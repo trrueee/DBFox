@@ -6,6 +6,8 @@ import time
 from typing import Any
 
 import httpx
+import sqlglot
+from sqlglot import exp
 from sqlalchemy.orm import Session
 
 from engine.errors import AIServiceError
@@ -173,11 +175,99 @@ def search_demo_sql(question: str) -> str:
     return "SELECT * FROM products LIMIT 10"
 
 
-def generate_schema_context(db: Session, datasource_id: str) -> str:
+def select_relevant_tables(tables: list[SchemaTable], question: str) -> list[SchemaTable]:
+    """
+    RAG Heuristic: Selects the most relevant tables for the given question
+    based on lexical overlap and relational linking.
+    """
+    q_words = re.findall(r"[\u4e00-\u9fa5\w]+", question.lower())
+    if not q_words:
+        return tables[:8] if len(tables) > 8 else tables
+
+    scored_tables = []
+    for t in tables:
+        score = 0
+        t_name_lower = t.table_name.lower()
+
+        # 1. Exact match of table name
+        if t_name_lower in question.lower():
+            score += 15
+
+        # 2. Name token overlap
+        for word in q_words:
+            if word in t_name_lower:
+                score += 8
+
+        # 3. Comment overlap
+        if t.table_comment:
+            comment_lower = t.table_comment.lower()
+            for word in q_words:
+                if word in comment_lower:
+                    score += 5
+
+        # 4. Column overlap
+        for col in t.columns:
+            col_name_lower = col.column_name.lower()
+            if col_name_lower in question.lower():
+                score += 3
+            if col.column_comment:
+                col_comment_lower = col.column_comment.lower()
+                for word in q_words:
+                    if word in col_comment_lower:
+                        score += 2
+
+        scored_tables.append((t, score))
+
+    # Sort tables by score descending
+    scored_tables.sort(key=lambda x: x[1], reverse=True)
+
+    # Select tables with score > 0
+    selected = [t for t, score in scored_tables if score > 0]
+    if not selected:
+        selected = [t for t, score in scored_tables[:5]]
+    else:
+        selected = selected[:6]
+
+    # Enforce minimum size: if total tables <= 8, return all
+    if len(tables) <= 8:
+        return tables
+
+    # Relationship linking (foreign keys)
+    selected_ids = {t.id for t in selected}
+    linked = list(selected)
+
+    for t in tables:
+        if t.id in selected_ids:
+            continue
+        is_linked = False
+        for sel_t in selected:
+            for col in t.columns:
+                if col.is_foreign_key and col.foreign_table_id == sel_t.id:
+                    is_linked = True
+                    break
+            for col in sel_t.columns:
+                if col.is_foreign_key and col.foreign_table_id == t.id:
+                    is_linked = True
+                    break
+            if is_linked:
+                break
+
+        if is_linked:
+            tbl_score = next((score for tbl, score in scored_tables if tbl.id == t.id), 0)
+            if tbl_score >= 2:
+                linked.append(t)
+
+    return linked[:8]
+
+
+def generate_schema_context(db: Session, datasource_id: str, question: str | None = None, optimize_rag: bool = False) -> str:
     """Builds a dense textual context containing table structures, comments, and relationships for LLM consumption"""
     tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
     if not tables:
         return "No schema metadata found. Please sync the data source first."
+
+    if optimize_rag and question:
+        tables = select_relevant_tables(tables, question)
 
     context_lines = []
     
@@ -192,7 +282,6 @@ def generate_schema_context(db: Session, datasource_id: str) -> str:
             comment_col = f" COMMENT '{c.column_comment}'" if c.column_comment else ""
             fk_str = ""
             if c.is_foreign_key and c.foreign_table_id:
-                # Find target table name
                 tgt = db.query(SchemaTable).filter(SchemaTable.id == c.foreign_table_id).first()
                 if tgt:
                     fk_str = f" REFERENCES {tgt.table_name}(id)"
@@ -204,8 +293,92 @@ def generate_schema_context(db: Session, datasource_id: str) -> str:
     return "\n".join(context_lines)
 
 
+PROMPT_VERSION = "v1.1"
+
+SYSTEM_PROMPT = (
+    "You are an expert MySQL developer and data analyst.\n"
+    "Your task is to generate a valid, high-performance SELECT statement to answer the user's question "
+    "based on the provided schema definitions.\n\n"
+    "Guidelines:\n"
+    "1. Answer ONLY with the raw SQL code block. Do NOT write any introduction or explanation.\n"
+    "2. Only write SELECT queries. DDL or DML statements (like INSERT, UPDATE, DROP, ALTER) are STRICTLY forbidden.\n"
+    "3. Use correct table joining paths and reference fields exactly as they are defined.\n"
+    "4. Always append a LIMIT clause (default to LIMIT 100) to keep results safe.\n"
+    "5. Output must use standard MySQL syntax dialect."
+)
+
+USER_PROMPT_TEMPLATE = (
+    "Available Database Tables Schema:\n"
+    "```sql\n"
+    "{schema_context}\n"
+    "```\n\n"
+    "User Question: \"{question}\"\n\n"
+    "Generate SQL:"
+)
+
+PROMPT_TEMPLATE_HASH = hashlib.sha256((SYSTEM_PROMPT + USER_PROMPT_TEMPLATE).encode("utf-8")).hexdigest()
+
+
+def validate_sql_schema(generated_sql: str, db: Session, datasource_id: str) -> list[str]:
+    """
+    Parses the generated SQL and checks for hallucinated tables and columns
+    against the local schema cache in metastore.
+    Returns a list of warnings if hallucinations are found.
+    """
+    warnings = []
+    try:
+        tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+        if not tables:
+            return []
+        
+        valid_schema = {t.table_name.lower(): {c.column_name.lower() for c in t.columns} for t in tables}
+        
+        parsed = sqlglot.parse_one(generated_sql, read="mysql")
+        
+        # 1. Extract all tables from the query
+        query_tables = []
+        for table_node in parsed.find_all(exp.Table):
+            t_name = table_node.name.lower()
+            query_tables.append(t_name)
+            if t_name not in valid_schema:
+                warnings.append(f"生成 SQL 包含不存在的表: `{table_node.name}`")
+                
+        # 2. Check column validity
+        for col_node in parsed.find_all(exp.Column):
+            col_name = col_node.name.lower()
+            if col_name == "*" or not col_name:
+                continue
+                
+            col_table_ref = col_node.text("table").lower()
+            
+            # Resolve alias or table name
+            target_table = None
+            if col_table_ref:
+                for t_node in parsed.find_all(exp.Table):
+                    alias = t_node.alias.lower() if t_node.alias else ""
+                    if alias == col_table_ref or t_node.name.lower() == col_table_ref:
+                        target_table = t_node.name.lower()
+                        break
+            
+            if target_table:
+                if target_table in valid_schema:
+                    if col_name not in valid_schema[target_table]:
+                        warnings.append(f"生成 SQL 包含表 `{target_table}` 中不存在的字段: `{col_node.name}`")
+            else:
+                queried_valid_tables = [t for t in query_tables if t in valid_schema]
+                if queried_valid_tables:
+                    exists_in_any = any(col_name in valid_schema[t] for t in queried_valid_tables)
+                    if not exists_in_any:
+                        tbl_list = ", ".join(f"`{t}`" for t in queried_valid_tables)
+                        warnings.append(f"生成 SQL 中的字段 `{col_node.name}` 不存在于查询的表 {tbl_list} 中")
+    except Exception as e:
+        print(f"Schema validation error: {e}")
+        
+    return warnings
+
+
 def generate_sql(
-    db: Session, datasource_id: str, question: str, llm_config: dict[str, Any] | None = None
+    db: Session, datasource_id: str, question: str, llm_config: dict[str, Any] | None = None, optimize_rag: bool = False
 ) -> dict[str, Any]:
     """
     Translates a natural language question into standard SQL.
@@ -220,7 +393,7 @@ def generate_sql(
     api_base = llm_config.get("api_base", "https://api.openai.com/v1").strip()
     model_name = llm_config.get("model", "gpt-4o-mini").strip()
     
-    schema_context = generate_schema_context(db, datasource_id)
+    schema_context = generate_schema_context(db, datasource_id, question, optimize_rag)
     
     # Ensure standard prompt hash is saved
     prompt_raw = f"Context:\n{schema_context}\n\nQuestion: {question}"
@@ -235,13 +408,22 @@ def generate_sql(
         # Guardrail check generated query
         guard_res = guardrail_check(generated_query)
         
-        # Log the call
+        # Perform schema reference validation
+        schema_warnings = validate_sql_schema(generated_query, db, datasource_id)
+        
+        # Log the call with premium versioning & audit parameters
         log_entry = LLMLog(
             request_type="text_to_sql",
+            data_source_id=datasource_id,
             prompt_hash=prompt_hash,
             model_name="databox-local-heuristic",
             latency_ms=latency_ms,
-            status="success"
+            status="success",
+            prompt_version=PROMPT_VERSION,
+            prompt_template_hash=PROMPT_TEMPLATE_HASH,
+            model_temperature=0.0,
+            max_tokens=None,
+            schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
         db.add(log_entry)
         db.commit()
@@ -251,40 +433,23 @@ def generate_sql(
             "model": "databox-local-heuristic",
             "latencyMs": latency_ms,
             "guardrail": guard_res,
-            "mode": "offline"
+            "mode": "offline",
+            "schemaValidationWarnings": schema_warnings
         }
 
     # 3. Connect to Online LLM via httpx
-    system_prompt = (
-        "You are an expert MySQL developer and data analyst.\n"
-        "Your task is to generate a valid, high-performance SELECT statement to answer the user's question "
-        "based on the provided schema definitions.\n\n"
-        "Guidelines:\n"
-        "1. Answer ONLY with the raw SQL code block. Do NOT write any introduction or explanation.\n"
-        "2. Only write SELECT queries. DDL or DML statements (like INSERT, UPDATE, DROP, ALTER) are STRICTLY forbidden.\n"
-        "3. Use correct table joining paths and reference fields exactly as they are defined.\n"
-        "4. Always append a LIMIT clause (default to LIMIT 100) to keep results safe.\n"
-        "5. Output must use standard MySQL syntax dialect."
-    )
-    
-    user_prompt = (
-        f"Available Database Tables Schema:\n"
-        f"```sql\n"
-        f"{schema_context}\n"
-        f"```\n\n"
-        f"User Question: \"{question}\"\n\n"
-        f"Generate SQL:"
-    )
-
+    # Using our hardened prompt template structures
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
+    user_prompt = USER_PROMPT_TEMPLATE.format(schema_context=schema_context, question=question)
+    
     payload = {
         "model": model_name,
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.1,
@@ -320,13 +485,22 @@ def generate_sql(
         # Enforce Guardrail validation on output SQL
         guard_res = guardrail_check(generated_query)
         
-        # Log to db
+        # Perform schema reference validation
+        schema_warnings = validate_sql_schema(generated_query, db, datasource_id)
+        
+        # Log to db with versioning & audit parameters
         log_entry = LLMLog(
             request_type="text_to_sql",
+            data_source_id=datasource_id,
             prompt_hash=prompt_hash,
             model_name=model_name,
             latency_ms=latency_ms,
-            status="success"
+            status="success",
+            prompt_version=PROMPT_VERSION,
+            prompt_template_hash=PROMPT_TEMPLATE_HASH,
+            model_temperature=0.1,
+            max_tokens=800,
+            schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
         db.add(log_entry)
         db.commit()
@@ -336,7 +510,8 @@ def generate_sql(
             "model": model_name,
             "latencyMs": latency_ms,
             "guardrail": guard_res,
-            "mode": "online"
+            "mode": "online",
+            "schemaValidationWarnings": schema_warnings
         }
         
     except Exception as e:
@@ -344,11 +519,16 @@ def generate_sql(
         # Log failure
         log_entry = LLMLog(
             request_type="text_to_sql",
+            data_source_id=datasource_id,
             prompt_hash=prompt_hash,
             model_name=model_name,
             latency_ms=latency_ms,
             status="failed",
-            error_message=str(e)
+            error_message=str(e),
+            prompt_version=PROMPT_VERSION,
+            prompt_template_hash=PROMPT_TEMPLATE_HASH,
+            model_temperature=0.1,
+            max_tokens=800
         )
         db.add(log_entry)
         db.commit()

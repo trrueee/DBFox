@@ -25,6 +25,14 @@ BLOCKED_SCHEMAS = {"information_schema", "mysql", "performance_schema", "sys"}
 # Dangerous functions we must block
 DANGEROUS_FUNCTIONS = {"sleep", "benchmark", "load_file", "database", "user", "current_user", "version"}
 
+# sqlglot normalizes some MySQL functions into dedicated expression types, so
+# string-based function-name checks are not enough for these security rules.
+DANGEROUS_EXPRESSION_TYPES = (
+    exp.CurrentUser,
+    exp.CurrentSchema,
+    exp.CurrentVersion,
+)
+
 # List of blocked SQL command types (anything that is not a SELECT)
 BLOCKED_COMMAND_TYPES = (
     exp.Insert,
@@ -150,6 +158,25 @@ def guardrail_check(sql_str: str) -> GuardrailResult:
                 })
                 has_errors = True
 
+        # Check normalized dangerous functions such as CURRENT_USER(),
+        # DATABASE()/SCHEMA(), and VERSION().
+        elif isinstance(node, DANGEROUS_EXPRESSION_TYPES):
+            checks.append({
+                "rule": "dangerous_function",
+                "level": "reject",
+                "message": f"Blocked dangerous system information function: {type(node).__name__}"
+            })
+            has_errors = True
+
+        # Block MySQL system variables such as @@version.
+        elif isinstance(node, exp.SessionParameter):
+            checks.append({
+                "rule": "system_variable_blocked",
+                "level": "reject",
+                "message": f"Blocked access to MySQL system variable: {node.name}"
+            })
+            has_errors = True
+
         # Check for dangerous functions
         elif isinstance(node, (exp.Anonymous, exp.Func)):
             func_name = node.name.lower() if node.name else ""
@@ -180,12 +207,22 @@ def guardrail_check(sql_str: str) -> GuardrailResult:
             "message": "拒绝执行：检测到高危 SQL 指令，已被 Guardrail 强制拦截。"
         }
 
-    # 4. Check for SELECT * Warning (only on the primary/root projection, or subqueries)
-    has_star = False
-    for projection in expression.expressions:
-        if isinstance(projection, exp.Star) or (hasattr(projection, "this") and isinstance(projection.this, exp.Star)):
-            has_star = True
-            break
+    # 4. Check for SELECT * Warning while excluding safe aggregate COUNT(*).
+    def projection_has_star(projection: exp.Expression) -> bool:
+        inner = projection.this if isinstance(projection, exp.Alias) else projection
+        if isinstance(inner, exp.Count):
+            return False
+        if isinstance(inner, exp.Star):
+            return True
+        if isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star):
+            return True
+        return False
+
+    has_star = any(
+        projection_has_star(projection)
+        for select in expression.find_all(exp.Select)
+        for projection in select.expressions
+    )
             
     if has_star:
         checks.append({
@@ -197,13 +234,13 @@ def guardrail_check(sql_str: str) -> GuardrailResult:
     # 5. Check and inject LIMIT 1000 if no limit exists
     # Find if there is an outer limit
     has_limit = expression.args.get("limit") is not None
-    safe_expression = expression
+    safe_expression = expression.copy()
     
     if not has_limit:
         # Inject LIMIT 1000 to the AST in a type-safe way
         try:
-            if isinstance(expression, exp.Select):
-                safe_expression = expression.limit(1000)
+            if isinstance(expression, (exp.Select, exp.Union)):
+                safe_expression = safe_expression.limit(1000)  # type: ignore[attr-defined]
                 checks.append({
                     "rule": "auto_limit",
                     "level": "warn",

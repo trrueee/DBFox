@@ -1,0 +1,18 @@
+# Local runtime state and credentials
+.databox_runtime/
+databox_local.db
+databox_local.db.bak_*
+engine/.secret_key
+engine/.local_token
+desktop/.env.local
+
+# Python / test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Frontend / Tauri build output
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/

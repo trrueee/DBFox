@@ -70,39 +70,41 @@ export function SqlEditor({ value, onChange }: SqlEditorProps) {
   };
 
   return (
-    <Editor
-      height="100%"
-      defaultLanguage="sql"
-      value={value}
-      onChange={(v) => onChange(v ?? "")}
-      onMount={handleMount}
-      options={{
-        fontSize: 13.5,
-        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
-        fontLigatures: true,
-        lineNumbers: "on",
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        wordWrap: "on",
-        padding: { top: 10, bottom: 10 },
-        tabSize: 2,
-        automaticLayout: true,
-        bracketPairColorization: { enabled: true },
-        matchBrackets: "always",
-        autoClosingBrackets: "always",
-        autoClosingQuotes: "always",
-        formatOnPaste: true,
-        suggest: { showKeywords: true, showSnippets: true },
-        folding: true,
-        lineDecorationsWidth: 6,
-        lineNumbersMinChars: 4,
-        glyphMargin: false,
-        renderLineHighlight: "line",
-        cursorBlinking: "smooth",
-        cursorSmoothCaretAnimation: "on",
-        smoothScrolling: true,
-      }}
-    />
+    <div className="select-text" style={{ height: "100%", userSelect: "text" }}>
+      <Editor
+        height="100%"
+        defaultLanguage="sql"
+        value={value}
+        onChange={(v) => onChange(v ?? "")}
+        onMount={handleMount}
+        options={{
+          fontSize: 13.5,
+          fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
+          fontLigatures: true,
+          lineNumbers: "on",
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          wordWrap: "on",
+          padding: { top: 10, bottom: 10 },
+          tabSize: 2,
+          automaticLayout: true,
+          bracketPairColorization: { enabled: true },
+          matchBrackets: "always",
+          autoClosingBrackets: "always",
+          autoClosingQuotes: "always",
+          formatOnPaste: true,
+          suggest: { showKeywords: true, showSnippets: true },
+          folding: true,
+          lineDecorationsWidth: 6,
+          lineNumbersMinChars: 4,
+          glyphMargin: false,
+          renderLineHighlight: "line",
+          cursorBlinking: "smooth",
+          cursorSmoothCaretAnimation: "on",
+          smoothScrolling: true,
+        }}
+      />
+    </div>
   );
 }
 

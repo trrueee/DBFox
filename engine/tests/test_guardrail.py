@@ -43,7 +43,7 @@ def test_select_with_subquery() -> None:
 def test_select_with_union() -> None:
     _check(guardrail_check(
         "SELECT name FROM products UNION SELECT name FROM suppliers"
-    ), "pass")
+    ), "warn")
 
 
 # ============================================================

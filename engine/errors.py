@@ -29,6 +29,20 @@ class SQLExecutionError(DataBoxError):
         super().__init__(message, code="SQL_EXECUTION_FAILED")
 
 
+class SQLQueryTimeoutError(DataBoxError):
+    """Raised when a query exceeds the server-side timeout guard."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="SQL_QUERY_TIMEOUT")
+
+
+class SQLQueryCancelledError(DataBoxError):
+    """Raised when a running query is cancelled by the user."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="SQL_QUERY_CANCELLED")
+
+
 class AIServiceError(DataBoxError):
     """Raised when the AI Text-to-SQL engine fails."""
 

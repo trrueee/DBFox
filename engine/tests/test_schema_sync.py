@@ -1,6 +1,7 @@
 """Schema sync tests — 对应第一版.md Section 18.2"""
 import uuid
 import pytest
+import engine.schema_sync as schema_sync_module
 from engine.schema_sync import sync_schema, build_er_diagram_data
 from engine.models import DataSource, SchemaTable, SchemaColumn
 
@@ -111,6 +112,31 @@ def test_sync_failure_status(db_session) -> None:
     # Use a non-existent datasource id
     with pytest.raises(ValueError, match="Data source not found"):
         sync_schema(db_session, str(uuid.uuid4()))
+
+
+def test_sync_failure_preserves_existing_schema(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+    initial_table_count = db_session.query(SchemaTable).filter(
+        SchemaTable.data_source_id == demo_datasource.id
+    ).count()
+    initial_column_count = db_session.query(SchemaColumn).join(SchemaTable).filter(
+        SchemaTable.data_source_id == demo_datasource.id
+    ).count()
+
+    monkeypatch.setattr(schema_sync_module, "MOCK_TABLES_INFO", [{"table_name": "broken"}])
+
+    with pytest.raises(ValueError, match="Schema sync failed"):
+        sync_schema(db_session, demo_datasource.id)
+
+    assert db_session.query(SchemaTable).filter(
+        SchemaTable.data_source_id == demo_datasource.id
+    ).count() == initial_table_count
+    assert db_session.query(SchemaColumn).join(SchemaTable).filter(
+        SchemaTable.data_source_id == demo_datasource.id
+    ).count() == initial_column_count
+
+    db_session.refresh(demo_datasource)
+    assert demo_datasource.last_sync_status == "failed"
 
 
 def test_cascade_delete_datasource(db_session, demo_datasource) -> None:

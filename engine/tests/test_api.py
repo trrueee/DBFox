@@ -67,6 +67,30 @@ def test_create_datasource(client) -> None:
     assert data["status"] == "active"
 
 
+def test_create_datasource_persists_ssl_settings(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "ssl_test_db",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+        "ssl_enabled": True,
+        "ssl_ca_path": "C:/certs/mysql-ca.pem",
+        "ssl_cert_path": "C:/certs/client-cert.pem",
+        "ssl_key_path": "C:/certs/client-key.pem",
+        "ssl_verify_identity": True,
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ssl_enabled"] is True
+    assert data["ssl_ca_path"] == "C:/certs/mysql-ca.pem"
+    assert data["ssl_cert_path"] == "C:/certs/client-cert.pem"
+    assert data["ssl_key_path"] == "C:/certs/client-key.pem"
+    assert data["ssl_verify_identity"] is True
+
+
 def test_sync_schema(client, db_session) -> None:
     # Create datasource first
     resp = client.post("/api/v1/datasources", json={
@@ -169,10 +193,12 @@ def test_execute_sql_and_history(client, db_session) -> None:
     resp = client.post("/api/v1/query/execute", json={
         "datasource_id": ds_id,
         "sql": "SELECT id, username, email FROM users LIMIT 5",
+        "execution_id": "api-test-exec-id",
     }, headers=_headers())
     assert resp.status_code == 200, f"Execute failed: {resp.json()}"
     data = resp.json()
     assert data["success"] is True
+    assert data["executionId"] == "api-test-exec-id"
     assert len(data["columns"]) == 3
     assert "username" in data["columns"]
 
@@ -182,3 +208,14 @@ def test_execute_sql_and_history(client, db_session) -> None:
     history = resp.json()
     assert len(history) >= 1
     assert history[0]["execution_status"] == "success"
+
+
+def test_cancel_unknown_query(client) -> None:
+    resp = client.post("/api/v1/query/cancel", json={
+        "execution_id": "missing-execution-id",
+    }, headers=_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is False
+    assert data["cancelled"] is False
+    assert data["executionId"] == "missing-execution-id"

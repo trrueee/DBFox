@@ -7,6 +7,7 @@ interface AiQueryInputProps {
   onSubmit: () => void;
   loading: boolean;
   onToggleConfig: () => void;
+  isDemo?: boolean;
 }
 
 const SUGGESTIONS = [
@@ -17,8 +18,18 @@ const SUGGESTIONS = [
   "每日活跃用户趋势",
 ];
 
-export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfig }: AiQueryInputProps) {
+const ECOMMERCE_SUGGESTIONS = [
+  "统计各个商品分类的商品数、库存量及平均价格",
+  "哪些用户在过去30天内消费的订单总额最高？",
+  "分析使用支付宝支付且状态为已完成的订单列表",
+  "展示本月每天新增订单数及总销售额的日变化趋势",
+  "找出库存为0且状态为已下架(inactive)的商品"
+];
+
+export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfig, isDemo }: AiQueryInputProps) {
   const [focused, setFocused] = useState(false);
+  const activeSuggestions = isDemo ? ECOMMERCE_SUGGESTIONS : SUGGESTIONS;
+
 
   return (
     <div
@@ -98,7 +109,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
       {/* Suggestion chips */}
       {!value.trim() && !loading && (
         <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-          {SUGGESTIONS.map((s) => (
+          {activeSuggestions.map((s) => (
             <button
               key={s}
               className="btn-ghost"

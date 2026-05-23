@@ -636,3 +636,51 @@ label.field-label {
   background: var(--accent-teal-light);
   color: var(--accent-teal);
 }
+
+/* Text Selection Utilities */
+.select-none {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+.select-text {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* Framework Area Select Restrictions */
+.breadcrumb,
+.status-badge,
+button,
+select,
+input[type="checkbox"],
+input[type="radio"],
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-ghost,
+.pill-tab,
+.empty-state-title,
+.tag {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+}
+
+.lab-card h2,
+.lab-card h3,
+.lab-card h4,
+.lab-card-elevated h2,
+.lab-card-elevated h3,
+.lab-card-elevated h4,
+.lab-card-accent h2,
+.lab-card-accent h3,
+.lab-card-accent h4 {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+}

@@ -109,3 +109,60 @@ def test_generate_sql_online_guardrail_reject(db_session, demo_datasource) -> No
         result = generate_sql(db_session, demo_datasource.id, "delete all users",
                               llm_config={"api_key": "sk-test"})
     assert result["guardrail"]["result"] == "reject"
+
+
+def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None:
+    from engine.ai import validate_sql_schema
+    from engine.models import SchemaTable, SchemaColumn
+
+    # 1. Add some schema info to metastore
+    users_tbl = SchemaTable(
+        id="tbl-users",
+        data_source_id=demo_datasource.id,
+        table_schema="demo_shop",
+        table_name="users",
+        table_comment="User details"
+    )
+    db_session.add(users_tbl)
+    db_session.commit()
+
+    db_session.add(SchemaColumn(id="col-u1", table_id="tbl-users", column_name="id", column_type="int"))
+    db_session.add(SchemaColumn(id="col-u2", table_id="tbl-users", column_name="username", column_type="varchar"))
+    db_session.add(SchemaColumn(id="col-u3", table_id="tbl-users", column_name="email", column_type="varchar"))
+    
+    orders_tbl = SchemaTable(
+        id="tbl-orders",
+        data_source_id=demo_datasource.id,
+        table_schema="demo_shop",
+        table_name="orders",
+        table_comment="Order details"
+    )
+    db_session.add(orders_tbl)
+    db_session.commit()
+
+    db_session.add(SchemaColumn(id="col-o1", table_id="tbl-orders", column_name="id", column_type="int"))
+    db_session.add(SchemaColumn(id="col-o2", table_id="tbl-orders", column_name="user_id", column_type="int"))
+    db_session.add(SchemaColumn(id="col-o3", table_id="tbl-orders", column_name="amount", column_type="decimal"))
+    db_session.commit()
+
+    # 2. Test valid queries
+    warnings = validate_sql_schema("SELECT username, email FROM users", db_session, demo_datasource.id)
+    assert len(warnings) == 0
+
+    warnings = validate_sql_schema("SELECT u.username, o.amount FROM users u JOIN orders o ON u.id = o.user_id", db_session, demo_datasource.id)
+    assert len(warnings) == 0
+
+    # 3. Test hallucinated table
+    warnings = validate_sql_schema("SELECT name FROM non_existent_table", db_session, demo_datasource.id)
+    assert len(warnings) > 0
+    assert any("non_existent_table" in w for w in warnings)
+
+    # 4. Test hallucinated column (no table prefix)
+    warnings = validate_sql_schema("SELECT age FROM users", db_session, demo_datasource.id)
+    assert len(warnings) > 0
+    assert any("age" in w for w in warnings)
+
+    # 5. Test hallucinated column with alias prefix
+    warnings = validate_sql_schema("SELECT u.username, o.non_existent_col FROM users u JOIN orders o ON u.id = o.user_id", db_session, demo_datasource.id)
+    assert len(warnings) > 0
+    assert any("non_existent_col" in w for w in warnings)

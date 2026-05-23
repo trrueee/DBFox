@@ -16,8 +16,9 @@ import type { DataSource, SchemaTable } from "./lib/api";
 import { DataSourcesPage } from "./pages/DataSourcesPage";
 import { QueryPage } from "./pages/QueryPage";
 import { SchemaPage } from "./pages/SchemaPage";
+import { DashboardPage } from "./pages/DashboardPage";
 
-type AppTab = "datasources" | "schema" | "query";
+type AppTab = "datasources" | "schema" | "query" | "dashboard";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>("datasources");
@@ -82,7 +83,11 @@ export default function App() {
       setActiveTab("datasources");
       return;
     }
-    if (activeTab === "datasources") setActiveTab("schema");
+    if (ds.database_name === "databox_demo" || ds.name.includes("Demo")) {
+      setActiveTab("query");
+    } else if (activeTab === "datasources") {
+      setActiveTab("schema");
+    }
   };
 
   const handleSelectTable = (tableName: string, showPreview = false) => {
@@ -92,12 +97,19 @@ export default function App() {
   };
 
   const workspaceTitle =
-    activeTab === "datasources" ? "数据源管理" : activeTab === "schema" ? "Schema 浏览" : "SQL 工作台";
+    activeTab === "datasources"
+      ? "数据源管理"
+      : activeTab === "schema"
+      ? "Schema 浏览"
+      : activeTab === "query"
+      ? "SQL 工作台"
+      : "AI 监控审计";
 
   const navItems: { id: AppTab; label: string; icon: typeof Database }[] = [
     { id: "datasources", label: "数据源", icon: Database },
     { id: "schema", label: "Schema", icon: BookOpen },
     { id: "query", label: "工作台", icon: Terminal },
+    { id: "dashboard", label: "监控审计", icon: Activity },
   ];
 
   return (
@@ -113,6 +125,7 @@ export default function App() {
     >
       {/* ═══ SIDEBAR ═══ */}
       <aside
+        className="select-none"
         style={{
           display: "grid",
           gridTemplateRows: "auto auto minmax(0, 1fr) auto",
@@ -458,10 +471,13 @@ export default function App() {
           display: "grid",
           gridTemplateRows: "auto minmax(0, 1fr) auto",
           minWidth: 0,
+          height: "100%",
+          overflow: "hidden",
         }}
       >
         {/* Header / Breadcrumb */}
         <header
+          className="select-none"
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -469,6 +485,7 @@ export default function App() {
             padding: "16px 24px",
             borderBottom: "1px solid var(--border-light)",
             background: "var(--bg-surface)",
+            borderTop: activeDataSource?.env === "prod" ? "3px solid var(--accent-red)" : undefined,
           }}
         >
           <div className="breadcrumb">
@@ -489,14 +506,45 @@ export default function App() {
             )}
           </div>
           {activeDataSource ? (
-            <span className="status-badge status-badge-success">{activeDataSource.database_name}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {activeDataSource.env === "prod" && (
+                <span className="status-badge" style={{ background: "rgba(220, 38, 38, 0.12)", color: "var(--accent-red)", border: "1px solid rgba(220, 38, 38, 0.3)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+                  🚨 生产环境 PROD
+                </span>
+              )}
+              {activeDataSource.env === "test" && (
+                <span className="status-badge" style={{ background: "rgba(217, 119, 6, 0.12)", color: "var(--accent-amber)", border: "1px solid rgba(217, 119, 6, 0.3)", fontWeight: 600 }}>
+                  🔬 测试环境 TEST
+                </span>
+              )}
+              {activeDataSource.env === "dev" && (
+                <span className="status-badge" style={{ background: "var(--bg-active)", color: "var(--text-secondary)", border: "1px solid var(--border-light)" }}>
+                  💻 开发环境 DEV
+                </span>
+              )}
+              {activeDataSource.is_read_only && (
+                <span className="status-badge" style={{ background: "rgba(74, 91, 192, 0.12)", color: "var(--accent-indigo)", border: "1px solid rgba(74, 91, 192, 0.3)", fontWeight: 600 }}>
+                  🔒 只读保护
+                </span>
+              )}
+              <span className="status-badge status-badge-success">{activeDataSource.database_name}</span>
+            </div>
           ) : (
             <span className="status-badge status-badge-neutral">未连接</span>
           )}
         </header>
 
         {/* Page Content */}
-        <main style={{ padding: 20, overflow: "hidden", minWidth: 0 }}>
+        <main
+          style={{
+            padding: 20,
+            overflow: "hidden",
+            minWidth: 0,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           {activeTab === "datasources" && (
             <DataSourcesPage
               onSelectDataSource={handleSelectDataSource}
@@ -513,10 +561,14 @@ export default function App() {
           {activeTab === "query" && activeDataSource && (
             <QueryPage datasource={activeDataSource} />
           )}
+          {activeTab === "dashboard" && activeDataSource && (
+            <DashboardPage datasource={activeDataSource} />
+          )}
         </main>
 
         {/* Footer */}
         <footer
+          className="select-none"
           style={{
             display: "flex",
             justifyContent: "space-between",

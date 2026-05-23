@@ -34,7 +34,19 @@ export interface DataSource {
   database_name: string;
   username: string;
   connection_mode: string;
+  is_read_only?: boolean;
+  env?: string;
   status: string;
+  ssh_enabled?: boolean;
+  ssh_host?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  ssh_pkey_path?: string;
+  ssl_enabled?: boolean;
+  ssl_ca_path?: string;
+  ssl_cert_path?: string;
+  ssl_key_path?: string;
+  ssl_verify_identity?: boolean;
   last_test_at?: string;
   last_test_status?: string;
   last_test_error?: string;
@@ -43,6 +55,7 @@ export interface DataSource {
   last_sync_error?: string;
   created_at: string;
 }
+
 
 export interface SchemaTable {
   id: string;
@@ -87,6 +100,17 @@ export interface QueryResult {
   latencyMs: number;
   guardrail: GuardrailCheckResult;
   historyId: string;
+  executionId?: string;
+  truncated?: boolean;
+  responseBytes?: number;
+  maxResponseBytes?: number;
+  warnings?: string[];
+  connectMs?: number;
+  guardrailMs?: number;
+  executeMs?: number;
+  fetchMs?: number;
+  serializeMs?: number;
+  totalMs?: number;
 }
 
 export interface QueryHistory {
@@ -97,7 +121,8 @@ export interface QueryHistory {
   safe_sql: string;
   executed_sql: string;
   guardrail_result: "pass" | "warn" | "reject";
-  execution_status: "success" | "failed";
+  guardrail_checks?: string;
+  execution_status: "success" | "failed" | "timeout" | "cancelled";
   execution_time_ms: number;
   rows_returned: number;
   columns_returned: number;
@@ -152,22 +177,30 @@ export const api = {
   getERDiagram: (datasourceId: string) =>
     request<ERDiagramData>(`/schema/er-diagram?datasource_id=${datasourceId}`),
 
-  validateSql: (sql: string) =>
+  validateSql: (sql: string, signal?: AbortSignal) =>
     request<GuardrailCheckResult>("/query/validate", {
       method: "POST",
       body: JSON.stringify({ sql }),
+      signal,
     }),
 
-  executeSql: (datasourceId: string, sql: string, question?: string) =>
+  executeSql: (datasourceId: string, sql: string, question?: string, executionId?: string, signal?: AbortSignal) =>
     request<QueryResult>("/query/execute", {
       method: "POST",
-      body: JSON.stringify({ datasource_id: datasourceId, sql, question }),
+      body: JSON.stringify({ datasource_id: datasourceId, sql, question, execution_id: executionId }),
+      signal,
+    }),
+
+  cancelQuery: (executionId: string) =>
+    request<{ success: boolean; cancelled: boolean; executionId: string; message: string }>("/query/cancel", {
+      method: "POST",
+      body: JSON.stringify({ execution_id: executionId }),
     }),
 
   listHistory: (datasourceId: string) =>
     request<QueryHistory[]>(`/query/history?datasource_id=${datasourceId}`),
 
-  generateSql: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string }) =>
+  generateSql: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean }, signal?: AbortSignal) =>
     request<any>("/query/generate", {
       method: "POST",
       body: JSON.stringify({
@@ -176,6 +209,39 @@ export const api = {
         api_key: config?.apiKey,
         api_base: config?.apiBase,
         model_name: config?.model,
+        optimize_rag: config?.optimizeRag ?? false,
+      }),
+      signal,
+    }),
+
+  listGoldenSql: (datasourceId: string) =>
+    request<any[]>(`/golden-sql?datasource_id=${datasourceId}`),
+
+  createGoldenSql: (datasourceId: string, question: string, goldenSql: string) =>
+    request<any>("/golden-sql", {
+      method: "POST",
+      body: JSON.stringify({ datasource_id: datasourceId, question, golden_sql: goldenSql }),
+    }),
+
+  deleteGoldenSql: (id: string) =>
+    request<any>(`/golden-sql/${id}`, { method: "DELETE" }),
+
+  runBenchmark: (datasourceId: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean }) =>
+    request<any>("/golden-sql/run-benchmark", {
+      method: "POST",
+      body: JSON.stringify({
+        datasource_id: datasourceId,
+        api_key: config?.apiKey,
+        api_base: config?.apiBase,
+        model_name: config?.model,
+        optimize_rag: config?.optimizeRag ?? false,
       }),
     }),
+
+  getLlmStats: (datasourceId: string) =>
+    request<any>(`/llm-logs/stats?datasource_id=${datasourceId}`),
+
+  startDemoMysql: () =>
+    request<DataSource>("/demo/start", { method: "POST" }),
 };
+

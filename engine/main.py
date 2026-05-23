@@ -1,5 +1,6 @@
 import logging
 import secrets
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from fastapi.responses import JSONResponse
 from engine.api import router
 from engine.db import init_db
 from engine.errors import DataBoxError
+from engine.runtime_paths import private_runtime_file, write_private_text
 
 logger = logging.getLogger("databox.main")
 
@@ -19,34 +21,49 @@ ENGINE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = ENGINE_DIR.parent
 
 # 1. Local Engine Security: Generate Local Secure Access Token
-TOKEN_FILE = ENGINE_DIR / ".local_token"
+LEGACY_TOKEN_FILE = ENGINE_DIR / ".local_token"
+TOKEN_FILE = private_runtime_file("auth", ".local_token")
 
 
 def get_or_create_local_token() -> str:
+    # Under packaged frozen sidecars, check if build-time static token preset exists
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        try:
+            from engine import token_preset
+            if token_preset.STATIC_TOKEN:
+                return token_preset.STATIC_TOKEN
+        except ImportError:
+            pass
+
+    if not TOKEN_FILE.exists() and LEGACY_TOKEN_FILE.exists():
+        write_private_text(TOKEN_FILE, LEGACY_TOKEN_FILE.read_text("utf-8").strip())
+
     if TOKEN_FILE.exists():
         return TOKEN_FILE.read_text("utf-8").strip()
     token = secrets.token_hex(32)
-    TOKEN_FILE.write_text(token, "utf-8")
+    write_private_text(TOKEN_FILE, token)
     return token
 
 
 LOCAL_SECURE_TOKEN = get_or_create_local_token()
 
-# Write the token to the React frontend folder as .env.local
-FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
+# Write the token to the React frontend folder as .env.local (development only)
+is_frozen = getattr(sys, "frozen", False)
+if not is_frozen:
+    FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
+    try:
+        expected_content = f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={LOCAL_SECURE_TOKEN}\n"
+        existing_content = ""
+        if FRONTEND_ENV_FILE.exists():
+            existing_content = FRONTEND_ENV_FILE.read_text("utf-8")
 
-try:
-    expected_content = f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={LOCAL_SECURE_TOKEN}\n"
-    existing_content = ""
-    if FRONTEND_ENV_FILE.exists():
-        existing_content = FRONTEND_ENV_FILE.read_text("utf-8")
-
-    if existing_content != expected_content:
-        FRONTEND_ENV_FILE.write_text(expected_content, "utf-8")
-except OSError:
-    logger.warning(
-        "Unable to write frontend .env.local file; the frontend may need manual token configuration."
-    )
+        if existing_content != expected_content:
+            FRONTEND_ENV_FILE.write_text(expected_content, "utf-8")
+    except OSError:
+        logger.warning(
+            "Unable to write frontend .env.local file; the frontend may need manual token configuration."
+        )
 
 
 @asynccontextmanager
@@ -55,9 +72,12 @@ async def lifespan(application: FastAPI) -> Any:
     print("===========================================================")
     print("DataBox Local Engine initialized successfully.")
     print("Listening address: http://127.0.0.1:18625")
-    print(f"Access Token: {LOCAL_SECURE_TOKEN}")
+    print(f"Access token file: {TOKEN_FILE}")
     print("===========================================================")
     yield
+    from engine.datasource import close_all_tunnels
+    close_all_tunnels()
+
 
 
 app = FastAPI(
@@ -130,4 +150,8 @@ def api_health() -> dict[str, str]:
 app.include_router(router)
 
 if __name__ == "__main__":
-    uvicorn.run("engine.main:app", host="127.0.0.1", port=18625, reload=True)
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        uvicorn.run(app, host="127.0.0.1", port=18625)
+    else:
+        uvicorn.run("engine.main:app", host="127.0.0.1", port=18625, reload=True)
