@@ -16,3 +16,5 @@ __pycache__/
 desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+
