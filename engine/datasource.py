@@ -328,7 +328,13 @@ class TunnelState:
     CLOSED = "closed"
 
 class TunnelInstance:
-    def __init__(self, datasource_id: str, ds_dict: dict[str, Any], tunnel: SSHTunnelForwarder):
+    datasource_id: str
+    ds_dict: dict[str, Any]
+    tunnel: SSHTunnelForwarder
+    state: str
+    error_message: str | None
+
+    def __init__(self, datasource_id: str, ds_dict: dict[str, Any], tunnel: SSHTunnelForwarder) -> None:
         self.datasource_id = datasource_id
         self.ds_dict = ds_dict
         self.tunnel = tunnel
@@ -336,7 +342,7 @@ class TunnelInstance:
         self.error_message = None
 
 class TunnelManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self._tunnels: dict[str, TunnelInstance] = {}
         self._lock = threading.Lock()
 

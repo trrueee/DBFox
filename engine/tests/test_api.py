@@ -2,7 +2,7 @@
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.db import get_db
-from engine.models import DataSource, SchemaTable
+from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaTable
 import pytest
 
 
@@ -24,6 +24,29 @@ def _headers():
 # ============================================================
 # DataSource endpoints
 # ============================================================
+
+def test_projects_default_exists(client) -> None:
+    resp = client.get("/api/v1/projects", headers=_headers())
+    assert resp.status_code == 200
+    projects = resp.json()
+    assert len(projects) == 1
+    assert projects[0]["id"] == DEFAULT_PROJECT_ID
+    assert projects[0]["name"] == "Default Workspace"
+
+
+def test_create_project(client) -> None:
+    resp = client.post("/api/v1/projects", json={
+        "name": "Demo Product Workspace",
+        "description": "Assets for lifecycle workflow tests",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["id"] != DEFAULT_PROJECT_ID
+    assert data["name"] == "Demo Product Workspace"
+    assert data["description"] == "Assets for lifecycle workflow tests"
+    assert data["datasource_count"] == 0
+
 
 def test_test_connection_success(client) -> None:
     resp = client.post("/api/v1/datasources/test", json={
@@ -65,6 +88,50 @@ def test_create_datasource(client) -> None:
     assert "id" in data
     assert data["name"] == "api_test_db"
     assert data["status"] == "active"
+    assert data["project_id"] == DEFAULT_PROJECT_ID
+
+
+def test_create_datasource_can_attach_to_project(client) -> None:
+    project_resp = client.post("/api/v1/projects", json={
+        "name": "Project Datasource Test",
+    }, headers=_headers())
+    project_id = project_resp.json()["id"]
+
+    resp = client.post("/api/v1/datasources", json={
+        "project_id": project_id,
+        "name": "project_api_test_db",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_id"] == project_id
+
+
+def test_list_datasources_can_filter_by_project(client) -> None:
+    project_a = client.post("/api/v1/projects", json={"name": "Workspace A"}, headers=_headers()).json()
+    project_b = client.post("/api/v1/projects", json={"name": "Workspace B"}, headers=_headers()).json()
+
+    for project, name in [(project_a, "db_a"), (project_b, "db_b")]:
+        resp = client.post("/api/v1/datasources", json={
+            "project_id": project["id"],
+            "name": name,
+            "host": "demo",
+            "port": 3306,
+            "database_name": "demo_shop",
+            "username": "demo",
+            "password": "demo",
+        }, headers=_headers())
+        assert resp.status_code == 200
+
+    resp = client.get(f"/api/v1/datasources?project_id={project_a['id']}", headers=_headers())
+    assert resp.status_code == 200
+    items = resp.json()
+    assert [item["name"] for item in items] == ["db_a"]
 
 
 def test_create_datasource_persists_ssl_settings(client) -> None:

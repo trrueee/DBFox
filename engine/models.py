@@ -6,6 +6,9 @@ from sqlalchemy.orm import relationship
 
 from engine.db import Base
 
+DEFAULT_PROJECT_ID = "default-project"
+DEFAULT_PROJECT_NAME = "Default Workspace"
+
 
 def generate_uuid() -> str:
     return str(uuid.uuid4())
@@ -15,10 +18,69 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class Project(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_status", "status"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="active")
+
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    data_sources = relationship("DataSource", back_populates="project")
+    environments = relationship("DatabaseEnvironment", back_populates="project", cascade="all, delete-orphan")
+    backups = relationship("BackupRecord", back_populates="project", cascade="all, delete-orphan")
+    drafts = relationship("TableDesignDraft", back_populates="project", cascade="all, delete-orphan")
+
+
+class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "database_environments"
+    __table_args__ = (
+        Index("ix_database_environments_project", "project_id"),
+        Index("ix_database_environments_status", "status"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+
+    name = Column(String, nullable=False)
+    runtime = Column(String, nullable=False, default="docker")
+    engine_type = Column(String, nullable=False, default="mysql")
+    engine_version = Column(String, nullable=False, default="8.0")
+    image = Column(String, nullable=False, default="mysql:8.0")
+    container_name = Column(String, nullable=False)
+
+    host = Column(String, nullable=False, default="127.0.0.1")
+    port = Column(Integer, nullable=False)
+    database_name = Column(String, nullable=False)
+    username = Column(String, nullable=False)
+    password_ciphertext = Column(String, nullable=False)
+    password_nonce = Column(String, nullable=False)
+
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
+    status = Column(String, nullable=False, default="created")
+    last_health_status = Column(String, nullable=True)
+    last_health_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    project = relationship("Project", back_populates="environments")
+    datasource = relationship("DataSource", foreign_keys=[datasource_id])
+
+
 class DataSource(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "data_sources"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    environment_id = Column(String, ForeignKey("database_environments.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String, nullable=False)
     db_type = Column(String, nullable=False, default="mysql")
 
@@ -64,9 +126,41 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
+    project = relationship("Project", back_populates="data_sources")
     tables = relationship("SchemaTable", back_populates="datasource", cascade="all, delete-orphan")
     queries = relationship("QueryHistory", back_populates="datasource", cascade="all, delete-orphan")
     golden_sqls = relationship("GoldenSQL", back_populates="datasource", cascade="all, delete-orphan")
+    backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
+
+
+class BackupRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "backup_records"
+    __table_args__ = (
+        Index("ix_backup_records_project", "project_id"),
+        Index("ix_backup_records_datasource", "datasource_id"),
+        Index("ix_backup_records_created", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    environment_id = Column(String, ForeignKey("database_environments.id", ondelete="SET NULL"), nullable=True)
+
+    label = Column(String, nullable=True)
+    backup_type = Column(String, nullable=False, default="mysqldump")
+    status = Column(String, nullable=False, default="running")
+    file_path = Column(Text, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    checksum_sha256 = Column(String, nullable=True)
+
+    started_at = Column(DateTime, nullable=False, default=utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    project = relationship("Project", back_populates="backups")
+    datasource = relationship("DataSource", back_populates="backups")
 
 
 class SchemaTable(Base):  # type: ignore[misc,valid-type]
@@ -201,3 +295,23 @@ class GoldenSQL(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     datasource = relationship("DataSource", back_populates="golden_sqls")
+
+
+class TableDesignDraft(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "table_design_drafts"
+    __table_args__ = (
+        Index("ix_table_design_drafts_project", "project_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+
+    table_name = Column(String, nullable=False)
+    table_comment = Column(String, nullable=True)
+    columns_json = Column(Text, nullable=False)
+    indexes_json = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    project = relationship("Project", back_populates="drafts")

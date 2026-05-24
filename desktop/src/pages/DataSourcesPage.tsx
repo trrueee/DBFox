@@ -11,12 +11,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api } from "../lib/api";
-import type { DataSource } from "../lib/api";
+import type { DataSource, Project } from "../lib/api";
 import { StatusIndicator } from "../components/StatusIndicator";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
   activeDataSource: DataSource | null;
+  activeProject: Project | null;
   onRefreshDatasources: () => Promise<void>;
 }
 
@@ -33,6 +34,7 @@ const DEMO_STEPS = [
 export const DataSourcesPage = ({
   onSelectDataSource,
   activeDataSource,
+  activeProject,
   onRefreshDatasources,
 }: DataSourcesPageProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
@@ -74,12 +76,12 @@ export const DataSourcesPage = ({
 
   useEffect(() => {
     void fetchDataSources();
-  }, []);
+  }, [activeProject?.id]);
 
   const fetchDataSources = async () => {
     try {
       setLoading(true);
-      setDataSources(await api.listDatasources());
+      setDataSources(await api.listDatasources(activeProject?.id));
     } finally {
       setLoading(false);
     }
@@ -104,7 +106,7 @@ export const DataSourcesPage = ({
     }, 2800);
 
     try {
-      const created = await api.startDemoMysql();
+      const created = await api.startDemoMysql(activeProject?.id);
       window.clearInterval(interval);
       setDemoStep(DEMO_STEPS.length - 2);
       await new Promise(r => setTimeout(r, 1200));
@@ -174,13 +176,13 @@ export const DataSourcesPage = ({
     try {
       setSubmitting(true);
       setFormError("");
-      const created = await api.createDatasource(form);
+      const created = await api.createDatasource({ ...form, project_id: activeProject?.id });
       setSyncingId(created.id);
       await api.syncSchema(created.id);
       await syncLists();
       resetForm();
       setShowAddForm(false);
-      const refreshed = await api.listDatasources();
+      const refreshed = await api.listDatasources(activeProject?.id);
       setDataSources(refreshed);
       onSelectDataSource(refreshed.find((item) => item.id === created.id) ?? null);
     } catch (error: any) {
@@ -227,6 +229,11 @@ export const DataSourcesPage = ({
           <p style={{ color: "var(--text-secondary)", marginTop: 4, fontSize: "0.9rem" }}>
             管理远程 MySQL 连接，测试可用性，同步本地 Schema 缓存
           </p>
+          {activeProject && (
+            <p style={{ color: "var(--text-muted)", marginTop: 6, fontSize: "0.78rem" }}>
+              Current project: {activeProject.name}
+            </p>
+          )}
         </div>
         <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
           {showAddForm ? <X size={15} /> : <Plus size={15} />}

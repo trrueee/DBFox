@@ -12,16 +12,21 @@ import {
   Terminal,
 } from "lucide-react";
 import { api } from "./lib/api";
-import type { DataSource, SchemaTable } from "./lib/api";
+import type { DataSource, Project, SchemaTable } from "./lib/api";
+import { BackupsPage } from "./pages/BackupsPage";
 import { DataSourcesPage } from "./pages/DataSourcesPage";
+import { EnvironmentsPage } from "./pages/EnvironmentsPage";
 import { QueryPage } from "./pages/QueryPage";
 import { SchemaPage } from "./pages/SchemaPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DemoTourGuide } from "./components/DemoTourGuide";
 
-type AppTab = "datasources" | "schema" | "query" | "dashboard";
+type AppTab = "environments" | "datasources" | "backups" | "schema" | "query" | "dashboard";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>("datasources");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeDataSource, setActiveDataSource] = useState<DataSource | null>(null);
   const [datasources, setDatasources] = useState<DataSource[]>([]);
   const [schemaTables, setSchemaTables] = useState<SchemaTable[]>([]);
@@ -33,8 +38,12 @@ export default function App() {
   const [schemaInitialView, setSchemaInitialView] = useState<"fields" | "er" | "data" | null>(null);
 
   useEffect(() => {
-    void refreshDatasources();
+    void refreshProjects();
   }, []);
+
+  useEffect(() => {
+    void refreshDatasources();
+  }, [activeProject?.id]);
 
   useEffect(() => {
     if (!activeDataSource) {
@@ -49,10 +58,19 @@ export default function App() {
     if (activeTab !== "schema") setSchemaInitialView(null);
   }, [activeTab]);
 
+  const refreshProjects = async () => {
+    const items = await api.listProjects();
+    setProjects(items);
+    setActiveProject((current) => {
+      if (!current) return items[0] ?? null;
+      return items.find((item) => item.id === current.id) ?? items[0] ?? null;
+    });
+  };
+
   const refreshDatasources = async () => {
     try {
       setLoadingTree(true);
-      const items = await api.listDatasources();
+      const items = await api.listDatasources(activeProject?.id);
       setDatasources(items);
       setActiveDataSource((current) => {
         if (!current) return items[0] ?? null;
@@ -61,6 +79,19 @@ export default function App() {
     } finally {
       setLoadingTree(false);
     }
+  };
+
+  const handleCreateProject = async () => {
+    const name = window.prompt("Project name");
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+
+    const created = await api.createProject({ name: trimmed });
+    await refreshProjects();
+    setActiveProject(created);
+    setActiveDataSource(null);
+    setSchemaTables([]);
+    setActiveTab("datasources");
   };
 
   const refreshSchemaTables = async (datasourceId: string) => {
@@ -97,7 +128,11 @@ export default function App() {
   };
 
   const workspaceTitle =
-    activeTab === "datasources"
+    activeTab === "environments"
+      ? "Environment Lab"
+      : activeTab === "backups"
+      ? "Backup Vault"
+      : activeTab === "datasources"
       ? "数据源管理"
       : activeTab === "schema"
       ? "Schema 浏览"
@@ -106,6 +141,8 @@ export default function App() {
       : "AI 监控审计";
 
   const navItems: { id: AppTab; label: string; icon: typeof Database }[] = [
+    { id: "environments", label: "Environments", icon: HardDrive },
+    { id: "backups", label: "Backups", icon: HardDrive },
     { id: "datasources", label: "数据源", icon: Database },
     { id: "schema", label: "Schema", icon: BookOpen },
     { id: "query", label: "工作台", icon: Terminal },
@@ -161,17 +198,63 @@ export default function App() {
               </p>
             </div>
           </div>
+          <div style={{ marginTop: 16 }}>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: 6 }}>
+              Project Workspace
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 6 }}>
+              <select
+                value={activeProject?.id ?? ""}
+                onChange={(event) => {
+                  const next = projects.find((project) => project.id === event.target.value) ?? null;
+                  setActiveProject(next);
+                  setActiveDataSource(null);
+                  setSchemaTables([]);
+                  setSelectedTableName(null);
+                  setActiveTab("datasources");
+                }}
+                style={{
+                  width: "100%",
+                  height: 34,
+                  borderRadius: 8,
+                  border: "1px solid var(--border-light)",
+                  background: "var(--bg-primary)",
+                  color: "var(--text-primary)",
+                  fontSize: "0.8rem",
+                  padding: "0 8px",
+                }}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn-ghost"
+                onClick={() => void handleCreateProject()}
+                style={{ height: 34, padding: "0 10px", fontWeight: 700 }}
+                title="Create project"
+              >
+                +
+              </button>
+            </div>
+            <div style={{ marginTop: 5, fontSize: "0.7rem", color: "var(--text-muted)" }}>
+              {activeProject ? "Connections, SQL, schema and backups live here" : "Loading workspace..."}
+            </div>
+          </div>
         </div>
 
         {/* Navigation */}
         <nav style={{ padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
           {navItems.map(({ id, label, icon: Icon }) => {
             const isActive = activeTab === id;
+            const needsDataSource = id === "schema" || id === "query" || id === "dashboard";
             return (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                disabled={id !== "datasources" && !activeDataSource}
+                disabled={needsDataSource && !activeDataSource}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -184,8 +267,8 @@ export default function App() {
                   color: isActive ? "var(--accent-indigo)" : "var(--text-secondary)",
                   fontWeight: isActive ? 600 : 500,
                   fontSize: "0.88rem",
-                  cursor: id !== "datasources" && !activeDataSource ? "not-allowed" : "pointer",
-                  opacity: id !== "datasources" && !activeDataSource ? 0.45 : 1,
+                  cursor: needsDataSource && !activeDataSource ? "not-allowed" : "pointer",
+                  opacity: needsDataSource && !activeDataSource ? 0.45 : 1,
                   transition: "background 0.15s, color 0.15s",
                 }}
               >
@@ -545,11 +628,26 @@ export default function App() {
             flexDirection: "column",
           }}
         >
+          {activeTab === "environments" && (
+            <EnvironmentsPage
+              activeProject={activeProject}
+              onRefreshDatasources={refreshDatasources}
+              onSelectDataSource={handleSelectDataSource}
+            />
+          )}
           {activeTab === "datasources" && (
             <DataSourcesPage
               onSelectDataSource={handleSelectDataSource}
               activeDataSource={activeDataSource}
+              activeProject={activeProject}
               onRefreshDatasources={refreshDatasources}
+            />
+          )}
+          {activeTab === "backups" && (
+            <BackupsPage
+              activeProject={activeProject}
+              datasources={datasources}
+              activeDataSource={activeDataSource}
             />
           )}
           {activeTab === "schema" && activeDataSource && (
@@ -584,6 +682,17 @@ export default function App() {
           <span>Desktop-first · MySQL Client</span>
         </footer>
       </section>
+
+      <DemoTourGuide
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        activeProject={activeProject}
+        projects={projects}
+        activeDataSource={activeDataSource}
+        datasources={datasources}
+        schemaTables={schemaTables}
+        handleCreateProject={handleCreateProject}
+      />
     </div>
   );
 }

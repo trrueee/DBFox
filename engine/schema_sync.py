@@ -204,9 +204,10 @@ def _build_real_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSna
                 c_key = str(row[7]).upper()
                 ord_pos = row[8]
                 
-                table_id = table_name_to_id.get(t_name)
-                if not table_id:
+                t_id = table_name_to_id.get(t_name)
+                if not t_id:
                     continue
+                table_id = t_id
                     
                 col_id = str(uuid.uuid4())
                 column_name_to_id[(t_name, c_name)] = col_id

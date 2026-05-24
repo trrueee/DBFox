@@ -280,14 +280,14 @@ def launch_demo_container() -> bool:
     subprocess.run(cmd, check=True)
     return True
 
-def wait_for_mysql_port(timeout: int = 40) -> bool:
+def wait_for_mysql_port(timeout: int = 40, port: int = 3309) -> bool:
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1.0)
-                s.connect(("127.0.0.1", 3309))
-                logger.info("MySQL port 3309 is open.")
+                s.connect(("127.0.0.1", port))
+                logger.info("MySQL port %s is open.", port)
                 # Give the database a brief moment to complete setup in active running state
                 time.sleep(4.0)
                 return True
@@ -295,16 +295,16 @@ def wait_for_mysql_port(timeout: int = 40) -> bool:
             time.sleep(1.5)
     return False
 
-def populate_demo_data() -> None:
+def populate_demo_data(port: int = 3309, root_password: str = "demo_root", database_name: str = "databox_demo") -> None:
     now = datetime.now()
     
     # Connect as root to ensure full permissions to load structure and bypass checks
     conn = pymysql.connect(
         host="127.0.0.1",
-        port=3309,
+        port=port,
         user="root",
-        password="demo_root",
-        database="databox_demo",
+        password=root_password,
+        database=database_name,
         charset="utf8mb4"
     )
     

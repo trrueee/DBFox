@@ -533,3 +533,193 @@ def generate_sql(
         db.add(log_entry)
         db.commit()
         raise AIServiceError(f"LLM 接口调用失败: {str(e)}")
+
+
+AI_TABLE_DESIGN_SYSTEM_PROMPT = (
+    "You are an expert database architect.\n"
+    "Your task is to design a high-performance MySQL table schema based on the user's natural language request.\n"
+    "You must output ONLY a valid JSON object matching the following structure. Do NOT include any markdown code blocks, explanation or additional characters.\n"
+    "JSON Structure:\n"
+    "{\n"
+    "  \"table_name\": \"string (snake_case database table name)\",\n"
+    "  \"table_comment\": \"string (brief Chinese explanation of what the table stores)\",\n"
+    "  \"columns\": [\n"
+    "    {\n"
+    "      \"name\": \"string (column name in snake_case)\",\n"
+    "      \"type\": \"string (standard MySQL column type, e.g., BIGINT, VARCHAR(255), INT, TIMESTAMP, DECIMAL(10,2))\",\n"
+    "      \"nullable\": true/false,\n"
+    "      \"primary_key\": true/false,\n"
+    "      \"auto_increment\": true/false,\n"
+    "      \"default_value\": \"string or null\",\n"
+    "      \"comment\": \"string (brief Chinese description of column content)\"\n"
+    "    }\n"
+    "  ],\n"
+    "  \"indexes\": [\n"
+    "    {\n"
+    "      \"name\": \"string (snake_case index name, e.g., idx_table_col)\",\n"
+    "      \"columns\": [\"string (column name)\"],\n"
+    "      \"unique\": true/false\n"
+    "    }\n"
+    "  ]\n"
+    "}\n"
+)
+
+OFFLINE_USER_SCHEMA = {
+    "table_name": "users",
+    "table_comment": "用户账户表",
+    "columns": [
+        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "用户ID"},
+        {"name": "username", "type": "VARCHAR(50)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "用户名"},
+        {"name": "email", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "电子邮箱"},
+        {"name": "password_hash", "type": "VARCHAR(255)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "加密密码"},
+        {"name": "status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "账号状态"},
+        {"name": "last_login_at", "type": "TIMESTAMP", "nullable": True, "primary_key": False, "auto_increment": False, "comment": "最后登录时间"},
+        {"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"}
+    ],
+    "indexes": [
+        {"name": "uk_username", "columns": ["username"], "unique": True},
+        {"name": "uk_email", "columns": ["email"], "unique": True}
+    ]
+}
+
+OFFLINE_ORDER_SCHEMA = {
+    "table_name": "orders",
+    "table_comment": "业务订单表",
+    "columns": [
+        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "订单ID"},
+        {"name": "order_sn", "type": "VARCHAR(64)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "订单流水号"},
+        {"name": "user_id", "type": "BIGINT", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "关联用户ID"},
+        {"name": "total_amount", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "订单总金额"},
+        {"name": "pay_status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "unpaid", "comment": "支付状态"},
+        {"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "下单时间"}
+    ],
+    "indexes": [
+        {"name": "uk_order_sn", "columns": ["order_sn"], "unique": True},
+        {"name": "idx_user_id", "columns": ["user_id"], "unique": False}
+    ]
+}
+
+OFFLINE_PRODUCT_SCHEMA = {
+    "table_name": "products",
+    "table_comment": "商品信息表",
+    "columns": [
+        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "商品ID"},
+        {"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "商品名称"},
+        {"name": "price", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "商品价格"},
+        {"name": "stock", "type": "INT", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0", "comment": "库存数量"},
+        {"name": "status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "上架状态"}
+    ],
+    "indexes": [
+        {"name": "idx_product_status", "columns": ["status"], "unique": False}
+    ]
+}
+
+
+def make_offline_fallback_schema(question: str) -> dict[str, Any]:
+    t_name = "business_table"
+    cleaned = question.lower()
+    if "用户" in question or "user" in cleaned:
+        t_name = "users"
+    elif "订单" in question or "order" in cleaned:
+        t_name = "orders"
+    elif "商品" in question or "product" in cleaned:
+        t_name = "products"
+    elif "日志" in question or "log" in cleaned:
+        t_name = "logs"
+    elif "会员" in question or "member" in cleaned:
+        t_name = "members"
+    
+    columns = [
+        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "主键ID"}
+    ]
+    indexes = []
+    
+    if any(w in question or w in cleaned for w in ["name", "姓名", "名称", "标题", "title"]):
+        columns.append({"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "名称"})
+        indexes.append({"name": "idx_name", "columns": ["name"], "unique": False})
+        
+    if any(w in question or w in cleaned for w in ["status", "状态", "类型", "type"]):
+        columns.append({"name": "status", "type": "VARCHAR(32)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "状态"})
+        
+    if any(w in question or w in cleaned for w in ["price", "价格", "金额", "amount"]):
+        columns.append({"name": "amount", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "金额"})
+        
+    if any(w in question or w in cleaned for w in ["desc", "描述", "备注", "content", "内容", "comment"]):
+        columns.append({"name": "description", "type": "VARCHAR(255)", "nullable": True, "primary_key": False, "auto_increment": False, "comment": "描述"})
+        
+    if any(w in question or w in cleaned for w in ["time", "时间", "日期", "date", "created_at"]):
+        columns.append({"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"})
+
+    if len(columns) == 1:
+        columns.append({"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "名称"})
+        columns.append({"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"})
+
+    return {
+        "table_name": t_name,
+        "table_comment": f"基于提示词生成的{t_name}表",
+        "columns": columns,
+        "indexes": indexes
+    }
+
+
+def generate_offline_table_design(question: str) -> dict[str, Any]:
+    cleaned = question.strip()
+    if "用户" in cleaned or "user" in cleaned.lower():
+        return OFFLINE_USER_SCHEMA
+    if "订单" in cleaned or "order" in cleaned.lower():
+        return OFFLINE_ORDER_SCHEMA
+    if "商品" in cleaned or "product" in cleaned.lower():
+        return OFFLINE_PRODUCT_SCHEMA
+    
+    return make_offline_fallback_schema(question)
+
+
+def generate_table_design_ai(
+    question: str, llm_config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """
+    Generates a premium MySQL table schema (columns and indexes) using AI or dynamic heuristics fallback.
+    """
+    llm_config = llm_config or {}
+    api_key = llm_config.get("api_key", "").strip()
+    api_base = llm_config.get("api_base", "https://api.openai.com/v1").strip()
+    model_name = llm_config.get("model", "gpt-4o-mini").strip()
+
+    if not api_key:
+        return generate_offline_table_design(question)
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": AI_TABLE_DESIGN_SYSTEM_PROMPT},
+            {"role": "user", "content": f"User Request: \"{question}\"\nGenerate Table Design JSON:"}
+        ],
+        "temperature": 0.2,
+        "max_tokens": 1200,
+        "response_format": {"type": "json_object"}
+    }
+
+    try:
+        response = httpx.post(
+            f"{api_base}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=20.0
+        )
+        if response.status_code != 200:
+            raise AIServiceError(f"LLM API returned an error (HTTP {response.status_code}): {response.text}")
+            
+        data = response.json()
+        response_text = data["choices"][0]["message"]["content"].strip()
+        
+        import json
+        design_json: dict[str, Any] = json.loads(response_text)
+        return design_json
+    except Exception as e:
+        print(f"Online table design failed, falling back: {e}")
+        return generate_offline_table_design(question)

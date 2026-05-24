@@ -28,6 +28,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export interface DataSource {
   id: string;
+  project_id?: string;
+  environment_id?: string;
   name: string;
   host: string;
   port: number;
@@ -56,6 +58,67 @@ export interface DataSource {
   created_at: string;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  datasource_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseEnvironment {
+  id: string;
+  project_id: string;
+  name: string;
+  runtime: string;
+  engine_type: string;
+  engine_version: string;
+  image: string;
+  container_name: string;
+  host: string;
+  port: number;
+  database_name: string;
+  username: string;
+  datasource_id?: string;
+  status: string;
+  last_health_status?: string;
+  last_health_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BackupRecord {
+  id: string;
+  project_id: string;
+  datasource_id: string;
+  environment_id?: string;
+  label: string;
+  backup_type: string;
+  status: string;
+  file_path?: string;
+  file_size_bytes?: number;
+  checksum_sha256?: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  error_message?: string;
+  created_at?: string;
+}
+
+export interface TableDesignDraft {
+  id: string;
+  project_id: string;
+  table_name: string;
+  table_comment?: string;
+  columns: any[];
+  indexes: any[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 
 export interface SchemaTable {
   id: string;
@@ -78,6 +141,44 @@ export interface SchemaColumn {
   is_foreign_key: boolean;
   foreign_table_id?: string;
   foreign_column_id?: string;
+}
+
+export interface TableDesignColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  default_value?: string | null;
+  primary_key: boolean;
+  auto_increment: boolean;
+  comment?: string | null;
+}
+
+export interface TableDesignIndex {
+  name?: string | null;
+  columns: string[];
+  unique: boolean;
+}
+
+export interface TableDesignDDLRequest {
+  table_name: string;
+  table_comment?: string | null;
+  engine?: string;
+  charset?: string;
+  collation?: string;
+  columns: TableDesignColumn[];
+  indexes?: TableDesignIndex[];
+}
+
+export interface TableDesignDDLResponse {
+  ddl: string;
+  warnings: string[];
+  summary: {
+    tableName: string;
+    columns: number;
+    indexes: number;
+    primaryKey: string[];
+    dialect: string;
+  };
 }
 
 export interface GuardrailCheckResult {
@@ -154,13 +255,78 @@ export interface ERDiagramData {
 }
 
 export const api = {
+  listProjects: () => request<Project[]>("/projects"),
+
+  createProject: (params: { name: string; description?: string }) =>
+    request<Project>("/projects", { method: "POST", body: JSON.stringify(params) }),
+
+  listEnvironments: (projectId: string) =>
+    request<DatabaseEnvironment[]>(`/projects/${encodeURIComponent(projectId)}/environments`),
+
+  createLocalMysqlEnvironment: (params: { project_id: string; name: string; mysql_version?: string; seed_demo?: boolean }) =>
+    request<DatabaseEnvironment>("/environments/local-mysql", { method: "POST", body: JSON.stringify(params) }),
+
+  startEnvironment: (environmentId: string) =>
+    request<DatabaseEnvironment>(`/environments/${environmentId}/start`, { method: "POST" }),
+
+  stopEnvironment: (environmentId: string) =>
+    request<DatabaseEnvironment>(`/environments/${environmentId}/stop`, { method: "POST" }),
+
+  checkEnvironmentHealth: (environmentId: string) =>
+    request<{ environment: DatabaseEnvironment; health: any }>(`/environments/${environmentId}/health`),
+
+  getEnvironmentLogs: (environmentId: string, tail = 200) =>
+    request<{ environmentId: string; logs: string }>(`/environments/${environmentId}/logs?tail=${tail}`),
+
+  checkDockerStatus: () =>
+    request<{ available: boolean }>("/environments/docker-status"),
+
+  destroyEnvironment: (environmentId: string) =>
+    request<{ ok: boolean; message: string }>(`/environments/${environmentId}`, { method: "DELETE" }),
+
+  rebuildEnvironment: (environmentId: string) =>
+    request<DatabaseEnvironment>(`/environments/${environmentId}/rebuild`, { method: "POST" }),
+
+  listBackups: (projectId: string, datasourceId?: string) =>
+    request<BackupRecord[]>(
+      `/projects/${encodeURIComponent(projectId)}/backups${
+        datasourceId ? `?datasource_id=${encodeURIComponent(datasourceId)}` : ""
+      }`,
+    ),
+
+  createBackup: (datasourceId: string, label?: string) =>
+    request<BackupRecord>("/backups", {
+      method: "POST",
+      body: JSON.stringify({ datasource_id: datasourceId, label }),
+    }),
+
+  restorePrecheck: (backupId: string) =>
+    request<{
+      ok: boolean;
+      warnings: string[];
+      errors: string[];
+      filePath: string;
+      fileSizeBytes: number;
+      checksumSha256?: string;
+    }>(`/backups/${backupId}/restore-precheck`, { method: "POST" }),
+
+  restoreBackup: (backupId: string) =>
+    request<{
+      success: boolean;
+      backup_id: string;
+      datasource_id: string;
+      database_name: string;
+      message: string;
+    }>(`/backups/${backupId}/restore`, { method: "POST" }),
+
   testConnection: (params: unknown) =>
     request<any>("/datasources/test", { method: "POST", body: JSON.stringify(params) }),
 
   createDatasource: (params: unknown) =>
     request<DataSource>("/datasources", { method: "POST", body: JSON.stringify(params) }),
 
-  listDatasources: () => request<DataSource[]>("/datasources"),
+  listDatasources: (projectId?: string) =>
+    request<DataSource[]>(projectId ? `/datasources?project_id=${encodeURIComponent(projectId)}` : "/datasources"),
 
   deleteDatasource: (id: string) =>
     request<{ success: boolean; message: string }>(`/datasources/${id}`, { method: "DELETE" }),
@@ -176,6 +342,24 @@ export const api = {
 
   getERDiagram: (datasourceId: string) =>
     request<ERDiagramData>(`/schema/er-diagram?datasource_id=${datasourceId}`),
+
+  generateCreateTableDDL: (params: TableDesignDDLRequest) =>
+    request<TableDesignDDLResponse>("/schema/design/create-table-ddl", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+
+  executeTableDesignDDL: (datasourceId: string, ddl: string) =>
+    request<any>("/schema/design/execute-ddl", {
+      method: "POST",
+      body: JSON.stringify({ datasource_id: datasourceId, ddl }),
+    }),
+
+  generateTestData: (params: { datasource_id: string; table_name: string; row_count?: number; language?: string }) =>
+    request<{ success: boolean; tableName: string; insertedRows: number; latencyMs: number; message: string }>("/schema/generate-test-data", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
 
   validateSql: (sql: string, signal?: AbortSignal) =>
     request<GuardrailCheckResult>("/query/validate", {
@@ -241,7 +425,59 @@ export const api = {
   getLlmStats: (datasourceId: string) =>
     request<any>(`/llm-logs/stats?datasource_id=${datasourceId}`),
 
-  startDemoMysql: () =>
-    request<DataSource>("/demo/start", { method: "POST" }),
+  startDemoMysql: (projectId?: string) =>
+    request<DataSource>("/demo/start", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
+
+  listTableDesignDrafts: (projectId: string) =>
+    request<TableDesignDraft[]>(`/schema/design/drafts?project_id=${projectId}`),
+
+  getTableDesignDraft: (draftId: string) =>
+    request<TableDesignDraft>(`/schema/design/drafts/${draftId}`),
+
+  saveTableDesignDraft: (req: {
+    project_id: string;
+    draft_id?: string;
+    table_name: string;
+    table_comment?: string;
+    columns: any[];
+    indexes: any[];
+  }) =>
+    request<TableDesignDraft>("/schema/design/drafts/save", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  deleteTableDesignDraft: (draftId: string) =>
+    request<any>(`/schema/design/drafts/${draftId}`, { method: "DELETE" }),
+
+  generateTableDesignAi: (prompt: string, config?: { apiKey?: string; apiBase?: string; model?: string }) =>
+    request<TableDesignAiResponse>("/schema/design/ai-generate", {
+      method: "POST",
+      body: JSON.stringify({
+        prompt,
+        api_key: config?.apiKey,
+        api_base: config?.apiBase,
+        model_name: config?.model,
+      }),
+    }),
 };
+
+export interface TableDesignAiResponse {
+  table_name: string;
+  table_comment: string;
+  columns: Array<{
+    name: string;
+    type: string;
+    nullable: boolean;
+    primary_key: boolean;
+    auto_increment: boolean;
+    default_value: string | null;
+    comment: string;
+  }>;
+  indexes: Array<{
+    name: string;
+    columns: string[];
+    unique: boolean;
+  }>;
+}
 

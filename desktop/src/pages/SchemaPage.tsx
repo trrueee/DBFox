@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Eye, HardDrive, Key, Link2, Search, Table } from "lucide-react";
+import { Eye, HardDrive, Key, Link2, Search, Table, X } from "lucide-react";
 import { api } from "../lib/api";
 import type { DataSource, ERDiagramData, QueryResult, SchemaColumn, SchemaTable } from "../lib/api";
 import { DataTable } from "../components/DataTable";
 import { ErDiagram } from "../components/ErDiagram";
+import { TableDesignDraft } from "../components/TableDesignDraft";
 
 interface SchemaPageProps {
   datasource: DataSource;
@@ -17,11 +18,45 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [columnsLoading, setColumnsLoading] = useState(false);
-  const [viewTab, setViewTab] = useState<"fields" | "er" | "data">("fields");
+  const [viewTab, setViewTab] = useState<"fields" | "er" | "data" | "design">("fields");
   const [erData, setErData] = useState<ERDiagramData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<QueryResult | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Test data generation states
+  const [showTestDataModal, setShowTestDataModal] = useState(false);
+  const [testDataRowCount, setTestDataRowCount] = useState(10);
+  const [testDataLanguage, setTestDataLanguage] = useState<"zh" | "en">("zh");
+  const [generatingTestData, setGeneratingTestData] = useState(false);
+  const [testDataResult, setTestDataResult] = useState<string | null>(null);
+  const [testDataError, setTestDataError] = useState<string | null>(null);
+
+  const handleGenerateTestData = async () => {
+    if (!selectedTable) return;
+    setGeneratingTestData(true);
+    setTestDataError(null);
+    setTestDataResult(null);
+    try {
+      const res = await api.generateTestData({
+        datasource_id: datasource.id,
+        table_name: selectedTable.table_name,
+        row_count: testDataRowCount,
+        language: testDataLanguage,
+      });
+      setTestDataResult(res.message);
+      // Wait a bit, then refresh preview and close modal
+      setTimeout(() => {
+        void fetchPreviewData(selectedTable.table_name);
+        setShowTestDataModal(false);
+        setTestDataResult(null);
+      }, 1800);
+    } catch (err: any) {
+      setTestDataError(err.message ?? "注入测试数据失败，请检查主外键关联表是否已填充数据。");
+    } finally {
+      setGeneratingTestData(false);
+    }
+  };
 
   useEffect(() => {
     void fetchTables();
@@ -36,13 +71,18 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
     if (viewTab === "data" && selectedTable) void fetchPreviewData(selectedTable.table_name);
   }, [viewTab, selectedTable?.id]);
 
-  const fetchTables = async () => {
+  const fetchTables = async (selectTableName?: string) => {
     try {
       setLoading(true);
       const data = await api.listTables(datasource.id);
       setTables(data);
-      if (data.length > 0) await handleSelectTable(data[0]);
-      else { setSelectedTable(null); setColumns([]); }
+      if (data.length > 0) {
+        const found = selectTableName ? data.find((t) => t.table_name === selectTableName) : null;
+        await handleSelectTable(found || data[0]);
+      } else {
+        setSelectedTable(null);
+        setColumns([]);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -56,6 +96,12 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
     } catch (err) {
       console.error("ER load failed", err);
     }
+  };
+
+  const handleExecuteSuccess = (newTableName?: string) => {
+    void fetchTables(newTableName);
+    void fetchERDiagram();
+    setViewTab("fields");
   };
 
   const fetchPreviewData = async (tableName: string) => {
@@ -212,6 +258,9 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
               <Eye size={13} />
               数据预览
             </button>
+            <button className={`pill-tab ${viewTab === "design" ? "active" : ""}`} onClick={() => setViewTab("design")}>
+              设计草稿
+            </button>
           </div>
         </div>
 
@@ -340,6 +389,26 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
                 )}
                 {previewLoading && <span className="status-badge status-badge-info">加载中...</span>}
                 {previewError && <span className="status-badge status-badge-error">{previewError}</span>}
+
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                  <button
+                    className="btn-secondary hover-lift"
+                    style={{
+                      padding: "3px 10px",
+                      fontSize: "0.76rem",
+                      color: "var(--accent-indigo)",
+                      borderColor: "rgba(74, 91, 192, 0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontWeight: 600,
+                    }}
+                    onClick={() => setShowTestDataModal(true)}
+                    disabled={previewLoading || !selectedTable}
+                  >
+                    <span>✨ AI 造测试数据</span>
+                  </button>
+                </div>
               </div>
               <div style={{ flex: 1, overflow: "auto" }}>
                 {previewLoading ? (
@@ -351,11 +420,196 @@ export const SchemaPage = ({ datasource, initialViewTab }: SchemaPageProps) => {
                 ) : previewData && previewData.rows.length > 0 ? (
                   <DataTable columns={previewData.columns} rows={previewData.rows} />
                 ) : previewData && previewData.rows.length === 0 ? (
-                  <div className="empty-state"><div className="empty-state-desc">该表暂无数据</div></div>
+                  <div className="empty-state">
+                    <div className="empty-state-desc">该表暂无数据</div>
+                    <button
+                      className="btn-primary hover-lift"
+                      style={{ marginTop: 12, padding: "6px 16px", fontSize: "0.82rem" }}
+                      onClick={() => setShowTestDataModal(true)}
+                    >
+                      ✨ 智能造测试数据
+                    </button>
+                  </div>
                 ) : !previewError ? (
                   <div className="empty-state"><div className="empty-state-desc">切换到「数据预览」查看前 100 行</div></div>
                 ) : null}
               </div>
+            </div>
+          )}
+
+          {/* ── Smart Test Data Generation Modal ── */}
+          {showTestDataModal && selectedTable && (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: "rgba(0, 0, 0, 0.4)",
+                backdropFilter: "blur(4px)",
+                display: "grid",
+                placeItems: "center",
+                zIndex: 999,
+                animation: "fade-in 0.2s ease-out",
+              }}
+              onClick={() => {
+                if (!generatingTestData) setShowTestDataModal(false);
+              }}
+            >
+              <div
+                className="lab-card animate-scale-up"
+                style={{
+                  width: 440,
+                  padding: 24,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  background: "var(--bg-surface)",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+                  border: "1px solid var(--border-light)",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span>✨ AI 智能关联造测试数据</span>
+                  </h3>
+                  <button
+                    className="btn-ghost"
+                    style={{ padding: 4 }}
+                    onClick={() => setShowTestDataModal(false)}
+                    disabled={generatingTestData}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <p style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                  为表 <strong style={{ color: "var(--text-primary)" }}>`{selectedTable.table_name}`</strong> 自动解析字段属性并注入高仿真的模拟数据。系统会自动解析外键依赖并进行智能关联，确保数据引用完整性。
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <label className="field-label" style={{ marginBottom: 6, display: "block" }}>生成行数</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {[10, 50, 100].map((rows) => (
+                        <button
+                          key={rows}
+                          className={testDataRowCount === rows ? "btn-primary" : "btn-secondary"}
+                          style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem" }}
+                          onClick={() => setTestDataRowCount(rows)}
+                          disabled={generatingTestData}
+                        >
+                          {rows} 行
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="field-label" style={{ marginBottom: 6, display: "block" }}>语言与数据风格</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className={testDataLanguage === "zh" ? "btn-primary" : "btn-secondary"}
+                        style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem", borderColor: testDataLanguage === "zh" ? "var(--accent-indigo)" : undefined }}
+                        onClick={() => setTestDataLanguage("zh")}
+                        disabled={generatingTestData}
+                      >
+                        🇨🇳 中文 (姓名、手机、地址)
+                      </button>
+                      <button
+                        className={testDataLanguage === "en" ? "btn-primary" : "btn-secondary"}
+                        style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem", borderColor: testDataLanguage === "en" ? "var(--accent-indigo)" : undefined }}
+                        onClick={() => setTestDataLanguage("en")}
+                        disabled={generatingTestData}
+                      >
+                        🇺🇸 英文 (Names, Phones, Cities)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      background: "var(--bg-secondary)",
+                      borderRadius: 8,
+                      padding: 12,
+                      fontSize: "0.76rem",
+                      color: "var(--text-muted)",
+                      border: "1px solid var(--border-light)",
+                    }}
+                  >
+                    🔒 <strong style={{ color: "var(--text-secondary)" }}>本地优先安全保障</strong>：推理与填充工作完全在本地执行，测试数据直接插入本地容器，无任何敏感信息离境上云风险。
+                  </div>
+
+                  {testDataResult && (
+                    <div
+                      style={{
+                        background: "rgba(16, 185, 129, 0.08)",
+                        border: "1px solid rgba(16, 185, 129, 0.2)",
+                        borderRadius: 6,
+                        padding: "8px 12px",
+                        color: "var(--accent-green)",
+                        fontSize: "0.82rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 14 }}>✅</span>
+                      <span>{testDataResult}</span>
+                    </div>
+                  )}
+
+                  {testDataError && (
+                    <div
+                      style={{
+                        background: "rgba(239, 68, 68, 0.08)",
+                        border: "1px solid rgba(239, 68, 68, 0.2)",
+                        borderRadius: 6,
+                        padding: "8px 12px",
+                        color: "var(--accent-red)",
+                        fontSize: "0.82rem",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      ⚠️ <strong>注入失败</strong>: {testDataError}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+                  <button
+                    className="btn-secondary"
+                    style={{ padding: "6px 16px", fontSize: "0.82rem" }}
+                    onClick={() => setShowTestDataModal(false)}
+                    disabled={generatingTestData}
+                  >
+                    取消
+                  </button>
+                  <button
+                    className="btn-primary"
+                    style={{ padding: "6px 20px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={handleGenerateTestData}
+                    disabled={generatingTestData}
+                  >
+                    {generatingTestData ? (
+                      <>
+                        <span className="animate-spin">⏳</span> 正在智能生成并注入...
+                      </>
+                    ) : (
+                      "🚀 开始造数"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Table Design Draft Tab */}
+          {viewTab === "design" && (
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <TableDesignDraft datasource={datasource} onExecuteSuccess={handleExecuteSuccess} />
             </div>
           )}
         </div>

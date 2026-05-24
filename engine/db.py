@@ -150,6 +150,149 @@ def init_db() -> None:
                 if not has_column(conn, "query_history", col_name):
                     conn.execute(text(f"ALTER TABLE query_history ADD COLUMN {col_name} {col_type}"))
 
+        def migration_v7(conn: Connection) -> None:
+            # Version 7: Project workspace ownership for lifecycle assets
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS projects (
+                    id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    description TEXT,
+                    status VARCHAR NOT NULL DEFAULT 'active',
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_projects_status
+                ON projects (status)
+            """))
+            conn.execute(text("""
+                INSERT OR IGNORE INTO projects (
+                    id,
+                    name,
+                    description,
+                    status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    'default-project',
+                    'Default Workspace',
+                    'Auto-created workspace for existing DataBox assets.',
+                    'active',
+                    datetime('now'),
+                    datetime('now')
+                )
+            """))
+
+            if not has_column(conn, "data_sources", "project_id"):
+                conn.execute(text("ALTER TABLE data_sources ADD COLUMN project_id VARCHAR"))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_data_sources_project_id
+                    ON data_sources (project_id)
+                """))
+
+            conn.execute(text("""
+                UPDATE data_sources
+                SET project_id = 'default-project'
+                WHERE project_id IS NULL OR project_id = ''
+            """))
+
+        def migration_v8(conn: Connection) -> None:
+            # Version 8: Project-scoped local database environments
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS database_environments (
+                    id VARCHAR PRIMARY KEY,
+                    project_id VARCHAR NOT NULL,
+                    name VARCHAR NOT NULL,
+                    runtime VARCHAR NOT NULL DEFAULT 'docker',
+                    engine_type VARCHAR NOT NULL DEFAULT 'mysql',
+                    engine_version VARCHAR NOT NULL DEFAULT '8.0',
+                    image VARCHAR NOT NULL DEFAULT 'mysql:8.0',
+                    container_name VARCHAR NOT NULL,
+                    host VARCHAR NOT NULL DEFAULT '127.0.0.1',
+                    port INTEGER NOT NULL,
+                    database_name VARCHAR NOT NULL,
+                    username VARCHAR NOT NULL,
+                    password_ciphertext VARCHAR NOT NULL,
+                    password_nonce VARCHAR NOT NULL,
+                    datasource_id VARCHAR,
+                    status VARCHAR NOT NULL DEFAULT 'created',
+                    last_health_status VARCHAR,
+                    last_health_at DATETIME,
+                    last_error TEXT,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_database_environments_project
+                ON database_environments (project_id)
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_database_environments_status
+                ON database_environments (status)
+            """))
+            if not has_column(conn, "data_sources", "environment_id"):
+                conn.execute(text("ALTER TABLE data_sources ADD COLUMN environment_id VARCHAR"))
+                conn.execute(text("""
+                    CREATE INDEX IF NOT EXISTS ix_data_sources_environment_id
+                    ON data_sources (environment_id)
+                """))
+
+        def migration_v9(conn: Connection) -> None:
+            # Version 9: Project-scoped datasource backup records
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS backup_records (
+                    id VARCHAR PRIMARY KEY,
+                    project_id VARCHAR NOT NULL,
+                    datasource_id VARCHAR NOT NULL,
+                    environment_id VARCHAR,
+                    label VARCHAR,
+                    backup_type VARCHAR NOT NULL DEFAULT 'mysqldump',
+                    status VARCHAR NOT NULL DEFAULT 'running',
+                    file_path TEXT,
+                    file_size_bytes INTEGER,
+                    checksum_sha256 VARCHAR,
+                    started_at DATETIME NOT NULL,
+                    completed_at DATETIME,
+                    duration_ms INTEGER,
+                    error_message TEXT,
+                    created_at DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_backup_records_project
+                ON backup_records (project_id)
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_backup_records_datasource
+                ON backup_records (datasource_id)
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_backup_records_created
+                ON backup_records (created_at)
+            """))
+
+        def migration_v10(conn: Connection) -> None:
+            # Version 10: Table design drafts persistence
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS table_design_drafts (
+                    id VARCHAR PRIMARY KEY,
+                    project_id VARCHAR NOT NULL,
+                    table_name VARCHAR NOT NULL,
+                    table_comment VARCHAR,
+                    columns_json TEXT NOT NULL,
+                    indexes_json TEXT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    updated_at DATETIME NOT NULL
+                )
+            """))
+            conn.execute(text("""
+                CREATE INDEX IF NOT EXISTS ix_table_design_drafts_project
+                ON table_design_drafts (project_id)
+            """))
+
         migrations = {
             1: migration_v1,
             2: migration_v2,
@@ -157,6 +300,10 @@ def init_db() -> None:
             4: migration_v4,
             5: migration_v5,
             6: migration_v6,
+            7: migration_v7,
+            8: migration_v8,
+            9: migration_v9,
+            10: migration_v10,
         }
 
         # Apply outstanding migrations sequentially within a transaction block
