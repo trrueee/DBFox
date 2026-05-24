@@ -108,8 +108,10 @@ def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
         raise BackupError("mysqldump timed out after 300 seconds.", code="BACKUP_TIMEOUT") from exc
 
 
-def _pymysql_fallback_backup(ds: DataSource, output_path: Path) -> None:
+def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
     import pymysql
+    import logging
+    logger = logging.getLogger("databox.backup")
     params = get_mysql_connection_params(_datasource_connection_dict(ds))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -125,7 +127,9 @@ def _pymysql_fallback_backup(ds: DataSource, output_path: Path) -> None:
     
     try:
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("-- DataBox Fallback Database Dump (Pure-Python)\n")
+            f.write("-- DataBox Simple SQL Export (Pure-Python)\n")
+            f.write("-- Warning: This simple export is only suited for simple table structures and data backups.\n")
+            f.write("-- Stored procedures, triggers, views, or complex physical properties are not supported.\n")
             f.write(f"-- Dump Date: {datetime.now(UTC).isoformat()}\n")
             f.write(f"-- Database: {params['database']}\n\n")
             f.write("SET FOREIGN_KEY_CHECKS=0;\n\n")
@@ -153,12 +157,12 @@ def _pymysql_fallback_backup(ds: DataSource, output_path: Path) -> None:
                             values = []
                             for val in row:
                                 if val is None:
-                                    values.append("NULL")
+                                     values.append("NULL")
                                 elif isinstance(val, (int, float)):
-                                    values.append(str(val))
+                                     values.append(str(val))
                                 else:
-                                    escaped_val = str(val).replace("\\", "\\\\").replace("'", "\\'")
-                                    values.append(f"'{escaped_val}'")
+                                     escaped_val = str(val).replace("\\", "\\\\").replace("'", "\\'")
+                                     values.append(f"'{escaped_val}'")
                             
                             col_str = ", ".join([f"`{c}`" for c in columns])
                             val_str = ", ".join(values)
@@ -180,7 +184,7 @@ def _pymysql_fallback_backup(ds: DataSource, output_path: Path) -> None:
         conn.close()
 
 
-def _pymysql_fallback_restore(ds: DataSource, sql_file_path: Path) -> None:
+def _pymysql_simple_sql_import(ds: DataSource, sql_file_path: Path) -> None:
     import pymysql
     params = get_mysql_connection_params(_datasource_connection_dict(ds))
     
@@ -222,7 +226,9 @@ def _pymysql_fallback_restore(ds: DataSource, sql_file_path: Path) -> None:
         conn.close()
 
 
-def create_backup(db: Session, datasource_id: str, label: str | None = None) -> BackupRecord:
+def create_backup(db: Session, datasource_id: str, label: str | None = None, allow_fallback: bool = True) -> BackupRecord:
+    import logging
+    logger = logging.getLogger("databox.backup")
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
@@ -257,8 +263,21 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None) -> 
             _run_mysqldump(ds, output_path)
         except BackupError as exc:
             if "not found" in str(exc).lower():
-                _pymysql_fallback_backup(ds, output_path)
-                backup_mode = "pymysql_fallback"
+                if not allow_fallback:
+                    raise BackupError(
+                        "mysqldump was not found. System is in Strict Mode (allow_fallback=False). "
+                        "Please install MySQL client tools and ensure mysqldump is in your system PATH "
+                        "to perform a production-grade full logical backup.",
+                        code="MYSQLDUMP_NOT_FOUND"
+                    ) from exc
+                logger.warning(
+                    "Warning: pure-Python simple SQL export is being used as fallback. "
+                    "This export only supports simple table structures and row data, and DOES NOT support "
+                    "triggers, stored procedures, views, or large binary objects. Please install official "
+                    "mysql-client tools for production-grade physical backups."
+                )
+                _pymysql_simple_sql_export(ds, output_path)
+                backup_mode = "simple_sql_export"
             else:
                 raise
 
@@ -302,9 +321,21 @@ def precheck_restore(record: BackupRecord) -> dict[str, Any]:
             errors.append("Backup file is empty.")
         if path.suffix.lower() != ".sql":
             warnings.append("Backup file does not use .sql extension.")
-        sample = path.read_text(encoding="utf-8", errors="ignore")[:4096].lower()
-        if "create table" not in sample and "insert into" not in sample and "mysql dump" not in sample and "fallback database dump" not in sample:
-            warnings.append("Backup file does not look like a standard SQL dump.")
+        
+        # Calculate current checksum and compare for anti-tamper security validation
+        try:
+            current_checksum = _sha256_file(path)
+            if current_checksum != record.checksum_sha256:
+                errors.append(f"Backup file has been modified or tampered with! Original checksum: {record.checksum_sha256}, current checksum: {current_checksum}")
+        except Exception as e:
+            errors.append(f"Failed to calculate backup file checksum: {e}")
+
+        try:
+            sample = path.read_text(encoding="utf-8", errors="ignore")[:4096].lower()
+            if "create table" not in sample and "insert into" not in sample and "mysql dump" not in sample and "simple sql export" not in sample and "fallback database dump" not in sample:
+                warnings.append("Backup file does not look like a standard SQL dump.")
+        except Exception:
+            pass
 
     if str(record.status) != "success":
         warnings.append("Backup record status is not success.")
@@ -352,7 +383,9 @@ def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
         raise BackupError("mysql restore timed out after 300 seconds.", code="RESTORE_TIMEOUT") from exc
 
 
-def execute_restore(db: Session, backup_id: str) -> dict[str, Any]:
+def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) -> dict[str, Any]:
+    import logging
+    logger = logging.getLogger("databox.backup")
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
         raise BackupError("Backup record not found.", code="BACKUP_NOT_FOUND")
@@ -364,16 +397,32 @@ def execute_restore(db: Session, backup_id: str) -> dict[str, Any]:
     if ds.is_read_only:
         raise BackupError("Cannot restore to a read-only data source.", code="RESTORE_READONLY_ERROR")
 
+    # Perform Dry-Run precheck (which includes SHA-256 anti-tamper confirmation)
     precheck = precheck_restore(record)
     if not precheck["ok"]:
         raise BackupError(f"Restore pre-check failed: {', '.join(precheck['errors'])}", code="RESTORE_PRECHECK_FAILED")
 
     sql_path = Path(precheck["filePath"])
+
+    # Safety confirmation: Prevent environment tier mismatch
+    if record.environment_id and record.environment_id != ds.environment_id:
+        raise BackupError(
+            f"Environment mismatch: Cannot restore a backup from environment '{record.environment_id}' to different target environment '{ds.environment_id or 'unknown'}'.",
+            code="RESTORE_ENV_MISMATCH"
+        )
+
     try:
         _run_mysql_restore(ds, sql_path)
     except BackupError as exc:
         if "not found" in str(exc).lower():
-            _pymysql_fallback_restore(ds, sql_path)
+            if not allow_fallback:
+                raise BackupError(
+                    "mysql client command was not found. System is in Strict Mode (allow_fallback=False). "
+                    "Please install MySQL client tools and ensure mysql is in PATH.",
+                    code="MYSQL_CLIENT_NOT_FOUND"
+                ) from exc
+            logger.warning("mysql command not found, falling back to pure-Python simple SQL execution.")
+            _pymysql_simple_sql_import(ds, sql_path)
         else:
             raise
 

@@ -156,3 +156,132 @@ def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "RESTORE_READONLY_ERROR"
 
+
+def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -> None:
+    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_anti_tamper") / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    # 1. Mock mysqldump
+    def fake_dump(ds: DataSource, output_path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("-- MySQL dump\nCREATE TABLE users (id int);\n", encoding="utf-8")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump)
+
+    # Create backup record
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id, "label": "to tamper"},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    backup = resp.json()
+    assert backup["status"] == "success"
+
+    # Now tamper with the file contents
+    file_path = Path(backup["file_path"])
+    file_path.write_text("-- MySQL dump (Tampereeeeeeed)\nCREATE TABLE users (id int, extra text);\n", encoding="utf-8")
+
+    # Verify that restore fails due to checksum verification mismatch!
+    resp = client.post(f"/api/v1/backups/{backup['id']}/restore", headers=_headers())
+    assert resp.status_code == 400
+    assert "tampered" in resp.json()["detail"]["message"]
+    assert resp.json()["detail"]["code"] == "RESTORE_PRECHECK_FAILED"
+
+
+def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
+    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_backup_strict") / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    # Mock _run_mysqldump to raise FileNotFoundError to simulate missing binary
+    from engine.backup import BackupError
+    def fake_dump_missing(ds: DataSource, output_path) -> None:
+        raise BackupError("mysqldump was not found. Please install MySQL client tools and ensure mysqldump is in PATH.")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump_missing)
+
+    # Under strict mode (allow_fallback=False), backup must fail directly!
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id, "allow_fallback": False},
+        headers=_headers(),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "MYSQLDUMP_NOT_FOUND"
+
+
+def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
+    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_strict") / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    def fake_dump(ds: DataSource, output_path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("-- MySQL dump\nCREATE TABLE users (id int);\n", encoding="utf-8")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump)
+
+    # Create backup record
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    backup = resp.json()
+
+    # Mock _run_mysql_restore to simulate missing mysql binary
+    from engine.backup import BackupError
+    def fake_restore_missing(ds: DataSource, sql_file_path: Path) -> None:
+        raise BackupError("mysql client command was not found. Please install MySQL client tools and ensure mysql is in PATH.")
+
+    monkeypatch.setattr("engine.backup._run_mysql_restore", fake_restore_missing)
+
+    # Under strict mode, restore must fail directly without fallback!
+    resp = client.post(f"/api/v1/backups/{backup['id']}/restore?allow_fallback=false", headers=_headers())
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "MYSQL_CLIENT_NOT_FOUND"
+
+
+def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> None:
+    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_env_mismatch") / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    
+    # 1. Create a dev datasource and backup
+    datasource = _create_mysql_datasource(db_session)
+    datasource.env = "dev"
+    datasource.environment_id = "env-dev"
+    db_session.add(datasource)
+    db_session.commit()
+
+    def fake_dump(ds: DataSource, output_path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("-- MySQL dump\nCREATE TABLE users (id int);\n", encoding="utf-8")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump)
+
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    backup = resp.json()
+
+    # 2. Make the datasource environment 'staging' and change environment_id to mismatch
+    datasource.env = "staging"
+    datasource.environment_id = "env-staging"
+    db_session.add(datasource)
+    db_session.commit()
+
+    # Restore must fail due to environment tier mismatch safety guardrail!
+    resp = client.post(f"/api/v1/backups/{backup['id']}/restore", headers=_headers())
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "RESTORE_ENV_MISMATCH"
+

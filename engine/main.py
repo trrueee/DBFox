@@ -80,11 +80,16 @@ async def lifespan(application: FastAPI) -> Any:
 
 
 
+is_frozen = getattr(sys, "frozen", False)
+
 app = FastAPI(
     title="DataBox Local Engine",
     description="Secured Database Client Core for DataBox Desktop Shell",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if is_frozen else "/docs",
+    redoc_url=None if is_frozen else "/redoc",
+    openapi_url=None if is_frozen else "/openapi.json",
 )
 
 # 2. Add CORS Middleware
@@ -111,7 +116,25 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    if request.url.path in ["/", "/docs", "/openapi.json", "/api/v1/health"]:
+    # 🔒 Origin & CSRF prevention in production context
+    origin = request.headers.get("origin")
+    if is_frozen and origin:
+        if origin != "tauri://localhost":
+            logger.warning("Blocked malicious request trying to connect from untrusted origin: %s", origin)
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "code": "FORBIDDEN_ORIGIN",
+                    "message": "Access blocked: Requests from this web origin are strictly prohibited."
+                }
+            )
+
+    if request.url.path in ["/", "/docs", "/openapi.json", "/redoc", "/api/v1/health"]:
+        if is_frozen and request.url.path in ["/docs", "/openapi.json", "/redoc"]:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "Not Found"}
+            )
         return await call_next(request)
 
     token_header = request.headers.get("X-Local-Token")
@@ -125,6 +148,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
         )
 
     return await call_next(request)
+
 
 
 # 4. Exception Handler for Custom DataBox Exceptions

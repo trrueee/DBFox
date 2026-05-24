@@ -35,7 +35,7 @@ def _patch_environment_create(monkeypatch) -> None:
         "engine.environment.populate_demo_data",
         lambda port=3311, root_password="", database_name="": None,
     )
-    monkeypatch.setattr("engine.api.sync_schema", lambda db, datasource_id: {"ok": True})
+    monkeypatch.setattr("engine.api.projects.sync_schema", lambda db, datasource_id: {"ok": True})
 
 
 def test_create_and_list_local_mysql_environment(client, monkeypatch) -> None:
@@ -77,12 +77,12 @@ def test_environment_operations(client, monkeypatch) -> None:
     )
     environment_id = create_resp.json()["id"]
 
-    monkeypatch.setattr("engine.api.stop_environment", lambda environment: setattr(environment, "status", "stopped"))
+    monkeypatch.setattr("engine.api.projects.stop_environment", lambda environment: setattr(environment, "status", "stopped"))
     resp = client.post(f"/api/v1/environments/{environment_id}/stop", headers=_headers())
     assert resp.status_code == 200
     assert resp.json()["status"] == "stopped"
 
-    monkeypatch.setattr("engine.api.start_environment", lambda environment: setattr(environment, "status", "running"))
+    monkeypatch.setattr("engine.api.projects.start_environment", lambda environment: setattr(environment, "status", "running"))
     resp = client.post(f"/api/v1/environments/{environment_id}/start", headers=_headers())
     assert resp.status_code == 200
     assert resp.json()["status"] == "running"
@@ -91,12 +91,12 @@ def test_environment_operations(client, monkeypatch) -> None:
         environment.last_health_status = "healthy"
         return {"status": "healthy", "containerStatus": "running", "tcpOk": True, "mysqlOk": True, "error": None}
 
-    monkeypatch.setattr("engine.api.check_environment_health", fake_health)
+    monkeypatch.setattr("engine.api.projects.check_environment_health", fake_health)
     resp = client.get(f"/api/v1/environments/{environment_id}/health", headers=_headers())
     assert resp.status_code == 200
     assert resp.json()["health"]["status"] == "healthy"
 
-    monkeypatch.setattr("engine.api.get_environment_logs", lambda environment, tail=200: "mysql ready")
+    monkeypatch.setattr("engine.api.projects.get_environment_logs", lambda environment, tail=200: "mysql ready")
     resp = client.get(f"/api/v1/environments/{environment_id}/logs", headers=_headers())
     assert resp.status_code == 200
     assert resp.json()["logs"] == "mysql ready"
@@ -137,7 +137,7 @@ def test_docker_status_and_lifecycle(client, monkeypatch) -> None:
         "engine.environment.populate_demo_data",
         lambda port=3311, root_password="", database_name="": None,
     )
-    monkeypatch.setattr("engine.api.sync_schema", lambda db, datasource_id: {"ok": True})
+    monkeypatch.setattr("engine.api.projects.sync_schema", lambda db, datasource_id: {"ok": True})
 
     resp = client.post(f"/api/v1/environments/{environment_id}/rebuild", headers=_headers())
     assert resp.status_code == 200

@@ -36,7 +36,7 @@ def test_api_start_demo_mysql_success(
     mock_populate.return_value = None
 
     # Mock the schema sync to prevent actual mysql querying in tests
-    with patch("engine.api.sync_schema") as mock_sync:
+    with patch("engine.api.projects.sync_schema") as mock_sync:
         mock_sync.return_value = {"ok": True, "tablesCount": 20}
         
         # 2. Make request

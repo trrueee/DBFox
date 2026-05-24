@@ -1,0 +1,39 @@
+from engine.schemas.project import ProjectCreateRequest
+from engine.schemas.environment import EnvironmentCreateRequest, DemoStartRequest
+from engine.schemas.backup import BackupCreateRequest
+from engine.schemas.table_design import (
+    TableDesignColumnRequest,
+    TableDesignIndexRequest,
+    TableDesignDDLRequest,
+    TableDesignExecuteRequest,
+    TableDesignDraftSaveRequest,
+    TableDesignAIRequest,
+    TestDataGenerateRequest,
+)
+from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest
+from engine.schemas.query import SQLValidateRequest, SQLExecuteRequest, SQLCancelRequest, SQLExplainRequest
+from engine.schemas.ai import SQLGenerateRequest, SchemaAlterationRequest, GoldenSQLCreateRequest, BenchmarkRequest
+
+__all__ = [
+    "ProjectCreateRequest",
+    "EnvironmentCreateRequest",
+    "DemoStartRequest",
+    "BackupCreateRequest",
+    "TableDesignColumnRequest",
+    "TableDesignIndexRequest",
+    "TableDesignDDLRequest",
+    "TableDesignExecuteRequest",
+    "TableDesignDraftSaveRequest",
+    "TableDesignAIRequest",
+    "TestDataGenerateRequest",
+    "DataSourceTestRequest",
+    "DataSourceCreateRequest",
+    "SQLValidateRequest",
+    "SQLExecuteRequest",
+    "SQLCancelRequest",
+    "SQLExplainRequest",
+    "SQLGenerateRequest",
+    "SchemaAlterationRequest",
+    "GoldenSQLCreateRequest",
+    "BenchmarkRequest",
+]
