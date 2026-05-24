@@ -166,27 +166,30 @@ def api_delete_datasource(
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
 
     # 🔒 Two-Phase confirmation check for deleting datasources
-    import os
-    if os.environ.get("DATABOX_BYPASS_CONFIRMATION") != "1":
+    from engine.policy import confirmation_bypass_enabled, confirmation_manager
+    if not confirmation_bypass_enabled():
+        expected_details = {"datasource_id": id}
         if not confirm_token:
-            from engine.policy.confirmation import confirmation_manager
             token = confirmation_manager.create_confirmation(
                 datasource_id=id,
                 action="delete_datasource",
-                details={"datasource_id": id},
+                details=expected_details,
                 expected_confirm_text=datasource.name
             )
             return {
                 "success": False,
                 "requires_confirmation": True,
                 "confirm_token": token,
-                "impact_summary": f"⚠️ 警告：您即将在系统中删除数据源 '{datasource.name}'！\n\n该操作会清空本地保存的所有相关 Schema 结构和元数据历史缓存！请输入数据源名称以确认执行。",
+                "impact_summary": f"⚠️ 警告：您即将在系统中删除数据源 '{datasource.name}'！\n\n该操作会清空本地保存的所有相关 Schema 结构 and 元数据历史缓存！请输入数据源名称以确认执行。",
                 "expected_confirm_text": datasource.name
             }
         else:
-            from engine.policy.confirmation import confirmation_manager
-            is_valid, err_msg, details = confirmation_manager.validate_and_consume(
-                confirm_token, confirm_text or ""
+            is_valid, err_msg = confirmation_manager.validate_and_consume(
+                confirm_token,
+                confirm_text or "",
+                expected_action="delete_datasource",
+                expected_datasource_id=id,
+                expected_details=expected_details
             )
             if not is_valid:
                 raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})

@@ -23,8 +23,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw error;
   }
 
-  return payload as T;
+
+export interface ConfirmationRequired {
+  success: false;
+  requires_confirmation: true;
+  confirm_token: string;
+  impact_summary: string;
+  expected_confirm_text: string;
 }
+
+export type DangerousOperationResult<T> = T | ConfirmationRequired;
 
 export interface DataSource {
   id: string;
@@ -314,14 +322,16 @@ export const api = {
       checksumSha256?: string;
     }>(`/backups/${backupId}/restore-precheck`, { method: "POST" }),
 
-  restoreBackup: (backupId: string) =>
-    request<{
+  restoreBackup: (backupId: string, confirm?: { token: string; text: string }) => {
+    const query = confirm ? `?confirm_token=${encodeURIComponent(confirm.token)}&confirm_text=${encodeURIComponent(confirm.text)}` : "";
+    return request<DangerousOperationResult<{
       success: boolean;
       backup_id: string;
       datasource_id: string;
       database_name: string;
       message: string;
-    }>(`/backups/${backupId}/restore`, { method: "POST" }),
+    }>>(`/backups/${backupId}/restore${query}`, { method: "POST" });
+  },
 
   testConnection: (params: unknown) =>
     request<any>("/datasources/test", { method: "POST", body: JSON.stringify(params) }),
@@ -332,8 +342,10 @@ export const api = {
   listDatasources: (projectId?: string) =>
     request<DataSource[]>(projectId ? `/datasources?project_id=${encodeURIComponent(projectId)}` : "/datasources"),
 
-  deleteDatasource: (id: string) =>
-    request<{ success: boolean; message: string }>(`/datasources/${id}`, { method: "DELETE" }),
+  deleteDatasource: (id: string, confirm?: { token: string; text: string }) => {
+    const query = confirm ? `?confirm_token=${encodeURIComponent(confirm.token)}&confirm_text=${encodeURIComponent(confirm.text)}` : "";
+    return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}${query}`, { method: "DELETE" });
+  },
 
   syncSchema: (id: string) =>
     request<any>(`/datasources/${id}/sync`, { method: "POST" }),
@@ -365,16 +377,25 @@ export const api = {
       body: JSON.stringify(params),
     }),
 
-  executeTableDesignDDL: (datasourceId: string, ddl: string) =>
-    request<any>("/schema/design/execute-ddl", {
+  executeTableDesignDDL: (datasourceId: string, ddl: string, confirm?: { token: string; text: string }) =>
+    request<DangerousOperationResult<any>>("/schema/design/execute-ddl", {
       method: "POST",
-      body: JSON.stringify({ datasource_id: datasourceId, ddl }),
+      body: JSON.stringify({
+        datasource_id: datasourceId,
+        ddl,
+        confirm_token: confirm?.token,
+        confirm_text: confirm?.text,
+      }),
     }),
 
-  generateTestData: (params: { datasource_id: string; table_name: string; row_count?: number; language?: string }) =>
-    request<{ success: boolean; tableName: string; insertedRows: number; latencyMs: number; message: string }>("/schema/generate-test-data", {
+  generateTestData: (params: { datasource_id: string; table_name: string; row_count?: number; language?: string }, confirm?: { token: string; text: string }) =>
+    request<DangerousOperationResult<{ success: boolean; tableName: string; insertedRows: number; latencyMs: number; message: string }>>("/schema/generate-test-data", {
       method: "POST",
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        ...params,
+        confirm_token: confirm?.token,
+        confirm_text: confirm?.text,
+      }),
     }),
 
   validateSql: (sql: string, signal?: AbortSignal) =>

@@ -13,6 +13,7 @@ import {
 import { api } from "../lib/api";
 import type { DataSource, Project } from "../lib/api";
 import { StatusIndicator } from "../components/StatusIndicator";
+import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -39,6 +40,7 @@ export const DataSourcesPage = ({
 }: DataSourcesPageProps) => {
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -223,9 +225,28 @@ export const DataSourcesPage = ({
   const handleDeleteDataSource = async (id: string, event: MouseEvent) => {
     event.stopPropagation();
     if (!window.confirm("确认删除此数据源？")) return;
-    await api.deleteDatasource(id);
-    await syncLists();
-    if (activeDataSource?.id === id) onSelectDataSource(null);
+    try {
+      const res = await api.deleteDatasource(id);
+      if (res && typeof res === "object" && "requires_confirmation" in res && res.requires_confirmation) {
+        setConfirmDetails({
+          confirm_token: res.confirm_token,
+          impact_summary: res.impact_summary,
+          expected_confirm_text: res.expected_confirm_text,
+          onConfirm: async (text) => {
+            await api.deleteDatasource(id, { token: res.confirm_token, text });
+            setConfirmDetails(null);
+            await syncLists();
+            if (activeDataSource?.id === id) onSelectDataSource(null);
+          },
+          onCancel: () => setConfirmDetails(null)
+        });
+        return;
+      }
+      await syncLists();
+      if (activeDataSource?.id === id) onSelectDataSource(null);
+    } catch (err: any) {
+      alert(err.message || "删除数据源失败");
+    }
   };
 
   const statusType = (ds: DataSource) =>
@@ -973,6 +994,7 @@ export const DataSourcesPage = ({
           </div>
         )}
       </div>
+      <DangerConfirmDialog details={confirmDetails} />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 """Shared pytest fixtures for DataBox engine tests."""
 import os
 os.environ["DATABOX_BYPASS_CONFIRMATION"] = "1"
+os.environ["DATABOX_TESTING"] = "1"
 
 import uuid
 import pytest

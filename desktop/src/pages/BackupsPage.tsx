@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Database, FileArchive, Plus, RefreshCw, Sh
 import { api } from "../lib/api";
 import type { BackupRecord, DataSource, Project } from "../lib/api";
 import { StatusIndicator } from "../components/StatusIndicator";
+import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 
 interface BackupsPageProps {
   activeProject: Project | null;
@@ -33,6 +34,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState("");
   const [restoreSuccess, setRestoreSuccess] = useState(false);
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
 
   useEffect(() => {
     setSelectedDatasourceId(activeDataSource?.id ?? datasources[0]?.id ?? "");
@@ -119,7 +121,6 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
       setRestoreError("数据库名称输入错误，请重新确认！");
       return;
     }
-
     if (!restoreConfirmed) {
       setRestoreError("您必须勾选确认选项以执行恢复！");
       return;
@@ -128,7 +129,22 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
     setRestoring(true);
     setRestoreError("");
     try {
-      await api.restoreBackup(restoringBackup.id);
+      const res = await api.restoreBackup(restoringBackup.id);
+      if (res && typeof res === "object" && "requires_confirmation" in res && res.requires_confirmation) {
+        setConfirmDetails({
+          confirm_token: res.confirm_token,
+          impact_summary: res.impact_summary,
+          expected_confirm_text: res.expected_confirm_text,
+          onConfirm: async (text) => {
+            await api.restoreBackup(restoringBackup.id, { token: res.confirm_token, text });
+            setConfirmDetails(null);
+            setRestoreSuccess(true);
+            void refreshBackups();
+          },
+          onCancel: () => setConfirmDetails(null),
+        });
+        return;
+      }
       setRestoreSuccess(true);
       void refreshBackups();
     } catch (err: any) {
@@ -538,6 +554,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
           </div>
         );
       })()}
+      <DangerConfirmDialog details={confirmDetails} />
     </div>
   );
 };

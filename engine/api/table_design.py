@@ -88,14 +88,14 @@ def api_execute_table_design_ddl(req: TableDesignExecuteRequest, db: Session = D
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
     # 🔒 Two-Phase confirmation check for dangerous DDL operations
-    import os
-    if os.environ.get("DATABOX_BYPASS_CONFIRMATION") != "1":
+    from engine.policy import confirmation_bypass_enabled, sha256_hash, confirmation_manager
+    if not confirmation_bypass_enabled():
+        expected_details = {"ddl_hash": sha256_hash(req.ddl)}
         if not req.confirm_token:
-            from engine.policy.confirmation import confirmation_manager
             token = confirmation_manager.create_confirmation(
                 datasource_id=req.datasource_id,
                 action="execute_ddl",
-                details={"ddl": req.ddl},
+                details=expected_details,
                 expected_confirm_text=datasource.name
             )
             return {
@@ -106,9 +106,12 @@ def api_execute_table_design_ddl(req: TableDesignExecuteRequest, db: Session = D
                 "expected_confirm_text": datasource.name
             }
         else:
-            from engine.policy.confirmation import confirmation_manager
-            is_valid, err_msg, details = confirmation_manager.validate_and_consume(
-                req.confirm_token, req.confirm_text or ""
+            is_valid, err_msg = confirmation_manager.validate_and_consume(
+                req.confirm_token,
+                req.confirm_text or "",
+                expected_action="execute_ddl",
+                expected_datasource_id=req.datasource_id,
+                expected_details=expected_details
             )
             if not is_valid:
                 raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
@@ -232,14 +235,14 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
     # 🔒 Two-Phase confirmation check for test data generation
-    import os
-    if os.environ.get("DATABOX_BYPASS_CONFIRMATION") != "1":
+    from engine.policy import confirmation_bypass_enabled, confirmation_manager
+    if not confirmation_bypass_enabled():
+        expected_details = {"table_name": req.table_name, "row_count": req.row_count}
         if not req.confirm_token:
-            from engine.policy.confirmation import confirmation_manager
             token = confirmation_manager.create_confirmation(
                 datasource_id=req.datasource_id,
                 action="generate_test_data",
-                details={"table_name": req.table_name, "row_count": req.row_count},
+                details=expected_details,
                 expected_confirm_text=datasource.name
             )
             return {
@@ -250,9 +253,12 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
                 "expected_confirm_text": datasource.name
             }
         else:
-            from engine.policy.confirmation import confirmation_manager
-            is_valid, err_msg, details = confirmation_manager.validate_and_consume(
-                req.confirm_token, req.confirm_text or ""
+            is_valid, err_msg = confirmation_manager.validate_and_consume(
+                req.confirm_token,
+                req.confirm_text or "",
+                expected_action="generate_test_data",
+                expected_datasource_id=req.datasource_id,
+                expected_details=expected_details
             )
             if not is_valid:
                 raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})

@@ -110,14 +110,14 @@ def api_restore_backup(
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
     # 🔒 Two-Phase confirmation check for dangerous database restores
-    import os
-    if os.environ.get("DATABOX_BYPASS_CONFIRMATION") != "1":
+    from engine.policy import confirmation_bypass_enabled, confirmation_manager
+    if not confirmation_bypass_enabled():
+        expected_details = {"backup_id": backup_id}
         if not confirm_token:
-            from engine.policy.confirmation import confirmation_manager
             token = confirmation_manager.create_confirmation(
                 datasource_id=str(record.datasource_id),
                 action="restore_backup",
-                details={"backup_id": backup_id},
+                details=expected_details,
                 expected_confirm_text=datasource.name
             )
             return {
@@ -128,9 +128,12 @@ def api_restore_backup(
                 "expected_confirm_text": datasource.name
             }
         else:
-            from engine.policy.confirmation import confirmation_manager
-            is_valid, err_msg, details = confirmation_manager.validate_and_consume(
-                confirm_token, confirm_text or ""
+            is_valid, err_msg = confirmation_manager.validate_and_consume(
+                confirm_token,
+                confirm_text or "",
+                expected_action="restore_backup",
+                expected_datasource_id=str(record.datasource_id),
+                expected_details=expected_details
             )
             if not is_valid:
                 raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})

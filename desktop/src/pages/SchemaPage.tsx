@@ -6,6 +6,7 @@ import { DataTable } from "../components/DataTable";
 import { ErDiagram } from "../components/ErDiagram";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { TableDesignDraft } from "../components/TableDesignDraft";
+import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 
 interface SchemaPageProps {
   datasource: DataSource;
@@ -41,6 +42,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
   const [generatingTestData, setGeneratingTestData] = useState(false);
   const [testDataResult, setTestDataResult] = useState<string | null>(null);
   const [testDataError, setTestDataError] = useState<string | null>(null);
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
 
   const handleGenerateTestData = async () => {
     if (!selectedTable) return;
@@ -48,14 +50,33 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
     setTestDataError(null);
     setTestDataResult(null);
     try {
-      const res = await api.generateTestData({
+      const params = {
         datasource_id: datasource.id,
         table_name: selectedTable.table_name,
         row_count: testDataRowCount,
         language: testDataLanguage,
-      });
-      setTestDataResult(res.message);
-      // Wait a bit, then refresh preview and close modal
+      };
+      const res = await api.generateTestData(params);
+      if (res && typeof res === "object" && "requires_confirmation" in res && res.requires_confirmation) {
+        setConfirmDetails({
+          confirm_token: res.confirm_token,
+          impact_summary: res.impact_summary,
+          expected_confirm_text: res.expected_confirm_text,
+          onConfirm: async (text) => {
+            const confirmed = await api.generateTestData(params, { token: res.confirm_token, text });
+            if (confirmed && "message" in confirmed) setTestDataResult(confirmed.message);
+            setConfirmDetails(null);
+            setTimeout(() => {
+              void fetchPreviewData(selectedTable.table_name);
+              setShowTestDataModal(false);
+              setTestDataResult(null);
+            }, 1800);
+          },
+          onCancel: () => setConfirmDetails(null),
+        });
+        return;
+      }
+      if (res && "message" in res) setTestDataResult(res.message);
       setTimeout(() => {
         void fetchPreviewData(selectedTable.table_name);
         setShowTestDataModal(false);
@@ -107,7 +128,29 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
     setApplyingAlter(true);
     setAiAlterError(null);
     try {
-      await api.executeTableDesignDDL(datasource.id, aiAlterResultDdl);
+      const res = await api.executeTableDesignDDL(datasource.id, aiAlterResultDdl);
+      if (res && typeof res === "object" && "requires_confirmation" in res && res.requires_confirmation) {
+        const ddl = aiAlterResultDdl;
+        setConfirmDetails({
+          confirm_token: res.confirm_token,
+          impact_summary: res.impact_summary,
+          expected_confirm_text: res.expected_confirm_text,
+          onConfirm: async (text) => {
+            await api.executeTableDesignDDL(datasource.id, ddl, { token: res.confirm_token, text });
+            setConfirmDetails(null);
+            setApplySuccess(true);
+            setTimeout(() => {
+              void fetchTables();
+              void fetchERDiagram();
+              setAiAlterResultDdl(null);
+              setAiAlterPrompt("");
+              setApplySuccess(false);
+            }, 1500);
+          },
+          onCancel: () => setConfirmDetails(null),
+        });
+        return;
+      }
       setApplySuccess(true);
       setTimeout(() => {
         void fetchTables();
@@ -1415,6 +1458,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
           )}
         </div>
       </div>
+      <DangerConfirmDialog details={confirmDetails} />
     </div>
   );
 };

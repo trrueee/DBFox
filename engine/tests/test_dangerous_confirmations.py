@@ -9,13 +9,19 @@ from engine.models import DataSource, BackupRecord
 
 @pytest.fixture(autouse=True)
 def run_without_bypass():
-    old = os.environ.get("DATABOX_BYPASS_CONFIRMATION")
+    old_bypass = os.environ.get("DATABOX_BYPASS_CONFIRMATION")
+    old_testing = os.environ.get("DATABOX_TESTING")
     os.environ["DATABOX_BYPASS_CONFIRMATION"] = "0"
+    os.environ["DATABOX_TESTING"] = "1"
     yield
-    if old is not None:
-        os.environ["DATABOX_BYPASS_CONFIRMATION"] = old
+    if old_bypass is not None:
+        os.environ["DATABOX_BYPASS_CONFIRMATION"] = old_bypass
     else:
         del os.environ["DATABOX_BYPASS_CONFIRMATION"]
+    if old_testing is not None:
+        os.environ["DATABOX_TESTING"] = old_testing
+    else:
+        del os.environ["DATABOX_TESTING"]
 
 def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
@@ -250,5 +256,203 @@ def test_two_phase_delete_datasource_flow(db_session, demo_datasource) -> None:
             )
             assert resp_ok.status_code == 200
             assert resp_ok.json()["success"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+# =====================================================================
+# CONTEXT TAMPERING & SWAPPING SECURITY TESTS (Sprint 1 / P1-4)
+# =====================================================================
+
+def test_tampering_ddl_swapping_fails(db_session, demo_datasource) -> None:
+    """Security: Token A requested for DDL A, but Phase 2 attempts execution with DDL B. Must fail."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            # Get token for DDL A
+            resp = client.post(
+                "/api/v1/schema/design/execute-ddl",
+                headers=_headers(),
+                json={
+                    "datasource_id": demo_datasource.id,
+                    "ddl": "CREATE TABLE tbl_a (id INT);"
+                }
+            )
+            token = resp.json()["confirm_token"]
+
+            # Try to execute DDL B using token for DDL A
+            resp_tampered = client.post(
+                "/api/v1/schema/design/execute-ddl",
+                headers=_headers(),
+                json={
+                    "datasource_id": demo_datasource.id,
+                    "ddl": "CREATE TABLE tbl_b (id INT);",  # TAMPERED
+                    "confirm_token": token,
+                    "confirm_text": demo_datasource.name
+                }
+            )
+            assert resp_tampered.status_code == 400
+            assert "二次确认参数" in resp_tampered.json()["detail"]["message"]
+            assert "ddl_hash" in resp_tampered.json()["detail"]["message"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_tampering_datasource_swapping_fails(db_session, demo_datasource) -> None:
+    """Security: Token A requested for datasource A, but Phase 2 attempts to apply to datasource B. Must fail."""
+    def override_get_db():
+        yield db_session
+
+    # Create a second datasource
+    ds2 = DataSource(
+        id=str(uuid.uuid4()),
+        name="another_datasource",
+        host="demo",
+        port=3306,
+        database_name="demo_shop",
+        username="demo",
+        password_ciphertext="test",
+        password_nonce="test",
+        status="active",
+    )
+    db_session.add(ds2)
+    db_session.commit()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            # Get token for datasource 1
+            resp = client.post(
+                "/api/v1/schema/design/execute-ddl",
+                headers=_headers(),
+                json={
+                    "datasource_id": demo_datasource.id,
+                    "ddl": "CREATE TABLE tbl_a (id INT);"
+                }
+            )
+            token = resp.json()["confirm_token"]
+
+            # Try to execute on datasource 2 using token for datasource 1
+            resp_tampered = client.post(
+                "/api/v1/schema/design/execute-ddl",
+                headers=_headers(),
+                json={
+                    "datasource_id": ds2.id,  # TAMPERED
+                    "ddl": "CREATE TABLE tbl_a (id INT);",
+                    "confirm_token": token,
+                    "confirm_text": ds2.name
+                }
+            )
+            assert resp_tampered.status_code == 400
+            assert "二次确认数据源不匹配" in resp_tampered.json()["detail"]["message"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_tampering_action_swapping_fails(db_session, demo_datasource) -> None:
+    """Security: Token requested for generate_test_data, but Phase 2 attempts to use it for execute_ddl. Must fail."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            # 1. Setup datasource and sync it
+            resp_ds = client.post("/api/v1/datasources", json={
+                "name": "test_swap_action_ds",
+                "host": "demo",
+                "port": 3306,
+                "database_name": "demo_shop",
+                "username": "demo",
+                "password": "demo",
+            }, headers=_headers())
+            ds_data = resp_ds.json()
+            ds_id = ds_data["id"]
+
+            sync_resp = client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+            assert sync_resp.status_code == 200
+
+            # 2. Get confirmation token for generating test data
+            resp_data = client.post(
+                "/api/v1/schema/generate-test-data",
+                headers=_headers(),
+                json={
+                    "datasource_id": ds_id,
+                    "table_name": "users",
+                    "row_count": 5
+                }
+            )
+            token = resp_data.json()["confirm_token"]
+
+            # 3. Try to use this token to execute a dangerous DDL command
+            resp_tampered = client.post(
+                "/api/v1/schema/design/execute-ddl",
+                headers=_headers(),
+                json={
+                    "datasource_id": ds_id,
+                    "ddl": "DROP TABLE users;",  # DANGEROUS DDL
+                    "confirm_token": token,
+                    "confirm_text": ds_data["name"]
+                }
+            )
+            assert resp_tampered.status_code == 400
+            assert "二次确认操作类型不匹配" in resp_tampered.json()["detail"]["message"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_tampering_test_data_params_swapping_fails(db_session) -> None:
+    """Security: Token A requested for generating 5 rows, but Phase 2 attempts to generate 100000 rows. Must fail."""
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            # 1. Setup datasource and sync it
+            resp_ds = client.post("/api/v1/datasources", json={
+                "name": "test_param_swap_ds",
+                "host": "demo",
+                "port": 3306,
+                "database_name": "demo_shop",
+                "username": "demo",
+                "password": "demo",
+            }, headers=_headers())
+            ds_data = resp_ds.json()
+            ds_id = ds_data["id"]
+
+            sync_resp = client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+            assert sync_resp.status_code == 200
+
+            # 2. Get token for 5 rows
+            resp_data = client.post(
+                "/api/v1/schema/generate-test-data",
+                headers=_headers(),
+                json={
+                    "datasource_id": ds_id,
+                    "table_name": "users",
+                    "row_count": 5
+                }
+            )
+            token = resp_data.json()["confirm_token"]
+
+            # 3. Try to execute Phase 2 with 100000 rows
+            resp_tampered = client.post(
+                "/api/v1/schema/generate-test-data",
+                headers=_headers(),
+                json={
+                    "datasource_id": ds_id,
+                    "table_name": "users",
+                    "row_count": 100000,  # TAMPERED
+                    "confirm_token": token,
+                    "confirm_text": ds_data["name"]
+                }
+            )
+            assert resp_tampered.status_code == 400
+            assert "二次确认参数" in resp_tampered.json()["detail"]["message"]
+            assert "row_count" in resp_tampered.json()["detail"]["message"]
     finally:
         app.dependency_overrides.clear()
