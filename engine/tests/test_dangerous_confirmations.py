@@ -456,3 +456,89 @@ def test_tampering_test_data_params_swapping_fails(db_session) -> None:
             assert "row_count" in resp_tampered.json()["detail"]["message"]
     finally:
         app.dependency_overrides.clear()
+
+
+# =====================================================================
+# BYPASS SECURITY BOUNDARY TESTS (Sprint 1 / P1-3)
+# =====================================================================
+
+def test_confirmation_bypass_disabled_when_frozen(monkeypatch) -> None:
+    """Security: bypass must be completely blocked in packaged/frozen desktop builds."""
+    import sys
+    from engine.policy.confirmation import confirmation_bypass_enabled
+    monkeypatch.setenv("DATABOX_BYPASS_CONFIRMATION", "1")
+    monkeypatch.setenv("DATABOX_TESTING", "1")
+    # setattr with raising=False: monkeypatch will delete the attr on teardown only if it didn't pre-exist
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert confirmation_bypass_enabled() is False
+    # Manually remove before monkeypatch teardown to avoid AttributeError on sys.frozen deletion
+    if hasattr(sys, "frozen"):
+        monkeypatch.delattr(sys, "frozen", raising=False)
+
+
+def test_confirmation_bypass_disabled_without_testing_flag(monkeypatch) -> None:
+    """Security: bypass must not work when DATABOX_TESTING env is absent."""
+    from engine.policy.confirmation import confirmation_bypass_enabled
+    monkeypatch.setenv("DATABOX_BYPASS_CONFIRMATION", "1")
+    monkeypatch.delenv("DATABOX_TESTING", raising=False)
+    assert confirmation_bypass_enabled() is False
+
+
+def test_confirmation_bypass_disabled_when_only_bypass_set(monkeypatch) -> None:
+    """Security: setting only DATABOX_BYPASS_CONFIRMATION without DATABOX_TESTING is not enough."""
+    from engine.policy.confirmation import confirmation_bypass_enabled
+    monkeypatch.setenv("DATABOX_BYPASS_CONFIRMATION", "1")
+    monkeypatch.delenv("DATABOX_TESTING", raising=False)
+    assert confirmation_bypass_enabled() is False
+
+
+def test_confirmation_token_single_use() -> None:
+    """Security: a consumed token cannot be reused even with valid confirm_text."""
+    from engine.policy.confirmation import ConfirmationManager
+    mgr = ConfirmationManager(ttl_seconds=60)
+    token = mgr.create_confirmation(
+        datasource_id="ds-1",
+        action="delete_datasource",
+        details={"datasource_id": "ds-1"},
+        expected_confirm_text="my_db"
+    )
+    # First consumption succeeds
+    ok, err = mgr.validate_and_consume(
+        token, "my_db",
+        expected_action="delete_datasource",
+        expected_datasource_id="ds-1",
+        expected_details={"datasource_id": "ds-1"}
+    )
+    assert ok is True
+    assert err == ""
+
+    # Second attempt with the same token must fail (token was consumed)
+    ok2, err2 = mgr.validate_and_consume(
+        token, "my_db",
+        expected_action="delete_datasource",
+        expected_datasource_id="ds-1",
+        expected_details={"datasource_id": "ds-1"}
+    )
+    assert ok2 is False
+    assert "无效或已过期" in err2
+
+
+def test_confirmation_token_confirm_text_whitespace_trim() -> None:
+    """confirm_text with surrounding whitespace should still match (strip both sides)."""
+    from engine.policy.confirmation import ConfirmationManager
+    mgr = ConfirmationManager(ttl_seconds=60)
+    token = mgr.create_confirmation(
+        datasource_id="ds-1",
+        action="delete_datasource",
+        details={"datasource_id": "ds-1"},
+        expected_confirm_text="my_db"
+    )
+    ok, err = mgr.validate_and_consume(
+        "  " + token.strip() + "  " if False else token,
+        "  my_db  ",   # whitespace around confirm_text
+        expected_action="delete_datasource",
+        expected_datasource_id="ds-1",
+        expected_details={"datasource_id": "ds-1"}
+    )
+    assert ok is True
+

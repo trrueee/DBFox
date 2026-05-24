@@ -180,7 +180,7 @@ def api_delete_datasource(
                 "success": False,
                 "requires_confirmation": True,
                 "confirm_token": token,
-                "impact_summary": f"⚠️ 警告：您即将在系统中删除数据源 '{datasource.name}'！\n\n该操作会清空本地保存的所有相关 Schema 结构 and 元数据历史缓存！请输入数据源名称以确认执行。",
+                "impact_summary": f"⚠️ 警告：您即将在系统中删除数据源 '{datasource.name}'！\n\n该操作会清空本地保存的所有相关 Schema 结构和元数据历史缓存！请输入数据源名称以确认执行。",
                 "expected_confirm_text": datasource.name
             }
         else:

@@ -12,7 +12,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
 
-  const payload = await response.json();
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
   if (!response.ok) {
     const error = new Error(payload?.detail?.message || payload?.message || "Request failed") as Error & {
       code?: string;
@@ -23,6 +24,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw error;
   }
 
+  return payload as T;
+}
 
 export interface ConfirmationRequired {
   success: false;
