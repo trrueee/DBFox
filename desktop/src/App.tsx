@@ -1,49 +1,34 @@
 import { useEffect, useState } from "react";
 import {
   Activity,
-  BookOpen,
-  ChevronDown,
-  ChevronRight,
   Database,
-  Eye,
   HardDrive,
-  RefreshCw,
-  Table2,
-  Terminal,
+  FolderKanban,
+  Settings,
+  Layout
 } from "lucide-react";
 import { api } from "./lib/api";
 import type { DataSource, Project, SchemaTable } from "./lib/api";
 import { BackupsPage } from "./pages/BackupsPage";
 import { DataSourcesPage } from "./pages/DataSourcesPage";
 import { EnvironmentsPage } from "./pages/EnvironmentsPage";
-import { QueryPage } from "./pages/QueryPage";
-import { SchemaPage } from "./pages/SchemaPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { WorkbenchPage } from "./pages/WorkbenchPage";
 import { DemoTourGuide } from "./components/DemoTourGuide";
 import { PromptDialog } from "./components/PromptDialog";
 
-type AppTab = "environments" | "datasources" | "backups" | "schema" | "query" | "dashboard";
-
-type QueryDraft = {
-  sql: string;
-  title?: string;
-  nonce: number;
-};
+type AppTab = "workbench" | "environments" | "backups" | "dashboard" | "datasources";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<AppTab>("datasources");
+  const [activeTab, setActiveTab] = useState<AppTab>("workbench");
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeDataSource, setActiveDataSource] = useState<DataSource | null>(null);
   const [datasources, setDatasources] = useState<DataSource[]>([]);
   const [schemaTables, setSchemaTables] = useState<SchemaTable[]>([]);
+
   const [loadingTree, setLoadingTree] = useState(true);
   const [loadingObjects, setLoadingObjects] = useState(false);
-  const [connectionsOpen, setConnectionsOpen] = useState(true);
-  const [objectsOpen, setObjectsOpen] = useState(true);
-  const [selectedTableName, setSelectedTableName] = useState<string | null>(null);
-  const [schemaInitialView, setSchemaInitialView] = useState<"fields" | "er" | "data" | null>(null);
-  const [queryDraft, setQueryDraft] = useState<QueryDraft | null>(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
 
   useEffect(() => {
@@ -57,27 +42,21 @@ export default function App() {
   useEffect(() => {
     if (!activeDataSource) {
       setSchemaTables([]);
-      setSelectedTableName(null);
       return;
     }
     void refreshSchemaTables(activeDataSource.id);
   }, [activeDataSource?.id]);
-
-  useEffect(() => {
-    if (activeTab !== "schema") setSchemaInitialView(null);
-  }, [activeTab]);
 
   // Global keyboard shortcuts for tab navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
-      if (e.key === "1") { e.preventDefault(); setActiveTab("environments"); }
-      if (e.key === "2") { e.preventDefault(); setActiveTab("backups"); }
-      if (e.key === "3") { e.preventDefault(); setActiveTab("datasources"); }
-      if (e.key === "4") { e.preventDefault(); setActiveTab("schema"); }
-      if (e.key === "5") { e.preventDefault(); setActiveTab("query"); }
-      if (e.key === "6") { e.preventDefault(); setActiveTab("dashboard"); }
+      if (e.key === "1") { e.preventDefault(); setActiveTab("workbench"); }
+      if (e.key === "2") { e.preventDefault(); setActiveTab("environments"); }
+      if (e.key === "3") { e.preventDefault(); setActiveTab("backups"); }
+      if (e.key === "4") { e.preventDefault(); setActiveTab("dashboard"); }
+      if (e.key === "5") { e.preventDefault(); setActiveTab("datasources"); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -112,7 +91,7 @@ export default function App() {
     setActiveProject(created);
     setActiveDataSource(null);
     setSchemaTables([]);
-    setActiveTab("datasources");
+    setActiveTab("workbench");
   };
 
   const refreshSchemaTables = async (datasourceId: string) => {
@@ -120,9 +99,6 @@ export default function App() {
       setLoadingObjects(true);
       const items = await api.listTables(datasourceId);
       setSchemaTables(items);
-      setSelectedTableName((current) =>
-        current && items.some((item) => item.table_name === current) ? current : items[0]?.table_name ?? null,
-      );
     } finally {
       setLoadingObjects(false);
     }
@@ -130,523 +106,221 @@ export default function App() {
 
   const handleSelectDataSource = (ds: DataSource | null) => {
     setActiveDataSource(ds);
-    setSelectedTableName(null);
     if (!ds) {
       setActiveTab("datasources");
       return;
     }
-    if (ds.database_name === "databox_demo" || ds.name.includes("Demo")) {
-      setActiveTab("query");
-    } else if (activeTab === "datasources") {
-      setActiveTab("schema");
-    }
+    setActiveTab("workbench");
   };
 
-  const handleSelectTable = (tableName: string, showPreview = false) => {
-    setSelectedTableName(tableName);
-    setActiveTab("schema");
-    setSchemaInitialView(showPreview ? "data" : null);
-  };
-
-  const handleOpenSqlWorkbench = (sql: string, title?: string) => {
-    setQueryDraft({ sql, title, nonce: Date.now() });
-    setActiveTab("query");
-  };
-
-  const workspaceTitle =
-    activeTab === "environments"
-      ? "环境实验室"
-      : activeTab === "backups"
-      ? "备份仓库"
-      : activeTab === "datasources"
-      ? "数据源管理"
-      : activeTab === "schema"
-      ? "Schema 浏览"
-      : activeTab === "query"
-      ? "SQL 工作台"
-      : "AI 监控审计";
-
+  // Nav Item structures
   const navItems: { id: AppTab; label: string; icon: typeof Database }[] = [
-    { id: "environments", label: "环境实验室", icon: HardDrive },
-    { id: "backups", label: "备份仓库", icon: HardDrive },
-    { id: "datasources", label: "数据源", icon: Database },
-    { id: "schema", label: "Schema 浏览", icon: BookOpen },
-    { id: "query", label: "SQL 工作台", icon: Terminal },
-    { id: "dashboard", label: "监控审计", icon: Activity },
+    { id: "workbench", label: "工作台", icon: Layout },
+    { id: "environments", label: "环境", icon: HardDrive },
+    { id: "backups", label: "备份", icon: FolderKanban },
+    { id: "dashboard", label: "监控", icon: Activity },
+    { id: "datasources", label: "设置", icon: Settings },
   ];
+
+  // Environment badge glowing indicators
+  const getEnvBadgeColor = () => {
+    if (!activeDataSource) return "rgba(148, 163, 184, 0.4)";
+    if (activeDataSource.env === "prod") return "var(--accent-red)";
+    if (activeDataSource.env === "test") return "var(--accent-amber)";
+    return "var(--accent-green)";
+  };
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "280px minmax(0, 1fr)",
+        gridTemplateColumns: "44px minmax(0, 1fr)",
         height: "100vh",
         width: "100vw",
         background: "var(--bg-primary)",
         overflow: "hidden",
       }}
     >
-      {/* ═══ SIDEBAR ═══ */}
+      {/* ═══ 1. HIGH-FIDELITY LEFT NAVIGATION RAIL (44px) ═══ */}
       <aside
-        className="select-none"
         style={{
-          display: "grid",
-          gridTemplateRows: "auto auto minmax(0, 1fr) auto",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "space-between",
           background: "var(--bg-surface)",
           borderRight: "1px solid var(--border-light)",
-          overflow: "hidden",
+          padding: "16px 0 12px",
+          zIndex: 10,
+          boxShadow: "2px 0 8px rgba(0,0,0,0.02)",
         }}
       >
-        {/* Logo */}
-        <div style={{ padding: "24px 20px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 8,
-                background: "var(--accent-indigo)",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <HardDrive size={17} color="#fff" />
-            </div>
-            <div>
-              <h1
-                className="text-display"
-                style={{ fontSize: "1.25rem", fontWeight: 700, lineHeight: 1.2, color: "var(--text-primary)" }}
-              >
-                DataBox
-              </h1>
-              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 1 }}>
-                数据库探索实验室
-              </p>
-            </div>
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--text-muted)", marginBottom: 6 }}>
-              Project Workspace
-            </label>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 6 }}>
-              <select
-                value={activeProject?.id ?? ""}
-                onChange={(event) => {
-                  const next = projects.find((project) => project.id === event.target.value) ?? null;
-                  setActiveProject(next);
-                  setActiveDataSource(null);
-                  setSchemaTables([]);
-                  setSelectedTableName(null);
-                  setActiveTab("datasources");
-                }}
-                style={{
-                  width: "100%",
-                  height: 34,
-                  borderRadius: 8,
-                  border: "1px solid var(--border-light)",
-                  background: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  fontSize: "0.8rem",
-                  padding: "0 8px",
-                }}
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn-ghost"
-                onClick={() => setShowCreateProject(true)}
-                style={{ height: 34, padding: "0 10px", fontWeight: 700 }}
-                title="创建项目"
-              >
-                +
-              </button>
-            </div>
-            <div style={{ marginTop: 5, fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              {activeProject ? "Connections, SQL, schema and backups live here" : "Loading workspace..."}
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav style={{ padding: "0 14px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          {navItems.map(({ id, label, icon: Icon }) => {
-            const isActive = activeTab === id;
-            const needsDataSource = id === "schema" || id === "query" || id === "dashboard";
-            return (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                disabled={needsDataSource && !activeDataSource}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  width: "100%",
-                  padding: "9px 14px",
-                  border: "none",
-                  borderRadius: 8,
-                  background: isActive ? "var(--bg-active)" : "transparent",
-                  color: isActive ? "var(--accent-indigo)" : "var(--text-secondary)",
-                  fontWeight: isActive ? 600 : 500,
-                  fontSize: "0.88rem",
-                  cursor: needsDataSource && !activeDataSource ? "not-allowed" : "pointer",
-                  opacity: needsDataSource && !activeDataSource ? 0.45 : 1,
-                  transition: "background 0.15s, color 0.15s",
-                }}
-              >
-                <Icon size={16} />
-                {label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Tree */}
-        <div style={{ padding: "0 14px", overflow: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          {/* Logo Brand Icon */}
           <div
+            className="hover-lift"
             style={{
-              border: "1px solid var(--border-light)",
-              borderRadius: 10,
-              overflow: "hidden",
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: "linear-gradient(135deg, var(--accent-indigo), #6366F1)",
+              display: "grid",
+              placeItems: "center",
+              boxShadow: "0 4px 10px rgba(74, 91, 192, 0.25)",
+              cursor: "pointer",
             }}
+            onClick={() => setActiveTab("workbench")}
+            title="DataBox - 物理智能数据库工作台"
           >
-            {/* Connections */}
-            <button
-              onClick={() => setConnectionsOpen((v) => !v)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                border: "none",
-                background: "var(--bg-secondary)",
-                color: "var(--text-secondary)",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                letterSpacing: "0.02em",
-              }}
-            >
-              连接列表
-              {connectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
+            <HardDrive size={16} color="#fff" />
+          </div>
 
-            {connectionsOpen && (
-              <div style={{ padding: "10px 12px" }}>
-                <div
+          <div style={{ width: 20, height: "1px", background: "var(--border-light)" }} />
+
+          {/* Navigation tabs */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+            {navItems.map(({ id, label, icon: Icon }) => {
+              const isActive = activeTab === id;
+              const isLocked = id === "workbench" && !activeDataSource;
+
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id)}
+                  disabled={isLocked && datasources.length > 0} // lock only if they have data sources but none connected
                   style={{
+                    position: "relative",
                     display: "flex",
-                    justifyContent: "space-between",
                     alignItems: "center",
-                    marginBottom: 8,
+                    justifyContent: "center",
+                    width: 32,
+                    height: 32,
+                    margin: "0 auto",
+                    border: "none",
+                    borderRadius: 8,
+                    background: isActive ? "rgba(74, 91, 192, 0.08)" : "transparent",
+                    color: isActive ? "var(--accent-indigo)" : "var(--text-secondary)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
                   }}
+                  title={label}
                 >
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    已保存 ({datasources.length})
-                  </span>
-                  <button
-                    className="btn-ghost"
-                    onClick={() => void refreshDatasources()}
-                    disabled={loadingTree}
-                    style={{ fontSize: "0.72rem" }}
-                  >
-                    <RefreshCw size={11} className={loadingTree ? "animate-spin" : ""} />
-                  </button>
-                </div>
-
-                {loadingTree ? (
-                  <div style={{ padding: "14px 8px" }}>
-                    <div className="skeleton" style={{ height: 36, marginBottom: 6, borderRadius: 6 }} />
-                    <div className="skeleton" style={{ height: 36, borderRadius: 6 }} />
-                  </div>
-                ) : datasources.length === 0 ? (
-                  <div style={{ padding: "16px 8px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
-                    暂无连接
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {datasources.map((ds) => {
-                      const selected = activeDataSource?.id === ds.id;
-                      return (
-                        <button
-                          key={ds.id}
-                          onClick={() => handleSelectDataSource(ds)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 8,
-                            width: "100%",
-                            padding: "8px 10px",
-                            border: "none",
-                            borderRadius: 6,
-                            background: selected ? "var(--bg-active)" : "transparent",
-                            color: selected ? "var(--accent-indigo)" : "var(--text-secondary)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            transition: "background 0.12s",
-                          }}
-                        >
-                          <Database size={13} style={{ flexShrink: 0, opacity: selected ? 1 : 0.5 }} />
-                          <div style={{ minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontSize: "0.82rem",
-                                fontWeight: selected ? 600 : 500,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {ds.name}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "var(--text-muted)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                marginTop: 1,
-                              }}
-                            >
-                              {ds.host}:{ds.port}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Objects */}
-            <button
-              onClick={() => setObjectsOpen((v) => !v)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                border: "none",
-                borderTop: "1px solid var(--border-light)",
-                background: "var(--bg-secondary)",
-                color: "var(--text-secondary)",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                letterSpacing: "0.02em",
-              }}
-            >
-              数据对象
-              {objectsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-
-            {objectsOpen && (
-              <div style={{ padding: "10px 12px" }}>
-                {!activeDataSource ? (
-                  <div style={{ padding: "16px 8px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
-                    请先选择连接
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>当前数据库</div>
-                      <div style={{ fontSize: "0.85rem", fontWeight: 600, marginTop: 2 }}>
-                        {activeDataSource.database_name}
-                      </div>
-                    </div>
-
+                  <Icon size={16} style={{ color: isActive ? "var(--accent-indigo)" : "inherit" }} />
+                  
+                  {isActive && (
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "4px 0 8px",
+                        position: "absolute",
+                        left: 0,
+                        top: 8,
+                        bottom: 8,
+                        width: 3,
+                        borderRadius: "0 4px 4px 0",
+                        background: "var(--accent-indigo)",
                       }}
-                    >
-                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                        表 ({schemaTables.length})
-                      </span>
-                      <button
-                        className="btn-ghost"
-                        onClick={() => void refreshSchemaTables(activeDataSource.id)}
-                        disabled={loadingObjects}
-                        style={{ fontSize: "0.72rem" }}
-                      >
-                        <RefreshCw size={11} className={loadingObjects ? "animate-spin" : ""} />
-                      </button>
-                    </div>
-
-                    {loadingObjects ? (
-                      <div style={{ padding: "8px 0" }}>
-                        {[1, 2, 3].map((i) => (
-                          <div key={i} className="skeleton" style={{ height: 32, marginBottom: 4, borderRadius: 4 }} />
-                        ))}
-                      </div>
-                    ) : schemaTables.length === 0 ? (
-                      <div style={{ padding: "16px 8px", fontSize: "0.8rem", color: "var(--text-muted)", textAlign: "center" }}>
-                        尚未同步
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        {schemaTables.map((table) => {
-                          const selected = selectedTableName === table.table_name;
-                          return (
-                            <div
-                              key={table.id}
-                              style={{ display: "flex", alignItems: "center", gap: 2 }}
-                            >
-                              <button
-                                onClick={() => handleSelectTable(table.table_name)}
-                                style={{
-                                  flex: 1,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  padding: "6px 10px",
-                                  border: "none",
-                                  borderRadius: 5,
-                                  background: selected ? "var(--bg-active)" : "transparent",
-                                  color: selected ? "var(--accent-indigo)" : "var(--text-secondary)",
-                                  cursor: "pointer",
-                                  textAlign: "left",
-                                  transition: "background 0.12s",
-                                  minWidth: 0,
-                                }}
-                              >
-                                <Table2 size={12} style={{ flexShrink: 0, opacity: selected ? 1 : 0.4 }} />
-                                <span
-                                  style={{
-                                    fontSize: "0.81rem",
-                                    fontWeight: selected ? 600 : 400,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {table.table_name}
-                                </span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelectTable(table.table_name, true);
-                                }}
-                                title="预览"
-                                className="btn-ghost"
-                                style={{ padding: 4, flexShrink: 0 }}
-                              >
-                                <Eye size={12} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Footer */}
-        <div
-          style={{
-            padding: "10px 18px",
-            borderTop: "1px solid var(--border-light)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "0.72rem",
-            color: "var(--text-muted)",
-          }}
-        >
-          <Activity size={11} />
-          <span>Engine :18625</span>
+        {/* Bottom Rail Controls */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+          {/* Active Connection Breathing light indicator */}
+          {activeDataSource && (
+            <div 
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                background: getEnvBadgeColor(),
+                boxShadow: `0 0 8px ${getEnvBadgeColor()}`,
+                animation: "pulse 2s infinite"
+              }}
+              title={`已连接: ${activeDataSource.name} (${activeDataSource.env})`}
+            />
+          )}
+
+          <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>
+            :18625
+          </div>
         </div>
       </aside>
 
-      {/* ═══ MAIN CONTENT ═══ */}
+      {/* ═══ 2. MAIN WORKSPACE VIEWPORT ═══ */}
       <section
         style={{
           display: "grid",
-          gridTemplateRows: "auto minmax(0, 1fr) auto",
+          gridTemplateRows: activeTab === "workbench" ? "minmax(0, 1fr) auto" : "auto minmax(0, 1fr) auto",
           minWidth: 0,
           height: "100%",
           overflow: "hidden",
         }}
       >
-        {/* Header / Breadcrumb */}
-        <header
-          className="select-none"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "16px 24px",
-            borderBottom: "1px solid var(--border-light)",
-            background: "var(--bg-surface)",
-            borderTop: activeDataSource?.env === "prod" ? "3px solid var(--accent-red)" : undefined,
-          }}
-        >
-          <div className="breadcrumb">
-            <span style={{ color: "var(--text-muted)" }}>{activeProject?.name || "DataBox"}</span>
-            <span className="breadcrumb-sep">/</span>
-            <span className="breadcrumb-current">{workspaceTitle}</span>
-            {activeDataSource && (
-              <>
-                <span className="breadcrumb-sep">/</span>
-                <span>{activeDataSource.name}</span>
-              </>
-            )}
-            {activeTab === "schema" && selectedTableName && (
-              <>
-                <span className="breadcrumb-sep">/</span>
-                <span style={{ color: "var(--text-secondary)" }}>{selectedTableName}</span>
-              </>
-            )}
-          </div>
-          {activeDataSource ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {activeDataSource.env === "prod" && (
-                <span className="status-badge" style={{ background: "rgba(220, 38, 38, 0.12)", color: "var(--accent-red)", border: "1px solid rgba(220, 38, 38, 0.3)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-                  🚨 生产环境 PROD
-                </span>
+        {/* Top Breadcrumb Header */}
+        {activeTab !== "workbench" && (
+          <header
+            className="select-none"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 24px",
+              borderBottom: "1px solid var(--border-light)",
+              background: "var(--bg-surface)",
+              borderTop: activeDataSource?.env === "prod" ? "3px solid var(--accent-red)" : undefined,
+            }}
+          >
+            <div className="breadcrumb" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.82rem" }}>
+              <span style={{ color: "var(--text-muted)" }}>{activeProject?.name || "DataBox"}</span>
+              <span className="breadcrumb-sep" style={{ color: "var(--text-muted)" }}>/</span>
+              <span className="breadcrumb-current" style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                {navItems.find(n => n.id === activeTab)?.label}
+              </span>
+              {activeDataSource && (
+                <>
+                  <span className="breadcrumb-sep" style={{ color: "var(--text-muted)" }}>/</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{activeDataSource.name}</span>
+                </>
               )}
-              {activeDataSource.env === "test" && (
-                <span className="status-badge" style={{ background: "rgba(217, 119, 6, 0.12)", color: "var(--accent-amber)", border: "1px solid rgba(217, 119, 6, 0.3)", fontWeight: 600 }}>
-                  🔬 测试环境 TEST
-                </span>
-              )}
-              {activeDataSource.env === "dev" && (
-                <span className="status-badge" style={{ background: "var(--bg-active)", color: "var(--text-secondary)", border: "1px solid var(--border-light)" }}>
-                  💻 开发环境 DEV
-                </span>
-              )}
-              {activeDataSource.is_read_only && (
-                <span className="status-badge" style={{ background: "rgba(74, 91, 192, 0.12)", color: "var(--accent-indigo)", border: "1px solid rgba(74, 91, 192, 0.3)", fontWeight: 600 }}>
-                  🔒 只读保护
-                </span>
-              )}
-              <span className="status-badge status-badge-success">{activeDataSource.database_name}</span>
             </div>
-          ) : (
-            <span className="status-badge status-badge-neutral">未连接</span>
-          )}
-        </header>
+            
+            {activeDataSource ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {activeDataSource.env === "prod" && (
+                  <span className="status-badge" style={{ background: "rgba(220, 38, 38, 0.12)", color: "var(--accent-red)", border: "1px solid rgba(220, 38, 38, 0.3)", fontWeight: 700 }}>
+                    🚨 生产环境 PROD
+                  </span>
+                )}
+                {activeDataSource.env === "test" && (
+                  <span className="status-badge" style={{ background: "rgba(217, 119, 6, 0.12)", color: "var(--accent-amber)", border: "1px solid rgba(217, 119, 6, 0.3)", fontWeight: 600 }}>
+                    🔬 测试环境 TEST
+                  </span>
+                )}
+                {activeDataSource.env === "dev" && (
+                  <span className="status-badge" style={{ background: "var(--bg-active)", color: "var(--text-secondary)", border: "1px solid var(--border-light)" }}>
+                    💻 开发环境 DEV
+                  </span>
+                )}
+                {activeDataSource.is_read_only && (
+                  <span className="status-badge" style={{ background: "rgba(74, 91, 192, 0.12)", color: "var(--accent-indigo)", border: "1px solid rgba(74, 91, 192, 0.3)", fontWeight: 600 }}>
+                    🔒 只读保护
+                  </span>
+                )}
+                <span className="status-badge status-badge-success">{activeDataSource.database_name}</span>
+              </div>
+            ) : (
+              <span className="status-badge status-badge-neutral">无激活连接</span>
+            )}
+          </header>
+        )}
 
-        {/* Page Content */}
+        {/* Page rendering */}
         <main
           style={{
-            padding: 20,
+            padding: activeTab === "workbench" ? 0 : 20, // Workbench gets absolute full-bleed spacing
             overflow: "hidden",
             minWidth: 0,
             height: "100%",
@@ -654,19 +328,25 @@ export default function App() {
             flexDirection: "column",
           }}
         >
+          {activeTab === "workbench" && (
+            <WorkbenchPage
+              projects={projects}
+              activeProject={activeProject}
+              setActiveProject={setActiveProject}
+              datasources={datasources}
+              activeDataSource={activeDataSource}
+              setActiveDataSource={handleSelectDataSource}
+              schemaTables={schemaTables}
+              loadingObjects={loadingObjects}
+              loadingTree={loadingTree}
+              onRefreshSchemaTables={refreshSchemaTables}
+            />
+          )}
           {activeTab === "environments" && (
             <EnvironmentsPage
               activeProject={activeProject}
               onRefreshDatasources={refreshDatasources}
               onSelectDataSource={handleSelectDataSource}
-            />
-          )}
-          {activeTab === "datasources" && (
-            <DataSourcesPage
-              onSelectDataSource={handleSelectDataSource}
-              activeDataSource={activeDataSource}
-              activeProject={activeProject}
-              onRefreshDatasources={refreshDatasources}
             />
           )}
           {activeTab === "backups" && (
@@ -676,23 +356,20 @@ export default function App() {
               activeDataSource={activeDataSource}
             />
           )}
-          {activeTab === "schema" && activeDataSource && (
-            <SchemaPage
-              datasource={activeDataSource}
-              initialViewTab={schemaInitialView ?? undefined}
-              selectedTableName={selectedTableName}
-              onOpenSql={handleOpenSqlWorkbench}
-            />
-          )}
-          {activeTab === "query" && activeDataSource && (
-            <QueryPage datasource={activeDataSource} initialDraft={queryDraft} />
-          )}
           {activeTab === "dashboard" && activeDataSource && (
             <DashboardPage datasource={activeDataSource} />
           )}
+          {activeTab === "datasources" && (
+            <DataSourcesPage
+              onSelectDataSource={handleSelectDataSource}
+              activeDataSource={activeDataSource}
+              activeProject={activeProject}
+              onRefreshDatasources={refreshDatasources}
+            />
+          )}
         </main>
 
-        {/* Footer */}
+        {/* System Footer Bar */}
         <footer
           className="select-none"
           style={{
@@ -706,8 +383,8 @@ export default function App() {
             color: "var(--text-muted)",
           }}
         >
-          <span>DataBox V1.0 · 本地优先的 AI 数据库工作台</span>
-          <span>MySQL / PostgreSQL / SQLite</span>
+          <span>DataBox Studio v1.2 · MySQL / PostgreSQL / SQLite</span>
+          <span>Security Exec Layer Active</span>
         </footer>
       </section>
 
@@ -723,8 +400,8 @@ export default function App() {
       />
 
       <DemoTourGuide
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        activeTab={activeTab === "workbench" ? "datasources" : activeTab}
+        setActiveTab={(t) => setActiveTab(t === "datasources" ? "workbench" : (t as any))}
         activeProject={activeProject}
         projects={projects}
         activeDataSource={activeDataSource}

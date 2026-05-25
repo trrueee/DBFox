@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
+  Sparkles,
   Table,
   Trash2,
   X,
@@ -68,6 +69,29 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
   const [showBenchmarkDrawer, setShowBenchmarkDrawer] = useState(false);
   const [goldenPresetQuestion, setGoldenPresetQuestion] = useState("");
   const [goldenPresetSql, setGoldenPresetSql] = useState("");
+
+  const [showAiInput, setShowAiInput] = useState(false);
+  const [showGuardrailDrawer, setShowGuardrailDrawer] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(320);
+
+  const handleHeightDragMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.pageY;
+    const startHeight = editorHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.pageY - startY;
+      setEditorHeight(Math.max(120, Math.min(800, startHeight + deltaY)));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
 
   const fetchHistory = async () => {
     try {
@@ -314,20 +338,45 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
       className="animate-fade-in"
       style={{ display: "flex", flexDirection: "column", gap: 14, height: "100%", overflow: "hidden" }}
     >
-      {/* ── AI Query Input ── */}
-      <ErrorBoundary title="AI 智能问数面板加载异常">
-        <AiQueryInput
-          value={aiQuestion}
-          onChange={setAiQuestion}
-          onSubmit={() => void handleAiGenerate()}
-          loading={aiGenerating}
-          onToggleConfig={() => setShowAiConfig((v) => !v)}
-          isDemo={datasource.database_name === "databox_demo" || datasource.name.includes("Demo")}
-        />
-      </ErrorBoundary>
+      <style>{`
+        .row-splitter {
+          transition: background 0.15s, border-color 0.15s;
+          border-top: 1px solid var(--border-light);
+          border-bottom: 1px solid var(--border-light);
+        }
+        .row-splitter:hover {
+          background: var(--bg-secondary) !important;
+        }
+        .row-splitter:hover div {
+          background: var(--accent-indigo) !important;
+        }
+        .animate-slide-left {
+          animation: slideLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes slideLeft {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
+
+      {/* ── Collapsible AI Query Input ── */}
+      {showAiInput && (
+        <ErrorBoundary title="AI 智能问数面板加载异常">
+          <div className="animate-slide-down">
+            <AiQueryInput
+              value={aiQuestion}
+              onChange={setAiQuestion}
+              onSubmit={() => void handleAiGenerate()}
+              loading={aiGenerating}
+              onToggleConfig={() => setShowAiConfig((v) => !v)}
+              isDemo={datasource.database_name === "databox_demo" || datasource.name.includes("Demo")}
+            />
+          </div>
+        </ErrorBoundary>
+      )}
 
       {/* ── LLM Config ── */}
-      {showAiConfig && (
+      {showAiConfig && showAiInput && (
         <div className="lab-card animate-slide-down" style={{ padding: "14px 18px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
@@ -394,667 +443,775 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
         </div>
       )}
 
-      {/* ── Main Content: Editor + Guardrail ── */}
+      {/* ── Main Content: SQL Workspace with Collapsible splits ── */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1.5fr minmax(280px, 0.85fr)",
-          gap: 14,
+          display: "flex",
+          flexDirection: "column",
           flex: 1,
           overflow: "hidden",
           minHeight: 0,
         }}
       >
-        {/* Left: Editor + Results */}
-        <div style={{ display: "grid", gridTemplateRows: "minmax(200px, 1fr) auto", gap: 14, overflow: "hidden" }}>
-          {/* SQL Editor */}
-          <div className="lab-card" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Tab bar */}
-            <div
-              style={{
-                borderBottom: "1px solid var(--border-light)",
-                padding: "6px 10px 0",
-                background: "var(--bg-secondary)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 4, overflowX: "auto", paddingBottom: 6 }}>
-                {tabs.map((tab) => {
-                  const dirty = isDirty(tab);
-                  const isActive = tab.id === activeEditorTab?.id;
-                  const isRenaming = renamingTabId === tab.id;
-                  return (
-                    <div
-                      key={tab.id}
+        {/* SQL Editor (Draggable height) */}
+        <div
+          className="lab-card"
+          style={{
+            height: editorHeight,
+            minHeight: 120,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {/* Tab bar */}
+          <div
+            style={{
+              borderBottom: "1px solid var(--border-light)",
+              padding: "6px 10px 0",
+              background: "var(--bg-secondary)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 4, overflowX: "auto", paddingBottom: 6 }}>
+              {tabs.map((tab) => {
+                const dirty = isDirty(tab);
+                const isActive = tab.id === activeEditorTab?.id;
+                const isRenaming = renamingTabId === tab.id;
+                return (
+                  <div
+                    key={tab.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "6px 10px",
+                      borderRadius: "6px 6px 0 0",
+                      border: "1px solid",
+                      borderColor: isActive ? "var(--border-light)" : "transparent",
+                      borderBottomColor: isActive ? "var(--bg-surface)" : "transparent",
+                      background: isActive ? "var(--bg-surface)" : "transparent",
+                      minWidth: "fit-content",
+                    }}
+                  >
+                    <button
+                      onClick={() => setActiveEditorTabId(tab.id)}
+                      onDoubleClick={() => startRenaming(tab)}
                       style={{
+                        border: "none",
+                        background: "transparent",
+                        color: isActive ? "var(--text-primary)" : "var(--text-muted)",
+                        cursor: "pointer",
+                        fontSize: "0.8rem",
+                        fontWeight: isActive ? 600 : 500,
                         display: "flex",
                         alignItems: "center",
                         gap: 4,
-                        padding: "6px 10px",
-                        borderRadius: "6px 6px 0 0",
-                        border: "1px solid",
-                        borderColor: isActive ? "var(--border-light)" : "transparent",
-                        borderBottomColor: isActive ? "var(--bg-surface)" : "transparent",
-                        background: isActive ? "var(--bg-surface)" : "transparent",
-                        minWidth: "fit-content",
                       }}
                     >
-                      <button
-                        onClick={() => setActiveEditorTabId(tab.id)}
-                        onDoubleClick={() => startRenaming(tab)}
-                        style={{
-                          border: "none",
-                          background: "transparent",
-                          color: isActive ? "var(--text-primary)" : "var(--text-muted)",
-                          cursor: "pointer",
-                          fontSize: "0.8rem",
-                          fontWeight: isActive ? 600 : 500,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        {dirty && <CircleDot size={10} style={{ color: "var(--accent-amber)" }} />}
-                        {isRenaming ? (
-                          <input
-                            className="input-field input-field-sm"
-                            value={renameDraft}
-                            autoFocus
-                            onChange={(e) => setRenameDraft(e.target.value)}
-                            onBlur={commitRename}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitRename();
-                              if (e.key === "Escape") {
-                                setRenameDraft("");
-                              }
-                            }}
-                            style={{ width: 100 }}
-                          />
-                        ) : (
-                          <span>{tab.title}</span>
-                        )}
+                      {dirty && <CircleDot size={10} style={{ color: "var(--accent-amber)" }} />}
+                      {isRenaming ? (
+                        <input
+                          className="input-field input-field-sm"
+                          value={renameDraft}
+                          autoFocus
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") {
+                              setRenameDraft("");
+                            }
+                          }}
+                          style={{ width: 100 }}
+                        />
+                      ) : (
+                        <span>{tab.title}</span>
+                      )}
+                    </button>
+                    {!isRenaming && (
+                      <button onClick={() => startRenaming(tab)} className="btn-ghost" style={{ padding: 1 }}>
+                        <PencilLine size={11} />
                       </button>
-                      {!isRenaming && (
-                        <button onClick={() => startRenaming(tab)} className="btn-ghost" style={{ padding: 1 }}>
-                          <PencilLine size={11} />
-                        </button>
-                      )}
-                      {tabs.length > 1 && (
-                        <button onClick={() => handleCloseTab(tab.id)} className="btn-ghost" style={{ padding: 1 }}>
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-                <button className="btn-ghost" onClick={() => handleAddTab()} style={{ padding: "4px 8px", flexShrink: 0 }} title="新建查询标签 (Ctrl+N)">
-                  <Plus size={13} />
-                </button>
-              </div>
-            </div>
-
-            {/* Toolbar */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 14px",
-                borderBottom: "1px solid var(--border-light)",
-                gap: 8,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                <span className="text-mono" style={{ fontWeight: 500, color: "var(--text-secondary)" }}>
-                  {datasource.database_name}
-                </span>
-                {activeEditorTab && isDirty(activeEditorTab) && (
-                  <span style={{ color: "var(--accent-amber)" }}>· 未执行</span>
-                )}
-                {activeEditorTab?.status === "running" && (
-                  <span className="animate-pulse" style={{ color: "var(--accent-indigo)", fontWeight: 600 }}>
-                    · 正在执行中...
-                  </span>
-                )}
-                {activeEditorTab?.status === "timeout" && (
-                  <span style={{ color: "var(--accent-red)", fontWeight: 600 }}>· 查询超时 ⚠️</span>
-                )}
-                {activeEditorTab?.status === "cancelled" && (
-                  <span style={{ color: "var(--text-muted)" }}>· 已取消 🛑</span>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  className="btn-secondary"
-                  style={{
-                    padding: "5px 10px",
-                    fontSize: "0.8rem",
-                    color: "var(--accent-indigo)",
-                    borderColor: "rgba(74, 91, 192, 0.2)",
-                  }}
-                  onClick={() => {
-                    setGoldenPresetQuestion("");
-                    setGoldenPresetSql("");
-                    setShowBenchmarkDrawer(true);
-                  }}
-                >
-                  <Award size={13} />
-                  黄金测试集
-                </button>
-                <button className="btn-ghost" onClick={handleCopySql}>
-                  {copied ? <Check size={13} /> : <Copy size={13} />}
-                  {copied ? "已复制" : "复制"}
-                </button>
-                <button
-                  className="btn-secondary"
-                  style={{ padding: "5px 10px", fontSize: "0.8rem" }}
-                  onClick={handleValidateSql}
-                  disabled={validating || !activeEditorTab || activeEditorTab.status === "running"}
-                  title="校验 SQL 安全性 (Ctrl+Shift+Enter)"
-                >
-                  <ShieldAlert size={13} />
-                  校验
-                </button>
-
-                {/* Cancellable Execution Button */}
-                {activeEditorTab?.status === "running" ? (
-                  <button
-                    className="btn-secondary shadow-sm hover-lift animate-pulse"
-                    style={{
-                      padding: "5px 14px",
-                      fontSize: "0.82rem",
-                      color: "var(--accent-red)",
-                      borderColor: "rgba(220, 38, 38, 0.2)",
-                      fontWeight: 600,
-                    }}
-                    onClick={() => handleCancelQuery(activeEditorTab.id)}
-                  >
-                    <X size={13} />
-                    取消执行
-                  </button>
-                ) : (
-                  <button
-                    className="btn-primary"
-                    style={{ padding: "5px 14px", fontSize: "0.82rem" }}
-                    onClick={() => handleExecuteSql(30000)}
-                    disabled={!activeEditorTab}
-                    title="执行 SQL 查询 (Ctrl+Enter)"
-                  >
-                    <Play size={13} />
-                    执行
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Editor */}
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <SqlEditor
-                value={activeEditorTab?.sql ?? ""}
-                onChange={(v) => updateActiveTab(() => ({ sql: v }))}
-                schemaTables={schemaTables}
-              />
+                    )}
+                    {tabs.length > 1 && (
+                      <button onClick={() => handleCloseTab(tab.id)} className="btn-ghost" style={{ padding: 1 }}>
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button className="btn-ghost" onClick={() => handleAddTab()} style={{ padding: "4px 8px", flexShrink: 0 }} title="新建查询标签 (Ctrl+N)">
+                <Plus size={13} />
+              </button>
             </div>
           </div>
 
-          {/* Results / History */}
+          {/* Toolbar */}
           <div
-            className="lab-card"
-            style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 180 }}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "8px 14px",
+              borderBottom: "1px solid var(--border-light)",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "8px 14px",
-                borderBottom: "1px solid var(--border-light)",
-                background: "var(--bg-secondary)",
-              }}
-            >
-              <div className="pill-tabs">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              <span className="text-mono" style={{ fontWeight: 500, color: "var(--text-secondary)" }}>
+                {datasource.database_name}
+              </span>
+              {activeEditorTab && isDirty(activeEditorTab) && (
+                <span style={{ color: "var(--accent-amber)" }}>· 未执行</span>
+              )}
+              {activeEditorTab?.status === "running" && (
+                <span className="animate-pulse" style={{ color: "var(--accent-indigo)", fontWeight: 600 }}>
+                  · 正在执行中...
+                </span>
+              )}
+              {activeEditorTab?.status === "timeout" && (
+                <span style={{ color: "var(--accent-red)", fontWeight: 600 }}>· 查询超时 ⚠️</span>
+              )}
+              {activeEditorTab?.status === "cancelled" && (
+                <span style={{ color: "var(--text-muted)" }}>· 已取消 🛑</span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className={`btn-secondary ${showAiInput ? "active" : ""}`}
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "0.8rem",
+                  color: showAiInput ? "var(--accent-indigo)" : "var(--text-secondary)",
+                  borderColor: showAiInput ? "var(--accent-indigo)" : "var(--border-light)",
+                  background: showAiInput ? "var(--bg-active)" : "var(--bg-surface)",
+                }}
+                onClick={() => setShowAiInput(!showAiInput)}
+              >
+                <Sparkles size={13} style={{ color: "var(--accent-indigo)" }} />
+                AI 智能问数
+              </button>
+              <button
+                className="btn-secondary"
+                style={{
+                  padding: "5px 10px",
+                  fontSize: "0.8rem",
+                  color: "var(--accent-indigo)",
+                  borderColor: "rgba(74, 91, 192, 0.2)",
+                }}
+                onClick={() => {
+                  setGoldenPresetQuestion("");
+                  setGoldenPresetSql("");
+                  setShowBenchmarkDrawer(true);
+                }}
+              >
+                <Award size={13} />
+                黄金测试集
+              </button>
+              <button className="btn-ghost" onClick={handleCopySql}>
+                {copied ? <Check size={13} /> : <Copy size={13} />}
+                {copied ? "已复制" : "复制"}
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ padding: "5px 10px", fontSize: "0.8rem" }}
+                onClick={handleValidateSql}
+                disabled={validating || !activeEditorTab || activeEditorTab.status === "running"}
+                title="校验 SQL 安全性 (Ctrl+Shift+Enter)"
+              >
+                <ShieldAlert size={13} />
+                校验
+              </button>
+
+              {/* Cancellable Execution Button */}
+              {activeEditorTab?.status === "running" ? (
                 <button
-                  className={`pill-tab ${activeBottomTab === "results" ? "active" : ""}`}
-                  onClick={() => setActiveBottomTab("results")}
+                  className="btn-secondary shadow-sm hover-lift animate-pulse"
+                  style={{
+                    padding: "5px 14px",
+                    fontSize: "0.82rem",
+                    color: "var(--accent-red)",
+                    borderColor: "rgba(220, 38, 38, 0.2)",
+                    fontWeight: 600,
+                  }}
+                  onClick={() => handleCancelQuery(activeEditorTab.id)}
                 >
-                  <Table size={13} />
-                  结果
+                  <X size={13} />
+                  取消执行
                 </button>
+              ) : (
                 <button
-                  className={`pill-tab ${activeBottomTab === "history" ? "active" : ""}`}
-                  onClick={() => setActiveBottomTab("history")}
+                  className="btn-primary"
+                  style={{ padding: "5px 14px", fontSize: "0.82rem" }}
+                  onClick={() => handleExecuteSql(30000)}
+                  disabled={!activeEditorTab}
+                  title="执行 SQL 查询 (Ctrl+Enter)"
                 >
-                  <History size={13} />
-                  历史
+                  <Play size={13} />
+                  执行
                 </button>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-                {activeBottomTab === "history" && (
-                  <>
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        minWidth: 180,
-                        maxWidth: 240,
-                        padding: "4px 8px",
-                        border: "1px solid var(--border-light)",
-                        borderRadius: 6,
-                        background: "var(--bg-surface)",
-                      }}
-                    >
-                      <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-                      <input
-                        value={historySearch}
-                        onChange={(e) => setHistorySearch(e.target.value)}
-                        placeholder="搜索问题或 SQL"
-                        style={{
-                          border: "none",
-                          outline: "none",
-                          background: "transparent",
-                          width: "100%",
-                          minWidth: 0,
-                          color: "var(--text-primary)",
-                          fontSize: "0.78rem",
-                        }}
-                      />
-                    </label>
-                    <select
-                      className="input-field input-field-sm"
-                      value={historyStatus}
-                      onChange={(e) => setHistoryStatus(e.target.value as typeof historyStatus)}
-                      style={{ width: 104, height: 30, fontSize: "0.78rem" }}
-                    >
-                      <option value="all">全部状态</option>
-                      <option value="success">成功</option>
-                      <option value="failed">失败</option>
-                      <option value="timeout">超时</option>
-                      <option value="cancelled">已取消</option>
-                    </select>
-                    <button
-                      className="btn-ghost"
-                      onClick={() => void fetchHistory()}
-                      disabled={historyLoading}
-                      title="刷新历史"
-                      style={{ padding: "5px 8px" }}
-                    >
-                      <RefreshCw size={13} />
-                    </button>
-                    <button
-                      className="btn-ghost"
-                      onClick={() => setClearConfirm(true)}
-                      disabled={historyMutating || history.length === 0}
-                      title="清空当前数据源历史"
-                      style={{ padding: "5px 8px", color: "var(--accent-red)" }}
-                    >
-                      <Trash2 size={13} />
-                      清空
-                    </button>
-                  </>
-                )}
-                {activeEditorTab?.queryError && (
-                  <span
-                    className="status-badge status-badge-error"
-                    style={{
-                      maxWidth: 320,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {activeEditorTab.queryError}
+              )}
+            </div>
+          </div>
+
+          {/* Guardrail Status Strip */}
+          {activeEditorTab?.guardrail && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "6px 14px",
+              background: activeEditorTab.guardrail.result === "pass" ? "rgba(16, 185, 129, 0.06)" : activeEditorTab.guardrail.result === "warn" ? "rgba(245, 158, 11, 0.06)" : "rgba(239, 68, 68, 0.06)",
+              borderBottom: "1px solid var(--border-light)",
+              fontSize: "0.78rem",
+              lineHeight: "1.4",
+              flexShrink: 0,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, color: activeEditorTab.guardrail.result === "pass" ? "var(--accent-green)" : activeEditorTab.guardrail.result === "warn" ? "var(--accent-amber)" : "var(--accent-red)" }}>
+                <ShieldAlert size={13} />
+                <span><strong>Guardrail:</strong> {activeEditorTab.guardrail.message}</span>
+                {activeEditorTab.schemaValidationWarnings && activeEditorTab.schemaValidationWarnings.length > 0 && (
+                  <span style={{
+                    marginLeft: 8,
+                    background: "rgba(245, 158, 11, 0.1)",
+                    color: "var(--accent-amber)",
+                    padding: "1px 5px",
+                    borderRadius: 3,
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                  }}>
+                    ⚠️ 架构告警 ({activeEditorTab.schemaValidationWarnings.length})
                   </span>
                 )}
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {activeEditorTab.guardrail.safeSql && (
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.7rem", fontFamily: "var(--font-mono)" }}>
+                    [自动注入 LIMIT]
+                  </span>
+                )}
+                <button
+                  onClick={() => setShowGuardrailDrawer(true)}
+                  className="btn-ghost"
+                  style={{
+                    padding: "2px 8px",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    color: "var(--accent-indigo)",
+                  }}
+                >
+                  查看审计报告 🔍
+                </button>
+              </div>
             </div>
+          )}
 
-            <div style={{ flex: 1, overflow: "auto" }}>
-              {activeBottomTab === "results" && (
-                <>
-                  {!activeEditorTab?.queryResult ? (
-                    <div className="empty-state" style={{ padding: 36 }}>
-                      {activeEditorTab?.status === "running" ? (
-                        <>
-                          <div className="empty-state-desc">SQL 正在安全执行中，请稍候...</div>
-                          <div style={{ marginTop: 8, width: 120, height: 3, background: "var(--accent-indigo-light)", borderRadius: 2, overflow: "hidden" }}>
-                            <div className="progress-bar-glow" style={{ height: "100%", width: "60%", background: "var(--accent-indigo)", borderRadius: 2 }} />
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Play size={28} className="empty-state-icon" style={{ color: "var(--accent-indigo)" }} />
-                          <div className="empty-state-desc">在编辑器中编写 SQL，点击「执行」或按 <strong>Ctrl+Enter</strong></div>
-                          <div style={{ marginTop: 12, fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                            也可通过 AI 智能问数自动生成 SQL
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <div>
-                      {/* Result meta bar */}
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "6px 16px",
-                          borderBottom: "1px solid var(--border-light)",
-                          fontSize: "0.78rem",
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        <div style={{ display: "flex", gap: 16 }}>
-                          <span>
-                            行数:{" "}
-                            <strong style={{ color: "var(--text-primary)" }}>
-                              {activeEditorTab.queryResult.rowCount}
-                            </strong>
-                          </span>
-                          <span>
-                            列数:{" "}
-                            <strong style={{ color: "var(--text-primary)" }}>
-                              {activeEditorTab.queryResult.columns.length}
-                            </strong>
-                          </span>
-                          <span>
-                            耗时:{" "}
-                            <strong style={{ color: "var(--text-primary)" }}>
-                              {activeEditorTab.queryResult.latencyMs}ms
-                            </strong>
-                          </span>
-                        </div>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          {isExplainQuery && (
-                            <button
-                              className={resultViewMode === "explain" ? "btn-primary" : "btn-secondary"}
-                              style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                              onClick={() => setResultViewMode("explain")}
-                            >
-                              <Activity size={12} /> 执行计划树
-                            </button>
-                          )}
-                          <button
-                            className={resultViewMode === "table" ? "btn-primary" : "btn-secondary"}
-                            style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                            onClick={() => setResultViewMode("table")}
-                          >
-                            <Table size={12} /> 表格
-                          </button>
-                          <button
-                            className={resultViewMode === "chart" ? "btn-primary" : "btn-secondary"}
-                            style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                            onClick={() => setResultViewMode("chart")}
-                          >
-                            <BarChart3 size={12} /> 图表
-                          </button>
-                          <button
-                            className="btn-ghost"
-                            style={{ fontSize: "0.74rem" }}
-                            onClick={handleExportCsv}
-                          >
-                            <Download size={12} /> CSV
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Performance Latency Breakdown Timeline */}
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "6px 16px",
-                          background: "var(--bg-secondary)",
-                          borderBottom: "1px solid var(--border-light)",
-                          fontSize: "0.74rem",
-                          gap: 12,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
-                          <span>⏱️ 耗时拆解:</span>
-                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                            <span>连接: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.connectMs ?? 0}ms</strong></span>
-                            <span>安全过滤: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.guardrailMs ?? 0}ms</strong></span>
-                            <span>引擎执行: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.executeMs ?? 0}ms</strong></span>
-                            <span>拉取: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.fetchMs ?? 0}ms</strong></span>
-                            <span>序列化: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.serializeMs ?? 0}ms</strong></span>
-                          </div>
-                        </div>
-                        
-                        {(() => {
-                          const r = activeEditorTab.queryResult;
-                          const c = r.connectMs ?? 0;
-                          const g = r.guardrailMs ?? 0;
-                          const e = r.executeMs ?? 0;
-                          const f = r.fetchMs ?? 0;
-                          const s = r.serializeMs ?? 0;
-                          const total = Math.max(1, c + g + e + f + s);
-                          const pc = (c / total) * 100;
-                          const pg = (g / total) * 100;
-                          const pe = (e / total) * 100;
-                          const pf = (f / total) * 100;
-                          const ps = (s / total) * 100;
-                          return (
-                            <div
-                              style={{
-                                display: "flex",
-                                width: 140,
-                                height: 6,
-                                borderRadius: 3,
-                                overflow: "hidden",
-                                background: "rgba(0,0,0,0.1)",
-                              }}
-                              title={`总计耗时拆解 (连接: ${c}ms, 安全: ${g}ms, 执行: ${e}ms, 拉取: ${f}ms, 序列化: ${s}ms)`}
-                            >
-                              <div style={{ width: `${pc}%`, background: "#10B981" }} title={`连接: ${c}ms`} />
-                              <div style={{ width: `${pg}%`, background: "#3B82F6" }} title={`安全: ${g}ms`} />
-                              <div style={{ width: `${pe}%`, background: "#8B5CF6" }} title={`执行: ${e}ms`} />
-                              <div style={{ width: `${pf}%`, background: "#F59E0B" }} title={`拉取: ${f}ms`} />
-                              <div style={{ width: `${ps}%`, background: "#EF4444" }} title={`序列化: ${s}ms`} />
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      {/* Warnings Alert */}
-                      {activeEditorTab.queryResult.warnings && activeEditorTab.queryResult.warnings.length > 0 && (
-                        <div
-                          className="animate-fade-in"
-                          style={{
-                            background: "rgba(245, 158, 11, 0.08)",
-                            borderBottom: "1px dashed rgba(245, 158, 11, 0.2)",
-                            padding: "8px 16px",
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 4,
-                            fontSize: "0.78rem",
-                            color: "var(--accent-amber)",
-                          }}
-                        >
-                          {activeEditorTab.queryResult.warnings.map((warn, i) => (
-                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: "10px" }}>⚠️</span>
-                              <span>{warn}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {resultViewMode === "explain" && isExplainQuery ? (
-                        <div style={{ padding: 12 }}>
-                          <ErrorBoundary title="执行计划可视化解析异常">
-                            <ExplainVisualizer
-                              columns={activeEditorTab.queryResult.columns}
-                              rows={activeEditorTab.queryResult.rows}
-                            />
-                          </ErrorBoundary>
-                        </div>
-                      ) : resultViewMode === "table" ? (
-                        <ErrorBoundary title="数据网格 (DataTable) 渲染崩溃">
-                          <DataTable
-                            columns={activeEditorTab.queryResult.columns}
-                            rows={activeEditorTab.queryResult.rows}
-                            maxHeight="360px"
-                          />
-                        </ErrorBoundary>
-                      ) : (
-                        <div style={{ padding: 12 }}>
-                          <ErrorBoundary title="数据分析图表 (ChartPanel) 渲染崩溃">
-                            <ChartPanel
-                              columns={activeEditorTab.queryResult.columns}
-                              rows={activeEditorTab.queryResult.rows}
-                            />
-                          </ErrorBoundary>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {activeBottomTab === "history" && (
-                <>
-                  {historyLoading ? (
-                    <div style={{ padding: 24 }}>
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="skeleton" style={{ height: 40, marginBottom: 6, borderRadius: 4 }} />
-                      ))}
-                    </div>
-                  ) : history.length === 0 ? (
-                    <div className="empty-state" style={{ padding: 36 }}>
-                      <div className="empty-state-desc">
-                        {historySearch.trim() || historyStatus !== "all"
-                          ? "没有匹配的查询历史"
-                          : "还没有执行历史，执行一条 SQL 试试"}
-                      </div>
-                    </div>
-                  ) : (
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>操作</th>
-                          <th>时间</th>
-                          <th>SQL</th>
-                          <th>审核</th>
-                          <th>状态</th>
-                          <th>行数</th>
-                          <th>耗时</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {history.map((item) => (
-                          <tr key={item.id}>
-                            <td style={{ whiteSpace: "nowrap" }}>
-                              <button
-                                className="btn-ghost"
-                                onClick={() => handleReuseHistory(item)}
-                                disabled={!getHistorySql(item)}
-                                title="复用 SQL"
-                                style={{ padding: "3px 7px", fontSize: "0.74rem" }}
-                              >
-                                <RotateCcw size={12} />
-                                复用
-                              </button>
-                              <button
-                                className="btn-ghost"
-                                onClick={() => handleDeleteHistory(item)}
-                                disabled={historyMutating}
-                                title="删除历史"
-                                style={{ padding: "3px 7px", color: "var(--accent-red)" }}
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </td>
-                            <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem" }}>
-                              {new Date(item.created_at).toLocaleString("zh-CN", {
-                                month: "short",
-                                day: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </td>
-                            <td
-                              className="text-mono"
-                              style={{
-                                maxWidth: 240,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                fontSize: "0.78rem",
-                              }}
-                              title={getHistorySql(item)}
-                            >
-                              {getHistorySql(item) || "-"}
-                            </td>
-                            <td>
-                              <StatusIndicator
-                                type={
-                                  item.guardrail_result === "pass"
-                                    ? "success"
-                                    : item.guardrail_result === "warn"
-                                    ? "warning"
-                                    : "error"
-                                }
-                                size="sm"
-                              />
-                            </td>
-                            <td>
-                              <span
-                                style={{
-                                  color:
-                                    item.execution_status === "success"
-                                      ? "var(--accent-green)"
-                                      : "var(--accent-red)",
-                                  fontSize: "0.8rem",
-                                }}
-                              >
-                                {formatHistoryStatus(item.execution_status)}
-                              </span>
-                            </td>
-                            <td className="cell-number">{item.rows_returned}</td>
-                            <td className="cell-number">{item.execution_time_ms}ms</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </>
-              )}
-            </div>
+          {/* Editor */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <SqlEditor
+              value={activeEditorTab?.sql ?? ""}
+              onChange={(v) => updateActiveTab(() => ({ sql: v }))}
+              schemaTables={schemaTables}
+            />
           </div>
         </div>
 
-        {/* Right: Guardrail Panel */}
-        <div className="lab-card" style={{ padding: 18, overflow: "auto" }}>
-          <h3
+        {/* Draggable Row Height Splitter */}
+        <div
+          onMouseDown={handleHeightDragMouseDown}
+          style={{
+            height: 8,
+            cursor: "row-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            userSelect: "none",
+            flexShrink: 0,
+          }}
+          className="row-splitter"
+          title="上下拖动调整编辑器与结果集高度"
+        >
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--border-medium)" }} />
+        </div>
+
+        {/* Results / History */}
+        <div
+          className="lab-card"
+          style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 120 }}
+        >
+          <div
             style={{
-              fontSize: "0.92rem",
-              fontWeight: 600,
               display: "flex",
+              justifyContent: "space-between",
               alignItems: "center",
-              gap: 8,
-              marginBottom: 16,
+              padding: "8px 14px",
+              borderBottom: "1px solid var(--border-light)",
+              background: "var(--bg-secondary)",
             }}
           >
-            <ShieldAlert size={16} style={{ color: "var(--accent-indigo)" }} />
-            Guardrail 安全审核
-          </h3>
-
-          {!activeEditorTab?.guardrail ? (
-            <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: 1.7 }}>
-              <p>点击「校验」或「执行」按钮后，这里会展示安全审核结果。</p>
-              <div className="divider-spaced" />
-              <p style={{ fontSize: "0.78rem" }}>
-                Guardrail 会检查：危险语句、系统库访问、危险函数、多语句、无 LIMIT 等。
-              </p>
+            <div className="pill-tabs">
+              <button
+                className={`pill-tab ${activeBottomTab === "results" ? "active" : ""}`}
+                onClick={() => setActiveBottomTab("results")}
+              >
+                <Table size={13} />
+                结果
+              </button>
+              <button
+                className={`pill-tab ${activeBottomTab === "history" ? "active" : ""}`}
+                onClick={() => setActiveBottomTab("history")}
+              >
+                <History size={13} />
+                历史
+              </button>
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {/* Result badge */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              {activeBottomTab === "history" && (
+                <>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      minWidth: 180,
+                      maxWidth: 240,
+                      padding: "4px 8px",
+                      border: "1px solid var(--border-light)",
+                      borderRadius: 6,
+                      background: "var(--bg-surface)",
+                    }}
+                  >
+                    <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                    <input
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      placeholder="搜索问题或 SQL"
+                      style={{
+                        border: "none",
+                        outline: "none",
+                        background: "transparent",
+                        width: "100%",
+                        minWidth: 0,
+                        color: "var(--text-primary)",
+                        fontSize: "0.78rem",
+                      }}
+                    />
+                  </label>
+                  <select
+                    className="input-field input-field-sm"
+                    value={historyStatus}
+                    onChange={(e) => setHistoryStatus(e.target.value as typeof historyStatus)}
+                    style={{ width: 104, height: 30, fontSize: "0.78rem" }}
+                  >
+                    <option value="all">全部状态</option>
+                    <option value="success">成功</option>
+                    <option value="failed">失败</option>
+                    <option value="timeout">超时</option>
+                    <option value="cancelled">已取消</option>
+                  </select>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => void fetchHistory()}
+                    disabled={historyLoading}
+                    title="刷新历史"
+                    style={{ padding: "5px 8px" }}
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => setClearConfirm(true)}
+                    disabled={historyMutating || history.length === 0}
+                    title="清空当前数据源历史"
+                    style={{ padding: "5px 8px", color: "var(--accent-red)" }}
+                  >
+                    <Trash2 size={13} />
+                    清空
+                  </button>
+                </>
+              )}
+              {activeEditorTab?.queryError && (
+                <span
+                  className="status-badge status-badge-error"
+                  style={{
+                    maxWidth: 320,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {activeEditorTab.queryError}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto" }}>
+            {activeBottomTab === "results" && (
+              <>
+                {!activeEditorTab?.queryResult ? (
+                  <div className="empty-state" style={{ padding: 36 }}>
+                    {activeEditorTab?.status === "running" ? (
+                      <>
+                        <div className="empty-state-desc">SQL 正在安全执行中，请稍候...</div>
+                        <div style={{ marginTop: 8, width: 120, height: 3, background: "var(--accent-indigo-light)", borderRadius: 2, overflow: "hidden" }}>
+                          <div className="progress-bar-glow" style={{ height: "100%", width: "60%", background: "var(--accent-indigo)", borderRadius: 2 }} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={28} className="empty-state-icon" style={{ color: "var(--accent-indigo)" }} />
+                        <div className="empty-state-desc">在编辑器中编写 SQL，点击「执行」或按 <strong>Ctrl+Enter</strong></div>
+                        <div style={{ marginTop: 12, fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                          也可通过 AI 智能问数自动生成 SQL
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {/* Result meta bar */}
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "6px 16px",
+                        borderBottom: "1px solid var(--border-light)",
+                        fontSize: "0.78rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: 16 }}>
+                        <span>
+                          行数:{" "}
+                          <strong style={{ color: "var(--text-primary)" }}>
+                            {activeEditorTab.queryResult.rowCount}
+                          </strong>
+                        </span>
+                        <span>
+                          列数:{" "}
+                          <strong style={{ color: "var(--text-primary)" }}>
+                            {activeEditorTab.queryResult.columns.length}
+                          </strong>
+                        </span>
+                        <span>
+                          耗时:{" "}
+                          <strong style={{ color: "var(--text-primary)" }}>
+                            {activeEditorTab.queryResult.latencyMs}ms
+                          </strong>
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {isExplainQuery && (
+                          <button
+                            className={resultViewMode === "explain" ? "btn-primary" : "btn-secondary"}
+                            style={{ padding: "3px 8px", fontSize: "0.74rem" }}
+                            onClick={() => setResultViewMode("explain")}
+                          >
+                            <Activity size={12} /> 执行计划树
+                          </button>
+                        )}
+                        <button
+                          className={resultViewMode === "table" ? "btn-primary" : "btn-secondary"}
+                          style={{ padding: "3px 8px", fontSize: "0.74rem" }}
+                          onClick={() => setResultViewMode("table")}
+                        >
+                          <Table size={12} /> 表格
+                        </button>
+                        <button
+                          className={resultViewMode === "chart" ? "btn-primary" : "btn-secondary"}
+                          style={{ padding: "3px 8px", fontSize: "0.74rem" }}
+                          onClick={() => setResultViewMode("chart")}
+                        >
+                          <BarChart3 size={12} /> 图表
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: "0.74rem" }}
+                          onClick={handleExportCsv}
+                        >
+                          <Download size={12} /> CSV
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Performance Latency Breakdown Timeline */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 16px",
+                        background: "var(--bg-secondary)",
+                        borderBottom: "1px solid var(--border-light)",
+                        fontSize: "0.74rem",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
+                        <span>⏱️ 耗时拆解:</span>
+                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                          <span>连接: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.connectMs ?? 0}ms</strong></span>
+                          <span>安全过滤: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.guardrailMs ?? 0}ms</strong></span>
+                          <span>引擎执行: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.executeMs ?? 0}ms</strong></span>
+                          <span>拉取: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.fetchMs ?? 0}ms</strong></span>
+                          <span>序列化: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.serializeMs ?? 0}ms</strong></span>
+                        </div>
+                      </div>
+                      
+                      {(() => {
+                        const r = activeEditorTab.queryResult;
+                        const c = r.connectMs ?? 0;
+                        const g = r.guardrailMs ?? 0;
+                        const e = r.executeMs ?? 0;
+                        const f = r.fetchMs ?? 0;
+                        const s = r.serializeMs ?? 0;
+                        const total = Math.max(1, c + g + e + f + s);
+                        const pc = (c / total) * 100;
+                        const pg = (g / total) * 100;
+                        const pe = (e / total) * 100;
+                        const pf = (f / total) * 100;
+                        const ps = (s / total) * 100;
+                        return (
+                          <div
+                            style={{
+                              display: "flex",
+                              width: 140,
+                              height: 6,
+                              borderRadius: 3,
+                              overflow: "hidden",
+                              background: "rgba(0,0,0,0.1)",
+                            }}
+                            title={`总计耗时拆解 (连接: ${c}ms, 安全: ${g}ms, 执行: ${e}ms, 拉取: ${f}ms, 序列化: ${s}ms)`}
+                          >
+                            <div style={{ width: `${pc}%`, background: "#10B981" }} title={`连接: ${c}ms`} />
+                            <div style={{ width: `${pg}%`, background: "#3B82F6" }} title={`安全: ${g}ms`} />
+                            <div style={{ width: `${pe}%`, background: "#8B5CF6" }} title={`执行: ${e}ms`} />
+                            <div style={{ width: `${pf}%`, background: "#F59E0B" }} title={`拉取: ${f}ms`} />
+                            <div style={{ width: `${ps}%`, background: "#EF4444" }} title={`序列化: ${s}ms`} />
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Warnings Alert */}
+                    {activeEditorTab.queryResult.warnings && activeEditorTab.queryResult.warnings.length > 0 && (
+                      <div
+                        className="animate-fade-in"
+                        style={{
+                          background: "rgba(245, 158, 11, 0.08)",
+                          borderBottom: "1px dashed rgba(245, 158, 11, 0.2)",
+                          padding: "8px 16px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          fontSize: "0.78rem",
+                          color: "var(--accent-amber)",
+                        }}
+                      >
+                        {activeEditorTab.queryResult.warnings.map((warn, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: "10px" }}>⚠️</span>
+                            <span>{warn}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {resultViewMode === "explain" && isExplainQuery ? (
+                      <div style={{ padding: 12 }}>
+                        <ErrorBoundary title="执行计划可视化解析异常">
+                          <ExplainVisualizer
+                            columns={activeEditorTab.queryResult.columns}
+                            rows={activeEditorTab.queryResult.rows}
+                          />
+                        </ErrorBoundary>
+                      </div>
+                    ) : resultViewMode === "table" ? (
+                      <ErrorBoundary title="数据网格 (DataTable) 渲染崩溃">
+                        <DataTable
+                          columns={activeEditorTab.queryResult.columns}
+                          rows={activeEditorTab.queryResult.rows}
+                          maxHeight="100%"
+                        />
+                      </ErrorBoundary>
+                    ) : (
+                      <div style={{ padding: 12 }}>
+                        <ErrorBoundary title="数据分析图表 (ChartPanel) 渲染崩溃">
+                          <ChartPanel
+                            columns={activeEditorTab.queryResult.columns}
+                            rows={activeEditorTab.queryResult.rows}
+                          />
+                        </ErrorBoundary>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeBottomTab === "history" && (
+              <>
+                {historyLoading ? (
+                  <div style={{ padding: 24 }}>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="skeleton" style={{ height: 40, marginBottom: 6, borderRadius: 4 }} />
+                    ))}
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="empty-state" style={{ padding: 36 }}>
+                    <div className="empty-state-desc">
+                      {historySearch.trim() || historyStatus !== "all"
+                        ? "没有匹配的查询历史"
+                        : "还没有执行历史，执行一条 SQL 试试"}
+                    </div>
+                  </div>
+                ) : (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>操作</th>
+                        <th>时间</th>
+                        <th>SQL</th>
+                        <th>审核</th>
+                        <th>状态</th>
+                        <th>行数</th>
+                        <th>耗时</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((item) => (
+                        <tr key={item.id}>
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            <button
+                              className="btn-ghost"
+                              onClick={() => handleReuseHistory(item)}
+                              disabled={!getHistorySql(item)}
+                              title="复用 SQL"
+                              style={{ padding: "3px 7px", fontSize: "0.74rem" }}
+                            >
+                              <RotateCcw size={12} />
+                              复用
+                            </button>
+                            <button
+                              className="btn-ghost"
+                              onClick={() => handleDeleteHistory(item)}
+                              disabled={historyMutating}
+                              title="删除历史"
+                              style={{ padding: "3px 7px", color: "var(--accent-red)" }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </td>
+                          <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem" }}>
+                            {new Date(item.created_at).toLocaleString("zh-CN", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td
+                            className="text-mono"
+                            style={{
+                              maxWidth: 240,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              fontSize: "0.78rem",
+                            }}
+                            title={getHistorySql(item)}
+                          >
+                            {getHistorySql(item) || "-"}
+                          </td>
+                          <td>
+                            <StatusIndicator
+                              type={
+                                item.guardrail_result === "pass"
+                                  ? "success"
+                                  : item.guardrail_result === "warn"
+                                  ? "warning"
+                                  : "error"
+                              }
+                              size="sm"
+                            />
+                          </td>
+                          <td>
+                            <span
+                              style={{
+                                color:
+                                  item.execution_status === "success"
+                                    ? "var(--accent-green)"
+                                    : "var(--accent-red)",
+                                fontSize: "0.8rem",
+                              }}
+                            >
+                              {formatHistoryStatus(item.execution_status)}
+                            </span>
+                          </td>
+                          <td className="cell-number">{item.rows_returned}</td>
+                          <td className="cell-number">{item.execution_time_ms}ms</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Sliding Detailed Guardrail Audit Drawer ── */}
+      {showGuardrailDrawer && activeEditorTab?.guardrail && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.4)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            justifyContent: "flex-end",
+            zIndex: 9999,
+          }}
+          onClick={() => setShowGuardrailDrawer(false)}
+        >
+          <div
+            className="animate-slide-left"
+            style={{
+              width: 440,
+              height: "100%",
+              background: "var(--bg-surface)",
+              borderLeft: "1px solid var(--border-medium)",
+              boxShadow: "var(--shadow-xl)",
+              display: "flex",
+              flexDirection: "column",
+              padding: 24,
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+                <ShieldAlert size={18} style={{ color: "var(--accent-indigo)" }} />
+                Guardrail 安全审计报告
+              </h3>
+              <button onClick={() => setShowGuardrailDrawer(false)} className="btn-ghost" style={{ padding: 4 }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
+                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", display: "block", marginBottom: 6 }}>审核结论</label>
                 <StatusIndicator
                   type={
                     activeEditorTab.guardrail.result === "pass"
@@ -1065,63 +1222,64 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
                   }
                   label={
                     activeEditorTab.guardrail.result === "pass"
-                      ? "通过"
+                      ? "安全评估通过"
                       : activeEditorTab.guardrail.result === "warn"
-                      ? "警告"
-                      : "拒绝"
+                      ? "存在合规性警告"
+                      : "拒绝执行（阻断）"
                   }
                 />
               </div>
 
-              <p style={{ fontSize: "0.84rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                {activeEditorTab.guardrail.message}
-              </p>
+              <div>
+                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", display: "block", marginBottom: 4 }}>详情说明</label>
+                <p style={{ fontSize: "0.84rem", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                  {activeEditorTab.guardrail.message}
+                </p>
+              </div>
 
               {/* Safe SQL */}
               <div>
-                <div style={{ fontWeight: 600, fontSize: "0.8rem", marginBottom: 6, color: "var(--text-secondary)" }}>
-                  安全 SQL
-                </div>
+                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", display: "block", marginBottom: 6 }}>安全 SQL 备份</label>
                 <pre
                   style={{
                     whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
+                    wordBreak: "break-all",
                     background: "var(--bg-secondary)",
                     padding: 12,
                     borderRadius: 6,
-                    fontSize: "0.8rem",
+                    fontSize: "0.78rem",
                     fontFamily: "var(--font-mono)",
                     color: "var(--text-primary)",
                     border: "1px solid var(--border-light)",
-                    lineHeight: 1.6,
+                    margin: 0,
+                    lineHeight: 1.5,
                   }}
                 >
-                  {activeEditorTab.guardrail.safeSql || "-"}
+                  {activeEditorTab.guardrail.safeSql || activeEditorTab.sql}
                 </pre>
               </div>
 
               {/* Checks */}
               {activeEditorTab.guardrail.checks.length > 0 && (
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: "0.8rem", marginBottom: 8, color: "var(--text-secondary)" }}>
-                    检查项 ({activeEditorTab.guardrail.checks.length})
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", display: "block", marginBottom: 8 }}>命中安全规则</label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {activeEditorTab.guardrail.checks.map((item, i) => (
                       <div
                         key={`${item.rule}-${i}`}
-                        className="lab-card-accent"
                         style={{
                           padding: "8px 12px",
+                          borderLeft: "3px solid",
                           borderLeftColor: item.level === "reject" ? "var(--accent-red)" : "var(--accent-amber)",
-                          background: item.level === "reject" ? "var(--accent-red-light)" : "var(--accent-amber-light)",
+                          background: "var(--bg-secondary)",
+                          borderRadius: "0 6px 6px 0",
                           fontSize: "0.78rem",
                         }}
                       >
-                        <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", fontSize: "0.72rem" }}>
+                        <div style={{ fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.72rem", marginBottom: 2 }}>
                           {item.rule}
-                        </span>
-                        <span style={{ marginLeft: 6, color: "var(--text-secondary)" }}>{item.message}</span>
+                        </div>
+                        <div style={{ color: "var(--text-secondary)" }}>{item.message}</div>
                       </div>
                     ))}
                   </div>
@@ -1131,43 +1289,38 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
               {/* AI Schema Validation Warnings */}
               {activeEditorTab.schemaValidationWarnings && activeEditorTab.schemaValidationWarnings.length > 0 && (
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: "0.8rem", marginBottom: 8, color: "var(--accent-amber)", display: "flex", alignItems: "center", gap: 4 }}>
-                    <ShieldAlert size={14} style={{ color: "var(--accent-amber)" }} />
-                    AI 字段存在性校验警告 ({activeEditorTab.schemaValidationWarnings.length})
-                  </div>
+                  <label style={{ fontSize: "0.76rem", color: "var(--accent-amber)", display: "block", marginBottom: 8 }}>AI 字段校验警告</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {activeEditorTab.schemaValidationWarnings.map((item, i) => (
                       <div
                         key={`schema-warn-${i}`}
-                        className="lab-card-accent"
                         style={{
                           padding: "8px 12px",
-                          borderLeftColor: "var(--accent-amber)",
-                          background: "var(--accent-amber-light)",
-                          fontSize: "0.78rem",
+                          borderLeft: "3px solid var(--accent-amber)",
+                          background: "var(--bg-secondary)",
+                          fontSize: "0.76rem",
                           color: "var(--text-primary)",
-                          borderRadius: 4,
+                          borderRadius: "0 6px 6px 0",
                         }}
                       >
                         <span style={{ fontWeight: 600, fontFamily: "var(--font-mono)", fontSize: "0.72rem", color: "var(--accent-amber)", marginRight: 6 }}>
                           hallucination
                         </span>
-                        <span style={{ color: "var(--text-primary)" }}>{item}</span>
+                        <span>{item}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Save as Golden SQL Shortcut */}
-              <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 12, marginTop: 4 }}>
+              <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 18, marginTop: 10 }}>
                 <button
                   className="btn-secondary"
                   style={{
                     width: "100%",
                     justifyContent: "center",
-                    fontSize: "0.78rem",
-                    padding: "6px 10px",
+                    fontSize: "0.8rem",
+                    padding: "8px 12px",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
@@ -1178,16 +1331,17 @@ export const QueryPage = ({ datasource, initialDraft }: QueryPageProps) => {
                     setGoldenPresetQuestion(activeEditorTab.title || "");
                     setGoldenPresetSql(activeEditorTab.sql);
                     setShowBenchmarkDrawer(true);
+                    setShowGuardrailDrawer(false);
                   }}
                 >
-                  <Award size={13} />
+                  <Award size={14} />
                   另存为 Golden SQL (加入 Benchmark)
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Golden SQL Benchmark Drawer ── */}
       {showBenchmarkDrawer && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Eye, HardDrive, Key, Link2, Search, Table, Terminal, X, Settings, Wand2, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Copy, Eye, HardDrive, Key, Link2, Terminal, X, Settings, Wand2, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { api } from "../lib/api";
 import type { DataSource, ERDiagramData, QueryResult, SchemaColumn, SchemaTable } from "../lib/api";
 import { DataTable } from "../components/DataTable";
@@ -10,7 +10,7 @@ import { DangerConfirmDialog, type ConfirmationDetails } from "../components/Dan
 
 interface SchemaPageProps {
   datasource: DataSource;
-  initialViewTab?: "fields" | "er" | "data";
+  initialViewTab?: "fields" | "er" | "data" | "design";
   selectedTableName?: string | null;
   onOpenSql?: (sql: string, title?: string) => void;
 }
@@ -19,8 +19,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
   const [tables, setTables] = useState<SchemaTable[]>([]);
   const [selectedTable, setSelectedTable] = useState<SchemaTable | null>(null);
   const [columns, setColumns] = useState<SchemaColumn[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [viewTab, setViewTab] = useState<"fields" | "er" | "data" | "design">("fields");
   const [erData, setErData] = useState<ERDiagramData | null>(null);
@@ -180,8 +178,10 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
   }, [selectedTableName, tables]);
 
   useEffect(() => {
-    if (initialViewTab === "data" && selectedTable) setViewTab("data");
-  }, [initialViewTab, selectedTable?.id]);
+    if (initialViewTab) {
+      setViewTab(initialViewTab);
+    }
+  }, [initialViewTab]);
 
   useEffect(() => {
     if (viewTab === "data" && selectedTable) void fetchPreviewData(selectedTable.table_name);
@@ -189,7 +189,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
 
   const fetchTables = async (selectTableName?: string) => {
     try {
-      setLoading(true);
       const data = await api.listTables(datasource.id);
       setTables(data);
       if (data.length > 0) {
@@ -201,8 +200,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -265,12 +262,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
     }
   };
 
-  const filteredTables = tables.filter(
-    (t) =>
-      t.table_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.table_comment.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
   const safeErData = useMemo<ERDiagramData>(
     () => ({
       nodes: Array.isArray(erData?.nodes) ? erData.nodes : [],
@@ -279,241 +270,44 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
     [erData],
   );
 
-  // Module prefix → display name mapping
-  const MODULE_PREFIXES: [string, string][] = [
-    ["account_", "账号模块"],
-    ["ai_", "AI 智能模块"],
-    ["agent_", "任务模块"],
-    ["auto_", "任务模块"],
-    ["billing_", "计费模块"],
-    ["content_", "内容模块"],
-    ["id_", "身份组织模块"],
-    ["login_", "认证会话模块"],
-    ["media_", "媒体素材模块"],
-    ["monitoring_", "监控模块"],
-    ["nurture_", "客户培育模块"],
-    ["notification_", "通知模块"],
-    ["platform_", "平台账号模块"],
-    ["publish_", "发布模块"],
-    ["rbac_", "权限模块"],
-    ["sales_", "销售模块"],
-    ["token_", "Token 账户模块"],
-    ["user_", "用户模块"],
-    ["video_", "视频模块"],
-    ["xhs_", "小红书模块"],
-    ["audit_", "审计模块"],
-    ["scheduler_", "调度模块"],
-  ];
-
-  const MODULE_ORDER = [
-    "账号模块",
-    "身份组织模块",
-    "认证会话模块",
-    "平台账号模块",
-    "Token 账户模块",
-    "销售模块",
-    "发布模块",
-    "媒体素材模块",
-    "视频模块",
-    "小红书模块",
-    "客户培育模块",
-    "AI 智能模块",
-    "任务模块",
-    "计费模块",
-    "审计模块",
-    "权限模块",
-    "监控模块",
-    "通知模块",
-    "用户模块",
-    "内容模块",
-    "调度模块",
-    "通用模块",
-  ];
-
-  function getModuleTag(tableName: string): string {
-    for (const [prefix, tag] of MODULE_PREFIXES) {
-      if (tableName.startsWith(prefix)) return tag;
-    }
-    return "通用模块";
-  }
-
-  // Group tables by module
-  const groupedTables = useMemo(() => {
-    const groups = new Map<string, SchemaTable[]>();
-    for (const t of filteredTables) {
-      const tag = t.module_tag || getModuleTag(t.table_name);
-      if (!groups.has(tag)) {
-        groups.set(tag, []);
-      }
-      groups.get(tag)!.push(t);
-    }
-    return Array.from(groups.entries())
-      .sort(([left], [right]) => {
-        const leftIndex = MODULE_ORDER.indexOf(left);
-        const rightIndex = MODULE_ORDER.indexOf(right);
-        const normalizedLeft = leftIndex === -1 ? MODULE_ORDER.length : leftIndex;
-        const normalizedRight = rightIndex === -1 ? MODULE_ORDER.length : rightIndex;
-        return normalizedLeft - normalizedRight || left.localeCompare(right, "zh-Hans-CN");
-      })
-      .map(([tag, group]) => ({
-        tag,
-        tables: [...group].sort((a, b) => a.table_name.localeCompare(b.table_name)),
-      }));
-  }, [filteredTables]);
-
-  // Collapse state for module groups
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-
   return (
     <div
       className="animate-fade-in"
-      style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 20, height: "100%", overflow: "hidden" }}
+      style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", overflow: "hidden" }}
     >
-      {/* Table List Panel */}
-      <div className="lab-card" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--border-light)" }}>
-          <h4
-            style={{ fontWeight: 600, fontSize: "0.92rem", marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}
-          >
-            <Table size={15} />
-            数据表
-            <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: "0.82rem" }}>({tables.length})</span>
-          </h4>
-          <div style={{ position: "relative" }}>
-            <Search
-              size={14}
-              style={{ position: "absolute", left: 10, top: 10, color: "var(--text-muted)" }}
-            />
-            <input
-              className="input-field input-field-sm"
-              placeholder="搜索表名或注释..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingLeft: 30, fontSize: "0.82rem" }}
-            />
-          </div>
-        </div>
-
-        <div style={{ flex: 1, overflow: "auto", padding: "6px 8px" }}>
-          {loading ? (
-            <div style={{ padding: 12 }}>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="skeleton" style={{ height: 30, marginBottom: 4, borderRadius: 4 }} />
-              ))}
-            </div>
-          ) : filteredTables.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: "0.82rem" }}>
-              没有匹配的表
-            </div>
-          ) : (
-            groupedTables.map(({ tag, tables: groupTables }) => {
-              const isCollapsed = collapsedGroups.has(tag);
-              return (
-                <div key={tag} className="er-table-group">
-                  <div
-                    className="er-table-group-header"
-                    onClick={() => {
-                      setCollapsedGroups((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(tag)) next.delete(tag);
-                        else next.add(tag);
-                        return next;
-                      });
-                    }}
-                  >
-                    <span style={{ fontSize: "0.6rem", transition: "transform 0.15s", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>
-                      ▼
-                    </span>
-                    <span>{tag}</span>
-                    <span className="er-table-group-count">({groupTables.length})</span>
-                  </div>
-                  {!isCollapsed &&
-                    groupTables.map((table) => {
-                      const isSelected = selectedTable?.id === table.id;
-                      return (
-                        <button
-                          key={table.id}
-                          onClick={() => void handleSelectTable(table)}
-                          style={{
-                            display: "block",
-                            width: "100%",
-                            padding: "8px 12px 8px 28px",
-                            border: "none",
-                            borderRadius: 5,
-                            background: isSelected ? "var(--bg-active)" : "transparent",
-                            color: isSelected ? "var(--accent-indigo)" : "var(--text-secondary)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            transition: "background 0.1s",
-                            marginBottom: 1,
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: "0.84rem",
-                              fontWeight: isSelected ? 600 : 500,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {table.table_name}
-                          </div>
-                          {table.table_comment && (
-                            <div
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "var(--text-muted)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                marginTop: 1,
-                              }}
-                            >
-                              {table.table_comment}
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
       {/* Right Content */}
       <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", gap: 0 }}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div>
-            <h3 className="text-display" style={{ fontSize: "1.3rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-              {selectedTable?.table_name ?? "Schema"}
-              {selectedTable?.table_comment && (
-                <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 400 }}>
-                  — {selectedTable.table_comment}
-                </span>
-              )}
-            </h3>
-          </div>
+        {!initialViewTab && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div>
+              <h3 className="text-display" style={{ fontSize: "1.3rem", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                {selectedTable?.table_name ?? "Schema"}
+                {selectedTable?.table_comment && (
+                  <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: 400 }}>
+                    — {selectedTable.table_comment}
+                  </span>
+                )}
+              </h3>
+            </div>
 
-          <div className="pill-tabs">
-            <button className={`pill-tab ${viewTab === "fields" ? "active" : ""}`} onClick={() => setViewTab("fields")}>
-              字段
-            </button>
-            <button className={`pill-tab ${viewTab === "er" ? "active" : ""}`} onClick={() => setViewTab("er")}>
-              关系图
-            </button>
-            <button className={`pill-tab ${viewTab === "data" ? "active" : ""}`} onClick={() => setViewTab("data")}>
-              <Eye size={13} />
-              数据预览
-            </button>
-            <button className={`pill-tab ${viewTab === "design" ? "active" : ""}`} onClick={() => setViewTab("design")}>
-              设计草稿
-            </button>
+            <div className="pill-tabs">
+              <button className={`pill-tab ${viewTab === "fields" ? "active" : ""}`} onClick={() => setViewTab("fields")}>
+                字段
+              </button>
+              <button className={`pill-tab ${viewTab === "er" ? "active" : ""}`} onClick={() => setViewTab("er")}>
+                关系图
+              </button>
+              <button className={`pill-tab ${viewTab === "data" ? "active" : ""}`} onClick={() => setViewTab("data")}>
+                <Eye size={13} />
+                数据预览
+              </button>
+              <button className={`pill-tab ${viewTab === "design" ? "active" : ""}`} onClick={() => setViewTab("design")}>
+                设计草稿
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content Area */}
         <div className="lab-card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>

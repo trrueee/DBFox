@@ -10,6 +10,7 @@ interface DataTableProps {
   maxHeight?: string;
   tableName?: string;
   databaseName?: string;
+  columnTypes?: Record<string, { dataType: string; isPrimaryKey: boolean; isForeignKey: boolean }>;
 }
 
 function isNumeric(val: unknown): boolean {
@@ -130,8 +131,9 @@ const JsonTree: React.FC<{ data: any; depth?: number }> = ({ data, depth = 0 }) 
   );
 };
 
-export function DataTable({ columns, rows, numericColumns, maxHeight, tableName, databaseName }: DataTableProps) {
+export function DataTable({ columns, rows, numericColumns, maxHeight, tableName, databaseName, columnTypes }: DataTableProps) {
   const numericSet = new Set(numericColumns ?? []);
+  const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; column: string } | null>(null);
   
   const {
     visibleColumns,
@@ -149,6 +151,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
 
   const [toast, setToast] = useState<string | null>(null);
   const [openColumnMenu, setOpenColumnMenu] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ rowIndex: number; x: number; y: number } | null>(null);
   
   // Persistent inspector Modal state
   const [activeInspect, setActiveInspect] = useState<{
@@ -248,6 +251,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
 
   return (
     <div className="select-text" style={{ overflow: "auto", maxHeight: maxHeight ?? "100%", position: "relative", userSelect: "text" }}>
+
       {toast && (
         <div
           style={{
@@ -508,11 +512,14 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           user-select: none;
           border-right: 2px solid var(--border-medium) !important;
         }
-        .row-actions-cell {
-          background: var(--bg-secondary) !important;
-          border-right: 2px solid var(--border-medium) !important;
-          white-space: nowrap;
-          width: 74px;
+        tr:hover .row-number-text {
+          display: none;
+        }
+        .row-menu-trigger {
+          display: none;
+        }
+        tr:hover .row-menu-trigger {
+          display: inline-flex !important;
         }
         .data-table-menu-item {
           width: 100%;
@@ -532,71 +539,127 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           background: var(--bg-active);
           color: var(--accent-indigo);
         }
+        tr.row-selected td {
+          background-color: rgba(74, 91, 192, 0.09) !important;
+        }
+        tr.row-selected td.row-counter-cell {
+          background-color: rgba(74, 91, 192, 0.16) !important;
+          color: var(--accent-indigo) !important;
+          font-weight: 700;
+        }
+        td.cell-selected-outline {
+          outline: 2px solid var(--accent-indigo) !important;
+          outline-offset: -2px !important;
+          background-color: rgba(74, 91, 192, 0.14) !important;
+        }
       `}</style>
 
       <table className="data-table-premium">
         <thead>
           <tr>
-            <th className="row-counter-cell">#</th>
-            <th className="row-actions-cell">操作</th>
             {visibleColumns.map((col) => {
               const currentFilter = filters[col];
               const filterVal = currentFilter?.mode === "contains" ? currentFilter.value || "" : "";
 
               return (
-                <th key={col}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative" }}>
-                    <span
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {col}
-                      {sortState?.column === col && (
-                        <span style={{ color: "var(--accent-indigo)", fontSize: "0.75rem", flexShrink: 0, fontWeight: "bold" }}>
-                          {sortState.direction === "asc" ? "▲" : "▼"}
-                        </span>
-                      )}
-                      {filters[col] && (
-                        <span
-                          title="该列已启用筛选"
-                          style={{
-                            color: "var(--accent-teal)",
-                            fontSize: "0.8rem",
-                            lineHeight: 1,
-                            flexShrink: 0,
+                <th key={col} style={{ padding: "8px 10px", minWidth: 120 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, position: "relative", width: "100%" }}>
+                    
+                    {/* Top Row: Column Name + Sort & Filter Indicators & Action Button */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, width: "100%" }}>
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          fontSize: "0.8rem",
+                          color: "var(--text-primary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                        }}
+                      >
+                        {col}
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                        {sortState?.column === col && (
+                          <span style={{ color: "var(--accent-indigo)", fontSize: "0.7rem", fontWeight: "bold" }}>
+                            {sortState.direction === "asc" ? "▲" : "▼"}
+                          </span>
+                        )}
+                        {filters[col] && (
+                          <span
+                            title="该列已启用筛选"
+                            style={{
+                              color: "var(--accent-teal)",
+                              fontSize: "0.8rem",
+                              lineHeight: 1,
+                              flexShrink: 0,
+                            }}
+                          >
+                            ●
+                          </span>
+                        )}
+                        <button
+                          className="btn-ghost"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenColumnMenu((current) => (current === col ? null : col));
                           }}
+                          style={{
+                            padding: 2,
+                            flexShrink: 0,
+                            background: openColumnMenu === col ? "var(--bg-active)" : undefined,
+                          }}
+                          title="列操作"
                         >
-                          ●
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      className="btn-ghost"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setOpenColumnMenu((current) => (current === col ? null : col));
-                      }}
-                      style={{
-                        padding: 2,
-                        flexShrink: 0,
-                        background: openColumnMenu === col ? "var(--bg-active)" : undefined,
-                      }}
-                      title="列操作"
-                    >
-                      <MoreVertical size={12} />
-                    </button>
+                          <MoreVertical size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: Navicat Type Icon + Type Name */}
+                    {columnTypes?.[col] ? (() => {
+                      const typeInfo = columnTypes[col];
+                      const isPk = typeInfo.isPrimaryKey;
+                      const isFk = typeInfo.isForeignKey;
+                      const typeName = typeInfo.dataType.toLowerCase();
+                      
+                      let IconNode = <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>;
+                      
+                      if (isPk) {
+                        IconNode = <span style={{ fontSize: "0.72rem", marginRight: 3 }} title="主键">🔑</span>;
+                      } else if (isFk) {
+                        IconNode = <span style={{ fontSize: "0.72rem", marginRight: 3 }} title="外键">🔗</span>;
+                      } else if (typeName.includes("int") || typeName.includes("decimal") || typeName.includes("double") || typeName.includes("float") || typeName.includes("number")) {
+                        IconNode = <span style={{ fontSize: "0.68rem", color: "var(--accent-teal)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>#</span>;
+                      } else if (typeName.includes("json")) {
+                        IconNode = <span style={{ fontSize: "0.65rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>{"{}"}</span>;
+                      } else if (typeName.includes("date") || typeName.includes("time")) {
+                        IconNode = <span style={{ fontSize: "0.68rem", color: "var(--accent-amber)", marginRight: 3 }}>📅</span>;
+                      } else if (typeName.includes("enum") || typeName.includes("set")) {
+                        IconNode = <span style={{ fontSize: "0.65rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3 }}>⚙️</span>;
+                      }
+                      
+                      return (
+                        <div style={{ display: "flex", alignItems: "center", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
+                          {IconNode}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {typeName}
+                          </span>
+                        </div>
+                      );
+                    })() : (
+                      <div style={{ display: "flex", alignItems: "center", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
+                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>
+                        <span>varchar</span>
+                      </div>
+                    )}
+
                     {openColumnMenu === col && (
                       <div
                         style={{
                           position: "absolute",
-                          top: 24,
+                          top: 28,
                           right: 0,
                           minWidth: 175,
                           background: "var(--bg-surface)",
@@ -740,40 +803,34 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           </tr>
         </thead>
         <tbody>
-          {visibleRows.map((row, ri) => (
-            <tr key={ri}>
-              <td className="row-counter-cell">{ri + 1}</td>
-              <td className="row-actions-cell">
-                <button
-                  className="btn-ghost"
-                  style={{ padding: "2px 5px" }}
-                  title="复制行 JSON"
-                  onClick={() => void handleCopyRowJson(row)}
-                >
-                  <FileJson size={12} />
-                </button>
-                <button
-                  className="btn-ghost"
-                  style={{ padding: "2px 5px" }}
-                  title="复制为 INSERT"
-                  onClick={() => void handleCopyInsert(row)}
-                  disabled={!tableName}
-                >
-                  <ListPlus size={12} />
-                </button>
-              </td>
+          {visibleRows.map((row, ri) => {
+            const isRowSelected = selectedCell?.rowIndex === ri;
+            return (
+              <tr 
+                key={ri} 
+                className={isRowSelected ? "row-selected" : undefined}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ rowIndex: ri, x: e.clientX, y: e.clientY });
+                }}
+              >
               {visibleColumns.map((col) => {
                 const val = row[col];
                 const isNum = numericSet.has(col) || isNumeric(val);
+                const isCellSelected = selectedCell?.rowIndex === ri && selectedCell?.column === col;
+                const cellClick = () => {
+                  setSelectedCell({ rowIndex: ri, column: col });
+                  void handleCopyCell(val);
+                };
 
                 if (val === null || val === undefined) {
                   return (
                     <td
                       key={`${ri}-${col}`}
-                      className="cell-null"
+                      className={`cell-null ${isCellSelected ? "cell-selected-outline" : ""}`}
                       tabIndex={0}
                       title="点击复制单元格"
-                      onClick={() => void handleCopyCell(val)}
+                      onClick={cellClick}
                       onMouseEnter={(e) => handleMouseEnterCell(col, "NULL", e)}
                       onMouseLeave={() => setHoveredCell(null)}
                     >
@@ -788,10 +845,11 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                   return (
                     <td
                       key={`${ri}-${col}`}
+                      className={isCellSelected ? "cell-selected-outline" : undefined}
                       style={{ whiteSpace: "nowrap" }}
                       tabIndex={0}
                       title="点击复制单元格"
-                      onClick={() => void handleCopyCell(val)}
+                      onClick={cellClick}
                       onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
                       onMouseLeave={() => setHoveredCell(null)}
                     >
@@ -851,9 +909,10 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                   return (
                     <td
                       key={`${ri}-${col}`}
+                      className={isCellSelected ? "cell-selected-outline" : undefined}
                       tabIndex={0}
                       title="点击复制单元格"
-                      onClick={() => void handleCopyCell(val)}
+                      onClick={cellClick}
                       onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
                       onMouseLeave={() => setHoveredCell(null)}
                     >
@@ -897,10 +956,10 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                 return (
                   <td
                     key={`${ri}-${col}`}
-                    className={isNum ? "cell-number" : undefined}
+                    className={`${isNum ? "cell-number" : ""} ${isCellSelected ? "cell-selected-outline" : ""}`.trim() || undefined}
                     tabIndex={0}
                     title="点击复制单元格"
-                    onClick={() => void handleCopyCell(val)}
+                    onClick={cellClick}
                     onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
                     onMouseLeave={() => setHoveredCell(null)}
                   >
@@ -909,7 +968,8 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                 );
               })}
             </tr>
-          ))}
+          );
+        })}
         </tbody>
       </table>
 
@@ -1174,6 +1234,68 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
             </div>
           </div>
         </div>
+      )}
+
+      {contextMenu && (
+        <>
+          <div
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu(null);
+            }}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+              background: "transparent",
+            }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
+              minWidth: 170,
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border-light)",
+              borderRadius: 8,
+              boxShadow: "var(--shadow-lg)",
+              padding: 6,
+              zIndex: 10000,
+              textAlign: "left",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "4px 8px", fontSize: "0.7rem", color: "var(--text-muted)", borderBottom: "1px solid var(--border-light)", marginBottom: 4, fontWeight: 600 }}>
+              行 #{contextMenu.rowIndex + 1} 操作
+            </div>
+            <button
+              className="data-table-menu-item"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCopyRowJson(visibleRows[contextMenu.rowIndex]);
+                setContextMenu(null);
+              }}
+            >
+              <FileJson size={12} /> 复制行 JSON
+            </button>
+            <button
+              className="data-table-menu-item"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleCopyInsert(visibleRows[contextMenu.rowIndex]);
+                setContextMenu(null);
+              }}
+              disabled={!tableName}
+            >
+              <ListPlus size={12} /> 复制为 INSERT SQL
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
