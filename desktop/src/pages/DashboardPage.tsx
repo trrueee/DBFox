@@ -12,12 +12,14 @@ import {
 import ReactECharts from "echarts-for-react";
 import { api } from "../lib/api";
 import type { DataSource, QueryHistory } from "../lib/api";
+import { useToast } from "../components/Toast";
 
 interface DashboardPageProps {
   datasource: DataSource;
 }
 
 export function DashboardPage({ datasource }: DashboardPageProps) {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
   const [history, setHistory] = useState<QueryHistory[]>([]);
@@ -390,7 +392,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
                   <button
                     onClick={async () => {
                       await navigator.clipboard.writeText(selectedLog.executed_sql || selectedLog.safe_sql || selectedLog.submitted_sql);
-                      alert("SQL 语句已复制到剪贴板！");
+                      toast.toast("SQL 已复制到剪贴板", "success");
                     }}
                     style={{ background: "none", border: "none", color: "var(--accent-indigo)", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600 }}
                   >

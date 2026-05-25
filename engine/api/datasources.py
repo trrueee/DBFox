@@ -1,13 +1,16 @@
 import logging
+import json
+import time
 import uuid
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.crypto import encrypt_password
-from engine.datasource import build_mysql_ssl_params, test_connection
+from engine.crypto import decrypt_password, encrypt_password
+from engine.datasource import build_mysql_ssl_params, is_demo_db, test_connection
 from engine.errors import DataBoxError
 from engine.models import (
     DEFAULT_PROJECT_ID,
@@ -19,6 +22,18 @@ from engine.schema_sync import _guess_module_tag, build_er_diagram_data, sync_sc
 
 logger = logging.getLogger("databox.api.datasources")
 router = APIRouter()
+
+
+def _json_list_or_empty(value: Any) -> list[str]:
+    if not value:
+        return []
+    try:
+        decoded = json.loads(str(value))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(decoded, list):
+        return []
+    return [str(item) for item in decoded]
 
 
 def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
@@ -49,11 +64,82 @@ def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
         "last_test_at": ds.last_test_at.isoformat() if ds.last_test_at else None,
         "last_test_status": ds.last_test_status,
         "last_test_error": ds.last_test_error,
+        "last_test_latency_ms": ds.last_test_latency_ms,
+        "last_test_readonly": ds.last_test_readonly,
+        "last_test_server_version": ds.last_test_server_version,
+        "last_test_tables_count": ds.last_test_tables_count,
+        "last_test_warnings": _json_list_or_empty(ds.last_test_warnings),
         "last_sync_at": ds.last_sync_at.isoformat() if ds.last_sync_at else None,
         "last_sync_status": ds.last_sync_status,
         "last_sync_error": ds.last_sync_error,
         "created_at": ds.created_at.isoformat() if ds.created_at else None,
     }
+
+
+def _decrypt_optional(ciphertext: str | None, nonce: str | None) -> str | None:
+    if not ciphertext or not nonce:
+        return None
+    return decrypt_password(ciphertext, nonce)
+
+
+def _datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
+    host = str(ds.host or "")
+    database_name = str(ds.database_name or "")
+    db_type = str(ds.db_type or "mysql")
+    password = ""
+
+    if db_type != "sqlite" and not is_demo_db(host, database_name):
+        password = decrypt_password(str(ds.password_ciphertext), str(ds.password_nonce))
+
+    return {
+        "db_type": db_type,
+        "host": host,
+        "port": int(ds.port or 0),
+        "database_name": database_name,
+        "username": str(ds.username or ""),
+        "password": password,
+        "ssh_enabled": bool(ds.ssh_enabled),
+        "ssh_host": ds.ssh_host,
+        "ssh_port": int(ds.ssh_port or 22),
+        "ssh_username": ds.ssh_username,
+        "ssh_password": _decrypt_optional(
+            cast(str | None, ds.ssh_password_ciphertext),
+            cast(str | None, ds.ssh_password_nonce),
+        ),
+        "ssh_pkey_path": ds.ssh_pkey_path,
+        "ssh_pkey_passphrase": _decrypt_optional(
+            cast(str | None, ds.ssh_pkey_passphrase_ciphertext),
+            cast(str | None, ds.ssh_pkey_passphrase_nonce),
+        ),
+        "ssl_enabled": bool(ds.ssl_enabled),
+        "ssl_ca_path": ds.ssl_ca_path,
+        "ssl_cert_path": ds.ssl_cert_path,
+        "ssl_key_path": ds.ssl_key_path,
+        "ssl_verify_identity": bool(ds.ssl_verify_identity),
+    }
+
+
+def _persist_health_success(ds: DataSource, result: dict[str, Any], latency_ms: int, checked_at: datetime) -> None:
+    warnings = [str(item) for item in result.get("warnings", [])]
+    setattr(ds, "last_test_at", checked_at)
+    setattr(ds, "last_test_status", "success")
+    setattr(ds, "last_test_error", None)
+    setattr(ds, "last_test_latency_ms", latency_ms)
+    setattr(ds, "last_test_readonly", bool(result.get("readonly", False)))
+    setattr(ds, "last_test_server_version", str(result.get("serverVersion") or ""))
+    setattr(ds, "last_test_tables_count", int(result.get("tablesCount") or 0))
+    setattr(ds, "last_test_warnings", json.dumps(warnings, ensure_ascii=False))
+
+
+def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, checked_at: datetime) -> None:
+    setattr(ds, "last_test_at", checked_at)
+    setattr(ds, "last_test_status", "failed")
+    setattr(ds, "last_test_error", message)
+    setattr(ds, "last_test_latency_ms", latency_ms)
+    setattr(ds, "last_test_readonly", None)
+    setattr(ds, "last_test_server_version", None)
+    setattr(ds, "last_test_tables_count", None)
+    setattr(ds, "last_test_warnings", json.dumps([], ensure_ascii=False))
 
 
 def _resolve_project_id(db: Session, project_id: str | None) -> str:
@@ -154,6 +240,64 @@ def api_list_datasources(
     return [_datasource_to_dict(ds) for ds in query.all()]
 
 
+@router.post("/datasources/{id}/health")
+def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    datasource = db.query(DataSource).filter(DataSource.id == id).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
+
+    started = time.perf_counter()
+    checked_at = datetime.now(UTC)
+    try:
+        result = test_connection(_datasource_to_health_config(datasource))
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        _persist_health_success(datasource, result, latency_ms, checked_at)
+        db.commit()
+        db.refresh(datasource)
+        return {
+            "ok": True,
+            "status": "success",
+            "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
+            "latencyMs": latency_ms,
+            "serverVersion": datasource.last_test_server_version,
+            "readonly": datasource.last_test_readonly,
+            "tablesCount": datasource.last_test_tables_count,
+            "warnings": _json_list_or_empty(datasource.last_test_warnings),
+            "message": result.get("message", "连接健康检查通过。"),
+            "datasource": _datasource_to_dict(datasource),
+        }
+    except DataBoxError as exc:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        _persist_health_failure(datasource, str(exc), latency_ms, checked_at)
+        db.commit()
+        db.refresh(datasource)
+        return {
+            "ok": False,
+            "status": "failed",
+            "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
+            "latencyMs": latency_ms,
+            "warnings": [],
+            "message": str(exc),
+            "datasource": _datasource_to_dict(datasource),
+        }
+    except Exception as exc:
+        logger.exception("Datasource health check failed")
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        message = "数据库连接健康检查失败，请检查连接配置。"
+        _persist_health_failure(datasource, message, latency_ms, checked_at)
+        db.commit()
+        db.refresh(datasource)
+        return {
+            "ok": False,
+            "status": "failed",
+            "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
+            "latencyMs": latency_ms,
+            "warnings": [],
+            "message": message,
+            "datasource": _datasource_to_dict(datasource),
+        }
+
+
 @router.delete("/datasources/{id}")
 def api_delete_datasource(
     id: str,
@@ -174,14 +318,14 @@ def api_delete_datasource(
                 datasource_id=id,
                 action="delete_datasource",
                 details=expected_details,
-                expected_confirm_text=datasource.name
+                expected_confirm_text=str(datasource.name)
             )
             return {
                 "success": False,
                 "requires_confirmation": True,
                 "confirm_token": token,
                 "impact_summary": f"⚠️ 警告：您即将在系统中删除数据源 '{datasource.name}'！\n\n该操作会清空本地保存的所有相关 Schema 结构和元数据历史缓存！请输入数据源名称以确认执行。",
-                "expected_confirm_text": datasource.name
+                "expected_confirm_text": str(datasource.name)
             }
         else:
             is_valid, err_msg = confirmation_manager.validate_and_consume(

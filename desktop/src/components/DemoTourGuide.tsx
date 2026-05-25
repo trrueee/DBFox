@@ -10,7 +10,7 @@ interface DemoTourGuideProps {
   activeDataSource: DataSource | null;
   datasources: DataSource[];
   schemaTables: SchemaTable[];
-  handleCreateProject: () => Promise<void>;
+  handleCreateProject: (name?: string) => Promise<void>;
 }
 
 export const DemoTourGuide = ({
@@ -37,7 +37,7 @@ export const DemoTourGuide = ({
       isActive: () => projects.length === 0,
       isDone: () => projects.length > 0,
       onAction: async () => {
-        await handleCreateProject();
+        await handleCreateProject("演示项目");
       },
       actionText: "新建项目",
     },

@@ -11,8 +11,17 @@ from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import DEFAULT_PROJECT_ID, DataSource
 
 
+TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".databox_runtime" / "tests"
+
+
 def _headers():
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
+
+
+def _runtime_dir(name: str) -> Path:
+    runtime_dir = TEST_RUNTIME_ROOT / name / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    return runtime_dir
 
 
 @pytest.fixture
@@ -46,8 +55,7 @@ def _create_mysql_datasource(db_session) -> DataSource:
 
 
 def test_create_list_and_precheck_backup(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_backup_runtime") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_backup_runtime")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
@@ -109,8 +117,7 @@ def test_backup_rejects_builtin_mock_demo_datasource(client, db_session) -> None
 
 
 def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_runtime") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_restore_runtime")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
@@ -158,8 +165,7 @@ def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
 
 
 def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_anti_tamper") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_restore_anti_tamper")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
@@ -192,8 +198,7 @@ def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -
 
 
 def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_backup_strict") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_backup_strict")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
@@ -215,8 +220,7 @@ def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> Non
 
 
 def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_strict") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_restore_strict")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
@@ -249,8 +253,7 @@ def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> No
 
 
 def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> None:
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_env_mismatch") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_restore_env_mismatch")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
     
     # 1. Create a dev datasource and backup

@@ -7,6 +7,9 @@ from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import DataSource, BackupRecord
 
+TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".databox_runtime" / "tests"
+
+
 @pytest.fixture(autouse=True)
 def run_without_bypass():
     old_bypass = os.environ.get("DATABOX_BYPASS_CONFIRMATION")
@@ -25,6 +28,13 @@ def run_without_bypass():
 
 def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
+
+
+def _runtime_dir(name: str) -> Path:
+    runtime_dir = TEST_RUNTIME_ROOT / name / str(uuid.uuid4())
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    return runtime_dir
+
 
 def test_two_phase_ddl_execution_flow(db_session, demo_datasource) -> None:
     def override_get_db():
@@ -158,8 +168,7 @@ def test_two_phase_restore_backup_flow(db_session, monkeypatch) -> None:
     from engine.crypto import encrypt_password
     from engine.models import DEFAULT_PROJECT_ID
 
-    runtime_dir = Path("D:/Project/DataBox/.databox_runtime/test_restore_runtime_confirm") / str(uuid.uuid4())
-    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir = _runtime_dir("test_restore_runtime_confirm")
     monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
 
     # Create MySQL datasource

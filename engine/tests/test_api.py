@@ -2,7 +2,8 @@
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.db import get_db
-from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaTable
+from engine.errors import DataSourceConnectionError
+from engine.models import DEFAULT_PROJECT_ID, DataSource, QueryHistory, SchemaTable
 import pytest
 
 
@@ -158,6 +159,59 @@ def test_create_datasource_persists_ssl_settings(client) -> None:
     assert data["ssl_verify_identity"] is True
 
 
+def test_datasource_health_check_updates_snapshot(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "health_test_db",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+
+    resp = client.post(f"/api/v1/datasources/{ds_id}/health", headers=_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["status"] == "success"
+    assert data["readonly"] is True
+    assert data["tablesCount"] == 20
+    assert isinstance(data["latencyMs"], int)
+    assert data["datasource"]["last_test_status"] == "success"
+    assert data["datasource"]["last_test_readonly"] is True
+    assert data["datasource"]["last_test_tables_count"] == 20
+    assert data["datasource"]["last_test_at"]
+
+
+def test_datasource_health_check_failure_persists_snapshot(client, monkeypatch) -> None:
+    import engine.api.datasources as datasources_api
+
+    resp = client.post("/api/v1/datasources", json={
+        "name": "health_failed_db",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+
+    def fail_connection(config: dict[str, object]) -> dict[str, object]:
+        raise DataSourceConnectionError("模拟连接失败")
+
+    monkeypatch.setattr(datasources_api, "test_connection", fail_connection)
+
+    resp = client.post(f"/api/v1/datasources/{ds_id}/health", headers=_headers())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert data["status"] == "failed"
+    assert data["message"] == "模拟连接失败"
+    assert data["datasource"]["last_test_status"] == "failed"
+    assert data["datasource"]["last_test_error"] == "模拟连接失败"
+
+
 def test_sync_schema(client, db_session) -> None:
     # Create datasource first
     resp = client.post("/api/v1/datasources", json={
@@ -276,6 +330,154 @@ def test_execute_sql_and_history(client, db_session) -> None:
     history = resp.json()
     assert len(history) >= 1
     assert history[0]["execution_status"] == "success"
+
+
+def test_query_history_search_status_and_datasource_filter(client, db_session) -> None:
+    ds1 = DataSource(
+        id="history-ds-1",
+        name="history_ds_1",
+        host="demo",
+        port=3306,
+        database_name="demo_shop",
+        username="demo",
+        password_ciphertext="test",
+        password_nonce="test",
+        status="active",
+    )
+    ds2 = DataSource(
+        id="history-ds-2",
+        name="history_ds_2",
+        host="demo",
+        port=3306,
+        database_name="demo_shop",
+        username="demo",
+        password_ciphertext="test",
+        password_nonce="test",
+        status="active",
+    )
+    db_session.add_all([ds1, ds2])
+    db_session.flush()
+    db_session.add_all([
+        QueryHistory(
+            id="history-success-users",
+            data_source_id=ds1.id,
+            question="list users",
+            submitted_sql="SELECT * FROM users LIMIT 10",
+            guardrail_result="warn",
+            execution_status="success",
+            execution_time_ms=12,
+            rows_returned=3,
+            columns_returned=4,
+        ),
+        QueryHistory(
+            id="history-failed-orders",
+            data_source_id=ds1.id,
+            question="find failed orders",
+            submitted_sql="SELECT * FROM orders LIMIT 10",
+            guardrail_result="pass",
+            execution_status="failed",
+            execution_time_ms=5,
+            rows_returned=0,
+            columns_returned=0,
+            error_message="orders table failed",
+        ),
+        QueryHistory(
+            id="history-other-customers",
+            data_source_id=ds2.id,
+            question="customers",
+            submitted_sql="SELECT * FROM customers LIMIT 10",
+            guardrail_result="pass",
+            execution_status="success",
+            execution_time_ms=8,
+            rows_returned=1,
+            columns_returned=2,
+        ),
+    ])
+    db_session.commit()
+
+    resp = client.get(
+        "/api/v1/query/history?datasource_id=history-ds-1&search=orders&status=failed&limit=10",
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [item["id"] for item in data] == ["history-failed-orders"]
+    assert data[0]["execution_status"] == "failed"
+    assert data[0]["execution_time_ms"] == 5
+
+    resp = client.get("/api/v1/query/history?search=customers", headers=_headers())
+    assert resp.status_code == 200
+    assert [item["id"] for item in resp.json()] == ["history-other-customers"]
+
+    resp = client.get("/api/v1/query/history?status=unknown", headers=_headers())
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "INVALID_HISTORY_STATUS"
+
+
+def test_query_history_delete_and_clear(client, db_session) -> None:
+    ds1 = DataSource(
+        id="history-clear-ds-1",
+        name="history_clear_ds_1",
+        host="demo",
+        port=3306,
+        database_name="demo_shop",
+        username="demo",
+        password_ciphertext="test",
+        password_nonce="test",
+        status="active",
+    )
+    ds2 = DataSource(
+        id="history-clear-ds-2",
+        name="history_clear_ds_2",
+        host="demo",
+        port=3306,
+        database_name="demo_shop",
+        username="demo",
+        password_ciphertext="test",
+        password_nonce="test",
+        status="active",
+    )
+    db_session.add_all([ds1, ds2])
+    db_session.flush()
+    db_session.add_all([
+        QueryHistory(
+            id="history-delete-one",
+            data_source_id=ds1.id,
+            submitted_sql="SELECT 1",
+            guardrail_result="pass",
+            execution_status="success",
+        ),
+        QueryHistory(
+            id="history-clear-one",
+            data_source_id=ds1.id,
+            submitted_sql="SELECT 2",
+            guardrail_result="pass",
+            execution_status="success",
+        ),
+        QueryHistory(
+            id="history-keep-other-ds",
+            data_source_id=ds2.id,
+            submitted_sql="SELECT 3",
+            guardrail_result="pass",
+            execution_status="success",
+        ),
+    ])
+    db_session.commit()
+
+    resp = client.delete("/api/v1/query/history/history-delete-one", headers=_headers())
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 1
+    assert db_session.query(QueryHistory).filter(QueryHistory.id == "history-delete-one").first() is None
+
+    resp = client.delete("/api/v1/query/history?datasource_id=history-clear-ds-1", headers=_headers())
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 1
+    assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == ds1.id).count() == 0
+    assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == ds2.id).count() == 1
+
+    resp = client.delete("/api/v1/query/history/missing-history", headers=_headers())
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "QUERY_HISTORY_NOT_FOUND"
 
 
 def test_cancel_unknown_query(client) -> None:

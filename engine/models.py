@@ -122,6 +122,11 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     last_test_at = Column(DateTime, nullable=True)
     last_test_status = Column(String, nullable=True)
     last_test_error = Column(String, nullable=True)
+    last_test_latency_ms = Column(Integer, nullable=True)
+    last_test_readonly = Column(Boolean, nullable=True)
+    last_test_server_version = Column(String, nullable=True)
+    last_test_tables_count = Column(Integer, nullable=True)
+    last_test_warnings = Column(Text, nullable=True)
 
     last_sync_at = Column(DateTime, nullable=True)
     last_sync_status = Column(String, nullable=True)

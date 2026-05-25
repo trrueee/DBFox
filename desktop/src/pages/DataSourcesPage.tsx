@@ -1,6 +1,7 @@
 import type { MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle2,
   Database,
@@ -14,6 +15,8 @@ import { api } from "../lib/api";
 import type { DataSource, Project } from "../lib/api";
 import { StatusIndicator } from "../components/StatusIndicator";
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { useToast } from "../components/Toast";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -38,11 +41,14 @@ export const DataSourcesPage = ({
   activeProject,
   onRefreshDatasources,
 }: DataSourcesPageProps) => {
+  const toast = useToast();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [healthCheckingId, setHealthCheckingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [demoStarting, setDemoStarting] = useState(false);
@@ -222,35 +228,67 @@ export const DataSourcesPage = ({
     }
   };
 
+  const handleHealthCheck = async (id: string, event: MouseEvent) => {
+    event.stopPropagation();
+    try {
+      setHealthCheckingId(id);
+      const result = await api.checkDatasourceHealth(id);
+      if (!result.ok) {
+        toast.toast(result.message || "连接健康检查失败", "error");
+      } else {
+        toast.toast("连接健康检查通过", "success");
+      }
+      await syncLists();
+    } finally {
+      setHealthCheckingId(null);
+    }
+  };
+
   const handleDeleteDataSource = async (id: string, event: MouseEvent) => {
     event.stopPropagation();
-    if (!window.confirm("确认删除此数据源？")) return;
+    const ds = dataSources.find((d) => d.id === id);
+    if (!ds) return;
+    setDeleteTarget(ds);
+  };
+
+  const doDeleteDataSource = async () => {
+    const ds = deleteTarget;
+    if (!ds) return;
+    setDeleteTarget(null);
     try {
-      const res = await api.deleteDatasource(id);
+      const res = await api.deleteDatasource(ds.id);
       if (res && typeof res === "object" && "requires_confirmation" in res && res.requires_confirmation) {
         setConfirmDetails({
           confirm_token: res.confirm_token,
           impact_summary: res.impact_summary,
           expected_confirm_text: res.expected_confirm_text,
           onConfirm: async (text) => {
-            await api.deleteDatasource(id, { token: res.confirm_token, text });
+            await api.deleteDatasource(ds.id, { token: res.confirm_token, text });
             setConfirmDetails(null);
             await syncLists();
-            if (activeDataSource?.id === id) onSelectDataSource(null);
+            if (activeDataSource?.id === ds.id) onSelectDataSource(null);
+            toast.toast("数据源已删除", "success");
           },
           onCancel: () => setConfirmDetails(null)
         });
         return;
       }
       await syncLists();
-      if (activeDataSource?.id === id) onSelectDataSource(null);
+      if (activeDataSource?.id === ds.id) onSelectDataSource(null);
+      toast.toast("数据源已删除", "success");
     } catch (err: any) {
-      alert(err.message || "删除数据源失败");
+      toast.toast(err.message || "删除数据源失败", "error");
     }
   };
 
   const statusType = (ds: DataSource) =>
     ds.last_sync_status === "success" ? "success" : ds.last_sync_status === "failed" ? "error" : "idle";
+
+  const healthStatusType = (ds: DataSource) =>
+    ds.last_test_status === "success" ? "success" : ds.last_test_status === "failed" ? "error" : "idle";
+
+  const formatDateTime = (value?: string) =>
+    value ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
 
   return (
     <div
@@ -898,6 +936,8 @@ export const DataSourcesPage = ({
             {dataSources.map((ds) => {
               const isActive = activeDataSource?.id === ds.id;
               const st = statusType(ds);
+              const healthSt = healthStatusType(ds);
+              const healthWarnings = ds.last_test_warnings ?? [];
 
               return (
                 <div
@@ -914,7 +954,7 @@ export const DataSourcesPage = ({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "minmax(0, 1.5fr) 120px 170px 100px auto",
+                      gridTemplateColumns: "minmax(0, 1.4fr) 120px 180px 180px 110px auto",
                       gap: 16,
                       alignItems: "center",
                     }}
@@ -964,12 +1004,47 @@ export const DataSourcesPage = ({
                     </div>
 
                     <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                      {ds.last_sync_at ? new Date(ds.last_sync_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "未同步"}
+                      <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Schema</div>
+                      <div>{ds.last_sync_at ? formatDateTime(ds.last_sync_at) : "未同步"}</div>
+                    </div>
+
+                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <StatusIndicator
+                          type={healthSt}
+                          label={healthSt === "success" ? "连接正常" : healthSt === "error" ? "连接失败" : "未检查"}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {typeof ds.last_test_latency_ms === "number" && <span>{ds.last_test_latency_ms}ms</span>}
+                        {typeof ds.last_test_tables_count === "number" && <span>{ds.last_test_tables_count} tables</span>}
+                        {ds.last_test_readonly === false && <span style={{ color: "var(--accent-amber)" }}>有写权限</span>}
+                      </div>
+                      {ds.last_test_at && <div>检查于 {formatDateTime(ds.last_test_at)}</div>}
+                      {ds.last_test_error && (
+                        <div style={{ color: "var(--accent-red)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {ds.last_test_error}
+                        </div>
+                      )}
+                      {healthWarnings.length > 0 && !ds.last_test_error && (
+                        <div style={{ color: "var(--accent-amber)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {healthWarnings[0]}
+                        </div>
+                      )}
                     </div>
 
                     <StatusIndicator type={st} label={st === "success" ? "已同步" : st === "error" ? "失败" : "待同步"} />
 
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                      <button
+                        className="btn-ghost"
+                        onClick={(e) => handleHealthCheck(ds.id, e)}
+                        disabled={healthCheckingId === ds.id}
+                        style={{ color: healthSt === "error" ? "var(--accent-red)" : "var(--accent-green)" }}
+                      >
+                        <Activity size={14} className={healthCheckingId === ds.id ? "animate-spin" : ""} />
+                        {healthCheckingId === ds.id ? "检查中" : "健康"}
+                      </button>
                       <button
                         className="btn-ghost"
                         onClick={(e) => handleSyncSchema(ds.id, e)}
@@ -995,6 +1070,15 @@ export const DataSourcesPage = ({
         )}
       </div>
       <DangerConfirmDialog details={confirmDetails} />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除数据源"
+        message={`确认删除数据源「${deleteTarget?.name ?? ""}」吗？\n\n${deleteTarget ? `${deleteTarget.host}:${deleteTarget.port}/${deleteTarget.database_name}` : ""}\n\n此操作不可撤销，关联的查询历史和 Schema 缓存将被清除。`}
+        variant="danger"
+        onConfirm={doDeleteDataSource}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };
