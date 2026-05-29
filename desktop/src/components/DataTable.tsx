@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Copy, Database, EyeOff, FileJson, ListPlus, MoreVertical, X } from "lucide-react";
+import { Check, Copy, Database, EyeOff, FileJson, ListPlus, MoreVertical, X, Filter } from "lucide-react";
 import { buildInsertSql, buildRowJson, normalizeCopyValue } from "../lib/sqlCopy";
 import { useDataTableView } from "../hooks/useDataTableView";
 
@@ -153,7 +153,8 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
 
   const [toast, setToast] = useState<string | null>(null);
   const [openColumnMenu, setOpenColumnMenu] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ rowIndex: number; x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ rowIndex: number; column?: string; x: number; y: number } | null>(null);
+  const [isCompact, setIsCompact] = useState(true);
   
   // Persistent inspector Modal state
   const [activeInspect, setActiveInspect] = useState<{
@@ -257,12 +258,12 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
       {toast && (
         <div
           style={{
-            position: "sticky",
+            position: "fixed",
             top: 8,
             left: "50%",
             transform: "translateX(-50%)",
             width: "fit-content",
-            zIndex: 80,
+            zIndex: 8000,
             background: "rgba(13, 115, 119, 0.94)",
             color: "#fff",
             borderRadius: 999,
@@ -411,7 +412,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           </div>
 
           {/* Right section: Count & Warning */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: "0.74rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
               显示 <strong>{visibleRows.length}</strong> / {rows.length} 行
               <span
@@ -429,6 +430,22 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                 ⚠️ 当前仅筛选已加载的预览结果
               </span>
             </span>
+
+            <button
+              className="btn-ghost"
+              onClick={() => setIsCompact(!isCompact)}
+              style={{
+                padding: "3px 10px",
+                fontSize: "0.72rem",
+                color: "var(--text-secondary)",
+                fontWeight: 600,
+                border: "1px solid var(--border-light)",
+                borderRadius: 4,
+                background: "var(--bg-surface)",
+              }}
+            >
+              {isCompact ? "舒适模式" : "紧凑模式"}
+            </button>
 
             <button
               className="btn-ghost"
@@ -466,9 +483,26 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           }}
         >
           <span>共 {rows.length} 行数据</span>
-          <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.8 }}>
-            💡 可点击列头右侧菜单进行本地排序/筛选
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              className="btn-ghost"
+              onClick={() => setIsCompact(!isCompact)}
+              style={{
+                padding: "2px 8px",
+                fontSize: "0.72rem",
+                color: "var(--text-secondary)",
+                fontWeight: 600,
+                border: "1px solid var(--border-light)",
+                borderRadius: 4,
+                background: "var(--bg-surface)",
+              }}
+            >
+              {isCompact ? "舒适模式" : "紧凑模式"}
+            </button>
+            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", opacity: 0.8 }}>
+              💡 可点击列头右侧菜单进行本地排序/筛选，右键单元格过滤或复制
+            </span>
+          </div>
         </div>
       )}
 
@@ -477,7 +511,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
         .data-table-premium {
           width: 100%;
           border-collapse: collapse;
-          font-size: 0.82rem;
+          font-size: ${isCompact ? "0.78rem" : "0.85rem"};
         }
         .data-table-premium th {
           position: sticky;
@@ -486,13 +520,13 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           background: var(--bg-secondary);
           border-bottom: 2px solid var(--border-medium);
           border-right: 1px solid var(--border-light);
-          padding: 8px 12px;
+          padding: ${isCompact ? "5px 8px" : "10px 14px"};
           text-align: left;
           color: var(--text-secondary);
           font-weight: 600;
         }
         .data-table-premium td {
-          padding: 6px 12px;
+          padding: ${isCompact ? "4px 8px" : "8px 14px"};
           border-bottom: 1px solid var(--border-light);
           border-right: 1px solid var(--border-light);
           color: var(--text-primary);
@@ -506,13 +540,14 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
         }
         .row-counter-cell {
           color: var(--text-muted) !important;
-          font-size: 0.74rem;
+          font-size: 0.72rem;
           font-weight: 600;
           text-align: center !important;
           background: var(--bg-secondary) !important;
-          width: 44px;
+          width: 40px;
           user-select: none;
           border-right: 2px solid var(--border-medium) !important;
+          padding: ${isCompact ? "4px 6px" : "8px 10px"} !important;
         }
         tr:hover .row-number-text {
           display: none;
@@ -559,20 +594,22 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
       <table className="data-table-premium">
         <thead>
           <tr>
+            {/* First Row Counter Column # */}
+            <th className="row-counter-cell" style={{ width: 44 }}>#</th>
             {visibleColumns.map((col) => {
               const currentFilter = filters[col];
               const filterVal = currentFilter?.mode === "contains" ? currentFilter.value || "" : "";
 
               return (
-                <th key={col} style={{ padding: "8px 10px", minWidth: 120 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, position: "relative", width: "100%" }}>
+                <th key={col} style={{ minWidth: 120 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, position: "relative", width: "100%" }}>
                     
                     {/* Top Row: Column Name + Sort & Filter Indicators & Action Button */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, width: "100%" }}>
                       <span
                         style={{
                           fontWeight: 700,
-                          fontSize: "0.8rem",
+                          fontSize: isCompact ? "0.76rem" : "0.82rem",
                           color: "var(--text-primary)",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
@@ -626,24 +663,24 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                       const isFk = typeInfo.isForeignKey;
                       const typeName = typeInfo.dataType.toLowerCase();
                       
-                      let IconNode = <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>;
+                      let IconNode = <span style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>;
                       
                       if (isPk) {
-                        IconNode = <span style={{ fontSize: "0.72rem", marginRight: 3 }} title="主键">🔑</span>;
+                        IconNode = <span style={{ fontSize: "0.68rem", marginRight: 3 }} title="主键">🔑</span>;
                       } else if (isFk) {
-                        IconNode = <span style={{ fontSize: "0.72rem", marginRight: 3 }} title="外键">🔗</span>;
+                        IconNode = <span style={{ fontSize: "0.68rem", marginRight: 3 }} title="外键">🔗</span>;
                       } else if (typeName.includes("int") || typeName.includes("decimal") || typeName.includes("double") || typeName.includes("float") || typeName.includes("number")) {
-                        IconNode = <span style={{ fontSize: "0.68rem", color: "var(--accent-teal)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>#</span>;
+                        IconNode = <span style={{ fontSize: "0.64rem", color: "var(--accent-teal)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>#</span>;
                       } else if (typeName.includes("json")) {
-                        IconNode = <span style={{ fontSize: "0.65rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>{"{}"}</span>;
+                        IconNode = <span style={{ fontSize: "0.62rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3, fontFamily: "monospace" }}>{"{}"}</span>;
                       } else if (typeName.includes("date") || typeName.includes("time")) {
-                        IconNode = <span style={{ fontSize: "0.68rem", color: "var(--accent-amber)", marginRight: 3 }}>📅</span>;
+                        IconNode = <span style={{ fontSize: "0.64rem", color: "var(--accent-amber)", marginRight: 3 }}>📅</span>;
                       } else if (typeName.includes("enum") || typeName.includes("set")) {
-                        IconNode = <span style={{ fontSize: "0.65rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3 }}>⚙️</span>;
+                        IconNode = <span style={{ fontSize: "0.62rem", color: "var(--accent-indigo)", fontWeight: 800, marginRight: 3 }}>⚙️</span>;
                       }
                       
                       return (
-                        <div style={{ display: "flex", alignItems: "center", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", fontSize: "0.66rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
                           {IconNode}
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {typeName}
@@ -651,8 +688,8 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                         </div>
                       );
                     })() : (
-                      <div style={{ display: "flex", alignItems: "center", fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
-                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>
+                      <div style={{ display: "flex", alignItems: "center", fontSize: "0.66rem", color: "var(--text-muted)", fontWeight: 500, userSelect: "none" }}>
+                        <span style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontWeight: 700, marginRight: 3, fontFamily: "monospace" }}>abc</span>
                         <span>varchar</span>
                       </div>
                     )}
@@ -811,167 +848,206 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
               <tr 
                 key={ri} 
                 className={isRowSelected ? "row-selected" : undefined}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ rowIndex: ri, x: e.clientX, y: e.clientY });
-                }}
               >
-              {visibleColumns.map((col) => {
-                const val = row[col];
-                const isNum = numericSet.has(col) || isNumeric(val);
-                const isCellSelected = selectedCell?.rowIndex === ri && selectedCell?.column === col;
-                const cellClick = () => {
-                  setSelectedCell({ rowIndex: ri, column: col });
-                  void handleCopyCell(val);
-                };
-
-                if (val === null || val === undefined) {
-                  return (
-                    <td
-                      key={`${ri}-${col}`}
-                      className={`cell-null ${isCellSelected ? "cell-selected-outline" : ""}`}
-                      tabIndex={0}
-                      title="点击复制单元格"
-                      onClick={cellClick}
-                      onMouseEnter={(e) => handleMouseEnterCell(col, "NULL", e)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                    >
-                      NULL
-                    </td>
-                  );
-                }
-
-                // Try JSON detection
-                const jsonParsed = tryParseJson(val);
-                if (jsonParsed !== null) {
-                  return (
-                    <td
-                      key={`${ri}-${col}`}
-                      className={isCellSelected ? "cell-selected-outline" : undefined}
-                      style={{ whiteSpace: "nowrap" }}
-                      tabIndex={0}
-                      title="点击复制单元格"
-                      onClick={cellClick}
-                      onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span
-                          className="status-badge"
-                          style={{
-                            background: "rgba(74, 91, 192, 0.12)",
-                            color: "var(--accent-indigo)",
-                            border: "1px solid rgba(74, 91, 192, 0.3)",
-                            fontSize: "0.7rem",
-                            padding: "1px 5px",
-                            fontWeight: 600,
-                          }}
-                        >
-                          JSON
-                        </span>
-                        <span
-                          className="text-mono"
-                          style={{
-                            fontSize: "0.78rem",
-                            color: "var(--text-secondary)",
-                            textOverflow: "ellipsis",
-                            overflow: "hidden",
-                            maxWidth: 180,
-                            display: "inline-block",
-                          }}
-                        >
-                          {String(val)}
-                        </span>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleOpenInspect(col, String(val), true);
-                          }}
-                          style={{
-                            border: "none",
-                            background: "rgba(74, 91, 192, 0.08)",
-                            color: "var(--accent-indigo)",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            cursor: "pointer",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                          }}
-                        >
-                          展开 🔍
-                        </button>
-                      </div>
-                    </td>
-                  );
-                }
-
-                // Long text detection (> 80 characters)
-                const valStr = String(val);
-                if (valStr.length > 80) {
-                  return (
-                    <td
-                      key={`${ri}-${col}`}
-                      className={isCellSelected ? "cell-selected-outline" : undefined}
-                      tabIndex={0}
-                      title="点击复制单元格"
-                      onClick={cellClick}
-                      onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "var(--text-primary)",
-                            textOverflow: "ellipsis",
-                            overflow: "hidden",
-                            whiteSpace: "nowrap",
-                            maxWidth: 240,
-                            display: "inline-block",
-                          }}
-                        >
-                          {valStr}
-                        </span>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleOpenInspect(col, valStr, false);
-                          }}
-                          style={{
-                            border: "none",
-                            background: "rgba(100, 116, 139, 0.08)",
-                            color: "var(--text-secondary)",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            cursor: "pointer",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                          }}
-                        >
-                          更多 🔍
-                        </button>
-                      </div>
-                    </td>
-                  );
-                }
-
-                return (
-                  <td
-                    key={`${ri}-${col}`}
-                    className={`${isNum ? "cell-number" : ""} ${isCellSelected ? "cell-selected-outline" : ""}`.trim() || undefined}
-                    tabIndex={0}
-                    title="点击复制单元格"
-                    onClick={cellClick}
-                    onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
-                    onMouseLeave={() => setHoveredCell(null)}
+                {/* 1. Counter Column # Cell */}
+                <td 
+                  className="row-counter-cell"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextMenu({ rowIndex: ri, x: e.clientX, y: e.clientY });
+                  }}
+                >
+                  <span className="row-number-text">{ri + 1}</span>
+                  <button
+                    className="btn-ghost row-menu-trigger"
+                    style={{ padding: 1, color: "var(--text-muted)" }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setContextMenu({ rowIndex: ri, x: rect.left, y: rect.bottom + 4 });
+                    }}
                   >
-                    {valStr}
-                  </td>
-                );
-              })}
-            </tr>
-          );
-        })}
+                    <MoreVertical size={11} />
+                  </button>
+                </td>
+
+                {visibleColumns.map((col) => {
+                  const val = row[col];
+                  const isNum = numericSet.has(col) || isNumeric(val);
+                  const isCellSelected = selectedCell?.rowIndex === ri && selectedCell?.column === col;
+                  
+                  const cellClick = () => {
+                    setSelectedCell({ rowIndex: ri, column: col });
+                    void handleCopyCell(val);
+                  };
+
+                  const handleCellContextMenu = (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSelectedCell({ rowIndex: ri, column: col });
+                    setContextMenu({ rowIndex: ri, column: col, x: e.clientX, y: e.clientY });
+                  };
+
+                  if (val === null || val === undefined) {
+                    return (
+                      <td
+                        key={`${ri}-${col}`}
+                        className={`cell-null ${isCellSelected ? "cell-selected-outline" : ""}`}
+                        tabIndex={0}
+                        title="右键可快捷过滤或排除值"
+                        onClick={cellClick}
+                        onContextMenu={handleCellContextMenu}
+                        onMouseEnter={(e) => handleMouseEnterCell(col, "NULL", e)}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        <span style={{
+                          display: "inline-block",
+                          padding: "1px 5px",
+                          background: "rgba(100, 116, 139, 0.08)",
+                          color: "var(--text-muted)",
+                          fontSize: "0.68rem",
+                          borderRadius: 3,
+                          fontFamily: "var(--font-mono)",
+                          userSelect: "none"
+                        }}>
+                          NULL
+                        </span>
+                      </td>
+                    );
+                  }
+
+                  // Try JSON detection
+                  const jsonParsed = tryParseJson(val);
+                  if (jsonParsed !== null) {
+                    return (
+                      <td
+                        key={`${ri}-${col}`}
+                        className={isCellSelected ? "cell-selected-outline" : undefined}
+                        style={{ whiteSpace: "nowrap" }}
+                        tabIndex={0}
+                        onClick={cellClick}
+                        onContextMenu={handleCellContextMenu}
+                        onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span
+                            className="status-badge"
+                            style={{
+                              background: "rgba(74, 91, 192, 0.12)",
+                              color: "var(--accent-indigo)",
+                              border: "1px solid rgba(74, 91, 192, 0.3)",
+                              fontSize: "0.66rem",
+                              padding: "0px 4px",
+                              fontWeight: 600,
+                            }}
+                          >
+                            JSON
+                          </span>
+                          <span
+                            className="text-mono"
+                            style={{
+                              fontSize: "0.74rem",
+                              color: "var(--text-secondary)",
+                              textOverflow: "ellipsis",
+                              overflow: "hidden",
+                              maxWidth: 180,
+                              display: "inline-block",
+                            }}
+                          >
+                            {String(val)}
+                          </span>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenInspect(col, String(val), true);
+                            }}
+                            style={{
+                              border: "none",
+                              background: "rgba(74, 91, 192, 0.08)",
+                              color: "var(--accent-indigo)",
+                              padding: "1px 5px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "0.68rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            展开
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  }
+
+                  // Long text detection (> 80 characters)
+                  const valStr = String(val);
+                  if (valStr.length > 80) {
+                    return (
+                      <td
+                        key={`${ri}-${col}`}
+                        className={isCellSelected ? "cell-selected-outline" : undefined}
+                        tabIndex={0}
+                        onClick={cellClick}
+                        onContextMenu={handleCellContextMenu}
+                        onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span
+                            style={{
+                              fontSize: "0.76rem",
+                              color: "var(--text-primary)",
+                              textOverflow: "ellipsis",
+                              overflow: "hidden",
+                              whiteSpace: "nowrap",
+                              maxWidth: 240,
+                              display: "inline-block",
+                            }}
+                          >
+                            {valStr}
+                          </span>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenInspect(col, valStr, false);
+                            }}
+                            style={{
+                              border: "none",
+                              background: "rgba(100, 116, 139, 0.08)",
+                              color: "var(--text-secondary)",
+                              padding: "1px 5px",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "0.68rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            更多
+                          </button>
+                        </div>
+                      </td>
+                    );
+                  }
+
+                  return (
+                    <td
+                      key={`${ri}-${col}`}
+                      className={`${isNum ? "cell-number" : ""} ${isCellSelected ? "cell-selected-outline" : ""}`.trim() || undefined}
+                      tabIndex={0}
+                      onClick={cellClick}
+                      onContextMenu={handleCellContextMenu}
+                      onMouseEnter={(e) => handleMouseEnterCell(col, val, e)}
+                      onMouseLeave={() => setHoveredCell(null)}
+                    >
+                      {valStr}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
@@ -1261,7 +1337,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
               position: "fixed",
               top: contextMenu.y,
               left: contextMenu.x,
-              minWidth: 170,
+              minWidth: 175,
               background: "var(--bg-surface)",
               border: "1px solid var(--border-light)",
               borderRadius: 8,
@@ -1272,8 +1348,54 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {contextMenu.column ? (
+              <>
+                <div style={{ padding: "4px 8px", fontSize: "0.7rem", color: "var(--text-muted)", borderBottom: "1px solid var(--border-light)", marginBottom: 4, fontWeight: 600 }}>
+                  单元格操作 ({contextMenu.column})
+                </div>
+                <button
+                  className="data-table-menu-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const val = visibleRows[contextMenu.rowIndex][contextMenu.column!];
+                    void handleCopyCell(val);
+                    setContextMenu(null);
+                  }}
+                >
+                  <Copy size={12} /> 复制单元格值
+                </button>
+                <button
+                  className="data-table-menu-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const val = visibleRows[contextMenu.rowIndex][contextMenu.column!];
+                    if (val !== null && val !== undefined) {
+                      setFilter(contextMenu.column!, "contains", String(val));
+                    } else {
+                      setFilter(contextMenu.column!, "is_null");
+                    }
+                    setContextMenu(null);
+                  }}
+                >
+                  <Filter size={12} /> 按此值本地筛选
+                </button>
+                <button
+                  className="data-table-menu-item"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Custom Exclude filter
+                    setFilter(contextMenu.column!, "is_not_null");
+                    setContextMenu(null);
+                  }}
+                >
+                  <EyeOff size={12} /> 排除此列 NULL 值
+                </button>
+                <div style={{ height: 1, background: "var(--border-light)", margin: "4px 0" }} />
+              </>
+            ) : null}
+
             <div style={{ padding: "4px 8px", fontSize: "0.7rem", color: "var(--text-muted)", borderBottom: "1px solid var(--border-light)", marginBottom: 4, fontWeight: 600 }}>
-              行 #{contextMenu.rowIndex + 1} 操作
+              整行操作 #{contextMenu.rowIndex + 1}
             </div>
             <button
               className="data-table-menu-item"

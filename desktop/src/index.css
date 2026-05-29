@@ -38,18 +38,18 @@
   --border-focus: #2D3B8C;
 
   /* ── Shadows ── */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
-  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.10), 0 8px 16px rgba(0, 0, 0, 0.04);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.08);
 
   /* ── Radius ── */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
 
   /* ── Typography ── */
   --font-display: "Noto Serif SC", "STSong", "SimSun", Georgia, "Times New Roman", serif;
@@ -58,7 +58,7 @@
 
   /* ── Sizing ── */
   --sidebar-width: 284px;
-  --header-height: 56px;
+  --header-height: 30px;
   --footer-height: 30px;
 
   font-family: var(--font-body);
@@ -637,7 +637,38 @@ label.field-label {
   color: var(--accent-teal);
 }
 
-/* Text Selection Utilities */
+/* ═══════════════════════════════════════
+   Menu Bar & Dropdowns
+   ═══════════════════════════════════════ */
+
+.menu-bar-item:hover {
+  background: var(--bg-hover);
+}
+
+.menu-dropdown-item:hover {
+  background: var(--bg-active);
+  color: var(--accent-indigo);
+}
+
+.menu-dropdown-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
+  background: transparent;
+}
+
+.win-control-btn:hover {
+  background: var(--bg-hover);
+}
+
+.win-control-close:hover {
+  background: var(--accent-red) !important;
+  color: #fff !important;
+}
+
+/* ═══════════════════════════════════════
+   Text Selection Utilities
+   ═══════════════════════════════════════ */
+
 .select-none {
   user-select: none !important;
   -webkit-user-select: none !important;

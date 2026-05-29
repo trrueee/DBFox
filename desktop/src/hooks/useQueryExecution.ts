@@ -190,9 +190,11 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
   }, [activeEditorTab, datasource.id, updateActiveTab]);
 
   // Execute SQL with Timeout & Cancellation Abort signals
-  const handleExecuteSql = useCallback(async (timeoutMs: number = 30000) => {
-    if (!activeEditorTab?.sql.trim()) return;
-    const tabId = activeEditorTab.id;
+  // sqlOverride: 查询动作系统传入的 compiledSql，优先于编辑器中的 sourceText
+  const handleExecuteSql = useCallback(async (timeoutMs: number = 30000, sqlOverride?: string) => {
+    const sqlToExecute = sqlOverride ?? activeEditorTab?.sql ?? "";
+    if (!sqlToExecute.trim()) return;
+    const tabId = activeEditorTab!.id;
 
     // Double confirmation for PROD environment
     if (datasource.env === "prod") {
@@ -235,7 +237,7 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
 
     try {
       // Step 1: Run through guardrails safety check
-      const checked = await api.validateSql(activeEditorTab.sql, datasource.id, controller.signal);
+      const checked = await api.validateSql(sqlToExecute, datasource.id, controller.signal);
       updateTabById(tabId, () => ({ guardrail: checked }));
 
       if (checked.result === "reject") {
@@ -249,7 +251,7 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
       }
 
       // Step 2: Send query execute request
-      const result = await api.executeSql(datasource.id, activeEditorTab.sql, undefined, execId, controller.signal);
+      const result = await api.executeSql(datasource.id, sqlToExecute, undefined, execId, controller.signal);
 
       clearTimeout(timeoutId);
       updateTabById(tabId, () => ({

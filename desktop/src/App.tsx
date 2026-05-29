@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./lib/api";
 import type { DataSource, Project, SchemaTable } from "./lib/api";
 import { WorkbenchPage } from "./pages/WorkbenchPage";
-import { DemoTourGuide } from "./components/DemoTourGuide";
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -96,7 +95,6 @@ export default function App() {
       <WorkbenchPage
         projects={projects}
         activeProject={activeProject}
-        setActiveProject={setActiveProject}
         datasources={datasources}
         activeDataSource={activeDataSource}
         setActiveDataSource={handleSelectDataSource}
@@ -106,19 +104,6 @@ export default function App() {
         onRefreshSchemaTables={refreshSchemaTables}
         onRefreshDatasources={refreshDatasources}
         onCreateProject={handleCreateProject}
-      />
-
-      <DemoTourGuide
-        activeTab="workbench"
-        setActiveTab={() => {}}
-        activeProject={activeProject}
-        projects={projects}
-        activeDataSource={activeDataSource}
-        datasources={datasources}
-        schemaTables={schemaTables}
-        handleCreateProject={async (name?) => {
-          await handleCreateProject(name || "新项目");
-        }}
       />
     </div>
   );

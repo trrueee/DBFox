@@ -28,6 +28,7 @@ interface ErDiagramProps {
   viewMode?: "focus" | "module" | "full";
   showInferred?: boolean;
   onNodeClick?: (tableName: string) => void;
+  onAnnotateTable?: (tableName: string) => void;
 }
 
 interface FieldData {
@@ -47,6 +48,7 @@ interface TableNodeData {
   totalFieldCount?: number;
   isSecondary?: boolean;
   onToggle?: () => void;
+  onAnnotate?: () => void;
 }
 
 interface ErEdgeData {
@@ -239,7 +241,6 @@ function computeLayout(
 
     let y = 60;
     let col = 0;
-    // Increased column gap to 220px to prevent relationship labels from overlapping cards
     const colX = [490, 920, 1350, 1780];
 
     others.forEach((node) => {
@@ -269,10 +270,8 @@ function computeLayout(
     for (const node of groupNodes) {
       const nodeH = getNodeHeight(node);
       positions.set(node.label, { x: colX, y: rowY });
-      // Increased vertical row gap to 70px
       rowY += nodeH + 70;
     }
-    // Increased horizontal column gap to 220px for better label breathing room
     colX += NODE_W + 220;
   }
 
@@ -293,6 +292,7 @@ function TableCardNode({ data }: NodeProps) {
     totalFieldCount = 0,
     isSecondary = false,
     onToggle,
+    onAnnotate,
   } = data as unknown as TableNodeData;
   const safeFields: FieldData[] = Array.isArray(fields) ? fields : [];
   const hasToggleRow = totalFieldCount > 5 && !isFocus;
@@ -353,7 +353,30 @@ function TableCardNode({ data }: NodeProps) {
             flexShrink: 0,
           }}
         />
-        {label}
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {label}
+        </span>
+        {onAnnotate && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAnnotate();
+            }}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 4px",
+              display: "grid",
+              placeItems: "center",
+              color: "var(--accent-indigo)",
+              fontSize: "0.75rem",
+            }}
+            title="添加设计批注修改该表架构"
+          >
+            <span>🪄</span>
+          </button>
+        )}
       </div>
 
       {/* Fields */}
@@ -507,7 +530,7 @@ function ErEdge({
               fontSize: "0.62rem",
               fontFamily: "var(--font-mono)",
               color: isInferred ? "#B45309" : "#0D7377",
-              background: "rgba(255,255,255,0.96)", // Solid backdrop for absolute legibility
+              background: "rgba(255,255,255,0.96)",
               padding: "2px 6px",
               borderRadius: 3,
               border: `1px solid ${isInferred ? "#FCD34D" : "#ccf0f0"}`,
@@ -517,7 +540,7 @@ function ErEdge({
               overflow: "hidden",
               textOverflow: "ellipsis",
               boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-              zIndex: 10, // Ensure edge labels render on top of overlapping nodes
+              zIndex: 10,
             }}
             title={`${displayLabel}${isInferred ? " (系统推断关联)" : ""}`}
           >
@@ -543,6 +566,7 @@ export function ErDiagram({
   viewMode = "full",
   showInferred = true,
   onNodeClick,
+  onAnnotateTable,
 }: ErDiagramProps) {
   const safeData = useMemo(() => normalizeDiagramData(data), [data]);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
@@ -552,7 +576,6 @@ export function ErDiagram({
     [safeData, focusTable, depth, viewMode, showInferred],
   );
 
-  // Compute direct connection set for styling
   const { directSet } = useMemo(() => {
     if (!focusTable) return { directSet: new Set<string>() };
     const { direct } = getConnectedNodes(focusTable, visibleEdges, depth);
@@ -626,10 +649,11 @@ export function ErDiagram({
                 return next;
               });
             },
+            onAnnotate: onAnnotateTable ? () => onAnnotateTable(n.label) : undefined,
           } satisfies TableNodeData,
         };
       }),
-    [visibleNodes, positions, focusTable, viewMode, directSet, isTableCollapsed, getVisibleFields],
+    [visibleNodes, positions, focusTable, viewMode, directSet, isTableCollapsed, getVisibleFields, onAnnotateTable],
   );
 
   const rfEdges: Edge[] = useMemo(

@@ -5,6 +5,7 @@ import {
   BarChart3,
   Check,
   Copy,
+  Database,
   Download,
   History,
   Play,
@@ -29,6 +30,7 @@ import { AiBenchmarkDrawer } from "../components/AiBenchmarkDrawer";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { useQueryExecution, type QueryTabState } from "../hooks/useQueryExecution";
+import { actionRegistry, type ParsedAction, planHasErrors, planWarnings } from "../lib/queryActions";
 
 interface QueryPageProps {
   datasource: DataSource;
@@ -226,7 +228,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     handledActionNonceRef.current = actionTriggerNonce;
     const executeAction = async () => {
       if (actionTriggerType === "execute") {
-        await handleExecuteSql(30000);
+        handleExecuteWithDirectives(30000);
       } else if (actionTriggerType === "stop") {
         if (activeEditorTab) {
           handleCancelQuery(activeEditorTab.id);
@@ -317,6 +319,129 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     toast.toast("已成功注入 LIMIT 100 保护", "success");
   };
 
+  const handleFormatSql = () => {
+    if (!activeEditorTab?.sql.trim()) return;
+    const sqlKeywords = [
+      "select", "from", "where", "join", "left", "right", "inner", "on", "group by", "order by", "limit",
+      "insert", "update", "delete", "create", "drop", "alter", "table", "and", "or", "not", "null", "as",
+      "having", "in", "like", "between", "exists", "union", "all", "is", "into", "values", "set",
+    ];
+    let formatted = activeEditorTab.sql;
+    sqlKeywords.forEach((kw) => {
+      const regex = new RegExp(`\\b${kw}\\b`, "gi");
+      formatted = formatted.replace(regex, kw.toUpperCase());
+    });
+    updateActiveTab(() => ({ sql: formatted }));
+    toast.toast("SQL 关键字已格式化", "success");
+  };
+
+  const handleRunExplain = async () => {
+    if (!activeEditorTab?.sql.trim()) return;
+    const sql = activeEditorTab.sql.trim();
+    if (/^\s*explain\s/i.test(sql)) {
+      toast.toast("SQL 已是 EXPLAIN 查询，直接执行即可", "info");
+      return;
+    }
+    updateActiveTab(() => ({ sql: `EXPLAIN ${sql}` }));
+    // Auto-execute after a brief delay to let the editor update
+    setTimeout(() => {
+      handleExecuteSql(30000);
+    }, 100);
+  };
+
+  const handleCopyResultJson = () => {
+    if (!activeEditorTab?.queryResult) return;
+    const { columns, rows } = activeEditorTab.queryResult;
+    const json = JSON.stringify(rows.map((row) => {
+      const obj: Record<string, unknown> = {};
+      columns.forEach((c) => { obj[c] = row[c] ?? null; });
+      return obj;
+    }), null, 2);
+    navigator.clipboard.writeText(json).then(() => {
+      toast.toast(`已复制 ${rows.length} 行 JSON`, "success");
+    }).catch(() => toast.toast("复制失败", "error"));
+  };
+
+  const handleCopyResultInsert = () => {
+    if (!activeEditorTab?.queryResult) return;
+    const { columns, rows } = activeEditorTab.queryResult;
+    const tableName = "table_name";
+    const inserts = rows.map((row) => {
+      const vals = columns.map((c) => {
+        const v = row[c];
+        if (v === null || v === undefined) return "NULL";
+        if (typeof v === "number" || typeof v === "bigint") return String(v);
+        if (typeof v === "boolean") return v ? "1" : "0";
+        const s = String(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
+        return `'${s}'`;
+      });
+      return `INSERT INTO \`${tableName}\` (${columns.map((c) => `\`${c}\``).join(", ")})\nVALUES (${vals.join(", ")});`;
+    }).join("\n\n");
+    navigator.clipboard.writeText(inserts).then(() => {
+      toast.toast(`已复制 ${rows.length} 行 INSERT`, "success");
+    }).catch(() => toast.toast("复制失败", "error"));
+  };
+
+  // ── @ 查询动作（ExecutionPlan 架构：sourceText 永不污染，只改 compiledSql）──
+
+  const activeDirectives = useMemo<ParsedAction[]>(() => {
+    if (!activeEditorTab?.sql) return [];
+    return actionRegistry.parseAll(activeEditorTab.sql).actions;
+  }, [activeEditorTab?.sql]);
+
+  const handleExecuteWithDirectives = useCallback(
+    (_timeoutMs: number = 30000) => {
+      if (!activeEditorTab?.sql.trim()) return;
+
+      const plan = actionRegistry.finalize(activeEditorTab.sql);
+
+      // 致命错误 → 阻止执行，展示给用户
+      if (planHasErrors(plan)) {
+        const msg = plan.issues
+          .filter((i) => i.level === "error")
+          .map((e) => `• [${e.code}] ${e.message}`)
+          .join("\n");
+        updateActiveTab(() => ({
+          queryError: `查询动作配置错误:\n${msg}`,
+          queryResult: null,
+        }));
+        return;
+      }
+
+      // 警告 → toast 提示，不阻止执行
+      for (const w of planWarnings(plan)) {
+        toast.toast(`[${w.code}] ${w.message}`, "warning");
+      }
+
+      // beforeExecute 阶段（如 @timeout 设置超时）
+      actionRegistry.applyPhase(plan, "beforeExecute");
+
+      // 执行：传入 compiledSql，不修改编辑器源码
+      void handleExecuteSql(plan.context.timeoutMs, plan.compiledSql);
+    },
+    [activeEditorTab, updateActiveTab, handleExecuteSql, toast],
+  );
+
+  const handleRemoveDirective = useCallback(
+    (index: number) => {
+      if (!activeEditorTab) return;
+      const lines = activeEditorTab.sql.split("\n");
+      let dirIdx = 0;
+      const newLines = lines.filter((line) => {
+        if (/^\s*@\w+/.test(line.trim())) {
+          if (dirIdx === index) {
+            dirIdx++;
+            return false;
+          }
+          dirIdx++;
+        }
+        return true;
+      });
+      updateActiveTab(() => ({ sql: newLines.join("\n") }));
+    },
+    [activeEditorTab, updateActiveTab],
+  );
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -327,7 +452,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
         if (e.shiftKey) {
           void handleValidateSql();
         } else {
-          void handleExecuteSql(30000);
+          void handleExecuteWithDirectives(30000);
         }
         return;
       }
@@ -348,7 +473,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeEditorTab, handleValidateSql, handleExecuteSql, handleAddTab, handleCloseTab]);
+  }, [activeEditorTab, handleValidateSql, handleExecuteWithDirectives, handleAddTab, handleCloseTab]);
 
   const isExplainQuery = useMemo(() => {
     if (!activeEditorTab?.queryResult) return false;
@@ -692,7 +817,28 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
                 disabled={!activeEditorTab || activeEditorTab.status === "running"}
                 title="自动在 SQL 尾部追加 LIMIT 100，防止大结果集拖慢执行"
               >
-                <span>注入 LIMIT</span>
+                注入 LIMIT
+              </button>
+
+              <button
+                className="btn-ghost"
+                style={{ padding: "5px 8px", fontSize: "0.8rem" }}
+                onClick={handleFormatSql}
+                disabled={!activeEditorTab?.sql.trim() || activeEditorTab.status === "running"}
+                title="格式化 SQL 关键字为大写"
+              >
+                格式化
+              </button>
+
+              <button
+                className="btn-secondary"
+                style={{ padding: "5px 10px", fontSize: "0.8rem", color: "var(--text-secondary)", borderColor: "var(--border-light)" }}
+                onClick={handleRunExplain}
+                disabled={!activeEditorTab?.sql.trim() || activeEditorTab.status === "running"}
+                title="执行 EXPLAIN 查看查询计划"
+              >
+                <Activity size={12} />
+                Explain
               </button>
 
               <button
@@ -703,7 +849,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
                 title="校验 SQL 安全性 (Ctrl+Shift+Enter)"
               >
                 <ShieldAlert size={13} />
-                鏍￠獙
+                安全检查
               </button>
 
               {/* Cancellable Execution Button */}
@@ -726,9 +872,9 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
                 <button
                   className="btn-primary"
                   style={{ padding: "5px 14px", fontSize: "0.82rem" }}
-                  onClick={() => handleExecuteSql(30000)}
+                  onClick={() => handleExecuteWithDirectives(30000)}
                   disabled={!activeEditorTab}
-                  title="执行 SQL 查询 (Ctrl+Enter)"
+                  title="执行 SQL 查询 (Ctrl+Enter) — @ 查询动作将在执行前自动剥离"
                 >
                   <Play size={13} />
                   执行
@@ -786,6 +932,59 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
                   查看审计报告 🔍
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* @ Query Action Directive Capsules */}
+          {activeDirectives.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "4px 14px",
+                borderBottom: "1px solid var(--border-light)",
+                background: "var(--bg-secondary)",
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600, marginRight: 2 }}>
+                查询动作:
+              </span>
+              {activeDirectives.map((d, i) => (
+                <span
+                  key={i}
+                  title="点击移除该查询动作"
+                  onClick={() => handleRemoveDirective(i)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "1px 8px",
+                    borderRadius: 3,
+                    fontSize: "0.66rem",
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: "1px solid",
+                    ...(d.type === "export"
+                      ? { background: "rgba(16,185,129,0.08)", color: "var(--accent-green)", borderColor: "rgba(16,185,129,0.2)" }
+                      : d.type === "limit"
+                        ? { background: "rgba(59,130,246,0.08)", color: "#2563EB", borderColor: "rgba(59,130,246,0.2)" }
+                        : d.type === "timeout"
+                          ? { background: "rgba(245,158,11,0.08)", color: "var(--accent-amber)", borderColor: "rgba(245,158,11,0.2)" }
+                          : d.type === "explain"
+                            ? { background: "rgba(139,92,246,0.08)", color: "#7C3AED", borderColor: "rgba(139,92,246,0.2)" }
+                            : d.type === "chart"
+                              ? { background: "rgba(236,72,153,0.08)", color: "#DB2777", borderColor: "rgba(236,72,153,0.2)" }
+                              : { background: "var(--bg-hover)", color: "var(--text-secondary)", borderColor: "var(--border-light)" }),
+                  }}
+                >
+                  @{d.label}
+                  <X size={9} style={{ opacity: 0.5 }} />
+                </span>
+              ))}
+              <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginLeft: "auto" }}>点击胶囊移除</span>
             </div>
           )}
 
@@ -1009,6 +1208,22 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
                           onClick={() => setResultViewMode("chart")}
                         >
                           <BarChart3 size={12} /> 图表
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: "0.74rem" }}
+                          onClick={handleCopyResultJson}
+                          title="复制结果为 JSON 数组"
+                        >
+                          <Copy size={11} /> JSON
+                        </button>
+                        <button
+                          className="btn-ghost"
+                          style={{ fontSize: "0.74rem" }}
+                          onClick={handleCopyResultInsert}
+                          title="复制结果为 INSERT 语句"
+                        >
+                          <Database size={11} /> INSERT
                         </button>
                         <button
                           className="btn-ghost"
