@@ -257,19 +257,21 @@ class ActionRegistry {
     if (planHasErrors(plan)) return plan;
 
     for (const proc of this.getPhaseProcessors("compile")) {
-      const action = plan.actions.find((a) => a.type === proc.name);
-      if (action) proc.apply(action, plan);
+      for (const action of plan.actions) {
+        if (action.type === proc.name) proc.apply(action, plan);
+      }
     }
 
     return plan;
   }
 
-  // ── applyPhase — 按阶段执行 processors ──
+  // ── applyPhase — 按阶段执行 processors，支持 repeatable ──
 
   applyPhase(plan: QueryExecutionPlan, phase: ActionPhase): void {
     for (const proc of this.getPhaseProcessors(phase)) {
-      const action = plan.actions.find((a) => a.type === proc.name);
-      if (action) proc.apply(action, plan);
+      for (const action of plan.actions) {
+        if (action.type === proc.name) proc.apply(action, plan);
+      }
     }
   }
 
