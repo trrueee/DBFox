@@ -9,7 +9,6 @@ import {
   Plus,
   X,
   Sparkles,
-  ShieldCheck,
   Search,
   RefreshCw,
   Code2,
@@ -497,17 +496,20 @@ export const WorkbenchPage = ({
       } catch { /* non-Tauri env */ }
     };
 
+    const hasConn = !!activeDataSource;
+
     return [
       {
         id: "file",
         label: "文件",
         items: [
-          { label: "新建 SQL 标签页", shortcut: "Ctrl+T", action: () => handleOpenQueryTab() },
-          { label: "新建连接", action: () => setShowSettingsModal(true) },
-          { label: "打开工作区", disabled: true },
-          { separator: true, label: "" },
+          { label: "新建 SQL 控制台", shortcut: "Ctrl+T", action: () => handleOpenQueryTab() },
+          { label: "打开 SQL 文件", disabled: true },
           { label: "保存当前 SQL", shortcut: "Ctrl+S", disabled: true },
           { label: "另存为 SQL 文件", disabled: true },
+          { separator: true, label: "" },
+          { label: "保存控制台会话", disabled: true },
+          { label: "打开控制台会话", disabled: true },
           { separator: true, label: "" },
           { label: "导入连接配置", disabled: true },
           { label: "导出连接配置", disabled: true },
@@ -519,12 +521,12 @@ export const WorkbenchPage = ({
         id: "edit",
         label: "编辑",
         items: [
-          { label: "撤销", shortcut: "Ctrl+Z", disabled: true },
-          { label: "重做", shortcut: "Ctrl+Shift+Z", disabled: true },
+          { label: "撤销", shortcut: "Ctrl+Z", action: () => document.execCommand("undo") },
+          { label: "重做", shortcut: "Ctrl+Shift+Z", action: () => document.execCommand("redo") },
           { separator: true, label: "" },
-          { label: "剪切", shortcut: "Ctrl+X", disabled: true },
-          { label: "复制", shortcut: "Ctrl+C", disabled: true },
-          { label: "粘贴", shortcut: "Ctrl+V", disabled: true },
+          { label: "剪切", shortcut: "Ctrl+X", action: () => document.execCommand("cut") },
+          { label: "复制", shortcut: "Ctrl+C", action: () => document.execCommand("copy") },
+          { label: "粘贴", shortcut: "Ctrl+V", action: () => document.execCommand("paste") },
           { separator: true, label: "" },
           { label: "查找", shortcut: "Ctrl+F", disabled: true },
           { label: "替换", shortcut: "Ctrl+H", disabled: true },
@@ -537,12 +539,9 @@ export const WorkbenchPage = ({
         id: "select",
         label: "选择",
         items: [
-          { label: "全选", shortcut: "Ctrl+A", disabled: true },
+          { label: "全选", shortcut: "Ctrl+A", action: () => document.execCommand("selectAll") },
           { label: "选择当前行", disabled: true },
-          { label: "选择当前列", disabled: true },
-          { label: "选择当前单元格", disabled: true },
           { label: "选择当前 SQL 语句", disabled: true },
-          { label: "选择当前表", disabled: true },
           { separator: true, label: "" },
           { label: "取消选择", disabled: true },
         ],
@@ -553,12 +552,9 @@ export const WorkbenchPage = ({
         items: [
           { label: "显示 / 隐藏 AI 面板", shortcut: "Alt+A", action: () => setAiPanelCollapsed(prev => !prev) },
           { label: "显示 / 隐藏资源管理器", disabled: true },
-          { label: "显示 / 隐藏底部面板", disabled: true },
           { separator: true, label: "" },
           { label: "紧凑表格模式", disabled: true },
           { label: "舒适表格模式", disabled: true },
-          { separator: true, label: "" },
-          { label: "切换主题", disabled: true },
           { separator: true, label: "" },
           { label: "放大", shortcut: "Ctrl+=", disabled: true },
           { label: "缩小", shortcut: "Ctrl+-", disabled: true },
@@ -570,8 +566,6 @@ export const WorkbenchPage = ({
         label: "转到",
         items: [
           { label: "快速打开对象", shortcut: "Ctrl+P", action: () => setShowCommandPalette(true) },
-          { label: "转到表", disabled: true },
-          { label: "转到字段", disabled: true },
           { label: "转到 SQL 标签页", shortcut: "Ctrl+Tab", disabled: true },
           { label: "转到最近打开", disabled: true },
           { label: "转到查询历史", disabled: true },
@@ -582,10 +576,8 @@ export const WorkbenchPage = ({
         label: "运行",
         items: [
           { label: "执行当前 SQL", shortcut: "Ctrl+Enter", action: () => triggerActiveTabAction("execute") },
-          { label: "执行选中 SQL", shortcut: "Shift+Ctrl+Enter", disabled: true },
+          { label: "执行选中 SQL", shortcut: "Ctrl+Shift+Enter", disabled: true },
           { label: "停止执行", action: () => triggerActiveTabAction("stop") },
-          { separator: true, label: "" },
-          { label: "解释执行计划", disabled: true },
           { separator: true, label: "" },
           { label: "提交事务", disabled: true },
           { label: "回滚事务", disabled: true },
@@ -598,21 +590,20 @@ export const WorkbenchPage = ({
         label: "数据库",
         items: [
           { label: "新建连接", action: () => setShowSettingsModal(true) },
-          { label: "测试连接", disabled: true },
-          { label: "刷新结构", action: () => { if (activeDataSource) void onRefreshSchemaTables(activeDataSource.id); } },
-          { separator: true, label: "" },
-          { label: "打开 SQL 控制台", shortcut: "Ctrl+T", action: () => handleOpenQueryTab() },
-          { label: "打开 ER 图", action: () => { if (schemaTables[0]) handleOpenTableTab(schemaTables[0].table_name, "er"); } },
-          { separator: true, label: "" },
-          { label: "生成 DDL", disabled: true },
-          { label: "导出数据", disabled: true },
-          { label: "导入数据", disabled: true },
-          { separator: true, label: "" },
-          { label: "备份数据库", action: () => setShowBackupsModal(true) },
-          { label: "恢复数据库", action: () => setShowBackupsModal(true) },
-          { separator: true, label: "" },
+          { label: "测试连接", disabled: !hasConn },
+          { label: "断开连接", disabled: !hasConn, action: () => { if (hasConn) setActiveDataSource(null); } },
           { label: "连接设置", action: () => setShowSettingsModal(true) },
-          { label: "断开连接", action: () => { setActiveDataSource(null); } },
+          { separator: true, label: "" },
+          { label: "刷新结构", disabled: !hasConn, action: () => { if (activeDataSource) void onRefreshSchemaTables(activeDataSource.id); } },
+          { label: "打开 SQL 控制台", shortcut: "Ctrl+T", action: () => handleOpenQueryTab() },
+          { label: "打开 ER 图", disabled: !hasConn || schemaTables.length === 0, action: () => { if (schemaTables[0]) handleOpenTableTab(schemaTables[0].table_name, "er"); } },
+          { separator: true, label: "" },
+          { label: "生成 DDL", disabled: !hasConn },
+          { label: "导入数据", disabled: !hasConn },
+          { label: "导出数据", disabled: !hasConn },
+          { separator: true, label: "" },
+          { label: "备份数据库", disabled: !hasConn, action: () => setShowBackupsModal(true) },
+          { label: "恢复数据库", disabled: !hasConn, action: () => setShowBackupsModal(true) },
         ],
       },
       {
@@ -620,12 +611,10 @@ export const WorkbenchPage = ({
         label: "AI",
         items: [
           { label: "打开 AI 面板", shortcut: "Alt+A", action: () => setAiPanelCollapsed(false) },
-          { label: "根据当前表问数", action: () => handleAiContextAction("分析当前表的字段结构、数据特征以及关联模型。") },
           { label: "生成 SQL", disabled: true },
           { label: "解释当前 SQL", disabled: true },
           { label: "优化当前 SQL", disabled: true },
           { label: "诊断表结构", disabled: true },
-          { label: "生成 ER 图", disabled: true },
           { separator: true, label: "" },
           { label: "生成测试数据", disabled: true },
         ],
@@ -635,7 +624,7 @@ export const WorkbenchPage = ({
         label: "帮助",
         items: [
           { label: "快捷键参考", action: () => setShowCommandPalette(true) },
-          { label: "Demo 引导向导", action: () => setShowTourDialog(true) },
+          { label: "引导向导", action: () => setShowTourDialog(true) },
           { separator: true, label: "" },
           { label: "性能监控面板", action: () => setShowDashboardModal(true) },
           { label: "Docker 环境管理", action: () => setShowEnvironmentsModal(true) },
@@ -644,7 +633,7 @@ export const WorkbenchPage = ({
           { label: "查看日志", disabled: true },
           { label: "检查更新", disabled: true },
           { separator: true, label: "" },
-          { label: "关于 DataBox", action: () => alert("DataBox v1.0.0\nAI 驱动的本地数据库工作台\n本地优先，安全第一") },
+          { label: "关于 DataBox", action: () => alert("DataBox v1.0.0\nAI 驱动的本地数据库工作台") },
         ],
       },
     ];
@@ -687,15 +676,15 @@ export const WorkbenchPage = ({
         >
           <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {/* Explorer Title bar */}
-            <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
-                <Code2 size={12} style={{ color: "var(--accent-indigo)" }} />
+            <div style={{ padding: "6px 8px", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 4 }}>
+                <Code2 size={11} style={{ color: "var(--text-muted)" }} />
                 对象资源管理器
               </span>
             </div>
 
             {/* Tree Nodes scrolling container */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "4px 4px", display: "flex", flexDirection: "column", gap: 0 }}>
               {loadingTree ? (
                 <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
                   <div className="skeleton" style={{ height: 18, borderRadius: 4 }} />
@@ -717,7 +706,7 @@ export const WorkbenchPage = ({
                           alignItems: "center",
                           gap: 6,
                           width: "100%",
-                          padding: "5px 6px",
+                          padding: "3px 4px",
                           border: "none",
                           borderRadius: 6,
                           background: isConnected ? "var(--bg-active)" : "transparent",
@@ -1025,84 +1014,63 @@ export const WorkbenchPage = ({
           {/* Active Tab content viewport */}
           <div style={{ flex: 1, overflow: "hidden", minHeight: 0, position: "relative" }}>
             {tabs.length === 0 ? (
-              /* Premium IDE-Style Welcome page */
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  padding: 30,
-                  overflowY: "auto",
-                  background: "var(--bg-primary)",
-                  textAlign: "center"
-                }}
-              >
-                <div
-                  className="lab-card"
-                  style={{
-                    maxWidth: 520,
-                    width: "100%",
-                    padding: "30px 24px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 16,
-                    border: "1px solid var(--border-medium)",
-                    borderRadius: 8,
-                    background: "var(--bg-surface)",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                    <Code2 size={24} style={{ color: "var(--accent-indigo)" }} />
-                    <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
-                      DataBox: 面向开发者的 AI 数据库工作台
-                    </h3>
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.78rem", maxWidth: 380, margin: "0 auto", lineHeight: 1.4 }}>
-                      像 VS Code 一样高效管理数据库连接、表定义、DDL 与 AI 安全问数。本地优先，秒级响应。
-                    </p>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: 30, background: "var(--bg-primary)" }}>
+                <div style={{ maxWidth: 380, width: "100%" }}>
+                  <div style={{ marginBottom: 20, textAlign: "center" }}>
+                    <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>快捷键</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px", fontSize: "0.76rem", color: "var(--text-secondary)", marginBottom: 16 }}>
+                    <span>新建 SQL 查询</span>
+                    <kbd style={{
+                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
+                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
+                      color: "var(--text-muted)"
+                    }}>Ctrl+T</kbd>
+
+                    <span>快速打开对象</span>
+                    <kbd style={{
+                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
+                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
+                      color: "var(--text-muted)"
+                    }}>Ctrl+P</kbd>
+
+                    <span>执行当前 SQL</span>
+                    <kbd style={{
+                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
+                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
+                      color: "var(--text-muted)"
+                    }}>Ctrl+Enter</kbd>
+
+                    <span>聚焦 AI 面板</span>
+                    <kbd style={{
+                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
+                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
+                      color: "var(--text-muted)"
+                    }}>Alt+A</kbd>
+
+                    <span>打开命令面板</span>
+                    <kbd style={{
+                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
+                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
+                      color: "var(--text-muted)"
+                    }}>Ctrl+Shift+P</kbd>
                   </div>
 
-                  <div style={{ height: "1px", background: "var(--border-light)" }} />
+                  <div style={{ height: "1px", background: "var(--border-light)", margin: "0 0 16px" }} />
 
-                  {/* Shortcuts List */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "left" }}>
-                    <h4 style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
-                      键盘流快捷指令:
-                    </h4>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "6px 12px", fontSize: "0.74rem", color: "var(--text-secondary)" }}>
-                      <span>打开全局模糊命令面板</span>
-                      <kbd style={{ background: "var(--bg-secondary)", padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border-medium)", fontFamily: "monospace", fontSize: "0.65rem" }}>Ctrl + P</kbd>
-
-                      <span>新建 SQL 查询标签页</span>
-                      <kbd style={{ background: "var(--bg-secondary)", padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border-medium)", fontFamily: "monospace", fontSize: "0.65rem" }}>Ctrl + T</kbd>
-
-                      <span>执行当前 SQL 语句</span>
-                      <kbd style={{ background: "var(--bg-secondary)", padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border-medium)", fontFamily: "monospace", fontSize: "0.65rem" }}>Ctrl + Enter</kbd>
-
-                      <span>关闭当前聚焦标签页</span>
-                      <kbd style={{ background: "var(--bg-secondary)", padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border-medium)", fontFamily: "monospace", fontSize: "0.65rem" }}>Ctrl + W</kbd>
-
-                      <span>聚焦/折叠 AI 智能侧栏</span>
-                      <kbd style={{ background: "var(--bg-secondary)", padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border-medium)", fontFamily: "monospace", fontSize: "0.65rem" }}>Alt + A</kbd>
-                    </div>
-                  </div>
-
-                  <div style={{ height: "1px", background: "var(--border-light)" }} />
-
-                  <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
                     <button
                       className="btn-primary"
                       onClick={() => handleOpenQueryTab()}
-                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "6px 0" }}
+                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "5px 0" }}
                     >
-                      <Plus size={13} />
+                      <Plus size={12} />
                       新建 SQL 标签页
                     </button>
                     <button
                       className="btn-secondary"
                       onClick={() => setShowCommandPalette(true)}
-                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "6px 0" }}
+                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "5px 0" }}
                     >
                       打开命令面板
                     </button>
@@ -1156,7 +1124,7 @@ export const WorkbenchPage = ({
                           </button>
                         );
                       })}
-                      <div style={{ marginLeft: "auto", fontSize: "0.7rem", color: "var(--text-muted)", paddingBottom: 4 }}>
+                      <div style={{ marginLeft: "auto", fontSize: "0.76rem", color: "var(--text-muted)", paddingBottom: 4 }}>
                         聚焦表: <strong style={{ color: "var(--text-secondary)" }}>{activeTab.tableName}</strong>
                       </div>
                     </div>
@@ -1277,192 +1245,133 @@ export const WorkbenchPage = ({
                 </button>
               </div>
 
-              {/* RAG Context Strip */}
-              <div style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-light)", fontSize: "0.68rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: 2 }}>
-                <div><strong>上下文数据库:</strong> <code style={{ color: "var(--accent-indigo)" }}>{activeDataSource?.database_name || "未激活"}</code></div>
-                {activeTab?.tableName && (
-                  <div><strong>当前分析表:</strong> <code style={{ color: "var(--accent-teal)" }}>{activeTab.tableName}</code></div>
-                )}
-                {activeTab?.type === "query" && (
-                  <div><strong>聚焦会话:</strong> <code style={{ color: "var(--accent-indigo)" }}>SQL Console ({activeTab.title})</code></div>
+              {/* Context Strip */}
+              <div style={{ padding: "6px 10px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-light)", fontSize: "0.65rem", color: "var(--text-secondary)", display: "flex", flexDirection: "column", gap: 1 }}>
+                <div><span style={{ opacity: 0.6 }}>数据库</span> <strong style={{ color: "var(--text-primary)" }}>{activeDataSource?.database_name || "未连接"}</strong></div>
+                {activeTab ? (
+                  <>
+                    <div><span style={{ opacity: 0.6 }}>会话</span> <strong style={{ color: "var(--text-primary)" }}>{activeTab.type === "query" ? `SQL Console (${activeTab.title})` : activeTab.type === "table" ? `表: ${activeTab.tableName}` : activeTab.title}</strong></div>
+                    {activeTab?.tableName && (
+                      <div><span style={{ opacity: 0.6 }}>当前表</span> <code style={{ color: "var(--accent-primary)", fontSize: "0.62rem" }}>{activeTab.tableName}</code></div>
+                    )}
+                    {activeTab?.lastExecutedAt && (
+                      <div><span style={{ opacity: 0.6 }}>最近执行</span> <strong style={{ color: "var(--text-primary)" }}>{activeTab.lastExecutedAt ? Math.round((Date.now() - activeTab.lastExecutedAt) / 1000) + "s 前" : ""}</strong></div>
+                    )}
+                  </>
+                ) : (
+                  <div><span style={{ opacity: 0.6 }}>状态</span> <span style={{ color: "var(--text-muted)" }}>未打开标签页</span></div>
                 )}
               </div>
 
-              {/* Quick Preset Actions based on active context */}
-              <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-                <div>
-                  <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>
-                    当前 Tab 专享快捷诊断:
-                  </span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {/* Main panel content */}
+              <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                {/* Quick actions — context-aware */}
+                <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-light)" }}>
+                  <div style={{ fontSize: "0.64rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4 }}>
+                    快捷动作
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
                     {activeTab?.type === "query" && (
                       <>
-                        <button
-                          onClick={() => triggerActiveTabAction("validate")}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          🔍 审查当前编辑器 SQL 安全性
-                        </button>
-                        <button
-                          onClick={() => triggerActiveTabAction("format")}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          ⌨️ 格式化 SQL 关键字大写
-                        </button>
-                        <button
-                          onClick={() => handleAiContextAction(`针对 SQL 会话中的 Draft 代码进行全面索引优化与语法调整建议。`)}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          🪄 AI 智能优化并重写 SQL
-                        </button>
+                        <button onClick={() => triggerActiveTabAction("execute")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>执行</button>
+                        <button onClick={() => triggerActiveTabAction("format")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>格式化</button>
+                        <button onClick={() => triggerActiveTabAction("validate")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>安全检查</button>
+                        <button onClick={() => handleAiContextAction("优化当前 SQL 的性能和可读性，返回优化后的标准 SQL。")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>AI 优化</button>
                       </>
                     )}
-
-                    {activeTab?.type === "table" && activeTab.activeSubTab === "data" && (
+                    {activeTab?.type === "table" && (
                       <>
-                        <button
-                          onClick={() => handleAiContextAction(`用最简洁的高可读性 SELECT SQL 关联查询表 ${activeTab.tableName} 并分页限制结果集。`)}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          SELECT 查询模板生成
-                        </button>
-                        <button
-                          onClick={() => handleAiContextAction(`分析并指出表 ${activeTab.tableName} 结构中是否有缺失索引，或者主外键关联的潜在优化风险。`)}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          🩺 表定义诊断与外键检测
-                        </button>
+                        <button onClick={() => handleAiContextAction(`为表 ${activeTab.tableName} 生成标准 SELECT 查询模板。`)}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>生成查询</button>
+                        <button onClick={() => handleAiContextAction(`诊断表 ${activeTab.tableName} 的索引、外键和结构问题。`)}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>诊断结构</button>
+                        <button onClick={() => handleAiContextAction(`分析表 ${activeTab.tableName} 的 ER 关系拓扑。`)}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>分析关系</button>
                       </>
                     )}
-
-                    {activeTab?.type === "table" && activeTab.activeSubTab === "er" && (
-                      <>
-                        <button
-                          onClick={() => handleAiContextAction(`分析并评估当前表 ${activeTab.tableName} 关联图拓扑设计是否合理，给出标准规范的级联调整意见。`)}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          📐 诊断拓扑拓扑关系
-                        </button>
-                        <button
-                          onClick={() => handleAiContextAction(`为表 ${activeTab.tableName} 生成 5 行典型的高真实度仿真外键测试插入 SQL。`)}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          🧪 快捷生成关联测试数据
-                        </button>
-                      </>
-                    )}
-
                     {!activeTab && (
                       <>
-                        <button
-                          onClick={() => handleAiContextAction("扫描当前已连接的数据表，指出表命名规范性以及外键依赖图是否合理。")}
-                          className="btn-secondary"
-                          style={{ padding: "4px 8px", fontSize: "0.72rem", width: "100%", justifyContent: "flex-start" }}
-                        >
-                          📊 诊断全局数据架构规范
-                        </button>
+                        <button onClick={() => handleOpenQueryTab()}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>打开控制台</button>
+                        <button onClick={() => handleAiContextAction("列出当前数据库的所有表和视图。")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>探索数据库</button>
+                        <button onClick={() => handleAiContextAction("分析当前数据库的表命名规范和整体架构。")}
+                          className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24 }}>诊断架构</button>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* AI suggested/response box */}
-                {aiResponse && (
-                  <div
-                    className="lab-card"
-                    style={{
-                      padding: 10,
-                      background: "rgba(0,0,0,0.01)",
-                      border: "1px solid var(--border-light)",
-                      fontSize: "0.74rem",
-                      lineHeight: 1.4,
-                      borderRadius: 6
-                    }}
-                  >
-                    <div style={{ fontWeight: 700, color: "var(--accent-indigo)", marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}>
-                      <ShieldCheck size={11} style={{ color: "var(--accent-green)" }} />
-                      <span>Copilot 优化与生成结果:</span>
-                    </div>
-                    <pre
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "0.7rem",
-                        color: "var(--text-primary)",
-                        background: "#fff",
-                        padding: 6,
-                        borderRadius: 4,
-                        overflowX: "auto",
-                        border: "1px solid var(--border-light)"
-                      }}
-                    >
-                      {aiResponse}
-                    </pre>
-
-                    {aiResponse.includes("SELECT") && (
-                      <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                        <button
-                          onClick={() => {
+                {/* Response / suggestions area */}
+                <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
+                  {aiResponse ? (
+                    <div style={{ padding: 6, background: "var(--bg-secondary)", border: "1px solid var(--border-light)", fontSize: "0.7rem", lineHeight: 1.4 }}>
+                      <div style={{ fontWeight: 600, color: "var(--accent-primary)", marginBottom: 3, fontSize: "0.64rem" }}>
+                        Copilot 结果
+                      </div>
+                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.66rem", color: "var(--text-primary)", background: "#fff", padding: 4, overflowX: "auto", border: "1px solid var(--border-light)", margin: 0 }}>
+                        {aiResponse}
+                      </pre>
+                      {aiResponse.includes("SELECT") && (
+                        <div style={{ marginTop: 4 }}>
+                          <button onClick={() => {
                             const match = aiResponse.match(/SELECT[\s\S]+?;/i);
                             handleOpenQueryTab(match ? match[0] : aiResponse, "AI 生成 SQL");
                           }}
-                          className="btn-primary"
-                          style={{ flex: 1, padding: "2px 0", fontSize: "0.68rem", justifyContent: "center" }}
-                        >
-                          插入新控制台
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {aiLoading && (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, padding: "14px 0", color: "var(--text-muted)" }}>
-                    <span className="animate-spin" style={{ fontSize: 16 }}>↻</span>
-                    <span style={{ fontSize: "0.7rem" }}>AI 元模型检索推理中...</span>
-                  </div>
-                )}
+                            className="btn-primary" style={{ padding: "2px 0", fontSize: "0.64rem", width: "100%", justifyContent: "center" }}>
+                            插入新控制台
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : aiLoading ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px 0", color: "var(--text-muted)", fontSize: "0.66rem" }}>
+                      <span className="animate-spin" style={{ fontSize: 12 }}>↻</span> AI 推理中...
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--text-secondary)" }}>可以试试:</div>
+                      {activeTab?.type === "query" ? (
+                        <>
+                          <div style={{ marginBottom: 2 }}>· 优化当前 SQL 语句</div>
+                          <div style={{ marginBottom: 2 }}>· 加 @limit 限制返回行数</div>
+                          <div style={{ marginBottom: 2 }}>· 加 @export 导出查询结果</div>
+                          <div>· 解释 SQL 执行逻辑</div>
+                        </>
+                      ) : activeTab?.type === "table" ? (
+                        <>
+                          <div style={{ marginBottom: 2 }}>· 统计 {activeTab.tableName} 中各字段分布</div>
+                          <div style={{ marginBottom: 2 }}>· 找出和 {activeTab.tableName} 关联的表</div>
+                          <div style={{ marginBottom: 2 }}>· 为 {activeTab.tableName} 生成测试数据</div>
+                          <div>· 诊断 {activeTab.tableName} 的索引和外键</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ marginBottom: 2 }}>· 统计各表数据量</div>
+                          <div style={{ marginBottom: 2 }}>· 找出数据库中的核心关系表</div>
+                          <div style={{ marginBottom: 2 }}>· 生成当前库的 ER 图</div>
+                          <div>· 分析表命名规范</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Chat Prompt Input Form */}
-              <form
-                onSubmit={handleAskGeneralAi}
-                style={{
-                  padding: 10,
-                  borderTop: "1px solid var(--border-light)",
-                  background: "var(--bg-secondary)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6
-                }}
-              >
-                <textarea
-                  className="input-field"
-                  placeholder="请输入需求生成 SQL，或诊断结构问题..."
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  style={{ height: 44, fontSize: "0.76rem", resize: "none" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleAskGeneralAi(e);
-                    }
-                  }}
-                />
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={aiLoading || !aiPrompt.trim()}
-                  style={{ padding: "4px 0", fontSize: "0.74rem", width: "100%", justifyContent: "center" }}
-                >
-                  发送给 Agent
+              {/* Input form */}
+              <form onSubmit={handleAskGeneralAi}
+                style={{ padding: "6px 8px", borderTop: "1px solid var(--border-light)", background: "var(--bg-secondary)", display: "flex", flexDirection: "column", gap: 3 }}>
+                <textarea className="input-field" placeholder="Ask 数据库、SQL、结构..."
+                  value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
+                  style={{ height: 34, fontSize: "0.7rem", resize: "none" }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleAskGeneralAi(e); } }} />
+                <button type="submit" className="btn-primary" disabled={aiLoading || !aiPrompt.trim()}
+                  style={{ padding: "2px 0", fontSize: "0.68rem", width: "100%", justifyContent: "center" }}>
+                  发送
                 </button>
               </form>
             </div>
@@ -1480,7 +1389,7 @@ export const WorkbenchPage = ({
           borderTop: "1px solid var(--border-light)",
           padding: "0 12px",
           height: 28,
-          fontSize: "0.7rem",
+          fontSize: "0.76rem",
           color: "var(--text-secondary)",
           userSelect: "none"
         }}
@@ -1588,7 +1497,7 @@ export const WorkbenchPage = ({
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              fontSize: "0.7rem",
+              fontSize: "0.76rem",
               color: "var(--accent-indigo)",
               display: "flex",
               alignItems: "center",
@@ -1628,7 +1537,7 @@ export const WorkbenchPage = ({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ padding: "4px 8px", fontSize: "0.7rem", color: "var(--text-muted)", borderBottom: "1px solid var(--border-light)", marginBottom: 4, fontWeight: 600 }}>
+            <div style={{ padding: "4px 8px", fontSize: "0.76rem", color: "var(--text-muted)", borderBottom: "1px solid var(--border-light)", marginBottom: 4, fontWeight: 600 }}>
               数据表: {treeContextMenu.tableName}
             </div>
             <button

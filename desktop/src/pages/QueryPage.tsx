@@ -1,36 +1,18 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
-  Award,
-  BarChart3,
-  Check,
-  Copy,
-  Database,
-  Download,
-  History,
-  Play,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  ShieldAlert,
-  Sparkles,
-  Table,
-  Trash2,
-  X,
+  Activity, Award, Check, Copy, Play, ShieldAlert, Sparkles, X,
 } from "lucide-react";
 import { api } from "../lib/api";
-import type { DataSource, ERDiagramData, QueryHistory } from "../lib/api";
-import { SqlEditor } from "../components/SqlEditor";
-import { DataTable } from "../components/DataTable";
+import type { DataSource, QueryHistory } from "../lib/api";
 import { AiQueryInput } from "../components/AiQueryInput";
 import { StatusIndicator } from "../components/StatusIndicator";
-import { ExplainVisualizer } from "../components/ExplainVisualizer";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { AiBenchmarkDrawer } from "../components/AiBenchmarkDrawer";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { useQueryExecution, type QueryTabState } from "../hooks/useQueryExecution";
 import { actionRegistry, type ParsedAction, planHasErrors, planWarnings } from "../lib/queryActions";
+import { ConsoleTranscript, type ConsoleBlock as ConsoleTranscriptBlock } from "../components/ConsoleTranscript";
 
 interface QueryPageProps {
   datasource: DataSource;
@@ -53,22 +35,20 @@ interface QueryPageProps {
 type ViewTab = "results" | "history";
 type ResultViewMode = "table" | "chart" | "explain";
 
-const ChartPanel = lazy(() =>
-  import("../components/ChartPanel").then((module) => ({ default: module.ChartPanel })),
-);
+
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
 export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChange }: QueryPageProps) => {
-  const [activeBottomTab, setActiveBottomTab] = useState<ViewTab>("results");
-  const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("table");
-  const [history, setHistory] = useState<QueryHistory[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyMutating, setHistoryMutating] = useState(false);
-  const [historySearch, setHistorySearch] = useState("");
-  const [historyStatus, setHistoryStatus] = useState<"all" | "success" | "failed" | "timeout" | "cancelled">("all");
+  const [_activeBottomTab, setActiveBottomTab] = useState<ViewTab>("results");
+  const [_resultViewMode, _setResultViewMode] = useState<ResultViewMode>("table");
+  const [_history, setHistory] = useState<QueryHistory[]>([]);
+  const [_historyLoading, setHistoryLoading] = useState(false);
+  const [_historyMutating, setHistoryMutating] = useState(false);
+  const [historySearch, _setHistorySearch] = useState("");
+  const [historyStatus, _setHistoryStatus] = useState<"all" | "success" | "failed" | "timeout" | "cancelled">("all");
   const [copied, setCopied] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -87,8 +67,10 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
 
   const [showAiInput, setShowAiInput] = useState(false);
   const [showGuardrailDrawer, setShowGuardrailDrawer] = useState(false);
+  const [consoleMode] = useState(true);
+  const [consoleBlocks, setConsoleBlocks] = useState<ConsoleTranscriptBlock[]>([]);
   const handledActionNonceRef = useRef<number | undefined>(undefined);
-  const [editorHeight, setEditorHeight] = useState(() => {
+  const [editorHeight] = useState(() => {
     const saved = localStorage.getItem("databox_editor_height");
     return saved ? Number(saved) : 320;
   });
@@ -97,24 +79,6 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     localStorage.setItem("databox_editor_height", String(editorHeight));
   }, [editorHeight]);
 
-  const handleHeightDragMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.pageY;
-    const startHeight = editorHeight;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaY = moveEvent.pageY - startY;
-      setEditorHeight(Math.max(120, Math.min(800, startHeight + deltaY)));
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-  };
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -151,15 +115,15 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
   });
 
   const toast = useToast();
-  const [schemaTables, setSchemaTables] = useState<ERDiagramData["nodes"]>([]);
+  const [_schemaTables, _setSchemaTables] = useState<Record<string,unknown>["nodes"]>([]);
 
-  const fetchSchemaMetadata = useCallback(async () => {
+  const _fetchSchemaMetadata = useCallback(async () => {
     try {
       const data = await api.getERDiagram(datasource.id);
-      setSchemaTables(data.nodes || []);
+      _setSchemaTables(data.nodes || []);
     } catch (e) {
       console.error("Failed to fetch schema metadata for autocomplete:", e);
-      setSchemaTables([]);
+      _setSchemaTables([]);
     }
   }, [datasource.id]);
 
@@ -171,8 +135,8 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
 
   useEffect(() => {
     setActiveBottomTab("results");
-    void fetchSchemaMetadata();
-  }, [fetchSchemaMetadata]);
+    void _fetchSchemaMetadata();
+  }, [_fetchSchemaMetadata]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -349,38 +313,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     }, 100);
   };
 
-  const handleCopyResultJson = () => {
-    if (!activeEditorTab?.queryResult) return;
-    const { columns, rows } = activeEditorTab.queryResult;
-    const json = JSON.stringify(rows.map((row) => {
-      const obj: Record<string, unknown> = {};
-      columns.forEach((c) => { obj[c] = row[c] ?? null; });
-      return obj;
-    }), null, 2);
-    navigator.clipboard.writeText(json).then(() => {
-      toast.toast(`已复制 ${rows.length} 行 JSON`, "success");
-    }).catch(() => toast.toast("复制失败", "error"));
-  };
 
-  const handleCopyResultInsert = () => {
-    if (!activeEditorTab?.queryResult) return;
-    const { columns, rows } = activeEditorTab.queryResult;
-    const tableName = "table_name";
-    const inserts = rows.map((row) => {
-      const vals = columns.map((c) => {
-        const v = row[c];
-        if (v === null || v === undefined) return "NULL";
-        if (typeof v === "number" || typeof v === "bigint") return String(v);
-        if (typeof v === "boolean") return v ? "1" : "0";
-        const s = String(v).replace(/\\/g, "\\\\").replace(/'/g, "''");
-        return `'${s}'`;
-      });
-      return `INSERT INTO \`${tableName}\` (${columns.map((c) => `\`${c}\``).join(", ")})\nVALUES (${vals.join(", ")});`;
-    }).join("\n\n");
-    navigator.clipboard.writeText(inserts).then(() => {
-      toast.toast(`已复制 ${rows.length} 行 INSERT`, "success");
-    }).catch(() => toast.toast("复制失败", "error"));
-  };
 
   // ── @ 查询动作（ExecutionPlan 架构：sourceText 永不污染，只改 compiledSql）──
 
@@ -421,6 +354,85 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     },
     [activeEditorTab, updateActiveTab, handleExecuteSql, toast],
   );
+
+  // ── Console mode execution — appends blocks to transcript ──
+
+  const handleConsoleExecute = useCallback(() => {
+    if (!activeEditorTab?.sql.trim() || activeEditorTab.status === "running") return;
+
+    const sql = activeEditorTab.sql.trim();
+    const inputBlock: ConsoleTranscriptBlock = {
+      id: `in-${Date.now()}`,
+      type: "input",
+      sql,
+      createdAt: Date.now(),
+    };
+    const runningBlock: ConsoleTranscriptBlock = {
+      id: `run-${Date.now()}`,
+      type: "running",
+      sql,
+      startedAt: Date.now(),
+    };
+
+    setConsoleBlocks((prev) => [...prev, inputBlock, runningBlock]);
+
+    // Use directive pipeline
+    const plan = actionRegistry.finalize(sql);
+    if (planHasErrors(plan)) {
+      const msg = plan.issues.filter((i) => i.level === "error").map((e) => `• ${e.message}`).join("\n");
+      setConsoleBlocks((prev) => {
+        const filtered = prev.filter((b) => b.id !== runningBlock.id);
+        return [...filtered, {
+          id: `err-${Date.now()}`,
+          type: "error",
+          sql,
+          message: `查询动作配置错误:\n${msg}`,
+        }];
+      });
+      return;
+    }
+
+    actionRegistry.applyPhase(plan, "beforeExecute");
+
+    void handleExecuteSql(plan.context.timeoutMs, plan.compiledSql);
+  }, [activeEditorTab, handleExecuteSql]);
+
+  // Sync console blocks with execution results
+  const prevResultRef = useRef(activeEditorTab?.queryResult);
+  useEffect(() => {
+    if (!consoleMode) return;
+    const tab = activeEditorTab;
+    if (!tab) return;
+
+    // Remove old running block when result/error arrives
+    if (tab.status !== "running" && prevResultRef.current !== tab.queryResult) {
+      prevResultRef.current = tab.queryResult;
+
+      if (tab.status === "success" && tab.queryResult) {
+        setConsoleBlocks((prev) => {
+          const withoutRunning = prev.filter((b) => b.type !== "running");
+          return [...withoutRunning, {
+            id: `res-${Date.now()}`,
+            type: "result",
+            sql: tab.sql,
+            result: tab.queryResult!,
+          }];
+        });
+      } else if (tab.status === "error" && tab.queryError) {
+        setConsoleBlocks((prev) => {
+          const withoutRunning = prev.filter((b) => b.type !== "running");
+          return [...withoutRunning, {
+            id: `err-${Date.now()}`,
+            type: "error",
+            sql: tab.sql,
+            message: tab.queryError ?? "未知错误",
+          }];
+        });
+      } else if (tab.status === "cancelled" || tab.status === "timeout") {
+        setConsoleBlocks((prev) => prev.filter((b) => b.type !== "running"));
+      }
+    }
+  }, [activeEditorTab?.status, activeEditorTab?.queryResult, activeEditorTab?.queryError, consoleMode]);
 
   const handleRemoveDirective = useCallback(
     (index: number) => {
@@ -475,16 +487,6 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeEditorTab, handleValidateSql, handleExecuteWithDirectives, handleAddTab, handleCloseTab]);
 
-  const isExplainQuery = useMemo(() => {
-    if (!activeEditorTab?.queryResult) return false;
-    const cols = activeEditorTab.queryResult.columns;
-    return (
-      cols.includes("select_type") ||
-      cols.includes("table") ||
-      cols.includes("detail") ||
-      cols.includes("selectid")
-    );
-  }, [activeEditorTab?.queryResult]);
 
   const isDirty = (tab: QueryTabState) => tab.sql !== tab.savedSql;
 
@@ -495,22 +497,11 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     window.setTimeout(() => setCopied(false), 1500);
   };
 
-  const getHistorySql = (item: QueryHistory) =>
-    item.executed_sql || item.safe_sql || item.generated_sql || item.submitted_sql || "";
 
-  const handleReuseHistory = (item: QueryHistory) => {
-    const sql = getHistorySql(item);
-    if (!sql) return;
-    openSqlDraft(sql, item.question || "历史查询");
-    setActiveBottomTab("results");
-  };
 
   const [deleteConfirm, setDeleteConfirm] = useState<{ item: QueryHistory } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
 
-  const handleDeleteHistory = async (item: QueryHistory) => {
-    setDeleteConfirm({ item });
-  };
 
   const doDeleteHistory = async () => {
     const item = deleteConfirm?.item;
@@ -542,20 +533,6 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     }
   };
 
-  const formatHistoryStatus = (status: QueryHistory["execution_status"] | string) => {
-    switch (status) {
-      case "success":
-        return "成功";
-      case "failed":
-        return "失败";
-      case "timeout":
-        return "超时";
-      case "cancelled":
-        return "已取消";
-      default:
-        return status || "-";
-    }
-  };
 
   const handleAiGenerate = async () => {
     const question = aiQuestion.trim();
@@ -988,484 +965,28 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
             </div>
           )}
 
-          {/* Editor */}
+          {/* Console Transcript */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            <SqlEditor
-              value={activeEditorTab?.sql ?? ""}
-              onChange={(v) => updateActiveTab(() => ({ sql: v }))}
-              schemaTables={schemaTables}
+            <ConsoleTranscript
+              blocks={consoleBlocks}
+              currentSql={activeEditorTab?.sql ?? ""}
+              onSqlChange={(v) => updateActiveTab(() => ({ sql: v }))}
+              onExecute={handleConsoleExecute}
+              onFormat={handleFormatSql}
+              onExplain={handleRunExplain}
+              onInjectLimit={handleInjectLimit}
+              onCancel={() => activeEditorTab && handleCancelQuery(activeEditorTab.id)}
+              onClear={() => setConsoleBlocks([])}
+              isRunning={activeEditorTab?.status === "running"}
+              databaseName={datasource.database_name}
+              engineLabel={datasource.db_type}
             />
           </div>
         </div>
 
-        {/* Draggable Row Height Splitter */}
-        <div
-          onMouseDown={handleHeightDragMouseDown}
-          style={{
-            height: 8,
-            cursor: "row-resize",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "transparent",
-            userSelect: "none",
-            flexShrink: 0,
-          }}
-          className="row-splitter"
-          title="上下拖动调整编辑器与结果集高度"
-        >
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--border-medium)" }} />
-        </div>
-
-        {/* Results / History */}
-        <div
-          className="lab-card"
-          style={{ display: "flex", flexDirection: "column", overflow: "hidden", flex: 1, minHeight: 120 }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "8px 14px",
-              borderBottom: "1px solid var(--border-light)",
-              background: "var(--bg-secondary)",
-            }}
-          >
-            <div className="pill-tabs">
-              <button
-                className={`pill-tab ${activeBottomTab === "results" ? "active" : ""}`}
-                onClick={() => setActiveBottomTab("results")}
-              >
-                <Table size={13} />
-                结果
-              </button>
-              <button
-                className={`pill-tab ${activeBottomTab === "history" ? "active" : ""}`}
-                onClick={() => setActiveBottomTab("history")}
-              >
-                <History size={13} />
-                历史
-              </button>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
-              {activeBottomTab === "history" && (
-                <>
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      minWidth: 180,
-                      maxWidth: 240,
-                      padding: "4px 8px",
-                      border: "1px solid var(--border-light)",
-                      borderRadius: 6,
-                      background: "var(--bg-surface)",
-                    }}
-                  >
-                    <Search size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-                    <input
-                      value={historySearch}
-                      onChange={(e) => setHistorySearch(e.target.value)}
-                      placeholder="搜索问题或 SQL"
-                      style={{
-                        border: "none",
-                        outline: "none",
-                        background: "transparent",
-                        width: "100%",
-                        minWidth: 0,
-                        color: "var(--text-primary)",
-                        fontSize: "0.78rem",
-                      }}
-                    />
-                  </label>
-                  <select
-                    className="input-field input-field-sm"
-                    value={historyStatus}
-                    onChange={(e) => setHistoryStatus(e.target.value as typeof historyStatus)}
-                    style={{ width: 104, height: 30, fontSize: "0.78rem" }}
-                  >
-                    <option value="all">全部状态</option>
-                    <option value="success">成功</option>
-                    <option value="failed">失败</option>
-                    <option value="timeout">超时</option>
-                    <option value="cancelled">已取消</option>
-                  </select>
-                  <button
-                    className="btn-ghost"
-                    onClick={() => void fetchHistory()}
-                    disabled={historyLoading}
-                    title="刷新历史"
-                    style={{ padding: "5px 8px" }}
-                  >
-                    <RefreshCw size={13} />
-                  </button>
-                  <button
-                    className="btn-ghost"
-                    onClick={() => setClearConfirm(true)}
-                    disabled={historyMutating || history.length === 0}
-                    title="清空当前数据源历史"
-                    style={{ padding: "5px 8px", color: "var(--accent-red)" }}
-                  >
-                    <Trash2 size={13} />
-                    清空
-                  </button>
-                </>
-              )}
-              {activeEditorTab?.queryError && (
-                <span
-                  className="status-badge status-badge-error"
-                  style={{
-                    maxWidth: 320,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {activeEditorTab.queryError}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div style={{ flex: 1, overflow: "auto" }}>
-            {activeBottomTab === "results" && (
-              <>
-                {!activeEditorTab?.queryResult ? (
-                  <div className="empty-state" style={{ padding: 36 }}>
-                    {activeEditorTab?.status === "running" ? (
-                      <>
-                        <div className="empty-state-desc">SQL 正在安全执行中，请稍候...</div>
-                        <div style={{ marginTop: 8, width: 120, height: 3, background: "var(--accent-indigo-light)", borderRadius: 2, overflow: "hidden" }}>
-                          <div className="progress-bar-glow" style={{ height: "100%", width: "60%", background: "var(--accent-indigo)", borderRadius: 2 }} />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Play size={28} className="empty-state-icon" style={{ color: "var(--accent-indigo)" }} />
-                        <div className="empty-state-desc">在编辑器中编写 SQL，点击「执行」或按 <strong>Ctrl+Enter</strong></div>
-                        <div style={{ marginTop: 12, fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                          也可通过 AI 智能问数自动生成 SQL
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    {/* Result meta bar */}
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "6px 16px",
-                        borderBottom: "1px solid var(--border-light)",
-                        fontSize: "0.78rem",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      <div style={{ display: "flex", gap: 16 }}>
-                        <span>
-                          行数:{" "}
-                          <strong style={{ color: "var(--text-primary)" }}>
-                            {activeEditorTab.queryResult.rowCount}
-                          </strong>
-                        </span>
-                        <span>
-                          列数:{" "}
-                          <strong style={{ color: "var(--text-primary)" }}>
-                            {activeEditorTab.queryResult.columns.length}
-                          </strong>
-                        </span>
-                        <span>
-                          耗时:{" "}
-                          <strong style={{ color: "var(--text-primary)" }}>
-                            {activeEditorTab.queryResult.latencyMs}ms
-                          </strong>
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        {isExplainQuery && (
-                          <button
-                            className={resultViewMode === "explain" ? "btn-primary" : "btn-secondary"}
-                            style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                            onClick={() => setResultViewMode("explain")}
-                          >
-                            <Activity size={12} /> 执行计划
-                          </button>
-                        )}
-                        <button
-                          className={resultViewMode === "table" ? "btn-primary" : "btn-secondary"}
-                          style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                          onClick={() => setResultViewMode("table")}
-                        >
-                          <Table size={12} /> 表格
-                        </button>
-                        <button
-                          className={resultViewMode === "chart" ? "btn-primary" : "btn-secondary"}
-                          style={{ padding: "3px 8px", fontSize: "0.74rem" }}
-                          onClick={() => setResultViewMode("chart")}
-                        >
-                          <BarChart3 size={12} /> 图表
-                        </button>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize: "0.74rem" }}
-                          onClick={handleCopyResultJson}
-                          title="复制结果为 JSON 数组"
-                        >
-                          <Copy size={11} /> JSON
-                        </button>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize: "0.74rem" }}
-                          onClick={handleCopyResultInsert}
-                          title="复制结果为 INSERT 语句"
-                        >
-                          <Database size={11} /> INSERT
-                        </button>
-                        <button
-                          className="btn-ghost"
-                          style={{ fontSize: "0.74rem" }}
-                          onClick={handleExportCsv}
-                        >
-                          <Download size={12} /> CSV
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Performance Latency Breakdown Timeline */}
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "6px 16px",
-                        background: "var(--bg-secondary)",
-                        borderBottom: "1px solid var(--border-light)",
-                        fontSize: "0.74rem",
-                        gap: 12,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-secondary)" }}>
-                        <span>耗时拆解:</span>
-                        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                          <span>连接: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.connectMs ?? 0}ms</strong></span>
-                          <span>安全过滤: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.guardrailMs ?? 0}ms</strong></span>
-                          <span>引擎执行: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.executeMs ?? 0}ms</strong></span>
-                          <span>拉取: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.fetchMs ?? 0}ms</strong></span>
-                          <span>序列化: <strong style={{ color: "var(--text-primary)" }}>{activeEditorTab.queryResult.serializeMs ?? 0}ms</strong></span>
-                        </div>
-                      </div>
-
-                      {(() => {
-                        const r = activeEditorTab.queryResult;
-                        const c = r.connectMs ?? 0;
-                        const g = r.guardrailMs ?? 0;
-                        const e = r.executeMs ?? 0;
-                        const f = r.fetchMs ?? 0;
-                        const s = r.serializeMs ?? 0;
-                        const total = Math.max(1, c + g + e + f + s);
-                        const pc = (c / total) * 100;
-                        const pg = (g / total) * 100;
-                        const pe = (e / total) * 100;
-                        const pf = (f / total) * 100;
-                        const ps = (s / total) * 100;
-                        return (
-                          <div
-                            style={{
-                              display: "flex",
-                              width: 140,
-                              height: 6,
-                              borderRadius: 3,
-                              overflow: "hidden",
-                              background: "rgba(0,0,0,0.1)",
-                            }}
-                            title={`总计耗时拆解 (连接: ${c}ms, 安全: ${g}ms, 执行: ${e}ms, 拉取: ${f}ms, 序列化: ${s}ms)`}
-                          >
-                            <div style={{ width: `${pc}%`, background: "#10B981" }} title={`连接: ${c}ms`} />
-                            <div style={{ width: `${pg}%`, background: "#3B82F6" }} title={`安全: ${g}ms`} />
-                            <div style={{ width: `${pe}%`, background: "#8B5CF6" }} title={`执行: ${e}ms`} />
-                            <div style={{ width: `${pf}%`, background: "#F59E0B" }} title={`拉取: ${f}ms`} />
-                            <div style={{ width: `${ps}%`, background: "#EF4444" }} title={`序列化: ${s}ms`} />
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Warnings Alert */}
-                    {activeEditorTab.queryResult.warnings && activeEditorTab.queryResult.warnings.length > 0 && (
-                      <div
-                        className="animate-fade-in"
-                        style={{
-                          background: "rgba(245, 158, 11, 0.08)",
-                          borderBottom: "1px dashed rgba(245, 158, 11, 0.2)",
-                          padding: "8px 16px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 4,
-                          fontSize: "0.78rem",
-                          color: "var(--accent-amber)",
-                        }}
-                      >
-                        {activeEditorTab.queryResult.warnings.map((warn, i) => (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: "10px" }}>!</span>
-                            <span>{warn}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {resultViewMode === "explain" && isExplainQuery ? (
-                      <div style={{ padding: 12 }}>
-                        <ErrorBoundary title="执行计划可视化解析异常">
-                          <ExplainVisualizer
-                            columns={activeEditorTab.queryResult.columns}
-                            rows={activeEditorTab.queryResult.rows}
-                          />
-                        </ErrorBoundary>
-                      </div>
-                    ) : resultViewMode === "table" ? (
-                      <ErrorBoundary title="数据网格 (DataTable) 渲染崩溃">
-                        <DataTable
-                          columns={activeEditorTab.queryResult.columns}
-                          rows={activeEditorTab.queryResult.rows}
-                          maxHeight="100%"
-                        />
-                      </ErrorBoundary>
-                    ) : (
-                      <div style={{ padding: 12 }}>
-                        <ErrorBoundary title="数据分析图表 (ChartPanel) 渲染崩溃">
-                          <Suspense fallback={<div className="skeleton" style={{ height: 260, borderRadius: 8 }} />}>
-                            <ChartPanel
-                              columns={activeEditorTab.queryResult.columns}
-                              rows={activeEditorTab.queryResult.rows}
-                            />
-                          </Suspense>
-                        </ErrorBoundary>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-
-            {activeBottomTab === "history" && (
-              <>
-                {historyLoading ? (
-                  <div style={{ padding: 24 }}>
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="skeleton" style={{ height: 40, marginBottom: 6, borderRadius: 4 }} />
-                    ))}
-                  </div>
-                ) : history.length === 0 ? (
-                  <div className="empty-state" style={{ padding: 36 }}>
-                    <div className="empty-state-desc">
-                      {historySearch.trim() || historyStatus !== "all"
-                        ? "没有匹配的查询历史"
-                        : "还没有执行历史，执行一条 SQL 试试"}
-                    </div>
-                  </div>
-                ) : (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>操作</th>
-                        <th>时间</th>
-                        <th>SQL</th>
-                        <th>审核</th>
-                        <th>状态</th>
-                        <th>行数</th>
-                        <th>耗时</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((item) => (
-                        <tr key={item.id}>
-                          <td style={{ whiteSpace: "nowrap" }}>
-                            <button
-                              className="btn-ghost"
-                              onClick={() => handleReuseHistory(item)}
-                              disabled={!getHistorySql(item)}
-                              title="复用 SQL"
-                              style={{ padding: "3px 7px", fontSize: "0.74rem" }}
-                            >
-                              <RotateCcw size={12} />
-                              复用
-                            </button>
-                            <button
-                              className="btn-ghost"
-                              onClick={() => handleDeleteHistory(item)}
-                              disabled={historyMutating}
-                              title="删除历史"
-                              style={{ padding: "3px 7px", color: "var(--accent-red)" }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </td>
-                          <td style={{ whiteSpace: "nowrap", fontSize: "0.8rem" }}>
-                            {new Date(item.created_at).toLocaleString("zh-CN", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </td>
-                          <td
-                            className="text-mono"
-                            style={{
-                              maxWidth: 240,
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              fontSize: "0.78rem",
-                            }}
-                            title={getHistorySql(item)}
-                          >
-                            {getHistorySql(item) || "-"}
-                          </td>
-                          <td>
-                            <StatusIndicator
-                              type={
-                                item.guardrail_result === "pass"
-                                  ? "success"
-                                  : item.guardrail_result === "warn"
-                                  ? "warning"
-                                  : "error"
-                              }
-                              size="sm"
-                            />
-                          </td>
-                          <td>
-                            <span
-                              style={{
-                                color:
-                                  item.execution_status === "success"
-                                    ? "var(--accent-green)"
-                                    : "var(--accent-red)",
-                                fontSize: "0.8rem",
-                              }}
-                            >
-                              {formatHistoryStatus(item.execution_status)}
-                            </span>
-                          </td>
-                          <td className="cell-number">{item.rows_returned}</td>
-                          <td className="cell-number">{item.execution_time_ms}ms</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* 鈹€鈹€ Sliding Detailed Guardrail Audit Drawer 鈹€鈹€ */}
+      {/* Sliding Detailed Guardrail Audit Drawer */}
       {showGuardrailDrawer && activeEditorTab?.guardrail && (
         <div
           style={{

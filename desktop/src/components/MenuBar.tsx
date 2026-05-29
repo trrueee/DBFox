@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { HardDrive } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export interface MenuItemDef {
   label: string;
@@ -146,28 +147,15 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
 
   // Window controls
   const handleMinimize = useCallback(() => {
-    try {
-      // Dynamic import to avoid issues when Tauri API is unavailable
-      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-        getCurrentWindow().minimize();
-      }).catch(() => {});
-    } catch { /* non-Tauri env */ }
+    try { getCurrentWindow().minimize(); } catch { /* non-Tauri env */ }
   }, []);
 
   const handleMaximize = useCallback(() => {
-    try {
-      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-        getCurrentWindow().toggleMaximize();
-      }).catch(() => {});
-    } catch { /* non-Tauri env */ }
+    try { getCurrentWindow().toggleMaximize(); } catch { /* non-Tauri env */ }
   }, []);
 
   const handleClose = useCallback(() => {
-    try {
-      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-        getCurrentWindow().close();
-      }).catch(() => {});
-    } catch { /* non-Tauri env */ }
+    try { getCurrentWindow().close(); } catch { /* non-Tauri env */ }
   }, []);
 
   const openMenuDef = menus.find((m) => m.id === openMenuId);
@@ -365,18 +353,16 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 34,
+            width: 46,
             height: "100%",
             border: "none",
             background: "transparent",
             color: "var(--text-secondary)",
-            fontSize: "0.85rem",
             cursor: "pointer",
-            fontFamily: "var(--font-body)",
           }}
         >
-          <svg width="10" height="10" viewBox="0 0 10 10">
-            <rect x="1" y="8" width="8" height="1" fill="currentColor" />
+          <svg width="10" height="1" viewBox="0 0 10 1">
+            <rect width="10" height="1" fill="currentColor" />
           </svg>
         </button>
         <button
@@ -387,26 +373,16 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 34,
+            width: 46,
             height: "100%",
             border: "none",
             background: "transparent",
             color: "var(--text-secondary)",
-            fontSize: "0.85rem",
             cursor: "pointer",
-            fontFamily: "var(--font-body)",
           }}
         >
           <svg width="10" height="10" viewBox="0 0 10 10">
-            <rect
-              x="1.5"
-              y="1.5"
-              width="7"
-              height="7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1"
-            />
+            <rect x="1" y="1" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1" />
           </svg>
         </button>
         <button
@@ -417,33 +393,17 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 34,
+            width: 46,
             height: "100%",
             border: "none",
             background: "transparent",
             color: "var(--text-secondary)",
-            fontSize: "0.85rem",
             cursor: "pointer",
-            fontFamily: "var(--font-body)",
           }}
         >
           <svg width="10" height="10" viewBox="0 0 10 10">
-            <line
-              x1="1"
-              y1="1"
-              x2="9"
-              y2="9"
-              stroke="currentColor"
-              strokeWidth="1.2"
-            />
-            <line
-              x1="9"
-              y1="1"
-              x2="1"
-              y2="9"
-              stroke="currentColor"
-              strokeWidth="1.2"
-            />
+            <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" strokeWidth="1" />
+            <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" strokeWidth="1" />
           </svg>
         </button>
       </div>

@@ -26,7 +26,7 @@ export interface ConfirmRequest {
   resolve: (confirmed: boolean) => void;
 }
 
-const defaultSql = "-- 从 Schema 选择一个表，或使用自动补全输入 SQL。\nSELECT 1;";
+const defaultSql = "";
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
