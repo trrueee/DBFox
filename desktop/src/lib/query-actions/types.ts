@@ -95,7 +95,7 @@ export interface ActionProcessor {
   /** Validates arguments and returns plan diagnostics */
   validate?(action: ParsedAction, plan: QueryExecutionPlan): QueryActionIssue[];
 
-  /** Applies phase modifications directly to the plan */
+  /** Applies deterministic plan/context mutations only. Must not perform side effects. */
   apply(action: ParsedAction, plan: QueryExecutionPlan): void;
 
   formatLabel(args: Record<string, string>): string;

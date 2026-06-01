@@ -86,7 +86,7 @@ export class ActionRegistry {
   // ── validate — Dynamic directives validation and conflict audits ──
   validate(plan: QueryExecutionPlan): QueryExecutionPlan {
     const typeCount = new Map<string, number>();
-    const registeredTypes = new Set<string>();
+    const presentTypes = new Set<string>();
 
     for (const action of plan.actions) {
       const proc = this.get(action.type);
@@ -103,7 +103,7 @@ export class ActionRegistry {
         continue;
       }
 
-      registeredTypes.add(action.type);
+      presentTypes.add(action.type);
       typeCount.set(action.type, (typeCount.get(action.type) ?? 0) + 1);
 
       // Re-execution restriction audit
@@ -117,23 +117,31 @@ export class ActionRegistry {
         });
       }
 
-      // Conflict audit
-      for (const conflict of proc.meta.conflictsWith) {
-        if (registeredTypes.has(conflict)) {
-          plan.issues.push({
-            code: "CONFLICTING_ACTIONS",
-            level: "error",
-            action: action.type,
-            message: `@${action.type} 与 @${conflict} 冲突，不能同时使用`,
-            stage: "validate",
-          });
-        }
-      }
-
       // Custom validation rules
       if (proc.validate) {
         const issues = proc.validate(action, plan);
         plan.issues.push(...issues);
+      }
+    }
+
+    // Two-stage conflict detection and de-duplication
+    const conflictPairs = new Set<string>();
+    for (const type1 of presentTypes) {
+      const proc1 = this.get(type1)!;
+      for (const type2 of proc1.meta.conflictsWith) {
+        if (presentTypes.has(type2)) {
+          const pairKey = [type1, type2].sort().join(":");
+          if (!conflictPairs.has(pairKey)) {
+            conflictPairs.add(pairKey);
+            plan.issues.push({
+              code: "CONFLICTING_ACTIONS",
+              level: "error",
+              action: type1,
+              message: `@${type1} 与 @${type2} 冲突，不能同时使用`,
+              stage: "validate",
+            });
+          }
+        }
       }
     }
 

@@ -39,4 +39,58 @@ describe("SQL Action Registry", () => {
     expect(planHasErrors(plan)).toBe(false);
     expect(plan.compiledSql).toBe("EXPLAIN SELECT id FROM users LIMIT 10;");
   });
+
+  it("deduplicates conflict issues regardless of directive ordering", () => {
+    const plan1 = actionRegistry.finalize("SELECT id FROM users\n@explain\n@export csv");
+    const conflicts1 = plan1.issues.filter((i) => i.code === "CONFLICTING_ACTIONS");
+    expect(conflicts1).toHaveLength(1);
+
+    const plan2 = actionRegistry.finalize("SELECT id FROM users\n@export csv\n@explain");
+    const conflicts2 = plan2.issues.filter((i) => i.code === "CONFLICTING_ACTIONS");
+    expect(conflicts2).toHaveLength(1);
+  });
+
+  it("only parses independent line-start @ directives", () => {
+    const sql = "SELECT id FROM users -- @limit 10\n/* @timeout 30 */\nSELECT @explain;";
+    const plan = actionRegistry.finalize(sql);
+
+    expect(plan.actions).toHaveLength(0);
+    expect(plan.compiledSql).toBe(sql.trim());
+  });
+
+  it("validates @limit boundaries and rejects invalid values", () => {
+    const plan1 = actionRegistry.finalize("SELECT * FROM t\n@limit 0");
+    expect(planHasErrors(plan1)).toBe(true);
+    expect(plan1.issues.some((i) => i.code === "INVALID_LIMIT_ROWS")).toBe(true);
+
+    const plan2 = actionRegistry.finalize("SELECT * FROM t\n@limit -5");
+    expect(planHasErrors(plan2)).toBe(true);
+    expect(plan2.issues.some((i) => i.code === "INVALID_LIMIT_ROWS")).toBe(true);
+
+    const plan3 = actionRegistry.finalize("SELECT * FROM t\n@limit 100000000");
+    expect(planHasErrors(plan3)).toBe(true);
+    expect(plan3.issues.some((i) => i.code === "INVALID_LIMIT_ROWS")).toBe(true);
+
+    const plan4 = actionRegistry.finalize("SELECT * FROM t\n@limit abc");
+    expect(planHasErrors(plan4)).toBe(true);
+    expect(plan4.issues.some((i) => i.code === "INVALID_LIMIT_ROWS")).toBe(true);
+  });
+
+  it("validates @timeout boundaries and rejects invalid values", () => {
+    const plan1 = actionRegistry.finalize("SELECT * FROM t\n@timeout 0");
+    expect(planHasErrors(plan1)).toBe(true);
+    expect(plan1.issues.some((i) => i.code === "INVALID_TIMEOUT_SECONDS")).toBe(true);
+
+    const plan2 = actionRegistry.finalize("SELECT * FROM t\n@timeout -1");
+    expect(planHasErrors(plan2)).toBe(true);
+    expect(plan2.issues.some((i) => i.code === "INVALID_TIMEOUT_SECONDS")).toBe(true);
+
+    const plan3 = actionRegistry.finalize("SELECT * FROM t\n@timeout 999999");
+    expect(planHasErrors(plan3)).toBe(true);
+    expect(plan3.issues.some((i) => i.code === "INVALID_TIMEOUT_SECONDS")).toBe(true);
+
+    const plan4 = actionRegistry.finalize("SELECT * FROM t\n@timeout abc");
+    expect(planHasErrors(plan4)).toBe(true);
+    expect(plan4.issues.some((i) => i.code === "INVALID_TIMEOUT_SECONDS")).toBe(true);
+  });
 });

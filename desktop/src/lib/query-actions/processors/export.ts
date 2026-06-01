@@ -14,7 +14,7 @@ export const ExportProcessor: ActionProcessor = {
 
   parse(rest) {
     const args: Record<string, string> = {};
-    const parts = rest.split(/\s+/);
+    const parts = rest.trim().split(/\s+/).filter(Boolean);
     let posIdx = 0;
     for (const part of parts) {
       const kv = part.match(/^(\w+)=(.+)$/);
@@ -30,7 +30,7 @@ export const ExportProcessor: ActionProcessor = {
   },
 
   validate(action, _plan) {
-    const format = (action.args.type ?? "csv").toLowerCase();
+    const format = (action.args.type || "csv").toLowerCase();
     if (!["csv", "json"].includes(format)) {
       return [{
         code: "INVALID_EXPORT_FORMAT",
@@ -44,7 +44,7 @@ export const ExportProcessor: ActionProcessor = {
   },
 
   apply(action, plan) {
-    const format = (action.args.type ?? "csv").toLowerCase() as "csv" | "json";
+    const format = (action.args.type || "csv").toLowerCase() as "csv" | "json";
     const path = action.args.path ?? action.args.filename ?? `databox_export.${format}`;
     plan.context.exportConfig = {
       enabled: true,
@@ -55,7 +55,7 @@ export const ExportProcessor: ActionProcessor = {
   },
 
   formatLabel(args) {
-    const fmt = args.type ?? "csv";
+    const fmt = args.type || "csv";
     const p = args.path ?? args.filename ?? "";
     const display = p ? ` → ${p}` : "";
     return `自动导出 ${fmt}${display}`;

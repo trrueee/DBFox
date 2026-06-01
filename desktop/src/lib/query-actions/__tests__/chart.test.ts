@@ -22,4 +22,15 @@ describe("@chart", () => {
     expect(planHasErrors(plan)).toBe(true);
     expect(plan.issues.some((i) => i.code === "INVALID_CHART_TYPE")).toBe(true);
   });
+
+  it("defaults to bar when no parameters are provided", () => {
+    const plan = actionRegistry.finalize("SELECT category, count FROM t\n@chart");
+
+    expect(planHasErrors(plan)).toBe(false);
+    actionRegistry.applyPhase(plan, "afterExecute");
+    expect(plan.context.chartConfig).toMatchObject({
+      enabled: true,
+      type: "bar",
+    });
+  });
 });

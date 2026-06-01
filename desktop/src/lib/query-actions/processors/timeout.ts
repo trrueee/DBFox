@@ -1,4 +1,4 @@
-import type { ActionProcessor } from "../types";
+import type { ActionProcessor, QueryActionIssue } from "../types";
 
 export const TimeoutProcessor: ActionProcessor = {
   name: "timeout",
@@ -13,13 +13,37 @@ export const TimeoutProcessor: ActionProcessor = {
   },
 
   parse(rest) {
-    const sec = parseInt(rest) || 30;
-    return { seconds: String(Math.max(1, sec)) };
+    const trimmed = rest.trim().replace(/s$/i, "");
+    if (!trimmed) {
+      return { seconds: "30" };
+    }
+    return { seconds: trimmed };
+  },
+
+  validate(action, _plan) {
+    const issues: QueryActionIssue[] = [];
+    const secondsStr = action.args.seconds ?? "30";
+    const n = Number(secondsStr);
+
+    if (!Number.isInteger(n) || n < 1 || n > 600) {
+      issues.push({
+        code: "INVALID_TIMEOUT_SECONDS",
+        level: "error",
+        action: "timeout",
+        message: `超时时间必须是 1 到 600 之间的整数秒，当前值为: ${secondsStr}`,
+        stage: "validate",
+      });
+    }
+    return issues;
   },
 
   apply(action, plan) {
-    const sec = parseInt(action.args.seconds ?? "30");
-    plan.context.timeoutMs = sec * 1000;
+    const secondsStr = action.args.seconds ?? "30";
+    const n = Number(secondsStr);
+    if (!Number.isInteger(n) || n < 1 || n > 600) {
+      return;
+    }
+    plan.context.timeoutMs = n * 1000;
   },
 
   formatLabel(args) {

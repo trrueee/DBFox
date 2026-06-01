@@ -30,4 +30,15 @@ describe("@export", () => {
     expect(planHasErrors(plan)).toBe(true);
     expect(plan.issues.some((i) => i.code === "INVALID_EXPORT_FORMAT")).toBe(true);
   });
+
+  it("defaults to csv when no parameters are provided", () => {
+    const plan = actionRegistry.finalize("SELECT id FROM users\n@export");
+
+    expect(planHasErrors(plan)).toBe(false);
+    actionRegistry.applyPhase(plan, "afterExecute");
+    expect(plan.context.exportConfig).toMatchObject({
+      enabled: true,
+      format: "csv",
+    });
+  });
 });

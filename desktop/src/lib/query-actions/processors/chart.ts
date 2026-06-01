@@ -14,7 +14,7 @@ export const ChartProcessor: ActionProcessor = {
 
   parse(rest) {
     const args: Record<string, string> = {};
-    const parts = rest.split(/\s+/);
+    const parts = rest.trim().split(/\s+/).filter(Boolean);
     for (const part of parts) {
       const kv = part.match(/^(\w+)=(.+)$/);
       if (kv) {
@@ -32,7 +32,7 @@ export const ChartProcessor: ActionProcessor = {
 
   validate(action, _plan) {
     const validTypes = ["line", "bar", "pie"];
-    const chartType = (action.args.type ?? "bar").toLowerCase();
+    const chartType = (action.args.type || "bar").toLowerCase();
     if (!validTypes.includes(chartType)) {
       return [{
         code: "INVALID_CHART_TYPE",
@@ -48,14 +48,14 @@ export const ChartProcessor: ActionProcessor = {
   apply(action, plan) {
     plan.context.chartConfig = {
       enabled: true,
-      type: action.args.type ?? "bar",
+      type: action.args.type || "bar",
       x: action.args.x ?? "",
       y: action.args.y ?? "",
     };
   },
 
   formatLabel(args) {
-    const t = args.type ?? "bar";
+    const t = args.type || "bar";
     const x = args.x ? ` x=${args.x}` : "";
     const y = args.y ? ` y=${args.y}` : "";
     return `图表 ${t}${x}${y}`;

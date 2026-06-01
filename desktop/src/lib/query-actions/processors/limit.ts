@@ -14,13 +14,29 @@ export const LimitProcessor: ActionProcessor = {
   },
 
   parse(rest) {
-    const n = parseInt(rest) || parseInt(rest.match(/(\d+)/)?.[0] ?? "100");
-    return { rows: String(n) };
+    const trimmed = rest.trim();
+    if (!trimmed) {
+      return { rows: "100" };
+    }
+    return { rows: trimmed };
   },
 
-  validate(_action, plan) {
+  validate(action, plan) {
     const issues: QueryActionIssue[] = [];
-    if (/limit\s+\d+/i.test(plan.pureSql)) {
+    const rowsStr = action.args.rows ?? "100";
+    const n = Number(rowsStr);
+
+    if (!Number.isInteger(n) || n < 1 || n > 10000) {
+      issues.push({
+        code: "INVALID_LIMIT_ROWS",
+        level: "error",
+        action: "limit",
+        message: `限制行数必须是 1 到 10000 之间的整数，当前值为: ${rowsStr}`,
+        stage: "validate",
+      });
+    }
+
+    if (hasLimitClause(plan.pureSql)) {
       issues.push({
         code: "LIMIT_ALREADY_EXISTS",
         level: "warning",
@@ -33,7 +49,11 @@ export const LimitProcessor: ActionProcessor = {
   },
 
   apply(action, plan) {
-    const n = parseInt(action.args.rows ?? "100");
+    const rowsStr = action.args.rows ?? "100";
+    const n = Number(rowsStr);
+    if (!Number.isInteger(n) || n < 1 || n > 10000) {
+      return;
+    }
     if (!hasLimitClause(plan.compiledSql)) {
       plan.compiledSql = appendLimit(plan.compiledSql, n);
     }
