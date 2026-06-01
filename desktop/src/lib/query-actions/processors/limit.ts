@@ -1,4 +1,5 @@
 import type { ActionProcessor, QueryActionIssue } from "../types";
+import { appendLimit, hasLimitClause } from "../sql-utils";
 
 export const LimitProcessor: ActionProcessor = {
   name: "limit",
@@ -33,9 +34,8 @@ export const LimitProcessor: ActionProcessor = {
 
   apply(action, plan) {
     const n = parseInt(action.args.rows ?? "100");
-    if (!/limit\s+\d+/i.test(plan.compiledSql)) {
-      plan.compiledSql = plan.compiledSql.replace(/;\s*$/, "");
-      plan.compiledSql += ` LIMIT ${n};`;
+    if (!hasLimitClause(plan.compiledSql)) {
+      plan.compiledSql = appendLimit(plan.compiledSql, n);
     }
   },
 

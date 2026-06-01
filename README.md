@@ -100,7 +100,7 @@ DataBox 采用高内聚、分层解耦的架构设计，整体数据流与编排
 ### 3. 注解式快捷操作引擎 (SQL Action Engine)
 Action Engine 是前端控制台交互的编译中枢，采用 Registry + Processor 插件化架构，将指令解析执行抽象为 compile、beforeExecute、aroundExecute、afterExecute 四个阶段：
 *   **`@limit [rows]`**：自动重写并限制返回行数，防范海量数据吞吐。
-*   **`@timeout [seconds]`**：客户端超时保护，秒级防止物理长连接挂死。
+*   **`@timeout [seconds]`**：设置客户端等待上限，并在超时时请求后端取消执行。
 *   **`@explain`**：自动改写为执行计划评估模式，方便开发排查慢查询与索引命中的性能瓶颈。
 *   **`@export [csv/json]`**：查询成功后自动进行本地数据序列化，即时触发浏览器下载保存，实现指令级自动归档。
 *   **`@chart [bar/line/pie] x=列名 y=列名`**：查询成功后自动解析坐标列，将数据转换为 ECharts 图表，同数据表格并列渲染，可视化体验极佳。

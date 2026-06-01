@@ -3,12 +3,12 @@ import type { ActionProcessor } from "../types";
 export const ExportProcessor: ActionProcessor = {
   name: "export",
   meta: {
-    phase: "aroundExecute",
+    phase: "afterExecute",
     order: 100,
     repeatable: false,
     conflictsWith: ["explain"],
     description: "查询执行成功后，自动将数据导出并触发浏览器本地下载",
-    usage: "@export [格式: csv/json/xlsx]",
+    usage: "@export [格式: csv/json]",
     examples: ["@export csv", "@export json", "@export csv filename=orders.csv"],
   },
 
@@ -31,12 +31,12 @@ export const ExportProcessor: ActionProcessor = {
 
   validate(action, _plan) {
     const format = (action.args.type ?? "csv").toLowerCase();
-    if (!["csv", "xlsx", "json"].includes(format)) {
+    if (!["csv", "json"].includes(format)) {
       return [{
         code: "INVALID_EXPORT_FORMAT",
         level: "error",
         action: "export",
-        message: `不支持的导出格式: ${format}，支持 csv / json / xlsx`,
+        message: `不支持的导出格式: ${format}，当前支持 csv / json`,
         stage: "validate",
       }];
     }
@@ -44,7 +44,7 @@ export const ExportProcessor: ActionProcessor = {
   },
 
   apply(action, plan) {
-    const format = (action.args.type ?? "csv").toLowerCase() as "csv" | "xlsx" | "json";
+    const format = (action.args.type ?? "csv").toLowerCase() as "csv" | "json";
     const path = action.args.path ?? action.args.filename ?? `databox_export.${format}`;
     plan.context.exportConfig = {
       enabled: true,

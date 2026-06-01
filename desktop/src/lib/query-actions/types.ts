@@ -47,7 +47,7 @@ export interface ExecutionContext {
   timeoutMs: number;
   exportConfig: {
     enabled: boolean;
-    format: "csv" | "xlsx" | "json";
+    format: "csv" | "json";
     path: string;
     chunkSize: number;
   } | null;

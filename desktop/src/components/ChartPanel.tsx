@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { BarChart3, LineChart, PieChart } from "lucide-react";
+import { isNumericLike, toChartNumber } from "../lib/chart-utils";
 
 type ChartType = "bar" | "line" | "pie";
 
@@ -15,13 +16,17 @@ interface ChartPanelProps {
 // Light lab palette for charts
 const CHART_COLORS = ["#2D3B8C", "#0D7377", "#B45309", "#2E7D32", "#4A5BC0", "#14A3A8", "#D97706", "#5C5D60"];
 
+function normalizeChartType(value?: string): ChartType {
+  return value === "line" || value === "pie" || value === "bar" ? value : "bar";
+}
+
 export function ChartPanel({ columns, rows, initialType, initialX, initialY }: ChartPanelProps) {
-  const [chartType, setChartType] = useState<ChartType>((initialType as ChartType) || "bar");
+  const [chartType, setChartType] = useState<ChartType>(normalizeChartType(initialType));
   const [labelCol, setLabelCol] = useState(initialX || "");
   const [valueCol, setValueCol] = useState(initialY || "");
 
   const numericCols = useMemo(
-    () => columns.filter((c) => rows.some((r) => typeof r[c] === "number")),
+    () => columns.filter((c) => rows.some((r) => isNumericLike(r[c]))),
     [columns, rows],
   );
 
@@ -37,7 +42,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
     if (rows.length === 0 || !effectiveLabel || !effectiveValue) return null;
 
     const labels = rows.map((r) => String(r[effectiveLabel] ?? ""));
-    const values = rows.map((r) => Number(r[effectiveValue]) || 0);
+    const values = rows.map((r) => toChartNumber(r[effectiveValue]));
 
     if (chartType === "pie") {
       return {

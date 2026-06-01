@@ -98,7 +98,7 @@ describe("@explain + @limit ordering", () => {
 describe("@explain + @export conflict", () => {
   it("blocks execution when @explain and @export are used together", () => {
     const plan = actionRegistry.finalize(
-      '@explain\n@export xlsx "./out.xlsx"\nSELECT * FROM users;',
+      '@explain\n@export csv "./out.csv"\nSELECT * FROM users;',
     );
 
     assert.equal(planHasErrors(plan), true);
@@ -115,18 +115,18 @@ describe("@explain + @export conflict", () => {
 describe("@export config", () => {
   it("generates exportConfig in execution plan", () => {
     const plan = actionRegistry.finalize(
-      '@export xlsx "./exports/users.xlsx"\nSELECT * FROM users;',
+      '@export csv "./exports/users.csv"\nSELECT * FROM users;',
     );
 
     assert.equal(planHasErrors(plan), false);
-    // exportConfig is set during aroundExecute phase
-    actionRegistry.applyPhase(plan, "aroundExecute");
+    // exportConfig is set during afterExecute phase
+    actionRegistry.applyPhase(plan, "afterExecute");
 
     assert.equal(plan.context.exportConfig?.enabled, true);
-    assert.equal(plan.context.exportConfig?.format, "xlsx");
+    assert.equal(plan.context.exportConfig?.format, "csv");
     assert.equal(
       plan.context.exportConfig?.path,
-      "./exports/users.xlsx",
+      "./exports/users.csv",
     );
   });
 
@@ -135,7 +135,7 @@ describe("@export config", () => {
       '@export type=json path="./data.json" chunk=2000\nSELECT * FROM users;',
     );
 
-    actionRegistry.applyPhase(plan, "aroundExecute");
+    actionRegistry.applyPhase(plan, "afterExecute");
 
     assert.equal(plan.context.exportConfig?.format, "json");
     assert.equal(plan.context.exportConfig?.path, "./data.json");

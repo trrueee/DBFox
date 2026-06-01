@@ -156,18 +156,21 @@ export const ConsoleTranscript: React.FC<ConsoleTranscriptProps> = ({
     return match ? match[1].toLowerCase() : null;
   }, [currentSql]);
 
-  const ALL_DIRECTIVES = useMemo(() => [
-    { name: "@limit", usage: "@limit 100", desc: "限制返回行数 (例如: @limit 100)" },
-    { name: "@timeout", usage: "@timeout 30", desc: "超时控制秒数 (例如: @timeout 30)" },
-    { name: "@explain", usage: "@explain", desc: "分析 SQL 执行计划" },
-    { name: "@export", usage: "@export csv", desc: "自动导出查询结果 (支持 csv/json)" },
-    { name: "@chart", usage: "@chart bar x=字段 y=字段", desc: "分析并自动生成图表可视化" },
-  ], []);
+  const allDirectives = useMemo(
+    () =>
+      actionRegistry.allProcessors().map((processor) => ({
+        name: `@${processor.name}`,
+        usage: processor.meta.examples[0] || processor.meta.usage,
+        desc: processor.meta.description,
+        examples: processor.meta.examples,
+      })),
+    [],
+  );
 
   const filteredDirectives = useMemo(() => {
     if (currentMatch === null) return [];
-    return ALL_DIRECTIVES.filter((d) => d.name.slice(1).startsWith(currentMatch));
-  }, [currentMatch, ALL_DIRECTIVES]);
+    return allDirectives.filter((d) => d.name.slice(1).startsWith(currentMatch));
+  }, [currentMatch, allDirectives]);
 
   const handleSelectDirective = (usage: string) => {
     const lines = currentSql.split("\n");

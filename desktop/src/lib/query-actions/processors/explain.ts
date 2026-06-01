@@ -1,4 +1,5 @@
 import type { ActionProcessor } from "../types";
+import { prependExplain } from "../sql-utils";
 
 export const ExplainProcessor: ActionProcessor = {
   name: "explain",
@@ -30,9 +31,7 @@ export const ExplainProcessor: ActionProcessor = {
   },
 
   apply(_action, plan) {
-    if (!/^\s*explain\s/i.test(plan.compiledSql)) {
-      plan.compiledSql = `EXPLAIN ${plan.compiledSql}`;
-    }
+    plan.compiledSql = prependExplain(plan.compiledSql);
   },
 
   formatLabel() {

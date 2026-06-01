@@ -258,6 +258,7 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
         status: "success",
         queryResult: result,
         queryError: null,
+        // savedSql intentionally stores the source SQL/DSL text, not the compiled SQL.
         savedSql: activeEditorTab.sql,
       }));
 
