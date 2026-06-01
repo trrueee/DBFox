@@ -38,22 +38,23 @@ jobs:
         env:
           DATABOX_MIGRATE_ONLY: "1"
         run: |
-          # Use an ephemeral in-memory / temp-file SQLite DB to verify migration chain
-          export DATABOX_DB_PATH="$(mktemp).db"
-          python -c "
+          rm -f "$RUNNER_TEMP/databox_migration_test.db"
+          export DATABOX_DB_PATH="$RUNNER_TEMP/databox_migration_test.db"
+          python << 'EOF'
           from alembic.config import Config
           from alembic import command
           cfg = Config('engine/migrations/alembic.ini')
           cfg.set_main_option('script_location', 'engine/migrations')
           command.upgrade(cfg, 'head')
           print('Alembic upgrade head: OK')
-          "
+          EOF
 
       - name: FastAPI startup smoke test
         run: |
+          rm -f /tmp/databox_smoke_test.db
           python -c "
           import os
-          os.environ['DATABOX_DB_PATH'] = '/tmp/smoke_test.db'
+          os.environ['DATABOX_DB_PATH'] = '/tmp/databox_smoke_test.db'
           from engine.main import app
           from fastapi.testclient import TestClient
           client = TestClient(app)
@@ -86,6 +87,9 @@ jobs:
 
       - name: ESLint — TypeScript/React static analysis
         run: npm run lint
+
+      - name: Run frontend unit tests
+        run: npm test
 
       - name: Compile and Build React/Vite APP
         run: npm run build

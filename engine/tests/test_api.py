@@ -287,6 +287,56 @@ def test_list_columns(client, db_session) -> None:
     assert all("data_type" in c for c in columns)
 
 
+def test_validate_sql_datasource_not_found(client) -> None:
+    resp = client.post("/api/v1/query/validate", json={
+        "sql": "SELECT id, name FROM users LIMIT 10",
+        "datasource_id": "nonexistent-ds-id-12345",
+    }, headers=_headers())
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "DATASOURCE_NOT_FOUND"
+
+
+def test_validate_sql_uses_datasource_db_type(client, db_session, monkeypatch) -> None:
+    ds = DataSource(
+        id="mock-pg-ds",
+        name="mock_pg_ds",
+        db_type="postgresql",
+        host="localhost",
+        port=5432,
+        database_name="postgres",
+        username="postgres",
+        password_ciphertext="pwd",
+        password_nonce="nonce",
+        status="active",
+    )
+    db_session.add(ds)
+    db_session.commit()
+
+    captured_dialect = None
+    import engine.api.query as query_api
+
+    def mock_guardrail_check(sql, dialect="mysql"):
+        nonlocal captured_dialect
+        captured_dialect = dialect
+        return {
+            "result": "pass",
+            "originalSql": sql,
+            "safeSql": sql,
+            "checks": [],
+            "message": "Passed"
+        }
+
+    monkeypatch.setattr(query_api, "guardrail_check", mock_guardrail_check)
+
+    resp = client.post("/api/v1/query/validate", json={
+        "sql": "SELECT * FROM users",
+        "datasource_id": "mock-pg-ds",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    assert captured_dialect == "postgresql"
+
+
 def test_validate_sql(client) -> None:
     resp = client.post("/api/v1/query/validate", json={
         "sql": "SELECT id, name FROM users LIMIT 10",

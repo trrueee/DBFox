@@ -1,7 +1,7 @@
 # 📦 DataBox — 本地优先的可信 Text-to-SQL 数据探索客户端 (Local-First Trusted Text-to-SQL Data Exploration Client)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
-[![Node.js 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
+[![Node.js 20.19+](https://img.shields.io/badge/node-20.19+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Security: Guardrails Built-in](https://img.shields.io/badge/security-guardrails%20active-red.svg)]()
@@ -174,7 +174,7 @@ DataBox/
 ### 1. 环境依赖准备
 确保您的计算机上已安装以下环境：
 *   **Python**: 3.12 或更高版本 (推荐使用 Conda 或 venv 管理虚拟环境)
-*   **Node.js**: 18.x 或更高版本 (前端构建及包管理工具)
+*   **Node.js**: 20.19+ 或 Node.js 22 LTS recommended (前端构建及包管理工具)
 
 ### 2. 一键启动 (Web 开发版)
 在项目根目录下执行以下命令，启动助手会自动为您校验并安装 Python 和 Node 依赖，并自动拉起 Local Engine 后端和 Vite 前端，最后在您的系统默认浏览器中打开页面：

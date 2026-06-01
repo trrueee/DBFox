@@ -180,7 +180,7 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
     if (!activeEditorTab?.sql.trim()) return;
     try {
       setValidating(true);
-      const guardrail = await api.validateSql(activeEditorTab.sql, datasource.id);
+      const guardrail = await api.validateSql(activeEditorTab.sql, { datasourceId: datasource.id });
       updateActiveTab(() => ({ guardrail, queryError: null }));
     } catch (error: unknown) {
       updateActiveTab(() => ({ queryError: getErrorMessage(error, "SQL 校验失败") }));
@@ -237,7 +237,7 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
 
     try {
       // Step 1: Run through guardrails safety check
-      const checked = await api.validateSql(sqlToExecute, datasource.id, controller.signal);
+      const checked = await api.validateSql(sqlToExecute, { datasourceId: datasource.id, signal: controller.signal });
       updateTabById(tabId, () => ({ guardrail: checked }));
 
       if (checked.result === "reject") {

@@ -13,7 +13,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  const payload = (() => { if (!text) return null; try { return JSON.parse(text); } catch { return { message: text }; } })();
   if (!response.ok) {
     const error = new Error(payload?.detail?.message || payload?.message || "Request failed") as Error & {
       code?: string;
@@ -528,11 +528,11 @@ export const api = {
       }),
     }),
 
-  validateSql: (sql: string, datasourceId?: string, signal?: AbortSignal) =>
+  validateSql: (sql: string, options?: { datasourceId?: string; signal?: AbortSignal }) =>
     request<GuardrailCheckResult>("/query/validate", {
       method: "POST",
-      body: JSON.stringify({ sql, datasource_id: datasourceId }),
-      signal,
+      body: JSON.stringify({ sql, datasource_id: options?.datasourceId }),
+      signal: options?.signal,
     }),
 
   executeSql: (datasourceId: string, sql: string, question?: string, executionId?: string, signal?: AbortSignal) =>
