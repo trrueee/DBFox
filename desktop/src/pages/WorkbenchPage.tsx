@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MenuBar, type MenuDef } from "../components/MenuBar";
 import { api } from "../lib/api";
-import type { AgentRunResponse, DataSource, Project, SchemaTable } from "../lib/api";
+import type { AgentRunResponse, DataSource, FollowUpSuggestion, Project, SchemaTable } from "../lib/api";
 import { EnvironmentsPage } from "./EnvironmentsPage";
 import { BackupsPage } from "./BackupsPage";
 import { DataSourcesPage } from "./DataSourcesPage";
@@ -28,6 +28,8 @@ import { PromptDialog } from "../components/PromptDialog";
 import { CommandPalette, type CommandItem } from "../components/CommandPalette";
 import { DemoTourGuide } from "../components/DemoTourGuide";
 import { useToast } from "../components/Toast";
+import { buildAgentFollowUpContext } from "../features/agent/context";
+import { AgentWorkspace } from "../features/agent/AgentWorkspace";
 
 // Tab structure for the workspace
 export interface WorkbenchTab {
@@ -76,7 +78,7 @@ function compactValue(value: unknown): string {
   }
 }
 
-function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse; onOpenSql: (sql: string) => void }) {
+export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse; onOpenSql: (sql: string) => void }) {
   const plan = result.query_plan;
   const safety = result.safety || {};
   const execution = result.execution || {};
@@ -538,20 +540,67 @@ export const WorkbenchPage = ({
     }
   };
 
+  const handleRunAgentPrompt = useCallback(async (question: string, followUpFrom?: AgentRunResponse | null) => {
+    if (!question.trim() || !activeDataSource) return;
+    const followUpContext = followUpFrom ? buildAgentFollowUpContext(followUpFrom) : undefined;
+    setAiMode("agent");
+    setAiPanelCollapsed(false);
+    setAiLoading(true);
+    setAiResponse("");
+    setAgentResponse(null);
+    setAiPrompt(question);
+    try {
+      const res = await api.runAgentQuery(activeDataSource.id, question, { optimizeRag: true, execute: true, followUpContext });
+      setAgentResponse(res);
+    } catch (err: unknown) {
+      setAiResponse(`Agent 运行失败: ${getErrorMessage(err, "Agent request failed")}`);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [activeDataSource]);
+
+  const handleAgentSuggestion = useCallback(async (suggestion: FollowUpSuggestion, result: AgentRunResponse) => {
+    if (suggestion.action_type === "save_golden_sql") {
+      if (!activeDataSource || !result.sql) {
+        showToast("没有可保存为 Golden SQL 的安全 SQL", "info");
+        return;
+      }
+      try {
+        await api.createGoldenSql(activeDataSource.id, result.question, result.sql);
+        showToast("已保存为 Golden SQL", "success");
+      } catch (err: unknown) {
+        showToast(`保存 Golden SQL 失败: ${getErrorMessage(err, "request failed")}`, "error");
+      }
+      return;
+    }
+
+    if (suggestion.action_type === "export") {
+      const sql = result.sql || "";
+      if (!sql) {
+        showToast("没有可导出的 SQL", "info");
+        return;
+      }
+      downloadTextFile("databox_agent_sql.sql", `${sql}\n`, "text/sql;charset=utf-8");
+      showToast("Agent SQL 已导出", "success");
+      return;
+    }
+
+    await handleRunAgentPrompt(suggestion.question, result);
+  }, [activeDataSource, handleRunAgentPrompt, showToast]);
+
   const handleAskGeneralAi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiPrompt.trim() || !activeDataSource) return;
+    if (aiMode === "agent") {
+      await handleRunAgentPrompt(aiPrompt);
+      return;
+    }
     setAiLoading(true);
     setAiResponse("");
     setAgentResponse(null);
     try {
-      if (aiMode === "agent") {
-        const res = await api.runAgentQuery(activeDataSource.id, aiPrompt, { optimizeRag: true, execute: true });
-        setAgentResponse(res);
-      } else {
-        const res = await api.generateSql(activeDataSource.id, aiPrompt);
+      const res = await api.generateSql(activeDataSource.id, aiPrompt);
         setAiResponse(res.sql || `生成 SQL:\n${res.sql}\n\n安全校验: ${res.guardrail?.message ?? "通过"}`);
-      }
     } catch (err: unknown) {
       setAiResponse(`生成失败: ${getErrorMessage(err, "AI request failed")}`);
     } finally {
@@ -1489,9 +1538,12 @@ export const WorkbenchPage = ({
 
                 <section style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
                   {agentResponse ? (
-                    <AgentRunPanel
+                    <AgentWorkspace
                       result={agentResponse}
+                      disabled={aiLoading}
                       onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
+                      onAsk={(question) => handleRunAgentPrompt(question, agentResponse)}
+                      onSuggestion={handleAgentSuggestion}
                     />
                   ) : aiResponse ? (
                     <div style={{ padding: 7, background: "var(--bg-secondary)", fontSize: "0.68rem", lineHeight: 1.45 }}>

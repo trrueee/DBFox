@@ -308,9 +308,114 @@ export interface AgentChartSuggestion {
   reason?: string;
 }
 
+export interface AgentArtifact {
+  id: string;
+  type: "query_plan" | "sql" | "safety" | "table" | "chart" | "insight" | "recommendation" | "error";
+  title: string;
+  payload: Record<string, unknown>;
+  presentation: {
+    mode: "inline" | "dock" | "both" | "hidden";
+    priority: number;
+    collapsed?: boolean;
+  };
+  refs?: Record<string, unknown>;
+}
+
+export interface FollowUpSuggestion {
+  label: string;
+  question: string;
+  reason: string;
+  action_type: "ask" | "chart" | "export" | "save_golden_sql";
+}
+
+export interface AgentContextArtifact {
+  id: string;
+  type: AgentArtifact["type"];
+  title: string;
+  summary?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface AgentFollowUpContext {
+  session_id?: string | null;
+  parent_run_id?: string | null;
+  previous_question?: string | null;
+  previous_answer?: string | null;
+  artifacts?: AgentContextArtifact[];
+}
+
+export interface AgentAnswer {
+  answer: string;
+  key_findings: string[];
+  evidence: Array<{
+    artifact_id: string;
+    label: string;
+    value?: string | number | null;
+  }>;
+  caveats: string[];
+  recommendations: string[];
+  follow_up_questions: string[];
+}
+
+export interface AgentMessageBlock {
+  block_id?: string | null;
+  sequence?: number | null;
+  type: "text" | "artifact_ref" | "answer" | "suggestions";
+  content?: string | null;
+  artifact_id?: string | null;
+  display?: "compact" | "full" | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+}
+
+export interface ResultProfile {
+  row_count: number;
+  column_profiles: Record<string, Record<string, unknown>>;
+  detected_patterns: string[];
+  notable_facts: string[];
+  anomalies: string[];
+  limitations: string[];
+}
+
+export interface AgentVisibleEvent {
+  event_id?: string | null;
+  sequence?: number | null;
+  created_at_ms?: number | null;
+  type:
+    | "agent.narration.delta"
+    | "agent.narration.completed"
+    | "agent.artifact.created"
+    | "agent.answer.delta"
+    | "agent.answer.completed"
+    | "agent.suggestions.created";
+  content?: string | null;
+  artifact?: AgentArtifact | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+}
+
+export interface AgentTraceEvent {
+  event_id?: string | null;
+  sequence?: number | null;
+  created_at_ms?: number | null;
+  type: "agent.trace.step_started" | "agent.trace.step_completed";
+  step_id: string;
+  name: string;
+  status?: "success" | "failed" | "skipped" | null;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  latency_ms?: number | null;
+}
+
 export interface AgentRunResponse {
+  run_id: string;
+  session_id: string;
+  parent_run_id?: string | null;
   success: boolean;
   question: string;
+  context_summary?: string | null;
+  referenced_artifact_ids?: string[];
   query_plan?: AgentQueryPlan | null;
   sql?: string | null;
   safety?: Record<string, unknown> | null;
@@ -326,6 +431,13 @@ export interface AgentRunResponse {
   } | null;
   explanation?: string | null;
   chart_suggestion?: AgentChartSuggestion | null;
+  result_profile?: ResultProfile | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+  artifacts?: AgentArtifact[];
+  message_blocks?: AgentMessageBlock[];
+  events?: AgentVisibleEvent[];
+  trace_events?: AgentTraceEvent[];
   steps: AgentStep[];
   error?: string | null;
 }
@@ -583,12 +695,15 @@ export const api = {
       signal,
     }),
 
-  runAgentQuery: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean; execute?: boolean }, signal?: AbortSignal) =>
+  runAgentQuery: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean; execute?: boolean; followUpContext?: AgentFollowUpContext }, signal?: AbortSignal) =>
     request<AgentRunResponse>("/query/agent-run", {
       method: "POST",
       body: JSON.stringify({
         datasource_id: datasourceId,
         question,
+        session_id: config?.followUpContext?.session_id,
+        parent_run_id: config?.followUpContext?.parent_run_id,
+        follow_up_context: config?.followUpContext,
         api_key: config?.apiKey,
         api_base: config?.apiBase,
         model_name: config?.model,

@@ -403,17 +403,72 @@ def test_agent_run_endpoint_review_mode(client) -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
+    assert data["run_id"]
+    assert data["session_id"]
+    assert data["context_summary"]
     assert data["sql"].upper().startswith("SELECT")
     assert data["safety"]["can_execute"] is True
+    assert data["answer"]["evidence"]
+    assert data["artifacts"]
+    artifact_ids = {artifact["id"] for artifact in data["artifacts"]}
+    assert {item["artifact_id"] for item in data["answer"]["evidence"]}.issubset(artifact_ids)
+    assert data["message_blocks"][0]["type"] == "text"
+    assert any(block["type"] == "answer" for block in data["message_blocks"])
+    assert data["events"][0]["type"] == "agent.narration.completed"
+    assert data["trace_events"]
     assert [step["name"] for step in data["steps"]] == [
         "build_schema_context",
         "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
         "execute_sql",
-        "explain_result",
+        "profile_result",
         "suggest_chart",
+        "suggest_followups",
+        "answer_synthesizer",
     ]
+
+
+def test_agent_run_endpoint_accepts_followup_context(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "agent_followup_endpoint_test",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+    client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+
+    resp = client.post("/api/v1/query/agent-run", json={
+        "datasource_id": ds_id,
+        "question": "Break it down by role",
+        "execute": False,
+        "follow_up_context": {
+            "session_id": "api-session",
+            "parent_run_id": "api-parent-run",
+            "previous_question": "List users",
+            "previous_answer": "The previous result listed users.",
+            "artifacts": [
+                {
+                    "id": "sql_candidate",
+                    "type": "sql",
+                    "title": "Validated SQL",
+                    "summary": "SELECT id, username, role FROM users LIMIT 5",
+                    "payload": {"sql": "SELECT id, username, role FROM users LIMIT 5"},
+                }
+            ],
+        },
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["session_id"] == "api-session"
+    assert data["parent_run_id"] == "api-parent-run"
+    assert data["referenced_artifact_ids"] == ["sql_candidate"]
+    assert data["steps"][0]["name"] == "load_follow_up_context"
 
 
 def test_query_history_search_status_and_datasource_filter(client, db_session) -> None:

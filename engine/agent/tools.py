@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session, selectinload
 from sqlglot import exp
 
 from engine.ai import generate_sql, validate_sql_schema
+from engine.agent.answer import synthesize_agent_answer
+from engine.agent.context import analysis_question, context_summary, referenced_artifact_ids, schema_linking_question
 from engine.agent.prompts import RESULT_EXPLANATION_SECTIONS
+from engine.agent.recommendations import suggest_followups
+from engine.agent.result_profiler import profile_result
 from engine.agent.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCandidate, ToolObservation
 from engine.errors import DataBoxError
 from engine.executor import execute_query
@@ -23,19 +27,40 @@ ToolBody = Callable[[], dict[str, Any]]
 STAR_EXPANSION_LIMIT = 12
 
 
+def load_followup_context_tool(req: AgentRunRequest) -> ToolObservation:
+    context = req.follow_up_context
+    tool_input = {
+        "session_id": req.session_id or (context.session_id if context else None),
+        "parent_run_id": req.parent_run_id or (context.parent_run_id if context else None),
+        "artifact_count": len(context.artifacts) if context else 0,
+    }
+
+    def body() -> dict[str, Any]:
+        return {
+            "context_summary": context_summary(req),
+            "analysis_question": analysis_question(req),
+            "schema_linking_question": schema_linking_question(req),
+            "referenced_artifact_ids": referenced_artifact_ids(req),
+        }
+
+    return _observe("load_follow_up_context", tool_input, body)
+
+
 def build_schema_context_tool(db: Session, req: AgentRunRequest) -> ToolObservation:
+    question = schema_linking_question(req)
     tool_input = {
         "datasource_id": req.datasource_id,
         "question": req.question,
+        "has_follow_up_context": bool(req.follow_up_context),
         "optimize_rag": req.optimize_rag,
     }
 
     def body() -> dict[str, Any]:
         linker = SchemaLinker(db)
         if req.optimize_rag:
-            linking_result = linker.link(datasource_id=req.datasource_id, question=req.question)
+            linking_result = linker.link(datasource_id=req.datasource_id, question=question)
         else:
-            linking_result = linker.full_context(datasource_id=req.datasource_id, question=req.question)
+            linking_result = linker.full_context(datasource_id=req.datasource_id, question=question)
 
         schema_context = SchemaContextBuilder(db).build(linking_result)
         metadata = linking_result.response_metadata(schema_context)
@@ -60,10 +85,12 @@ def build_query_plan_tool(
     schema_context: dict[str, Any] | None = None,
 ) -> ToolObservation:
     schema_context = schema_context or {}
+    question = analysis_question(req)
     selected_tables = [str(item) for item in _list_value(schema_context.get("selected_tables"))]
     tool_input = {
         "datasource_id": req.datasource_id,
         "question": req.question,
+        "has_follow_up_context": bool(req.follow_up_context),
         "selected_tables": selected_tables,
     }
 
@@ -71,14 +98,14 @@ def build_query_plan_tool(
         try:
             plan = QueryPlanBuilder(db).build(
                 datasource_id=req.datasource_id,
-                question=req.question,
+                question=question,
                 schema_context=str(schema_context.get("schema_context", "")),
                 llm_config=_llm_config(req),
                 selected_tables=selected_tables,
             )
             return _agent_query_plan_from_semantic(req.question, plan.to_dict(), selected_tables)
         except Exception as exc:
-            return _fallback_query_plan(db, req.datasource_id, req.question, selected_tables, exc)
+            return _fallback_query_plan(db, req.datasource_id, question, selected_tables, exc)
 
     return _observe("build_query_plan", tool_input, body)
 
@@ -91,9 +118,11 @@ def generate_sql_tool(
 ) -> ToolObservation:
     schema_context = schema_context or {}
     query_plan = query_plan or {}
+    question = analysis_question(req)
     tool_input = {
         "datasource_id": req.datasource_id,
         "question": req.question,
+        "has_follow_up_context": bool(req.follow_up_context),
         "optimize_rag": req.optimize_rag,
         "model_name": req.model_name,
         "has_api_key": bool(req.api_key),
@@ -121,7 +150,7 @@ def generate_sql_tool(
             result = generate_sql(
                 db,
                 req.datasource_id,
-                _question_with_plan(req.question, query_plan) if req.api_key else req.question,
+                _question_with_plan(question, query_plan) if req.api_key else question,
                 llm_config=_llm_config(req),
                 optimize_rag=req.optimize_rag,
             )
@@ -341,6 +370,104 @@ def suggest_chart_tool(execution: dict[str, Any] | None) -> ToolObservation:
         }
 
     return _observe("suggest_chart", tool_input, body)
+
+
+def profile_result_tool(
+    req: AgentRunRequest,
+    query_plan: dict[str, Any] | None,
+    execution: dict[str, Any] | None,
+) -> ToolObservation:
+    tool_input = {
+        "question": req.question,
+        "has_execution": bool(execution),
+        "execution_success": bool((execution or {}).get("success")),
+    }
+
+    def body() -> dict[str, Any]:
+        columns = [str(item) for item in _list_value((execution or {}).get("columns"))]
+        rows = [dict(item) for item in _list_value((execution or {}).get("rows")) if isinstance(item, dict)]
+        profile = profile_result(
+            question=req.question,
+            columns=columns,
+            rows=rows,
+            query_plan=query_plan,
+            execution_success=bool((execution or {}).get("success")),
+        )
+        return profile.model_dump()
+
+    return _observe("profile_result", tool_input, body)
+
+
+def answer_synthesizer_tool(
+    req: AgentRunRequest,
+    query_plan: dict[str, Any] | None,
+    sql: str | None,
+    safety: dict[str, Any] | None,
+    execution: dict[str, Any] | None,
+    result_profile: dict[str, Any] | None,
+    suggestions: list[dict[str, Any]] | None = None,
+    error: str | None = None,
+) -> ToolObservation:
+    tool_input = {
+        "question": req.question,
+        "has_sql": bool(sql),
+        "has_profile": bool(result_profile),
+        "has_error": bool(error),
+    }
+
+    def body() -> dict[str, Any]:
+        from engine.agent.types import FollowUpSuggestion, ResultProfile
+
+        profile = ResultProfile.model_validate(result_profile) if result_profile else None
+        parsed_suggestions = [
+            FollowUpSuggestion.model_validate(item)
+            for item in (suggestions or [])
+            if isinstance(item, dict)
+        ]
+        answer = synthesize_agent_answer(
+            question=req.question,
+            query_plan=query_plan,
+            sql=sql,
+            safety=safety,
+            execution=execution,
+            result_profile=profile,
+            suggestions=parsed_suggestions,
+            error=error,
+        )
+        return answer.model_dump()
+
+    return _observe("answer_synthesizer", tool_input, body)
+
+
+def suggest_followups_tool(
+    req: AgentRunRequest,
+    sql: str | None,
+    safety: dict[str, Any] | None,
+    execution: dict[str, Any] | None,
+    result_profile: dict[str, Any] | None,
+    chart_suggestion: dict[str, Any] | None,
+) -> ToolObservation:
+    tool_input = {
+        "question": req.question,
+        "has_profile": bool(result_profile),
+        "has_chart": bool(chart_suggestion),
+    }
+
+    def body() -> dict[str, Any]:
+        from engine.agent.types import ResultProfile
+
+        profile = ResultProfile.model_validate(result_profile) if result_profile else None
+        suggestions = suggest_followups(
+            question=req.question,
+            result_profile=profile,
+            chart_suggestion=chart_suggestion,
+            sql=sql,
+            safety=safety,
+            execution=execution,
+        )
+        return {"suggestions": [suggestion.model_dump() for suggestion in suggestions]}
+
+    return _observe("suggest_followups", tool_input, body)
 
 
 def _observe(name: str, tool_input: dict[str, Any], body: ToolBody) -> ToolObservation:
