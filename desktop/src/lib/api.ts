@@ -280,6 +280,56 @@ export interface GeneratedSqlResult {
   selectedSchemaTableCount?: number;
 }
 
+export interface AgentStep {
+  name: string;
+  status: "success" | "failed" | "skipped";
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  latency_ms: number;
+}
+
+export interface AgentQueryPlan {
+  analysis_goal: string;
+  metrics: Array<Record<string, unknown>>;
+  dimensions: Array<Record<string, unknown>>;
+  filters: Array<Record<string, unknown>>;
+  time_range?: Record<string, unknown> | null;
+  candidate_tables: string[];
+  assumptions: string[];
+  risk_notes: string[];
+  raw_plan?: Record<string, unknown> | null;
+}
+
+export interface AgentChartSuggestion {
+  type: "bar" | "line" | "pie" | "table";
+  x?: string | null;
+  y?: string | null;
+  reason?: string;
+}
+
+export interface AgentRunResponse {
+  success: boolean;
+  question: string;
+  query_plan?: AgentQueryPlan | null;
+  sql?: string | null;
+  safety?: Record<string, unknown> | null;
+  execution?: {
+    success?: boolean;
+    columns?: string[];
+    rows?: Array<Record<string, unknown>>;
+    rowCount?: number;
+    latencyMs?: number;
+    warnings?: string[];
+    reason?: string;
+    revise_suggestion?: string;
+  } | null;
+  explanation?: string | null;
+  chart_suggestion?: AgentChartSuggestion | null;
+  steps: AgentStep[];
+  error?: string | null;
+}
+
 export interface QueryResult {
   success: boolean;
   columns: string[];
@@ -529,6 +579,21 @@ export const api = {
         api_base: config?.apiBase,
         model_name: config?.model,
         optimize_rag: config?.optimizeRag ?? false,
+      }),
+      signal,
+    }),
+
+  runAgentQuery: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean; execute?: boolean }, signal?: AbortSignal) =>
+    request<AgentRunResponse>("/query/agent-run", {
+      method: "POST",
+      body: JSON.stringify({
+        datasource_id: datasourceId,
+        question,
+        api_key: config?.apiKey,
+        api_base: config?.apiBase,
+        model_name: config?.model,
+        optimize_rag: config?.optimizeRag ?? true,
+        execute: config?.execute ?? true,
       }),
       signal,
     }),

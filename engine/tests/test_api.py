@@ -332,6 +332,40 @@ def test_execute_sql_and_history(client, db_session) -> None:
     assert history[0]["execution_status"] == "success"
 
 
+def test_agent_run_endpoint_review_mode(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "agent_endpoint_test",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+    client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+
+    resp = client.post("/api/v1/query/agent-run", json={
+        "datasource_id": ds_id,
+        "question": "查询所有用户",
+        "execute": False,
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["success"] is True
+    assert data["sql"].upper().startswith("SELECT")
+    assert data["safety"]["can_execute"] is True
+    assert [step["name"] for step in data["steps"]] == [
+        "build_schema_context",
+        "build_query_plan",
+        "generate_sql_candidate",
+        "validate_sql",
+        "execute_sql",
+        "explain_result",
+        "suggest_chart",
+    ]
+
+
 def test_query_history_search_status_and_datasource_filter(client, db_session) -> None:
     ds1 = DataSource(
         id="history-ds-1",

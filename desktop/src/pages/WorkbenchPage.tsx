@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MenuBar, type MenuDef } from "../components/MenuBar";
 import { api } from "../lib/api";
-import type { DataSource, Project, SchemaTable } from "../lib/api";
+import type { AgentRunResponse, DataSource, Project, SchemaTable } from "../lib/api";
 import { EnvironmentsPage } from "./EnvironmentsPage";
 import { BackupsPage } from "./BackupsPage";
 import { DataSourcesPage } from "./DataSourcesPage";
@@ -65,6 +65,128 @@ interface WorkbenchPageProps {
 }
 
 type QueryTabStatePatch = Pick<WorkbenchTab, "resultState" | "sqlDraft" | "dirty">;
+
+function compactValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse; onOpenSql: (sql: string) => void }) {
+  const plan = result.query_plan;
+  const safety = result.safety || {};
+  const execution = result.execution || {};
+  const columns = execution.columns || [];
+  const rows = execution.rows || [];
+  const chart = result.chart_suggestion;
+  const statusClass = result.success ? "status-badge-success" : "status-badge-error";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: "0.68rem", lineHeight: 1.45 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+        <span className={`status-badge ${statusClass}`}>{result.success ? "Agent success" : "Agent stopped"}</span>
+        {result.error && <span style={{ color: "var(--accent-red)", textAlign: "right" }}>{result.error}</span>}
+      </div>
+
+      <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+        <strong>Question</strong>
+        <div style={{ marginTop: 3 }}>{result.question}</div>
+      </section>
+
+      <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+        <strong>Query Plan</strong>
+        <div style={{ marginTop: 4 }}>Goal: {plan?.analysis_goal || "-"}</div>
+        <div>Tables: {plan?.candidate_tables?.join(", ") || "-"}</div>
+        <div>Metrics: {(plan?.metrics || []).map(compactValue).join(" | ") || "-"}</div>
+        <div>Dimensions: {(plan?.dimensions || []).map(compactValue).join(" | ") || "-"}</div>
+        {plan?.risk_notes?.length ? <div style={{ color: "var(--accent-amber)" }}>Risk: {plan.risk_notes.join(" | ")}</div> : null}
+      </section>
+
+      <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+          <strong>Candidate SQL</strong>
+          {result.sql && (
+            <button className="btn-ghost" onClick={() => onOpenSql(result.sql || "")} style={{ fontSize: "0.64rem" }}>
+              Open
+            </button>
+          )}
+        </div>
+        <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.64rem", background: "#fff", padding: 5, marginTop: 4, overflowX: "auto" }}>
+          {result.sql || "-"}
+        </pre>
+      </section>
+
+      <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+        <strong>Safety</strong>
+        <div style={{ display: "grid", gridTemplateColumns: "82px 1fr", gap: 3, marginTop: 4 }}>
+          <span>Passed</span><span>{compactValue(safety.passed)}</span>
+          <span>Can execute</span><span>{compactValue(safety.can_execute)}</span>
+          <span>Guardrail</span><span>{compactValue((safety.guardrail as { result?: unknown } | undefined)?.result)}</span>
+          <span>Confirm</span><span>{compactValue(safety.requires_confirmation)}</span>
+        </div>
+      </section>
+
+      {columns.length > 0 && rows.length > 0 && (
+        <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+          <strong>Execution Result</strong>
+          <div style={{ color: "var(--text-muted)", marginTop: 3 }}>
+            {execution.rowCount ?? rows.length} rows · {execution.latencyMs ?? 0}ms
+          </div>
+          <div style={{ overflow: "auto", maxHeight: 180, marginTop: 5, background: "#fff" }}>
+            <table className="data-table">
+              <thead>
+                <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+              </thead>
+              <tbody>
+                {rows.slice(0, 20).map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {columns.map((column) => <td key={`${rowIndex}-${column}`}>{compactValue(row[column])}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {result.explanation && (
+        <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+          <strong>Explanation</strong>
+          <pre style={{ whiteSpace: "pre-wrap", margin: "4px 0 0", fontFamily: "var(--font-body)" }}>{result.explanation}</pre>
+        </section>
+      )}
+
+      {chart && (
+        <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+          <strong>Chart Suggestion</strong>
+          <div style={{ marginTop: 3 }}>
+            {chart.type} · x={chart.x || "-"} · y={chart.y || "-"}
+          </div>
+          <div style={{ color: "var(--text-muted)" }}>{chart.reason}</div>
+        </section>
+      )}
+
+      <section style={{ padding: 7, background: "var(--bg-secondary)" }}>
+        <strong>Agent Steps</strong>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 5 }}>
+          {result.steps.map((step) => (
+            <div key={`${step.name}-${step.latency_ms}`} style={{ display: "grid", gridTemplateColumns: "1fr 58px 48px", gap: 4 }}>
+              <span>{step.name}</span>
+              <span className={`status-badge ${step.status === "failed" ? "status-badge-error" : step.status === "skipped" ? "status-badge-neutral" : "status-badge-success"}`}>
+                {step.status}
+              </span>
+              <span style={{ textAlign: "right", color: "var(--text-muted)" }}>{step.latency_ms}ms</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
 
 const DashboardPage = lazy(() =>
   import("./DashboardPage").then((module) => ({ default: module.DashboardPage })),
@@ -188,6 +310,8 @@ export const WorkbenchPage = ({
   const [aiPanelWidth] = useState(340);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
+  const [agentResponse, setAgentResponse] = useState<AgentRunResponse | null>(null);
+  const [aiMode, setAiMode] = useState<"sql" | "agent">("sql");
   const [aiLoading, setAiLoading] = useState(false);
 
   // Tree context menu
@@ -380,6 +504,7 @@ export const WorkbenchPage = ({
     setAiPanelCollapsed(false);
     setAiLoading(true);
     setAiResponse("");
+    setAgentResponse(null);
     setAiPrompt(promptText);
     try {
       const prompt = `数据源: ${activeDataSource.name} (${activeDataSource.database_name})\n当前聚焦表: ${activeTab?.tableName || "无"}\n当前指令: ${promptText}\n请提供专业的 DDL 修改、优化的标准 SQL，或详细的数据结构建模建议。`;
@@ -397,9 +522,15 @@ export const WorkbenchPage = ({
     if (!aiPrompt.trim() || !activeDataSource) return;
     setAiLoading(true);
     setAiResponse("");
+    setAgentResponse(null);
     try {
-      const res = await api.generateSql(activeDataSource.id, aiPrompt);
-      setAiResponse(res.sql || `生成 SQL:\n${res.sql}\n\n安全校验: ${res.guardrail?.message ?? "通过"}`);
+      if (aiMode === "agent") {
+        const res = await api.runAgentQuery(activeDataSource.id, aiPrompt, { optimizeRag: true, execute: true });
+        setAgentResponse(res);
+      } else {
+        const res = await api.generateSql(activeDataSource.id, aiPrompt);
+        setAiResponse(res.sql || `生成 SQL:\n${res.sql}\n\n安全校验: ${res.guardrail?.message ?? "通过"}`);
+      }
     } catch (err: unknown) {
       setAiResponse(`生成失败: ${getErrorMessage(err, "AI request failed")}`);
     } finally {
@@ -1336,7 +1467,12 @@ export const WorkbenchPage = ({
                 </section>
 
                 <section style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                  {aiResponse ? (
+                  {agentResponse ? (
+                    <AgentRunPanel
+                      result={agentResponse}
+                      onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
+                    />
+                  ) : aiResponse ? (
                     <div style={{ padding: 7, background: "var(--bg-secondary)", fontSize: "0.68rem", lineHeight: 1.45 }}>
                       <div style={{ fontWeight: 700, color: "var(--accent-indigo)", marginBottom: 4, fontSize: "0.64rem" }}>
                         Copilot 结果
@@ -1395,13 +1531,37 @@ export const WorkbenchPage = ({
               {/* Input form */}
               <form onSubmit={handleAskGeneralAi}
                 style={{ padding: "6px 8px", borderTop: "1px solid var(--border-light)", background: "var(--bg-secondary)", display: "flex", flexDirection: "column", gap: 3 }}>
+                <div className="pill-tabs" style={{ width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+                  <button
+                    type="button"
+                    className={`pill-tab ${aiMode === "sql" ? "active" : ""}`}
+                    onClick={() => {
+                      setAiMode("sql");
+                      setAgentResponse(null);
+                    }}
+                    style={{ justifyContent: "center" }}
+                  >
+                    SQL 模式
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill-tab ${aiMode === "agent" ? "active" : ""}`}
+                    onClick={() => {
+                      setAiMode("agent");
+                      setAiResponse("");
+                    }}
+                    style={{ justifyContent: "center" }}
+                  >
+                    Agent 模式
+                  </button>
+                </div>
                 <textarea className="input-field" placeholder="Ask 数据库、SQL、结构..."
                   value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
                   style={{ height: 34, fontSize: "0.7rem", resize: "none" }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleAskGeneralAi(e); } }} />
                 <button type="submit" className="btn-primary" disabled={aiLoading || !aiPrompt.trim()}
                   style={{ padding: "2px 0", fontSize: "0.68rem", width: "100%", justifyContent: "center" }}>
-                  发送
+                  {aiMode === "agent" ? "运行 Agent" : "发送"}
                 </button>
               </form>
             </div>

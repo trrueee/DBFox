@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from engine.agent import AgentRunRequest, AgentRunResponse, DataBoxAgentRuntime
 from engine.ai import generate_sql
 from engine.db import get_db
 from engine.errors import DataBoxError
@@ -18,6 +19,20 @@ from engine.executor import execute_query
 
 logger = logging.getLogger("databox.api.ai")
 router = APIRouter()
+
+
+@router.post("/query/agent-run", response_model=AgentRunResponse)
+def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentRunResponse:
+    try:
+        return DataBoxAgentRuntime(db).run(req)
+    except DataBoxError as exc:
+        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    except Exception as exc:
+        logger.exception("Agent runtime failed")
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "AGENT_RUNTIME_ERROR", "message": f"Agent runtime failed: {str(exc)}"},
+        )
 
 
 @router.post("/query/generate")
