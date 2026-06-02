@@ -451,6 +451,8 @@ export interface AgentRunConfig {
   model?: string;
   optimizeRag?: boolean;
   execute?: boolean;
+  sessionId?: string;
+  parentRunId?: string;
   followUpContext?: AgentFollowUpContext;
 }
 
@@ -559,8 +561,8 @@ function buildAgentRunPayload(datasourceId: string, question: string, config?: A
   return {
     datasource_id: datasourceId,
     question,
-    session_id: config?.followUpContext?.session_id,
-    parent_run_id: config?.followUpContext?.parent_run_id,
+    session_id: config?.sessionId || config?.followUpContext?.session_id,
+    parent_run_id: config?.parentRunId || config?.followUpContext?.parent_run_id,
     follow_up_context: config?.followUpContext,
     api_key: config?.apiKey,
     api_base: config?.apiBase,
@@ -920,6 +922,15 @@ export const api = {
     config?: AgentRunConfig,
     options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
   ) => streamAgentRun(datasourceId, question, config, options),
+
+  getAgentRun: (runId: string) =>
+    request<AgentRunResponse | null>(`/query/agent-runs/${encodeURIComponent(runId)}`),
+
+  listAgentSessionRuns: (sessionId: string) =>
+    request<any[]>(`/query/agent-sessions/${encodeURIComponent(sessionId)}/runs`),
+
+  getRecentAgentRun: (datasourceId: string) =>
+    request<AgentRunResponse | null>(`/query/agent-runs/recent?datasource_id=${encodeURIComponent(datasourceId)}`),
 
   listGoldenSql: (datasourceId: string) =>
     request<any[]>(`/golden-sql?datasource_id=${datasourceId}`),

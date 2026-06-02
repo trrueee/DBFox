@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from engine.agent import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent, DataBoxAgentRuntime
+from engine.agent import persistence as agent_persistence
 from engine.ai import generate_sql
 from engine.db import get_db
 from engine.errors import DataBoxError
@@ -21,6 +22,27 @@ from engine.executor import execute_query
 
 logger = logging.getLogger("databox.api.ai")
 router = APIRouter()
+
+
+@router.get("/query/agent-runs/{run_id}", response_model=AgentRunResponse | None)
+def api_get_agent_run(run_id: str, db: Session = Depends(get_db)):
+    result = agent_persistence.get_run(db, run_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND", "message": f"Agent run {run_id} not found."})
+    return result
+
+
+@router.get("/query/agent-sessions/{session_id}/runs")
+def api_list_session_runs(session_id: str, db: Session = Depends(get_db)):
+    return agent_persistence.list_session_runs(db, session_id)
+
+
+@router.get("/query/agent-runs/recent", response_model=AgentRunResponse | None)
+def api_get_recent_agent_run(datasource_id: str = Query(...), db: Session = Depends(get_db)):
+    result = agent_persistence.get_recent_run(db, datasource_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail={"code": "NO_RECENT_RUN", "message": "No recent agent run found for this datasource."})
+    return result
 
 
 @router.post("/query/agent-run", response_model=AgentRunResponse)

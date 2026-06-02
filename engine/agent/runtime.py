@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from collections.abc import Iterator
@@ -7,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.agent import persistence as agent_persistence
 from engine.agent.answer import synthesize_agent_answer
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
@@ -51,6 +53,8 @@ from engine.agent.types import (
     ToolObservation,
 )
 
+logger = logging.getLogger("databox.agent.runtime")
+
 
 class DataBoxAgentRuntime:
     def __init__(self, db: Session):
@@ -68,6 +72,14 @@ class DataBoxAgentRuntime:
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
+
+        if not has_follow_up_context(req) and req.parent_run_id:
+            reconstructed = agent_persistence.build_followup_context_from_run(self.db, req.parent_run_id)
+            if reconstructed is not None:
+                req.follow_up_context = reconstructed
+                if not req.session_id:
+                    req.session_id = reconstructed.session_id
+                    session_id = reconstructed.session_id
         artifact_identity = AgentArtifactIdentity(run_id)
         sequence = 0
         steps: list[AgentStep] = []
@@ -94,8 +106,8 @@ class DataBoxAgentRuntime:
         ) -> AgentRuntimeEvent:
             nonlocal sequence
             sequence += 1
-            return AgentRuntimeEvent(
-                event_id=f"runtime_{sequence}_{event_type.replace('.', '_')}",
+            event = AgentRuntimeEvent(
+                event_id=f"runtime_{run_id[:8]}_{sequence}_{event_type.replace('.', '_')}",
                 run_id=run_id,
                 sequence=sequence,
                 created_at_ms=int(time.time() * 1000),
@@ -106,6 +118,28 @@ class DataBoxAgentRuntime:
                 response=response,
                 error=error,
             )
+            _save_event(event)
+            return event
+
+        def _save_event(event: AgentRuntimeEvent) -> None:
+            try:
+                agent_persistence.record_runtime_event(self.db, session_id, event)
+            except Exception:
+                logger.warning("Persistence: failed to save event %s", event.event_id)
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
+
+        def _save_artifact_record(artifact: AgentArtifact, seq: int) -> None:
+            try:
+                agent_persistence.record_artifact(self.db, session_id, run_id, artifact, seq)
+            except Exception:
+                logger.warning("Persistence: failed to save artifact %s", artifact.id)
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
 
         def start_step(name: str) -> AgentRuntimeEvent:
             return emit(
@@ -131,18 +165,33 @@ class DataBoxAgentRuntime:
                 if artifact.id in emitted_artifact_ids:
                     continue
                 emitted_artifact_ids.add(artifact.id)
-                yield emit("agent.artifact.created", artifact=artifact)
+                event = emit("agent.artifact.created", artifact=artifact)
+                yield event
+                _save_artifact_record(artifact, len(artifacts))
             if response.answer is not None:
                 yield emit("agent.answer.completed", answer_payload=response.answer)
             final_type: AgentRuntimeEventType = "agent.run.completed" if response.success else "agent.run.failed"
             yield emit(final_type, response=response, error=response.error)
+            try:
+                if response.success:
+                    agent_persistence.complete_run(self.db, response)
+                else:
+                    agent_persistence.fail_run(self.db, run_id, session_id, response.error or "Agent run failed.", response)
+            except Exception:
+                logger.warning("Persistence: failed to persist final response for run %s", run_id)
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
 
         def append_artifact(artifact: AgentArtifact) -> AgentRuntimeEvent:
             semantic_to_id = {item.semantic_id or item.id: item.id for item in artifacts}
             artifact.depends_on = [semantic_to_id.get(dependency, dependency) for dependency in artifact.depends_on]
             artifacts.append(artifact)
             emitted_artifact_ids.add(artifact.id)
-            return emit("agent.artifact.created", artifact=artifact)
+            event = emit("agent.artifact.created", artifact=artifact)
+            _save_artifact_record(artifact, len(artifacts))
+            return event
 
         def build_failure(error: str, plan: dict[str, Any] | None = None) -> AgentRunResponse:
             return self._failure(
@@ -164,6 +213,23 @@ class DataBoxAgentRuntime:
                 "execute": req.execute,
             },
         )
+
+        try:
+            agent_persistence.create_or_get_session(self.db, req, run_id)
+        except Exception:
+            logger.warning("Persistence: failed to create session for run %s", run_id)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+        try:
+            agent_persistence.start_run(self.db, req, run_id, session_id)
+        except Exception:
+            logger.warning("Persistence: failed to start run %s", run_id)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
 
         if has_follow_up_context(req):
             yield start_step("load_follow_up_context")

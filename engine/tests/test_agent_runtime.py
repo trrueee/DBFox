@@ -453,3 +453,310 @@ def test_stream_and_non_stream_final_response_consistency(db_session, demo_datas
     for ns_step, ss_step in zip(non_stream_res.steps, stream_res.steps):
         assert ns_step.name == ss_step.name
         assert ns_step.status == ss_step.status
+
+
+# ── Persistence tests ──
+
+
+def test_persistence_creates_session_and_run(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.schema_sync import sync_schema
+    from engine.models import AgentRun as AgentRunModel, AgentSession as AgentSessionModel
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id FROM users LIMIT 1",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="persistence test",
+        execute=True,
+        session_id="persist-session-1",
+    )
+
+    res = DataBoxAgentRuntime(db_session).run(req)
+
+    session_row = db_session.query(AgentSessionModel).filter(AgentSessionModel.id == "persist-session-1").first()
+    assert session_row is not None
+    assert session_row.datasource_id == demo_datasource.id
+
+    run_row = db_session.query(AgentRunModel).filter(AgentRunModel.id == res.run_id).first()
+    assert run_row is not None
+    assert run_row.session_id == "persist-session-1"
+    assert run_row.status == "success"
+    assert run_row.question == "persistence test"
+    assert run_row.response_json is not None
+
+
+def test_persistence_saves_artifacts(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.schema_sync import sync_schema
+    from engine.models import AgentArtifactRecord
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="artifact persistence test",
+        execute=True,
+        session_id="persist-artifact-session",
+    )
+
+    res = DataBoxAgentRuntime(db_session).run(req)
+    assert res.success is True
+
+    records = (
+        db_session.query(AgentArtifactRecord)
+        .filter(AgentArtifactRecord.run_id == res.run_id)
+        .order_by(AgentArtifactRecord.sequence)
+        .all()
+    )
+    semantic_ids = {r.semantic_id for r in records}
+    assert "query_plan" in semantic_ids
+    assert "sql_candidate" in semantic_ids
+    assert "safety_report" in semantic_ids
+    assert "result_table" in semantic_ids
+
+    for record in records:
+        assert record.id.startswith(f"agent/run/{res.run_id}/artifact/")
+        assert record.type
+        assert record.title
+        assert record.payload_json
+
+
+def test_persistence_get_run_restores_response(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent.persistence import get_run
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="get_run test",
+        execute=True,
+        session_id="persist-getrun",
+    )
+
+    res = DataBoxAgentRuntime(db_session).run(req)
+
+    restored = get_run(db_session, res.run_id)
+    assert restored is not None
+    assert restored.run_id == res.run_id
+    assert restored.session_id == res.session_id
+    assert restored.success == res.success
+    assert restored.question == res.question
+    assert restored.sql == res.sql
+    assert restored.answer is not None
+    assert restored.answer.answer == res.answer.answer
+    assert len(restored.artifacts) == len(res.artifacts)
+    assert restored.steps == res.steps
+
+    evidence_artifact_ids = {e.artifact_id for e in restored.answer.evidence}
+    artifact_ids = {a.id for a in restored.artifacts}
+    assert evidence_artifact_ids.issubset(artifact_ids)
+
+
+def test_persistence_followup_server_side_reconstruction(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent.persistence import build_followup_context_from_run
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    first_req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="first run",
+        execute=True,
+        session_id="followup-session",
+    )
+    first_res = DataBoxAgentRuntime(db_session).run(first_req)
+    assert first_res.success is True
+
+    followup_req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="break it down further",
+        execute=True,
+        parent_run_id=first_res.run_id,
+    )
+    followup_res = DataBoxAgentRuntime(db_session).run(followup_req)
+    assert followup_res.success is True
+
+    assert followup_res.session_id == "followup-session"
+    assert followup_res.referenced_artifact_ids
+    assert followup_res.steps[0].name == "load_follow_up_context"
+
+    ctx = build_followup_context_from_run(db_session, first_res.run_id)
+    assert ctx is not None
+    assert ctx.session_id == "followup-session"
+    assert ctx.parent_run_id == first_res.run_id
+    assert ctx.previous_question == "first run"
+    assert ctx.previous_answer is not None
+    assert len(ctx.artifacts) > 0
+
+
+def test_persistence_streaming_saves_events(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.models import AgentRuntimeEventRecord
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id FROM users LIMIT 1",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="streaming persistence",
+        execute=True,
+        session_id="stream-persist",
+    )
+
+    events = list(DataBoxAgentRuntime(db_session).run_iter(req))
+    final_response = events[-1].response
+    assert final_response is not None
+
+    saved_events = (
+        db_session.query(AgentRuntimeEventRecord)
+        .filter(AgentRuntimeEventRecord.run_id == final_response.run_id)
+        .order_by(AgentRuntimeEventRecord.sequence)
+        .all()
+    )
+    assert len(saved_events) > 0
+    assert saved_events[0].type == "agent.run.started"
+    assert saved_events[-1].type == "agent.run.completed"
+
+    artifact_events = [e for e in saved_events if e.type == "agent.artifact.created"]
+    assert len(artifact_events) >= 4
+
+    from engine.models import AgentRun as AgentRunModel
+    run_row = db_session.query(AgentRunModel).filter(AgentRunModel.id == final_response.run_id).first()
+    assert run_row is not None
+    assert run_row.status == "success"
+
+
+def test_persistence_failure_saves_error_artifact(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.models import AgentRun as AgentRunModel
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "DELETE FROM users",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="delete users",
+        execute=True,
+        session_id="persist-fail",
+    )
+
+    events = list(DataBoxAgentRuntime(db_session).run_iter(req))
+    final = events[-1]
+    assert final.type == "agent.run.failed"
+    assert final.response is not None
+
+    run_row = db_session.query(AgentRunModel).filter(AgentRunModel.id == final.response.run_id).first()
+    assert run_row is not None
+    assert run_row.status == "failed"
+    assert run_row.error is not None
+
+    from engine.models import AgentArtifactRecord
+    error_artifact = (
+        db_session.query(AgentArtifactRecord)
+        .filter(
+            AgentArtifactRecord.run_id == final.response.run_id,
+            AgentArtifactRecord.semantic_id == "agent_error",
+        )
+        .first()
+    )
+    assert error_artifact is not None
+
+    import json
+    payload = json.loads(error_artifact.payload_json)
+    assert "error" in payload
+    assert "recovery_guidance" in payload
+
+
+def test_persistence_recent_run_recovery(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent.persistence import get_recent_run
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id FROM users LIMIT 1",
+            "model": "test", "mode": "offline", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="recent run test",
+        execute=True,
+    )
+
+    res = DataBoxAgentRuntime(db_session).run(req)
+    assert res.success is True
+
+    recent = get_recent_run(db_session, demo_datasource.id)
+    assert recent is not None
+    assert recent.run_id == res.run_id
+    assert recent.question == "recent run test"

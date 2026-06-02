@@ -309,6 +309,111 @@ class GoldenSQL(Base):  # type: ignore[misc,valid-type]
     datasource = relationship("DataSource", back_populates="golden_sqls")
 
 
+class AgentSession(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_sessions"
+    __table_args__ = (
+        Index("ix_agent_sessions_datasource", "datasource_id"),
+        Index("ix_agent_sessions_created", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    runs = relationship("AgentRun", back_populates="session", cascade="all, delete-orphan")
+
+
+class AgentRun(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_session", "session_id"),
+        Index("ix_agent_runs_datasource", "datasource_id"),
+        Index("ix_agent_runs_created", "created_at"),
+    )
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    parent_run_id = Column(String, nullable=True)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    question = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="running")
+    response_json = Column(Text, nullable=True)
+    context_summary = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    session = relationship("AgentSession", back_populates="runs")
+    artifacts = relationship("AgentArtifactRecord", back_populates="run", cascade="all, delete-orphan")
+    runtime_events = relationship("AgentRuntimeEventRecord", back_populates="run", cascade="all, delete-orphan")
+    trace_events = relationship("AgentTraceEventRecord", back_populates="run", cascade="all, delete-orphan")
+
+
+class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_artifacts"
+    __table_args__ = (
+        Index("ix_agent_artifacts_run", "run_id"),
+        Index("ix_agent_artifacts_session", "session_id"),
+    )
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(String, nullable=False)
+    semantic_id = Column(String, nullable=True)
+    type = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    produced_by_step = Column(String, nullable=True)
+    depends_on_json = Column(Text, nullable=True)
+    payload_json = Column(Text, nullable=False)
+    presentation_json = Column(Text, nullable=False)
+    refs_json = Column(Text, nullable=True)
+    sequence = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    run = relationship("AgentRun", back_populates="artifacts")
+
+
+class AgentRuntimeEventRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_runtime_events"
+    __table_args__ = (
+        Index("ix_agent_runtime_events_run", "run_id"),
+        Index("ix_agent_runtime_events_session", "session_id"),
+    )
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(String, nullable=False)
+    sequence = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
+    event_json = Column(Text, nullable=False)
+    created_at_ms = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    run = relationship("AgentRun", back_populates="runtime_events")
+
+
+class AgentTraceEventRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_trace_events"
+    __table_args__ = (
+        Index("ix_agent_trace_events_run", "run_id"),
+        Index("ix_agent_trace_events_session", "session_id"),
+    )
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(String, nullable=False)
+    sequence = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
+    event_json = Column(Text, nullable=False)
+    created_at_ms = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+    run = relationship("AgentRun", back_populates="trace_events")
+
+
 class TableDesignDraft(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "table_design_drafts"
     __table_args__ = (

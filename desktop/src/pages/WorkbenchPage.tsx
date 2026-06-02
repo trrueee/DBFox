@@ -469,6 +469,22 @@ export const WorkbenchPage = ({
   // Stepper Tour Guide Dialog state in bottom status bar
   const [showTourDialog, setShowTourDialog] = useState(false);
 
+  // ── Recover recent agent run on page refresh ──
+  useEffect(() => {
+    if (!activeDataSource) return;
+    let cancelled = false;
+    api.getRecentAgentRun(activeDataSource.id).then((res) => {
+      if (!cancelled && res) {
+        setAgentResponse(res);
+        setAiMode("agent");
+        setAiPanelCollapsed(false);
+      }
+    }).catch(() => {
+      // No recent run available — ignore
+    });
+    return () => { cancelled = true; };
+  }, [activeDataSource?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   // Active tab context RAG
   const activeTab = useMemo(() => {
     return tabs.find(t => t.id === activeTabId) || null;
@@ -663,7 +679,17 @@ export const WorkbenchPage = ({
 
   const handleRunAgentPrompt = useCallback(async (question: string, followUpFrom?: AgentRunResponse | null) => {
     if (!question.trim() || !activeDataSource) return;
-    const followUpContext = followUpFrom ? buildAgentFollowUpContext(followUpFrom) : undefined;
+    const config: Parameters<typeof api.streamAgentQuery>[2] = {
+      optimizeRag: true,
+      execute: true,
+    };
+    if (followUpFrom) {
+      config.sessionId = followUpFrom.session_id;
+      config.parentRunId = followUpFrom.run_id;
+      if (followUpFrom.artifacts && followUpFrom.artifacts.length > 0) {
+        config.followUpContext = buildAgentFollowUpContext(followUpFrom);
+      }
+    }
     setAiMode("agent");
     setAiPanelCollapsed(false);
     setAiLoading(true);
@@ -676,7 +702,7 @@ export const WorkbenchPage = ({
       const res = await api.streamAgentQuery(
         activeDataSource.id,
         question,
-        { optimizeRag: true, execute: true, followUpContext },
+        config,
         {
           onEvent: (event) => {
             setAgentStreamEvents((prev) => [...prev, event]);
