@@ -20,7 +20,7 @@ export const TimeoutProcessor: ActionProcessor = {
     return { seconds: trimmed };
   },
 
-  validate(action, _plan) {
+  validate(action) {
     const issues: QueryActionIssue[] = [];
     const secondsStr = action.args.seconds ?? "30";
     const n = Number(secondsStr);

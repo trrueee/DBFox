@@ -9,6 +9,8 @@
 > **DataBox** 是一款面向运营、业务和数据分析人员的 **本地优先可信 Text-to-SQL 数据探索桌面客户端**。系统基于本地 Schema 语义层、SQL 安全校验和注解式 SQL Action Engine，实现了自然语言智能问数、SQL 生成、执行编排、结果可视化，并通过 Spider / BIRD / Golden SQL 标准测试集对 SQL 生成效果进行量化评估与诊断。
 
 [English Summary](#english-documentation) | [中文系统架构说明](#chinese-documentation)
+ 
+**Boundary note:** `@limit`, `@timeout`, `@explain`, `@export`, and `@chart` belong to the SQL Editor action pipeline in `desktop/src/lib/query-actions/`. They are not Agent tools. The Agent runtime owns AgentRun, Step, Artifact, Trace, SSE, and follow-up workflows under `engine/agent/` and `desktop/src/features/agent/`. The semantic layer is shared Text-to-SQL infrastructure, not an Agent-only submodule. See `docs/databox_code_based_architecture_v0.4.md`.
 
 ---
 

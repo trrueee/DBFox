@@ -13,7 +13,7 @@ export const ExplainProcessor: ActionProcessor = {
     examples: ["@explain"],
   },
 
-  parse(_rest) {
+  parse() {
     return {};
   },
 

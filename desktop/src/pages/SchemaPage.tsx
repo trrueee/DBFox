@@ -62,7 +62,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
           expected_confirm_text: res.expected_confirm_text,
           onConfirm: async (text) => {
             const confirmed = await api.generateTestData(params, { token: res.confirm_token, text });
-            if (confirmed && "message" in confirmed) setTestDataResult(confirmed.message);
+            if (confirmed && "message" in confirmed) setTestDataResult(confirmed.message ?? null);
             setConfirmDetails(null);
             setTimeout(() => {
               void fetchPreviewData(selectedTable.table_name);
@@ -74,7 +74,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
         });
         return;
       }
-      if (res && "message" in res) setTestDataResult(res.message);
+      if (res && "message" in res) setTestDataResult(res.message ?? null);
       setTimeout(() => {
         void fetchPreviewData(selectedTable.table_name);
         setShowTestDataModal(false);

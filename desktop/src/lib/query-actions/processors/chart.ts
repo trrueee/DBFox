@@ -30,7 +30,7 @@ export const ChartProcessor: ActionProcessor = {
     return args;
   },
 
-  validate(action, _plan) {
+  validate(action) {
     const validTypes = ["line", "bar", "pie"];
     const chartType = (action.args.type || "bar").toLowerCase();
     if (!validTypes.includes(chartType)) {

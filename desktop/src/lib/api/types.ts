@@ -1,0 +1,647 @@
+export interface ConfirmationRequired {
+  success: false;
+  requires_confirmation: true;
+  confirm_token: string;
+  impact_summary: string;
+  expected_confirm_text: string;
+  message?: string;
+}
+
+export type DangerousOperationResult<T> = T | ConfirmationRequired;
+
+export interface DataSource {
+  id: string;
+  project_id?: string;
+  environment_id?: string;
+  name: string;
+  db_type?: string;
+  host: string;
+  port: number;
+  database_name: string;
+  username: string;
+  connection_mode: string;
+  is_read_only?: boolean;
+  env?: string;
+  status: string;
+  ssh_enabled?: boolean;
+  ssh_host?: string;
+  ssh_port?: number;
+  ssh_username?: string;
+  ssh_pkey_path?: string;
+  ssl_enabled?: boolean;
+  ssl_ca_path?: string;
+  ssl_cert_path?: string;
+  ssl_key_path?: string;
+  ssl_verify_identity?: boolean;
+  last_test_at?: string;
+  last_test_status?: string;
+  last_test_error?: string;
+  last_test_latency_ms?: number | null;
+  last_test_readonly?: boolean | null;
+  last_test_server_version?: string | null;
+  last_test_tables_count?: number | null;
+  last_test_warnings?: string[];
+  last_sync_at?: string;
+  last_sync_status?: string;
+  last_sync_error?: string;
+  created_at: string;
+}
+
+export interface DataSourceHealthResult {
+  ok: boolean;
+  status: "success" | "failed";
+  checkedAt?: string;
+  latencyMs?: number;
+  serverVersion?: string;
+  readonly?: boolean | null;
+  tablesCount?: number;
+  warnings: string[];
+  message: string;
+  datasource: DataSource;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  datasource_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DatabaseEnvironment {
+  id: string;
+  project_id: string;
+  name: string;
+  runtime: string;
+  engine_type: string;
+  engine_version: string;
+  image: string;
+  container_name: string;
+  host: string;
+  port: number;
+  database_name: string;
+  username: string;
+  datasource_id?: string;
+  status: string;
+  last_health_status?: string;
+  last_health_at?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BackupRecord {
+  id: string;
+  project_id: string;
+  datasource_id: string;
+  environment_id?: string;
+  label: string;
+  backup_type: string;
+  status: string;
+  file_path?: string;
+  file_size_bytes?: number;
+  checksum_sha256?: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  error_message?: string;
+  created_at?: string;
+}
+
+export interface TableDesignDraft {
+  id: string;
+  project_id: string;
+  table_name: string;
+  table_comment?: string;
+  columns: TableDesignColumn[];
+  indexes: TableDesignIndex[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+
+export interface SchemaTable {
+  id: string;
+  table_name: string;
+  table_comment: string;
+  table_type: string;
+  row_count_estimate: number;
+  columns_count: number;
+  module_tag?: string;
+}
+
+export interface SchemaColumn {
+  id: string;
+  column_name: string;
+  data_type: string;
+  column_type: string;
+  is_nullable: boolean;
+  column_default: string;
+  column_comment: string;
+  is_primary_key: boolean;
+  is_foreign_key: boolean;
+  foreign_table_id?: string;
+  foreign_column_id?: string;
+}
+
+export interface TableDesignColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  default_value?: string | null;
+  primary_key: boolean;
+  auto_increment: boolean;
+  comment?: string | null;
+}
+
+export interface TableDesignIndex {
+  name?: string | null;
+  columns: string[];
+  unique: boolean;
+}
+
+export interface DeleteResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface DataSourceTestResult {
+  success?: boolean;
+  message?: string;
+  serverVersion?: string;
+  readonly?: boolean;
+  tablesCount?: number;
+  warnings?: string[];
+}
+
+export interface SchemaSyncResult {
+  success?: boolean;
+  message?: string;
+  syncedTables?: number;
+  [key: string]: unknown;
+}
+
+export interface GoldenSqlRecord {
+  id: string;
+  data_source_id: string;
+  question: string;
+  golden_sql: string;
+  created_at: string | null;
+}
+
+export interface BenchmarkDetail {
+  golden_id: string;
+  question: string;
+  golden_sql: string;
+  generated_sql: string;
+  status: "passed" | "failed";
+  match_type: "lexical" | "execution" | "none";
+  latency_ms: number;
+  error_message: string;
+}
+
+export interface BenchmarkResult {
+  success: boolean;
+  total_queries: number;
+  passed_count: number;
+  accuracy_rate: number;
+  avg_latency_ms: number;
+  details: BenchmarkDetail[];
+}
+
+export interface LlmStats {
+  total_calls: number;
+  success_count?: number;
+  failed_count?: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  guardrail_total?: number;
+  guardrail_blocked?: number;
+  guardrail_approved?: number;
+  guardrail_block_rate: number;
+  chart_data: Array<{ date: string; value: number }>;
+  model_dist: Array<{ name: string; value: number }>;
+}
+
+export interface TableDesignDDLRequest {
+  table_name: string;
+  table_comment?: string | null;
+  engine?: string;
+  charset?: string;
+  collation?: string;
+  columns: TableDesignColumn[];
+  indexes?: TableDesignIndex[];
+}
+
+export interface TableDesignDDLResponse {
+  ddl: string;
+  warnings: string[];
+  summary: {
+    tableName: string;
+    columns: number;
+    indexes: number;
+    primaryKey: string[];
+    dialect: string;
+  };
+}
+
+export interface GuardrailCheckResult {
+  result: "pass" | "warn" | "reject";
+  originalSql: string;
+  safeSql: string;
+  checks: Array<{
+    rule: string;
+    level: "warn" | "reject";
+    message: string;
+  }>;
+  message: string;
+}
+
+export interface QueryPlan {
+  intent: string;
+  tables: string[];
+  metrics: Array<{
+    name: string;
+    expression: string;
+    source_column: string;
+  }>;
+  dimensions: Array<{
+    name: string;
+    column: string;
+    transform: string | null;
+  }>;
+  filters: Array<{
+    column: string;
+    operator: string;
+    value: string;
+  }>;
+  joins: Array<{
+    left_table: string;
+    right_table: string;
+    condition: string;
+  }>;
+  order_by: string | null;
+  limit: number;
+  warnings?: string[];
+  mode?: string;
+}
+
+export interface TrustGateResult {
+  sql: string;
+  schemaWarnings: string[];
+  guardrail: GuardrailCheckResult;
+  riskLevel: "safe" | "warning" | "danger";
+  requiresConfirmation: boolean;
+  messages: string[];
+  canExecute?: boolean;
+}
+
+export interface GeneratedSqlResult {
+  sql: string;
+  model: string;
+  latencyMs: number;
+  guardrail: GuardrailCheckResult;
+  trustGate?: TrustGateResult;
+  mode: "offline" | "online";
+  schemaValidationWarnings: string[];
+  queryPlan?: QueryPlan;
+  selectedTables?: string[];
+  selectedColumns?: string[];
+  schemaLinkingReasons?: unknown[];
+  schemaContextSize?: number;
+  originalSchemaTableCount?: number;
+  selectedSchemaTableCount?: number;
+}
+
+export interface AgentStep {
+  name: string;
+  status: "success" | "failed" | "skipped";
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  latency_ms: number;
+}
+
+export interface AgentQueryPlan {
+  analysis_goal: string;
+  metrics: Array<Record<string, unknown>>;
+  dimensions: Array<Record<string, unknown>>;
+  filters: Array<Record<string, unknown>>;
+  time_range?: Record<string, unknown> | null;
+  candidate_tables: string[];
+  assumptions: string[];
+  risk_notes: string[];
+  raw_plan?: Record<string, unknown> | null;
+}
+
+export interface AgentChartSuggestion {
+  type: "bar" | "line" | "pie" | "table";
+  x?: string | null;
+  y?: string | null;
+  reason?: string;
+}
+
+export interface AgentArtifact {
+  id: string;
+  semantic_id?: string | null;
+  type: "query_plan" | "sql" | "safety" | "table" | "chart" | "insight" | "recommendation" | "error";
+  title: string;
+  payload: Record<string, unknown>;
+  presentation: {
+    mode: "inline" | "dock" | "both" | "hidden";
+    priority: number;
+    collapsed?: boolean;
+  };
+  refs?: Record<string, unknown>;
+  produced_by_step?: string | null;
+  depends_on?: string[];
+}
+
+export interface FollowUpSuggestion {
+  label: string;
+  question: string;
+  reason: string;
+  action_type: "ask" | "chart" | "export" | "save_golden_sql";
+}
+
+export interface AgentContextArtifact {
+  id: string;
+  type: AgentArtifact["type"];
+  title: string;
+  summary?: string | null;
+  payload?: Record<string, unknown>;
+}
+
+export interface AgentFollowUpContext {
+  session_id?: string | null;
+  parent_run_id?: string | null;
+  previous_question?: string | null;
+  previous_answer?: string | null;
+  artifacts?: AgentContextArtifact[];
+}
+
+export interface AgentAnswer {
+  answer: string;
+  key_findings: string[];
+  evidence: Array<{
+    artifact_id: string;
+    label: string;
+    value?: string | number | null;
+  }>;
+  caveats: string[];
+  recommendations: string[];
+  follow_up_questions: string[];
+}
+
+export interface AgentMessageBlock {
+  block_id?: string | null;
+  sequence?: number | null;
+  type: "text" | "artifact_ref" | "answer" | "suggestions";
+  content?: string | null;
+  artifact_id?: string | null;
+  display?: "compact" | "full" | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+}
+
+export interface ResultProfile {
+  row_count: number;
+  column_profiles: Record<string, Record<string, unknown>>;
+  detected_patterns: string[];
+  notable_facts: string[];
+  anomalies: string[];
+  limitations: string[];
+}
+
+export interface AgentVisibleEvent {
+  event_id?: string | null;
+  sequence?: number | null;
+  created_at_ms?: number | null;
+  type:
+    | "agent.narration.delta"
+    | "agent.narration.completed"
+    | "agent.artifact.created"
+    | "agent.answer.delta"
+    | "agent.answer.completed"
+    | "agent.suggestions.created";
+  content?: string | null;
+  artifact?: AgentArtifact | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+}
+
+export interface AgentTraceEvent {
+  event_id?: string | null;
+  sequence?: number | null;
+  created_at_ms?: number | null;
+  type: "agent.trace.step_started" | "agent.trace.step_completed";
+  step_id: string;
+  name: string;
+  status?: "success" | "failed" | "skipped" | null;
+  input?: Record<string, unknown> | null;
+  output?: Record<string, unknown> | null;
+  error?: string | null;
+  latency_ms?: number | null;
+}
+
+export interface AgentRunResponse {
+  run_id: string;
+  session_id: string;
+  parent_run_id?: string | null;
+  success: boolean;
+  question: string;
+  context_summary?: string | null;
+  referenced_artifact_ids?: string[];
+  query_plan?: AgentQueryPlan | null;
+  sql?: string | null;
+  safety?: Record<string, unknown> | null;
+  execution?: {
+    success?: boolean;
+    columns?: string[];
+    rows?: Array<Record<string, unknown>>;
+    rowCount?: number;
+    latencyMs?: number;
+    warnings?: string[];
+    reason?: string;
+    revise_suggestion?: string;
+  } | null;
+  explanation?: string | null;
+  chart_suggestion?: AgentChartSuggestion | null;
+  result_profile?: ResultProfile | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+  artifacts?: AgentArtifact[];
+  message_blocks?: AgentMessageBlock[];
+  events?: AgentVisibleEvent[];
+  trace_events?: AgentTraceEvent[];
+  steps: AgentStep[];
+  error?: string | null;
+}
+
+export interface AgentRunConfig {
+  apiKey?: string;
+  apiBase?: string;
+  model?: string;
+  optimizeRag?: boolean;
+  execute?: boolean;
+  sessionId?: string;
+  parentRunId?: string;
+  followUpContext?: AgentFollowUpContext;
+}
+
+export type AgentRuntimeEventType =
+  | "agent.run.started"
+  | "agent.step.started"
+  | "agent.step.completed"
+  | "agent.artifact.created"
+  | "agent.answer.completed"
+  | "agent.run.completed"
+  | "agent.run.failed";
+
+export interface AgentRuntimeEvent {
+  event_id: string;
+  run_id: string;
+  sequence: number;
+  created_at_ms: number;
+  type: AgentRuntimeEventType;
+  step?: (Partial<AgentStep> & Record<string, unknown>) | null;
+  artifact?: AgentArtifact | null;
+  answer?: AgentAnswer | null;
+  response?: AgentRunResponse | null;
+  error?: string | null;
+}
+
+export interface AgentRunDraftState {
+  runId?: string;
+  status: "idle" | "running" | "failed" | "completed";
+  question: string;
+  events: AgentRuntimeEvent[];
+  artifacts: AgentArtifact[];
+  answer?: AgentAnswer | null;
+  response?: AgentRunResponse | null;
+  error?: string | null;
+}
+
+export interface AgentSessionRunSummary {
+  run_id: string;
+  session_id: string;
+  parent_run_id?: string | null;
+  question: string;
+  status: string;
+  error?: string | null;
+  artifact_count: number;
+  created_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface AgentArtifactRecord extends AgentArtifact {
+  run_id: string;
+  sequence: number;
+  created_at?: string | null;
+}
+
+export interface AgentRuntimeEventRecord {
+  id: string;
+  run_id: string;
+  sequence: number;
+  type: string;
+  event: AgentRuntimeEvent;
+  created_at_ms: number;
+}
+
+export interface AgentTraceEventRecord extends AgentTraceEvent {
+  id?: string;
+  run_id?: string;
+  sequence?: number | null;
+}
+
+export interface TableDesignExecutionResult {
+  success: true;
+  latencyMs: number;
+  syncResult: SchemaSyncResult | null;
+  message: string;
+}
+
+export interface QueryResult {
+  success: boolean;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  rowCount: number;
+  latencyMs: number;
+  guardrail: GuardrailCheckResult;
+  historyId: string;
+  executionId?: string;
+  truncated?: boolean;
+  responseBytes?: number;
+  maxResponseBytes?: number;
+  warnings?: string[];
+  connectMs?: number;
+  guardrailMs?: number;
+  executeMs?: number;
+  fetchMs?: number;
+  serializeMs?: number;
+  totalMs?: number;
+}
+
+export interface QueryHistory {
+  id: string;
+  question: string;
+  submitted_sql: string;
+  generated_sql: string;
+  safe_sql: string;
+  executed_sql: string;
+  guardrail_result: "pass" | "warn" | "reject";
+  guardrail_checks?: string;
+  execution_status: "success" | "failed" | "timeout" | "cancelled";
+  execution_time_ms: number;
+  rows_returned: number;
+  columns_returned: number;
+  error_message: string;
+  created_at: string;
+}
+
+export interface ERDiagramData {
+  nodes: Array<{
+    id: string;
+    label: string;
+    comment: string;
+    module_tag: string;
+    fields: Array<{
+      name: string;
+      type: string;
+      is_pk: boolean;
+      is_fk: boolean;
+      comment: string;
+    }>;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    sourceHandle: string;
+    target: string;
+    targetHandle: string;
+    label: string;
+    edge_type: "real" | "inferred";
+  }>;
+}
+
+export interface TableDesignAiResponse {
+  table_name: string;
+  table_comment: string;
+  columns: Array<{
+    name: string;
+    type: string;
+    nullable: boolean;
+    primary_key: boolean;
+    auto_increment: boolean;
+    default_value: string | null;
+    comment: string;
+  }>;
+  indexes: Array<{
+    name: string;
+    columns: string[];
+    unique: boolean;
+  }>;
+}

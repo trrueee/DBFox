@@ -29,7 +29,7 @@ export const ExportProcessor: ActionProcessor = {
     return args;
   },
 
-  validate(action, _plan) {
+  validate(action) {
     const format = (action.args.type || "csv").toLowerCase();
     if (!["csv", "json"].includes(format)) {
       return [{

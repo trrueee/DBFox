@@ -188,7 +188,7 @@ describe("repeatable actions", () => {
       parse(rest) {
         return { column: rest.trim() };
       },
-      apply(action, _plan) {
+      apply(action) {
         applied.push(action.args.column);
       },
       formatLabel(args) {

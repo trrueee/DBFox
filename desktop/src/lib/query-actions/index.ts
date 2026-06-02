@@ -8,6 +8,7 @@ import { TimeoutProcessor } from "./processors/timeout";
 import { ExplainProcessor } from "./processors/explain";
 import { ExportProcessor } from "./processors/export";
 import { ChartProcessor } from "./processors/chart";
+import type { ActionProcessor } from "./types";
 
 // Register all standard processors into the singleton registry on startup
 actionRegistry
@@ -26,6 +27,6 @@ export { ExplainProcessor } from "./processors/explain";
 export { ExportProcessor } from "./processors/export";
 export { ChartProcessor } from "./processors/chart";
 
-export function registerActionProcessor(processor: any): void {
+export function registerActionProcessor(processor: ActionProcessor): void {
   actionRegistry.register(processor);
 }
