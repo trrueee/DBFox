@@ -14,7 +14,7 @@ class AgentArtifactIdentity:
         if not self.run_id:
             return semantic_id
         self._counter += 1
-        return f"run_{self.run_id}.artifact.{self._counter:03d}.{semantic_id}"
+        return f"agent/run/{self.run_id}/artifact/{self._counter:03d}/{semantic_id}"
 
 
 def build_agent_artifacts(

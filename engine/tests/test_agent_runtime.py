@@ -122,7 +122,7 @@ def test_agent_runtime_run_iter_streams_artifacts_after_producing_steps(db_sessi
     artifact_events = [event for event in events if event.type == "agent.artifact.created"]
     semantic_ids = [event.artifact.semantic_id for event in artifact_events if event.artifact]
     assert {"query_plan", "sql_candidate", "safety_report", "result_table"}.issubset(set(semantic_ids))
-    assert all(event.artifact.id.startswith(f"run_{final_response.run_id}.artifact.") for event in artifact_events if event.artifact)
+    assert all(event.artifact.id.startswith(f"agent/run/{final_response.run_id}/artifact/") for event in artifact_events if event.artifact)
 
     def step_index(step_name: str, event_type: str) -> int:
         return next(
@@ -368,3 +368,88 @@ def test_agent_runtime_stops_on_schema_hallucination_without_execution(db_sessio
     assert res.safety["schema_warnings"]
     assert "execute_sql" not in [step.name for step in res.steps]
     assert res.steps[-1].name == "revise_sql"
+
+
+def test_sse_event_format(db_session, demo_datasource) -> None:
+    from engine.api.ai import _format_sse_event
+    from engine.agent.types import AgentRuntimeEvent, AgentArtifact, AgentArtifactPresentation
+
+    artifact = AgentArtifact(
+        id="agent/run/test-run/artifact/001/query_plan",
+        semantic_id="query_plan",
+        type="query_plan",
+        title="Query plan",
+        payload={"analysis_goal": "test"},
+        presentation=AgentArtifactPresentation(mode="dock", priority=80),
+    )
+    event = AgentRuntimeEvent(
+        event_id="evt_1",
+        run_id="test-run",
+        sequence=1,
+        created_at_ms=1700000000000,
+        type="agent.artifact.created",
+        artifact=artifact,
+    )
+
+    formatted = _format_sse_event(event)
+
+    assert formatted.startswith("event: agent.artifact.created\n"), repr(formatted[:200])
+    assert "\ndata: " in formatted
+    assert formatted.endswith("\n\n")
+    parsed = __import__("json").loads(formatted.split("data: ")[1].rstrip("\n"))
+    assert parsed["event_id"] == "evt_1"
+    assert parsed["type"] == "agent.artifact.created"
+
+
+def test_stream_and_non_stream_final_response_consistency(db_session, demo_datasource, monkeypatch) -> None:
+    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent.tools import generate_sql as real_generate_sql
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "model": "test",
+            "mode": "offline",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="list users",
+        execute=True,
+        session_id="consistency-session",
+    )
+
+    non_stream_res = DataBoxAgentRuntime(db_session).run(req)
+    stream_events = list(DataBoxAgentRuntime(db_session).run_iter(req))
+    stream_res = stream_events[-1].response
+
+    assert stream_res is not None
+    assert non_stream_res.success == stream_res.success
+    assert stream_res.session_id == "consistency-session"
+
+    comparable_fields = ("session_id", "success", "question", "sql", "explanation")
+    for field in comparable_fields:
+        assert getattr(non_stream_res, field) == getattr(stream_res, field), f"{field} mismatch"
+
+    assert non_stream_res.answer is not None
+    assert stream_res.answer is not None
+    assert non_stream_res.answer.answer == stream_res.answer.answer
+    assert non_stream_res.answer.key_findings == stream_res.answer.key_findings
+    assert len(non_stream_res.answer.evidence) == len(stream_res.answer.evidence)
+
+    non_stream_semantic = {a.semantic_id for a in non_stream_res.artifacts}
+    stream_semantic = {a.semantic_id for a in stream_res.artifacts}
+    assert non_stream_semantic == stream_semantic
+
+    assert len(non_stream_res.steps) == len(stream_res.steps)
+    for ns_step, ss_step in zip(non_stream_res.steps, stream_res.steps):
+        assert ns_step.name == ss_step.name
+        assert ns_step.status == ss_step.status
