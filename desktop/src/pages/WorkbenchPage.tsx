@@ -334,7 +334,7 @@ export const WorkbenchPage = ({
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [agentResponse, setAgentResponse] = useState<AgentRunResponse | null>(null);
-  const [aiMode, setAiMode] = useState<"sql" | "agent">("sql");
+  const [aiMode, setAiMode] = useState<"sql" | "agent">("agent");
   const [aiLoading, setAiLoading] = useState(false);
 
   // Tree context menu
@@ -1265,69 +1265,88 @@ export const WorkbenchPage = ({
           {/* Active Tab content viewport */}
           <div style={{ flex: 1, overflow: "hidden", minHeight: 0, position: "relative" }}>
             {tabs.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", padding: 30, background: "var(--bg-primary)" }}>
-                <div style={{ maxWidth: 380, width: "100%" }}>
-                  <div style={{ marginBottom: 20, textAlign: "center" }}>
-                    <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)" }}>快捷键</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "4px 16px", fontSize: "0.76rem", color: "var(--text-secondary)", marginBottom: 16 }}>
-                    <span>新建 SQL 查询</span>
-                    <kbd style={{
-                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
-                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
-                      color: "var(--text-muted)"
-                    }}>Ctrl+T</kbd>
+              agentResponse ? (
+                <div style={{ height: "100%", overflow: "auto", padding: 18, background: "var(--bg-primary)" }}>
+                  <AgentWorkspace
+                    result={agentResponse}
+                    disabled={aiLoading}
+                    onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
+                    onAsk={(question) => handleRunAgentPrompt(question, agentResponse)}
+                    onSuggestion={handleAgentSuggestion}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: 30, background: "var(--bg-primary)" }}>
+                  <div style={{ maxWidth: 620, width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--accent-indigo)", fontWeight: 800, fontSize: "0.82rem", marginBottom: 6 }}>
+                        <Sparkles size={15} />
+                        Agent 分析入口
+                      </div>
+                      <div style={{ color: "var(--text-secondary)", fontSize: "0.78rem", lineHeight: 1.6 }}>
+                        直接用自然语言描述你要调查的问题，DataBox 会生成 narrative、证据 artifacts、结果表和后续建议。
+                      </div>
+                    </div>
 
-                    <span>快速打开对象</span>
-                    <kbd style={{
-                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
-                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
-                      color: "var(--text-muted)"
-                    }}>Ctrl+P</kbd>
-
-                    <span>执行当前 SQL</span>
-                    <kbd style={{
-                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
-                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
-                      color: "var(--text-muted)"
-                    }}>Ctrl+Enter</kbd>
-
-                    <span>聚焦 AI 面板</span>
-                    <kbd style={{
-                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
-                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
-                      color: "var(--text-muted)"
-                    }}>Alt+A</kbd>
-
-                    <span>打开命令面板</span>
-                    <kbd style={{
-                      background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 3,
-                      border: "1px solid var(--border-medium)", fontFamily: "var(--font-mono)", fontSize: "0.64rem",
-                      color: "var(--text-muted)"
-                    }}>Ctrl+Shift+P</kbd>
-                  </div>
-
-                  <div style={{ height: "1px", background: "var(--border-light)", margin: "0 0 16px" }} />
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      className="btn-primary"
-                      onClick={() => handleOpenQueryTab()}
-                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "5px 0" }}
+                    <form
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void handleRunAgentPrompt(aiPrompt);
+                      }}
+                      style={{ display: "flex", flexDirection: "column", gap: 8 }}
                     >
-                      <Plus size={12} />
-                      新建 SQL 标签页
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => setShowCommandPalette(true)}
-                      style={{ flex: 1, justifyContent: "center", fontSize: "0.78rem", padding: "5px 0" }}
-                    >
-                      打开命令面板
-                    </button>
+                      <textarea
+                        className="input-field"
+                        placeholder="例如：分析最近 30 天订单趋势，按日期展示订单数和销售额"
+                        value={aiPrompt}
+                        onChange={(event) => setAiPrompt(event.target.value)}
+                        disabled={!activeDataSource || aiLoading}
+                        style={{ minHeight: 88, resize: "vertical", fontSize: "0.82rem", lineHeight: 1.55 }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                            event.preventDefault();
+                            void handleRunAgentPrompt(aiPrompt);
+                          }
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          type="submit"
+                          className="btn-primary"
+                          disabled={!activeDataSource || aiLoading || !aiPrompt.trim()}
+                          style={{ justifyContent: "center", fontSize: "0.78rem", padding: "5px 12px" }}
+                        >
+                          <Sparkles size={12} />
+                          {aiLoading ? "Agent 分析中..." : "运行 Agent 分析"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => handleOpenQueryTab()}
+                          style={{ justifyContent: "center", fontSize: "0.78rem", padding: "5px 12px" }}
+                        >
+                          <Terminal size={12} />
+                          高级 SQL 控制台
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => setShowCommandPalette(true)}
+                          style={{ marginLeft: "auto", fontSize: "0.74rem" }}
+                        >
+                          命令面板
+                        </button>
+                      </div>
+                    </form>
+
+                    {!activeDataSource && (
+                      <div style={{ color: "var(--accent-amber)", fontSize: "0.72rem" }}>
+                        请先在左侧选择或创建一个数据源。
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              )
             ) : (
               <div style={{ height: "100%", width: "100%" }}>
                 {activeTab?.type === "query" && activeDataSource && (

@@ -60,6 +60,32 @@ def test_agent_runtime_execute_false_generates_full_review_response(db_session, 
     assert res.steps[4].status == "skipped"
 
 
+def test_agent_runtime_reuses_validation_safety_decision_for_execution(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "model": "test",
+            "mode": "offline",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=True)
+
+    res = DataBoxAgentRuntime(db_session).run(req)
+
+    assert res.success is True, res.model_dump()
+    assert res.safety is not None
+    assert res.safety["execution_safety_decision"]["can_execute"] is True
+    assert res.execution is not None
+    assert res.execution["success"] is True
+    assert res.execution["safetyDecision"]["decision_id"] == res.safety["execution_safety_decision"]["decision_id"]
+
+
 def test_agent_runtime_uses_client_supplied_followup_context(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
     context = AgentFollowUpContext(

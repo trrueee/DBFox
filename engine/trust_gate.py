@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from typing import Callable, Literal, TypedDict
+from datetime import datetime, timezone
+from typing import Any, Callable, Literal, TypedDict
+from uuid import uuid4
+
+from pydantic import BaseModel, Field
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +24,21 @@ class TrustGateResult(TypedDict, total=False):
     requiresConfirmation: bool
     messages: list[str]
     canExecute: bool
+
+
+class ExecutionSafetyDecision(BaseModel):
+    decision_id: str = Field(default_factory=lambda: f"safety-{uuid4()}")
+    datasource_id: str
+    original_sql: str
+    safe_sql: str | None
+    passed: bool
+    can_execute: bool
+    requires_confirmation: bool
+    guardrail: GuardrailResult
+    schema_warnings: list[str] = Field(default_factory=list)
+    scope_state: dict[str, Any] = Field(default_factory=dict)
+    messages: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class TrustGate:
@@ -68,3 +87,46 @@ class TrustGate:
             "messages": messages,
             "canExecute": can_execute,
         }
+
+    def execution_decision(self, datasource_id: str, sql: str) -> ExecutionSafetyDecision:
+        datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
+        trust_gate = self.evaluate(datasource_id, sql)
+        guardrail = trust_gate["guardrail"]
+        schema_warnings = list(trust_gate.get("schemaWarnings", []))
+        messages = list(trust_gate.get("messages", []))
+        env = str(datasource.env or "dev").lower() if datasource else "unknown"
+        guardrail_rejected = guardrail.get("result") == "reject"
+        requires_confirmation = env == "prod"
+        if schema_warnings:
+            messages.append("Execution blocked until schema validation warnings are resolved.")
+        if requires_confirmation:
+            messages.append("Execution blocked until production datasource confirmation is handled.")
+
+        can_execute = bool(
+            datasource
+            and not guardrail_rejected
+            and not schema_warnings
+            and not requires_confirmation
+        )
+        safe_sql = str(guardrail.get("safeSql") or "").strip() if can_execute else None
+
+        return ExecutionSafetyDecision(
+            datasource_id=datasource_id,
+            original_sql=sql,
+            safe_sql=safe_sql,
+            passed=can_execute,
+            can_execute=can_execute,
+            requires_confirmation=requires_confirmation,
+            guardrail=guardrail,
+            schema_warnings=schema_warnings,
+            scope_state={
+                "datasource_exists": bool(datasource),
+                "datasource_id": datasource_id,
+                "db_type": str(datasource.db_type or "mysql") if datasource else None,
+                "env": env,
+                "is_read_only": bool(datasource.is_read_only) if datasource else None,
+                "project_id": str(datasource.project_id) if datasource and datasource.project_id else None,
+                "environment_id": str(datasource.environment_id) if datasource and datasource.environment_id else None,
+            },
+            messages=messages,
+        )

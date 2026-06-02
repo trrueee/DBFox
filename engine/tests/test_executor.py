@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from engine.executor import _serialize_value, _process_rows, MAX_ROWS, execute_query, explain_sql
+from engine.schema_sync import sync_schema
 
 
 class TestSerializeValue:
@@ -212,6 +213,8 @@ class TestPerformanceAndExplain:
 
         res = execute_query(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 3")
         assert res["success"] is True
+        assert res["safetyDecision"]["can_execute"] is True
+        assert res["safetyDecision"]["datasource_id"] == demo_datasource.id
         assert "connectMs" in res
         assert "guardrailMs" in res
         assert "executeMs" in res
@@ -229,6 +232,39 @@ class TestPerformanceAndExplain:
         assert history.execute_ms is not None
         assert history.fetch_ms is not None
         assert history.serialize_ms is not None
+
+    def test_execute_query_blocks_schema_hallucination(self, db_session, demo_datasource) -> None:
+        from engine.errors import GuardrailValidationError
+
+        demo_datasource.host = "demo"
+        demo_datasource.database_name = "demo_shop"
+        db_session.commit()
+        sync_schema(db_session, demo_datasource.id)
+
+        with pytest.raises(GuardrailValidationError) as exc_info:
+            execute_query(db_session, demo_datasource.id, "SELECT imaginary_column FROM users LIMIT 3")
+
+        assert any(check["rule"] == "schema_validation" for check in exc_info.value.checks)
+
+    def test_execute_query_rejects_mismatched_safety_decision(self, db_session, demo_datasource) -> None:
+        from engine.ai import validate_sql_schema
+        from engine.errors import GuardrailValidationError
+        from engine.trust_gate import TrustGate
+
+        decision = TrustGate(db_session, validate_sql_schema).execution_decision(
+            demo_datasource.id,
+            "SELECT id FROM users LIMIT 3",
+        )
+
+        with pytest.raises(GuardrailValidationError) as exc_info:
+            execute_query(
+                db_session,
+                demo_datasource.id,
+                "SELECT username FROM users LIMIT 3",
+                safety_decision=decision,
+            )
+
+        assert any(check["rule"] == "safety_decision_sql_mismatch" for check in exc_info.value.checks)
 
     def test_explain_sql_sqlite(self, db_session, demo_datasource) -> None:
         demo_datasource.host = "demo"

@@ -184,7 +184,9 @@ def validate_sql_tool(db: Session, datasource_id: str, sql: str) -> ToolObservat
     tool_input = {"datasource_id": datasource_id, "sql_preview": _preview_sql(sql)}
 
     def body() -> dict[str, Any]:
-        trust_gate = TrustGate(db, validate_sql_schema).evaluate(datasource_id, sql)
+        gate = TrustGate(db, validate_sql_schema)
+        trust_gate = gate.evaluate(datasource_id, sql)
+        execution_decision = gate.execution_decision(datasource_id, sql)
         guardrail = trust_gate["guardrail"]
         schema_warnings = list(trust_gate.get("schemaWarnings", []))
         reject_checks = [item for item in guardrail.get("checks", []) if item.get("level") == "reject"]
@@ -215,6 +217,7 @@ def validate_sql_tool(db: Session, datasource_id: str, sql: str) -> ToolObservat
             "schema_warnings": schema_warnings,
             "guardrail": dict(guardrail),
             "trust_gate": dict(trust_gate),
+            "execution_safety_decision": execution_decision.model_dump(mode="json"),
             "requires_confirmation": requires_confirmation,
             "messages": list(trust_gate.get("messages", [])),
             "revise_suggestion": revise_suggestion,
@@ -223,11 +226,22 @@ def validate_sql_tool(db: Session, datasource_id: str, sql: str) -> ToolObservat
     return _observe("validate_sql", tool_input, body)
 
 
-def execute_sql_tool(db: Session, req: AgentRunRequest, sql: str) -> ToolObservation:
+def execute_sql_tool(
+    db: Session,
+    req: AgentRunRequest,
+    sql: str,
+    safety: dict[str, Any] | None = None,
+) -> ToolObservation:
     start = time.perf_counter()
     tool_input = {"datasource_id": req.datasource_id, "sql_preview": _preview_sql(sql)}
     try:
-        result = execute_query(db, req.datasource_id, sql, question=req.question)
+        result = execute_query(
+            db,
+            req.datasource_id,
+            sql,
+            question=req.question,
+            safety_decision=(safety or {}).get("execution_safety_decision"),
+        )
         output = {
             "success": bool(result.get("success")),
             "columns": result.get("columns", []),
@@ -236,6 +250,7 @@ def execute_sql_tool(db: Session, req: AgentRunRequest, sql: str) -> ToolObserva
             "latencyMs": result.get("latencyMs", 0),
             "historyId": result.get("historyId"),
             "executionId": result.get("executionId"),
+            "safetyDecision": result.get("safetyDecision"),
             "truncated": result.get("truncated", False),
             "warnings": result.get("warnings", []),
             "timing": {

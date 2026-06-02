@@ -10,6 +10,7 @@ from engine.agent.artifacts import build_agent_artifacts
 from engine.agent.context import build_response_context_summary, has_follow_up_context, referenced_artifact_ids
 from engine.agent.events import build_trace_events
 from engine.agent.narration import build_message_blocks, build_visible_events
+from engine.agent.validation import validate_agent_response_contract
 from engine.agent.tools import (
     answer_synthesizer_tool,
     build_query_plan_tool,
@@ -155,7 +156,7 @@ class DataBoxAgentRuntime:
                     error="Agent stopped before SQL execution because max_steps was reached.",
                 )
 
-            execute_obs = execute_sql_tool(self.db, req, safe_sql)
+            execute_obs = execute_sql_tool(self.db, req, safe_sql, safety=safety)
             self._record(steps, execute_obs)
             execution = execute_obs.output or {}
             if execute_obs.status == "failed":
@@ -324,7 +325,7 @@ class DataBoxAgentRuntime:
             artifacts=artifacts,
         )
 
-        return AgentRunResponse(
+        response = AgentRunResponse(
             run_id=str(uuid.uuid4()),
             session_id=self._session_id(req),
             parent_run_id=req.parent_run_id or (req.follow_up_context.parent_run_id if req.follow_up_context else None),
@@ -348,6 +349,8 @@ class DataBoxAgentRuntime:
             steps=steps,
             error=error,
         )
+        validate_agent_response_contract(response)
+        return response
 
     def _failure(
         self,

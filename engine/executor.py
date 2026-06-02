@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import decimal
 import json
+import os
 import sqlite3
 import time
 import uuid
@@ -24,6 +25,7 @@ from engine.guardrail import guardrail_check
 from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
+from engine.trust_gate import ExecutionSafetyDecision, TrustGate
 
 MAX_ROWS = 1000
 MAX_COLUMNS = 100
@@ -390,6 +392,124 @@ def _execute_on_mysql(
     return rows, columns, truncated, response_bytes
 
 
+def _resolve_execution_safety_decision(
+    db: Session,
+    datasource_id: str,
+    sql_str: str,
+    bypass_guardrail: bool,
+    safety_decision: ExecutionSafetyDecision | dict[str, Any] | None,
+) -> ExecutionSafetyDecision:
+    if safety_decision is not None:
+        decision = (
+            safety_decision
+            if isinstance(safety_decision, ExecutionSafetyDecision)
+            else ExecutionSafetyDecision.model_validate(safety_decision)
+        )
+        if decision.datasource_id != datasource_id:
+            raise GuardrailValidationError(
+                "TrustGate decision datasource does not match the execution datasource.",
+                checks=[{
+                    "rule": "safety_decision_datasource_mismatch",
+                    "level": "reject",
+                    "message": "The supplied safety decision belongs to a different datasource.",
+                }],
+            )
+        supplied_sql = sql_str.strip()
+        decision_sqls = {
+            decision.original_sql.strip(),
+            str(decision.safe_sql or "").strip(),
+        }
+        if supplied_sql not in decision_sqls:
+            raise GuardrailValidationError(
+                "TrustGate decision SQL does not match the SQL requested for execution.",
+                checks=[{
+                    "rule": "safety_decision_sql_mismatch",
+                    "level": "reject",
+                    "message": "The supplied safety decision was created for different SQL text.",
+                }],
+            )
+        return decision
+
+    if bypass_guardrail:
+        guard_res = {
+            "result": "pass",
+            "originalSql": sql_str,
+            "safeSql": sql_str,
+            "checks": [],
+            "message": "Bypassed via system request",
+        }
+        return ExecutionSafetyDecision(
+            datasource_id=datasource_id,
+            original_sql=sql_str,
+            safe_sql=sql_str,
+            passed=True,
+            can_execute=True,
+            requires_confirmation=False,
+            guardrail=guard_res,  # type: ignore[arg-type]
+            schema_warnings=[],
+            scope_state={
+                "datasource_id": datasource_id,
+                "bypass_guardrail": True,
+                "testing": os.environ.get("DATABOX_TESTING") == "1",
+            },
+            messages=["Legacy system bypass was used; prefer explicit non-query execution helpers."],
+        )
+
+    from engine.ai import validate_sql_schema
+
+    return TrustGate(db, validate_sql_schema).execution_decision(datasource_id, sql_str)
+
+
+def _decision_checks_for_history(decision: ExecutionSafetyDecision) -> list[dict[str, Any]]:
+    checks = [dict(item) for item in decision.guardrail.get("checks", [])]
+    checks.extend(
+        {
+            "rule": "schema_validation",
+            "level": "reject",
+            "message": warning,
+        }
+        for warning in decision.schema_warnings
+    )
+    if decision.requires_confirmation:
+        checks.append(
+            {
+                "rule": "requires_confirmation",
+                "level": "reject",
+                "message": "Execution requires manual confirmation before a result set can be produced.",
+            }
+        )
+    if not decision.scope_state.get("datasource_exists", True):
+        checks.append(
+            {
+                "rule": "datasource_scope",
+                "level": "reject",
+                "message": "Datasource scope could not be resolved for this execution.",
+            }
+        )
+    return checks
+
+
+def _decision_checks_for_error(decision: ExecutionSafetyDecision) -> list[dict[str, str]]:
+    return [
+        {
+            "rule": str(item.get("rule", "trust_gate")),
+            "level": str(item.get("level", "reject")),
+            "message": str(item.get("message", "")),
+        }
+        for item in _decision_checks_for_history(decision)
+    ]
+
+
+def _decision_block_message(decision: ExecutionSafetyDecision) -> str:
+    if decision.guardrail.get("result") == "reject":
+        return str(decision.guardrail.get("message") or "TrustGate blocked execution.")
+    if decision.schema_warnings:
+        return "TrustGate blocked execution because schema validation found unknown tables or columns."
+    if decision.requires_confirmation:
+        return "TrustGate blocked execution because this datasource requires manual confirmation."
+    return "TrustGate blocked execution before SQL reached the database."
+
+
 def execute_query(
     db: Session,
     datasource_id: str,
@@ -397,12 +517,13 @@ def execute_query(
     question: str | None = None,
     execution_id: str | None = None,
     bypass_guardrail: bool = False,
+    safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Safely executes a SELECT query:
-    1. Guardrail check
-    2. Execute on demo SQLite or real MySQL
-    3. Serialize results, log history
+    Safely executes a SQL query:
+    1. Resolve an ExecutionSafetyDecision through TrustGate
+    2. Execute the approved safe SQL on the target datasource
+    3. Serialize results and log history
     """
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
@@ -411,21 +532,20 @@ def execute_query(
     execution_id = execution_id or f"exec-{uuid.uuid4()}"
     
     t_guard_start = time.perf_counter()
-    if bypass_guardrail:
-        guard_res = {
-            "result": "pass",
-            "originalSql": sql_str,
-            "safeSql": sql_str,
-            "checks": [],
-            "message": "Bypassed via system request"
-        }
-    else:
-        guard_res = guardrail_check(sql_str, dialect=ds.db_type or "mysql")
+    decision = _resolve_execution_safety_decision(
+        db=db,
+        datasource_id=datasource_id,
+        sql_str=sql_str,
+        bypass_guardrail=bypass_guardrail,
+        safety_decision=safety_decision,
+    )
+    guard_res = decision.guardrail
     guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)
-    guard_checks_json = json.dumps(guard_res["checks"], ensure_ascii=False)
+    guard_checks_json = json.dumps(_decision_checks_for_history(decision), ensure_ascii=False)
 
-    if guard_res["result"] == "reject":
+    if not decision.can_execute or not str(decision.safe_sql or "").strip():
         redacted_sql = DataRedactor.redact_sql(sql_str)
+        message = _decision_block_message(decision)
         history = QueryHistory(
             data_source_id=datasource_id,
             question=question,
@@ -433,10 +553,10 @@ def execute_query(
             generated_sql=redacted_sql,
             safe_sql="",
             executed_sql="",
-            guardrail_result="reject",
+            guardrail_result=guard_res["result"],
             guardrail_checks=guard_checks_json,
             execution_status="failed",
-            error_message=guard_res["message"],
+            error_message=message,
             execution_time_ms=guardrail_ms,
             connect_ms=0,
             guardrail_ms=guardrail_ms,
@@ -447,10 +567,10 @@ def execute_query(
         db.add(history)
         db.commit()
         raise GuardrailValidationError(
-            guard_res["message"], checks=guard_res["checks"]  # type: ignore[arg-type]
+            message, checks=_decision_checks_for_error(decision)
         )
 
-    safe_sql = guard_res["safeSql"]
+    safe_sql = str(decision.safe_sql or "").strip()
     start_time = time.time()
     rows: list[dict[str, Any]] = []
     columns: list[str] = []
@@ -592,6 +712,7 @@ def execute_query(
         "rowCount": len(rows),
         "latencyMs": latency_ms,
         "guardrail": guard_res,
+        "safetyDecision": decision.model_dump(mode="json"),
         "historyId": history.id,
         "executionId": execution_id,
         "truncated": truncated,
