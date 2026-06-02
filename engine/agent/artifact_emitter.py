@@ -3,6 +3,7 @@ from __future__ import annotations
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
+    build_sql_suggestion_artifact,
     build_profile_artifact,
     build_query_plan_artifact,
     build_safety_artifact,
@@ -47,6 +48,11 @@ class ArtifactEmitter:
             and state.chart_suggestion.get("type") != "table"
         ):
             return [build_chart_artifact(state.chart_suggestion, safety=state.safety, identity=identity)]
+
+        if step_name.startswith("workspace.") and observation.output:
+            payload = dict(observation.output)
+            payload["produced_by_step"] = step_name
+            return [build_sql_suggestion_artifact(payload, identity=identity)]
 
         return []
 

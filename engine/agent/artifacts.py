@@ -75,6 +75,53 @@ def build_query_plan_artifact(
     )
 
 
+def build_agent_plan_artifact(
+    plan: dict[str, Any],
+    *,
+    identity: AgentArtifactIdentity | None = None,
+) -> AgentArtifact:
+    return _artifact(
+        "agent_plan_draft",
+        "agent_plan",
+        "Agent plan draft",
+        plan,
+        mode="dock",
+        priority=90,
+        collapsed=True,
+        identity=identity,
+        produced_by_step="plan_agent",
+    )
+
+
+def build_sql_suggestion_artifact(
+    payload: dict[str, Any],
+    *,
+    identity: AgentArtifactIdentity | None = None,
+) -> AgentArtifact:
+    raw_suggestions = payload.get("suggestions")
+    suggestions: list[Any] = raw_suggestions if isinstance(raw_suggestions, list) else []
+    first_sql = ""
+    for suggestion in suggestions:
+        if isinstance(suggestion, dict) and isinstance(suggestion.get("proposed_sql"), str):
+            first_sql = str(suggestion["proposed_sql"]).strip()
+            if first_sql:
+                break
+    if not first_sql and isinstance(payload.get("proposed_sql"), str):
+        first_sql = str(payload["proposed_sql"]).strip()
+
+    return _artifact(
+        "sql_suggestion",
+        "sql_suggestion",
+        "SQL suggestion",
+        {**payload, "proposed_sql": first_sql or payload.get("proposed_sql")},
+        mode="both",
+        priority=25,
+        identity=identity,
+        produced_by_step=str(payload.get("produced_by_step") or "workspace_assist"),
+        depends_on=["agent_plan_draft"],
+    )
+
+
 def build_sql_artifact(
     sql: str,
     *,

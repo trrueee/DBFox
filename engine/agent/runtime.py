@@ -12,6 +12,7 @@ from engine.agent.answer import synthesize_agent_answer
 from engine.agent.artifact_emitter import ArtifactEmitter
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
+    build_agent_plan_artifact,
     build_agent_artifacts,
     build_error_artifact,
     build_recommendations_artifact,
@@ -21,6 +22,8 @@ from engine.agent.default_tools import build_default_tool_registry
 from engine.agent.events import EventEmitter, build_trace_events
 from engine.agent.executor import AgentStepSpec, StepExecutor
 from engine.agent.narration import build_message_blocks, build_visible_events
+from engine.agent.plan_validator import AgentPlanValidator
+from engine.agent.planner import AgentPlanner, WORKSPACE_TOOL_BY_INTENT
 from engine.agent.registry import AgentToolContext, ToolRegistry
 from engine.agent.state import AgentState
 from engine.agent.validation import validate_agent_response_contract
@@ -30,6 +33,7 @@ from engine.agent.types import (
     AgentApprovalRecord,
     AgentArtifact,
     AgentCheckpointRecord,
+    AgentPlanDraft,
     AgentRunRequest,
     AgentRunResponse,
     AgentRuntimeEvent,
@@ -39,6 +43,7 @@ from engine.agent.types import (
     ResultProfile,
     ToolObservation,
 )
+from engine.agent.workspace_context import build_agent_context_bundle
 from engine.errors import DataBoxError
 from engine.models import AgentRun
 
@@ -53,6 +58,8 @@ class DataBoxAgentRuntime:
         self.registry = registry or build_default_tool_registry()
         self.step_executor = StepExecutor(self.registry)
         self.artifact_emitter = ArtifactEmitter()
+        self.planner = AgentPlanner(self.registry)
+        self.plan_validator = AgentPlanValidator(self.registry)
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
@@ -261,6 +268,80 @@ class DataBoxAgentRuntime:
                 self.db.rollback()
             except Exception:
                 pass
+
+        context_bundle = build_agent_context_bundle(self.db, req)
+        plan_draft = self.planner.plan(self.db, req, context_bundle)
+        validation = self.plan_validator.validate(req, plan_draft, context_bundle)
+        yield append_artifact(
+            build_agent_plan_artifact(
+                {
+                    **plan_draft.model_dump(mode="json"),
+                    "validation": validation.model_dump(mode="json", exclude={"normalized_plan"}),
+                },
+                identity=artifact_identity,
+            )
+        )
+        if not validation.valid:
+            response = self._response(
+                req=req,
+                success=False,
+                steps=steps,
+                query_plan=None,
+                sql=None,
+                safety=None,
+                execution=None,
+                explanation=None,
+                chart_suggestion=None,
+                result_profile=None,
+                answer=None,
+                suggestions=[],
+                error=f"Agent plan rejected: {'; '.join(validation.reasons)}",
+                run_id=run_id,
+                session_id=session_id,
+                artifacts=artifacts,
+                artifact_identity=artifact_identity,
+            )
+            yield from final_events(response)
+            return
+
+        workspace_tool_name = self._workspace_tool_name(plan_draft)
+        if workspace_tool_name:
+            yield start_step(workspace_tool_name)
+            workspace_step, workspace_obs = execute_step(
+                workspace_tool_name,
+                workspace_tool_name,
+                {"intent": plan_draft.intent.intent, "context_bundle": context_bundle},
+            )
+            yield complete_step(workspace_step)
+            yield from append_artifacts_from_observation(workspace_tool_name, workspace_obs)
+            if workspace_obs.status == "failed":
+                yield from final_events(build_failure(workspace_obs.error or "Workspace assistance failed."))
+                return
+            workspace_output = workspace_obs.output or {}
+            answer_payload = self._workspace_answer_payload(workspace_output)
+            state.answer = answer_payload
+            explanation = str(workspace_output.get("answer") or "")
+            response = self._response(
+                req=req,
+                success=True,
+                steps=steps,
+                query_plan=None,
+                sql=str(workspace_output.get("proposed_sql") or "") or None,
+                safety=None,
+                execution=None,
+                explanation=explanation,
+                chart_suggestion=None,
+                result_profile=None,
+                answer=answer_payload,
+                suggestions=[],
+                error=None,
+                run_id=run_id,
+                session_id=session_id,
+                artifacts=artifacts,
+                artifact_identity=artifact_identity,
+            )
+            yield from final_events(response)
+            return
 
         if has_follow_up_context(req):
             yield start_step("load_follow_up_context")
@@ -849,6 +930,45 @@ class DataBoxAgentRuntime:
             artifact_identity=artifact_identity,
         )
         yield from final_events(response)
+
+    def _workspace_tool_name(self, plan: AgentPlanDraft) -> str | None:
+        expected = WORKSPACE_TOOL_BY_INTENT.get(plan.intent.intent)
+        if not expected:
+            return None
+        planned = {step.tool_name for step in plan.steps}
+        return expected if expected in planned else None
+
+    def _workspace_answer_payload(self, output: dict[str, Any]) -> dict[str, Any]:
+        raw_suggestions = output.get("suggestions")
+        raw_safety_notes = output.get("safety_notes")
+        safety_notes: list[Any] = raw_safety_notes if isinstance(raw_safety_notes, list) else []
+        suggestions = [
+            dict(item)
+            for item in (raw_suggestions if isinstance(raw_suggestions, list) else [])
+            if isinstance(item, dict)
+        ]
+        recommendations = [
+            str(item.get("title") or item.get("explanation") or "")
+            for item in suggestions
+            if str(item.get("title") or item.get("explanation") or "").strip()
+        ]
+        evidence: list[dict[str, Any]] = []
+        if suggestions or output.get("proposed_sql"):
+            evidence.append(
+                {
+                    "artifact_id": "sql_suggestion",
+                    "label": "SQL suggestion",
+                    "value": suggestions[0].get("title") if suggestions else "workspace suggestion",
+                }
+            )
+        return {
+            "answer": str(output.get("answer") or "Workspace assistance completed."),
+            "key_findings": [],
+            "evidence": evidence,
+            "caveats": [str(item) for item in safety_notes],
+            "recommendations": recommendations,
+            "follow_up_questions": [],
+        }
 
     def _record(self, steps: list[AgentStep], observation: ToolObservation) -> AgentStep:
         step = AgentStep(
