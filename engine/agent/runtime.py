@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -10,36 +9,22 @@ from sqlalchemy.orm import Session
 
 from engine.agent import persistence as agent_persistence
 from engine.agent.answer import synthesize_agent_answer
+from engine.agent.artifact_emitter import ArtifactEmitter
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
     build_agent_artifacts,
-    build_chart_artifact,
     build_error_artifact,
-    build_profile_artifact,
-    build_query_plan_artifact,
     build_recommendations_artifact,
-    build_safety_artifact,
-    build_sql_artifact,
-    build_table_artifact,
 )
 from engine.agent.context import build_response_context_summary, has_follow_up_context, referenced_artifact_ids
-from engine.agent.events import build_trace_events
+from engine.agent.default_tools import build_default_tool_registry
+from engine.agent.events import EventEmitter, build_trace_events
+from engine.agent.executor import AgentStepSpec, StepExecutor
 from engine.agent.narration import build_message_blocks, build_visible_events
+from engine.agent.registry import AgentToolContext, ToolRegistry
+from engine.agent.state import AgentState
 from engine.agent.validation import validate_agent_response_contract
-from engine.agent.tools import (
-    answer_synthesizer_tool,
-    build_query_plan_tool,
-    build_schema_context_tool,
-    execute_sql_tool,
-    generate_sql_tool,
-    load_followup_context_tool,
-    profile_result_tool,
-    revise_sql_tool,
-    skipped_execute_observation,
-    suggest_chart_tool,
-    suggest_followups_tool,
-    validate_sql_tool,
-)
+from engine.agent.tools import skipped_execute_observation
 from engine.agent.types import (
     AgentAnswer,
     AgentArtifact,
@@ -57,8 +42,11 @@ logger = logging.getLogger("databox.agent.runtime")
 
 
 class DataBoxAgentRuntime:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, registry: ToolRegistry | None = None):
         self.db = db
+        self.registry = registry or build_default_tool_registry()
+        self.step_executor = StepExecutor(self.registry)
+        self.artifact_emitter = ArtifactEmitter()
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
@@ -68,6 +56,25 @@ class DataBoxAgentRuntime:
         if final_response is None:
             raise RuntimeError("Agent runtime completed without a final response.")
         return final_response
+
+    def build_default_plan(self, request: AgentRunRequest) -> list[AgentStepSpec]:
+        steps: list[AgentStepSpec] = []
+        if has_follow_up_context(request) or request.parent_run_id:
+            steps.append(AgentStepSpec(name="load_follow_up_context", tool_name="followup.load_context"))
+        steps.extend(
+            [
+                AgentStepSpec(name="build_schema_context", tool_name="schema.build_context"),
+                AgentStepSpec(name="build_query_plan", tool_name="query_plan.build"),
+                AgentStepSpec(name="generate_sql_candidate", tool_name="sql.generate_candidate"),
+                AgentStepSpec(name="validate_sql", tool_name="sql.validate"),
+                AgentStepSpec(name="execute_sql", tool_name="sql.execute_readonly", required=request.execute),
+                AgentStepSpec(name="profile_result", tool_name="result.profile", required=False),
+                AgentStepSpec(name="suggest_chart", tool_name="chart.suggest", required=False),
+                AgentStepSpec(name="suggest_followups", tool_name="followup.suggest", required=False),
+                AgentStepSpec(name="answer_synthesizer", tool_name="answer.synthesize"),
+            ]
+        )
+        return steps
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         run_id = str(uuid.uuid4())
@@ -79,47 +86,20 @@ class DataBoxAgentRuntime:
                 req.follow_up_context = reconstructed
                 if not req.session_id:
                     req.session_id = reconstructed.session_id
-                    session_id = reconstructed.session_id
+                    if reconstructed.session_id:
+                        session_id = reconstructed.session_id
         artifact_identity = AgentArtifactIdentity(run_id)
-        sequence = 0
-        steps: list[AgentStep] = []
-        artifacts: list[AgentArtifact] = []
+        state = AgentState(
+            run_id=run_id,
+            session_id=session_id,
+            parent_run_id=req.parent_run_id,
+            question=req.question,
+            datasource_id=req.datasource_id,
+        )
+        steps = state.steps
+        artifacts = state.artifacts
         emitted_artifact_ids: set[str] = set()
-        query_plan: dict[str, Any] | None = None
-        sql: str | None = None
-        safety: dict[str, Any] | None = None
-        execution: dict[str, Any] | None = None
         explanation: str | None = None
-        chart_suggestion: dict[str, Any] | None = None
-        result_profile: dict[str, Any] | None = None
-        answer: dict[str, Any] | None = None
-        suggestions: list[dict[str, Any]] = []
-
-        def emit(
-            event_type: AgentRuntimeEventType,
-            *,
-            step: dict[str, Any] | None = None,
-            artifact: AgentArtifact | None = None,
-            answer_payload: AgentAnswer | None = None,
-            response: AgentRunResponse | None = None,
-            error: str | None = None,
-        ) -> AgentRuntimeEvent:
-            nonlocal sequence
-            sequence += 1
-            event = AgentRuntimeEvent(
-                event_id=f"runtime_{run_id[:8]}_{sequence}_{event_type.replace('.', '_')}",
-                run_id=run_id,
-                sequence=sequence,
-                created_at_ms=int(time.time() * 1000),
-                type=event_type,
-                step=step,
-                artifact=artifact,
-                answer=answer_payload,
-                response=response,
-                error=error,
-            )
-            _save_event(event)
-            return event
 
         def _save_event(event: AgentRuntimeEvent) -> None:
             try:
@@ -130,6 +110,27 @@ class DataBoxAgentRuntime:
                     self.db.rollback()
                 except Exception:
                     pass
+
+        event_emitter = EventEmitter(run_id, _save_event)
+        tool_ctx = AgentToolContext(db=self.db, request=req, state=state)
+
+        def emit(
+            event_type: AgentRuntimeEventType,
+            *,
+            step: dict[str, Any] | None = None,
+            artifact: AgentArtifact | None = None,
+            answer_payload: AgentAnswer | None = None,
+            response: AgentRunResponse | None = None,
+            error: str | None = None,
+        ) -> AgentRuntimeEvent:
+            return event_emitter.emit(
+                event_type,
+                step=step,
+                artifact=artifact,
+                answer_payload=answer_payload,
+                response=response,
+                error=error,
+            )
 
         def _save_artifact_record(artifact: AgentArtifact, seq: int) -> None:
             try:
@@ -147,8 +148,21 @@ class DataBoxAgentRuntime:
                 step={"name": name, "index": len(steps) + 1},
             )
 
-        def complete_step(observation: ToolObservation) -> AgentRuntimeEvent:
-            step = self._record(steps, observation)
+        def execute_step(
+            name: str,
+            tool_name: str,
+            input_override: dict[str, Any] | None = None,
+        ) -> tuple[AgentStep, ToolObservation]:
+            step, observation = self.step_executor.execute_step(
+                AgentStepSpec(name=name, tool_name=tool_name),
+                state,
+                tool_ctx,
+                input_override=input_override,
+            )
+            state.apply_observation(name, observation, agent_step=step)
+            return step, observation
+
+        def complete_step(step: AgentStep) -> AgentRuntimeEvent:
             return emit(
                 "agent.step.completed",
                 step={
@@ -185,13 +199,19 @@ class DataBoxAgentRuntime:
                     pass
 
         def append_artifact(artifact: AgentArtifact) -> AgentRuntimeEvent:
-            semantic_to_id = {item.semantic_id or item.id: item.id for item in artifacts}
-            artifact.depends_on = [semantic_to_id.get(dependency, dependency) for dependency in artifact.depends_on]
-            artifacts.append(artifact)
-            emitted_artifact_ids.add(artifact.id)
-            event = emit("agent.artifact.created", artifact=artifact)
-            _save_artifact_record(artifact, len(artifacts))
+            bound_artifact = self.artifact_emitter.bind_dependencies(artifacts, artifact)
+            artifacts.append(bound_artifact)
+            emitted_artifact_ids.add(bound_artifact.id)
+            event = emit("agent.artifact.created", artifact=bound_artifact)
+            _save_artifact_record(bound_artifact, len(artifacts))
             return event
+
+        def append_artifacts_from_observation(
+            name: str,
+            observation: ToolObservation,
+        ) -> Iterator[AgentRuntimeEvent]:
+            for artifact in self.artifact_emitter.from_observation(name, observation, state, artifact_identity):
+                yield append_artifact(artifact)
 
         def build_failure(error: str, plan: dict[str, Any] | None = None) -> AgentRunResponse:
             return self._failure(
@@ -233,8 +253,8 @@ class DataBoxAgentRuntime:
 
         if has_follow_up_context(req):
             yield start_step("load_follow_up_context")
-            context_obs = load_followup_context_tool(req)
-            yield complete_step(context_obs)
+            context_step, context_obs = execute_step("load_follow_up_context", "followup.load_context")
+            yield complete_step(context_step)
             if context_obs.status == "failed":
                 yield from final_events(build_failure("Failed to load follow-up context."))
                 return
@@ -243,72 +263,67 @@ class DataBoxAgentRuntime:
                 return
 
         yield start_step("build_schema_context")
-        schema_obs = build_schema_context_tool(self.db, req)
-        yield complete_step(schema_obs)
+        schema_step, schema_obs = execute_step("build_schema_context", "schema.build_context")
+        yield complete_step(schema_step)
         if schema_obs.status == "failed":
             yield from final_events(build_failure("Failed to build schema context."))
             return
-
-        schema_context = schema_obs.output or {}
 
         if self._budget_reached(req, steps):
             yield from final_events(build_failure("Agent stopped before query planning because max_steps was reached."))
             return
 
         yield start_step("build_query_plan")
-        plan_obs = build_query_plan_tool(self.db, req, schema_context)
-        yield complete_step(plan_obs)
+        plan_step, plan_obs = execute_step("build_query_plan", "query_plan.build")
+        yield complete_step(plan_step)
         if plan_obs.status == "failed":
             yield from final_events(build_failure("Failed to build query plan."))
             return
-        query_plan = plan_obs.output
-        if query_plan:
-            yield append_artifact(build_query_plan_artifact(query_plan, identity=artifact_identity))
+        yield from append_artifacts_from_observation("build_query_plan", plan_obs)
 
         if self._budget_reached(req, steps):
-            yield from final_events(build_failure("Agent stopped before SQL generation because max_steps was reached.", query_plan))
+            yield from final_events(build_failure("Agent stopped before SQL generation because max_steps was reached.", state.query_plan))
             return
 
         yield start_step("generate_sql_candidate")
-        sql_obs = generate_sql_tool(self.db, req, schema_context=schema_context, query_plan=query_plan)
-        yield complete_step(sql_obs)
+        sql_step, sql_obs = execute_step("generate_sql_candidate", "sql.generate_candidate")
+        yield complete_step(sql_step)
         if sql_obs.status == "failed":
             yield start_step("revise_sql")
-            revise_obs = revise_sql_tool(
-                None,
-                sql_obs.error or "SQL generation failed.",
-                db=self.db,
-                datasource_id=req.datasource_id,
+            revise_step, revise_obs = execute_step(
+                "revise_sql",
+                "sql.revise",
+                {"sql": None, "error": sql_obs.error or "SQL generation failed."},
             )
-            yield complete_step(revise_obs)
-            yield from final_events(build_failure(sql_obs.error or "Failed to generate SQL.", query_plan))
+            yield complete_step(revise_step)
+            yield from final_events(build_failure(sql_obs.error or "Failed to generate SQL.", state.query_plan))
             return
 
         sql_output = sql_obs.output or {}
-        sql = str(sql_output.get("sql") or "").strip()
+        sql = state.sql or str(sql_output.get("sql") or "").strip()
         if not sql:
             yield start_step("revise_sql")
-            revise_obs = revise_sql_tool(
-                sql,
-                "SQL generation returned an empty candidate.",
-                db=self.db,
-                datasource_id=req.datasource_id,
+            revise_step, revise_obs = execute_step(
+                "revise_sql",
+                "sql.revise",
+                {"sql": sql, "error": "SQL generation returned an empty candidate."},
             )
-            yield complete_step(revise_obs)
-            yield from final_events(build_failure("SQL generation returned an empty candidate.", query_plan))
+            yield complete_step(revise_step)
+            yield from final_events(build_failure("SQL generation returned an empty candidate.", state.query_plan))
             return
 
         if self._budget_reached(req, steps):
-            yield from final_events(build_failure("Agent stopped before SQL validation because max_steps was reached.", query_plan))
+            yield from final_events(build_failure("Agent stopped before SQL validation because max_steps was reached.", state.query_plan))
             return
 
         yield start_step("validate_sql")
-        validate_obs = validate_sql_tool(self.db, req.datasource_id, sql)
-        yield complete_step(validate_obs)
-        safety = validate_obs.output or {}
+        validate_step, validate_obs = execute_step("validate_sql", "sql.validate", {"sql": sql})
+        yield complete_step(validate_step)
+        safety = state.safety or validate_obs.output or {}
         self._attach_generation_notes(safety, sql_output)
-        yield append_artifact(build_sql_artifact(sql, safety=safety, identity=artifact_identity))
-        yield append_artifact(build_safety_artifact(safety, identity=artifact_identity))
+        state.safety = safety
+        state.sql = sql
+        yield from append_artifacts_from_observation("validate_sql", validate_obs)
         if validate_obs.status == "failed" or not safety.get("can_execute"):
             reason = (
                 safety.get("revise_suggestion")
@@ -316,13 +331,17 @@ class DataBoxAgentRuntime:
                 or "SQL did not pass DataBox Agent validation."
             )
             yield start_step("revise_sql")
-            revise_obs = revise_sql_tool(sql, str(reason), safety, db=self.db, datasource_id=req.datasource_id)
-            yield complete_step(revise_obs)
+            revise_step, revise_obs = execute_step(
+                "revise_sql",
+                "sql.revise",
+                {"sql": sql, "error": str(reason), "safety": safety},
+            )
+            yield complete_step(revise_step)
             response = self._response(
                 req=req,
                 success=False,
                 steps=steps,
-                query_plan=query_plan,
+                query_plan=state.query_plan,
                 sql=sql,
                 safety=safety,
                 execution=None,
@@ -342,6 +361,7 @@ class DataBoxAgentRuntime:
 
         safe_sql = str(safety.get("safe_sql") or sql)
         sql = safe_sql
+        state.sql = safe_sql
 
         if req.execute:
             if self._budget_reached(req, steps):
@@ -349,7 +369,7 @@ class DataBoxAgentRuntime:
                     req=req,
                     success=False,
                     steps=steps,
-                    query_plan=query_plan,
+                    query_plan=state.query_plan,
                     sql=safe_sql,
                     safety=safety,
                     execution=None,
@@ -368,11 +388,14 @@ class DataBoxAgentRuntime:
                 return
 
             yield start_step("execute_sql")
-            execute_obs = execute_sql_tool(self.db, req, safe_sql, safety=safety)
-            yield complete_step(execute_obs)
-            execution = execute_obs.output or {}
-            if execute_obs.status != "failed" and execution.get("success"):
-                yield append_artifact(build_table_artifact(execution, safety=safety, identity=artifact_identity))
+            execute_step_result, execute_obs = execute_step(
+                "execute_sql",
+                "sql.execute_readonly",
+                {"sql": safe_sql, "safety": safety},
+            )
+            yield complete_step(execute_step_result)
+            execution = state.execution or execute_obs.output or {}
+            yield from append_artifacts_from_observation("execute_sql", execute_obs)
             if execute_obs.status == "failed":
                 reason = (
                     execution.get("revise_suggestion")
@@ -380,13 +403,17 @@ class DataBoxAgentRuntime:
                     or "SQL execution failed."
                 )
                 yield start_step("revise_sql")
-                revise_obs = revise_sql_tool(safe_sql, str(reason), safety, db=self.db, datasource_id=req.datasource_id)
-                yield complete_step(revise_obs)
+                revise_step, revise_obs = execute_step(
+                    "revise_sql",
+                    "sql.revise",
+                    {"sql": safe_sql, "error": str(reason), "safety": safety},
+                )
+                yield complete_step(revise_step)
                 response = self._response(
                     req=req,
                     success=False,
                     steps=steps,
-                    query_plan=query_plan,
+                    query_plan=state.query_plan,
                     sql=safe_sql,
                     safety=safety,
                     execution=execution,
@@ -406,63 +433,46 @@ class DataBoxAgentRuntime:
         else:
             yield start_step("execute_sql")
             execute_obs = skipped_execute_observation()
-            yield complete_step(execute_obs)
-            execution = execute_obs.output
+            state.apply_observation("execute_sql", execute_obs)
+            yield complete_step(steps[-1])
 
         if not self._budget_reached(req, steps):
             yield start_step("profile_result")
-            profile_obs = profile_result_tool(req, query_plan, execution)
-            yield complete_step(profile_obs)
-            if profile_obs.output:
-                result_profile = profile_obs.output
-                parsed_profile = ResultProfile.model_validate(result_profile)
-                yield append_artifact(build_profile_artifact(parsed_profile, safety=safety, identity=artifact_identity))
+            profile_step, profile_obs = execute_step("profile_result", "result.profile")
+            yield complete_step(profile_step)
+            yield from append_artifacts_from_observation("profile_result", profile_obs)
 
         if not self._budget_reached(req, steps):
             yield start_step("suggest_chart")
-            chart_obs = suggest_chart_tool(execution)
-            yield complete_step(chart_obs)
-            chart_suggestion = chart_obs.output
-            if chart_suggestion and chart_suggestion.get("type") and chart_suggestion.get("type") != "table":
-                yield append_artifact(build_chart_artifact(chart_suggestion, safety=safety, identity=artifact_identity))
+            chart_step, chart_obs = execute_step("suggest_chart", "chart.suggest")
+            yield complete_step(chart_step)
+            yield from append_artifacts_from_observation("suggest_chart", chart_obs)
 
         if not self._budget_reached(req, steps):
             yield start_step("suggest_followups")
-            suggestions_obs = suggest_followups_tool(req, safe_sql, safety, execution, result_profile, chart_suggestion)
-            yield complete_step(suggestions_obs)
-            if suggestions_obs.output:
-                raw_suggestions = suggestions_obs.output.get("suggestions")
-                suggestions = [dict(item) for item in raw_suggestions if isinstance(item, dict)] if isinstance(raw_suggestions, list) else []
+            suggestions_step, suggestions_obs = execute_step("suggest_followups", "followup.suggest")
+            yield complete_step(suggestions_step)
 
         if not self._budget_reached(req, steps):
             yield start_step("answer_synthesizer")
-            answer_obs = answer_synthesizer_tool(
-                req,
-                query_plan=query_plan,
-                sql=safe_sql,
-                safety=safety,
-                execution=execution,
-                result_profile=result_profile,
-                suggestions=suggestions,
-            )
-            yield complete_step(answer_obs)
-            if answer_obs.output:
-                answer = answer_obs.output
-                explanation = str(answer.get("answer") or "")
+            answer_step, answer_obs = execute_step("answer_synthesizer", "answer.synthesize")
+            yield complete_step(answer_step)
+            if state.answer:
+                explanation = str(state.answer.get("answer") or "")
 
         response = self._response(
             req=req,
             success=True,
             steps=steps,
-            query_plan=query_plan,
+            query_plan=state.query_plan,
             sql=safe_sql,
             safety=safety,
-            execution=execution,
+            execution=state.execution,
             explanation=explanation,
-            chart_suggestion=chart_suggestion,
-            result_profile=result_profile,
-            answer=answer,
-            suggestions=suggestions,
+            chart_suggestion=state.chart_suggestion,
+            result_profile=state.result_profile,
+            answer=state.answer,
+            suggestions=state.suggestions,
             error=None,
             run_id=run_id,
             session_id=session_id,
@@ -488,8 +498,10 @@ class DataBoxAgentRuntime:
 
     def _attach_generation_notes(self, safety: dict[str, Any], sql_output: dict[str, Any]) -> None:
         rewrite_notes = list(sql_output.get("rewrite_notes") or [])
-        metadata = sql_output.get("metadata") if isinstance(sql_output.get("metadata"), dict) else {}
-        rewrite_metadata = metadata.get("rewrite") if isinstance(metadata.get("rewrite"), dict) else {}
+        raw_metadata = sql_output.get("metadata")
+        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
+        raw_rewrite_metadata = metadata.get("rewrite")
+        rewrite_metadata: dict[str, Any] = raw_rewrite_metadata if isinstance(raw_rewrite_metadata, dict) else {}
         safety["rewrite_notes"] = rewrite_notes
         safety["generation_metadata"] = metadata
         messages = safety.setdefault("messages", [])

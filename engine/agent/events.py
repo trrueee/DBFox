@@ -1,9 +1,47 @@
 from __future__ import annotations
 
 import time
+from typing import Any, Callable
 
-from engine.agent.types import AgentStep, AgentTraceEvent
+from engine.agent.types import AgentAnswer, AgentArtifact, AgentRunResponse, AgentRuntimeEvent, AgentRuntimeEventType, AgentStep, AgentTraceEvent
 from engine.agent.trace_redactor import AgentTraceRedactor
+
+
+RuntimeEventRecorder = Callable[[AgentRuntimeEvent], None]
+
+
+class EventEmitter:
+    def __init__(self, run_id: str, recorder: RuntimeEventRecorder | None = None):
+        self.run_id = run_id
+        self.recorder = recorder
+        self.sequence = 0
+
+    def emit(
+        self,
+        event_type: AgentRuntimeEventType,
+        *,
+        step: dict[str, Any] | None = None,
+        artifact: AgentArtifact | None = None,
+        answer_payload: AgentAnswer | None = None,
+        response: AgentRunResponse | None = None,
+        error: str | None = None,
+    ) -> AgentRuntimeEvent:
+        self.sequence += 1
+        event = AgentRuntimeEvent(
+            event_id=f"runtime_{self.run_id[:8]}_{self.sequence}_{event_type.replace('.', '_')}",
+            run_id=self.run_id,
+            sequence=self.sequence,
+            created_at_ms=_now_ms(),
+            type=event_type,
+            step=step,
+            artifact=artifact,
+            answer=answer_payload,
+            response=response,
+            error=error,
+        )
+        if self.recorder is not None:
+            self.recorder(event)
+        return event
 
 
 def build_trace_events(
@@ -57,8 +95,8 @@ def _trace_event(
     step_id: str,
     name: str,
     status: str | None = None,
-    input: dict | None = None,
-    output: dict | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
     error: str | None = None,
     latency_ms: int | None = None,
 ) -> AgentTraceEvent:

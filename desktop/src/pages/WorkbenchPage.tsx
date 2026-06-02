@@ -30,6 +30,7 @@ import { DemoTourGuide } from "../components/DemoTourGuide";
 import { useToast } from "../components/Toast";
 import { buildAgentFollowUpContext } from "../features/agent/context";
 import { AgentWorkspace } from "../features/agent/AgentWorkspace";
+import { SemanticSettingsPanel } from "../features/semantic/SemanticSettingsPanel";
 
 // Tab structure for the workspace
 export interface WorkbenchTab {
@@ -541,6 +542,7 @@ export const WorkbenchPage = ({
   const [aiResponse, setAiResponse] = useState("");
   const [agentResponse, setAgentResponse] = useState<AgentRunResponse | null>(null);
   const [agentDraft, setAgentDraft] = useState<AgentRunDraftState | null>(null);
+  const [showSemanticSettings, setShowSemanticSettings] = useState(false);
   const [agentStreamEvents, setAgentStreamEvents] = useState<AgentRuntimeEvent[]>([]);
   const [aiMode, setAiMode] = useState<"sql" | "agent">("agent");
   const [aiLoading, setAiLoading] = useState(false);
@@ -1291,6 +1293,22 @@ export const WorkbenchPage = ({
                             <HardDrive size={12} style={{ color: "var(--accent-indigo)" }} />
                             <span style={{ fontWeight: 600 }}>{ds.database_name}</span>
                           </div>
+
+                          {/* Semantic Settings button */}
+                          <button
+                            onClick={() => setShowSemanticSettings(true)}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 5,
+                              width: "100%", minHeight: 22,
+                              padding: `2px 4px 2px ${treeIndent(1)}px`,
+                              border: "none", background: "transparent",
+                              color: "var(--text-secondary)", fontSize: "0.72rem",
+                              cursor: "pointer", textAlign: "left",
+                            }}
+                          >
+                            <Settings size={12} style={{ color: "var(--accent-amber)", opacity: 0.8 }} />
+                            <span style={{ fontWeight: 500 }}>Semantic Settings</span>
+                          </button>
 
                           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                             {/* Tables Folder */}
@@ -2358,6 +2376,15 @@ export const WorkbenchPage = ({
         }}
         onCancel={() => setShowCreateProject(false)}
       />
+
+      {/* Semantic Settings Modal */}
+      {showSemanticSettings && activeDataSource && activeProject && (
+        <SemanticSettingsPanel
+          datasource={activeDataSource}
+          projectId={activeProject.id}
+          onClose={() => setShowSemanticSettings(false)}
+        />
+      )}
 
     </div>
   );

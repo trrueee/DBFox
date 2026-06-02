@@ -1,4 +1,7 @@
 from engine.agent.runtime import DataBoxAgentRuntime
+from engine.agent.executor import AgentStepSpec, StepExecutor
+from engine.agent.registry import AgentToolContext, FunctionAgentTool, ToolRegistry, ToolSpec
+from engine.agent.state import AgentState
 from engine.agent.types import (
     AgentError,
     AgentAnswer,
@@ -35,15 +38,22 @@ __all__ = [
     "AgentRuntimeEvent",
     "AgentRuntimeEventType",
     "AgentStep",
+    "AgentState",
+    "AgentStepSpec",
+    "AgentToolContext",
     "AgentTraceEvent",
     "AgentVisibleEvent",
     "AnswerEvidence",
     "ColumnProfile",
     "DataBoxAgentRuntime",
     "FollowUpSuggestion",
+    "FunctionAgentTool",
     "QueryPlan",
     "ReviseResult",
     "ResultProfile",
     "SQLCandidate",
+    "StepExecutor",
+    "ToolRegistry",
     "ToolObservation",
+    "ToolSpec",
 ]

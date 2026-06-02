@@ -6,10 +6,10 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session, selectinload
 
-from engine.models import SchemaColumn, SchemaTable
+from engine.models import SchemaColumn, SchemaTable, WorkspaceTableScope
 from engine.semantic.alias import AliasMatch, SemanticAliasResolver
 
-TOKEN_PATTERN = re.compile(r"[\u4e00-\u9fffA-Za-z0-9_]+")
+TOKEN_PATTERN = re.compile(r"[一-鿿A-Za-z0-9_]+")
 
 
 @dataclass
@@ -49,6 +49,9 @@ class SchemaLinkingResult:
     candidate_table_count: int
     tables: list[TableLink]
     mode: str = "rag"
+    workspace_scope_applied: bool = False
+    workspace_scope_table_count: int = 0
+    semantic_aliases_used: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def selected_table_count(self) -> int:
@@ -100,6 +103,9 @@ class SchemaLinkingResult:
             "schemaContextSize": len(schema_context),
             "originalSchemaTableCount": self.original_table_count,
             "selectedSchemaTableCount": self.selected_table_count,
+            "semanticAliasesUsed": self.semantic_aliases_used,
+            "workspaceScopeApplied": self.workspace_scope_applied,
+            "workspaceScopeTableCount": self.workspace_scope_table_count,
         }
 
 
@@ -108,14 +114,50 @@ class SchemaLinker:
 
     def __init__(self, db: Session, alias_resolver: SemanticAliasResolver | None = None) -> None:
         self.db = db
-        self.alias_resolver = alias_resolver or SemanticAliasResolver()
+        self.alias_resolver = alias_resolver
+
+    def _get_alias_resolver(self, datasource_id: str) -> SemanticAliasResolver:
+        if self.alias_resolver is not None:
+            return self.alias_resolver
+        return SemanticAliasResolver.from_db(self.db, datasource_id)
+
+    def _resolve_workspace_table_ids(
+        self,
+        datasource_id: str,
+        project_id: str | None,
+        workspace_table_ids: Sequence[str] | None,
+    ) -> tuple[list[str] | None, bool, int]:
+        """Resolve workspace scope from explicit ids or project+datasource combination.
+
+        Returns (table_ids, scope_applied, scope_table_count).
+        """
+        if workspace_table_ids:
+            return list(workspace_table_ids), True, len(workspace_table_ids)
+
+        if project_id:
+            scopes = (
+                self.db.query(WorkspaceTableScope)
+                .filter(
+                    WorkspaceTableScope.project_id == project_id,
+                    WorkspaceTableScope.data_source_id == datasource_id,
+                    WorkspaceTableScope.enabled == True,
+                )
+                .all()
+            )
+            if scopes:
+                ids = [s.table_id for s in scopes]
+                return ids, True, len(ids)
+
+        return None, False, 0
 
     def link(
         self,
         datasource_id: str,
         question: str,
         workspace_table_ids: Sequence[str] | None = None,
+        project_id: str | None = None,
     ) -> SchemaLinkingResult:
+        alias_resolver = self._get_alias_resolver(datasource_id)
         all_tables = (
             self.db.query(SchemaTable)
             .options(selectinload(SchemaTable.columns))
@@ -123,9 +165,14 @@ class SchemaLinker:
             .all()
         )
         original_table_count = len(all_tables)
-        if workspace_table_ids:
-            workspace_ids = {str(table_id) for table_id in workspace_table_ids}
-            candidate_tables = [table for table in all_tables if str(table.id) in workspace_ids]
+
+        resolved_ids, scope_applied, scope_count = self._resolve_workspace_table_ids(
+            datasource_id, project_id, workspace_table_ids
+        )
+
+        if resolved_ids:
+            workspace_id_set = {str(table_id) for table_id in resolved_ids}
+            candidate_tables = [table for table in all_tables if str(table.id) in workspace_id_set]
         else:
             candidate_tables = all_tables
 
@@ -136,9 +183,15 @@ class SchemaLinker:
                 original_table_count=original_table_count,
                 candidate_table_count=0,
                 tables=[],
+                workspace_scope_applied=scope_applied,
+                workspace_scope_table_count=scope_count,
             )
 
-        alias_matches = self.alias_resolver.resolve(question)
+        alias_matches = alias_resolver.resolve(question)
+        sem_aliases_used = [
+            {"alias": m.alias, "target": m.target, "source": m.source}
+            for m in alias_matches
+        ]
         table_links = [self._score_table(table, question, alias_matches) for table in candidate_tables]
 
         if len(candidate_tables) <= 8:
@@ -152,6 +205,9 @@ class SchemaLinker:
                 original_table_count=original_table_count,
                 candidate_table_count=len(candidate_tables),
                 tables=selected,
+                workspace_scope_applied=scope_applied,
+                workspace_scope_table_count=scope_count,
+                semantic_aliases_used=sem_aliases_used,
             )
 
         scored = sorted(table_links, key=lambda item: (-item.score, str(item.table.table_name)))
@@ -170,6 +226,9 @@ class SchemaLinker:
             original_table_count=original_table_count,
             candidate_table_count=len(candidate_tables),
             tables=selected[:8],
+            workspace_scope_applied=scope_applied,
+            workspace_scope_table_count=scope_count,
+            semantic_aliases_used=sem_aliases_used,
         )
 
     def full_context(
@@ -177,6 +236,7 @@ class SchemaLinker:
         datasource_id: str,
         question: str | None = None,
         workspace_table_ids: Sequence[str] | None = None,
+        project_id: str | None = None,
     ) -> SchemaLinkingResult:
         all_tables = (
             self.db.query(SchemaTable)
@@ -185,11 +245,23 @@ class SchemaLinker:
             .all()
         )
         original_table_count = len(all_tables)
-        if workspace_table_ids:
-            workspace_ids = {str(table_id) for table_id in workspace_table_ids}
-            selected_tables = [table for table in all_tables if str(table.id) in workspace_ids]
+
+        resolved_ids, scope_applied, scope_count = self._resolve_workspace_table_ids(
+            datasource_id, project_id, workspace_table_ids
+        )
+
+        if resolved_ids:
+            workspace_id_set = {str(table_id) for table_id in resolved_ids}
+            selected_tables = [table for table in all_tables if str(table.id) in workspace_id_set]
         else:
             selected_tables = all_tables
+
+        alias_resolver = self._get_alias_resolver(datasource_id)
+        alias_matches = alias_resolver.resolve(question or "")
+        sem_aliases_used = [
+            {"alias": m.alias, "target": m.target, "source": m.source}
+            for m in alias_matches
+        ]
 
         links = [TableLink(table=table, reasons=["full_schema_context"]) for table in selected_tables]
         return SchemaLinkingResult(
@@ -199,6 +271,9 @@ class SchemaLinker:
             candidate_table_count=len(selected_tables),
             tables=links,
             mode="full",
+            workspace_scope_applied=scope_applied,
+            workspace_scope_table_count=scope_count,
+            semantic_aliases_used=sem_aliases_used,
         )
 
     def _score_table(self, table: SchemaTable, question: str, alias_matches: list[AliasMatch]) -> TableLink:
@@ -224,7 +299,8 @@ class SchemaLinker:
 
         for alias in alias_matches:
             if alias.table_name.lower() == table_name_lower:
-                table_link.add_reason(f"alias_match:{alias.alias}->{alias.target}", 12.0)
+                reason = f"alias_match:{alias.alias}->{alias.target}[source={alias.source}]"
+                table_link.add_reason(reason, 12.0)
 
         for column in _sorted_columns(list(table.columns)):
             self._score_column(table_link, column, question, q_tokens, alias_matches)
@@ -266,7 +342,8 @@ class SchemaLinker:
                 and alias.column_name
                 and alias.column_name.lower() == column_name_lower
             ):
-                column_link.add_reason(f"alias_column_match:{alias.alias}->{alias.target}", 10.0)
+                reason = f"alias_column_match:{alias.alias}->{alias.target}[source={alias.source}]"
+                column_link.add_reason(reason, 10.0)
 
         if column_link.score > 0:
             table_link.score += column_link.score

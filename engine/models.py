@@ -432,3 +432,71 @@ class TableDesignDraft(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     project = relationship("Project", back_populates="drafts")
+
+
+class SemanticAlias(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "semantic_aliases"
+    __table_args__ = (
+        Index("ix_semantic_aliases_datasource", "data_source_id"),
+        Index("ix_semantic_aliases_alias", "alias"),
+        UniqueConstraint("data_source_id", "alias", "target_type", "target", name="uq_semantic_aliases_ds_alias_target"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    alias = Column(String, nullable=False)
+    target_type = Column(String, nullable=False)
+    target = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class SemanticMetric(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "semantic_metrics"
+    __table_args__ = (
+        Index("ix_semantic_metrics_datasource", "data_source_id"),
+        UniqueConstraint("data_source_id", "name", name="uq_semantic_metrics_ds_name"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    expression = Column(String, nullable=False)
+    source_columns_json = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class SemanticDimension(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "semantic_dimensions"
+    __table_args__ = (
+        Index("ix_semantic_dimensions_datasource", "data_source_id"),
+        UniqueConstraint("data_source_id", "name", name="uq_semantic_dimensions_ds_name"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    column_ref = Column(String, nullable=False)
+    transform = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class WorkspaceTableScope(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "workspace_table_scopes"
+    __table_args__ = (
+        Index("ix_workspace_table_scopes_project_ds", "project_id", "data_source_id"),
+        UniqueConstraint("project_id", "data_source_id", "table_id", name="uq_workspace_scopes_project_ds_table"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    table_id = Column(String, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)

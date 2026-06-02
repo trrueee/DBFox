@@ -8,7 +8,24 @@ from typing import Any, Literal, Sequence
 import httpx
 from sqlalchemy.orm import Session, selectinload
 
-from engine.models import SchemaColumn, SchemaTable
+from engine.models import SchemaColumn, SchemaTable, SemanticDimension, SemanticMetric
+
+
+def _parse_source_columns(source_columns_json: str | None) -> list[str]:
+    if not source_columns_json:
+        return []
+    try:
+        parsed = json.loads(source_columns_json)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed]
+    return []
+
+
+def _extract_table_from_ref(ref: str) -> str:
+    parts = ref.split(".", 1)
+    return parts[0] if len(parts) == 2 else ""
 
 
 PlanBuildMode = Literal["auto", "offline", "online"]
@@ -113,7 +130,8 @@ QUERY_PLAN_USER_TEMPLATE = (
     "Schema context:\n"
     "```sql\n"
     "{schema_context}\n"
-    "```\n\n"
+    "```\n"
+    "{semantic_context}\n"
     "User question: \"{question}\"\n\n"
     "Generate the structured query plan JSON:"
 )
@@ -146,6 +164,7 @@ class QueryPlanBuilder:
                     question=question,
                     schema_context=schema_context,
                     llm_config=config,
+                    datasource_id=datasource_id,
                 )
                 plan.mode = "online"
                 return self.validate(datasource_id, plan)
@@ -190,17 +209,40 @@ class QueryPlanBuilder:
         plan.warnings = _dedupe(warnings)
         return plan
 
+    def _build_semantic_context_text(self, datasource_id: str) -> str:
+        metrics, dimensions = self._load_semantic_definitions(datasource_id)
+        parts: list[str] = []
+
+        if metrics:
+            parts.append("Predefined metrics:")
+            for m in metrics:
+                parts.append(f"  - {m.name}: {m.expression} (source: {m.source_column})")
+
+        if dimensions:
+            parts.append("Predefined dimensions:")
+            for d in dimensions:
+                transform_str = f" [{d.transform}]" if d.transform else ""
+                parts.append(f"  - {d.name}: {d.column}{transform_str}")
+
+        if not parts:
+            return ""
+
+        return "\n".join(parts) + "\n"
+
     def _build_online(
         self,
         question: str,
         schema_context: str,
         llm_config: dict[str, Any],
+        datasource_id: str = "",
     ) -> QueryPlan:
         api_key = str(llm_config.get("api_key", "") or "").strip()
         api_base = str(llm_config.get("api_base", "https://api.openai.com/v1") or "").strip()
         model_name = str(llm_config.get("model", "gpt-4o-mini") or "").strip()
         if not api_key:
             raise ValueError("missing api_key")
+
+        semantic_context = self._build_semantic_context_text(datasource_id)
 
         response = httpx.post(
             f"{api_base}/chat/completions",
@@ -216,6 +258,7 @@ class QueryPlanBuilder:
                         "role": "user",
                         "content": QUERY_PLAN_USER_TEMPLATE.format(
                             schema_context=schema_context,
+                            semantic_context=f"\n{semantic_context}" if semantic_context else "",
                             question=question,
                         ),
                     },
@@ -240,6 +283,56 @@ class QueryPlanBuilder:
     ) -> QueryPlan:
         q = question.lower()
 
+        # 1. Check semantic definitions from DB
+        metrics, dimensions = self._load_semantic_definitions(datasource_id)
+        matched_metrics = self._match_metrics(q, metrics)
+        matched_dimensions = self._match_dimensions(q, dimensions)
+
+        if matched_metrics or matched_dimensions:
+            tables_set: set[str] = set()
+            for m in matched_metrics:
+                source_cols = _parse_source_columns(m.source_columns_json)
+                source_col = source_cols[0] if source_cols else m.expression
+                table = _extract_table_from_ref(source_col)
+                if table:
+                    tables_set.add(table)
+            for d in matched_dimensions:
+                table = _extract_table_from_ref(d.column_ref)
+                if table:
+                    tables_set.add(table)
+
+            if selected_tables:
+                available = {table.lower() for table in selected_tables}
+                tables_set = {table for table in tables_set if table.lower() in available}
+
+            tables = list(tables_set) if tables_set else self._fallback_tables(datasource_id, selected_tables)
+            source_cols = _parse_source_columns(matched_metrics[0].source_columns_json) if matched_metrics else []
+            return QueryPlan(
+                intent="answer_question_with_semantic_definitions",
+                tables=tables,
+                metrics=[
+                    QueryMetric(
+                        name=m.name,
+                        expression=m.expression,
+                        source_column=_parse_source_columns(m.source_columns_json)[0] if _parse_source_columns(m.source_columns_json) else "",
+                    )
+                    for m in matched_metrics
+                ],
+                dimensions=[
+                    QueryDimension(
+                        name=d.name,
+                        column=d.column_ref,
+                        transform=d.transform if d.transform else None,
+                    )
+                    for d in matched_dimensions
+                ],
+                filters=[],
+                joins=self._infer_joins(datasource_id, tables),
+                order_by=None,
+                limit=100,
+            )
+
+        # 2. Existing offline heuristics (unchanged)
         if self._has_sales_volume_intent(q):
             tables = self._available_tables(datasource_id, ["order_items", "products"], selected_tables)
             return QueryPlan(
@@ -260,9 +353,9 @@ class QueryPlanBuilder:
 
         if self._has_order_count_intent(q):
             tables = self._available_tables(datasource_id, ["orders"], selected_tables)
-            dimensions: list[QueryDimension] = []
+            out_dimensions: list[QueryDimension] = []
             if _contains_any(q, ("每天", "每日", "按天", "daily", "per day")):
-                dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
+                out_dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
             return QueryPlan(
                 intent="aggregate_order_count",
                 tables=tables,
@@ -273,18 +366,18 @@ class QueryPlanBuilder:
                         source_column="orders.id",
                     )
                 ],
-                dimensions=dimensions,
+                dimensions=out_dimensions,
                 filters=self._order_status_filters(q),
                 joins=[],
-                order_by="order_date DESC" if dimensions else None,
+                order_by="order_date DESC" if out_dimensions else None,
                 limit=100,
             )
 
         if self._has_amount_intent(q):
             tables = self._available_tables(datasource_id, ["orders"], selected_tables)
-            dimensions = []
+            out_dimensions = []
             if _contains_any(q, ("每天", "每日", "按天", "daily", "per day")):
-                dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
+                out_dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
             return QueryPlan(
                 intent="aggregate_order_amount",
                 tables=tables,
@@ -295,10 +388,10 @@ class QueryPlanBuilder:
                         source_column="orders.total_amount",
                     )
                 ],
-                dimensions=dimensions,
+                dimensions=out_dimensions,
                 filters=self._order_status_filters(q),
                 joins=[],
-                order_by="order_date DESC" if dimensions else None,
+                order_by="order_date DESC" if out_dimensions else None,
                 limit=100,
             )
 
@@ -316,20 +409,49 @@ class QueryPlanBuilder:
             )
 
         tables = self._fallback_tables(datasource_id, selected_tables)
-        metrics: list[QueryMetric] = []
+        out_metrics: list[QueryMetric] = []
         if _contains_any(q, ("数量", "多少", "count", "统计")) and tables:
-            metrics.append(QueryMetric(name="row_count", expression="COUNT(*)", source_column=f"{tables[0]}.id"))
+            out_metrics.append(QueryMetric(name="row_count", expression="COUNT(*)", source_column=f"{tables[0]}.id"))
 
         return QueryPlan(
             intent="answer_question",
             tables=tables,
-            metrics=metrics,
+            metrics=out_metrics,
             dimensions=[],
             filters=[],
             joins=self._infer_joins(datasource_id, tables),
             order_by=None,
             limit=100,
         )
+
+    def _load_semantic_definitions(
+        self, datasource_id: str
+    ) -> tuple[list[SemanticMetric], list[SemanticDimension]]:
+        metrics = (
+            self.db.query(SemanticMetric)
+            .filter(SemanticMetric.data_source_id == datasource_id)
+            .all()
+        )
+        dimensions = (
+            self.db.query(SemanticDimension)
+            .filter(SemanticDimension.data_source_id == datasource_id)
+            .all()
+        )
+        return metrics, dimensions
+
+    def _match_metrics(self, q_lower: str, metrics: list[SemanticMetric]) -> list[SemanticMetric]:
+        matched: list[SemanticMetric] = []
+        for m in metrics:
+            if m.name.lower() in q_lower:
+                matched.append(m)
+        return matched
+
+    def _match_dimensions(self, q_lower: str, dimensions: list[SemanticDimension]) -> list[SemanticDimension]:
+        matched: list[SemanticDimension] = []
+        for d in dimensions:
+            if d.name.lower() in q_lower:
+                matched.append(d)
+        return matched
 
     def _has_sales_volume_intent(self, q: str) -> bool:
         return _contains_any(q, ("销量", "销售量", "total_sold", "sold")) and _contains_any(

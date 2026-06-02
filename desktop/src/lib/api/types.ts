@@ -645,3 +645,99 @@ export interface TableDesignAiResponse {
     unique: boolean;
   }>;
 }
+
+// Semantic Layer types
+
+export interface SemanticAlias {
+  id: string;
+  data_source_id: string;
+  alias: string;
+  target_type: string;
+  target: string;
+  description?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SemanticAliasCreateParams {
+  data_source_id: string;
+  alias: string;
+  target_type: string;
+  target: string;
+  description?: string | null;
+}
+
+export interface SemanticAliasUpdateParams {
+  alias?: string | null;
+  target_type?: string | null;
+  target?: string | null;
+  description?: string | null;
+}
+
+export interface SemanticMetric {
+  id: string;
+  data_source_id: string;
+  name: string;
+  expression: string;
+  source_columns_json?: string | null;
+  description?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SemanticMetricCreateParams {
+  data_source_id: string;
+  name: string;
+  expression: string;
+  source_columns_json?: string | null;
+  description?: string | null;
+}
+
+export interface SemanticMetricUpdateParams {
+  name?: string | null;
+  expression?: string | null;
+  source_columns_json?: string | null;
+  description?: string | null;
+}
+
+export interface SemanticDimension {
+  id: string;
+  data_source_id: string;
+  name: string;
+  column_ref: string;
+  transform?: string | null;
+  description?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface SemanticDimensionCreateParams {
+  data_source_id: string;
+  name: string;
+  column_ref: string;
+  transform?: string | null;
+  description?: string | null;
+}
+
+export interface SemanticDimensionUpdateParams {
+  name?: string | null;
+  column_ref?: string | null;
+  transform?: string | null;
+  description?: string | null;
+}
+
+export interface WorkspaceTableScope {
+  id: string;
+  project_id: string;
+  data_source_id: string;
+  table_id: string;
+  enabled: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkspaceTableScopeUpdateParams {
+  project_id: string;
+  datasource_id: string;
+  enabled_table_ids: string[];
+}

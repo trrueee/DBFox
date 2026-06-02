@@ -7,6 +7,7 @@ export * from "./query";
 export * from "./schema";
 export * from "./ai";
 export * from "./tableDesign";
+export * from "./semantic";
 
 import { agentApi } from "./agent";
 import { backupApi } from "./backup";
@@ -16,6 +17,7 @@ import { queryApi } from "./query";
 import { schemaApi } from "./schema";
 import { aiApi } from "./ai";
 import { tableDesignApi } from "./tableDesign";
+import { semanticApi } from "./semantic";
 
 export const api = {
   ...projectsApi,
@@ -26,4 +28,5 @@ export const api = {
   ...aiApi,
   ...agentApi,
   ...tableDesignApi,
+  ...semanticApi,
 };
