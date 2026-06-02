@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import time
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -30,6 +32,8 @@ from engine.agent.types import (
     AgentArtifact,
     AgentRunRequest,
     AgentRunResponse,
+    AgentRuntimeEvent,
+    AgentRuntimeEventType,
     AgentStep,
     FollowUpSuggestion,
     ResultProfile,
@@ -42,6 +46,18 @@ class DataBoxAgentRuntime:
         self.db = db
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
+        final_response: AgentRunResponse | None = None
+        for event in self.run_iter(req):
+            if event.response is not None:
+                final_response = event.response
+        if final_response is None:
+            raise RuntimeError("Agent runtime completed without a final response.")
+        return final_response
+
+    def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
+        run_id = str(uuid.uuid4())
+        session_id = self._session_id(req)
+        sequence = 0
         steps: list[AgentStep] = []
         query_plan: dict[str, Any] | None = None
         sql: str | None = None
@@ -53,62 +69,148 @@ class DataBoxAgentRuntime:
         answer: dict[str, Any] | None = None
         suggestions: list[dict[str, Any]] = []
 
-        if has_follow_up_context(req):
-            context_obs = load_followup_context_tool(req)
-            self._record(steps, context_obs)
-            if context_obs.status == "failed":
-                return self._failure(req, steps, "Failed to load follow-up context.")
-            if self._budget_reached(req, steps):
-                return self._failure(req, steps, "Agent stopped before schema linking because max_steps was reached.")
+        def emit(
+            event_type: AgentRuntimeEventType,
+            *,
+            step: dict[str, Any] | None = None,
+            artifact: AgentArtifact | None = None,
+            answer_payload: AgentAnswer | None = None,
+            response: AgentRunResponse | None = None,
+            error: str | None = None,
+        ) -> AgentRuntimeEvent:
+            nonlocal sequence
+            sequence += 1
+            return AgentRuntimeEvent(
+                event_id=f"runtime_{sequence}_{event_type.replace('.', '_')}",
+                run_id=run_id,
+                sequence=sequence,
+                created_at_ms=int(time.time() * 1000),
+                type=event_type,
+                step=step,
+                artifact=artifact,
+                answer=answer_payload,
+                response=response,
+                error=error,
+            )
 
+        def start_step(name: str) -> AgentRuntimeEvent:
+            return emit(
+                "agent.step.started",
+                step={"name": name, "index": len(steps) + 1},
+            )
+
+        def complete_step(observation: ToolObservation) -> AgentRuntimeEvent:
+            step = self._record(steps, observation)
+            return emit(
+                "agent.step.completed",
+                step={
+                    "name": step.name,
+                    "status": step.status,
+                    "error": step.error,
+                    "latency_ms": step.latency_ms,
+                    "index": len(steps),
+                },
+            )
+
+        def final_events(response: AgentRunResponse) -> Iterator[AgentRuntimeEvent]:
+            for artifact in response.artifacts:
+                yield emit("agent.artifact.created", artifact=artifact)
+            if response.answer is not None:
+                yield emit("agent.answer.completed", answer_payload=response.answer)
+            final_type: AgentRuntimeEventType = "agent.run.completed" if response.success else "agent.run.failed"
+            yield emit(final_type, response=response, error=response.error)
+
+        def build_failure(error: str, plan: dict[str, Any] | None = None) -> AgentRunResponse:
+            return self._failure(
+                req,
+                steps,
+                error,
+                query_plan=plan,
+                run_id=run_id,
+                session_id=session_id,
+            )
+
+        yield emit(
+            "agent.run.started",
+            step={
+                "datasource_id": req.datasource_id,
+                "question": req.question,
+                "execute": req.execute,
+            },
+        )
+
+        if has_follow_up_context(req):
+            yield start_step("load_follow_up_context")
+            context_obs = load_followup_context_tool(req)
+            yield complete_step(context_obs)
+            if context_obs.status == "failed":
+                yield from final_events(build_failure("Failed to load follow-up context."))
+                return
+            if self._budget_reached(req, steps):
+                yield from final_events(build_failure("Agent stopped before schema linking because max_steps was reached."))
+                return
+
+        yield start_step("build_schema_context")
         schema_obs = build_schema_context_tool(self.db, req)
-        self._record(steps, schema_obs)
+        yield complete_step(schema_obs)
         if schema_obs.status == "failed":
-            return self._failure(req, steps, "Failed to build schema context.")
+            yield from final_events(build_failure("Failed to build schema context."))
+            return
 
         schema_context = schema_obs.output or {}
 
         if self._budget_reached(req, steps):
-            return self._failure(req, steps, "Agent stopped before query planning because max_steps was reached.")
+            yield from final_events(build_failure("Agent stopped before query planning because max_steps was reached."))
+            return
 
+        yield start_step("build_query_plan")
         plan_obs = build_query_plan_tool(self.db, req, schema_context)
-        self._record(steps, plan_obs)
+        yield complete_step(plan_obs)
         if plan_obs.status == "failed":
-            return self._failure(req, steps, "Failed to build query plan.")
+            yield from final_events(build_failure("Failed to build query plan."))
+            return
         query_plan = plan_obs.output
 
         if self._budget_reached(req, steps):
-            return self._failure(req, steps, "Agent stopped before SQL generation because max_steps was reached.", query_plan=query_plan)
+            yield from final_events(build_failure("Agent stopped before SQL generation because max_steps was reached.", query_plan))
+            return
 
+        yield start_step("generate_sql_candidate")
         sql_obs = generate_sql_tool(self.db, req, schema_context=schema_context, query_plan=query_plan)
-        self._record(steps, sql_obs)
+        yield complete_step(sql_obs)
         if sql_obs.status == "failed":
+            yield start_step("revise_sql")
             revise_obs = revise_sql_tool(
                 None,
                 sql_obs.error or "SQL generation failed.",
                 db=self.db,
                 datasource_id=req.datasource_id,
             )
-            self._record(steps, revise_obs)
-            return self._failure(req, steps, sql_obs.error or "Failed to generate SQL.", query_plan=query_plan)
+            yield complete_step(revise_obs)
+            yield from final_events(build_failure(sql_obs.error or "Failed to generate SQL.", query_plan))
+            return
 
         sql_output = sql_obs.output or {}
         sql = str(sql_output.get("sql") or "").strip()
         if not sql:
+            yield start_step("revise_sql")
             revise_obs = revise_sql_tool(
                 sql,
                 "SQL generation returned an empty candidate.",
                 db=self.db,
                 datasource_id=req.datasource_id,
             )
-            self._record(steps, revise_obs)
-            return self._failure(req, steps, "SQL generation returned an empty candidate.", query_plan=query_plan)
+            yield complete_step(revise_obs)
+            yield from final_events(build_failure("SQL generation returned an empty candidate.", query_plan))
+            return
 
         if self._budget_reached(req, steps):
-            return self._failure(req, steps, "Agent stopped before SQL validation because max_steps was reached.", query_plan=query_plan)
+            yield from final_events(build_failure("Agent stopped before SQL validation because max_steps was reached.", query_plan))
+            return
 
+        yield start_step("validate_sql")
         validate_obs = validate_sql_tool(self.db, req.datasource_id, sql)
-        self._record(steps, validate_obs)
+        yield complete_step(validate_obs)
         safety = validate_obs.output or {}
         self._attach_generation_notes(safety, sql_output)
         if validate_obs.status == "failed" or not safety.get("can_execute"):
@@ -117,9 +219,10 @@ class DataBoxAgentRuntime:
                 or validate_obs.error
                 or "SQL did not pass DataBox Agent validation."
             )
+            yield start_step("revise_sql")
             revise_obs = revise_sql_tool(sql, str(reason), safety, db=self.db, datasource_id=req.datasource_id)
-            self._record(steps, revise_obs)
-            return self._response(
+            yield complete_step(revise_obs)
+            response = self._response(
                 req=req,
                 success=False,
                 steps=steps,
@@ -133,14 +236,18 @@ class DataBoxAgentRuntime:
                 answer=None,
                 suggestions=[],
                 error=str(reason),
+                run_id=run_id,
+                session_id=session_id,
             )
+            yield from final_events(response)
+            return
 
         safe_sql = str(safety.get("safe_sql") or sql)
         sql = safe_sql
 
         if req.execute:
             if self._budget_reached(req, steps):
-                return self._response(
+                response = self._response(
                     req=req,
                     success=False,
                     steps=steps,
@@ -154,10 +261,15 @@ class DataBoxAgentRuntime:
                     answer=None,
                     suggestions=[],
                     error="Agent stopped before SQL execution because max_steps was reached.",
+                    run_id=run_id,
+                    session_id=session_id,
                 )
+                yield from final_events(response)
+                return
 
+            yield start_step("execute_sql")
             execute_obs = execute_sql_tool(self.db, req, safe_sql, safety=safety)
-            self._record(steps, execute_obs)
+            yield complete_step(execute_obs)
             execution = execute_obs.output or {}
             if execute_obs.status == "failed":
                 reason = (
@@ -165,9 +277,10 @@ class DataBoxAgentRuntime:
                     or execute_obs.error
                     or "SQL execution failed."
                 )
+                yield start_step("revise_sql")
                 revise_obs = revise_sql_tool(safe_sql, str(reason), safety, db=self.db, datasource_id=req.datasource_id)
-                self._record(steps, revise_obs)
-                return self._response(
+                yield complete_step(revise_obs)
+                response = self._response(
                     req=req,
                     success=False,
                     steps=steps,
@@ -181,31 +294,40 @@ class DataBoxAgentRuntime:
                     answer=None,
                     suggestions=[],
                     error=str(reason),
+                    run_id=run_id,
+                    session_id=session_id,
                 )
+                yield from final_events(response)
+                return
         else:
+            yield start_step("execute_sql")
             execute_obs = skipped_execute_observation()
-            self._record(steps, execute_obs)
+            yield complete_step(execute_obs)
             execution = execute_obs.output
 
         if not self._budget_reached(req, steps):
+            yield start_step("profile_result")
             profile_obs = profile_result_tool(req, query_plan, execution)
-            self._record(steps, profile_obs)
+            yield complete_step(profile_obs)
             if profile_obs.output:
                 result_profile = profile_obs.output
 
         if not self._budget_reached(req, steps):
+            yield start_step("suggest_chart")
             chart_obs = suggest_chart_tool(execution)
-            self._record(steps, chart_obs)
+            yield complete_step(chart_obs)
             chart_suggestion = chart_obs.output
 
         if not self._budget_reached(req, steps):
+            yield start_step("suggest_followups")
             suggestions_obs = suggest_followups_tool(req, safe_sql, safety, execution, result_profile, chart_suggestion)
-            self._record(steps, suggestions_obs)
+            yield complete_step(suggestions_obs)
             if suggestions_obs.output:
                 raw_suggestions = suggestions_obs.output.get("suggestions")
                 suggestions = [dict(item) for item in raw_suggestions if isinstance(item, dict)] if isinstance(raw_suggestions, list) else []
 
         if not self._budget_reached(req, steps):
+            yield start_step("answer_synthesizer")
             answer_obs = answer_synthesizer_tool(
                 req,
                 query_plan=query_plan,
@@ -215,12 +337,12 @@ class DataBoxAgentRuntime:
                 result_profile=result_profile,
                 suggestions=suggestions,
             )
-            self._record(steps, answer_obs)
+            yield complete_step(answer_obs)
             if answer_obs.output:
                 answer = answer_obs.output
                 explanation = str(answer.get("answer") or "")
 
-        return self._response(
+        response = self._response(
             req=req,
             success=True,
             steps=steps,
@@ -234,19 +356,22 @@ class DataBoxAgentRuntime:
             answer=answer,
             suggestions=suggestions,
             error=None,
+            run_id=run_id,
+            session_id=session_id,
         )
+        yield from final_events(response)
 
-    def _record(self, steps: list[AgentStep], observation: ToolObservation) -> None:
-        steps.append(
-            AgentStep(
-                name=observation.name,
-                status=observation.status,
-                input=observation.input,
-                output=observation.output,
-                error=observation.error,
-                latency_ms=observation.latency_ms,
-            )
+    def _record(self, steps: list[AgentStep], observation: ToolObservation) -> AgentStep:
+        step = AgentStep(
+            name=observation.name,
+            status=observation.status,
+            input=observation.input,
+            output=observation.output,
+            error=observation.error,
+            latency_ms=observation.latency_ms,
         )
+        steps.append(step)
+        return step
 
     def _budget_reached(self, req: AgentRunRequest, steps: list[AgentStep]) -> bool:
         return len(steps) >= req.max_steps
@@ -279,6 +404,8 @@ class DataBoxAgentRuntime:
         answer: dict[str, Any] | None,
         suggestions: list[dict[str, Any]],
         error: str | None,
+        run_id: str | None = None,
+        session_id: str | None = None,
     ) -> AgentRunResponse:
         parsed_profile = ResultProfile.model_validate(result_profile) if result_profile else None
         parsed_suggestions = [
@@ -326,8 +453,8 @@ class DataBoxAgentRuntime:
         )
 
         response = AgentRunResponse(
-            run_id=str(uuid.uuid4()),
-            session_id=self._session_id(req),
+            run_id=run_id or str(uuid.uuid4()),
+            session_id=session_id or self._session_id(req),
             parent_run_id=req.parent_run_id or (req.follow_up_context.parent_run_id if req.follow_up_context else None),
             success=success,
             question=req.question,
@@ -358,6 +485,8 @@ class DataBoxAgentRuntime:
         steps: list[AgentStep],
         error: str,
         query_plan: dict[str, Any] | None = None,
+        run_id: str | None = None,
+        session_id: str | None = None,
     ) -> AgentRunResponse:
         return self._response(
             req=req,
@@ -373,6 +502,8 @@ class DataBoxAgentRuntime:
             answer=None,
             suggestions=[],
             error=error,
+            run_id=run_id,
+            session_id=session_id,
         )
 
     def _session_id(self, req: AgentRunRequest) -> str:

@@ -1,11 +1,13 @@
 import logging
+import json
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from engine.agent import AgentRunRequest, AgentRunResponse, DataBoxAgentRuntime
+from engine.agent import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent, DataBoxAgentRuntime
 from engine.ai import generate_sql
 from engine.db import get_db
 from engine.errors import DataBoxError
@@ -33,6 +35,52 @@ def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentR
             status_code=500,
             detail={"code": "AGENT_RUNTIME_ERROR", "message": f"Agent runtime failed: {str(exc)}"},
         )
+
+
+def _format_sse_event(event: AgentRuntimeEvent) -> str:
+    return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+
+
+@router.post("/query/agent-run/stream")
+def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+    def stream_events():
+        try:
+            for event in DataBoxAgentRuntime(db).run_iter(req):
+                yield _format_sse_event(event)
+        except DataBoxError as exc:
+            payload = {
+                "event_id": "runtime_error_databox",
+                "run_id": "",
+                "sequence": 1,
+                "created_at_ms": 0,
+                "type": "agent.run.failed",
+                "error": str(exc),
+                "response": None,
+                "code": exc.code,
+            }
+            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+        except Exception as exc:
+            logger.exception("Agent runtime stream failed")
+            payload = {
+                "event_id": "runtime_error_unhandled",
+                "run_id": "",
+                "sequence": 1,
+                "created_at_ms": 0,
+                "type": "agent.run.failed",
+                "error": f"Agent runtime failed: {str(exc)}",
+                "response": None,
+                "code": "AGENT_RUNTIME_ERROR",
+            }
+            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/query/generate")

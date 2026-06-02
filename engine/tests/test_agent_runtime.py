@@ -60,6 +60,41 @@ def test_agent_runtime_execute_false_generates_full_review_response(db_session, 
     assert res.steps[4].status == "skipped"
 
 
+def test_agent_runtime_run_iter_emits_ordered_events_and_final_response(db_session, demo_datasource) -> None:
+    sync_schema(db_session, demo_datasource.id)
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="list users",
+        execute=False,
+        session_id="stream-session",
+    )
+
+    events = list(DataBoxAgentRuntime(db_session).run_iter(req))
+
+    assert events
+    assert events[0].type == "agent.run.started"
+    assert [event.sequence for event in events] == list(range(1, len(events) + 1))
+    final = events[-1]
+    assert final.type == "agent.run.completed"
+    assert final.response is not None
+    assert final.response.success is True
+    assert final.response.session_id == "stream-session"
+    assert final.response.run_id == final.run_id
+    assert all(event.run_id == final.response.run_id for event in events)
+
+    started_steps = [event.step["name"] for event in events if event.type == "agent.step.started" and event.step]
+    completed_steps = [event.step["name"] for event in events if event.type == "agent.step.completed" and event.step]
+    assert completed_steps == [step.name for step in final.response.steps]
+    assert started_steps == completed_steps
+
+    artifact_events = [event for event in events if event.type == "agent.artifact.created"]
+    assert [event.artifact.id for event in artifact_events if event.artifact] == [
+        artifact.id for artifact in final.response.artifacts
+    ]
+    answer_index = next(index for index, event in enumerate(events) if event.type == "agent.answer.completed")
+    assert answer_index > max(index for index, event in enumerate(events) if event.type == "agent.artifact.created")
+
+
 def test_agent_runtime_reuses_validation_safety_decision_for_execution(db_session, demo_datasource, monkeypatch) -> None:
     sync_schema(db_session, demo_datasource.id)
 

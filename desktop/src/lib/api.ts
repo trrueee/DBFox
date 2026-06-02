@@ -442,6 +442,136 @@ export interface AgentRunResponse {
   error?: string | null;
 }
 
+export interface AgentRunConfig {
+  apiKey?: string;
+  apiBase?: string;
+  model?: string;
+  optimizeRag?: boolean;
+  execute?: boolean;
+  followUpContext?: AgentFollowUpContext;
+}
+
+export type AgentRuntimeEventType =
+  | "agent.run.started"
+  | "agent.step.started"
+  | "agent.step.completed"
+  | "agent.artifact.created"
+  | "agent.answer.completed"
+  | "agent.run.completed"
+  | "agent.run.failed";
+
+export interface AgentRuntimeEvent {
+  event_id: string;
+  run_id: string;
+  sequence: number;
+  created_at_ms: number;
+  type: AgentRuntimeEventType;
+  step?: (Partial<AgentStep> & Record<string, unknown>) | null;
+  artifact?: AgentArtifact | null;
+  answer?: AgentAnswer | null;
+  response?: AgentRunResponse | null;
+  error?: string | null;
+}
+
+function buildAgentRunPayload(datasourceId: string, question: string, config?: AgentRunConfig) {
+  return {
+    datasource_id: datasourceId,
+    question,
+    session_id: config?.followUpContext?.session_id,
+    parent_run_id: config?.followUpContext?.parent_run_id,
+    follow_up_context: config?.followUpContext,
+    api_key: config?.apiKey,
+    api_base: config?.apiBase,
+    model_name: config?.model,
+    optimize_rag: config?.optimizeRag ?? true,
+    execute: config?.execute ?? true,
+  };
+}
+
+function parseSseEvent(rawEvent: string): AgentRuntimeEvent | null {
+  const dataLines = rawEvent
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart());
+  if (dataLines.length === 0) return null;
+  return JSON.parse(dataLines.join("\n")) as AgentRuntimeEvent;
+}
+
+async function streamAgentRun(
+  datasourceId: string,
+  question: string,
+  config?: AgentRunConfig,
+  options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
+): Promise<AgentRunResponse> {
+  const response = await fetch(`${BASE_URL}/query/agent-run/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Local-Token": ENGINE_TOKEN,
+    },
+    body: JSON.stringify(buildAgentRunPayload(datasourceId, question, config)),
+    signal: options?.signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const payload = (() => { if (!text) return null; try { return JSON.parse(text); } catch { return { message: text }; } })();
+    const error = new Error(payload?.detail?.message || payload?.message || "Request failed") as Error & { code?: string; checks?: unknown[] };
+    error.code = payload?.detail?.code || payload?.code;
+    error.checks = payload?.detail?.checks || payload?.checks || [];
+    throw error;
+  }
+
+  if (!response.body) {
+    throw new Error("Agent stream is not supported by this browser runtime.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResponse: AgentRunResponse | null = null;
+
+  const processText = (text: string) => {
+    buffer += text;
+    buffer = buffer.replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const rawEvent = buffer.slice(0, boundary).trim();
+      buffer = buffer.slice(boundary + 2);
+      if (rawEvent) {
+        const event = parseSseEvent(rawEvent);
+        if (event) {
+          options?.onEvent?.(event);
+          if (event.response) {
+            finalResponse = event.response;
+          } else if (event.type === "agent.run.failed") {
+            throw new Error(event.error || "Agent stream failed.");
+          }
+        }
+      }
+      boundary = buffer.indexOf("\n\n");
+    }
+  };
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      processText(decoder.decode(value, { stream: true }));
+    }
+    const remaining = decoder.decode();
+    if (remaining) processText(remaining);
+    if (buffer.trim()) processText("\n\n");
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!finalResponse) {
+    throw new Error("Agent stream ended without a final response.");
+  }
+  return finalResponse;
+}
+
 export interface QueryResult {
   success: boolean;
   columns: string[];
@@ -695,23 +825,19 @@ export const api = {
       signal,
     }),
 
-  runAgentQuery: (datasourceId: string, question: string, config?: { apiKey?: string; apiBase?: string; model?: string; optimizeRag?: boolean; execute?: boolean; followUpContext?: AgentFollowUpContext }, signal?: AbortSignal) =>
+  runAgentQuery: (datasourceId: string, question: string, config?: AgentRunConfig, signal?: AbortSignal) =>
     request<AgentRunResponse>("/query/agent-run", {
       method: "POST",
-      body: JSON.stringify({
-        datasource_id: datasourceId,
-        question,
-        session_id: config?.followUpContext?.session_id,
-        parent_run_id: config?.followUpContext?.parent_run_id,
-        follow_up_context: config?.followUpContext,
-        api_key: config?.apiKey,
-        api_base: config?.apiBase,
-        model_name: config?.model,
-        optimize_rag: config?.optimizeRag ?? true,
-        execute: config?.execute ?? true,
-      }),
+      body: JSON.stringify(buildAgentRunPayload(datasourceId, question, config)),
       signal,
     }),
+
+  streamAgentQuery: (
+    datasourceId: string,
+    question: string,
+    config?: AgentRunConfig,
+    options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
+  ) => streamAgentRun(datasourceId, question, config, options),
 
   listGoldenSql: (datasourceId: string) =>
     request<any[]>(`/golden-sql?datasource_id=${datasourceId}`),

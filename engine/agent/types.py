@@ -17,6 +17,15 @@ AgentArtifactType = Literal[
     "error",
 ]
 AgentPresentationMode = Literal["inline", "dock", "both", "hidden"]
+AgentRuntimeEventType = Literal[
+    "agent.run.started",
+    "agent.step.started",
+    "agent.step.completed",
+    "agent.artifact.created",
+    "agent.answer.completed",
+    "agent.run.completed",
+    "agent.run.failed",
+]
 
 
 class AgentContextArtifact(BaseModel):
@@ -231,4 +240,17 @@ class AgentRunResponse(BaseModel):
     events: list[AgentVisibleEvent] = Field(default_factory=list)
     trace_events: list[AgentTraceEvent] = Field(default_factory=list)
     steps: list[AgentStep] = Field(default_factory=list)
+    error: str | None = None
+
+
+class AgentRuntimeEvent(BaseModel):
+    event_id: str
+    run_id: str
+    sequence: int
+    created_at_ms: int
+    type: AgentRuntimeEventType
+    step: dict[str, Any] | None = None
+    artifact: AgentArtifact | None = None
+    answer: AgentAnswer | None = None
+    response: AgentRunResponse | None = None
     error: str | None = None

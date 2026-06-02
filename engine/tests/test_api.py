@@ -1,4 +1,6 @@
 """API tests — 对应第一版.md Section 18.3"""
+import json
+
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.db import get_db
@@ -417,6 +419,60 @@ def test_agent_run_endpoint_review_mode(client) -> None:
     assert data["events"][0]["type"] == "agent.narration.completed"
     assert data["trace_events"]
     assert [step["name"] for step in data["steps"]] == [
+        "build_schema_context",
+        "build_query_plan",
+        "generate_sql_candidate",
+        "validate_sql",
+        "execute_sql",
+        "profile_result",
+        "suggest_chart",
+        "suggest_followups",
+        "answer_synthesizer",
+    ]
+
+
+def test_agent_run_stream_endpoint_returns_sse_final_response(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "agent_stream_endpoint_test",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+    client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+
+    resp = client.post("/api/v1/query/agent-run/stream", json={
+        "datasource_id": ds_id,
+        "question": "list users",
+        "execute": False,
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    chunks = [chunk for chunk in resp.text.strip().split("\n\n") if chunk.strip()]
+    event_names: list[str] = []
+    payloads: list[dict] = []
+    for chunk in chunks:
+        lines = chunk.splitlines()
+        event_line = next(line for line in lines if line.startswith("event: "))
+        data_line = next(line for line in lines if line.startswith("data: "))
+        event_names.append(event_line.removeprefix("event: "))
+        payloads.append(json.loads(data_line.removeprefix("data: ")))
+
+    assert event_names[0] == "agent.run.started"
+    assert "agent.step.started" in event_names
+    assert "agent.step.completed" in event_names
+    assert "agent.artifact.created" in event_names
+    assert "agent.answer.completed" in event_names
+    assert event_names[-1] == "agent.run.completed"
+    assert [payload["sequence"] for payload in payloads] == list(range(1, len(payloads) + 1))
+    final_response = payloads[-1]["response"]
+    assert final_response["success"] is True
+    assert final_response["run_id"] == payloads[-1]["run_id"]
+    assert final_response["sql"].upper().startswith("SELECT")
+    assert [step["name"] for step in final_response["steps"]] == [
         "build_schema_context",
         "build_query_plan",
         "generate_sql_candidate",

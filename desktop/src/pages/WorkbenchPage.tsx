@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { MenuBar, type MenuDef } from "../components/MenuBar";
 import { api } from "../lib/api";
-import type { AgentRunResponse, DataSource, FollowUpSuggestion, Project, SchemaTable } from "../lib/api";
+import type { AgentRunResponse, AgentRuntimeEvent, DataSource, FollowUpSuggestion, Project, SchemaTable } from "../lib/api";
 import { EnvironmentsPage } from "./EnvironmentsPage";
 import { BackupsPage } from "./BackupsPage";
 import { DataSourcesPage } from "./DataSourcesPage";
@@ -219,7 +219,58 @@ const AGENT_LOADING_STEPS = [
   "正在执行并整理证据",
 ];
 
-function AgentLoadingNarrative({ compact = false, prompt }: { compact?: boolean; prompt?: string }) {
+const AGENT_STEP_LABELS: Record<string, string> = {
+  load_follow_up_context: "Load follow-up context",
+  build_schema_context: "Build schema context",
+  build_query_plan: "Build query plan",
+  generate_sql_candidate: "Generate SQL candidate",
+  validate_sql: "Validate SQL",
+  revise_sql: "Revise SQL",
+  execute_sql: "Execute SQL",
+  profile_result: "Profile result",
+  suggest_chart: "Suggest chart",
+  suggest_followups: "Suggest follow-ups",
+  answer_synthesizer: "Synthesize answer",
+};
+
+function getRuntimeStepName(event: AgentRuntimeEvent): string | null {
+  const name = event.step?.name;
+  return typeof name === "string" ? name : null;
+}
+
+function getRuntimeLoadingSteps(events?: AgentRuntimeEvent[]) {
+  if (!events?.length) {
+    return AGENT_LOADING_STEPS.map((label, index) => ({
+      label,
+      state: index < 2 ? "active" : "queued",
+    }));
+  }
+
+  const names: string[] = [];
+  const states = new Map<string, "active" | "done" | "failed">();
+  for (const event of events) {
+    const name = getRuntimeStepName(event);
+    if (!name || !event.type.startsWith("agent.step.")) continue;
+    if (!names.includes(name)) names.push(name);
+    if (event.type === "agent.step.started") {
+      states.set(name, "active");
+    }
+    if (event.type === "agent.step.completed") {
+      states.set(name, event.step?.status === "failed" ? "failed" : "done");
+    }
+  }
+
+  return names.map((name) => ({
+    label: AGENT_STEP_LABELS[name] || name.replace(/_/g, " "),
+    state: states.get(name) || "active",
+  }));
+}
+
+function AgentLoadingNarrative({ compact = false, prompt, events }: { compact?: boolean; prompt?: string; events?: AgentRuntimeEvent[] }) {
+  const runtimeSteps = getRuntimeLoadingSteps(events);
+  const artifactCount = events?.filter((event) => event.type === "agent.artifact.created").length ?? 0;
+  const failedEvent = events?.find((event) => event.type === "agent.run.failed");
+
   return (
     <div
       style={{
@@ -242,15 +293,15 @@ function AgentLoadingNarrative({ compact = false, prompt }: { compact?: boolean;
         </div>
       ) : null}
       <div style={{ display: "flex", flexDirection: "column", gap: compact ? 5 : 7 }}>
-        {AGENT_LOADING_STEPS.map((step, index) => (
+        {runtimeSteps.map((step) => (
           <div
-            key={step}
+            key={step.label}
             style={{
               display: "grid",
               gridTemplateColumns: compact ? "16px 1fr" : "22px 1fr",
               alignItems: "center",
               gap: 7,
-              color: index < 2 ? "var(--text-primary)" : "var(--text-secondary)",
+              color: step.state === "queued" ? "var(--text-secondary)" : "var(--text-primary)",
               fontSize: compact ? "0.66rem" : "0.75rem",
             }}
           >
@@ -259,15 +310,20 @@ function AgentLoadingNarrative({ compact = false, prompt }: { compact?: boolean;
                 width: compact ? 7 : 9,
                 height: compact ? 7 : 9,
                 borderRadius: "50%",
-                background: index < 2 ? "var(--accent-indigo)" : "var(--border-medium)",
-                boxShadow: index < 2 ? "0 0 0 4px rgba(74,91,192,0.08)" : "none",
+                background: step.state === "failed" ? "var(--accent-red)" : step.state === "queued" ? "var(--border-medium)" : "var(--accent-indigo)",
+                boxShadow: step.state === "active" ? "0 0 0 4px rgba(74,91,192,0.08)" : "none",
                 justifySelf: "center",
               }}
             />
-            <span>{step}</span>
+            <span>{step.label}</span>
           </div>
         ))}
       </div>
+      {artifactCount > 0 || failedEvent ? (
+        <div style={{ color: failedEvent ? "var(--accent-red)" : "var(--text-secondary)", fontSize: compact ? "0.64rem" : "0.72rem" }}>
+          {failedEvent ? failedEvent.error || "Agent stream failed." : `Artifacts ready: ${artifactCount}`}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -395,6 +451,7 @@ export const WorkbenchPage = ({
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [agentResponse, setAgentResponse] = useState<AgentRunResponse | null>(null);
+  const [agentStreamEvents, setAgentStreamEvents] = useState<AgentRuntimeEvent[]>([]);
   const [aiMode, setAiMode] = useState<"sql" | "agent">("agent");
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -589,6 +646,7 @@ export const WorkbenchPage = ({
     setAiLoading(true);
     setAiResponse("");
     setAgentResponse(null);
+    setAgentStreamEvents([]);
     setAiPrompt(promptText);
     try {
       const prompt = `数据源: ${activeDataSource.name} (${activeDataSource.database_name})\n当前聚焦表: ${activeTab?.tableName || "无"}\n当前指令: ${promptText}\n请提供专业的 DDL 修改、优化的标准 SQL，或详细的数据结构建模建议。`;
@@ -609,9 +667,15 @@ export const WorkbenchPage = ({
     setAiLoading(true);
     setAiResponse("");
     setAgentResponse(null);
+    setAgentStreamEvents([]);
     setAiPrompt(question);
     try {
-      const res = await api.runAgentQuery(activeDataSource.id, question, { optimizeRag: true, execute: true, followUpContext });
+      const res = await api.streamAgentQuery(
+        activeDataSource.id,
+        question,
+        { optimizeRag: true, execute: true, followUpContext },
+        { onEvent: (event) => setAgentStreamEvents((prev) => [...prev, event]) },
+      );
       setAgentResponse(res);
     } catch (err: unknown) {
       setAiResponse(`Agent 运行失败: ${getErrorMessage(err, "Agent request failed")}`);
@@ -659,6 +723,7 @@ export const WorkbenchPage = ({
     setAiLoading(true);
     setAiResponse("");
     setAgentResponse(null);
+    setAgentStreamEvents([]);
     try {
       const res = await api.generateSql(activeDataSource.id, aiPrompt);
         setAiResponse(res.sql || `生成 SQL:\n${res.sql}\n\n安全校验: ${res.guardrail?.message ?? "通过"}`);
@@ -1329,7 +1394,7 @@ export const WorkbenchPage = ({
               aiLoading && aiMode === "agent" ? (
                 <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 30, background: "var(--bg-primary)" }}>
                   <div style={{ width: "min(620px, 100%)" }}>
-                    <AgentLoadingNarrative prompt={aiPrompt} />
+                    <AgentLoadingNarrative prompt={aiPrompt} events={agentStreamEvents} />
                   </div>
                 </div>
               ) : agentResponse ? (
@@ -1653,7 +1718,7 @@ export const WorkbenchPage = ({
                     </div>
                   ) : aiLoading ? (
                     aiMode === "agent" ? (
-                      <AgentLoadingNarrative compact prompt={aiPrompt} />
+                      <AgentLoadingNarrative compact prompt={aiPrompt} events={agentStreamEvents} />
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px 0", color: "var(--text-muted)", fontSize: "0.66rem" }}>
                         <span className="animate-spin" style={{ fontSize: 12 }}>↻</span> AI 推理中...
@@ -1701,6 +1766,7 @@ export const WorkbenchPage = ({
                     onClick={() => {
                       setAiMode("sql");
                       setAgentResponse(null);
+                      setAgentStreamEvents([]);
                     }}
                     style={{ justifyContent: "center" }}
                   >
@@ -1712,6 +1778,7 @@ export const WorkbenchPage = ({
                     onClick={() => {
                       setAiMode("agent");
                       setAiResponse("");
+                      setAgentStreamEvents([]);
                     }}
                     style={{ justifyContent: "center" }}
                   >
