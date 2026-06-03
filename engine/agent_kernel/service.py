@@ -6,28 +6,35 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command, interrupt
 from sqlalchemy.orm import Session
 
 from engine.agent import persistence as agent_persistence
 from engine.agent.artifact_emitter import ArtifactEmitter
 from engine.agent.artifacts import AgentArtifactIdentity
 from engine.agent.events import EventEmitter
-from engine.agent.runtime import DataBoxAgentRuntime
 from engine.agent.state import AgentState
 from engine.agent.types import (
     AgentApprovalRecord,
     AgentAnswer,
     AgentArtifact,
+    AgentCheckpointRecord,
     AgentRunRequest,
     AgentRunResponse,
     AgentRuntimeEvent,
     AgentRuntimeEventType,
+    AgentStep,
     ToolObservation,
 )
+from engine.errors import DataBoxError
+from engine.models import AgentRun
 from engine.agent_kernel.controller import decide_next_action
 from engine.agent_kernel.databinding import apply_tool_result_to_state, merge_state
 from engine.agent_kernel.databox_tools import register_databox_tools
+from engine.agent_kernel.graph import build_agent_kernel_graph
 from engine.agent_kernel.policy import PolicyGate
+from engine.agent_kernel.response import AgentKernelResponseAssembler
 from engine.agent_kernel.state import KernelState, latest_user_message
 from engine.agent_kernel.tool_registry import ToolContext, ToolRegistry
 
@@ -35,11 +42,14 @@ logger = logging.getLogger("databox.agent_kernel.service")
 
 
 class AgentKernelService:
+    _checkpointer = InMemorySaver()
+
     def __init__(self, db: Session, registry: ToolRegistry | None = None):
         self.db = db
         self.registry = registry or register_databox_tools()
         self.policy_gate = PolicyGate(self.registry)
         self.artifact_emitter = ArtifactEmitter()
+        self.response_assembler = AgentKernelResponseAssembler()
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
@@ -48,6 +58,27 @@ class AgentKernelService:
                 final_response = event.response
         if final_response is None:
             raise RuntimeError("Agent kernel completed without a final response.")
+        return final_response
+
+    def resume_approval(
+        self,
+        *,
+        run_id: str,
+        approval_id: str,
+        approved: bool,
+        note: str | None = None,
+    ) -> AgentRunResponse:
+        final_response: AgentRunResponse | None = None
+        for event in self.resume_approval_iter(
+            run_id=run_id,
+            approval_id=approval_id,
+            approved=approved,
+            note=note,
+        ):
+            if event.response is not None:
+                final_response = event.response
+        if final_response is None:
+            raise RuntimeError("Agent kernel resume completed without a final response.")
         return final_response
 
     def send_message(
@@ -83,6 +114,29 @@ class AgentKernelService:
             "response": response.model_dump(mode="json"),
         }
 
+    def get_thread_state(self, thread_id: str) -> dict[str, Any]:
+        app = build_agent_kernel_graph(
+            controller_node=self._controller_node,
+            policy_node=self._policy_node,
+            execute_tool_node=lambda _graph_state: {},
+            approval_interrupt_node=self._approval_interrupt_node,
+            checkpointer=self._checkpointer,
+        )
+        snapshot = app.get_state({"configurable": {"thread_id": thread_id}})
+        return {
+            "thread_id": thread_id,
+            "values": dict(snapshot.values) if isinstance(snapshot.values, dict) else snapshot.values,
+            "next": list(snapshot.next),
+            "interrupts": [
+                {
+                    "id": item.id,
+                    "value": item.value,
+                }
+                for item in snapshot.interrupts
+            ],
+            "config": snapshot.config,
+        }
+
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
@@ -95,6 +149,7 @@ class AgentKernelService:
             datasource_id=req.datasource_id,
         )
         state: dict[str, Any] = dict(self._initial_state(req, run_id, session_id))
+        graph_state = dict(state)
         emitted_artifact_ids: set[str] = set()
 
         def _save_event(event: AgentRuntimeEvent) -> None:
@@ -114,6 +169,7 @@ class AgentKernelService:
             answer_payload: AgentAnswer | None = None,
             response: AgentRunResponse | None = None,
             approval: AgentApprovalRecord | None = None,
+            checkpoint: AgentCheckpointRecord | None = None,
             error: str | None = None,
         ) -> AgentRuntimeEvent:
             return emitter.emit(
@@ -123,6 +179,7 @@ class AgentKernelService:
                 answer_payload=answer_payload,
                 response=response,
                 approval=approval,
+                checkpoint=checkpoint,
                 error=error,
             )
 
@@ -132,89 +189,495 @@ class AgentKernelService:
         )
         self._start_persistence(req, run_id, session_id)
 
-        while True:
-            if int(state.get("step_count", 0)) >= int(state.get("max_steps", 20)):
-                merge_state(
-                    state,
-                    {
-                        "status": "failed",
-                        "error": "Max agent steps reached.",
-                    },
-                )
-                response = self._response(req, state, agent_state, run_id, session_id, artifact_identity, success=False)
-                yield from self._final_events(emit, response, agent_state, emitted_artifact_ids)
-                return
+        app = build_agent_kernel_graph(
+            controller_node=self._controller_node,
+            policy_node=self._policy_node,
+            execute_tool_node=lambda graph_state: self._execute_tool_node(req, graph_state),
+            approval_interrupt_node=self._approval_interrupt_node,
+            checkpointer=self._checkpointer,
+        )
+        config = {"configurable": {"thread_id": session_id}}
 
-            decision = decide_next_action(
-                state=cast(KernelState, state),
-                available_tools=[spec.model_dump(mode="json") for spec in self.registry.list_specs()],
+        for chunk in app.stream(graph_state, config=config, stream_mode="updates"):
+            for node_name, update in chunk.items():
+                if not isinstance(update, dict):
+                    continue
+                merge_state(state, update)
+                yield from self._events_from_graph_update(
+                    emit=emit,
+                    node_name=str(node_name),
+                    update=update,
+                    agent_state=agent_state,
+                    artifact_identity=artifact_identity,
+                    emitted_artifact_ids=emitted_artifact_ids,
+                )
+
+        approval = self._approval_from_state(state)
+        waiting_approval = state.get("status") == "waiting_approval"
+        checkpoint = self._save_waiting_checkpoint(state, agent_state) if waiting_approval else None
+        success = state.get("status") == "completed" and not state.get("error")
+        response = self._response(
+            req,
+            state,
+            agent_state,
+            run_id,
+            session_id,
+            artifact_identity,
+            success=success,
+            approval=approval,
+            checkpoint=checkpoint,
+        )
+        yield from self._final_events(
+            emit,
+            response,
+            agent_state,
+            emitted_artifact_ids,
+            waiting_approval=waiting_approval,
+        )
+
+    def resume_approval_iter(
+        self,
+        *,
+        run_id: str,
+        approval_id: str,
+        approved: bool,
+        note: str | None = None,
+    ) -> Iterator[AgentRuntimeEvent]:
+        approval = agent_persistence.resolve_approval(
+            self.db,
+            run_id=run_id,
+            approval_id=approval_id,
+            decision="approved" if approved else "rejected",
+            note=note,
+        )
+        req = self._request_from_run(run_id)
+        session_id = approval.session_id
+        checkpoint_payload = agent_persistence.get_latest_checkpoint_payload(self.db, run_id)
+        agent_state = self._agent_state_from_checkpoint(req, run_id, session_id, checkpoint_payload)
+        artifact_identity = AgentArtifactIdentity(run_id)
+        emitted_artifact_ids = {artifact.id for artifact in agent_state.artifacts}
+        state: dict[str, Any] = dict(checkpoint_payload.get("state") or {}) if checkpoint_payload else {}
+        if not state:
+            state = dict(self._initial_state(req, run_id, session_id))
+
+        def _save_event(event: AgentRuntimeEvent) -> None:
+            try:
+                agent_persistence.record_runtime_event(self.db, session_id, event)
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to save resume event %s", event.event_id)
+                self._rollback_quietly()
+
+        emitter = EventEmitter(
+            run_id,
+            _save_event,
+            start_sequence=agent_persistence.get_latest_runtime_event_sequence(self.db, run_id),
+        )
+
+        def emit(
+            event_type: AgentRuntimeEventType,
+            *,
+            step: dict[str, Any] | None = None,
+            artifact: AgentArtifact | None = None,
+            answer_payload: AgentAnswer | None = None,
+            response: AgentRunResponse | None = None,
+            approval: AgentApprovalRecord | None = None,
+            checkpoint: AgentCheckpointRecord | None = None,
+            error: str | None = None,
+        ) -> AgentRuntimeEvent:
+            return emitter.emit(
+                event_type,
+                step=step,
+                artifact=artifact,
+                answer_payload=answer_payload,
+                response=response,
+                approval=approval,
+                checkpoint=checkpoint,
+                error=error,
             )
-            merge_state(
-                state,
-                {
-                    "pending_decision": decision.model_dump(mode="json"),
-                    "step_count": int(state.get("step_count", 0)) + 1,
-                    "trace_events": [{"type": "controller.decision", "payload": decision.model_dump(mode="json")}],
+
+        yield emit(
+            "agent.approval.resolved",
+            step={"name": approval.step_name, "status": approval.status},
+            approval=approval,
+        )
+
+        if approved:
+            agent_persistence.mark_run_resumed(self.db, run_id=run_id, current_step_name="execute_sql")
+            yield emit("agent.run.resumed", step={"name": "execute_sql", "status": "running"}, approval=approval)
+
+        app = build_agent_kernel_graph(
+            controller_node=self._controller_node,
+            policy_node=self._policy_node,
+            execute_tool_node=lambda graph_state: self._execute_tool_node(req, graph_state),
+            approval_interrupt_node=self._approval_interrupt_node,
+            checkpointer=self._checkpointer,
+        )
+        config = {"configurable": {"thread_id": session_id}}
+
+        for chunk in app.stream(
+            Command(resume={"decision": "approved" if approved else "rejected", "note": note}),
+            config=config,
+            stream_mode="updates",
+        ):
+            for node_name, update in chunk.items():
+                if not isinstance(update, dict):
+                    continue
+                merge_state(state, update)
+                yield from self._events_from_graph_update(
+                    emit=emit,
+                    node_name=str(node_name),
+                    update=update,
+                    agent_state=agent_state,
+                    artifact_identity=artifact_identity,
+                    emitted_artifact_ids=emitted_artifact_ids,
+                )
+
+        final_approval = agent_persistence.get_approval(self.db, approval_id) or approval
+        success = state.get("status") == "completed" and not state.get("error")
+        response = self._response(
+            req,
+            state,
+            agent_state,
+            run_id,
+            session_id,
+            artifact_identity,
+            success=success,
+            approval=final_approval,
+            checkpoint=checkpoint_payload.get("record") if checkpoint_payload else None,
+        )
+        yield from self._final_events(emit, response, agent_state, emitted_artifact_ids)
+
+    def _controller_node(self, graph_state: KernelState) -> dict[str, Any]:
+        if int(graph_state.get("step_count", 0)) >= int(graph_state.get("max_steps", 20)):
+            return {
+                "status": "failed",
+                "error": "Max agent steps reached.",
+                "pending_decision": {
+                    "action": "final_answer",
+                    "final_answer": "Agent stopped before completion because max_steps was reached.",
                 },
+            }
+
+        decision = decide_next_action(
+            state=graph_state,
+            available_tools=[spec.model_dump(mode="json") for spec in self.registry.list_specs()],
+        )
+        update: dict[str, Any] = {
+            "pending_decision": decision.model_dump(mode="json"),
+            "step_count": int(graph_state.get("step_count", 0)) + 1,
+            "trace_events": [{"type": "controller.decision", "payload": decision.model_dump(mode="json")}],
+        }
+
+        if decision.plan_patches:
+            update["plan_events"] = [patch.model_dump(mode="json") for patch in decision.plan_patches]
+
+        if decision.action == "call_tool" and decision.tool_call:
+            update["pending_tool_call"] = decision.tool_call.model_dump(mode="json")
+            return update
+
+        if decision.action == "final_answer":
+            update["status"] = "completed"
+            if decision.final_answer:
+                update["final_answer"] = {
+                    "answer": decision.final_answer,
+                    "key_findings": [],
+                    "evidence": [],
+                    "caveats": [],
+                    "recommendations": [],
+                    "follow_up_questions": [],
+                }
+            return update
+
+        if decision.action == "ask_user":
+            update["status"] = "waiting_user"
+            return update
+
+        if decision.action == "wait_approval":
+            update["status"] = "waiting_approval"
+            return update
+
+        if decision.action == "pause":
+            update["status"] = "paused"
+            return update
+
+        update["status"] = "failed"
+        update["error"] = f"Unsupported controller action: {decision.action}"
+        return update
+
+    def _policy_node(self, graph_state: KernelState) -> dict[str, Any]:
+        tool_call = graph_state.get("pending_tool_call") or {}
+        tool_name = str(tool_call.get("tool_name") or "")
+        raw_args = tool_call.get("args")
+        args: dict[str, Any] = dict(raw_args) if isinstance(raw_args, dict) else {}
+        decision = self.policy_gate.check(dict(graph_state), tool_name, args)
+
+        if decision.status == "blocked":
+            return {
+                "pending_tool_call": None,
+                "error": decision.reason,
+                "trace_events": [{"type": "policy.blocked", "payload": decision.model_dump(mode="json")}],
+            }
+
+        if decision.status == "approval_required":
+            requested_action = {"tool_name": tool_name, "args": decision.safe_args}
+            approval = self._approval_record(
+                str(graph_state.get("run_id") or ""),
+                str(graph_state.get("thread_id") or ""),
+                tool_name,
+                decision.reason,
+                decision.risk_level,
+                requested_action,
             )
+            return {
+                "status": "waiting_approval",
+                "pending_tool_call": None,
+                "pending_approval": approval.model_dump(mode="json"),
+                "trace_events": [{"type": "policy.approval_required", "payload": approval.model_dump(mode="json")}],
+            }
 
-            if decision.action == "final_answer":
-                merge_state(state, {"status": "completed"})
-                response = self._response(req, state, agent_state, run_id, session_id, artifact_identity, success=True)
-                yield from self._final_events(emit, response, agent_state, emitted_artifact_ids)
-                return
+        return {
+            "pending_tool_call": {"tool_name": tool_name, "args": decision.safe_args},
+            "trace_events": [{"type": "policy.allowed", "payload": decision.model_dump(mode="json")}],
+        }
 
-            if decision.action in {"ask_user", "pause", "wait_approval"}:
-                status = "waiting_user" if decision.action == "ask_user" else "paused"
-                if decision.action == "wait_approval":
-                    status = "waiting_approval"
-                merge_state(state, {"status": status})
-                response = self._response(req, state, agent_state, run_id, session_id, artifact_identity, success=False)
-                yield from self._final_events(emit, response, agent_state, emitted_artifact_ids)
-                return
+    def _execute_tool_node(self, req: AgentRunRequest, graph_state: KernelState) -> dict[str, Any]:
+        tool_call = graph_state.get("pending_tool_call") or {}
+        tool_name = str(tool_call.get("tool_name") or "")
+        raw_args = tool_call.get("args")
+        args: dict[str, Any] = dict(raw_args) if isinstance(raw_args, dict) else {}
+        observation = self._execute_tool(req, dict(graph_state), tool_name, args)
+        update = apply_tool_result_to_state(
+            state=dict(graph_state),
+            tool_name=tool_name,
+            observation=observation,
+        )
+        update["pending_tool_call"] = None
+        update["last_tool_name"] = tool_name
+        update["last_observation"] = observation.model_dump(mode="json")
+        return update
 
-            if decision.action != "call_tool" or decision.tool_call is None:
-                merge_state(state, {"status": "failed", "error": f"Unsupported controller action: {decision.action}"})
-                response = self._response(req, state, agent_state, run_id, session_id, artifact_identity, success=False)
-                yield from self._final_events(emit, response, agent_state, emitted_artifact_ids)
-                return
-
-            tool_name = decision.tool_call.tool_name
-            policy = self.policy_gate.check(state, tool_name, decision.tool_call.args)
-            if policy.status == "blocked":
-                merge_state(state, {"error": policy.reason, "trace_events": [{"type": "policy.blocked", "payload": policy.model_dump(mode="json")}]})
-                continue
-
-            if policy.status == "approval_required":
-                approval = self._approval_record(run_id, session_id, tool_name, policy.reason, policy.risk_level, policy.safe_args)
-                merge_state(
-                    state,
-                    {
-                        "status": "waiting_approval",
-                        "pending_approval": approval.model_dump(mode="json"),
-                        "trace_events": [{"type": "policy.approval_required", "payload": approval.model_dump(mode="json")}],
-                    },
-                )
-                yield emit("agent.approval.required", step={"name": tool_name, "status": "waiting_approval"}, approval=approval)
-                response = self._response(req, state, agent_state, run_id, session_id, artifact_identity, success=False, approval=approval)
-                yield from self._final_events(emit, response, agent_state, emitted_artifact_ids, waiting_approval=True)
-                return
-
-            yield emit("agent.step.started", step={"name": self._step_name(tool_name), "tool_name": tool_name})
-            observation = self._execute_tool(req, state, tool_name, policy.safe_args)
-            agent_state.apply_observation(observation.name or self._step_name(tool_name), observation)
-            yield emit(
-                "agent.step.completed",
-                step={
-                    "name": observation.name or self._step_name(tool_name),
+    def _approval_interrupt_node(self, graph_state: KernelState) -> dict[str, Any]:
+        approval = graph_state.get("pending_approval") or {}
+        decision = interrupt(
+            {
+                "type": "approval_required",
+                "approval": approval,
+                "message": "This action requires approval before the agent can continue.",
+            }
+        )
+        if isinstance(decision, dict) and decision.get("decision") == "approved":
+            requested_action = approval.get("requested_action") if isinstance(approval, dict) else {}
+            tool_name = str(
+                (requested_action or {}).get("tool_name")
+                or approval.get("tool_name")
+                or ""
+            )
+            args = (requested_action or {}).get("args") if isinstance(requested_action, dict) else {}
+            safety = self._approve_safety(dict(graph_state), approval if isinstance(approval, dict) else {})
+            return {
+                "status": "running",
+                "pending_approval": None,
+                "pending_tool_call": {
                     "tool_name": tool_name,
-                    "status": observation.status,
-                    "error": observation.error,
-                    "latency_ms": observation.latency_ms,
+                    "args": dict(args) if isinstance(args, dict) else {},
                 },
+                "safety": safety,
+                "trace_events": [{"type": "approval.approved", "payload": approval}],
+            }
+        return {
+            "status": "failed",
+            "pending_approval": None,
+            "pending_tool_call": None,
+            "error": "User rejected approval.",
+            "trace_events": [{"type": "approval.rejected", "payload": approval}],
+        }
+
+    def _events_from_graph_update(
+        self,
+        *,
+        emit: Any,
+        node_name: str,
+        update: dict[str, Any],
+        agent_state: AgentState,
+        artifact_identity: AgentArtifactIdentity,
+        emitted_artifact_ids: set[str],
+    ) -> Iterator[AgentRuntimeEvent]:
+        if node_name == "policy" and isinstance(update.get("pending_approval"), dict):
+            approval = AgentApprovalRecord.model_validate(update["pending_approval"])
+            yield emit(
+                "agent.approval.required",
+                step={"name": approval.step_name, "status": "waiting_approval"},
+                approval=approval,
             )
-            merge_state(state, apply_tool_result_to_state(state=state, tool_name=tool_name, observation=observation))
-            yield from self._artifact_events(emit, observation, agent_state, artifact_identity, emitted_artifact_ids)
+
+        if node_name != "execute_tool" or not isinstance(update.get("last_observation"), dict):
+            return
+
+        observation = ToolObservation.model_validate(update["last_observation"])
+        tool_name = str(update.get("last_tool_name") or "")
+        step_name = observation.name or self._step_name(tool_name)
+        yield emit("agent.step.started", step={"name": step_name, "tool_name": tool_name})
+        agent_state.apply_observation(step_name, observation)
+        yield emit(
+            "agent.step.completed",
+            step={
+                "name": step_name,
+                "tool_name": tool_name,
+                "status": observation.status,
+                "error": observation.error,
+                "latency_ms": observation.latency_ms,
+            },
+        )
+        yield from self._artifact_events(emit, observation, agent_state, artifact_identity, emitted_artifact_ids)
+
+    def _approval_from_state(self, state: dict[str, Any]) -> AgentApprovalRecord | None:
+        pending = state.get("pending_approval")
+        if not isinstance(pending, dict):
+            return None
+        return AgentApprovalRecord.model_validate(pending)
+
+    def _save_waiting_checkpoint(
+        self,
+        state: dict[str, Any],
+        agent_state: AgentState,
+    ) -> AgentCheckpointRecord | None:
+        approval = self._approval_from_state(state)
+        if approval is None:
+            return None
+        return agent_persistence.save_checkpoint(
+            self.db,
+            run_id=agent_state.run_id,
+            session_id=agent_state.session_id or approval.session_id,
+            status="waiting_approval",
+            current_step_name="approval_interrupt",
+            next_step_name=self._step_name(approval.tool_name or approval.step_name),
+            plan=state.get("plan"),
+            state=state,
+            completed_steps=[step.model_dump(mode="json") for step in agent_state.steps],
+            pending_steps=[
+                {
+                    "name": self._step_name(approval.tool_name or approval.step_name),
+                    "tool_name": approval.tool_name,
+                    "args": (approval.requested_action or {}).get("args") if approval.requested_action else {},
+                }
+            ],
+            artifacts=[artifact.model_dump(mode="json") for artifact in agent_state.artifacts],
+        )
+
+    def _approve_safety(self, graph_state: dict[str, Any], approval: dict[str, Any]) -> dict[str, Any]:
+        raw_safety = graph_state.get("safety")
+        safety: dict[str, Any] = dict(raw_safety) if isinstance(raw_safety, dict) else {}
+        decision = safety.get("execution_safety_decision")
+        execution_decision: dict[str, Any] = dict(decision) if isinstance(decision, dict) else {}
+        safe_sql = str(
+            execution_decision.get("safe_sql")
+            or safety.get("safe_sql")
+            or graph_state.get("sql")
+            or execution_decision.get("original_sql")
+            or ""
+        ).strip()
+        blocked_reasons = [
+            str(reason)
+            for reason in (safety.get("blocked_reasons") or [])
+            if str(reason) != "requires_confirmation"
+        ]
+        messages = [str(message) for message in (safety.get("messages") or [])]
+        messages.append(f"Agent approval {approval.get('id')} approved execution after manual review.")
+
+        execution_decision["safe_sql"] = safe_sql
+        execution_decision["can_execute"] = not blocked_reasons
+        execution_decision["passed"] = not blocked_reasons
+        execution_decision["requires_confirmation"] = False
+        execution_decision["blocked_reasons"] = [
+            str(reason)
+            for reason in (execution_decision.get("blocked_reasons") or [])
+            if str(reason) != "requires_confirmation"
+        ]
+        execution_decision["messages"] = messages
+
+        safety["safe_sql"] = safe_sql
+        safety["can_execute"] = not blocked_reasons
+        safety["passed"] = not blocked_reasons
+        safety["requires_confirmation"] = False
+        safety["blocked_reasons"] = blocked_reasons
+        safety["messages"] = messages
+        safety["execution_safety_decision"] = execution_decision
+        safety["approval"] = {"id": approval.get("id"), "status": "approved"}
+        return safety
+
+    def _request_from_run(self, run_id: str) -> AgentRunRequest:
+        run = self.db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if run is None:
+            raise DataBoxError("Agent run not found.", code="RUN_NOT_FOUND")
+        return AgentRunRequest(
+            datasource_id=str(run.datasource_id),
+            question=str(run.question),
+            session_id=str(run.session_id),
+            parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
+            execute=True,
+            max_steps=20,
+        )
+
+    def _agent_state_from_checkpoint(
+        self,
+        req: AgentRunRequest,
+        run_id: str,
+        session_id: str,
+        checkpoint_payload: dict[str, Any] | None,
+    ) -> AgentState:
+        state_payload = checkpoint_payload.get("state") if checkpoint_payload else {}
+        state = state_payload if isinstance(state_payload, dict) else {}
+        agent_state = AgentState(
+            run_id=run_id,
+            session_id=session_id,
+            parent_run_id=req.parent_run_id,
+            question=req.question,
+            datasource_id=req.datasource_id,
+        )
+        completed_steps = checkpoint_payload.get("completed_steps") if checkpoint_payload else []
+        if isinstance(completed_steps, list):
+            agent_state.steps = [
+                AgentStep.model_validate(item)
+                for item in completed_steps
+                if isinstance(item, dict)
+            ]
+        artifacts = checkpoint_payload.get("artifacts") if checkpoint_payload else []
+        if isinstance(artifacts, list):
+            agent_state.artifacts = [
+                AgentArtifact.model_validate(item)
+                for item in artifacts
+                if isinstance(item, dict)
+            ]
+
+        self._sync_agent_state_from_graph_state(agent_state, state)
+        return agent_state
+
+    def _sync_agent_state_from_graph_state(self, agent_state: AgentState, state: dict[str, Any]) -> None:
+        schema_context = state.get("schema_context")
+        if isinstance(schema_context, dict):
+            agent_state.schema_metadata = schema_context
+            agent_state.schema_context = str(schema_context.get("schema_context") or "")
+        for attr in (
+            "query_plan",
+            "sql_candidate",
+            "safety",
+            "execution",
+            "result_profile",
+            "chart_suggestion",
+            "answer",
+        ):
+            value = state.get(attr)
+            if isinstance(value, dict):
+                setattr(agent_state, attr, value)
+        followup_context = state.get("followup_context")
+        if isinstance(followup_context, dict):
+            agent_state.follow_up_context = followup_context
+        suggestions = state.get("suggestions")
+        if isinstance(suggestions, list):
+            agent_state.suggestions = [dict(item) for item in suggestions if isinstance(item, dict)]
+        sql = state.get("sql")
+        if isinstance(sql, str):
+            agent_state.sql = sql
 
     def _execute_tool(
         self,
@@ -275,7 +738,23 @@ class AgentKernelService:
             yield event
 
         if waiting_approval:
+            if response.checkpoint is not None:
+                yield emit("agent.checkpoint.saved", checkpoint=response.checkpoint)
             yield emit("agent.run.waiting_approval", response=response, approval=response.approval)
+            try:
+                if response.approval is not None:
+                    agent_persistence.mark_run_waiting_approval(
+                        self.db,
+                        run_id=response.run_id,
+                        approval_id=response.approval.id,
+                        current_step_name=response.approval.step_name,
+                        response=response,
+                    )
+                self.db.commit()
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to mark run waiting for approval %s", response.run_id)
+                self._rollback_quietly()
+            return
         else:
             final_type: AgentRuntimeEventType = "agent.run.completed" if response.success else "agent.run.failed"
             yield emit(final_type, response=response, error=response.error)
@@ -301,10 +780,11 @@ class AgentKernelService:
         *,
         success: bool,
         approval: AgentApprovalRecord | None = None,
+        checkpoint: AgentCheckpointRecord | None = None,
     ) -> AgentRunResponse:
-        runtime = DataBoxAgentRuntime(self.db)
+        self._sync_agent_state_from_graph_state(agent_state, state)
         error = state.get("error")
-        return runtime._response(
+        return self.response_assembler.build_response(
             req=req,
             success=success and not error,
             steps=agent_state.steps,
@@ -324,6 +804,7 @@ class AgentKernelService:
             artifact_identity=artifact_identity,
             status=state.get("status"),
             approval=approval,
+            checkpoint=checkpoint,
         )
 
     def _initial_state(self, req: AgentRunRequest, run_id: str, session_id: str) -> KernelState:
@@ -342,6 +823,8 @@ class AgentKernelService:
             pending_decision=None,
             pending_tool_call=None,
             pending_approval=None,
+            last_tool_name=None,
+            last_observation=None,
             tool_results=[],
             artifacts=[],
             trace_events=[],
@@ -383,24 +866,21 @@ class AgentKernelService:
         risk_level: str,
         requested_action: dict[str, Any],
     ) -> AgentApprovalRecord:
-        now = datetime.now(timezone.utc)
         normalized_risk: Literal["safe", "warning", "danger"] = (
             cast(Literal["safe", "warning", "danger"], risk_level)
             if risk_level in {"safe", "warning", "danger"}
             else "warning"
         )
-        return AgentApprovalRecord(
-            id=f"approval_{uuid.uuid4().hex}",
+        return agent_persistence.create_approval(
+            self.db,
             run_id=run_id,
             session_id=session_id,
-            step_name=tool_name,
+            step_name=self._step_name(tool_name),
             tool_name=tool_name,
-            status="pending",
             risk_level=normalized_risk,
             reason=reason,
-            policy_decision={"reason": reason, "risk_level": risk_level},
+            policy_decision={"reason": reason, "risk_level": risk_level, "requested_action": requested_action},
             requested_action=requested_action,
-            created_at=now,
         )
 
     def _session_id(self, req: AgentRunRequest) -> str:

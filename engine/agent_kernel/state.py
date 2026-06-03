@@ -33,6 +33,8 @@ class KernelState(TypedDict, total=False):
     pending_decision: dict[str, Any] | None
     pending_tool_call: dict[str, Any] | None
     pending_approval: dict[str, Any] | None
+    last_tool_name: str | None
+    last_observation: dict[str, Any] | None
 
     tool_results: Annotated[list[dict[str, Any]], add]
     artifacts: Annotated[list[dict[str, Any]], add]
