@@ -12,11 +12,7 @@ spider/train_others.json
 spider/train_gold.sql
 spider/dev_gold.sql
 
-# Eval outputs
-outputs/
-results/
-eval_report.md
-eval_summary.json
+# Eval outputs (keep results for debugging)
 
 # Downloads / temp
 *.zip

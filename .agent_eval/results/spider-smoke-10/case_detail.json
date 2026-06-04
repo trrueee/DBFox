@@ -1,0 +1,60 @@
+{
+  "case_id": "spider-smoke-10",
+  "db_id": "pets_1",
+  "question": "Find the first name of students who have both cat and dog pets .",
+  "difficulty": "extra hard",
+  "gold_sql": "SELECT T1.Fname FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T3.petid  =  T2.petid WHERE T3.pettype  =  'cat' INTERSECT SELECT T1.Fname FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T3.petid  =  T2.petid WHERE T3.pettype  =  'dog'",
+  "agent_sql": "SELECT Student.Fname AS first_name FROM Student JOIN Has_Pet ON Student.StuID = Has_Pet.StuID JOIN Pets ON Has_Pet.PetID = Pets.PetID ORDER BY ARRAY() LIMIT 100",
+  "safe_sql": "SELECT Student.Fname AS first_name FROM Student JOIN Has_Pet ON Student.StuID = Has_Pet.StuID JOIN Pets ON Has_Pet.PetID = Pets.PetID ORDER BY ARRAY() LIMIT 100",
+  "agent_answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "status": "fail",
+  "final_status": "failed",
+  "execution_match": null,
+  "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+  "quality": {
+    "score": 3,
+    "max_score": 5,
+    "sql_valid": true,
+    "execution_match": null,
+    "has_safety_artifact": true,
+    "has_answer": true,
+    "flow_complete": true,
+    "checks": {
+      "completed": false,
+      "sql_generated": true,
+      "execution_match": false,
+      "has_safety": true,
+      "has_answer": true,
+      "has_query_plan": true,
+      "has_table": false,
+      "has_error": true,
+      "flow_complete": true
+    }
+  },
+  "steps": [
+    "build_schema_context",
+    "build_query_plan",
+    "generate_sql_candidate",
+    "validate_sql",
+    "execute_sql",
+    "revise_sql",
+    "profile_result",
+    "suggest_chart",
+    "suggest_followups",
+    "answer_synthesizer"
+  ],
+  "artifacts": [
+    "query_plan",
+    "sql",
+    "safety",
+    "insight",
+    "error"
+  ],
+  "approval": null,
+  "latency_seconds": 70.6,
+  "gold_rows_count": 0,
+  "agent_rows_count": 0,
+  "gold_error": "(1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+  "agent_error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "event_count": 28
+}

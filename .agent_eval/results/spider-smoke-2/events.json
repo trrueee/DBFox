@@ -1,0 +1,3238 @@
+[
+  {
+    "event_id": "runtime_7b59486f_1_agent_run_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 1,
+    "created_at_ms": 1780588431929,
+    "type": "agent.run.started",
+    "step": {
+      "datasource_id": "ds-spider-concert-singer",
+      "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+      "execute": true
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.run.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_2_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 2,
+    "created_at_ms": 1780588435930,
+    "type": "agent.step.started",
+    "step": {
+      "name": "build_schema_context",
+      "tool_name": "schema.build_context"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_3_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 3,
+    "created_at_ms": 1780588435930,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "build_schema_context",
+      "tool_name": "schema.build_context",
+      "status": "success",
+      "error": null,
+      "latency_ms": 3
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_4_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 4,
+    "created_at_ms": 1780588443382,
+    "type": "agent.step.started",
+    "step": {
+      "name": "build_query_plan",
+      "tool_name": "query_plan.build"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_5_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 5,
+    "created_at_ms": 1780588443383,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "build_query_plan",
+      "tool_name": "query_plan.build",
+      "status": "success",
+      "error": null,
+      "latency_ms": 4089
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_6_agent_artifact_created",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 6,
+    "created_at_ms": 1780588443383,
+    "type": "agent.artifact.created",
+    "step": {
+      "name": "build_query_plan"
+    },
+    "artifact": {
+      "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/001/query_plan",
+      "semantic_id": "query_plan",
+      "type": "query_plan",
+      "title": "Query plan",
+      "payload": {
+        "analysis_goal": "retrieve_singer_details_ordered_by_age",
+        "metrics": [],
+        "dimensions": [
+          {
+            "name": "name",
+            "column": "Name",
+            "transform": null
+          },
+          {
+            "name": "country",
+            "column": "Country",
+            "transform": null
+          },
+          {
+            "name": "age",
+            "column": "Age",
+            "transform": null
+          }
+        ],
+        "filters": [],
+        "time_range": null,
+        "candidate_tables": [
+          "singer"
+        ],
+        "assumptions": [
+          "Plan mode: online",
+          "Only synced local schema metadata is trusted."
+        ],
+        "risk_notes": [],
+        "raw_plan": {
+          "intent": "retrieve_singer_details_ordered_by_age",
+          "tables": [
+            "singer"
+          ],
+          "metrics": [],
+          "dimensions": [
+            {
+              "name": "name",
+              "column": "Name",
+              "transform": null
+            },
+            {
+              "name": "country",
+              "column": "Country",
+              "transform": null
+            },
+            {
+              "name": "age",
+              "column": "Age",
+              "transform": null
+            }
+          ],
+          "filters": [],
+          "joins": [],
+          "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+          "limit": 100,
+          "warnings": [],
+          "mode": "online"
+        }
+      },
+      "presentation": {
+        "mode": "dock",
+        "priority": 80,
+        "collapsed": true
+      },
+      "refs": {},
+      "produced_by_step": "build_query_plan",
+      "depends_on": []
+    },
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.artifact.created"
+  },
+  {
+    "event_id": "runtime_7b59486f_7_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 7,
+    "created_at_ms": 1780588447458,
+    "type": "agent.step.started",
+    "step": {
+      "name": "generate_sql_candidate",
+      "tool_name": "sql.generate"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_8_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 8,
+    "created_at_ms": 1780588447459,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "generate_sql_candidate",
+      "tool_name": "sql.generate",
+      "status": "success",
+      "error": null,
+      "latency_ms": 5
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_9_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 9,
+    "created_at_ms": 1780588452899,
+    "type": "agent.step.started",
+    "step": {
+      "name": "validate_sql",
+      "tool_name": "sql.validate"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_10_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 10,
+    "created_at_ms": 1780588452901,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "validate_sql",
+      "tool_name": "sql.validate",
+      "status": "success",
+      "error": null,
+      "latency_ms": 6
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_11_agent_artifact_created",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 11,
+    "created_at_ms": 1780588452902,
+    "type": "agent.artifact.created",
+    "step": {
+      "name": "validate_sql"
+    },
+    "artifact": {
+      "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/002/sql_candidate",
+      "semantic_id": "sql_candidate",
+      "type": "sql",
+      "title": "Validated SQL",
+      "payload": {
+        "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+        "safety_state": {
+          "available": true,
+          "passed": true,
+          "can_execute": true,
+          "requires_confirmation": false,
+          "guardrail_result": "pass",
+          "schema_warnings_count": 0
+        }
+      },
+      "presentation": {
+        "mode": "dock",
+        "priority": 70,
+        "collapsed": true
+      },
+      "refs": {},
+      "produced_by_step": "validate_sql",
+      "depends_on": [
+        "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/001/query_plan"
+      ]
+    },
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.artifact.created"
+  },
+  {
+    "event_id": "runtime_7b59486f_12_agent_artifact_created",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 12,
+    "created_at_ms": 1780588452903,
+    "type": "agent.artifact.created",
+    "step": {
+      "name": "validate_sql"
+    },
+    "artifact": {
+      "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report",
+      "semantic_id": "safety_report",
+      "type": "safety",
+      "title": "Safety report",
+      "payload": {
+        "passed": true,
+        "can_execute": true,
+        "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+        "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+        "schema_warnings": [],
+        "guardrail": {
+          "result": "pass",
+          "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "checks": [],
+          "message": "SQL 安全审核通过！"
+        },
+        "trust_gate": {
+          "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "schemaWarnings": [],
+          "guardrail": {
+            "result": "pass",
+            "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "checks": [],
+            "message": "SQL 安全审核通过！"
+          },
+          "riskLevel": "safe",
+          "requiresConfirmation": false,
+          "messages": [
+            "SQL passed schema validation and guardrail checks."
+          ],
+          "canExecute": true
+        },
+        "execution_safety_decision": {
+          "decision_id": "safety-10b2b971-9b2c-45c3-bd30-38c0b67e1a90",
+          "datasource_id": "ds-spider-concert-singer",
+          "policy": "agent_readonly",
+          "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "passed": true,
+          "can_execute": true,
+          "requires_confirmation": false,
+          "guardrail": {
+            "result": "pass",
+            "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "checks": [],
+            "message": "SQL 安全审核通过！"
+          },
+          "schema_warnings": [],
+          "scope_state": {
+            "datasource_exists": true,
+            "datasource_id": "ds-spider-concert-singer",
+            "db_type": "mysql",
+            "env": "dev",
+            "is_read_only": false,
+            "project_id": "default-project",
+            "environment_id": null
+          },
+          "blocked_reasons": [],
+          "messages": [
+            "SQL passed schema validation and guardrail checks."
+          ],
+          "created_at": "2026-06-04T15:54:12.899754Z"
+        },
+        "requires_confirmation": false,
+        "messages": [
+          "SQL passed schema validation and guardrail checks."
+        ],
+        "blocked_reasons": [],
+        "revise_suggestion": null
+      },
+      "presentation": {
+        "mode": "dock",
+        "priority": 75,
+        "collapsed": true
+      },
+      "refs": {},
+      "produced_by_step": "validate_sql",
+      "depends_on": [
+        "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/002/sql_candidate"
+      ]
+    },
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.artifact.created"
+  },
+  {
+    "event_id": "runtime_7b59486f_13_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 13,
+    "created_at_ms": 1780588456013,
+    "type": "agent.step.started",
+    "step": {
+      "name": "execute_sql",
+      "tool_name": "sql.execute_readonly"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_14_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 14,
+    "created_at_ms": 1780588456014,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "execute_sql",
+      "tool_name": "sql.execute_readonly",
+      "status": "failed",
+      "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "latency_ms": 14
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_15_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 15,
+    "created_at_ms": 1780588461345,
+    "type": "agent.step.started",
+    "step": {
+      "name": "revise_sql",
+      "tool_name": "sql.revise"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_16_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 16,
+    "created_at_ms": 1780588461345,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "revise_sql",
+      "tool_name": "sql.revise",
+      "status": "success",
+      "error": null,
+      "latency_ms": 0
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_17_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 17,
+    "created_at_ms": 1780588467636,
+    "type": "agent.step.started",
+    "step": {
+      "name": "profile_result",
+      "tool_name": "result.profile"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_18_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 18,
+    "created_at_ms": 1780588467637,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "profile_result",
+      "tool_name": "result.profile",
+      "status": "success",
+      "error": null,
+      "latency_ms": 0
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_19_agent_artifact_created",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 19,
+    "created_at_ms": 1780588467638,
+    "type": "agent.artifact.created",
+    "step": {
+      "name": "profile_result"
+    },
+    "artifact": {
+      "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/004/result_profile",
+      "semantic_id": "result_profile",
+      "type": "insight",
+      "title": "Result profile",
+      "payload": {
+        "row_count": 0,
+        "column_profiles": {},
+        "detected_patterns": [
+          "no_result"
+        ],
+        "notable_facts": [],
+        "anomalies": [],
+        "limitations": [
+          "No successful execution result was available to profile."
+        ],
+        "safety_state": {
+          "available": true,
+          "passed": true,
+          "can_execute": true,
+          "requires_confirmation": false,
+          "guardrail_result": "pass",
+          "schema_warnings_count": 0
+        }
+      },
+      "presentation": {
+        "mode": "both",
+        "priority": 10,
+        "collapsed": false
+      },
+      "refs": {},
+      "produced_by_step": "profile_result",
+      "depends_on": [
+        "result_table"
+      ]
+    },
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.artifact.created"
+  },
+  {
+    "event_id": "runtime_7b59486f_20_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 20,
+    "created_at_ms": 1780588476194,
+    "type": "agent.step.started",
+    "step": {
+      "name": "suggest_chart",
+      "tool_name": "chart.suggest"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_21_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 21,
+    "created_at_ms": 1780588476196,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "suggest_chart",
+      "tool_name": "chart.suggest",
+      "status": "success",
+      "error": null,
+      "latency_ms": 0
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_22_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 22,
+    "created_at_ms": 1780588481604,
+    "type": "agent.step.started",
+    "step": {
+      "name": "suggest_followups",
+      "tool_name": "followup.suggest"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_23_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 23,
+    "created_at_ms": 1780588481606,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "suggest_followups",
+      "tool_name": "followup.suggest",
+      "status": "success",
+      "error": null,
+      "latency_ms": 0
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_24_agent_step_started",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 24,
+    "created_at_ms": 1780588503490,
+    "type": "agent.step.started",
+    "step": {
+      "name": "answer_synthesizer",
+      "tool_name": "answer.synthesize"
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.started"
+  },
+  {
+    "event_id": "runtime_7b59486f_25_agent_step_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 25,
+    "created_at_ms": 1780588503492,
+    "type": "agent.step.completed",
+    "step": {
+      "name": "answer_synthesizer",
+      "tool_name": "answer.synthesize",
+      "status": "success",
+      "error": null,
+      "latency_ms": 0
+    },
+    "artifact": null,
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.step.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_26_agent_artifact_created",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 26,
+    "created_at_ms": 1780588508656,
+    "type": "agent.artifact.created",
+    "step": null,
+    "artifact": {
+      "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/005/agent_error",
+      "semantic_id": "agent_error",
+      "type": "error",
+      "title": "Agent stopped",
+      "payload": {
+        "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+        "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
+        "safety_state": {
+          "available": true,
+          "passed": true,
+          "can_execute": true,
+          "requires_confirmation": false,
+          "guardrail_result": "pass",
+          "schema_warnings_count": 0
+        }
+      },
+      "presentation": {
+        "mode": "both",
+        "priority": 1,
+        "collapsed": false
+      },
+      "refs": {},
+      "produced_by_step": "agent_finalize",
+      "depends_on": [
+        "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report"
+      ]
+    },
+    "answer": null,
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.artifact.created"
+  },
+  {
+    "event_id": "runtime_7b59486f_27_agent_answer_completed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 27,
+    "created_at_ms": 1780588508659,
+    "type": "agent.answer.completed",
+    "step": null,
+    "artifact": null,
+    "answer": {
+      "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "key_findings": [],
+      "evidence": [],
+      "caveats": [],
+      "recommendations": [],
+      "follow_up_questions": []
+    },
+    "response": null,
+    "approval": null,
+    "checkpoint": null,
+    "error": null,
+    "_sse_event": "agent.answer.completed"
+  },
+  {
+    "event_id": "runtime_7b59486f_28_agent_run_failed",
+    "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+    "sequence": 28,
+    "created_at_ms": 1780588508659,
+    "type": "agent.run.failed",
+    "step": null,
+    "artifact": null,
+    "answer": null,
+    "response": {
+      "run_id": "7b59486f-46e0-45cf-9342-7f412e9f9a70",
+      "session_id": "457cd2f5-858c-496c-b7d2-89ec350dc429",
+      "parent_run_id": null,
+      "success": false,
+      "status": "completed",
+      "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+      "context_summary": "Question: Show name, country, age for all singers ordered by age from the oldest to the youngest. Answer: I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\") Artifacts: - agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/001/query_plan (query_plan, Query plan): analysis_goal=retrieve_singer_details_ordered_by_age, metrics=[], dimensions=[{'name': 'name', 'column': 'Name', 'transform': None}, {'name': 'country', 'column': 'Country', 'transform': None}, {'name': 'age', 'column': 'Age', 'transform': None}], filters=[], time_range=None, candidate_tables=['singer'] - agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/002/sql_candidate (sql, Validated SQL): SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100 - agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report (safety, Safety report): can_execute=True; messages=['SQL passed schema validation and guardrail checks.'] - agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/004/result_profile (insight, Result profile): - agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/005/agent_error (error, Agent stopped): 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "referenced_artifact_ids": [],
+      "query_plan": {
+        "analysis_goal": "retrieve_singer_details_ordered_by_age",
+        "metrics": [],
+        "dimensions": [
+          {
+            "name": "name",
+            "column": "Name",
+            "transform": null
+          },
+          {
+            "name": "country",
+            "column": "Country",
+            "transform": null
+          },
+          {
+            "name": "age",
+            "column": "Age",
+            "transform": null
+          }
+        ],
+        "filters": [],
+        "time_range": null,
+        "candidate_tables": [
+          "singer"
+        ],
+        "assumptions": [
+          "Plan mode: online",
+          "Only synced local schema metadata is trusted."
+        ],
+        "risk_notes": [],
+        "raw_plan": {
+          "intent": "retrieve_singer_details_ordered_by_age",
+          "tables": [
+            "singer"
+          ],
+          "metrics": [],
+          "dimensions": [
+            {
+              "name": "name",
+              "column": "Name",
+              "transform": null
+            },
+            {
+              "name": "country",
+              "column": "Country",
+              "transform": null
+            },
+            {
+              "name": "age",
+              "column": "Age",
+              "transform": null
+            }
+          ],
+          "filters": [],
+          "joins": [],
+          "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+          "limit": 100,
+          "warnings": [],
+          "mode": "online"
+        }
+      },
+      "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+      "safety": {
+        "passed": true,
+        "can_execute": true,
+        "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+        "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+        "schema_warnings": [],
+        "guardrail": {
+          "result": "pass",
+          "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "checks": [],
+          "message": "SQL 安全审核通过！"
+        },
+        "trust_gate": {
+          "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "schemaWarnings": [],
+          "guardrail": {
+            "result": "pass",
+            "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "checks": [],
+            "message": "SQL 安全审核通过！"
+          },
+          "riskLevel": "safe",
+          "requiresConfirmation": false,
+          "messages": [
+            "SQL passed schema validation and guardrail checks."
+          ],
+          "canExecute": true
+        },
+        "execution_safety_decision": {
+          "decision_id": "safety-10b2b971-9b2c-45c3-bd30-38c0b67e1a90",
+          "datasource_id": "ds-spider-concert-singer",
+          "policy": "agent_readonly",
+          "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+          "passed": true,
+          "can_execute": true,
+          "requires_confirmation": false,
+          "guardrail": {
+            "result": "pass",
+            "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "checks": [],
+            "message": "SQL 安全审核通过！"
+          },
+          "schema_warnings": [],
+          "scope_state": {
+            "datasource_exists": true,
+            "datasource_id": "ds-spider-concert-singer",
+            "db_type": "mysql",
+            "env": "dev",
+            "is_read_only": false,
+            "project_id": "default-project",
+            "environment_id": null
+          },
+          "blocked_reasons": [],
+          "messages": [
+            "SQL passed schema validation and guardrail checks."
+          ],
+          "created_at": "2026-06-04T15:54:12.899754Z"
+        },
+        "requires_confirmation": false,
+        "messages": [
+          "SQL passed schema validation and guardrail checks."
+        ],
+        "blocked_reasons": [],
+        "revise_suggestion": null
+      },
+      "execution": {
+        "success": false,
+        "error_type": "SQLExecutionError",
+        "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
+      },
+      "explanation": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "chart_suggestion": {
+        "type": "table",
+        "x": null,
+        "y": null,
+        "reason": "No successful result set is available."
+      },
+      "result_profile": {
+        "row_count": 0,
+        "column_profiles": {},
+        "detected_patterns": [
+          "no_result"
+        ],
+        "notable_facts": [],
+        "anomalies": [],
+        "limitations": [
+          "No successful execution result was available to profile."
+        ]
+      },
+      "answer": {
+        "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+        "key_findings": [],
+        "evidence": [],
+        "caveats": [],
+        "recommendations": [],
+        "follow_up_questions": []
+      },
+      "suggestions": [
+        {
+          "label": "Break down",
+          "question": "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+          "reason": "A dimension breakdown is often the next step after a direct query.",
+          "action_type": "ask"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/001/query_plan",
+          "semantic_id": "query_plan",
+          "type": "query_plan",
+          "title": "Query plan",
+          "payload": {
+            "analysis_goal": "retrieve_singer_details_ordered_by_age",
+            "metrics": [],
+            "dimensions": [
+              {
+                "name": "name",
+                "column": "Name",
+                "transform": null
+              },
+              {
+                "name": "country",
+                "column": "Country",
+                "transform": null
+              },
+              {
+                "name": "age",
+                "column": "Age",
+                "transform": null
+              }
+            ],
+            "filters": [],
+            "time_range": null,
+            "candidate_tables": [
+              "singer"
+            ],
+            "assumptions": [
+              "Plan mode: online",
+              "Only synced local schema metadata is trusted."
+            ],
+            "risk_notes": [],
+            "raw_plan": {
+              "intent": "retrieve_singer_details_ordered_by_age",
+              "tables": [
+                "singer"
+              ],
+              "metrics": [],
+              "dimensions": [
+                {
+                  "name": "name",
+                  "column": "Name",
+                  "transform": null
+                },
+                {
+                  "name": "country",
+                  "column": "Country",
+                  "transform": null
+                },
+                {
+                  "name": "age",
+                  "column": "Age",
+                  "transform": null
+                }
+              ],
+              "filters": [],
+              "joins": [],
+              "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+              "limit": 100,
+              "warnings": [],
+              "mode": "online"
+            }
+          },
+          "presentation": {
+            "mode": "dock",
+            "priority": 80,
+            "collapsed": true
+          },
+          "refs": {},
+          "produced_by_step": "build_query_plan",
+          "depends_on": []
+        },
+        {
+          "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/002/sql_candidate",
+          "semantic_id": "sql_candidate",
+          "type": "sql",
+          "title": "Validated SQL",
+          "payload": {
+            "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "safety_state": {
+              "available": true,
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail_result": "pass",
+              "schema_warnings_count": 0
+            }
+          },
+          "presentation": {
+            "mode": "dock",
+            "priority": 70,
+            "collapsed": true
+          },
+          "refs": {},
+          "produced_by_step": "validate_sql",
+          "depends_on": [
+            "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/001/query_plan"
+          ]
+        },
+        {
+          "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report",
+          "semantic_id": "safety_report",
+          "type": "safety",
+          "title": "Safety report",
+          "payload": {
+            "passed": true,
+            "can_execute": true,
+            "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "schema_warnings": [],
+            "guardrail": {
+              "result": "pass",
+              "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "checks": [],
+              "message": "SQL 安全审核通过！"
+            },
+            "trust_gate": {
+              "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "schemaWarnings": [],
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "riskLevel": "safe",
+              "requiresConfirmation": false,
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "canExecute": true
+            },
+            "execution_safety_decision": {
+              "decision_id": "safety-10b2b971-9b2c-45c3-bd30-38c0b67e1a90",
+              "datasource_id": "ds-spider-concert-singer",
+              "policy": "agent_readonly",
+              "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "schema_warnings": [],
+              "scope_state": {
+                "datasource_exists": true,
+                "datasource_id": "ds-spider-concert-singer",
+                "db_type": "mysql",
+                "env": "dev",
+                "is_read_only": false,
+                "project_id": "default-project",
+                "environment_id": null
+              },
+              "blocked_reasons": [],
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "created_at": "2026-06-04T15:54:12.899754Z"
+            },
+            "requires_confirmation": false,
+            "messages": [
+              "SQL passed schema validation and guardrail checks."
+            ],
+            "blocked_reasons": [],
+            "revise_suggestion": null
+          },
+          "presentation": {
+            "mode": "dock",
+            "priority": 75,
+            "collapsed": true
+          },
+          "refs": {},
+          "produced_by_step": "validate_sql",
+          "depends_on": [
+            "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/002/sql_candidate"
+          ]
+        },
+        {
+          "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/004/result_profile",
+          "semantic_id": "result_profile",
+          "type": "insight",
+          "title": "Result profile",
+          "payload": {
+            "row_count": 0,
+            "column_profiles": {},
+            "detected_patterns": [
+              "no_result"
+            ],
+            "notable_facts": [],
+            "anomalies": [],
+            "limitations": [
+              "No successful execution result was available to profile."
+            ],
+            "safety_state": {
+              "available": true,
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail_result": "pass",
+              "schema_warnings_count": 0
+            }
+          },
+          "presentation": {
+            "mode": "both",
+            "priority": 10,
+            "collapsed": false
+          },
+          "refs": {},
+          "produced_by_step": "profile_result",
+          "depends_on": [
+            "result_table"
+          ]
+        },
+        {
+          "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/005/agent_error",
+          "semantic_id": "agent_error",
+          "type": "error",
+          "title": "Agent stopped",
+          "payload": {
+            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
+            "safety_state": {
+              "available": true,
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail_result": "pass",
+              "schema_warnings_count": 0
+            }
+          },
+          "presentation": {
+            "mode": "both",
+            "priority": 1,
+            "collapsed": false
+          },
+          "refs": {},
+          "produced_by_step": "agent_finalize",
+          "depends_on": [
+            "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report"
+          ]
+        }
+      ],
+      "message_blocks": [
+        {
+          "block_id": "block_1_text",
+          "sequence": 1,
+          "type": "text",
+          "content": "I started from the trusted schema and safety checks, but stopped before a complete answer: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+          "artifact_id": null,
+          "display": null,
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "block_id": "block_2_artifact_ref",
+          "sequence": 2,
+          "type": "artifact_ref",
+          "content": null,
+          "artifact_id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/004/result_profile",
+          "display": "full",
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "block_id": "block_3_artifact_ref",
+          "sequence": 3,
+          "type": "artifact_ref",
+          "content": null,
+          "artifact_id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/005/agent_error",
+          "display": "full",
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "block_id": "block_4_answer",
+          "sequence": 4,
+          "type": "answer",
+          "content": null,
+          "artifact_id": null,
+          "display": null,
+          "answer": {
+            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "key_findings": [],
+            "evidence": [],
+            "caveats": [],
+            "recommendations": [],
+            "follow_up_questions": []
+          },
+          "suggestions": []
+        },
+        {
+          "block_id": "block_5_suggestions",
+          "sequence": 5,
+          "type": "suggestions",
+          "content": null,
+          "artifact_id": null,
+          "display": null,
+          "answer": null,
+          "suggestions": [
+            {
+              "label": "Break down",
+              "question": "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+              "reason": "A dimension breakdown is often the next step after a direct query.",
+              "action_type": "ask"
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "event_id": "visible_1_agent_narration_completed",
+          "sequence": 1,
+          "created_at_ms": 1780588508652,
+          "type": "agent.narration.completed",
+          "content": "I started from the trusted schema and safety checks, but stopped before a complete answer: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+          "artifact": null,
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "event_id": "visible_2_agent_artifact_created",
+          "sequence": 2,
+          "created_at_ms": 1780588508653,
+          "type": "agent.artifact.created",
+          "content": null,
+          "artifact": {
+            "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/004/result_profile",
+            "semantic_id": "result_profile",
+            "type": "insight",
+            "title": "Result profile",
+            "payload": {
+              "row_count": 0,
+              "column_profiles": {},
+              "detected_patterns": [
+                "no_result"
+              ],
+              "notable_facts": [],
+              "anomalies": [],
+              "limitations": [
+                "No successful execution result was available to profile."
+              ],
+              "safety_state": {
+                "available": true,
+                "passed": true,
+                "can_execute": true,
+                "requires_confirmation": false,
+                "guardrail_result": "pass",
+                "schema_warnings_count": 0
+              }
+            },
+            "presentation": {
+              "mode": "both",
+              "priority": 10,
+              "collapsed": false
+            },
+            "refs": {},
+            "produced_by_step": "profile_result",
+            "depends_on": [
+              "result_table"
+            ]
+          },
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "event_id": "visible_3_agent_artifact_created",
+          "sequence": 3,
+          "created_at_ms": 1780588508654,
+          "type": "agent.artifact.created",
+          "content": null,
+          "artifact": {
+            "id": "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/005/agent_error",
+            "semantic_id": "agent_error",
+            "type": "error",
+            "title": "Agent stopped",
+            "payload": {
+              "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+              "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
+              "safety_state": {
+                "available": true,
+                "passed": true,
+                "can_execute": true,
+                "requires_confirmation": false,
+                "guardrail_result": "pass",
+                "schema_warnings_count": 0
+              }
+            },
+            "presentation": {
+              "mode": "both",
+              "priority": 1,
+              "collapsed": false
+            },
+            "refs": {},
+            "produced_by_step": "agent_finalize",
+            "depends_on": [
+              "agent/run/7b59486f-46e0-45cf-9342-7f412e9f9a70/artifact/003/safety_report"
+            ]
+          },
+          "answer": null,
+          "suggestions": []
+        },
+        {
+          "event_id": "visible_4_agent_answer_completed",
+          "sequence": 4,
+          "created_at_ms": 1780588508655,
+          "type": "agent.answer.completed",
+          "content": null,
+          "artifact": null,
+          "answer": {
+            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "key_findings": [],
+            "evidence": [],
+            "caveats": [],
+            "recommendations": [],
+            "follow_up_questions": []
+          },
+          "suggestions": []
+        },
+        {
+          "event_id": "visible_5_agent_suggestions_created",
+          "sequence": 5,
+          "created_at_ms": 1780588508656,
+          "type": "agent.suggestions.created",
+          "content": null,
+          "artifact": null,
+          "answer": null,
+          "suggestions": [
+            {
+              "label": "Break down",
+              "question": "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+              "reason": "A dimension breakdown is often the next step after a direct query.",
+              "action_type": "ask"
+            }
+          ]
+        }
+      ],
+      "trace_events": [
+        {
+          "event_id": "trace_1_step_1_build_schema_context_started",
+          "sequence": 1,
+          "created_at_ms": 1780588508654,
+          "type": "agent.trace.step_started",
+          "step_id": "step_1_build_schema_context",
+          "name": "build_schema_context",
+          "status": null,
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_2_step_1_build_schema_context_completed",
+          "sequence": 2,
+          "created_at_ms": 1780588508655,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_1_build_schema_context",
+          "name": "build_schema_context",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true
+          },
+          "output": {
+            "schema_context": "CREATE TABLE concert (\n  concert_ID int PRIMARY KEY NOT NULL,\n  concert_Name varchar(255),\n  Theme varchar(255),\n  Stadium_ID int REFERENCES stadium(Stadium_ID),\n  Year varchar(255)\n);\n\nCREATE TABLE singer (\n  Singer_ID int PRIMARY KEY NOT NULL,\n  Name varchar(255),\n  Country varchar(255),\n  Song_Name varchar(255),\n  Song_release_year varchar(255),\n  Age int,\n  Is_male text\n);\n\nCREATE TABLE singer_in_concert (\n  concert_ID int PRIMARY KEY NOT NULL REFERENCES concert(concert_ID),\n  Singer_ID int PRIMARY KEY NOT NULL REFERENCES singer(Singer_ID)\n);\n\nCREATE TABLE stadium (\n  Stadium_ID int PRIMARY KEY NOT NULL,\n  Location varchar(255),\n  Name varchar(255),\n  Capacity int,\n  Highest int,\n  Lowest int,\n  Average int\n);\n",
+            "candidate_tables": [
+              {
+                "table": "concert",
+                "comment": "",
+                "score": 9.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "concert_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "concert_Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Theme",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Stadium_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": true
+                  },
+                  {
+                    "name": "Year",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              },
+              {
+                "table": "singer",
+                "comment": "",
+                "score": 39.0,
+                "reasons": [
+                  "table_name_exact_match"
+                ],
+                "columns": [
+                  {
+                    "name": "Singer_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Country",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Song_Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Song_release_year",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Age",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Is_male",
+                    "type": "text",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              },
+              {
+                "table": "singer_in_concert",
+                "comment": "",
+                "score": 0.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "concert_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": true
+                  },
+                  {
+                    "name": "Singer_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": true
+                  }
+                ]
+              },
+              {
+                "table": "stadium",
+                "comment": "",
+                "score": 12.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "Stadium_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Location",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Capacity",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Highest",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Lowest",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Average",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              }
+            ],
+            "candidate_columns": [
+              "concert.concert_ID",
+              "concert.concert_Name",
+              "concert.Theme",
+              "concert.Stadium_ID",
+              "concert.Year",
+              "singer.Singer_ID",
+              "singer.Name",
+              "singer.Country",
+              "singer.Song_Name",
+              "singer.Song_release_year",
+              "singer.Age",
+              "singer.Is_male",
+              "singer_in_concert.concert_ID",
+              "singer_in_concert.Singer_ID",
+              "stadium.Stadium_ID",
+              "stadium.Location",
+              "stadium.Name",
+              "stadium.Capacity",
+              "stadium.Highest",
+              "stadium.Lowest",
+              {
+                "_truncated": 1
+              }
+            ],
+            "selected_tables": [
+              "concert",
+              "singer",
+              "singer_in_concert",
+              "stadium"
+            ],
+            "schema_linking_reasons": [
+              {
+                "targetType": "table",
+                "table": "concert",
+                "score": 9.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "concert",
+                "column": "Theme",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_token_match:the",
+                  "column_name_token_match:the"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "concert",
+                "column": "concert_Name",
+                "score": 3.0,
+                "reasons": [
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "singer",
+                "score": 39.0,
+                "reasons": [
+                  "table_name_exact_match"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Age",
+                "score": 9.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:age",
+                  "column_name_token_match:age"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Country",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:country"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Name",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Song_Name",
+                "score": 3.0,
+                "reasons": [
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "singer_in_concert",
+                "score": 0.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "stadium",
+                "score": 12.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "stadium",
+                "column": "Average",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_token_match:age",
+                  "column_name_token_match:age"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "stadium",
+                "column": "Name",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:name"
+                ]
+              }
+            ],
+            "schema_context_size": 724,
+            "original_schema_table_count": 4,
+            "selected_schema_table_count": 4,
+            "mode": "rag"
+          },
+          "error": null,
+          "latency_ms": 3
+        },
+        {
+          "event_id": "trace_3_step_2_build_query_plan_started",
+          "sequence": 3,
+          "created_at_ms": 1780588508656,
+          "type": "agent.trace.step_started",
+          "step_id": "step_2_build_query_plan",
+          "name": "build_query_plan",
+          "status": null,
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "selected_tables": [
+              "concert",
+              "singer",
+              "singer_in_concert",
+              "stadium"
+            ]
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_4_step_2_build_query_plan_completed",
+          "sequence": 4,
+          "created_at_ms": 1780588508657,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_2_build_query_plan",
+          "name": "build_query_plan",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "selected_tables": [
+              "concert",
+              "singer",
+              "singer_in_concert",
+              "stadium"
+            ]
+          },
+          "output": {
+            "analysis_goal": "retrieve_singer_details_ordered_by_age",
+            "metrics": [],
+            "dimensions": [
+              {
+                "name": "name",
+                "column": "Name",
+                "transform": null
+              },
+              {
+                "name": "country",
+                "column": "Country",
+                "transform": null
+              },
+              {
+                "name": "age",
+                "column": "Age",
+                "transform": null
+              }
+            ],
+            "filters": [],
+            "time_range": null,
+            "candidate_tables": [
+              "singer"
+            ],
+            "assumptions": [
+              "Plan mode: online",
+              "Only synced local schema metadata is trusted."
+            ],
+            "risk_notes": [],
+            "raw_plan": {
+              "intent": "retrieve_singer_details_ordered_by_age",
+              "tables": [
+                "singer"
+              ],
+              "metrics": [],
+              "dimensions": [
+                {
+                  "name": "name",
+                  "column": "Name",
+                  "transform": null
+                },
+                {
+                  "name": "country",
+                  "column": "Country",
+                  "transform": null
+                },
+                {
+                  "name": "age",
+                  "column": "Age",
+                  "transform": null
+                }
+              ],
+              "filters": [],
+              "joins": [],
+              "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+              "limit": 100,
+              "warnings": [],
+              "mode": "online"
+            }
+          },
+          "error": null,
+          "latency_ms": 4089
+        },
+        {
+          "event_id": "trace_5_step_3_generate_sql_candidate_started",
+          "sequence": 5,
+          "created_at_ms": 1780588508658,
+          "type": "agent.trace.step_started",
+          "step_id": "step_3_generate_sql_candidate",
+          "name": "generate_sql_candidate",
+          "status": null,
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true,
+            "model_name": "qwen-plus",
+            "has_api_key": "[REDACTED]",
+            "plan_goal": "retrieve_singer_details_ordered_by_age",
+            "plan_candidate_tables": [
+              "singer"
+            ],
+            "schema_context_size": 724
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_6_step_3_generate_sql_candidate_completed",
+          "sequence": 6,
+          "created_at_ms": 1780588508659,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_3_generate_sql_candidate",
+          "name": "generate_sql_candidate",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true,
+            "model_name": "qwen-plus",
+            "has_api_key": "[REDACTED]",
+            "plan_goal": "retrieve_singer_details_ordered_by_age",
+            "plan_candidate_tables": [
+              "singer"
+            ],
+            "schema_context_size": 724
+          },
+          "output": {
+            "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+            "raw_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY [{'[REDACTED_LITERAL]': '[REDACTED_LITERAL]', '[REDACTED_LITERAL]': '[REDACTED_LITERAL]'}] LIMIT 100",
+            "model": "databox-query-plan-renderer",
+            "mode": "plan_guided",
+            "latency_ms": 0,
+            "schema_validation_warnings": [],
+            "rewrite_notes": [
+              "limit_added_by_guardrail"
+            ],
+            "metadata": {
+              "generation_source": "query_plan_rendered",
+              "agent_query_plan": {
+                "analysis_goal": "retrieve_singer_details_ordered_by_age",
+                "metrics": [],
+                "dimensions": [
+                  {
+                    "name": "name",
+                    "column": "Name",
+                    "transform": null
+                  },
+                  {
+                    "name": "country",
+                    "column": "Country",
+                    "transform": null
+                  },
+                  {
+                    "name": "age",
+                    "column": "Age",
+                    "transform": null
+                  }
+                ],
+                "filters": [],
+                "time_range": null,
+                "candidate_tables": [
+                  "singer"
+                ],
+                "assumptions": [
+                  "Plan mode: online",
+                  "Only synced local schema metadata is trusted."
+                ],
+                "risk_notes": [],
+                "raw_plan": {
+                  "intent": "retrieve_singer_details_ordered_by_age",
+                  "tables": [
+                    "singer"
+                  ],
+                  "metrics": [],
+                  "dimensions": [
+                    {
+                      "name": "name",
+                      "column": "Name",
+                      "transform": null
+                    },
+                    {
+                      "name": "country",
+                      "column": "Country",
+                      "transform": null
+                    },
+                    {
+                      "name": "age",
+                      "column": "Age",
+                      "transform": null
+                    }
+                  ],
+                  "filters": [],
+                  "joins": [],
+                  "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+                  "limit": 100,
+                  "warnings": [],
+                  "mode": "online"
+                }
+              },
+              "query_plan": {
+                "intent": "retrieve_singer_details_ordered_by_age",
+                "tables": [
+                  "singer"
+                ],
+                "metrics": [],
+                "dimensions": [
+                  {
+                    "name": "name",
+                    "column": "Name",
+                    "transform": null
+                  },
+                  {
+                    "name": "country",
+                    "column": "Country",
+                    "transform": null
+                  },
+                  {
+                    "name": "age",
+                    "column": "Age",
+                    "transform": null
+                  }
+                ],
+                "filters": [],
+                "joins": [],
+                "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+                "limit": 100,
+                "warnings": [],
+                "mode": "online"
+              },
+              "selected_tables": [
+                "singer"
+              ],
+              "selected_columns": [
+                "concert.concert_ID",
+                "concert.concert_Name",
+                "concert.Theme",
+                "concert.Stadium_ID",
+                "concert.Year",
+                "singer.Singer_ID",
+                "singer.Name",
+                "singer.Country",
+                "singer.Song_Name",
+                "singer.Song_release_year",
+                "singer.Age",
+                "singer.Is_male",
+                "singer_in_concert.concert_ID",
+                "singer_in_concert.Singer_ID",
+                "stadium.Stadium_ID",
+                "stadium.Location",
+                "stadium.Name",
+                "stadium.Capacity",
+                "stadium.Highest",
+                "stadium.Lowest",
+                {
+                  "_truncated": 1
+                }
+              ],
+              "schema_context_size": 724,
+              "rewrite": {}
+            }
+          },
+          "error": null,
+          "latency_ms": 5
+        },
+        {
+          "event_id": "trace_7_step_4_validate_sql_started",
+          "sequence": 7,
+          "created_at_ms": 1780588508660,
+          "type": "agent.trace.step_started",
+          "step_id": "step_4_validate_sql",
+          "name": "validate_sql",
+          "status": null,
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100"
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_8_step_4_validate_sql_completed",
+          "sequence": 8,
+          "created_at_ms": 1780588508661,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_4_validate_sql",
+          "name": "validate_sql",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100"
+          },
+          "output": {
+            "passed": true,
+            "can_execute": true,
+            "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+            "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+            "schema_warnings": [],
+            "guardrail": {
+              "result": "pass",
+              "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+              "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+              "checks": [],
+              "message": "SQL 安全审核通过！"
+            },
+            "trust_gate": {
+              "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+              "schemaWarnings": [],
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "riskLevel": "safe",
+              "requiresConfirmation": false,
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "canExecute": true
+            },
+            "execution_safety_decision": {
+              "decision_id": "safety-10b2b971-9b2c-45c3-bd30-38c0b67e1a90",
+              "datasource_id": "ds-spider-concert-singer",
+              "policy": "agent_readonly",
+              "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+              "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "schema_warnings": [],
+              "scope_state": {
+                "datasource_exists": true,
+                "datasource_id": "ds-spider-concert-singer",
+                "db_type": "mysql",
+                "env": "dev",
+                "is_read_only": false,
+                "project_id": "default-project",
+                "environment_id": null
+              },
+              "blocked_reasons": [],
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "created_at": "2026-06-04T15:54:12.899754Z"
+            },
+            "requires_confirmation": false,
+            "messages": [
+              "SQL passed schema validation and guardrail checks."
+            ],
+            "blocked_reasons": [],
+            "revise_suggestion": null
+          },
+          "error": null,
+          "latency_ms": 6
+        },
+        {
+          "event_id": "trace_9_step_5_execute_sql_started",
+          "sequence": 9,
+          "created_at_ms": 1780588508662,
+          "type": "agent.trace.step_started",
+          "step_id": "step_5_execute_sql",
+          "name": "execute_sql",
+          "status": null,
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100"
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_10_step_5_execute_sql_completed",
+          "sequence": 10,
+          "created_at_ms": 1780588508663,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_5_execute_sql",
+          "name": "execute_sql",
+          "status": "failed",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100"
+          },
+          "output": {
+            "success": false,
+            "error_type": "SQLExecutionError",
+            "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
+          },
+          "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+          "latency_ms": 14
+        },
+        {
+          "event_id": "trace_11_step_6_revise_sql_started",
+          "sequence": 11,
+          "created_at_ms": 1780588508664,
+          "type": "agent.trace.step_started",
+          "step_id": "step_6_revise_sql",
+          "name": "revise_sql",
+          "status": null,
+          "input": {
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")"
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_12_step_6_revise_sql_completed",
+          "sequence": 12,
+          "created_at_ms": 1780588508665,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_6_revise_sql",
+          "name": "revise_sql",
+          "status": "success",
+          "input": {
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100",
+            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")"
+          },
+          "output": {
+            "can_fix": false,
+            "fixed_sql": null,
+            "reason": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "changes": [],
+            "remaining_risks": [
+              "The failure is not a deterministic SELECT * repair case."
+            ],
+            "revise_suggestion": "Regenerate the SQL using only existing schema tables and columns, explicit projections, and a safe LIMIT.",
+            "blocked_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('[REDACTED_LITERAL]' AS `column`, '[REDACTED_LITERAL]' AS direction)) LIMIT 100"
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "event_id": "trace_13_step_7_profile_result_started",
+          "sequence": 13,
+          "created_at_ms": 1780588508666,
+          "type": "agent.trace.step_started",
+          "step_id": "step_7_profile_result",
+          "name": "profile_result",
+          "status": null,
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_execution": true,
+            "execution_success": false
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_14_step_7_profile_result_completed",
+          "sequence": 14,
+          "created_at_ms": 1780588508667,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_7_profile_result",
+          "name": "profile_result",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_execution": true,
+            "execution_success": false
+          },
+          "output": {
+            "row_count": 0,
+            "column_profiles": {},
+            "detected_patterns": [
+              "no_result"
+            ],
+            "notable_facts": [],
+            "anomalies": [],
+            "limitations": [
+              "No successful execution result was available to profile."
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "event_id": "trace_15_step_8_suggest_chart_started",
+          "sequence": 15,
+          "created_at_ms": 1780588508668,
+          "type": "agent.trace.step_started",
+          "step_id": "step_8_suggest_chart",
+          "name": "suggest_chart",
+          "status": null,
+          "input": {
+            "has_execution": true
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_16_step_8_suggest_chart_completed",
+          "sequence": 16,
+          "created_at_ms": 1780588508669,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_8_suggest_chart",
+          "name": "suggest_chart",
+          "status": "success",
+          "input": {
+            "has_execution": true
+          },
+          "output": {
+            "type": "table",
+            "x": null,
+            "y": null,
+            "reason": "No successful result set is available."
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "event_id": "trace_17_step_9_suggest_followups_started",
+          "sequence": 17,
+          "created_at_ms": 1780588508670,
+          "type": "agent.trace.step_started",
+          "step_id": "step_9_suggest_followups",
+          "name": "suggest_followups",
+          "status": null,
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_profile": true,
+            "has_chart": true
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_18_step_9_suggest_followups_completed",
+          "sequence": 18,
+          "created_at_ms": 1780588508671,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_9_suggest_followups",
+          "name": "suggest_followups",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_profile": true,
+            "has_chart": true
+          },
+          "output": {
+            "suggestions": [
+              {
+                "label": "Break down",
+                "question": "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+                "reason": "A dimension breakdown is often the next step after a direct query.",
+                "action_type": "ask"
+              }
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "event_id": "trace_19_step_10_answer_synthesizer_started",
+          "sequence": 19,
+          "created_at_ms": 1780588508672,
+          "type": "agent.trace.step_started",
+          "step_id": "step_10_answer_synthesizer",
+          "name": "answer_synthesizer",
+          "status": null,
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_sql": true,
+            "has_profile": true,
+            "has_error": true
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_20_step_10_answer_synthesizer_completed",
+          "sequence": 20,
+          "created_at_ms": 1780588508673,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_10_answer_synthesizer",
+          "name": "answer_synthesizer",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_sql": true,
+            "has_profile": true,
+            "has_error": true
+          },
+          "output": {
+            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "key_findings": [],
+            "evidence": [
+              {
+                "artifact_id": "result_profile",
+                "label": "Result profile",
+                "value": "0 rows profiled"
+              },
+              {
+                "artifact_id": "sql_candidate",
+                "label": "SQL",
+                "value": "validated candidate"
+              },
+              {
+                "artifact_id": "safety_report",
+                "label": "Safety",
+                "value": "passed"
+              }
+            ],
+            "caveats": [
+              "No business conclusion was produced because the run did not complete successfully."
+            ],
+            "recommendations": [
+              "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest."
+            ],
+            "follow_up_questions": [
+              "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest."
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        }
+      ],
+      "steps": [
+        {
+          "name": "build_schema_context",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true
+          },
+          "output": {
+            "schema_context": "CREATE TABLE concert (\n  concert_ID int PRIMARY KEY NOT NULL,\n  concert_Name varchar(255),\n  Theme varchar(255),\n  Stadium_ID int REFERENCES stadium(Stadium_ID),\n  Year varchar(255)\n);\n\nCREATE TABLE singer (\n  Singer_ID int PRIMARY KEY NOT NULL,\n  Name varchar(255),\n  Country varchar(255),\n  Song_Name varchar(255),\n  Song_release_year varchar(255),\n  Age int,\n  Is_male text\n);\n\nCREATE TABLE singer_in_concert (\n  concert_ID int PRIMARY KEY NOT NULL REFERENCES concert(concert_ID),\n  Singer_ID int PRIMARY KEY NOT NULL REFERENCES singer(Singer_ID)\n);\n\nCREATE TABLE stadium (\n  Stadium_ID int PRIMARY KEY NOT NULL,\n  Location varchar(255),\n  Name varchar(255),\n  Capacity int,\n  Highest int,\n  Lowest int,\n  Average int\n);\n",
+            "candidate_tables": [
+              {
+                "table": "concert",
+                "comment": "",
+                "score": 9.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "concert_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "concert_Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Theme",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Stadium_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": true
+                  },
+                  {
+                    "name": "Year",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              },
+              {
+                "table": "singer",
+                "comment": "",
+                "score": 39.0,
+                "reasons": [
+                  "table_name_exact_match"
+                ],
+                "columns": [
+                  {
+                    "name": "Singer_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Country",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Song_Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Song_release_year",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Age",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Is_male",
+                    "type": "text",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              },
+              {
+                "table": "singer_in_concert",
+                "comment": "",
+                "score": 0.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "concert_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": true
+                  },
+                  {
+                    "name": "Singer_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": true
+                  }
+                ]
+              },
+              {
+                "table": "stadium",
+                "comment": "",
+                "score": 12.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ],
+                "columns": [
+                  {
+                    "name": "Stadium_ID",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": true,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Location",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Name",
+                    "type": "varchar(255)",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Capacity",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Highest",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Lowest",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  },
+                  {
+                    "name": "Average",
+                    "type": "int",
+                    "comment": "",
+                    "primary_key": false,
+                    "foreign_key": false
+                  }
+                ]
+              }
+            ],
+            "candidate_columns": [
+              "concert.concert_ID",
+              "concert.concert_Name",
+              "concert.Theme",
+              "concert.Stadium_ID",
+              "concert.Year",
+              "singer.Singer_ID",
+              "singer.Name",
+              "singer.Country",
+              "singer.Song_Name",
+              "singer.Song_release_year",
+              "singer.Age",
+              "singer.Is_male",
+              "singer_in_concert.concert_ID",
+              "singer_in_concert.Singer_ID",
+              "stadium.Stadium_ID",
+              "stadium.Location",
+              "stadium.Name",
+              "stadium.Capacity",
+              "stadium.Highest",
+              "stadium.Lowest",
+              "stadium.Average"
+            ],
+            "selected_tables": [
+              "concert",
+              "singer",
+              "singer_in_concert",
+              "stadium"
+            ],
+            "schema_linking_reasons": [
+              {
+                "targetType": "table",
+                "table": "concert",
+                "score": 9.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "concert",
+                "column": "Theme",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_token_match:the",
+                  "column_name_token_match:the"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "concert",
+                "column": "concert_Name",
+                "score": 3.0,
+                "reasons": [
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "singer",
+                "score": 39.0,
+                "reasons": [
+                  "table_name_exact_match"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Age",
+                "score": 9.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:age",
+                  "column_name_token_match:age"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Country",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:country"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Name",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "singer",
+                "column": "Song_Name",
+                "score": 3.0,
+                "reasons": [
+                  "column_name_token_match:name"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "singer_in_concert",
+                "score": 0.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "table",
+                "table": "stadium",
+                "score": 12.0,
+                "reasons": [
+                  "small_schema_full_context"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "stadium",
+                "column": "Average",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_token_match:age",
+                  "column_name_token_match:age"
+                ]
+              },
+              {
+                "targetType": "column",
+                "table": "stadium",
+                "column": "Name",
+                "score": 6.0,
+                "reasons": [
+                  "column_name_exact_match",
+                  "column_name_token_match:name"
+                ]
+              }
+            ],
+            "schema_context_size": 724,
+            "original_schema_table_count": 4,
+            "selected_schema_table_count": 4,
+            "mode": "rag"
+          },
+          "error": null,
+          "latency_ms": 3
+        },
+        {
+          "name": "build_query_plan",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "selected_tables": [
+              "concert",
+              "singer",
+              "singer_in_concert",
+              "stadium"
+            ]
+          },
+          "output": {
+            "analysis_goal": "retrieve_singer_details_ordered_by_age",
+            "metrics": [],
+            "dimensions": [
+              {
+                "name": "name",
+                "column": "Name",
+                "transform": null
+              },
+              {
+                "name": "country",
+                "column": "Country",
+                "transform": null
+              },
+              {
+                "name": "age",
+                "column": "Age",
+                "transform": null
+              }
+            ],
+            "filters": [],
+            "time_range": null,
+            "candidate_tables": [
+              "singer"
+            ],
+            "assumptions": [
+              "Plan mode: online",
+              "Only synced local schema metadata is trusted."
+            ],
+            "risk_notes": [],
+            "raw_plan": {
+              "intent": "retrieve_singer_details_ordered_by_age",
+              "tables": [
+                "singer"
+              ],
+              "metrics": [],
+              "dimensions": [
+                {
+                  "name": "name",
+                  "column": "Name",
+                  "transform": null
+                },
+                {
+                  "name": "country",
+                  "column": "Country",
+                  "transform": null
+                },
+                {
+                  "name": "age",
+                  "column": "Age",
+                  "transform": null
+                }
+              ],
+              "filters": [],
+              "joins": [],
+              "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+              "limit": 100,
+              "warnings": [],
+              "mode": "online"
+            }
+          },
+          "error": null,
+          "latency_ms": 4089
+        },
+        {
+          "name": "generate_sql_candidate",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_follow_up_context": false,
+            "optimize_rag": true,
+            "model_name": "qwen-plus",
+            "has_api_key": true,
+            "plan_goal": "retrieve_singer_details_ordered_by_age",
+            "plan_candidate_tables": [
+              "singer"
+            ],
+            "schema_context_size": 724
+          },
+          "output": {
+            "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "raw_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY [{'column': 'Age', 'direction': 'DESC'}] LIMIT 100",
+            "model": "databox-query-plan-renderer",
+            "mode": "plan_guided",
+            "latency_ms": 0,
+            "schema_validation_warnings": [],
+            "rewrite_notes": [
+              "limit_added_by_guardrail"
+            ],
+            "metadata": {
+              "generation_source": "query_plan_rendered",
+              "agent_query_plan": {
+                "analysis_goal": "retrieve_singer_details_ordered_by_age",
+                "metrics": [],
+                "dimensions": [
+                  {
+                    "name": "name",
+                    "column": "Name",
+                    "transform": null
+                  },
+                  {
+                    "name": "country",
+                    "column": "Country",
+                    "transform": null
+                  },
+                  {
+                    "name": "age",
+                    "column": "Age",
+                    "transform": null
+                  }
+                ],
+                "filters": [],
+                "time_range": null,
+                "candidate_tables": [
+                  "singer"
+                ],
+                "assumptions": [
+                  "Plan mode: online",
+                  "Only synced local schema metadata is trusted."
+                ],
+                "risk_notes": [],
+                "raw_plan": {
+                  "intent": "retrieve_singer_details_ordered_by_age",
+                  "tables": [
+                    "singer"
+                  ],
+                  "metrics": [],
+                  "dimensions": [
+                    {
+                      "name": "name",
+                      "column": "Name",
+                      "transform": null
+                    },
+                    {
+                      "name": "country",
+                      "column": "Country",
+                      "transform": null
+                    },
+                    {
+                      "name": "age",
+                      "column": "Age",
+                      "transform": null
+                    }
+                  ],
+                  "filters": [],
+                  "joins": [],
+                  "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+                  "limit": 100,
+                  "warnings": [],
+                  "mode": "online"
+                }
+              },
+              "query_plan": {
+                "intent": "retrieve_singer_details_ordered_by_age",
+                "tables": [
+                  "singer"
+                ],
+                "metrics": [],
+                "dimensions": [
+                  {
+                    "name": "name",
+                    "column": "Name",
+                    "transform": null
+                  },
+                  {
+                    "name": "country",
+                    "column": "Country",
+                    "transform": null
+                  },
+                  {
+                    "name": "age",
+                    "column": "Age",
+                    "transform": null
+                  }
+                ],
+                "filters": [],
+                "joins": [],
+                "order_by": "[{'column': 'Age', 'direction': 'DESC'}]",
+                "limit": 100,
+                "warnings": [],
+                "mode": "online"
+              },
+              "selected_tables": [
+                "singer"
+              ],
+              "selected_columns": [
+                "concert.concert_ID",
+                "concert.concert_Name",
+                "concert.Theme",
+                "concert.Stadium_ID",
+                "concert.Year",
+                "singer.Singer_ID",
+                "singer.Name",
+                "singer.Country",
+                "singer.Song_Name",
+                "singer.Song_release_year",
+                "singer.Age",
+                "singer.Is_male",
+                "singer_in_concert.concert_ID",
+                "singer_in_concert.Singer_ID",
+                "stadium.Stadium_ID",
+                "stadium.Location",
+                "stadium.Name",
+                "stadium.Capacity",
+                "stadium.Highest",
+                "stadium.Lowest",
+                "stadium.Average"
+              ],
+              "schema_context_size": 724,
+              "rewrite": {}
+            }
+          },
+          "error": null,
+          "latency_ms": 5
+        },
+        {
+          "name": "validate_sql",
+          "status": "success",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100"
+          },
+          "output": {
+            "passed": true,
+            "can_execute": true,
+            "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "schema_warnings": [],
+            "guardrail": {
+              "result": "pass",
+              "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "checks": [],
+              "message": "SQL 安全审核通过！"
+            },
+            "trust_gate": {
+              "sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "schemaWarnings": [],
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "riskLevel": "safe",
+              "requiresConfirmation": false,
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "canExecute": true
+            },
+            "execution_safety_decision": {
+              "decision_id": "safety-10b2b971-9b2c-45c3-bd30-38c0b67e1a90",
+              "datasource_id": "ds-spider-concert-singer",
+              "policy": "agent_readonly",
+              "original_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "safe_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+              "passed": true,
+              "can_execute": true,
+              "requires_confirmation": false,
+              "guardrail": {
+                "result": "pass",
+                "originalSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "safeSql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+                "checks": [],
+                "message": "SQL 安全审核通过！"
+              },
+              "schema_warnings": [],
+              "scope_state": {
+                "datasource_exists": true,
+                "datasource_id": "ds-spider-concert-singer",
+                "db_type": "mysql",
+                "env": "dev",
+                "is_read_only": false,
+                "project_id": "default-project",
+                "environment_id": null
+              },
+              "blocked_reasons": [],
+              "messages": [
+                "SQL passed schema validation and guardrail checks."
+              ],
+              "created_at": "2026-06-04T15:54:12.899754Z"
+            },
+            "requires_confirmation": false,
+            "messages": [
+              "SQL passed schema validation and guardrail checks."
+            ],
+            "blocked_reasons": [],
+            "revise_suggestion": null
+          },
+          "error": null,
+          "latency_ms": 6
+        },
+        {
+          "name": "execute_sql",
+          "status": "failed",
+          "input": {
+            "datasource_id": "ds-spider-concert-singer",
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100"
+          },
+          "output": {
+            "success": false,
+            "error_type": "SQLExecutionError",
+            "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
+          },
+          "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+          "latency_ms": 14
+        },
+        {
+          "name": "revise_sql",
+          "status": "success",
+          "input": {
+            "sql_preview": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100",
+            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")"
+          },
+          "output": {
+            "can_fix": false,
+            "fixed_sql": null,
+            "reason": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "changes": [],
+            "remaining_risks": [
+              "The failure is not a deterministic SELECT * repair case."
+            ],
+            "revise_suggestion": "Regenerate the SQL using only existing schema tables and columns, explicit projections, and a safe LIMIT.",
+            "blocked_sql": "SELECT Name AS name, Country AS country, Age AS age FROM singer ORDER BY ARRAY(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100"
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "name": "profile_result",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_execution": true,
+            "execution_success": false
+          },
+          "output": {
+            "row_count": 0,
+            "column_profiles": {},
+            "detected_patterns": [
+              "no_result"
+            ],
+            "notable_facts": [],
+            "anomalies": [],
+            "limitations": [
+              "No successful execution result was available to profile."
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "name": "suggest_chart",
+          "status": "success",
+          "input": {
+            "has_execution": true
+          },
+          "output": {
+            "type": "table",
+            "x": null,
+            "y": null,
+            "reason": "No successful result set is available."
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "name": "suggest_followups",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_profile": true,
+            "has_chart": true
+          },
+          "output": {
+            "suggestions": [
+              {
+                "label": "Break down",
+                "question": "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+                "reason": "A dimension breakdown is often the next step after a direct query.",
+                "action_type": "ask"
+              }
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        },
+        {
+          "name": "answer_synthesizer",
+          "status": "success",
+          "input": {
+            "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+            "has_sql": true,
+            "has_profile": true,
+            "has_error": true
+          },
+          "output": {
+            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+            "key_findings": [],
+            "evidence": [
+              {
+                "artifact_id": "result_profile",
+                "label": "Result profile",
+                "value": "0 rows profiled"
+              },
+              {
+                "artifact_id": "sql_candidate",
+                "label": "SQL",
+                "value": "validated candidate"
+              },
+              {
+                "artifact_id": "safety_report",
+                "label": "Safety",
+                "value": "passed"
+              }
+            ],
+            "caveats": [
+              "No business conclusion was produced because the run did not complete successfully."
+            ],
+            "recommendations": [
+              "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest."
+            ],
+            "follow_up_questions": [
+              "Break this result down by a useful business dimension: Show name, country, age for all singers ordered by age from the oldest to the youngest."
+            ]
+          },
+          "error": null,
+          "latency_ms": 0
+        }
+      ],
+      "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "approval": null,
+      "checkpoint": null
+    },
+    "approval": null,
+    "checkpoint": null,
+    "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+    "_sse_event": "agent.run.failed"
+  }
+]

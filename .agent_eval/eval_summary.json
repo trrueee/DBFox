@@ -1,0 +1,102 @@
+{
+  "evaluation_time": "2026-06-04T16:04:32.723530+00:00",
+  "total_cases": 10,
+  "passed_cases": 0,
+  "failed_cases": 10,
+  "pass_rate": 0.0,
+  "average_latency_seconds": 72.41,
+  "total_duration_seconds": 724.42,
+  "model": "qwen-plus",
+  "cases": [
+    {
+      "case_id": "spider-smoke-1",
+      "db_id": "concert_singer",
+      "difficulty": "simple",
+      "status": "fail",
+      "score": 3,
+      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "latency_seconds": 83.38
+    },
+    {
+      "case_id": "spider-smoke-2",
+      "db_id": "concert_singer",
+      "difficulty": "simple",
+      "status": "fail",
+      "score": 3,
+      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
+      "latency_seconds": 76.94
+    },
+    {
+      "case_id": "spider-smoke-3",
+      "db_id": "concert_singer",
+      "difficulty": "medium",
+      "status": "fail",
+      "score": 3,
+      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "latency_seconds": 64.17
+    },
+    {
+      "case_id": "spider-smoke-4",
+      "db_id": "concert_singer",
+      "difficulty": "medium",
+      "status": "fail",
+      "score": 3,
+      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "latency_seconds": 62.77
+    },
+    {
+      "case_id": "spider-smoke-5",
+      "db_id": "pets_1",
+      "difficulty": "simple",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.pets' doesn't exist\")",
+      "latency_seconds": 68.88
+    },
+    {
+      "case_id": "spider-smoke-6",
+      "db_id": "pets_1",
+      "difficulty": "medium",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.pets' doesn't exist\")",
+      "latency_seconds": 60.81
+    },
+    {
+      "case_id": "spider-smoke-7",
+      "db_id": "pets_1",
+      "difficulty": "medium",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+      "latency_seconds": 66.63
+    },
+    {
+      "case_id": "spider-smoke-8",
+      "db_id": "pets_1",
+      "difficulty": "hard",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+      "latency_seconds": 77.19
+    },
+    {
+      "case_id": "spider-smoke-9",
+      "db_id": "pets_1",
+      "difficulty": "hard",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+      "latency_seconds": 92.71
+    },
+    {
+      "case_id": "spider-smoke-10",
+      "db_id": "pets_1",
+      "difficulty": "extra hard",
+      "status": "fail",
+      "score": 3,
+      "reason": "Gold SQL execution failed: (1146, \"Table 'spider_pets_1.student' doesn't exist\")",
+      "latency_seconds": 70.6
+    }
+  ]
+}

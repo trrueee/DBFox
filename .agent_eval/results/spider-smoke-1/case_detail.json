@@ -1,0 +1,60 @@
+{
+  "case_id": "spider-smoke-1",
+  "db_id": "concert_singer",
+  "question": "How many singers do we have?",
+  "difficulty": "simple",
+  "gold_sql": "SELECT count(*) FROM singer",
+  "agent_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
+  "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
+  "agent_answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "status": "fail",
+  "final_status": "failed",
+  "execution_match": null,
+  "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "quality": {
+    "score": 3,
+    "max_score": 5,
+    "sql_valid": false,
+    "execution_match": null,
+    "has_safety_artifact": true,
+    "has_answer": true,
+    "flow_complete": true,
+    "checks": {
+      "completed": false,
+      "sql_generated": true,
+      "execution_match": false,
+      "has_safety": true,
+      "has_answer": true,
+      "has_query_plan": true,
+      "has_table": false,
+      "has_error": true,
+      "flow_complete": true
+    }
+  },
+  "steps": [
+    "build_schema_context",
+    "build_query_plan",
+    "generate_sql_candidate",
+    "validate_sql",
+    "execute_sql",
+    "revise_sql",
+    "profile_result",
+    "suggest_chart",
+    "suggest_followups",
+    "answer_synthesizer"
+  ],
+  "artifacts": [
+    "query_plan",
+    "sql",
+    "safety",
+    "insight",
+    "error"
+  ],
+  "approval": null,
+  "latency_seconds": 83.38,
+  "gold_rows_count": 1,
+  "agent_rows_count": 0,
+  "gold_error": null,
+  "agent_error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "event_count": 28
+}
