@@ -619,6 +619,14 @@ export interface AgentRunDraftState {
   error?: string | null;
 }
 
+export interface AgentKernelThreadState {
+  thread_id: string;
+  values?: Record<string, unknown> | null;
+  next?: string[];
+  interrupts?: Array<{ id?: string | null; value?: unknown }>;
+  config?: Record<string, unknown> | null;
+}
+
 export interface AgentSessionRunSummary {
   run_id: string;
   session_id: string;

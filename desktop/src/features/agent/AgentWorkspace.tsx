@@ -3,6 +3,7 @@ import { ArtifactInspector } from "./ArtifactInspector";
 import { AgentComposer } from "./AgentComposer";
 import { AgentNarrativeStream } from "./AgentNarrativeStream";
 import { ApprovalCard } from "./ApprovalCard";
+import { AgentStateInspector } from "./AgentStateInspector";
 import { TraceDrawer } from "./TraceDrawer";
 import type { AgentRunDraftState, AgentRunResponse, AgentRuntimeEvent, AgentStep, AgentVisibleEvent, AgentWorkspaceContext, FollowUpSuggestion } from "./types";
 
@@ -45,6 +46,7 @@ export function AgentWorkspace({
   const error = result?.error || draft?.error || null;
   const answer = result?.answer || draft?.answer || null;
   const approval = result?.approval || draft?.approval || null;
+  const threadId = result?.session_id || draft?.response?.session_id || null;
   const [selectedArtifactId, setSelectedArtifactId] = useState("");
   const activeArtifactId = selectedArtifactId && artifacts.some((artifact) => artifact.id === selectedArtifactId)
     ? selectedArtifactId
@@ -69,6 +71,8 @@ export function AgentWorkspace({
       />
 
       <WorkspaceContextIndicator context={workspaceContext} />
+
+      <AgentStateInspector key={threadId || "agent-state"} threadId={threadId} />
 
       <AgentNarrativeStream
         events={events}

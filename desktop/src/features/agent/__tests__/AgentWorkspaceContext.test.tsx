@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentWorkspace } from "../AgentWorkspace";
 import type { AgentArtifact, AgentRunResponse, AgentWorkspaceContext } from "../types";
@@ -43,6 +43,7 @@ const response: AgentRunResponse = {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("AgentWorkspace workspace context", () => {
@@ -86,6 +87,53 @@ describe("AgentWorkspace workspace context", () => {
     fireEvent.click(screen.getByText("Ask"));
 
     expect(onAsk).toHaveBeenCalledWith("continue", workspaceContext);
+  });
+
+  it("loads and displays Agent Kernel thread state", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      thread_id: "session-1",
+      values: { status: "waiting_approval", step_count: 4 },
+      next: ["approval_interrupt"],
+      interrupts: [{ id: "interrupt-1", value: { approval_id: "approval-1" } }],
+      config: { configurable: { thread_id: "session-1" } },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentWorkspace result={{ ...response, status: "waiting_approval" }} workspaceContext={workspaceContext} />);
+
+    fireEvent.click(screen.getByText("State"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("waiting_approval")).toBeTruthy();
+    expect(screen.getByText("approval_interrupt")).toBeTruthy();
+    expect(screen.getByText("1 interrupt")).toBeTruthy();
+  });
+
+  it("resets the state inspector when the Agent thread changes", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const isSecondSession = url.includes("session-2");
+      return new Response(JSON.stringify({
+        thread_id: isSecondSession ? "session-2" : "session-1",
+        values: { status: isSecondSession ? "completed" : "waiting_approval", step_count: isSecondSession ? 6 : 4 },
+        next: isSecondSession ? [] : ["approval_interrupt"],
+        interrupts: [],
+        config: { configurable: { thread_id: isSecondSession ? "session-2" : "session-1" } },
+      }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<AgentWorkspace result={{ ...response, session_id: "session-1" }} workspaceContext={workspaceContext} />);
+
+    fireEvent.click(screen.getByText("State"));
+    await waitFor(() => expect(screen.getByText("waiting_approval")).toBeTruthy());
+
+    rerender(<AgentWorkspace result={{ ...response, session_id: "session-2" }} workspaceContext={workspaceContext} />);
+
+    expect(screen.queryByText("waiting_approval")).toBeNull();
+    fireEvent.click(screen.getByText("State"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("completed")).toBeTruthy();
   });
 
   it("does not crash when context is absent", () => {

@@ -99,6 +99,24 @@ describe("agent approval api", () => {
     expect(String(url)).toContain("/agent-kernel/run");
   });
 
+  it("loads Agent Kernel thread state for the state inspector", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      thread_id: "session_1",
+      values: { status: "waiting_approval", step_count: 4 },
+      next: ["approval_interrupt"],
+      interrupts: [{ id: "interrupt_1", value: { approval_id: "approval_1" } }],
+      config: { configurable: { thread_id: "session_1" } },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const state = await agentApi.getAgentThreadState("session_1");
+
+    expect(state.thread_id).toBe("session_1");
+    expect(state.values?.status).toBe("waiting_approval");
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/agent-kernel/state/session_1");
+  });
+
   it("posts rejection decisions to the Agent Kernel endpoint", async () => {
     const rejectedResponse: AgentRunResponse = {
       ...completedResponse,

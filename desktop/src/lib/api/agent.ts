@@ -4,6 +4,7 @@ import type {
   AgentArtifactRecord,
   AgentApproval,
   AgentCheckpoint,
+  AgentKernelThreadState,
   AgentRunConfig,
   AgentRunDraftState,
   AgentRunResponse,
@@ -315,6 +316,9 @@ export const agentApi = {
 
   getAgentRunTrace: (runId: string) =>
     request<AgentTraceEventRecord[]>(`/query/agent-runs/${encodeURIComponent(runId)}/trace`),
+
+  getAgentThreadState: (threadId: string) =>
+    request<AgentKernelThreadState>(`/agent-kernel/state/${encodeURIComponent(threadId)}`),
 
   listAgentRunApprovals,
 
