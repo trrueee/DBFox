@@ -32,6 +32,7 @@ from engine.agent_kernel.checkpointer import build_agent_kernel_checkpointer
 from engine.agent_kernel.controller import decide_next_action
 from engine.agent_kernel.databinding import apply_tool_result_to_state, merge_state
 from engine.agent_kernel.databox_tools import register_databox_tools
+from engine.agent_kernel.event_bridge import events_from_graph_update
 from engine.agent_kernel.graph import build_agent_kernel_graph
 from engine.agent_kernel.policy import PolicyGate
 from engine.agent_kernel.response import AgentKernelResponseAssembler
@@ -203,13 +204,19 @@ class AgentKernelService:
                 if not isinstance(update, dict):
                     continue
                 merge_state(state, update)
-                yield from self._events_from_graph_update(
+                yield from events_from_graph_update(
                     emit=emit,
                     node_name=str(node_name),
                     update=update,
                     agent_state=agent_state,
-                    artifact_identity=artifact_identity,
-                    emitted_artifact_ids=emitted_artifact_ids,
+                    step_name_for_tool=self._step_name,
+                    artifact_events=lambda observation, bridge_agent_state: self._artifact_events(
+                        emit,
+                        observation,
+                        bridge_agent_state,
+                        artifact_identity,
+                        emitted_artifact_ids,
+                    ),
                 )
 
         approval = self._approval_from_state(state)
@@ -320,13 +327,19 @@ class AgentKernelService:
                     if not isinstance(update, dict):
                         continue
                     merge_state(state, update)
-                    yield from self._events_from_graph_update(
+                    yield from events_from_graph_update(
                         emit=emit,
                         node_name=str(node_name),
                         update=update,
                         agent_state=agent_state,
-                        artifact_identity=artifact_identity,
-                        emitted_artifact_ids=emitted_artifact_ids,
+                        step_name_for_tool=self._step_name,
+                        artifact_events=lambda observation, bridge_agent_state: self._artifact_events(
+                            emit,
+                            observation,
+                            bridge_agent_state,
+                            artifact_identity,
+                            emitted_artifact_ids,
+                        ),
                     )
 
         yield from stream_graph_updates(
@@ -509,44 +522,6 @@ class AgentKernelService:
             "error": "User rejected approval.",
             "trace_events": [{"type": "approval.rejected", "payload": approval}],
         }
-
-    def _events_from_graph_update(
-        self,
-        *,
-        emit: Any,
-        node_name: str,
-        update: dict[str, Any],
-        agent_state: AgentState,
-        artifact_identity: AgentArtifactIdentity,
-        emitted_artifact_ids: set[str],
-    ) -> Iterator[AgentRuntimeEvent]:
-        if node_name == "policy" and isinstance(update.get("pending_approval"), dict):
-            approval = AgentApprovalRecord.model_validate(update["pending_approval"])
-            yield emit(
-                "agent.approval.required",
-                step={"name": approval.step_name, "status": "waiting_approval"},
-                approval=approval,
-            )
-
-        if node_name != "execute_tool" or not isinstance(update.get("last_observation"), dict):
-            return
-
-        observation = ToolObservation.model_validate(update["last_observation"])
-        tool_name = str(update.get("last_tool_name") or "")
-        step_name = observation.name or self._step_name(tool_name)
-        yield emit("agent.step.started", step={"name": step_name, "tool_name": tool_name})
-        agent_state.apply_observation(step_name, observation)
-        yield emit(
-            "agent.step.completed",
-            step={
-                "name": step_name,
-                "tool_name": tool_name,
-                "status": observation.status,
-                "error": observation.error,
-                "latency_ms": observation.latency_ms,
-            },
-        )
-        yield from self._artifact_events(emit, observation, agent_state, artifact_identity, emitted_artifact_ids)
 
     def _approval_from_state(self, state: dict[str, Any]) -> AgentApprovalRecord | None:
         pending = state.get("pending_approval")

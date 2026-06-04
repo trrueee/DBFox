@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
 
 from engine.agent import AgentRunRequest, ToolObservation
+from engine.agent.events import EventEmitter
+from engine.agent.state import AgentState
 from engine.agent import persistence as agent_persistence
 from engine.agent.runtime import DataBoxAgentRuntime
-from engine.agent_kernel.controller import _controller_state_view
+from engine.agent_kernel.controller import CONTROLLER_SYSTEM_PROMPT, _controller_state_view
 from engine.agent_kernel.databox_tools import register_databox_tools
 from engine.agent_kernel.graph import build_agent_kernel_graph, langgraph_available
 from engine.agent_kernel.policy import PolicyGate
@@ -228,6 +231,100 @@ def test_agent_kernel_controller_state_view_includes_actionable_context() -> Non
     assert view["workspace_context_summary"]["selected_artifact_id"] == "artifact_sql"
     assert view["workspace_context_summary"]["selected_table_names"] == ["users"]
     assert view["plan_events"][-1]["operation"] == "create_plan"
+
+
+def test_agent_kernel_controller_prompt_teaches_followup_artifact_and_approval_policy() -> None:
+    prompt = CONTROLLER_SYSTEM_PROMPT.lower()
+
+    assert "follow-up" in prompt
+    assert "artifact" in prompt
+    assert "approval" in prompt
+    assert "resume" in prompt
+    assert "update_plan" in prompt
+
+
+def test_agent_kernel_event_bridge_emits_approval_required_event() -> None:
+    from engine.agent_kernel.event_bridge import events_from_graph_update
+
+    created_at = datetime.now(timezone.utc)
+    agent_state = AgentState(
+        run_id="run_approval",
+        session_id="thread_approval",
+        question="list users",
+        datasource_id="ds_1",
+    )
+
+    events = list(events_from_graph_update(
+        emit=EventEmitter("run_approval").emit,
+        node_name="policy",
+        update={
+            "pending_approval": {
+                "id": "approval_1",
+                "run_id": "run_approval",
+                "session_id": "thread_approval",
+                "step_name": "execute_sql",
+                "tool_name": "sql.execute_readonly",
+                "status": "pending",
+                "risk_level": "warning",
+                "reason": "Manual review required.",
+                "policy_decision": {"requires_confirmation": True},
+                "requested_action": {"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}},
+                "created_at": created_at,
+            }
+        },
+        agent_state=agent_state,
+        step_name_for_tool=lambda tool_name: tool_name,
+        artifact_events=lambda *_args: iter(()),
+    ))
+
+    assert [event.type for event in events] == ["agent.approval.required"]
+    assert events[0].approval is not None
+    assert events[0].approval.id == "approval_1"
+    assert events[0].step == {"name": "execute_sql", "status": "waiting_approval"}
+
+
+def test_agent_kernel_event_bridge_emits_tool_step_events_and_delegates_artifacts() -> None:
+    from engine.agent_kernel.event_bridge import events_from_graph_update
+
+    agent_state = AgentState(
+        run_id="run_tool",
+        session_id="thread_tool",
+        question="list users",
+        datasource_id="ds_1",
+    )
+    observation = ToolObservation(
+        name="validate_sql",
+        status="success",
+        input={"sql_preview": "SELECT 1"},
+        output={"safe_sql": "SELECT 1"},
+        latency_ms=7,
+    )
+    artifact_observations: list[str] = []
+
+    def artifact_events(observation_arg, *_args):
+        artifact_observations.append(observation_arg.name)
+        return iter(())
+
+    events = list(events_from_graph_update(
+        emit=EventEmitter("run_tool").emit,
+        node_name="execute_tool",
+        update={"last_observation": observation.model_dump(mode="json"), "last_tool_name": "sql.validate"},
+        agent_state=agent_state,
+        step_name_for_tool=lambda tool_name: "validate_sql" if tool_name == "sql.validate" else tool_name,
+        artifact_events=artifact_events,
+    ))
+
+    assert [event.type for event in events] == ["agent.step.started", "agent.step.completed"]
+    assert events[0].step == {"name": "validate_sql", "tool_name": "sql.validate"}
+    assert events[1].step == {
+        "name": "validate_sql",
+        "tool_name": "sql.validate",
+        "status": "success",
+        "error": None,
+        "latency_ms": 7,
+    }
+    assert [step.name for step in agent_state.steps] == ["validate_sql"]
+    assert artifact_observations == ["validate_sql"]
 
 
 def test_agent_kernel_fallback_execute_false_returns_review_response(db_session, demo_datasource) -> None:
