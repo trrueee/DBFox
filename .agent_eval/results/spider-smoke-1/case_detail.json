@@ -4,13 +4,13 @@
   "question": "How many singers do we have?",
   "difficulty": "simple",
   "gold_sql": "SELECT count(*) FROM singer",
-  "agent_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-  "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-  "agent_answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "agent_sql": "SELECT * FROM products LIMIT 10",
+  "safe_sql": "SELECT * FROM products LIMIT 10",
+  "agent_answer": "I do not have a successful result set to analyze yet.",
   "status": "fail",
-  "final_status": "failed",
+  "final_status": "completed",
   "execution_match": null,
-  "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+  "reason": "Agent SQL execution failed: (1146, \"Table 'spider_concert_singer.products' doesn't exist\")",
   "quality": {
     "score": 3,
     "max_score": 5,
@@ -36,25 +36,19 @@
     "build_query_plan",
     "generate_sql_candidate",
     "validate_sql",
-    "execute_sql",
     "revise_sql",
-    "profile_result",
-    "suggest_chart",
-    "suggest_followups",
     "answer_synthesizer"
   ],
   "artifacts": [
     "query_plan",
     "sql",
-    "safety",
-    "insight",
-    "error"
+    "safety"
   ],
   "approval": null,
-  "latency_seconds": 72.72,
+  "latency_seconds": 0.4,
   "gold_rows_count": 1,
   "agent_rows_count": 0,
   "gold_error": null,
-  "agent_error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-  "event_count": 28
+  "agent_error": "(1146, \"Table 'spider_concert_singer.products' doesn't exist\")",
+  "event_count": 18
 }

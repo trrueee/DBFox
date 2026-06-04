@@ -1,9 +1,9 @@
 [
   {
-    "event_id": "runtime_18703c3a_1_agent_run_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_1_agent_run_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 1,
-    "created_at_ms": 1780591139654,
+    "created_at_ms": 1780592903528,
     "type": "agent.run.started",
     "step": {
       "datasource_id": "ds-spider-concert-singer",
@@ -19,10 +19,10 @@
     "_sse_event": "agent.run.started"
   },
   {
-    "event_id": "runtime_18703c3a_2_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_2_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 2,
-    "created_at_ms": 1780591142735,
+    "created_at_ms": 1780592903553,
     "type": "agent.step.started",
     "step": {
       "name": "build_schema_context",
@@ -37,10 +37,10 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_3_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_3_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 3,
-    "created_at_ms": 1780591142736,
+    "created_at_ms": 1780592903553,
     "type": "agent.step.completed",
     "step": {
       "name": "build_schema_context",
@@ -58,10 +58,10 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_4_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_4_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 4,
-    "created_at_ms": 1780591149141,
+    "created_at_ms": 1780592903562,
     "type": "agent.step.started",
     "step": {
       "name": "build_query_plan",
@@ -76,17 +76,17 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_5_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_5_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 5,
-    "created_at_ms": 1780591149143,
+    "created_at_ms": 1780592903563,
     "type": "agent.step.completed",
     "step": {
       "name": "build_query_plan",
       "tool_name": "query_plan.build",
       "status": "success",
       "error": null,
-      "latency_ms": 3210
+      "latency_ms": 4
     },
     "artifact": null,
     "answer": null,
@@ -97,58 +97,61 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_6_agent_artifact_created",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_6_agent_artifact_created",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 6,
-    "created_at_ms": 1780591149143,
+    "created_at_ms": 1780592903564,
     "type": "agent.artifact.created",
     "step": {
       "name": "build_query_plan"
     },
     "artifact": {
-      "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/001/query_plan",
+      "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/001/query_plan",
       "semantic_id": "query_plan",
       "type": "query_plan",
       "title": "Query plan",
       "payload": {
-        "analysis_goal": "count",
-        "metrics": [
-          {
-            "name": "singer_count",
-            "expression": "COUNT(*)",
-            "source_column": "*"
-          }
-        ],
+        "analysis_goal": "answer_question",
+        "metrics": [],
         "dimensions": [],
         "filters": [],
         "time_range": null,
         "candidate_tables": [
-          "singer"
+          "concert",
+          "singer",
+          "singer_in_concert"
         ],
         "assumptions": [
-          "Plan mode: online",
+          "Plan mode: offline",
           "Only synced local schema metadata is trusted."
         ],
         "risk_notes": [],
         "raw_plan": {
-          "intent": "count",
+          "intent": "answer_question",
           "tables": [
-            "singer"
+            "concert",
+            "singer",
+            "singer_in_concert"
           ],
-          "metrics": [
-            {
-              "name": "singer_count",
-              "expression": "COUNT(*)",
-              "source_column": "*"
-            }
-          ],
+          "metrics": [],
           "dimensions": [],
           "filters": [],
-          "joins": [],
-          "order_by": "[]",
+          "joins": [
+            {
+              "left_table": "singer_in_concert",
+              "right_table": "concert",
+              "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+            },
+            {
+              "left_table": "singer_in_concert",
+              "right_table": "singer",
+              "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+            }
+          ],
+          "order_by": null,
           "limit": 100,
           "warnings": [],
-          "mode": "online"
+          "mode": "offline"
         }
       },
       "presentation": {
@@ -168,10 +171,10 @@
     "_sse_event": "agent.artifact.created"
   },
   {
-    "event_id": "runtime_18703c3a_7_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_7_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 7,
-    "created_at_ms": 1780591152842,
+    "created_at_ms": 1780592903588,
     "type": "agent.step.started",
     "step": {
       "name": "generate_sql_candidate",
@@ -186,17 +189,17 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_8_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_8_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 8,
-    "created_at_ms": 1780591152843,
+    "created_at_ms": 1780592903590,
     "type": "agent.step.completed",
     "step": {
       "name": "generate_sql_candidate",
       "tool_name": "sql.generate",
       "status": "success",
       "error": null,
-      "latency_ms": 3
+      "latency_ms": 21
     },
     "artifact": null,
     "answer": null,
@@ -207,10 +210,10 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_9_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_9_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 9,
-    "created_at_ms": 1780591156405,
+    "created_at_ms": 1780592903598,
     "type": "agent.step.started",
     "step": {
       "name": "validate_sql",
@@ -225,17 +228,17 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_10_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_10_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 10,
-    "created_at_ms": 1780591156407,
+    "created_at_ms": 1780592903599,
     "type": "agent.step.completed",
     "step": {
       "name": "validate_sql",
       "tool_name": "sql.validate",
       "status": "success",
       "error": null,
-      "latency_ms": 5
+      "latency_ms": 4
     },
     "artifact": null,
     "answer": null,
@@ -246,28 +249,28 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_11_agent_artifact_created",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_11_agent_artifact_created",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 11,
-    "created_at_ms": 1780591156407,
+    "created_at_ms": 1780592903601,
     "type": "agent.artifact.created",
     "step": {
       "name": "validate_sql"
     },
     "artifact": {
-      "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/002/sql_candidate",
+      "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/002/sql_candidate",
       "semantic_id": "sql_candidate",
       "type": "sql",
       "title": "Validated SQL",
       "payload": {
-        "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
+        "sql": "SELECT * FROM products LIMIT 10",
         "safety_state": {
           "available": true,
-          "passed": true,
-          "can_execute": true,
+          "passed": false,
+          "can_execute": false,
           "requires_confirmation": false,
-          "guardrail_result": "pass",
-          "schema_warnings_count": 0
+          "guardrail_result": "warn",
+          "schema_warnings_count": 1
         }
       },
       "presentation": {
@@ -278,7 +281,7 @@
       "refs": {},
       "produced_by_step": "validate_sql",
       "depends_on": [
-        "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/001/query_plan"
+        "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/001/query_plan"
       ]
     },
     "answer": null,
@@ -289,66 +292,91 @@
     "_sse_event": "agent.artifact.created"
   },
   {
-    "event_id": "runtime_18703c3a_12_agent_artifact_created",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_12_agent_artifact_created",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 12,
-    "created_at_ms": 1780591156409,
+    "created_at_ms": 1780592903602,
     "type": "agent.artifact.created",
     "step": {
       "name": "validate_sql"
     },
     "artifact": {
-      "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report",
+      "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/003/safety_report",
       "semantic_id": "safety_report",
       "type": "safety",
       "title": "Safety report",
       "payload": {
-        "passed": true,
-        "can_execute": true,
-        "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-        "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-        "schema_warnings": [],
+        "passed": false,
+        "can_execute": false,
+        "safe_sql": null,
+        "original_sql": "SELECT * FROM products LIMIT 10",
+        "schema_warnings": [
+          "生成 SQL 包含不存在的表: `products`"
+        ],
         "guardrail": {
-          "result": "pass",
-          "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "checks": [],
-          "message": "SQL 安全审核通过！"
+          "result": "warn",
+          "originalSql": "SELECT * FROM products LIMIT 10",
+          "safeSql": "SELECT * FROM products LIMIT 10",
+          "checks": [
+            {
+              "rule": "select_star",
+              "level": "warn",
+              "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+            }
+          ],
+          "message": "SQL 审核通过，但包含优化建议。"
         },
         "trust_gate": {
-          "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "schemaWarnings": [],
+          "sql": "SELECT * FROM products LIMIT 10",
+          "schemaWarnings": [
+            "生成 SQL 包含不存在的表: `products`"
+          ],
           "guardrail": {
-            "result": "pass",
-            "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "checks": [],
-            "message": "SQL 安全审核通过！"
+            "result": "warn",
+            "originalSql": "SELECT * FROM products LIMIT 10",
+            "safeSql": "SELECT * FROM products LIMIT 10",
+            "checks": [
+              {
+                "rule": "select_star",
+                "level": "warn",
+                "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+              }
+            ],
+            "message": "SQL 审核通过，但包含优化建议。"
           },
-          "riskLevel": "safe",
-          "requiresConfirmation": false,
+          "riskLevel": "warning",
+          "requiresConfirmation": true,
           "messages": [
-            "SQL passed schema validation and guardrail checks."
+            "Schema validation found unknown tables or columns.",
+            "SQL 审核通过，但包含优化建议。"
           ],
           "canExecute": true
         },
         "execution_safety_decision": {
-          "decision_id": "safety-c250c15c-1e8e-4b1c-9652-c3eca5115ebc",
+          "decision_id": "safety-3e10c55e-25e3-4c5e-8315-d46b5c659a4f",
           "datasource_id": "ds-spider-concert-singer",
           "policy": "agent_readonly",
-          "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "passed": true,
-          "can_execute": true,
+          "original_sql": "SELECT * FROM products LIMIT 10",
+          "safe_sql": null,
+          "passed": false,
+          "can_execute": false,
           "requires_confirmation": false,
           "guardrail": {
-            "result": "pass",
-            "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "checks": [],
-            "message": "SQL 安全审核通过！"
+            "result": "warn",
+            "originalSql": "SELECT * FROM products LIMIT 10",
+            "safeSql": "SELECT * FROM products LIMIT 10",
+            "checks": [
+              {
+                "rule": "select_star",
+                "level": "warn",
+                "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+              }
+            ],
+            "message": "SQL 审核通过，但包含优化建议。"
           },
-          "schema_warnings": [],
+          "schema_warnings": [
+            "生成 SQL 包含不存在的表: `products`"
+          ],
           "scope_state": {
             "datasource_exists": true,
             "datasource_id": "ds-spider-concert-singer",
@@ -358,18 +386,30 @@
             "project_id": "default-project",
             "environment_id": null
           },
-          "blocked_reasons": [],
-          "messages": [
-            "SQL passed schema validation and guardrail checks."
+          "blocked_reasons": [
+            "schema_validation",
+            "select_star"
           ],
-          "created_at": "2026-06-04T16:39:16.405704Z"
+          "messages": [
+            "Schema validation found unknown tables or columns.",
+            "SQL 审核通过，但包含优化建议。",
+            "Execution blocked until schema validation warnings are resolved.",
+            "Agent execution requires explicit projected columns instead of SELECT *."
+          ],
+          "created_at": "2026-06-04T17:08:23.598117Z"
         },
         "requires_confirmation": false,
         "messages": [
-          "SQL passed schema validation and guardrail checks."
+          "Schema validation found unknown tables or columns.",
+          "SQL 审核通过，但包含优化建议。",
+          "Execution blocked until schema validation warnings are resolved.",
+          "Agent execution requires explicit projected columns instead of SELECT *."
         ],
-        "blocked_reasons": [],
-        "revise_suggestion": null
+        "blocked_reasons": [
+          "schema_validation",
+          "select_star"
+        ],
+        "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
       },
       "presentation": {
         "mode": "dock",
@@ -379,7 +419,7 @@
       "refs": {},
       "produced_by_step": "validate_sql",
       "depends_on": [
-        "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/002/sql_candidate"
+        "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/002/sql_candidate"
       ]
     },
     "answer": null,
@@ -390,49 +430,10 @@
     "_sse_event": "agent.artifact.created"
   },
   {
-    "event_id": "runtime_18703c3a_13_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
+    "event_id": "runtime_c5aedca1_13_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
     "sequence": 13,
-    "created_at_ms": 1780591161742,
-    "type": "agent.step.started",
-    "step": {
-      "name": "execute_sql",
-      "tool_name": "sql.execute_readonly"
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.started"
-  },
-  {
-    "event_id": "runtime_18703c3a_14_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 14,
-    "created_at_ms": 1780591161744,
-    "type": "agent.step.completed",
-    "step": {
-      "name": "execute_sql",
-      "tool_name": "sql.execute_readonly",
-      "status": "failed",
-      "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-      "latency_ms": 14
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.completed"
-  },
-  {
-    "event_id": "runtime_18703c3a_15_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 15,
-    "created_at_ms": 1780591167724,
+    "created_at_ms": 1780592903610,
     "type": "agent.step.started",
     "step": {
       "name": "revise_sql",
@@ -447,17 +448,17 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_16_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 16,
-    "created_at_ms": 1780591167726,
+    "event_id": "runtime_c5aedca1_14_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+    "sequence": 14,
+    "created_at_ms": 1780592903612,
     "type": "agent.step.completed",
     "step": {
       "name": "revise_sql",
       "tool_name": "sql.revise",
       "status": "success",
       "error": null,
-      "latency_ms": 0
+      "latency_ms": 5
     },
     "artifact": null,
     "answer": null,
@@ -468,179 +469,10 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_17_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 17,
-    "created_at_ms": 1780591172888,
-    "type": "agent.step.started",
-    "step": {
-      "name": "profile_result",
-      "tool_name": "result.profile"
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.started"
-  },
-  {
-    "event_id": "runtime_18703c3a_18_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 18,
-    "created_at_ms": 1780591172889,
-    "type": "agent.step.completed",
-    "step": {
-      "name": "profile_result",
-      "tool_name": "result.profile",
-      "status": "success",
-      "error": null,
-      "latency_ms": 0
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.completed"
-  },
-  {
-    "event_id": "runtime_18703c3a_19_agent_artifact_created",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 19,
-    "created_at_ms": 1780591172889,
-    "type": "agent.artifact.created",
-    "step": {
-      "name": "profile_result"
-    },
-    "artifact": {
-      "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/004/result_profile",
-      "semantic_id": "result_profile",
-      "type": "insight",
-      "title": "Result profile",
-      "payload": {
-        "row_count": 0,
-        "column_profiles": {},
-        "detected_patterns": [
-          "no_result"
-        ],
-        "notable_facts": [],
-        "anomalies": [],
-        "limitations": [
-          "No successful execution result was available to profile."
-        ],
-        "safety_state": {
-          "available": true,
-          "passed": true,
-          "can_execute": true,
-          "requires_confirmation": false,
-          "guardrail_result": "pass",
-          "schema_warnings_count": 0
-        }
-      },
-      "presentation": {
-        "mode": "both",
-        "priority": 10,
-        "collapsed": false
-      },
-      "refs": {},
-      "produced_by_step": "profile_result",
-      "depends_on": [
-        "result_table"
-      ]
-    },
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.artifact.created"
-  },
-  {
-    "event_id": "runtime_18703c3a_20_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 20,
-    "created_at_ms": 1780591178789,
-    "type": "agent.step.started",
-    "step": {
-      "name": "suggest_chart",
-      "tool_name": "chart.suggest"
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.started"
-  },
-  {
-    "event_id": "runtime_18703c3a_21_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 21,
-    "created_at_ms": 1780591178790,
-    "type": "agent.step.completed",
-    "step": {
-      "name": "suggest_chart",
-      "tool_name": "chart.suggest",
-      "status": "success",
-      "error": null,
-      "latency_ms": 0
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.completed"
-  },
-  {
-    "event_id": "runtime_18703c3a_22_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 22,
-    "created_at_ms": 1780591185060,
-    "type": "agent.step.started",
-    "step": {
-      "name": "suggest_followups",
-      "tool_name": "followup.suggest"
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.started"
-  },
-  {
-    "event_id": "runtime_18703c3a_23_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 23,
-    "created_at_ms": 1780591185062,
-    "type": "agent.step.completed",
-    "step": {
-      "name": "suggest_followups",
-      "tool_name": "followup.suggest",
-      "status": "success",
-      "error": null,
-      "latency_ms": 0
-    },
-    "artifact": null,
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.step.completed"
-  },
-  {
-    "event_id": "runtime_18703c3a_24_agent_step_started",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 24,
-    "created_at_ms": 1780591191315,
+    "event_id": "runtime_c5aedca1_15_agent_step_started",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+    "sequence": 15,
+    "created_at_ms": 1780592903615,
     "type": "agent.step.started",
     "step": {
       "name": "answer_synthesizer",
@@ -655,10 +487,10 @@
     "_sse_event": "agent.step.started"
   },
   {
-    "event_id": "runtime_18703c3a_25_agent_step_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 25,
-    "created_at_ms": 1780591191316,
+    "event_id": "runtime_c5aedca1_16_agent_step_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+    "sequence": 16,
+    "created_at_ms": 1780592903616,
     "type": "agent.step.completed",
     "step": {
       "name": "answer_synthesizer",
@@ -676,57 +508,15 @@
     "_sse_event": "agent.step.completed"
   },
   {
-    "event_id": "runtime_18703c3a_26_agent_artifact_created",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 26,
-    "created_at_ms": 1780591212046,
-    "type": "agent.artifact.created",
-    "step": null,
-    "artifact": {
-      "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/005/agent_error",
-      "semantic_id": "agent_error",
-      "type": "error",
-      "title": "Agent stopped",
-      "payload": {
-        "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-        "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
-        "safety_state": {
-          "available": true,
-          "passed": true,
-          "can_execute": true,
-          "requires_confirmation": false,
-          "guardrail_result": "pass",
-          "schema_warnings_count": 0
-        }
-      },
-      "presentation": {
-        "mode": "both",
-        "priority": 1,
-        "collapsed": false
-      },
-      "refs": {},
-      "produced_by_step": "agent_finalize",
-      "depends_on": [
-        "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report"
-      ]
-    },
-    "answer": null,
-    "response": null,
-    "approval": null,
-    "checkpoint": null,
-    "error": null,
-    "_sse_event": "agent.artifact.created"
-  },
-  {
-    "event_id": "runtime_18703c3a_27_agent_answer_completed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 27,
-    "created_at_ms": 1780591212052,
+    "event_id": "runtime_c5aedca1_17_agent_answer_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+    "sequence": 17,
+    "created_at_ms": 1780592903621,
     "type": "agent.answer.completed",
     "step": null,
     "artifact": null,
     "answer": {
-      "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "answer": "I do not have a successful result set to analyze yet.",
       "key_findings": [],
       "evidence": [],
       "caveats": [],
@@ -740,112 +530,140 @@
     "_sse_event": "agent.answer.completed"
   },
   {
-    "event_id": "runtime_18703c3a_28_agent_run_failed",
-    "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-    "sequence": 28,
-    "created_at_ms": 1780591212052,
-    "type": "agent.run.failed",
+    "event_id": "runtime_c5aedca1_18_agent_run_completed",
+    "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+    "sequence": 18,
+    "created_at_ms": 1780592903621,
+    "type": "agent.run.completed",
     "step": null,
     "artifact": null,
     "answer": null,
     "response": {
-      "run_id": "18703c3a-cfb1-4f64-9b09-53c9df74cda8",
-      "session_id": "2f269b4d-9d45-482c-b2ba-d027259582c7",
+      "run_id": "c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2",
+      "session_id": "8f28f729-4bc6-459b-a318-01a6c34d559b",
       "parent_run_id": null,
-      "success": false,
+      "success": true,
       "status": "completed",
       "question": "How many singers do we have?",
-      "context_summary": "Question: How many singers do we have? Answer: I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\") Artifacts: - agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/001/query_plan (query_plan, Query plan): analysis_goal=count, metrics=[{'name': 'singer_count', 'expression': 'COUNT(*)', 'source_column': '*'}], dimensions=[], filters=[], time_range=None, candidate_tables=['singer'] - agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/002/sql_candidate (sql, Validated SQL): SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100 - agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report (safety, Safety report): can_execute=True; messages=['SQL passed schema validation and guardrail checks.'] - agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/004/result_profile (insight, Result profile): - agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/005/agent_error (error, Agent stopped): 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "context_summary": "Question: How many singers do we have? Answer: I do not have a successful result set to analyze yet. Artifacts: - agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/001/query_plan (query_plan, Query plan): analysis_goal=answer_question, metrics=[], dimensions=[], filters=[], time_range=None, candidate_tables=['concert', 'singer', 'singer_in_concert'] - agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/002/sql_candidate (sql, Validated SQL): SELECT * FROM products LIMIT 10 - agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/003/safety_report (safety, Safety report): can_execute=False; messages=['Schema validation found unknown tables or columns.', 'SQL 审核通过，但包含优化建议。', 'Execution blocked until schema validation warnings are resolved.', 'Agent execution requires explicit projected columns instead of SELECT *.']",
       "referenced_artifact_ids": [],
       "query_plan": {
-        "analysis_goal": "count",
-        "metrics": [
-          {
-            "name": "singer_count",
-            "expression": "COUNT(*)",
-            "source_column": "*"
-          }
-        ],
+        "analysis_goal": "answer_question",
+        "metrics": [],
         "dimensions": [],
         "filters": [],
         "time_range": null,
         "candidate_tables": [
-          "singer"
+          "concert",
+          "singer",
+          "singer_in_concert"
         ],
         "assumptions": [
-          "Plan mode: online",
+          "Plan mode: offline",
           "Only synced local schema metadata is trusted."
         ],
         "risk_notes": [],
         "raw_plan": {
-          "intent": "count",
+          "intent": "answer_question",
           "tables": [
-            "singer"
+            "concert",
+            "singer",
+            "singer_in_concert"
           ],
-          "metrics": [
-            {
-              "name": "singer_count",
-              "expression": "COUNT(*)",
-              "source_column": "*"
-            }
-          ],
+          "metrics": [],
           "dimensions": [],
           "filters": [],
-          "joins": [],
-          "order_by": "[]",
+          "joins": [
+            {
+              "left_table": "singer_in_concert",
+              "right_table": "concert",
+              "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+            },
+            {
+              "left_table": "singer_in_concert",
+              "right_table": "singer",
+              "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+            }
+          ],
+          "order_by": null,
           "limit": 100,
           "warnings": [],
-          "mode": "online"
+          "mode": "offline"
         }
       },
-      "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
+      "sql": "SELECT * FROM products LIMIT 10",
       "safety": {
-        "passed": true,
-        "can_execute": true,
-        "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-        "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-        "schema_warnings": [],
+        "passed": false,
+        "can_execute": false,
+        "safe_sql": null,
+        "original_sql": "SELECT * FROM products LIMIT 10",
+        "schema_warnings": [
+          "生成 SQL 包含不存在的表: `products`"
+        ],
         "guardrail": {
-          "result": "pass",
-          "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "checks": [],
-          "message": "SQL 安全审核通过！"
+          "result": "warn",
+          "originalSql": "SELECT * FROM products LIMIT 10",
+          "safeSql": "SELECT * FROM products LIMIT 10",
+          "checks": [
+            {
+              "rule": "select_star",
+              "level": "warn",
+              "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+            }
+          ],
+          "message": "SQL 审核通过，但包含优化建议。"
         },
         "trust_gate": {
-          "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "schemaWarnings": [],
+          "sql": "SELECT * FROM products LIMIT 10",
+          "schemaWarnings": [
+            "生成 SQL 包含不存在的表: `products`"
+          ],
           "guardrail": {
-            "result": "pass",
-            "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "checks": [],
-            "message": "SQL 安全审核通过！"
+            "result": "warn",
+            "originalSql": "SELECT * FROM products LIMIT 10",
+            "safeSql": "SELECT * FROM products LIMIT 10",
+            "checks": [
+              {
+                "rule": "select_star",
+                "level": "warn",
+                "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+              }
+            ],
+            "message": "SQL 审核通过，但包含优化建议。"
           },
-          "riskLevel": "safe",
-          "requiresConfirmation": false,
+          "riskLevel": "warning",
+          "requiresConfirmation": true,
           "messages": [
-            "SQL passed schema validation and guardrail checks."
+            "Schema validation found unknown tables or columns.",
+            "SQL 审核通过，但包含优化建议。"
           ],
           "canExecute": true
         },
         "execution_safety_decision": {
-          "decision_id": "safety-c250c15c-1e8e-4b1c-9652-c3eca5115ebc",
+          "decision_id": "safety-3e10c55e-25e3-4c5e-8315-d46b5c659a4f",
           "datasource_id": "ds-spider-concert-singer",
           "policy": "agent_readonly",
-          "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-          "passed": true,
-          "can_execute": true,
+          "original_sql": "SELECT * FROM products LIMIT 10",
+          "safe_sql": null,
+          "passed": false,
+          "can_execute": false,
           "requires_confirmation": false,
           "guardrail": {
-            "result": "pass",
-            "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "checks": [],
-            "message": "SQL 安全审核通过！"
+            "result": "warn",
+            "originalSql": "SELECT * FROM products LIMIT 10",
+            "safeSql": "SELECT * FROM products LIMIT 10",
+            "checks": [
+              {
+                "rule": "select_star",
+                "level": "warn",
+                "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+              }
+            ],
+            "message": "SQL 审核通过，但包含优化建议。"
           },
-          "schema_warnings": [],
+          "schema_warnings": [
+            "生成 SQL 包含不存在的表: `products`"
+          ],
           "scope_state": {
             "datasource_exists": true,
             "datasource_id": "ds-spider-concert-singer",
@@ -855,104 +673,92 @@
             "project_id": "default-project",
             "environment_id": null
           },
-          "blocked_reasons": [],
-          "messages": [
-            "SQL passed schema validation and guardrail checks."
+          "blocked_reasons": [
+            "schema_validation",
+            "select_star"
           ],
-          "created_at": "2026-06-04T16:39:16.405704Z"
+          "messages": [
+            "Schema validation found unknown tables or columns.",
+            "SQL 审核通过，但包含优化建议。",
+            "Execution blocked until schema validation warnings are resolved.",
+            "Agent execution requires explicit projected columns instead of SELECT *."
+          ],
+          "created_at": "2026-06-04T17:08:23.598117Z"
         },
         "requires_confirmation": false,
         "messages": [
-          "SQL passed schema validation and guardrail checks."
+          "Schema validation found unknown tables or columns.",
+          "SQL 审核通过，但包含优化建议。",
+          "Execution blocked until schema validation warnings are resolved.",
+          "Agent execution requires explicit projected columns instead of SELECT *."
         ],
-        "blocked_reasons": [],
-        "revise_suggestion": null
-      },
-      "execution": {
-        "success": false,
-        "error_type": "SQLExecutionError",
-        "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
-      },
-      "explanation": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-      "chart_suggestion": {
-        "type": "table",
-        "x": null,
-        "y": null,
-        "reason": "No successful result set is available."
-      },
-      "result_profile": {
-        "row_count": 0,
-        "column_profiles": {},
-        "detected_patterns": [
-          "no_result"
+        "blocked_reasons": [
+          "schema_validation",
+          "select_star"
         ],
-        "notable_facts": [],
-        "anomalies": [],
-        "limitations": [
-          "No successful execution result was available to profile."
-        ]
+        "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
       },
+      "execution": null,
+      "explanation": "I do not have a successful result set to analyze yet.",
+      "chart_suggestion": null,
+      "result_profile": null,
       "answer": {
-        "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+        "answer": "I do not have a successful result set to analyze yet.",
         "key_findings": [],
         "evidence": [],
         "caveats": [],
         "recommendations": [],
         "follow_up_questions": []
       },
-      "suggestions": [
-        {
-          "label": "Break down",
-          "question": "Break this result down by a useful business dimension: How many singers do we have?",
-          "reason": "A dimension breakdown is often the next step after a direct query.",
-          "action_type": "ask"
-        }
-      ],
+      "suggestions": [],
       "artifacts": [
         {
-          "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/001/query_plan",
+          "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/001/query_plan",
           "semantic_id": "query_plan",
           "type": "query_plan",
           "title": "Query plan",
           "payload": {
-            "analysis_goal": "count",
-            "metrics": [
-              {
-                "name": "singer_count",
-                "expression": "COUNT(*)",
-                "source_column": "*"
-              }
-            ],
+            "analysis_goal": "answer_question",
+            "metrics": [],
             "dimensions": [],
             "filters": [],
             "time_range": null,
             "candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "assumptions": [
-              "Plan mode: online",
+              "Plan mode: offline",
               "Only synced local schema metadata is trusted."
             ],
             "risk_notes": [],
             "raw_plan": {
-              "intent": "count",
+              "intent": "answer_question",
               "tables": [
-                "singer"
+                "concert",
+                "singer",
+                "singer_in_concert"
               ],
-              "metrics": [
-                {
-                  "name": "singer_count",
-                  "expression": "COUNT(*)",
-                  "source_column": "*"
-                }
-              ],
+              "metrics": [],
               "dimensions": [],
               "filters": [],
-              "joins": [],
-              "order_by": "[]",
+              "joins": [
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "concert",
+                  "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                },
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "singer",
+                  "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                }
+              ],
+              "order_by": null,
               "limit": 100,
               "warnings": [],
-              "mode": "online"
+              "mode": "offline"
             }
           },
           "presentation": {
@@ -965,19 +771,19 @@
           "depends_on": []
         },
         {
-          "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/002/sql_candidate",
+          "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/002/sql_candidate",
           "semantic_id": "sql_candidate",
           "type": "sql",
           "title": "Validated SQL",
           "payload": {
-            "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
+            "sql": "SELECT * FROM products LIMIT 10",
             "safety_state": {
               "available": true,
-              "passed": true,
-              "can_execute": true,
+              "passed": false,
+              "can_execute": false,
               "requires_confirmation": false,
-              "guardrail_result": "pass",
-              "schema_warnings_count": 0
+              "guardrail_result": "warn",
+              "schema_warnings_count": 1
             }
           },
           "presentation": {
@@ -988,61 +794,86 @@
           "refs": {},
           "produced_by_step": "validate_sql",
           "depends_on": [
-            "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/001/query_plan"
+            "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/001/query_plan"
           ]
         },
         {
-          "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report",
+          "id": "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/003/safety_report",
           "semantic_id": "safety_report",
           "type": "safety",
           "title": "Safety report",
           "payload": {
-            "passed": true,
-            "can_execute": true,
-            "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "schema_warnings": [],
+            "passed": false,
+            "can_execute": false,
+            "safe_sql": null,
+            "original_sql": "SELECT * FROM products LIMIT 10",
+            "schema_warnings": [
+              "生成 SQL 包含不存在的表: `products`"
+            ],
             "guardrail": {
-              "result": "pass",
-              "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "checks": [],
-              "message": "SQL 安全审核通过！"
+              "result": "warn",
+              "originalSql": "SELECT * FROM products LIMIT 10",
+              "safeSql": "SELECT * FROM products LIMIT 10",
+              "checks": [
+                {
+                  "rule": "select_star",
+                  "level": "warn",
+                  "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                }
+              ],
+              "message": "SQL 审核通过，但包含优化建议。"
             },
             "trust_gate": {
-              "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "schemaWarnings": [],
+              "sql": "SELECT * FROM products LIMIT 10",
+              "schemaWarnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "riskLevel": "safe",
-              "requiresConfirmation": false,
+              "riskLevel": "warning",
+              "requiresConfirmation": true,
               "messages": [
-                "SQL passed schema validation and guardrail checks."
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。"
               ],
               "canExecute": true
             },
             "execution_safety_decision": {
-              "decision_id": "safety-c250c15c-1e8e-4b1c-9652-c3eca5115ebc",
+              "decision_id": "safety-3e10c55e-25e3-4c5e-8315-d46b5c659a4f",
               "datasource_id": "ds-spider-concert-singer",
               "policy": "agent_readonly",
-              "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "passed": true,
-              "can_execute": true,
+              "original_sql": "SELECT * FROM products LIMIT 10",
+              "safe_sql": null,
+              "passed": false,
+              "can_execute": false,
               "requires_confirmation": false,
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "schema_warnings": [],
+              "schema_warnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "scope_state": {
                 "datasource_exists": true,
                 "datasource_id": "ds-spider-concert-singer",
@@ -1052,18 +883,30 @@
                 "project_id": "default-project",
                 "environment_id": null
               },
-              "blocked_reasons": [],
-              "messages": [
-                "SQL passed schema validation and guardrail checks."
+              "blocked_reasons": [
+                "schema_validation",
+                "select_star"
               ],
-              "created_at": "2026-06-04T16:39:16.405704Z"
+              "messages": [
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。",
+                "Execution blocked until schema validation warnings are resolved.",
+                "Agent execution requires explicit projected columns instead of SELECT *."
+              ],
+              "created_at": "2026-06-04T17:08:23.598117Z"
             },
             "requires_confirmation": false,
             "messages": [
-              "SQL passed schema validation and guardrail checks."
+              "Schema validation found unknown tables or columns.",
+              "SQL 审核通过，但包含优化建议。",
+              "Execution blocked until schema validation warnings are resolved.",
+              "Agent execution requires explicit projected columns instead of SELECT *."
             ],
-            "blocked_reasons": [],
-            "revise_suggestion": null
+            "blocked_reasons": [
+              "schema_validation",
+              "select_star"
+            ],
+            "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
           },
           "presentation": {
             "mode": "dock",
@@ -1073,71 +916,7 @@
           "refs": {},
           "produced_by_step": "validate_sql",
           "depends_on": [
-            "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/002/sql_candidate"
-          ]
-        },
-        {
-          "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/004/result_profile",
-          "semantic_id": "result_profile",
-          "type": "insight",
-          "title": "Result profile",
-          "payload": {
-            "row_count": 0,
-            "column_profiles": {},
-            "detected_patterns": [
-              "no_result"
-            ],
-            "notable_facts": [],
-            "anomalies": [],
-            "limitations": [
-              "No successful execution result was available to profile."
-            ],
-            "safety_state": {
-              "available": true,
-              "passed": true,
-              "can_execute": true,
-              "requires_confirmation": false,
-              "guardrail_result": "pass",
-              "schema_warnings_count": 0
-            }
-          },
-          "presentation": {
-            "mode": "both",
-            "priority": 10,
-            "collapsed": false
-          },
-          "refs": {},
-          "produced_by_step": "profile_result",
-          "depends_on": [
-            "result_table"
-          ]
-        },
-        {
-          "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/005/agent_error",
-          "semantic_id": "agent_error",
-          "type": "error",
-          "title": "Agent stopped",
-          "payload": {
-            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-            "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
-            "safety_state": {
-              "available": true,
-              "passed": true,
-              "can_execute": true,
-              "requires_confirmation": false,
-              "guardrail_result": "pass",
-              "schema_warnings_count": 0
-            }
-          },
-          "presentation": {
-            "mode": "both",
-            "priority": 1,
-            "collapsed": false
-          },
-          "refs": {},
-          "produced_by_step": "agent_finalize",
-          "depends_on": [
-            "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report"
+            "agent/run/c5aedca1-6bf8-45fb-b0d3-1a0a2d4a6af2/artifact/002/sql_candidate"
           ]
         }
       ],
@@ -1146,41 +925,21 @@
           "block_id": "block_1_text",
           "sequence": 1,
           "type": "text",
-          "content": "I started from the trusted schema and safety checks, but stopped before a complete answer: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+          "content": "I used the trusted schema context around concert, singer, singer_in_concert, stadium to answer: How many singers do we have?",
           "artifact_id": null,
           "display": null,
           "answer": null,
           "suggestions": []
         },
         {
-          "block_id": "block_2_artifact_ref",
+          "block_id": "block_2_answer",
           "sequence": 2,
-          "type": "artifact_ref",
-          "content": null,
-          "artifact_id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/004/result_profile",
-          "display": "full",
-          "answer": null,
-          "suggestions": []
-        },
-        {
-          "block_id": "block_3_artifact_ref",
-          "sequence": 3,
-          "type": "artifact_ref",
-          "content": null,
-          "artifact_id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/005/agent_error",
-          "display": "full",
-          "answer": null,
-          "suggestions": []
-        },
-        {
-          "block_id": "block_4_answer",
-          "sequence": 4,
           "type": "answer",
           "content": null,
           "artifact_id": null,
           "display": null,
           "answer": {
-            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+            "answer": "I do not have a successful result set to analyze yet.",
             "key_findings": [],
             "evidence": [],
             "caveats": [],
@@ -1188,127 +947,28 @@
             "follow_up_questions": []
           },
           "suggestions": []
-        },
-        {
-          "block_id": "block_5_suggestions",
-          "sequence": 5,
-          "type": "suggestions",
-          "content": null,
-          "artifact_id": null,
-          "display": null,
-          "answer": null,
-          "suggestions": [
-            {
-              "label": "Break down",
-              "question": "Break this result down by a useful business dimension: How many singers do we have?",
-              "reason": "A dimension breakdown is often the next step after a direct query.",
-              "action_type": "ask"
-            }
-          ]
         }
       ],
       "events": [
         {
           "event_id": "visible_1_agent_narration_completed",
           "sequence": 1,
-          "created_at_ms": 1780591212045,
+          "created_at_ms": 1780592903619,
           "type": "agent.narration.completed",
-          "content": "I started from the trusted schema and safety checks, but stopped before a complete answer: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+          "content": "I used the trusted schema context around concert, singer, singer_in_concert, stadium to answer: How many singers do we have?",
           "artifact": null,
           "answer": null,
           "suggestions": []
         },
         {
-          "event_id": "visible_2_agent_artifact_created",
+          "event_id": "visible_2_agent_answer_completed",
           "sequence": 2,
-          "created_at_ms": 1780591212046,
-          "type": "agent.artifact.created",
-          "content": null,
-          "artifact": {
-            "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/004/result_profile",
-            "semantic_id": "result_profile",
-            "type": "insight",
-            "title": "Result profile",
-            "payload": {
-              "row_count": 0,
-              "column_profiles": {},
-              "detected_patterns": [
-                "no_result"
-              ],
-              "notable_facts": [],
-              "anomalies": [],
-              "limitations": [
-                "No successful execution result was available to profile."
-              ],
-              "safety_state": {
-                "available": true,
-                "passed": true,
-                "can_execute": true,
-                "requires_confirmation": false,
-                "guardrail_result": "pass",
-                "schema_warnings_count": 0
-              }
-            },
-            "presentation": {
-              "mode": "both",
-              "priority": 10,
-              "collapsed": false
-            },
-            "refs": {},
-            "produced_by_step": "profile_result",
-            "depends_on": [
-              "result_table"
-            ]
-          },
-          "answer": null,
-          "suggestions": []
-        },
-        {
-          "event_id": "visible_3_agent_artifact_created",
-          "sequence": 3,
-          "created_at_ms": 1780591212047,
-          "type": "agent.artifact.created",
-          "content": null,
-          "artifact": {
-            "id": "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/005/agent_error",
-            "semantic_id": "agent_error",
-            "type": "error",
-            "title": "Agent stopped",
-            "payload": {
-              "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-              "recovery_guidance": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT.",
-              "safety_state": {
-                "available": true,
-                "passed": true,
-                "can_execute": true,
-                "requires_confirmation": false,
-                "guardrail_result": "pass",
-                "schema_warnings_count": 0
-              }
-            },
-            "presentation": {
-              "mode": "both",
-              "priority": 1,
-              "collapsed": false
-            },
-            "refs": {},
-            "produced_by_step": "agent_finalize",
-            "depends_on": [
-              "agent/run/18703c3a-cfb1-4f64-9b09-53c9df74cda8/artifact/003/safety_report"
-            ]
-          },
-          "answer": null,
-          "suggestions": []
-        },
-        {
-          "event_id": "visible_4_agent_answer_completed",
-          "sequence": 4,
-          "created_at_ms": 1780591212048,
+          "created_at_ms": 1780592903620,
           "type": "agent.answer.completed",
           "content": null,
           "artifact": null,
           "answer": {
-            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+            "answer": "I do not have a successful result set to analyze yet.",
             "key_findings": [],
             "evidence": [],
             "caveats": [],
@@ -1316,30 +976,13 @@
             "follow_up_questions": []
           },
           "suggestions": []
-        },
-        {
-          "event_id": "visible_5_agent_suggestions_created",
-          "sequence": 5,
-          "created_at_ms": 1780591212049,
-          "type": "agent.suggestions.created",
-          "content": null,
-          "artifact": null,
-          "answer": null,
-          "suggestions": [
-            {
-              "label": "Break down",
-              "question": "Break this result down by a useful business dimension: How many singers do we have?",
-              "reason": "A dimension breakdown is often the next step after a direct query.",
-              "action_type": "ask"
-            }
-          ]
         }
       ],
       "trace_events": [
         {
           "event_id": "trace_1_step_1_build_schema_context_started",
           "sequence": 1,
-          "created_at_ms": 1780591212045,
+          "created_at_ms": 1780592903619,
           "type": "agent.trace.step_started",
           "step_id": "step_1_build_schema_context",
           "name": "build_schema_context",
@@ -1357,7 +1000,7 @@
         {
           "event_id": "trace_2_step_1_build_schema_context_completed",
           "sequence": 2,
-          "created_at_ms": 1780591212046,
+          "created_at_ms": 1780592903620,
           "type": "agent.trace.step_completed",
           "step_id": "step_1_build_schema_context",
           "name": "build_schema_context",
@@ -1644,7 +1287,7 @@
         {
           "event_id": "trace_3_step_2_build_query_plan_started",
           "sequence": 3,
-          "created_at_ms": 1780591212047,
+          "created_at_ms": 1780592903621,
           "type": "agent.trace.step_started",
           "step_id": "step_2_build_query_plan",
           "name": "build_query_plan",
@@ -1667,7 +1310,7 @@
         {
           "event_id": "trace_4_step_2_build_query_plan_completed",
           "sequence": 4,
-          "created_at_ms": 1780591212048,
+          "created_at_ms": 1780592903622,
           "type": "agent.trace.step_completed",
           "step_id": "step_2_build_query_plan",
           "name": "build_query_plan",
@@ -1684,53 +1327,56 @@
             ]
           },
           "output": {
-            "analysis_goal": "count",
-            "metrics": [
-              {
-                "name": "singer_count",
-                "expression": "COUNT(*)",
-                "source_column": "*"
-              }
-            ],
+            "analysis_goal": "answer_question",
+            "metrics": [],
             "dimensions": [],
             "filters": [],
             "time_range": null,
             "candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "assumptions": [
-              "Plan mode: online",
+              "Plan mode: offline",
               "Only synced local schema metadata is trusted."
             ],
             "risk_notes": [],
             "raw_plan": {
-              "intent": "count",
+              "intent": "answer_question",
               "tables": [
-                "singer"
+                "concert",
+                "singer",
+                "singer_in_concert"
               ],
-              "metrics": [
-                {
-                  "name": "singer_count",
-                  "expression": "COUNT(*)",
-                  "source_column": "*"
-                }
-              ],
+              "metrics": [],
               "dimensions": [],
               "filters": [],
-              "joins": [],
-              "order_by": "[]",
+              "joins": [
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "concert",
+                  "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                },
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "singer",
+                  "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                }
+              ],
+              "order_by": null,
               "limit": 100,
               "warnings": [],
-              "mode": "online"
+              "mode": "offline"
             }
           },
           "error": null,
-          "latency_ms": 3210
+          "latency_ms": 4
         },
         {
           "event_id": "trace_5_step_3_generate_sql_candidate_started",
           "sequence": 5,
-          "created_at_ms": 1780591212049,
+          "created_at_ms": 1780592903623,
           "type": "agent.trace.step_started",
           "step_id": "step_3_generate_sql_candidate",
           "name": "generate_sql_candidate",
@@ -1740,11 +1386,13 @@
             "question": "How many singers do we have?",
             "has_follow_up_context": false,
             "optimize_rag": true,
-            "model_name": "qwen-plus",
+            "model_name": "gpt-4o-mini",
             "has_api_key": "[REDACTED]",
-            "plan_goal": "count",
+            "plan_goal": "answer_question",
             "plan_candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "schema_context_size": 724
           },
@@ -1755,7 +1403,7 @@
         {
           "event_id": "trace_6_step_3_generate_sql_candidate_completed",
           "sequence": 6,
-          "created_at_ms": 1780591212050,
+          "created_at_ms": 1780592903624,
           "type": "agent.trace.step_completed",
           "step_id": "step_3_generate_sql_candidate",
           "name": "generate_sql_candidate",
@@ -1765,89 +1413,104 @@
             "question": "How many singers do we have?",
             "has_follow_up_context": false,
             "optimize_rag": true,
-            "model_name": "qwen-plus",
+            "model_name": "gpt-4o-mini",
             "has_api_key": "[REDACTED]",
-            "plan_goal": "count",
+            "plan_goal": "answer_question",
             "plan_candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "schema_context_size": 724
           },
           "output": {
-            "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "raw_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY [] LIMIT 100",
-            "model": "databox-query-plan-renderer",
-            "mode": "plan_guided",
-            "latency_ms": 0,
-            "schema_validation_warnings": [],
-            "rewrite_notes": [
-              "limit_added_by_guardrail"
+            "sql": "SELECT * FROM products LIMIT 10",
+            "raw_sql": null,
+            "model": "databox-local-heuristic",
+            "mode": "offline",
+            "latency_ms": 7,
+            "schema_validation_warnings": [
+              "生成 SQL 包含不存在的表: `products`"
             ],
+            "rewrite_notes": [],
             "metadata": {
-              "generation_source": "query_plan_rendered",
+              "generation_source": "generate_sql_fallback",
               "agent_query_plan": {
-                "analysis_goal": "count",
-                "metrics": [
-                  {
-                    "name": "singer_count",
-                    "expression": "COUNT(*)",
-                    "source_column": "*"
-                  }
-                ],
+                "analysis_goal": "answer_question",
+                "metrics": [],
                 "dimensions": [],
                 "filters": [],
                 "time_range": null,
                 "candidate_tables": [
-                  "singer"
+                  "concert",
+                  "singer",
+                  "singer_in_concert"
                 ],
                 "assumptions": [
-                  "Plan mode: online",
+                  "Plan mode: offline",
                   "Only synced local schema metadata is trusted."
                 ],
                 "risk_notes": [],
                 "raw_plan": {
-                  "intent": "count",
+                  "intent": "answer_question",
                   "tables": [
-                    "singer"
+                    "concert",
+                    "singer",
+                    "singer_in_concert"
                   ],
-                  "metrics": [
-                    {
-                      "name": "singer_count",
-                      "expression": "COUNT(*)",
-                      "source_column": "*"
-                    }
-                  ],
+                  "metrics": [],
                   "dimensions": [],
                   "filters": [],
-                  "joins": [],
-                  "order_by": "[]",
+                  "joins": [
+                    {
+                      "left_table": "singer_in_concert",
+                      "right_table": "concert",
+                      "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                    },
+                    {
+                      "left_table": "singer_in_concert",
+                      "right_table": "singer",
+                      "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                    }
+                  ],
+                  "order_by": null,
                   "limit": 100,
                   "warnings": [],
-                  "mode": "online"
+                  "mode": "offline"
                 }
               },
               "query_plan": {
-                "intent": "count",
+                "intent": "answer_question",
                 "tables": [
-                  "singer"
+                  "concert",
+                  "singer",
+                  "singer_in_concert"
                 ],
-                "metrics": [
-                  {
-                    "name": "singer_count",
-                    "expression": "COUNT(*)",
-                    "source_column": "*"
-                  }
-                ],
+                "metrics": [],
                 "dimensions": [],
                 "filters": [],
-                "joins": [],
-                "order_by": "[]",
+                "joins": [
+                  {
+                    "left_table": "singer_in_concert",
+                    "right_table": "concert",
+                    "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                  },
+                  {
+                    "left_table": "singer_in_concert",
+                    "right_table": "singer",
+                    "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                  }
+                ],
+                "order_by": null,
                 "limit": 100,
                 "warnings": [],
-                "mode": "online"
+                "mode": "offline"
               },
               "selected_tables": [
-                "singer"
+                "concert",
+                "singer",
+                "singer_in_concert",
+                "stadium"
               ],
               "selected_columns": [
                 "concert.concert_ID",
@@ -1879,19 +1542,19 @@
             }
           },
           "error": null,
-          "latency_ms": 3
+          "latency_ms": 21
         },
         {
           "event_id": "trace_7_step_4_validate_sql_started",
           "sequence": 7,
-          "created_at_ms": 1780591212051,
+          "created_at_ms": 1780592903625,
           "type": "agent.trace.step_started",
           "step_id": "step_4_validate_sql",
           "name": "validate_sql",
           "status": null,
           "input": {
             "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
+            "sql_preview": "SELECT * FROM products LIMIT 10"
           },
           "output": null,
           "error": null,
@@ -1900,62 +1563,87 @@
         {
           "event_id": "trace_8_step_4_validate_sql_completed",
           "sequence": 8,
-          "created_at_ms": 1780591212052,
+          "created_at_ms": 1780592903626,
           "type": "agent.trace.step_completed",
           "step_id": "step_4_validate_sql",
           "name": "validate_sql",
           "status": "success",
           "input": {
             "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
+            "sql_preview": "SELECT * FROM products LIMIT 10"
           },
           "output": {
-            "passed": true,
-            "can_execute": true,
-            "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "schema_warnings": [],
+            "passed": false,
+            "can_execute": false,
+            "safe_sql": null,
+            "original_sql": "SELECT * FROM products LIMIT 10",
+            "schema_warnings": [
+              "生成 SQL 包含不存在的表: `products`"
+            ],
             "guardrail": {
-              "result": "pass",
-              "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "checks": [],
-              "message": "SQL 安全审核通过！"
+              "result": "warn",
+              "originalSql": "SELECT * FROM products LIMIT 10",
+              "safeSql": "SELECT * FROM products LIMIT 10",
+              "checks": [
+                {
+                  "rule": "select_star",
+                  "level": "warn",
+                  "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                }
+              ],
+              "message": "SQL 审核通过，但包含优化建议。"
             },
             "trust_gate": {
-              "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "schemaWarnings": [],
+              "sql": "SELECT * FROM products LIMIT 10",
+              "schemaWarnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "riskLevel": "safe",
-              "requiresConfirmation": false,
+              "riskLevel": "warning",
+              "requiresConfirmation": true,
               "messages": [
-                "SQL passed schema validation and guardrail checks."
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。"
               ],
               "canExecute": true
             },
             "execution_safety_decision": {
-              "decision_id": "safety-c250c15c-1e8e-4b1c-9652-c3eca5115ebc",
+              "decision_id": "safety-3e10c55e-25e3-4c5e-8315-d46b5c659a4f",
               "datasource_id": "ds-spider-concert-singer",
               "policy": "agent_readonly",
-              "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "passed": true,
-              "can_execute": true,
+              "original_sql": "SELECT * FROM products LIMIT 10",
+              "safe_sql": null,
+              "passed": false,
+              "can_execute": false,
               "requires_confirmation": false,
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "schema_warnings": [],
+              "schema_warnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "scope_state": {
                 "datasource_exists": true,
                 "datasource_id": "ds-spider-concert-singer",
@@ -1965,264 +1653,113 @@
                 "project_id": "default-project",
                 "environment_id": null
               },
-              "blocked_reasons": [],
-              "messages": [
-                "SQL passed schema validation and guardrail checks."
+              "blocked_reasons": [
+                "schema_validation",
+                "select_star"
               ],
-              "created_at": "2026-06-04T16:39:16.405704Z"
+              "messages": [
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。",
+                "Execution blocked until schema validation warnings are resolved.",
+                "Agent execution requires explicit projected columns instead of SELECT *."
+              ],
+              "created_at": "2026-06-04T17:08:23.598117Z"
             },
             "requires_confirmation": false,
             "messages": [
-              "SQL passed schema validation and guardrail checks."
+              "Schema validation found unknown tables or columns.",
+              "SQL 审核通过，但包含优化建议。",
+              "Execution blocked until schema validation warnings are resolved.",
+              "Agent execution requires explicit projected columns instead of SELECT *."
             ],
-            "blocked_reasons": [],
-            "revise_suggestion": null
+            "blocked_reasons": [
+              "schema_validation",
+              "select_star"
+            ],
+            "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
+          },
+          "error": null,
+          "latency_ms": 4
+        },
+        {
+          "event_id": "trace_9_step_5_revise_sql_started",
+          "sequence": 9,
+          "created_at_ms": 1780592903627,
+          "type": "agent.trace.step_started",
+          "step_id": "step_5_revise_sql",
+          "name": "revise_sql",
+          "status": null,
+          "input": {
+            "sql_preview": "SELECT * FROM products LIMIT 10",
+            "error": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
+          },
+          "output": null,
+          "error": null,
+          "latency_ms": null
+        },
+        {
+          "event_id": "trace_10_step_5_revise_sql_completed",
+          "sequence": 10,
+          "created_at_ms": 1780592903628,
+          "type": "agent.trace.step_completed",
+          "step_id": "step_5_revise_sql",
+          "name": "revise_sql",
+          "status": "success",
+          "input": {
+            "sql_preview": "SELECT * FROM products LIMIT 10",
+            "error": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
+          },
+          "output": {
+            "can_fix": false,
+            "fixed_sql": null,
+            "reason": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause.",
+            "changes": [],
+            "remaining_risks": [
+              "A deterministic repair was attempted, but the repaired SQL still did not pass validation.",
+              "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
+            ],
+            "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause.",
+            "blocked_sql": "SELECT * FROM products LIMIT 10"
           },
           "error": null,
           "latency_ms": 5
         },
         {
-          "event_id": "trace_9_step_5_execute_sql_started",
-          "sequence": 9,
-          "created_at_ms": 1780591212053,
-          "type": "agent.trace.step_started",
-          "step_id": "step_5_execute_sql",
-          "name": "execute_sql",
-          "status": null,
-          "input": {
-            "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
-          },
-          "output": null,
-          "error": null,
-          "latency_ms": null
-        },
-        {
-          "event_id": "trace_10_step_5_execute_sql_completed",
-          "sequence": 10,
-          "created_at_ms": 1780591212054,
-          "type": "agent.trace.step_completed",
-          "step_id": "step_5_execute_sql",
-          "name": "execute_sql",
-          "status": "failed",
-          "input": {
-            "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
-          },
-          "output": {
-            "success": false,
-            "error_type": "SQLExecutionError",
-            "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
-          },
-          "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-          "latency_ms": 14
-        },
-        {
-          "event_id": "trace_11_step_6_revise_sql_started",
+          "event_id": "trace_11_step_6_answer_synthesizer_started",
           "sequence": 11,
-          "created_at_ms": 1780591212055,
+          "created_at_ms": 1780592903629,
           "type": "agent.trace.step_started",
-          "step_id": "step_6_revise_sql",
-          "name": "revise_sql",
+          "step_id": "step_6_answer_synthesizer",
+          "name": "answer_synthesizer",
           "status": null,
           "input": {
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")"
+            "question": "How many singers do we have?",
+            "has_sql": true,
+            "has_profile": false,
+            "has_error": false
           },
           "output": null,
           "error": null,
           "latency_ms": null
         },
         {
-          "event_id": "trace_12_step_6_revise_sql_completed",
+          "event_id": "trace_12_step_6_answer_synthesizer_completed",
           "sequence": 12,
-          "created_at_ms": 1780591212056,
+          "created_at_ms": 1780592903630,
           "type": "agent.trace.step_completed",
-          "step_id": "step_6_revise_sql",
-          "name": "revise_sql",
-          "status": "success",
-          "input": {
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")"
-          },
-          "output": {
-            "can_fix": false,
-            "fixed_sql": null,
-            "reason": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-            "changes": [],
-            "remaining_risks": [
-              "The failure is not a deterministic SELECT * repair case."
-            ],
-            "revise_suggestion": "Replace SELECT * with explicit columns and add a LIMIT.",
-            "blocked_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "event_id": "trace_13_step_7_profile_result_started",
-          "sequence": 13,
-          "created_at_ms": 1780591212057,
-          "type": "agent.trace.step_started",
-          "step_id": "step_7_profile_result",
-          "name": "profile_result",
-          "status": null,
-          "input": {
-            "question": "How many singers do we have?",
-            "has_execution": true,
-            "execution_success": false
-          },
-          "output": null,
-          "error": null,
-          "latency_ms": null
-        },
-        {
-          "event_id": "trace_14_step_7_profile_result_completed",
-          "sequence": 14,
-          "created_at_ms": 1780591212058,
-          "type": "agent.trace.step_completed",
-          "step_id": "step_7_profile_result",
-          "name": "profile_result",
-          "status": "success",
-          "input": {
-            "question": "How many singers do we have?",
-            "has_execution": true,
-            "execution_success": false
-          },
-          "output": {
-            "row_count": 0,
-            "column_profiles": {},
-            "detected_patterns": [
-              "no_result"
-            ],
-            "notable_facts": [],
-            "anomalies": [],
-            "limitations": [
-              "No successful execution result was available to profile."
-            ]
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "event_id": "trace_15_step_8_suggest_chart_started",
-          "sequence": 15,
-          "created_at_ms": 1780591212059,
-          "type": "agent.trace.step_started",
-          "step_id": "step_8_suggest_chart",
-          "name": "suggest_chart",
-          "status": null,
-          "input": {
-            "has_execution": true
-          },
-          "output": null,
-          "error": null,
-          "latency_ms": null
-        },
-        {
-          "event_id": "trace_16_step_8_suggest_chart_completed",
-          "sequence": 16,
-          "created_at_ms": 1780591212060,
-          "type": "agent.trace.step_completed",
-          "step_id": "step_8_suggest_chart",
-          "name": "suggest_chart",
-          "status": "success",
-          "input": {
-            "has_execution": true
-          },
-          "output": {
-            "type": "table",
-            "x": null,
-            "y": null,
-            "reason": "No successful result set is available."
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "event_id": "trace_17_step_9_suggest_followups_started",
-          "sequence": 17,
-          "created_at_ms": 1780591212061,
-          "type": "agent.trace.step_started",
-          "step_id": "step_9_suggest_followups",
-          "name": "suggest_followups",
-          "status": null,
-          "input": {
-            "question": "How many singers do we have?",
-            "has_profile": true,
-            "has_chart": true
-          },
-          "output": null,
-          "error": null,
-          "latency_ms": null
-        },
-        {
-          "event_id": "trace_18_step_9_suggest_followups_completed",
-          "sequence": 18,
-          "created_at_ms": 1780591212062,
-          "type": "agent.trace.step_completed",
-          "step_id": "step_9_suggest_followups",
-          "name": "suggest_followups",
-          "status": "success",
-          "input": {
-            "question": "How many singers do we have?",
-            "has_profile": true,
-            "has_chart": true
-          },
-          "output": {
-            "suggestions": [
-              {
-                "label": "Break down",
-                "question": "Break this result down by a useful business dimension: How many singers do we have?",
-                "reason": "A dimension breakdown is often the next step after a direct query.",
-                "action_type": "ask"
-              }
-            ]
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "event_id": "trace_19_step_10_answer_synthesizer_started",
-          "sequence": 19,
-          "created_at_ms": 1780591212063,
-          "type": "agent.trace.step_started",
-          "step_id": "step_10_answer_synthesizer",
-          "name": "answer_synthesizer",
-          "status": null,
-          "input": {
-            "question": "How many singers do we have?",
-            "has_sql": true,
-            "has_profile": true,
-            "has_error": true
-          },
-          "output": null,
-          "error": null,
-          "latency_ms": null
-        },
-        {
-          "event_id": "trace_20_step_10_answer_synthesizer_completed",
-          "sequence": 20,
-          "created_at_ms": 1780591212064,
-          "type": "agent.trace.step_completed",
-          "step_id": "step_10_answer_synthesizer",
+          "step_id": "step_6_answer_synthesizer",
           "name": "answer_synthesizer",
           "status": "success",
           "input": {
             "question": "How many singers do we have?",
             "has_sql": true,
-            "has_profile": true,
-            "has_error": true
+            "has_profile": false,
+            "has_error": false
           },
           "output": {
-            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+            "answer": "I do not have a successful result set to analyze yet.",
             "key_findings": [],
             "evidence": [
-              {
-                "artifact_id": "result_profile",
-                "label": "Result profile",
-                "value": "0 rows profiled"
-              },
               {
                 "artifact_id": "sql_candidate",
                 "label": "SQL",
@@ -2231,18 +1768,16 @@
               {
                 "artifact_id": "safety_report",
                 "label": "Safety",
-                "value": "passed"
+                "value": "blocked"
               }
             ],
             "caveats": [
-              "No business conclusion was produced because the run did not complete successfully."
+              "Schema validation found unknown tables or columns.",
+              "SQL 审核通过，但包含优化建议。",
+              "Execution blocked until schema validation warnings are resolved."
             ],
-            "recommendations": [
-              "Break this result down by a useful business dimension: How many singers do we have?"
-            ],
-            "follow_up_questions": [
-              "Break this result down by a useful business dimension: How many singers do we have?"
-            ]
+            "recommendations": [],
+            "follow_up_questions": []
           },
           "error": null,
           "latency_ms": 0
@@ -2544,48 +2079,51 @@
             ]
           },
           "output": {
-            "analysis_goal": "count",
-            "metrics": [
-              {
-                "name": "singer_count",
-                "expression": "COUNT(*)",
-                "source_column": "*"
-              }
-            ],
+            "analysis_goal": "answer_question",
+            "metrics": [],
             "dimensions": [],
             "filters": [],
             "time_range": null,
             "candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "assumptions": [
-              "Plan mode: online",
+              "Plan mode: offline",
               "Only synced local schema metadata is trusted."
             ],
             "risk_notes": [],
             "raw_plan": {
-              "intent": "count",
+              "intent": "answer_question",
               "tables": [
-                "singer"
+                "concert",
+                "singer",
+                "singer_in_concert"
               ],
-              "metrics": [
-                {
-                  "name": "singer_count",
-                  "expression": "COUNT(*)",
-                  "source_column": "*"
-                }
-              ],
+              "metrics": [],
               "dimensions": [],
               "filters": [],
-              "joins": [],
-              "order_by": "[]",
+              "joins": [
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "concert",
+                  "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                },
+                {
+                  "left_table": "singer_in_concert",
+                  "right_table": "singer",
+                  "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                }
+              ],
+              "order_by": null,
               "limit": 100,
               "warnings": [],
-              "mode": "online"
+              "mode": "offline"
             }
           },
           "error": null,
-          "latency_ms": 3210
+          "latency_ms": 4
         },
         {
           "name": "generate_sql_candidate",
@@ -2595,89 +2133,104 @@
             "question": "How many singers do we have?",
             "has_follow_up_context": false,
             "optimize_rag": true,
-            "model_name": "qwen-plus",
-            "has_api_key": true,
-            "plan_goal": "count",
+            "model_name": "gpt-4o-mini",
+            "has_api_key": false,
+            "plan_goal": "answer_question",
             "plan_candidate_tables": [
-              "singer"
+              "concert",
+              "singer",
+              "singer_in_concert"
             ],
             "schema_context_size": 724
           },
           "output": {
-            "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "raw_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY [] LIMIT 100",
-            "model": "databox-query-plan-renderer",
-            "mode": "plan_guided",
-            "latency_ms": 0,
-            "schema_validation_warnings": [],
-            "rewrite_notes": [
-              "limit_added_by_guardrail"
+            "sql": "SELECT * FROM products LIMIT 10",
+            "raw_sql": null,
+            "model": "databox-local-heuristic",
+            "mode": "offline",
+            "latency_ms": 7,
+            "schema_validation_warnings": [
+              "生成 SQL 包含不存在的表: `products`"
             ],
+            "rewrite_notes": [],
             "metadata": {
-              "generation_source": "query_plan_rendered",
+              "generation_source": "generate_sql_fallback",
               "agent_query_plan": {
-                "analysis_goal": "count",
-                "metrics": [
-                  {
-                    "name": "singer_count",
-                    "expression": "COUNT(*)",
-                    "source_column": "*"
-                  }
-                ],
+                "analysis_goal": "answer_question",
+                "metrics": [],
                 "dimensions": [],
                 "filters": [],
                 "time_range": null,
                 "candidate_tables": [
-                  "singer"
+                  "concert",
+                  "singer",
+                  "singer_in_concert"
                 ],
                 "assumptions": [
-                  "Plan mode: online",
+                  "Plan mode: offline",
                   "Only synced local schema metadata is trusted."
                 ],
                 "risk_notes": [],
                 "raw_plan": {
-                  "intent": "count",
+                  "intent": "answer_question",
                   "tables": [
-                    "singer"
+                    "concert",
+                    "singer",
+                    "singer_in_concert"
                   ],
-                  "metrics": [
-                    {
-                      "name": "singer_count",
-                      "expression": "COUNT(*)",
-                      "source_column": "*"
-                    }
-                  ],
+                  "metrics": [],
                   "dimensions": [],
                   "filters": [],
-                  "joins": [],
-                  "order_by": "[]",
+                  "joins": [
+                    {
+                      "left_table": "singer_in_concert",
+                      "right_table": "concert",
+                      "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                    },
+                    {
+                      "left_table": "singer_in_concert",
+                      "right_table": "singer",
+                      "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                    }
+                  ],
+                  "order_by": null,
                   "limit": 100,
                   "warnings": [],
-                  "mode": "online"
+                  "mode": "offline"
                 }
               },
               "query_plan": {
-                "intent": "count",
+                "intent": "answer_question",
                 "tables": [
-                  "singer"
+                  "concert",
+                  "singer",
+                  "singer_in_concert"
                 ],
-                "metrics": [
-                  {
-                    "name": "singer_count",
-                    "expression": "COUNT(*)",
-                    "source_column": "*"
-                  }
-                ],
+                "metrics": [],
                 "dimensions": [],
                 "filters": [],
-                "joins": [],
-                "order_by": "[]",
+                "joins": [
+                  {
+                    "left_table": "singer_in_concert",
+                    "right_table": "concert",
+                    "condition": "singer_in_concert.concert_ID = concert.concert_ID"
+                  },
+                  {
+                    "left_table": "singer_in_concert",
+                    "right_table": "singer",
+                    "condition": "singer_in_concert.Singer_ID = singer.Singer_ID"
+                  }
+                ],
+                "order_by": null,
                 "limit": 100,
                 "warnings": [],
-                "mode": "online"
+                "mode": "offline"
               },
               "selected_tables": [
-                "singer"
+                "concert",
+                "singer",
+                "singer_in_concert",
+                "stadium"
               ],
               "selected_columns": [
                 "concert.concert_ID",
@@ -2707,62 +2260,87 @@
             }
           },
           "error": null,
-          "latency_ms": 3
+          "latency_ms": 21
         },
         {
           "name": "validate_sql",
           "status": "success",
           "input": {
             "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
+            "sql_preview": "SELECT * FROM products LIMIT 10"
           },
           "output": {
-            "passed": true,
-            "can_execute": true,
-            "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "schema_warnings": [],
+            "passed": false,
+            "can_execute": false,
+            "safe_sql": null,
+            "original_sql": "SELECT * FROM products LIMIT 10",
+            "schema_warnings": [
+              "生成 SQL 包含不存在的表: `products`"
+            ],
             "guardrail": {
-              "result": "pass",
-              "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "checks": [],
-              "message": "SQL 安全审核通过！"
+              "result": "warn",
+              "originalSql": "SELECT * FROM products LIMIT 10",
+              "safeSql": "SELECT * FROM products LIMIT 10",
+              "checks": [
+                {
+                  "rule": "select_star",
+                  "level": "warn",
+                  "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                }
+              ],
+              "message": "SQL 审核通过，但包含优化建议。"
             },
             "trust_gate": {
-              "sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "schemaWarnings": [],
+              "sql": "SELECT * FROM products LIMIT 10",
+              "schemaWarnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "riskLevel": "safe",
-              "requiresConfirmation": false,
+              "riskLevel": "warning",
+              "requiresConfirmation": true,
               "messages": [
-                "SQL passed schema validation and guardrail checks."
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。"
               ],
               "canExecute": true
             },
             "execution_safety_decision": {
-              "decision_id": "safety-c250c15c-1e8e-4b1c-9652-c3eca5115ebc",
+              "decision_id": "safety-3e10c55e-25e3-4c5e-8315-d46b5c659a4f",
               "datasource_id": "ds-spider-concert-singer",
               "policy": "agent_readonly",
-              "original_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "safe_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-              "passed": true,
-              "can_execute": true,
+              "original_sql": "SELECT * FROM products LIMIT 10",
+              "safe_sql": null,
+              "passed": false,
+              "can_execute": false,
               "requires_confirmation": false,
               "guardrail": {
-                "result": "pass",
-                "originalSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "safeSql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-                "checks": [],
-                "message": "SQL 安全审核通过！"
+                "result": "warn",
+                "originalSql": "SELECT * FROM products LIMIT 10",
+                "safeSql": "SELECT * FROM products LIMIT 10",
+                "checks": [
+                  {
+                    "rule": "select_star",
+                    "level": "warn",
+                    "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
+                  }
+                ],
+                "message": "SQL 审核通过，但包含优化建议。"
               },
-              "schema_warnings": [],
+              "schema_warnings": [
+                "生成 SQL 包含不存在的表: `products`"
+              ],
               "scope_state": {
                 "datasource_exists": true,
                 "datasource_id": "ds-spider-concert-singer",
@@ -2772,116 +2350,55 @@
                 "project_id": "default-project",
                 "environment_id": null
               },
-              "blocked_reasons": [],
-              "messages": [
-                "SQL passed schema validation and guardrail checks."
+              "blocked_reasons": [
+                "schema_validation",
+                "select_star"
               ],
-              "created_at": "2026-06-04T16:39:16.405704Z"
+              "messages": [
+                "Schema validation found unknown tables or columns.",
+                "SQL 审核通过，但包含优化建议。",
+                "Execution blocked until schema validation warnings are resolved.",
+                "Agent execution requires explicit projected columns instead of SELECT *."
+              ],
+              "created_at": "2026-06-04T17:08:23.598117Z"
             },
             "requires_confirmation": false,
             "messages": [
-              "SQL passed schema validation and guardrail checks."
+              "Schema validation found unknown tables or columns.",
+              "SQL 审核通过，但包含优化建议。",
+              "Execution blocked until schema validation warnings are resolved.",
+              "Agent execution requires explicit projected columns instead of SELECT *."
             ],
-            "blocked_reasons": [],
-            "revise_suggestion": null
+            "blocked_reasons": [
+              "schema_validation",
+              "select_star"
+            ],
+            "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
           },
           "error": null,
-          "latency_ms": 5
-        },
-        {
-          "name": "execute_sql",
-          "status": "failed",
-          "input": {
-            "datasource_id": "ds-spider-concert-singer",
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
-          },
-          "output": {
-            "success": false,
-            "error_type": "SQLExecutionError",
-            "revise_suggestion": "Check SQL syntax and regenerate with explicit fields and a simple LIMIT."
-          },
-          "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-          "latency_ms": 14
+          "latency_ms": 4
         },
         {
           "name": "revise_sql",
           "status": "success",
           "input": {
-            "sql_preview": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100",
-            "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")"
+            "sql_preview": "SELECT * FROM products LIMIT 10",
+            "error": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
           },
           "output": {
             "can_fix": false,
             "fixed_sql": null,
-            "reason": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+            "reason": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause.",
             "changes": [],
             "remaining_risks": [
-              "The failure is not a deterministic SELECT * repair case."
+              "A deterministic repair was attempted, but the repaired SQL still did not pass validation.",
+              "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause."
             ],
-            "revise_suggestion": "Replace SELECT * with explicit columns and add a LIMIT.",
-            "blocked_sql": "SELECT COUNT(*) AS singer_count FROM singer ORDER BY ARRAY() LIMIT 100"
+            "revise_suggestion": "Replace SELECT * with explicit column names from the synced schema, then keep a LIMIT clause.",
+            "blocked_sql": "SELECT * FROM products LIMIT 10"
           },
           "error": null,
-          "latency_ms": 0
-        },
-        {
-          "name": "profile_result",
-          "status": "success",
-          "input": {
-            "question": "How many singers do we have?",
-            "has_execution": true,
-            "execution_success": false
-          },
-          "output": {
-            "row_count": 0,
-            "column_profiles": {},
-            "detected_patterns": [
-              "no_result"
-            ],
-            "notable_facts": [],
-            "anomalies": [],
-            "limitations": [
-              "No successful execution result was available to profile."
-            ]
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "name": "suggest_chart",
-          "status": "success",
-          "input": {
-            "has_execution": true
-          },
-          "output": {
-            "type": "table",
-            "x": null,
-            "y": null,
-            "reason": "No successful result set is available."
-          },
-          "error": null,
-          "latency_ms": 0
-        },
-        {
-          "name": "suggest_followups",
-          "status": "success",
-          "input": {
-            "question": "How many singers do we have?",
-            "has_profile": true,
-            "has_chart": true
-          },
-          "output": {
-            "suggestions": [
-              {
-                "label": "Break down",
-                "question": "Break this result down by a useful business dimension: How many singers do we have?",
-                "reason": "A dimension breakdown is often the next step after a direct query.",
-                "action_type": "ask"
-              }
-            ]
-          },
-          "error": null,
-          "latency_ms": 0
+          "latency_ms": 5
         },
         {
           "name": "answer_synthesizer",
@@ -2889,18 +2406,13 @@
           "input": {
             "question": "How many singers do we have?",
             "has_sql": true,
-            "has_profile": true,
-            "has_error": true
+            "has_profile": false,
+            "has_error": false
           },
           "output": {
-            "answer": "I could not complete the analysis because: 执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+            "answer": "I do not have a successful result set to analyze yet.",
             "key_findings": [],
             "evidence": [
-              {
-                "artifact_id": "result_profile",
-                "label": "Result profile",
-                "value": "0 rows profiled"
-              },
               {
                 "artifact_id": "sql_candidate",
                 "label": "SQL",
@@ -2909,30 +2421,28 @@
               {
                 "artifact_id": "safety_report",
                 "label": "Safety",
-                "value": "passed"
+                "value": "blocked"
               }
             ],
             "caveats": [
-              "No business conclusion was produced because the run did not complete successfully."
+              "Schema validation found unknown tables or columns.",
+              "SQL 审核通过，但包含优化建议。",
+              "Execution blocked until schema validation warnings are resolved."
             ],
-            "recommendations": [
-              "Break this result down by a useful business dimension: How many singers do we have?"
-            ],
-            "follow_up_questions": [
-              "Break this result down by a useful business dimension: How many singers do we have?"
-            ]
+            "recommendations": [],
+            "follow_up_questions": []
           },
           "error": null,
           "latency_ms": 0
         }
       ],
-      "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
+      "error": null,
       "approval": null,
       "checkpoint": null
     },
     "approval": null,
     "checkpoint": null,
-    "error": "执行 SQL 遇到错误: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-    "_sse_event": "agent.run.failed"
+    "error": null,
+    "_sse_event": "agent.run.completed"
   }
 ]

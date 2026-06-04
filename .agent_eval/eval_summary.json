@@ -1,12 +1,12 @@
 {
-  "evaluation_time": "2026-06-04T16:42:10.369675+00:00",
+  "evaluation_time": "2026-06-04T17:08:24.332985+00:00",
   "total_cases": 3,
   "passed_cases": 0,
   "failed_cases": 3,
   "pass_rate": 0.0,
-  "average_latency_seconds": 63.62,
-  "total_duration_seconds": 191.02,
-  "model": "qwen-plus",
+  "average_latency_seconds": 0.31,
+  "total_duration_seconds": 1.1,
+  "model": "gpt-4o-mini",
   "cases": [
     {
       "case_id": "spider-smoke-1",
@@ -14,26 +14,26 @@
       "difficulty": "simple",
       "status": "fail",
       "score": 3,
-      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-      "latency_seconds": 72.72
+      "reason": "Agent SQL execution failed: (1146, \"Table 'spider_concert_singer.products' doesn't exist\")",
+      "latency_seconds": 0.4
     },
     {
-      "case_id": "spider-smoke-2",
-      "db_id": "concert_singer",
-      "difficulty": "simple",
-      "status": "fail",
-      "score": 3,
-      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '(STRUCT('Age' AS `column`, 'DESC' AS direction)) LIMIT 100' at line 1\")",
-      "latency_seconds": 59.96
-    },
-    {
-      "case_id": "spider-smoke-4",
-      "db_id": "concert_singer",
+      "case_id": "spider-smoke-6",
+      "db_id": "pets_1",
       "difficulty": "medium",
       "status": "fail",
       "score": 3,
-      "reason": "Agent SQL execution failed: (1064, \"You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '() LIMIT 100' at line 1\")",
-      "latency_seconds": 58.19
+      "reason": "Agent SQL execution failed: (1146, \"Table 'spider_pets_1.products' doesn't exist\")",
+      "latency_seconds": 0.27
+    },
+    {
+      "case_id": "spider-smoke-7",
+      "db_id": "pets_1",
+      "difficulty": "medium",
+      "status": "fail",
+      "score": 3,
+      "reason": "Agent SQL execution failed: (1146, \"Table 'spider_pets_1.products' doesn't exist\")",
+      "latency_seconds": 0.27
     }
   ]
 }
