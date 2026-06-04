@@ -6,6 +6,7 @@ from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.db import get_db
 from engine.errors import DataSourceConnectionError
 from engine.models import DEFAULT_PROJECT_ID, DataSource, QueryHistory, SchemaTable
+from engine.agent.types import AgentRunResponse, AgentRuntimeEvent
 import pytest
 
 
@@ -502,6 +503,124 @@ def test_agent_run_stream_endpoint_returns_sse_final_response(client) -> None:
     assert [artifact["semantic_id"] for artifact in final_response["artifacts"]] == [
         artifact["semantic_id"] for artifact in fallback["artifacts"]
     ]
+
+
+def test_agent_kernel_run_stream_endpoint_returns_sse_final_response(client) -> None:
+    resp = client.post("/api/v1/datasources", json={
+        "name": "agent_kernel_stream_endpoint_test",
+        "host": "demo",
+        "port": 3306,
+        "database_name": "demo_shop",
+        "username": "demo",
+        "password": "demo",
+    }, headers=_headers())
+    ds_id = resp.json()["id"]
+    client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
+
+    resp = client.post("/api/v1/agent-kernel/run/stream", json={
+        "datasource_id": ds_id,
+        "question": "list users",
+        "execute": False,
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    chunks = [chunk for chunk in resp.text.strip().split("\n\n") if chunk.strip()]
+    event_names: list[str] = []
+    payloads: list[dict] = []
+    for chunk in chunks:
+        lines = chunk.splitlines()
+        event_line = next(line for line in lines if line.startswith("event: "))
+        data_line = next(line for line in lines if line.startswith("data: "))
+        event_names.append(event_line.removeprefix("event: "))
+        payloads.append(json.loads(data_line.removeprefix("data: ")))
+
+    assert event_names[0] == "agent.run.started"
+    assert "agent.step.started" in event_names
+    assert "agent.step.completed" in event_names
+    assert "agent.artifact.created" in event_names
+    assert "agent.answer.completed" in event_names
+    assert event_names[-1] == "agent.run.completed"
+    assert [payload["sequence"] for payload in payloads] == list(range(1, len(payloads) + 1))
+    final_response = payloads[-1]["response"]
+    assert final_response["success"] is True
+    assert final_response["run_id"] == payloads[-1]["run_id"]
+    assert final_response["sql"].upper().startswith("SELECT")
+    assert final_response["status"] == "completed"
+
+
+def test_agent_kernel_resume_stream_endpoint_returns_sse_final_response(client, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    final_response = AgentRunResponse(
+        run_id="run_1",
+        session_id="thread_1",
+        success=True,
+        status="completed",
+        question="list users",
+        steps=[],
+    )
+
+    class FakeAgentKernelService:
+        def __init__(self, _db) -> None:
+            pass
+
+        def resume_approval_iter(
+            self,
+            *,
+            run_id: str,
+            approval_id: str,
+            approved: bool,
+            note: str | None = None,
+        ):
+            captured.update(
+                {
+                    "run_id": run_id,
+                    "approval_id": approval_id,
+                    "approved": approved,
+                    "note": note,
+                }
+            )
+            yield AgentRuntimeEvent(
+                event_id="evt_1",
+                run_id=run_id,
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.resumed",
+            )
+            yield AgentRuntimeEvent(
+                event_id="evt_2",
+                run_id=run_id,
+                sequence=2,
+                created_at_ms=2,
+                type="agent.run.completed",
+                response=final_response,
+            )
+
+    monkeypatch.setattr("engine.agent_kernel.api.AgentKernelService", FakeAgentKernelService)
+
+    resp = client.post("/api/v1/agent-kernel/resume/stream", json={
+        "run_id": "run_1",
+        "approval_id": "approval_1",
+        "approved": True,
+        "note": "reviewed",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+    chunks = [chunk for chunk in resp.text.strip().split("\n\n") if chunk.strip()]
+    event_names = [next(line for line in chunk.splitlines() if line.startswith("event: ")).removeprefix("event: ") for chunk in chunks]
+    payloads = [
+        json.loads(next(line for line in chunk.splitlines() if line.startswith("data: ")).removeprefix("data: "))
+        for chunk in chunks
+    ]
+    assert captured == {
+        "run_id": "run_1",
+        "approval_id": "approval_1",
+        "approved": True,
+        "note": "reviewed",
+    }
+    assert event_names == ["agent.run.resumed", "agent.run.completed"]
+    assert payloads[-1]["response"]["status"] == "completed"
 
 
 def test_agent_run_endpoint_accepts_followup_context(client) -> None:

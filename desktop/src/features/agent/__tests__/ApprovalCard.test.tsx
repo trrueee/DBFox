@@ -6,7 +6,7 @@ import type { AgentApproval, AgentRunResponse } from "../types";
 
 vi.mock("../../../lib/api", () => ({
   api: {
-    resolveAgentApproval: vi.fn(),
+    rejectAgentApproval: vi.fn(),
     streamResumeAgentRun: vi.fn(),
   },
 }));
@@ -46,7 +46,6 @@ afterEach(() => {
 
 describe("ApprovalCard", () => {
   it("shows approval details and resumes after approve", async () => {
-    vi.mocked(api.resolveAgentApproval).mockResolvedValue({ ...pendingApproval, status: "approved" });
     vi.mocked(api.streamResumeAgentRun).mockImplementation(async (_runId, _approvalId, options) => {
       options?.onEvent?.({
         event_id: "resume_1",
@@ -74,28 +73,30 @@ describe("ApprovalCard", () => {
 
     fireEvent.click(screen.getByText("Approve execute"));
 
-    await waitFor(() => expect(api.resolveAgentApproval).toHaveBeenCalledWith(
+    await waitFor(() => expect(api.streamResumeAgentRun).toHaveBeenCalledWith(
       "run_1",
       "approval_1",
-      "approved",
-      "Reviewed in DataBox Agent UI.",
+      expect.objectContaining({ note: "Reviewed in DataBox Agent UI." }),
     ));
-    expect(api.streamResumeAgentRun).toHaveBeenCalledWith("run_1", "approval_1", expect.any(Object));
     expect(onRuntimeEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "agent.run.resumed" }));
     expect(onResumeComplete).toHaveBeenCalledWith(finalResponse);
   });
 
   it("rejects without starting resume", async () => {
-    vi.mocked(api.resolveAgentApproval).mockResolvedValue({ ...pendingApproval, status: "rejected" });
+    vi.mocked(api.rejectAgentApproval).mockResolvedValue({
+      ...finalResponse,
+      success: false,
+      status: "failed",
+      approval: { ...pendingApproval, status: "rejected" },
+    });
 
     render(<ApprovalCard approval={pendingApproval} />);
 
     fireEvent.click(screen.getByText("Reject"));
 
-    await waitFor(() => expect(api.resolveAgentApproval).toHaveBeenCalledWith(
+    await waitFor(() => expect(api.rejectAgentApproval).toHaveBeenCalledWith(
       "run_1",
       "approval_1",
-      "rejected",
       "Rejected in DataBox Agent UI.",
     ));
     expect(api.streamResumeAgentRun).not.toHaveBeenCalled();

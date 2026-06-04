@@ -40,18 +40,21 @@ export function ApprovalCard({
     setBusy(true);
     setError(null);
     try {
-      const resolved = await api.resolveAgentApproval(
-        currentApproval.run_id,
-        currentApproval.id,
-        decision,
-        decision === "approved" ? "Reviewed in DataBox Agent UI." : "Rejected in DataBox Agent UI.",
-      );
-      setResolvedApproval(resolved);
       if (decision === "approved") {
         const resumed = await api.streamResumeAgentRun(currentApproval.run_id, currentApproval.id, {
           onEvent: onRuntimeEvent,
+          note: "Reviewed in DataBox Agent UI.",
         });
+        setResolvedApproval(resumed.approval || { ...currentApproval, status: "approved" });
         onResumeComplete?.(resumed);
+      } else {
+        const rejected = await api.rejectAgentApproval(
+          currentApproval.run_id,
+          currentApproval.id,
+          "Rejected in DataBox Agent UI.",
+        );
+        setResolvedApproval(rejected.approval || { ...currentApproval, status: "rejected" });
+        onResumeComplete?.(rejected);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval action failed.");

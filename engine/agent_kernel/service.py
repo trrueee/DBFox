@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any, Literal, cast
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command, interrupt
 from sqlalchemy.orm import Session
 
@@ -29,6 +28,7 @@ from engine.agent.types import (
 )
 from engine.errors import DataBoxError
 from engine.models import AgentRun
+from engine.agent_kernel.checkpointer import build_agent_kernel_checkpointer
 from engine.agent_kernel.controller import decide_next_action
 from engine.agent_kernel.databinding import apply_tool_result_to_state, merge_state
 from engine.agent_kernel.databox_tools import register_databox_tools
@@ -42,7 +42,7 @@ logger = logging.getLogger("databox.agent_kernel.service")
 
 
 class AgentKernelService:
-    _checkpointer = InMemorySaver()
+    _checkpointer = build_agent_kernel_checkpointer()
 
     def __init__(self, db: Session, registry: ToolRegistry | None = None):
         self.db = db
@@ -314,23 +314,36 @@ class AgentKernelService:
         )
         config = {"configurable": {"thread_id": session_id}}
 
-        for chunk in app.stream(
-            Command(resume={"decision": "approved" if approved else "rejected", "note": note}),
-            config=config,
-            stream_mode="updates",
-        ):
-            for node_name, update in chunk.items():
-                if not isinstance(update, dict):
-                    continue
-                merge_state(state, update)
-                yield from self._events_from_graph_update(
-                    emit=emit,
-                    node_name=str(node_name),
-                    update=update,
-                    agent_state=agent_state,
-                    artifact_identity=artifact_identity,
-                    emitted_artifact_ids=emitted_artifact_ids,
-                )
+        def stream_graph_updates(chunks: Any) -> Iterator[AgentRuntimeEvent]:
+            for chunk in chunks:
+                for node_name, update in chunk.items():
+                    if not isinstance(update, dict):
+                        continue
+                    merge_state(state, update)
+                    yield from self._events_from_graph_update(
+                        emit=emit,
+                        node_name=str(node_name),
+                        update=update,
+                        agent_state=agent_state,
+                        artifact_identity=artifact_identity,
+                        emitted_artifact_ids=emitted_artifact_ids,
+                    )
+
+        yield from stream_graph_updates(
+            app.stream(
+                Command(resume={"decision": "approved" if approved else "rejected", "note": note}),
+                config=config,
+                stream_mode="updates",
+            )
+        )
+
+        if approved and state.get("status") == "waiting_approval":
+            logger.warning(
+                "Agent kernel LangGraph checkpoint was unavailable for run %s; resuming from saved DB checkpoint.",
+                run_id,
+            )
+            state.update(self._approved_resume_state_from_saved_checkpoint(state, approval))
+            yield from stream_graph_updates(app.stream(dict(state), config=config, stream_mode="updates"))
 
         final_approval = agent_persistence.get_approval(self.db, approval_id) or approval
         success = state.get("status") == "completed" and not state.get("error")
@@ -378,7 +391,7 @@ class AgentKernelService:
         if decision.action == "final_answer":
             update["status"] = "completed"
             if decision.final_answer:
-                update["final_answer"] = {
+                answer_payload = {
                     "answer": decision.final_answer,
                     "key_findings": [],
                     "evidence": [],
@@ -386,6 +399,8 @@ class AgentKernelService:
                     "recommendations": [],
                     "follow_up_questions": [],
                 }
+                update["final_answer"] = answer_payload
+                update["answer"] = answer_payload
             return update
 
         if decision.action == "ask_user":
@@ -446,10 +461,13 @@ class AgentKernelService:
         raw_args = tool_call.get("args")
         args: dict[str, Any] = dict(raw_args) if isinstance(raw_args, dict) else {}
         observation = self._execute_tool(req, dict(graph_state), tool_name, args)
-        update = apply_tool_result_to_state(
-            state=dict(graph_state),
-            tool_name=tool_name,
-            observation=observation,
+        update = cast(
+            dict[str, Any],
+            apply_tool_result_to_state(
+                state=dict(graph_state),
+                tool_name=tool_name,
+                observation=observation,
+            ),
         )
         update["pending_tool_call"] = None
         update["last_tool_name"] = tool_name
@@ -535,6 +553,26 @@ class AgentKernelService:
         if not isinstance(pending, dict):
             return None
         return AgentApprovalRecord.model_validate(pending)
+
+    def _approved_resume_state_from_saved_checkpoint(
+        self,
+        state: dict[str, Any],
+        approval: AgentApprovalRecord,
+    ) -> dict[str, Any]:
+        approval_payload = approval.model_dump(mode="json")
+        safety = self._approve_safety(dict(state), approval_payload)
+        return {
+            "status": "running",
+            "pending_approval": None,
+            "pending_tool_call": None,
+            "safety": safety,
+            "trace_events": [
+                {
+                    "type": "approval.approved_from_saved_checkpoint",
+                    "payload": approval_payload,
+                }
+            ],
+        }
 
     def _save_waiting_checkpoint(
         self,
@@ -885,13 +923,13 @@ class AgentKernelService:
 
     def _session_id(self, req: AgentRunRequest) -> str:
         if req.session_id:
-            return req.session_id
+            return str(req.session_id)
         if req.follow_up_context and req.follow_up_context.session_id:
-            return req.follow_up_context.session_id
+            return str(req.follow_up_context.session_id)
         return str(uuid.uuid4())
 
     def _step_name(self, tool_name: str) -> str:
-        return {
+        step_names = {
             "followup.load_context": "load_follow_up_context",
             "schema.build_context": "build_schema_context",
             "query_plan.build": "build_query_plan",
@@ -904,7 +942,8 @@ class AgentKernelService:
             "chart.suggest": "suggest_chart",
             "followup.suggest": "suggest_followups",
             "answer.synthesize": "answer_synthesizer",
-        }.get(tool_name, tool_name)
+        }
+        return step_names.get(tool_name, tool_name)
 
     def _rollback_quietly(self) -> None:
         try:
@@ -914,4 +953,4 @@ class AgentKernelService:
 
 
 def latest_message_for_debug(state: KernelState) -> str:
-    return latest_user_message(state)
+    return str(latest_user_message(state))

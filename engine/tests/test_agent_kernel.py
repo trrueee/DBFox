@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import uuid
+from pathlib import Path
+
+from langgraph.checkpoint.memory import InMemorySaver
+
 from engine.agent import AgentRunRequest, ToolObservation
 from engine.agent import persistence as agent_persistence
 from engine.agent.runtime import DataBoxAgentRuntime
+from engine.agent_kernel.controller import _controller_state_view
 from engine.agent_kernel.databox_tools import register_databox_tools
 from engine.agent_kernel.graph import build_agent_kernel_graph, langgraph_available
 from engine.agent_kernel.policy import PolicyGate
@@ -136,7 +142,95 @@ def test_agent_kernel_graph_factory_builds_langgraph_shape() -> None:
     assert graph is not None
 
 
-def test_agent_kernel_execute_false_returns_review_response(db_session, demo_datasource) -> None:
+def test_agent_kernel_checkpointer_factory_prefers_sqlite(monkeypatch) -> None:
+    from contextlib import ExitStack
+
+    from engine.agent_kernel.checkpointer import build_agent_kernel_checkpointer
+
+    monkeypatch.delenv("DATABOX_TESTING", raising=False)
+    monkeypatch.delenv("DATABOX_AGENT_KERNEL_CHECKPOINTER", raising=False)
+    checkpoint_path = Path(".databox_runtime") / "test-checkpoints" / f"{uuid.uuid4().hex}.sqlite"
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with ExitStack() as stack:
+        checkpointer = build_agent_kernel_checkpointer(checkpoint_path, stack=stack)
+
+        assert checkpointer.__class__.__name__ == "SqliteSaver"
+    checkpoint_path.unlink(missing_ok=True)
+
+
+def test_agent_kernel_controller_state_view_includes_actionable_context() -> None:
+    view = _controller_state_view(
+        {
+            "goal": "Explain the current SQL",
+            "status": "waiting_approval",
+            "execute": True,
+            "messages": [
+                {"role": "user", "content": "list users"},
+                {"role": "assistant", "content": "Generated SQL."},
+                {"role": "user", "content": "explain this SQL"},
+            ],
+            "artifacts": [
+                {"id": "artifact_schema", "tool_name": "schema.build_context", "payload": {"tables": ["users"]}},
+                {
+                    "id": "artifact_sql",
+                    "tool_name": "sql.generate",
+                    "payload": {"sql": "SELECT id, username FROM users LIMIT 3"},
+                },
+            ],
+            "pending_approval": {
+                "id": "approval_1",
+                "tool_name": "sql.execute_readonly",
+                "status": "pending",
+                "reason": "Manual review required.",
+            },
+            "sql": "SELECT id, username FROM users LIMIT 3",
+            "safety": {
+                "safe_sql": "SELECT id, username FROM users LIMIT 3",
+                "can_execute": True,
+                "requires_confirmation": True,
+                "blocked_reasons": ["requires_confirmation"],
+            },
+            "execution": {
+                "success": True,
+                "columns": ["id", "username"],
+                "rows": [{"id": 1, "username": "alice"}, {"id": 2, "username": "bob"}],
+                "rowCount": 2,
+            },
+            "tool_results": [
+                {
+                    "name": "validate_sql",
+                    "status": "success",
+                    "output": {"safe_sql": "SELECT id, username FROM users LIMIT 3"},
+                }
+            ],
+            "workspace_context": {
+                "selected_sql": "SELECT * FROM users",
+                "selected_artifact_id": "artifact_sql",
+                "selected_table_names": ["users"],
+                "last_query_result_preview": {"columns": ["id"], "rows": [{"id": 1}]},
+            },
+            "plan_events": [
+                {"operation": "create_plan", "step": {"id": "step_1", "title": "Generate SQL", "status": "completed"}}
+            ],
+            "step_count": 4,
+            "max_steps": 20,
+        }
+    )
+
+    assert view["latest_messages"][-1] == {"role": "user", "content": "explain this SQL"}
+    assert view["latest_artifacts"][-1]["id"] == "artifact_sql"
+    assert view["pending_approval"]["id"] == "approval_1"
+    assert view["sql_preview"] == "SELECT id, username FROM users LIMIT 3"
+    assert view["safe_sql_preview"] == "SELECT id, username FROM users LIMIT 3"
+    assert view["execution_preview"] == {"success": True, "row_count": 2, "columns": ["id", "username"]}
+    assert view["last_tool_result"]["name"] == "validate_sql"
+    assert view["workspace_context_summary"]["selected_artifact_id"] == "artifact_sql"
+    assert view["workspace_context_summary"]["selected_table_names"] == ["users"]
+    assert view["plan_events"][-1]["operation"] == "create_plan"
+
+
+def test_agent_kernel_fallback_execute_false_returns_review_response(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", execute=False)
 
@@ -161,6 +255,37 @@ def test_agent_kernel_execute_false_returns_review_response(db_session, demo_dat
         "answer_synthesizer",
     ]
     assert res.steps[4].status == "skipped"
+
+
+def test_agent_kernel_fallback_explains_workspace_sql_without_schema_restart(
+    db_session,
+    demo_datasource,
+    monkeypatch,
+) -> None:
+    def fail_schema_context(*_args, **_kwargs):
+        raise AssertionError("SQL explanation follow-up should not restart schema context building.")
+
+    monkeypatch.setattr("engine.agent_kernel.databox_tools.build_schema_context_tool", fail_schema_context)
+
+    res = AgentKernelService(db_session).run(
+        AgentRunRequest(
+            datasource_id=demo_datasource.id,
+            question="Explain this SQL",
+            execute=False,
+            workspace_context={
+                "datasource_id": demo_datasource.id,
+                "selected_sql": "SELECT id, username FROM users LIMIT 3",
+                "selected_artifact_id": "artifact_sql",
+            },
+            session_id="workspace-sql-explain-thread",
+        )
+    )
+
+    assert res.success is True, res.model_dump()
+    assert res.status == "completed"
+    assert res.answer is not None
+    assert "SELECT id, username FROM users LIMIT 3" in res.answer.answer
+    assert res.steps == []
 
 
 def test_agent_kernel_service_uses_graph_factory(db_session, demo_datasource, monkeypatch) -> None:
@@ -260,6 +385,38 @@ def test_agent_kernel_resume_after_approval_continues_from_interrupt(
     assert resumed.safety["requires_confirmation"] is False
     assert resumed.safety["approval"]["status"] == "approved"
     assert "execute_sql" in [step.name for step in resumed.steps]
+    assert resumed.execution is not None
+    assert resumed.execution["success"] is True
+
+
+def test_agent_kernel_resume_after_service_restart_uses_saved_checkpoint(
+    db_session,
+    demo_datasource,
+    monkeypatch,
+) -> None:
+    response, approval, _events = _kernel_waiting_run(
+        db_session,
+        demo_datasource,
+        monkeypatch,
+        session_id="kernel-approve-after-restart",
+    )
+
+    original_checkpointer = AgentKernelService._checkpointer
+    AgentKernelService._checkpointer = InMemorySaver()
+    try:
+        resumed = AgentKernelService(db_session).resume_approval(
+            run_id=response.run_id,
+            approval_id=approval.id,
+            approved=True,
+            note="OK after restart",
+        )
+    finally:
+        AgentKernelService._checkpointer = original_checkpointer
+
+    assert resumed.success is True, resumed.model_dump()
+    assert resumed.status == "completed"
+    assert resumed.approval is not None
+    assert resumed.approval.status == "approved"
     assert resumed.execution is not None
     assert resumed.execution["success"] is True
 

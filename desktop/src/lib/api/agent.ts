@@ -153,7 +153,7 @@ async function streamAgentRun(
   options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    "/query/agent-run/stream",
+    "/agent-kernel/run/stream",
     buildAgentRunPayload(datasourceId, question, config),
     options,
   );
@@ -161,12 +161,17 @@ async function streamAgentRun(
 
 export async function streamResumeAgentRun(
   runId: string,
-  approvalId?: string | null,
-  options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
+  approvalId: string,
+  options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void; note?: string | null },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    `/query/agent-runs/${encodeURIComponent(runId)}/resume/stream`,
-    { approval_id: approvalId || null },
+    "/agent-kernel/resume/stream",
+    {
+      run_id: runId,
+      approval_id: approvalId,
+      approved: true,
+      note: options?.note || null,
+    },
     options,
   );
 }
@@ -262,15 +267,25 @@ export const resolveAgentApproval = (
     body: JSON.stringify({ decision, note }),
   });
 
-export const resumeAgentRun = (runId: string, approvalId?: string | null) =>
-  request<AgentRunResponse>(`/query/agent-runs/${encodeURIComponent(runId)}/resume`, {
+export const resumeAgentRun = (runId: string, approvalId: string) =>
+  request<AgentRunResponse>("/agent-kernel/resume", {
     method: "POST",
-    body: JSON.stringify({ approval_id: approvalId || null }),
+    body: JSON.stringify({ run_id: runId, approval_id: approvalId, approved: true, note: null }),
+  });
+
+export const rejectAgentApproval = (
+  runId: string,
+  approvalId: string,
+  note?: string,
+) =>
+  request<AgentRunResponse>("/agent-kernel/reject", {
+    method: "POST",
+    body: JSON.stringify({ run_id: runId, approval_id: approvalId, note }),
   });
 
 export const agentApi = {
   runAgentQuery: (datasourceId: string, question: string, config?: AgentRunConfig, signal?: AbortSignal) =>
-    request<AgentRunResponse>("/query/agent-run", {
+    request<AgentRunResponse>("/agent-kernel/run", {
       method: "POST",
       body: JSON.stringify(buildAgentRunPayload(datasourceId, question, config)),
       signal,
@@ -308,6 +323,8 @@ export const agentApi = {
   resolveAgentApproval,
 
   resumeAgentRun,
+
+  rejectAgentApproval,
 
   streamResumeAgentRun,
 };
