@@ -68,10 +68,22 @@ def main():
 
             with cfg_path.open("r", encoding="utf-8") as fh:
                 cfg = _json.load(fh)
-            # merge known keys into env if not already present
-            for k in ("DATABOX_LLM_PROVIDER", "DATABOX_LLM_MODEL", "OPENAI_API_KEY", "DASHSCOPE_API_KEY", "DATABOX_LLM_API_KEY"):
-                if k in cfg and k not in env:
-                    env[k] = str(cfg[k])
+            llm = cfg.get("llm") if isinstance(cfg, dict) else None
+            if isinstance(llm, dict):
+                # merge known keys into env if not already present
+                if "provider" in llm and "DATABOX_LLM_PROVIDER" not in env:
+                    env["DATABOX_LLM_PROVIDER"] = str(llm.get("provider"))
+                if "model_name" in llm and "DATABOX_LLM_MODEL" not in env:
+                    env["DATABOX_LLM_MODEL"] = str(llm.get("model_name"))
+                if "api_key" in llm and "DATABOX_LLM_API_KEY" not in env:
+                    env["DATABOX_LLM_API_KEY"] = str(llm.get("api_key"))
+                if "api_base" in llm and "DATABOX_LLM_API_BASE" not in env:
+                    env["DATABOX_LLM_API_BASE"] = str(llm.get("api_base"))
+            else:
+                # legacy flat keys
+                for k in ("DATABOX_LLM_PROVIDER", "DATABOX_LLM_MODEL", "OPENAI_API_KEY", "DASHSCOPE_API_KEY", "DATABOX_LLM_API_KEY"):
+                    if k in cfg and k not in env:
+                        env[k] = str(cfg[k])
     except Exception:
         pass
 

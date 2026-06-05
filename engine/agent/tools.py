@@ -157,13 +157,33 @@ def generate_sql_tool(
             }
             generation_source = "query_plan_rendered"
         else:
-            result = generate_sql(
-                db,
-                req.datasource_id,
-                _question_with_plan(question, query_plan) if req.api_key else question,
-                llm_config=_llm_config(req),
-                optimize_rag=req.optimize_rag,
-            )
+            if require_llm and not req.api_key:
+                result = {
+                    "sql": None,
+                    "model": "databox-local-heuristic",
+                    "mode": "fallback_unavailable",
+                    "latencyMs": 0,
+                    "schemaValidationWarnings": [],
+                    "queryPlan": query_plan.get("raw_plan") or query_plan,
+                    "selectedTables": query_plan.get("candidate_tables", []),
+                    "selectedColumns": schema_context.get("candidate_columns", []),
+                    "schemaContextSize": schema_context.get("schema_context_size"),
+                    "metadata": {
+                        "generation_source": "generate_sql_fallback",
+                        "fallback_reason": fallback_reason or "no_llm_api_key",
+                        "blocked_reason": "no_llm_api_key",
+                        "requires_llm": True,
+                    },
+                    "error": "Complex SQL fallback requires a configured LLM API key.",
+                }
+            else:
+                result = generate_sql(
+                    db,
+                    req.datasource_id,
+                    _question_with_plan(question, query_plan) if req.api_key else question,
+                    llm_config=_llm_config(req),
+                    optimize_rag=req.optimize_rag,
+                )
             generation_source = "generate_sql_fallback"
         raw_sql = str(result.get("sql", "") or "").strip()
         sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, req.datasource_id, raw_sql)

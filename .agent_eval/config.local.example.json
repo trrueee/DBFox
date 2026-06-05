@@ -1,0 +1,19 @@
+{
+  "llm": {
+    "provider": "dashscope",
+    "model_name": "qwen-plus",
+    "api_key": "YOUR_API_KEY_HERE",
+    "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  },
+  "backend": {
+    "base_url": "http://127.0.0.1:18625"
+  },
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3307,
+    "user": "root",
+    "password": "root"
+  },
+  "execute": true,
+  "max_steps": 15
+}

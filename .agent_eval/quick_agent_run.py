@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import sys
 import time
@@ -13,7 +14,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from eval_common import get_local_token, get_local_token_path  # noqa: E402
+from eval_common import get_local_token, get_local_token_path, load_llm_config  # noqa: E402
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -248,49 +249,6 @@ def summarize_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         or "execute_sql" in trace_step_names
         or any(event.get("step", {}).get("name") == "execute_sql" for event in events if isinstance(event.get("step"), dict))
     )
-
-
-def _extract_execute_sql_status(steps: list[dict[str, Any]], trace_events: list[dict[str, Any]]) -> dict[str, Any]:
-    execute_steps = []
-
-    for step in steps:
-        if step.get("name") == "execute_sql":
-            execute_steps.append(step)
-
-    for trace in trace_events:
-        if trace.get("name") == "execute_sql":
-            execute_steps.append(trace)
-
-    if not execute_steps:
-        return {
-            "execute_sql_step_appeared": False,
-            "execute_sql_status": None,
-            "execute_sql_executed": False,
-        }
-
-    last = execute_steps[-1]
-    status = last.get("status")
-    output = last.get("output") if isinstance(last.get("output"), dict) else {}
-    input_ = last.get("input") if isinstance(last.get("input"), dict) else {}
-
-    skipped = (
-        status == "skipped"
-        or input_.get("execute") is False
-        or "not executed" in str(output.get("reason", "")).lower()
-    )
-
-    executed = bool(
-        status == "success"
-        and not skipped
-        and output.get("success", True) is not False
-    )
-
-    return {
-        "execute_sql_step_appeared": True,
-        "execute_sql_status": status,
-        "execute_sql_executed": executed,
-    }
-
     final_answer_values: list[Any] = []
     final_error_values: list[Any] = []
 
@@ -390,6 +348,48 @@ def _extract_execute_sql_status(steps: list[dict[str, Any]], trace_events: list[
     return summary
 
 
+def _extract_execute_sql_status(steps: list[dict[str, Any]], trace_events: list[dict[str, Any]]) -> dict[str, Any]:
+    execute_steps = []
+
+    for step in steps:
+        if step.get("name") == "execute_sql":
+            execute_steps.append(step)
+
+    for trace in trace_events:
+        if trace.get("name") == "execute_sql":
+            execute_steps.append(trace)
+
+    if not execute_steps:
+        return {
+            "execute_sql_step_appeared": False,
+            "execute_sql_status": None,
+            "execute_sql_executed": False,
+        }
+
+    last = execute_steps[-1]
+    status = last.get("status")
+    output = last.get("output") if isinstance(last.get("output"), dict) else {}
+    input_ = last.get("input") if isinstance(last.get("input"), dict) else {}
+
+    skipped = (
+        status == "skipped"
+        or input_.get("execute") is False
+        or "not executed" in str(output.get("reason", "")).lower()
+    )
+
+    executed = bool(
+        status == "success"
+        and not skipped
+        and output.get("success", True) is not False
+    )
+
+    return {
+        "execute_sql_step_appeared": True,
+        "execute_sql_status": status,
+        "execute_sql_executed": executed,
+    }
+
+
 def run_case(
     case: dict[str, Any],
     *,
@@ -397,6 +397,7 @@ def run_case(
     token: str,
     execute: bool,
     max_steps: int,
+    llm_config: dict[str, Any] | None = None,
     timeout: int = 180,
 ) -> tuple[list[dict[str, Any]] | None, dict[str, Any] | None, int | None]:
     run_url = f"{base_url.rstrip('/')}/api/v1/agent-kernel/run/stream"
@@ -406,6 +407,13 @@ def run_case(
         "execute": execute,
         "max_steps": max_steps,
     }
+    llm_config = llm_config or {}
+    if llm_config.get("api_key"):
+        payload["api_key"] = llm_config["api_key"]
+    if llm_config.get("api_base"):
+        payload["api_base"] = llm_config["api_base"]
+    if llm_config.get("model_name"):
+        payload["model_name"] = llm_config["model_name"]
     headers = {"X-Local-Token": token, "Content-Type": "application/json"}
 
     try:
@@ -509,6 +517,11 @@ def main() -> None:
     parser.add_argument("--max-steps", default=15, type=int)
     parser.add_argument("--save-events-dir", default=None)
     parser.add_argument("--include-events-in-jsonl", action="store_true")
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--api-key-env", default=None)
+    parser.add_argument("--model-name", default=None)
+    parser.add_argument("--api-base", default=None)
+    parser.add_argument("--provider", default=None)
     args = parser.parse_args()
 
     base_url = args.base_url
@@ -516,6 +529,20 @@ def main() -> None:
     out_path = Path(args.out)
     execute = parse_bool(args.execute)
     save_events_dir = Path(args.save_events_dir) if args.save_events_dir else None
+
+    overrides: dict[str, Any] = {}
+    if args.provider:
+        overrides["provider"] = args.provider
+    if args.model_name:
+        overrides["model_name"] = args.model_name
+    if args.api_base:
+        overrides["api_base"] = args.api_base
+    if args.api_key_env:
+        overrides["api_key"] = os.getenv(args.api_key_env)
+
+    llm_config = load_llm_config(args.config, overrides=overrides)
+    if not llm_config.get("api_key") or not llm_config.get("model_name"):
+        print("WARNING: No LLM config available; complex fallback will fail-closed.")
 
     health_check(base_url)
 
@@ -548,6 +575,7 @@ def main() -> None:
             token=token,
             execute=execute,
             max_steps=args.max_steps,
+            llm_config=llm_config,
         )
 
         record = collect_metadata(
@@ -557,6 +585,9 @@ def main() -> None:
             status_code=status_code,
             execute_requested=execute,
         )
+        record["provider_from_config"] = llm_config.get("provider")
+        record["model_from_config"] = llm_config.get("model_name")
+        record["has_api_key_from_config"] = bool(llm_config.get("api_key"))
 
         write_case_files(
             save_events_dir=save_events_dir,
@@ -580,177 +611,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
-import json
-import httpx
-import argparse
-from pathlib import Path
-import time
-import sys
-
-# Allow running this file directly as a script (python .agent_eval/quick_agent_run.py)
-# by ensuring the .agent_eval directory is on sys.path and importing eval_common normally.
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:
-    sys.path.insert(0, str(HERE))
-from eval_common import get_local_token, get_local_token_path
-
-
-def parse_sse_lines(response: httpx.Response):
-    events = []
-    current_event = None
-    current_data = []
-    for raw_line in response.iter_lines():
-        line = raw_line.strip() if raw_line else ""
-        if not line:
-            if current_data:
-                payload = "\n".join(current_data)
-                try:
-                    event = json.loads(payload)
-                    if current_event:
-                        event["_sse_event"] = current_event
-                    events.append(event)
-                except json.JSONDecodeError:
-                    events.append({"_sse_event": current_event or "unknown", "raw": payload})
-            current_event = None
-            current_data = []
-            continue
-        if line.startswith("event:"):
-            current_event = line[len("event:"):].strip()
-        elif line.startswith("data:"):
-            current_data.append(line[len("data:"):].strip())
-    return events
-
-
-def run_case(case, base_url: str, token: str, execute: bool, max_steps: int, timeout: int = 180):
-    run_url = f"{base_url.rstrip('/')}/api/v1/agent-kernel/run/stream"
-    payload = {
-        "datasource_id": f"ds-spider-{case['db_id'].replace('_','-')}",
-        "question": case['question'],
-        "execute": execute,
-        "max_steps": max_steps,
-    }
-    headers = {"X-Local-Token": token, "Content-Type": "application/json"}
-    client = httpx.Client(timeout=60.0)
-    try:
-        # Lightweight pre-check: attempt a simple POST to ensure TCP connects and server accepts POST.
-        try:
-            r = client.post(run_url, json={"datasource_id": payload["datasource_id"], "question": payload["question"], "execute": False, "max_steps": 1}, headers=headers, timeout=5.0)
-            # If server rejects method or requires stream, we still proceed to stream path when status indicates OK-ish.
-            if r.status_code not in (200, 204, 422):
-                # return structured HTTP error
-                return None, {"error": f"HTTP {r.status_code}", "body": r.text[:400], "status_code": r.status_code}
-        except Exception as pre_e:
-            # connection-level error — report it clearly
-            return None, {"error": "connection_error", "detail": repr(pre_e), "message": str(pre_e)}
-
-        # Now open streaming connection
-        with client.stream("POST", run_url, json=payload, headers=headers, timeout=timeout) as resp:
-            if resp.status_code != 200:
-                return None, {"error": f"HTTP {resp.status_code}", "body": resp.text[:400], "status_code": resp.status_code}
-            events = parse_sse_lines(resp)
-            return events, None
-    except Exception as e:
-        return None, {"error": "exception", "detail": repr(e), "message": str(e)}
-    finally:
-        client.close()
-
-
-def collect_metadata(case_id, events, err):
-    rec = {
-        "case_id": case_id,
-        "error": None,
-        "status_code": None,
-        "events_count": 0,
-        "final_status": None,
-        "generation_source": None,
-        "agent_sql": None,
-        "safety.can_execute": None,
-        "blocked_reasons": None,
-    }
-    if err:
-        rec["error"] = err
-        return rec
-    rec["events_count"] = len(events)
-    # try to extract useful fields from events
-    for ev in events:
-        if isinstance(ev, dict):
-            # candidate/gen info
-            if "generation_source" in ev:
-                rec["generation_source"] = ev.get("generation_source")
-            if "agent_sql" in ev:
-                rec["agent_sql"] = ev.get("agent_sql")
-            if "safe_sql" in ev:
-                rec["agent_sql"] = ev.get("safe_sql")
-            # nested safety
-            safety = ev.get("safety") or ev.get("safety_check") or {}
-            if isinstance(safety, dict):
-                if "can_execute" in safety:
-                    rec["safety.can_execute"] = safety.get("can_execute")
-                if "blocked_reasons" in safety:
-                    rec["blocked_reasons"] = safety.get("blocked_reasons")
-            # final status
-            if ev.get("status"):
-                rec["final_status"] = ev.get("status")
-    return rec
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://127.0.0.1:18625")
-    parser.add_argument("--cases", default=".agent_eval/cases.smoke_subset.json")
-    parser.add_argument("--out", default=".agent_eval/outputs/agent_only_results.jsonl")
-    parser.add_argument("--execute", default="false")
-    parser.add_argument("--max-steps", default=15, type=int)
-    args = parser.parse_args()
-
-    base_url = args.base_url
-    cases_path = Path(args.cases)
-    out_path = Path(args.out)
-    execute = str(args.execute).lower() in ("1", "true", "yes")
-    max_steps = args.max_steps
-
-    # preflight health
-    try:
-        r = httpx.get(f"{base_url.rstrip('/')}/api/v1/health", timeout=3.0)
-        if r.status_code != 200:
-            print("Health check failed:", r.status_code, r.text[:200])
-            print("Please run: python .agent_eval/start_eval_backend.py")
-            raise SystemExit(2)
-    except Exception as e:
-        print("Health check error for base_url=", base_url)
-        print("Error:", e)
-        print("Please run: python .agent_eval/start_eval_backend.py")
-        raise SystemExit(2)
-
-    # token
-    token_path = get_local_token_path()
-    if not token_path:
-        print("Local token not found. Ensure backend started and token file exists.")
-        raise SystemExit(3)
-    token = get_local_token()
-
-    if not cases_path.exists():
-        print("Cases file not found:", cases_path)
-        raise SystemExit(4)
-
-    CASES = json.loads(cases_path.read_text(encoding='utf-8'))
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    outputs = []
-
-    for case in CASES:
-        cid = case.get("case_id")
-        print("Running:", cid)
-        events, err = run_case(case, base_url, token, execute, max_steps)
-        rec = collect_metadata(cid, events, err)
-        outputs.append(rec)
-        print('done', cid, 'err=', rec.get('error'))
-        time.sleep(0.5)
-
-    out_path.write_text('\n'.join(json.dumps(r, ensure_ascii=False) for r in outputs), encoding='utf-8')
-    print('\nWrote', out_path)
-
-
-if __name__ == '__main__':
     main()
