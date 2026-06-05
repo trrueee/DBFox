@@ -42,6 +42,11 @@ EVAL_DIR = PROJECT_ROOT / ".agent_eval"
 RESULTS_DIR = EVAL_DIR / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+if str(EVAL_DIR) not in sys.path:
+    sys.path.insert(0, str(EVAL_DIR))
+
+from spider_sql_canonicalizer import canonicalize_gold_sql_with_warnings
+
 STATUS_BUCKETS = [
     "pass",
     "eval_env_failed",
@@ -157,6 +162,56 @@ def fetch_mysql_tables(
             conn.close()
     except Exception as exc:
         return None, str(exc)
+
+
+def execute_gold_sql_for_case(
+    *,
+    mysql_host: str,
+    mysql_port: int,
+    mysql_user: str,
+    mysql_password: str,
+    mysql_db: str,
+    db_id: str,
+    gold_sql: str,
+) -> dict[str, Any]:
+    """Canonicalize and execute a Spider gold SQL query against imported MySQL."""
+    mysql_tables, table_err = fetch_mysql_tables(
+        mysql_host,
+        mysql_port,
+        mysql_user,
+        mysql_password,
+        mysql_db,
+    )
+    warnings: list[str] = []
+    if table_err:
+        canonical_gold_sql = gold_sql
+        warnings.append(f"canonicalization_skipped_table_fetch_failed:{table_err}")
+    else:
+        canonical_gold_sql, warnings = canonicalize_gold_sql_with_warnings(
+            gold_sql,
+            db_id=db_id,
+            table_names=mysql_tables or [],
+        )
+
+    rows, columns, error = execute_mysql_query(
+        mysql_host,
+        mysql_port,
+        mysql_user,
+        mysql_password,
+        mysql_db,
+        canonical_gold_sql,
+    )
+
+    return {
+        "gold_rows": rows,
+        "gold_cols": columns,
+        "gold_error": error,
+        "gold_sql_original": gold_sql,
+        "gold_sql_canonical": canonical_gold_sql,
+        "gold_sql_was_canonicalized": canonical_gold_sql != gold_sql,
+        "gold_sql_canonicalization_warnings": warnings,
+        "mysql_tables": mysql_tables or [],
+    }
 
 
 def fetch_databox_schema_tables(
@@ -983,6 +1038,10 @@ def main() -> None:
 
         case_start = time.time()
         gold_rows, gold_cols, gold_err = None, None, None
+        gold_sql_original = gold_sql
+        gold_sql_canonical = gold_sql
+        gold_sql_was_canonicalized = False
+        gold_sql_canonicalization_warnings: list[str] = []
         agent_rows, agent_cols, agent_exec_err = None, None, None
         execution_match: bool | None = None
         reason = ""
@@ -990,11 +1049,30 @@ def main() -> None:
 
         # --- Eval environment preflight ---
         if gold_sql:
-            gold_rows, gold_cols, gold_err = execute_mysql_query(
-                mysql_host, mysql_port, mysql_user, mysql_password, mysql_db, gold_sql
+            gold_exec = execute_gold_sql_for_case(
+                mysql_host=mysql_host,
+                mysql_port=mysql_port,
+                mysql_user=mysql_user,
+                mysql_password=mysql_password,
+                mysql_db=mysql_db,
+                db_id=db_id,
+                gold_sql=gold_sql,
             )
+            gold_rows = gold_exec["gold_rows"]
+            gold_cols = gold_exec["gold_cols"]
+            gold_err = gold_exec["gold_error"]
+            gold_sql_original = gold_exec["gold_sql_original"]
+            gold_sql_canonical = gold_exec["gold_sql_canonical"]
+            gold_sql_was_canonicalized = bool(gold_exec["gold_sql_was_canonicalized"])
+            gold_sql_canonicalization_warnings = list(
+                gold_exec.get("gold_sql_canonicalization_warnings") or []
+            )
+            if gold_sql_was_canonicalized:
+                print(f"  Canonical Gold SQL: {gold_sql_canonical}")
+            if gold_sql_canonicalization_warnings:
+                print(f"  Gold canonicalization warnings: {gold_sql_canonicalization_warnings}")
             if gold_err:
-                reason = f"Gold SQL execution failed: {gold_err}"
+                reason = f"canonical_gold_failed: Gold SQL execution failed: {gold_err}"
                 print(f"  [GOLD ERR] Gold SQL error: {gold_err}")
             else:
                 print(f"  Gold rows: {len(gold_rows)} cols={gold_cols}")
@@ -1039,6 +1117,10 @@ def main() -> None:
                 "question": question,
                 "difficulty": difficulty,
                 "gold_sql": gold_sql,
+                "gold_sql_original": gold_sql_original,
+                "gold_sql_canonical": gold_sql_canonical,
+                "gold_sql_was_canonicalized": gold_sql_was_canonicalized,
+                "gold_sql_canonicalization_warnings": gold_sql_canonicalization_warnings,
                 "agent_sql": None,
                 "safe_sql": None,
                 "agent_answer": None,
@@ -1127,7 +1209,7 @@ def main() -> None:
                 reason = f"Agent SQL execution failed: {agent_exec_err}"
                 print(f"  [AGENT ERR] Agent SQL error: {agent_exec_err}")
             elif gold_rows is not None:
-                has_order = "order by" in gold_sql.lower()
+                has_order = "order by" in gold_sql_canonical.lower()
                 is_match, match_reason = compare_results(gold_rows, agent_rows, has_order)
                 execution_match = is_match
                 if is_match:
@@ -1171,6 +1253,10 @@ def main() -> None:
             "question": question,
             "difficulty": difficulty,
             "gold_sql": gold_sql,
+            "gold_sql_original": gold_sql_original,
+            "gold_sql_canonical": gold_sql_canonical,
+            "gold_sql_was_canonicalized": gold_sql_was_canonicalized,
+            "gold_sql_canonicalization_warnings": gold_sql_canonicalization_warnings,
             "agent_sql": agent_sql,
             "safe_sql": safe_sql,
             "agent_answer": answer,
@@ -1213,6 +1299,12 @@ def main() -> None:
         "average_latency_seconds": round(avg_latency, 2),
         "total_duration_seconds": round(eval_latency, 2),
         "status_counts": build_status_summary(results),
+        "gold_sql_canonicalized_count": sum(
+            1 for r in results if r.get("gold_sql_was_canonicalized")
+        ),
+        "gold_sql_canonicalization_failed_count": sum(
+            1 for r in results if r.get("gold_error")
+        ),
         "model": model,
         "cases": [
             {
@@ -1223,6 +1315,7 @@ def main() -> None:
                 "score": r.get("quality", {}).get("score", 0),
                 "reason": r.get("reason", ""),
                 "latency_seconds": r["latency_seconds"],
+                "gold_sql_was_canonicalized": r.get("gold_sql_was_canonicalized", False),
             }
             for r in results
         ],
