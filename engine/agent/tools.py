@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+import json
 from typing import Any, Callable
 
 import sqlglot
@@ -14,6 +15,8 @@ from engine.agent.context import analysis_question, context_summary, referenced_
 from engine.agent.prompts import RESULT_EXPLANATION_SECTIONS
 from engine.agent.recommendations import suggest_followups
 from engine.agent.result_profiler import profile_result
+from engine.agent.semantic_contract import QueryContract, build_query_contract
+from engine.agent.sql_semantic_verifier import SemanticViolation, verify_sql_against_contract
 from engine.agent.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCandidate, ToolObservation
 from engine.errors import DataBoxError
 from engine.executor import execute_query
@@ -132,8 +135,13 @@ def generate_sql_tool(
     }
 
     def body() -> dict[str, Any]:
+        contract = build_query_contract(question, schema_context, query_plan)
         # Decide whether plan requires LLM fallback first
         require_llm, fallback_reason = _plan_requires_llm_sql(query_plan, question=question)
+        contract_requires_llm, contract_reason = _contract_requires_llm(contract)
+        if contract_requires_llm:
+            require_llm = True
+            fallback_reason = fallback_reason or contract_reason
         # Check low-confidence BEFORE attempting deterministic renderer (P1 guard)
         if not require_llm:
             low_conf, low_reason = _plan_is_low_confidence_for_render(query_plan, question=question)
@@ -194,20 +202,43 @@ def generate_sql_tool(
                 result = generate_sql(
                     db,
                     req.datasource_id,
-                    _question_with_plan(question, query_plan) if req.api_key else question,
+                    _question_with_contract(question, schema_context, query_plan, contract) if req.api_key else question,
                     llm_config=_llm_config(req),
                     optimize_rag=req.optimize_rag,
                 )
             generation_source = "generate_sql_fallback"
         raw_sql = str(result.get("sql", "") or "").strip()
         sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, req.datasource_id, raw_sql)
-        # Anti-join verifier: if question is anti-join and generated SQL has
-        # DISTINCT or NOT IN, prefer NOT EXISTS without DISTINCT.
-        if sql and _question_is_antijoin(question):
-            fixed = _fix_antijoin_sql(db, req.datasource_id, sql, question)
-            if fixed and fixed != sql:
-                rewrite_notes.append("antijoin_rewritten_to_not_exists")
-                sql = fixed
+        semantic_retry_attempted = False
+        semantic_initial_violations: list[dict[str, Any]] = []
+        semantic_violations = verify_sql_against_contract(sql, contract, schema_context) if sql else []
+        if sql and _has_retryable_semantic_violations(semantic_violations) and req.api_key:
+            semantic_retry_attempted = True
+            semantic_initial_violations = _semantic_violation_payload(semantic_violations)
+            retry_prompt = _semantic_retry_prompt(
+                question=question,
+                schema_context=schema_context,
+                contract=contract,
+                previous_sql=sql,
+                violations=semantic_violations,
+            )
+            retry_result = generate_sql(
+                db,
+                req.datasource_id,
+                retry_prompt,
+                llm_config=_llm_config(req),
+                optimize_rag=req.optimize_rag,
+            )
+            retry_raw_sql = str(retry_result.get("sql", "") or "").strip()
+            retry_sql, retry_notes, retry_metadata = _prepare_generated_sql(db, req.datasource_id, retry_raw_sql)
+            retry_violations = verify_sql_against_contract(retry_sql, contract, schema_context) if retry_sql else []
+            if retry_sql:
+                result = retry_result
+                raw_sql = retry_raw_sql
+                sql = retry_sql
+                rewrite_notes.extend(f"semantic_retry:{note}" for note in retry_notes)
+                rewrite_metadata = {**rewrite_metadata, "semantic_retry": retry_metadata}
+                semantic_violations = retry_violations
         sql_value = sql if sql else None
         candidate = SQLCandidate(
             sql=sql_value,
@@ -226,6 +257,10 @@ def generate_sql_tool(
                 "schema_context_size": result.get("schemaContextSize"),
                 "rewrite": rewrite_metadata,
                 "fallback_reason": fallback_reason if 'fallback_reason' in locals() else None,
+                "semantic_contract": contract.to_dict(),
+                "semantic_violations": _semantic_violation_payload(semantic_violations),
+                "semantic_initial_violations": semantic_initial_violations,
+                "semantic_retry_attempted": semantic_retry_attempted,
             },
         )
         return candidate.model_dump()
@@ -777,6 +812,89 @@ def _question_with_plan(question: str, query_plan: dict[str, Any]) -> str:
         "Use this previously validated Query Plan as the source of truth for SQL generation. "
         f"Query Plan: {plan_summary}"
     )
+
+
+def _question_with_contract(
+    question: str,
+    schema_context: dict[str, Any],
+    query_plan: dict[str, Any],
+    contract: QueryContract,
+) -> str:
+    base_question = _question_with_plan(question, query_plan) if query_plan else question
+    contract_dict = contract.to_dict()
+    return (
+        f"{base_question}\n\n"
+        "SQL_CONTRACT:\n"
+        f"{json.dumps(contract_dict, ensure_ascii=False, indent=2)}\n\n"
+        "Generate one MySQL SELECT query satisfying SQL_CONTRACT. Return SQL only."
+    )
+
+
+def _contract_requires_llm(contract: QueryContract) -> tuple[bool, str | None]:
+    if contract.aggregation and contract.aggregation.type == "count_threshold":
+        return True, "semantic_contract_count_threshold"
+    if contract.negation and contract.negation.type == "absence_of_relation":
+        return True, "semantic_contract_absence_of_relation"
+    if contract.set_logic and contract.set_logic.type in {"intersection", "both_conditions"}:
+        return True, "semantic_contract_set_logic"
+    return False, None
+
+
+def _has_retryable_semantic_violations(violations: list[SemanticViolation]) -> bool:
+    return any(violation.severity == "retryable" for violation in violations)
+
+
+def _semantic_violation_payload(violations: list[SemanticViolation]) -> list[dict[str, Any]]:
+    return [violation.to_dict() for violation in violations]
+
+
+def _semantic_retry_prompt(
+    *,
+    question: str,
+    schema_context: dict[str, Any],
+    contract: QueryContract,
+    previous_sql: str,
+    violations: list[SemanticViolation],
+) -> str:
+    schema_text = str(schema_context.get("schema_context") or "")
+    schema_block = f"\nSchema context:\n{schema_text[:12000]}\n" if schema_text else ""
+    guidance = _semantic_retry_guidance(violations)
+    guidance_block = f"\nCorrection rules:\n{guidance}\n" if guidance else ""
+    return (
+        "Previous SQL violated the semantic contract.\n\n"
+        f"Original question:\n{question}\n"
+        f"{schema_block}\n"
+        "SQL_CONTRACT:\n"
+        f"{json.dumps(contract.to_dict(), ensure_ascii=False, indent=2)}\n\n"
+        "Previous SQL:\n"
+        f"{previous_sql}\n\n"
+        "Violations:\n"
+        f"{json.dumps(_semantic_violation_payload(violations), ensure_ascii=False, indent=2)}\n\n"
+        f"{guidance_block}"
+        "Regenerate one MySQL SELECT query that satisfies the contract. Return SQL only."
+    )
+
+
+def _semantic_retry_guidance(violations: list[SemanticViolation]) -> str:
+    codes = {violation.code for violation in violations}
+    rules: list[str] = []
+    if codes & {"group_by_missing", "having_missing", "having_count_missing", "having_threshold_mismatch"}:
+        rules.append(
+            "- For related-row thresholds, select only the requested entity columns, GROUP BY them, and put COUNT(...) comparison in HAVING."
+        )
+    if codes & {"projection_extra_count", "projection_extra_columns"}:
+        rules.append("- Remove extra projected columns or COUNT columns unless SQL_CONTRACT explicitly asks to return them.")
+    if "distinct_missing" in codes:
+        rules.append("- Use SELECT DISTINCT for explicitly distinct/different/unique results.")
+    if codes & {"antijoin_outer_join", "antijoin_missing"}:
+        rules.append(
+            "- For absence/never/no-related-record questions, use a correlated NOT EXISTS subquery; do not inner join the excluded relation in the outer query."
+        )
+    if codes & {"setlogic_contradictory_and", "setlogic_missing"}:
+        rules.append(
+            "- For shared/both/intersection semantics, use EXISTS subqueries or a self-join with DISTINCT; do not combine mutually exclusive predicates in one row scope, and prefer this over INTERSECT."
+        )
+    return "\n".join(rules)
 
 
 def _prepare_generated_sql(db: Session, datasource_id: str, sql: str) -> tuple[str, list[str], dict[str, Any]]:

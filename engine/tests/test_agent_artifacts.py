@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from engine.agent.artifact_emitter import ArtifactEmitter
-from engine.agent.artifacts import AgentArtifactIdentity, build_profile_artifact, build_table_artifact
+from engine.agent.artifacts import AgentArtifactIdentity, build_profile_artifact, build_sql_artifact, build_table_artifact
 from engine.agent.state import AgentState
 from engine.agent.types import ResultProfile, ToolObservation
 
@@ -63,3 +63,19 @@ def test_table_artifact_is_complete() -> None:
     assert artifact.payload["columns"] == ["id"]
     assert artifact.payload["rowCount"] == 1
     assert artifact.depends_on == ["sql_candidate", "safety_report"]
+
+
+def test_sql_artifact_includes_generation_metadata() -> None:
+    artifact = build_sql_artifact(
+        "SELECT 1",
+        safety={
+            "can_execute": True,
+            "generation_metadata": {
+                "semantic_violations": [{"code": "distinct_missing"}],
+                "semantic_retry_attempted": True,
+            },
+        },
+    )
+
+    assert artifact.payload["generation_metadata"]["semantic_retry_attempted"] is True
+    assert artifact.payload["generation_metadata"]["semantic_violations"][0]["code"] == "distinct_missing"

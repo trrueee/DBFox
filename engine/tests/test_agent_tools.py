@@ -7,12 +7,15 @@ import pytest
 from engine.agent import AgentRunRequest
 from engine.agent.tools import (
     _prepare_generated_sql,
+    _semantic_retry_prompt,
     build_query_plan_tool,
     generate_sql_tool,
     revise_sql_tool,
     suggest_chart_tool,
     validate_sql_tool,
 )
+from engine.agent.semantic_contract import build_query_contract
+from engine.agent.sql_semantic_verifier import SemanticViolation
 from engine.models import SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 
@@ -88,6 +91,101 @@ def test_generate_sql_tool_uses_query_plan_before_fallback(db_session, demo_data
     assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
     assert "COUNT(*) AS total_users" in obs.output["sql"]
     assert "FROM users" in obs.output["sql"]
+
+
+def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT Airline FROM flights GROUP BY Airline",
+            "model": "test",
+            "mode": "online",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="Which airlines have at least 10 flights?",
+        api_key="test",
+    )
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    metadata = obs.output["metadata"]
+    assert metadata["semantic_contract"]["aggregation"]["type"] == "count_threshold"
+    assert {item["code"] for item in metadata["semantic_violations"]} == {"having_missing"}
+    assert metadata["semantic_retry_attempted"] is True
+    assert "HAVING" not in obs.output["sql"].upper()
+
+
+def test_generate_sql_tool_retries_once_with_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+    prompts: list[str] = []
+
+    def fake_generate_sql(_db, _datasource_id, prompt, **_kwargs):
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return {
+                "sql": "SELECT Airline FROM flights GROUP BY Airline",
+                "model": "test",
+                "mode": "online",
+                "latencyMs": 1,
+                "schemaValidationWarnings": [],
+            }
+        return {
+            "sql": "SELECT Airline FROM flights GROUP BY Airline HAVING COUNT(*) >= 10",
+            "model": "test",
+            "mode": "online",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="Which airlines have at least 10 flights?",
+        api_key="test",
+    )
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "schema", "schema_context_size": 1}, query_plan={})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert len(prompts) == 2
+    assert "SQL_CONTRACT" in prompts[1]
+    assert "having_missing" in prompts[1]
+    assert "HAVING COUNT(*) >= 10" in obs.output["sql"]
+    assert obs.output["metadata"]["semantic_retry_attempted"] is True
+    assert obs.output["metadata"]["semantic_violations"] == []
+
+
+def test_semantic_retry_prompt_includes_code_specific_guidance() -> None:
+    contract = build_query_contract(
+        "What are all distinct countries where singers above age 20 are from?",
+        {},
+        {},
+    )
+
+    prompt = _semantic_retry_prompt(
+        question="What are all distinct countries where singers above age 20 are from?",
+        schema_context={},
+        contract=contract,
+        previous_sql="SELECT Country FROM singer WHERE Age > 20",
+        violations=[
+            SemanticViolation(
+                code="distinct_missing",
+                severity="retryable",
+                message="DISTINCT is required.",
+            )
+        ],
+    )
+
+    assert "Use SELECT DISTINCT" in prompt
 
 
 def test_generate_sql_tool_omits_empty_raw_plan_order_by(db_session, demo_datasource, monkeypatch) -> None:
@@ -588,42 +686,19 @@ def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasour
     assert obs.output["metadata"]["generation_source"] == "generate_sql_fallback"
 
 
-def test_question_is_antijoin_detection() -> None:
-    from engine.agent.tools import _question_is_antijoin as qaj
-    assert qaj("Find the major and age of students who do not have a cat pet.") is True
-    assert qaj("students without pets") is True
-    assert qaj("How many singers do we have?") is False
-    assert qaj("Show all countries") is False
-
-
-def test_fix_antijoin_strips_distinct() -> None:
-    from engine.agent.tools import _fix_antijoin_sql as faj
-    sql = "SELECT DISTINCT s.Major, s.Age FROM student s WHERE NOT EXISTS (SELECT 1 FROM has_pet hp WHERE hp.StuID = s.StuID) LIMIT 100"
-    fixed = faj(None, "", sql)
-    assert fixed is not None
-    assert "DISTINCT" not in (fixed or "").upper()
-
-
-def test_fix_antijoin_preserves_not_exists() -> None:
-    from engine.agent.tools import _fix_antijoin_sql as faj
-    sql = "SELECT s.Major, s.Age FROM student AS s WHERE NOT EXISTS (SELECT 1 FROM has_pet AS hp JOIN pets AS p ON hp.PetID = p.PetID WHERE hp.StuID = s.StuID AND p.PetType = 'cat') LIMIT 100"
-    fixed = faj(None, "", sql)
-    assert fixed == sql
-
-
-def test_antijoin_sql_must_not_have_distinct(db_session, demo_datasource, monkeypatch) -> None:
-    """Smoke-9 style: anti-join + DISTINCT must be stripped."""
+def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, demo_datasource, monkeypatch) -> None:
+    """Semantic verifier reports anti-join shape issues without hard-rewriting SQL."""
     sync_schema(db_session, demo_datasource.id)
 
     def fake_generate_sql(*_args, **_kwargs):
         return {
-            "sql": "SELECT DISTINCT id, username FROM users WHERE NOT id IN (SELECT id FROM users WHERE role = 'admin') LIMIT 100",
+            "sql": "SELECT DISTINCT users.id FROM users JOIN has_pet ON users.id = has_pet.user_id LIMIT 100",
             "model": "test", "mode": "online", "latencyMs": 1,
             "schemaValidationWarnings": [],
         }
 
     monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have admin role", api_key="test")
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test")
     query_plan = {
         "analysis_goal": "find non-admin",
         "candidate_tables": ["users"],
@@ -633,4 +708,6 @@ def test_antijoin_sql_must_not_have_distinct(db_session, demo_datasource, monkey
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
     assert obs.status == "success"
     sql = (obs.output or {}).get("sql", "")
-    assert "DISTINCT" not in sql.upper(), f"DISTINCT found in: {sql}"
+    assert "DISTINCT" in sql.upper()
+    metadata = (obs.output or {}).get("metadata", {})
+    assert {item["code"] for item in metadata.get("semantic_violations", [])} == {"antijoin_outer_join"}

@@ -55,6 +55,15 @@ def apply_tool_result_to_state(
 
     elif tool_name == "sql.validate":
         safe_sql = str(output.get("safe_sql") or "").strip()
+        sql_candidate = state.get("sql_candidate")
+        generation_metadata = (
+            sql_candidate.get("metadata")
+            if isinstance(sql_candidate, dict) and isinstance(sql_candidate.get("metadata"), dict)
+            else None
+        )
+        if generation_metadata and "generation_metadata" not in output:
+            output = dict(output)
+            output["generation_metadata"] = generation_metadata
         update["safety"] = output
         if safe_sql:
             update["sql"] = safe_sql

@@ -134,11 +134,15 @@ def build_sql_artifact(
     safety: dict[str, Any] | None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    payload: dict[str, Any] = {"sql": sql, "safety_state": _safety_state(safety)}
+    generation_metadata = safety.get("generation_metadata") if isinstance(safety, dict) else None
+    if isinstance(generation_metadata, dict):
+        payload["generation_metadata"] = generation_metadata
     return _artifact(
         "sql_candidate",
         "sql",
         "Validated SQL",
-        {"sql": sql, "safety_state": _safety_state(safety)},
+        payload,
         mode="dock",
         priority=70,
         collapsed=True,

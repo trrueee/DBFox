@@ -27,6 +27,7 @@ import json
 import os
 import sys
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -479,6 +480,35 @@ def extract_final_safety(events: list[dict]) -> dict[str, Any] | None:
         if isinstance(safety, dict):
             return safety
     return None
+
+
+def extract_generation_metadata(events: list[dict]) -> dict[str, Any]:
+    """Extract SQL generation metadata from response safety or SQL artifacts."""
+    for event in reversed(events):
+        data = event.get("response") or event
+        if not isinstance(data, dict):
+            continue
+        safety = data.get("safety")
+        if isinstance(safety, dict) and isinstance(safety.get("generation_metadata"), dict):
+            return dict(safety["generation_metadata"])
+
+    for event in reversed(events):
+        artifact = event.get("artifact")
+        if not isinstance(artifact, dict):
+            data = event.get("response") or event
+            artifact = data.get("artifact") if isinstance(data, dict) else None
+        if not isinstance(artifact, dict):
+            continue
+        payload = artifact.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        metadata = payload.get("generation_metadata")
+        if isinstance(metadata, dict):
+            return dict(metadata)
+        if artifact.get("type") == "safety" and isinstance(payload.get("generation_metadata"), dict):
+            return dict(payload["generation_metadata"])
+
+    return {}
 
 
 def agent_execution_plan(
@@ -1162,6 +1192,11 @@ def main() -> None:
         agent_sql = extract_agent_sql(events)
         safe_sql = extract_safe_sql(events)
         final_safety = extract_final_safety(events)
+        generation_metadata = extract_generation_metadata(events)
+        semantic_violations = generation_metadata.get("semantic_violations")
+        if not isinstance(semantic_violations, list):
+            semantic_violations = []
+        semantic_retry_attempted = bool(generation_metadata.get("semantic_retry_attempted"))
         answer = extract_answer(events)
         steps = extract_steps(events)
         artifacts = extract_artifacts(events)
@@ -1268,6 +1303,9 @@ def main() -> None:
             "steps": steps,
             "artifacts": artifacts,
             "approval": approval_info,
+            "generation_metadata": generation_metadata,
+            "semantic_violations": semantic_violations,
+            "semantic_retry_attempted": semantic_retry_attempted,
             "latency_seconds": round(case_latency, 2),
             "gold_rows_count": len(gold_rows) if gold_rows is not None else 0,
             "agent_rows_count": len(agent_rows) if agent_rows is not None else 0,
@@ -1289,6 +1327,12 @@ def main() -> None:
         else 0.0
     )
     pass_rate = passed_count / total_cases if total_cases > 0 else 0.0
+    semantic_violation_counts = Counter(
+        str(item.get("code"))
+        for r in results
+        for item in (r.get("semantic_violations") or [])
+        if isinstance(item, dict) and item.get("code")
+    )
 
     summary = {
         "evaluation_time": datetime.now(timezone.utc).isoformat(),
@@ -1299,6 +1343,8 @@ def main() -> None:
         "average_latency_seconds": round(avg_latency, 2),
         "total_duration_seconds": round(eval_latency, 2),
         "status_counts": build_status_summary(results),
+        "semantic_violation_counts": dict(sorted(semantic_violation_counts.items())),
+        "semantic_retry_attempted_count": sum(1 for r in results if r.get("semantic_retry_attempted")),
         "gold_sql_canonicalized_count": sum(
             1 for r in results if r.get("gold_sql_was_canonicalized")
         ),
@@ -1316,6 +1362,8 @@ def main() -> None:
                 "reason": r.get("reason", ""),
                 "latency_seconds": r["latency_seconds"],
                 "gold_sql_was_canonicalized": r.get("gold_sql_was_canonicalized", False),
+                "semantic_violations": r.get("semantic_violations", []),
+                "semantic_retry_attempted": r.get("semantic_retry_attempted", False),
             }
             for r in results
         ],

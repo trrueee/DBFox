@@ -309,9 +309,9 @@ def generate_schema_context(db: Session, datasource_id: str, question: str | Non
     return schema_context
 
 
-PROMPT_VERSION = "v1.1"
+PROMPT_VERSION = "v1.2"
 
-SYSTEM_PROMPT = (
+LEGACY_SYSTEM_PROMPT = (
     "You are an expert MySQL developer and data analyst.\n"
     "Your task is to generate a valid, high-performance SELECT statement to answer the user's question "
     "based on the provided schema definitions.\n\n"
@@ -332,6 +332,23 @@ SYSTEM_PROMPT = (
     "   f. Template: SELECT cols FROM subject AS s WHERE NOT EXISTS (SELECT 1 FROM junction AS j JOIN lookup AS l ON j.fk = l.pk WHERE j.subject_fk = s.pk AND l.filter_col = 'value')\n"
     "9. For 'both A and B' style constraints, prefer GROUP BY ... HAVING COUNT(DISTINCT ...) = N or an equivalent self-join; avoid ad-hoc client-side filtering.\n"
     "10. Return ONLY the SQL statement; do not include explanations, examples, or surrounding markdown other than an optional sql code block."
+)
+
+SYSTEM_PROMPT = (
+    "You are an expert MySQL developer and data analyst.\n"
+    "Generate one valid MySQL SELECT statement from the provided schema definitions.\n"
+    "If SQL_CONTRACT JSON is present in the user message, satisfy that contract.\n\n"
+    "Rules:\n"
+    "1. Return SQL only; no explanation.\n"
+    "2. Use only tables and columns from the schema context.\n"
+    "3. Project only requested columns.\n"
+    "4. Use WHERE for scalar filters.\n"
+    "5. Use GROUP BY + HAVING COUNT(...) for count thresholds over related rows.\n"
+    "6. Use NOT EXISTS or equivalent for absence of related rows.\n"
+    "7. Use EXISTS-pair or GROUP BY/HAVING for shared, both, or intersection semantics.\n"
+    "8. Do not include COUNT or extra columns unless requested.\n"
+    "9. Do not use BigQuery-specific ARRAY(), STRUCT(), UNNEST(), or ARRAY_AGG().\n"
+    "10. Append a safe LIMIT unless the query already has a bounded LIMIT."
 )
 
 USER_PROMPT_TEMPLATE = (

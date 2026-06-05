@@ -756,6 +756,36 @@ def test_agent_kernel_sql_revise_state_clears_stale_execution_approval_and_safet
     assert update["trace_events"][-1]["type"] == "approval.superseded"
 
 
+def test_agent_kernel_validate_state_carries_generation_metadata() -> None:
+    observation = ToolObservation(
+        name="validate_sql",
+        status="success",
+        input={"sql_preview": "SELECT Country FROM singer"},
+        output={
+            "safe_sql": "SELECT Country FROM singer",
+            "can_execute": True,
+            "blocked_reasons": [],
+        },
+        latency_ms=0,
+    )
+
+    update = apply_tool_result_to_state(
+        state={
+            "sql_candidate": {
+                "metadata": {
+                    "semantic_violations": [{"code": "distinct_missing"}],
+                    "semantic_retry_attempted": True,
+                }
+            }
+        },
+        tool_name="sql.validate",
+        observation=observation,
+    )
+
+    assert update["safety"]["generation_metadata"]["semantic_retry_attempted"] is True
+    assert update["safety"]["generation_metadata"]["semantic_violations"][0]["code"] == "distinct_missing"
+
+
 def test_agent_kernel_event_bridge_emits_approval_required_event() -> None:
     from engine.agent_kernel.event_bridge import events_from_graph_update
 
