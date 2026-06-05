@@ -890,8 +890,21 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=15, help="Max agent steps per case")
     args = parser.parse_args()
 
-    # Load config
+    # Load config (supports both legacy flat format and nested llm/backend format)
     cfg = load_config(args.config)
+
+    # Resolve LLM config via eval_common for nested llm/backend format support
+    from eval_common import load_llm_config
+    llm_cfg = load_llm_config(args.config)
+    if llm_cfg.get("api_key"):
+        cfg["api_key"] = llm_cfg["api_key"]
+    if llm_cfg.get("model_name"):
+        cfg["model"] = llm_cfg["model_name"]
+    if llm_cfg.get("api_base"):
+        cfg["api_base"] = llm_cfg["api_base"]
+    # Also resolve base_url from backend block
+    if isinstance(cfg.get("backend"), dict):
+        cfg["base_url"] = cfg["backend"].get("base_url", cfg.get("base_url"))
 
     base_url = args.base_url or cfg.get("base_url", "http://127.0.0.1:18625")
     api_key = args.api_key or cfg.get("api_key") or os.environ.get("OPENAI_API_KEY", "")

@@ -586,3 +586,51 @@ def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasour
     assert obs.output is not None
     # Should fallback to LLM because of anti-join intent
     assert obs.output["metadata"]["generation_source"] == "generate_sql_fallback"
+
+
+def test_question_is_antijoin_detection() -> None:
+    from engine.agent.tools import _question_is_antijoin as qaj
+    assert qaj("Find the major and age of students who do not have a cat pet.") is True
+    assert qaj("students without pets") is True
+    assert qaj("How many singers do we have?") is False
+    assert qaj("Show all countries") is False
+
+
+def test_fix_antijoin_strips_distinct() -> None:
+    from engine.agent.tools import _fix_antijoin_sql as faj
+    sql = "SELECT DISTINCT s.Major, s.Age FROM student s WHERE NOT EXISTS (SELECT 1 FROM has_pet hp WHERE hp.StuID = s.StuID) LIMIT 100"
+    fixed = faj(None, "", sql)
+    assert fixed is not None
+    assert "DISTINCT" not in (fixed or "").upper()
+
+
+def test_fix_antijoin_preserves_not_exists() -> None:
+    from engine.agent.tools import _fix_antijoin_sql as faj
+    sql = "SELECT s.Major, s.Age FROM student AS s WHERE NOT EXISTS (SELECT 1 FROM has_pet AS hp JOIN pets AS p ON hp.PetID = p.PetID WHERE hp.StuID = s.StuID AND p.PetType = 'cat') LIMIT 100"
+    fixed = faj(None, "", sql)
+    assert fixed == sql
+
+
+def test_antijoin_sql_must_not_have_distinct(db_session, demo_datasource, monkeypatch) -> None:
+    """Smoke-9 style: anti-join + DISTINCT must be stripped."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT DISTINCT id, username FROM users WHERE NOT id IN (SELECT id FROM users WHERE role = 'admin') LIMIT 100",
+            "model": "test", "mode": "online", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have admin role", api_key="test")
+    query_plan = {
+        "analysis_goal": "find non-admin",
+        "candidate_tables": ["users"],
+        "raw_plan": {"intent": "filter", "tables": ["users"], "metrics": [], "dimensions": [], "filters": [], "joins": [], "limit": 100},
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    sql = (obs.output or {}).get("sql", "")
+    assert "DISTINCT" not in sql.upper(), f"DISTINCT found in: {sql}"

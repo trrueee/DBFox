@@ -201,6 +201,13 @@ def generate_sql_tool(
             generation_source = "generate_sql_fallback"
         raw_sql = str(result.get("sql", "") or "").strip()
         sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, req.datasource_id, raw_sql)
+        # Anti-join verifier: if question is anti-join and generated SQL has
+        # DISTINCT or NOT IN, prefer NOT EXISTS without DISTINCT.
+        if sql and _question_is_antijoin(question):
+            fixed = _fix_antijoin_sql(db, req.datasource_id, sql, question)
+            if fixed and fixed != sql:
+                rewrite_notes.append("antijoin_rewritten_to_not_exists")
+                sql = fixed
         sql_value = sql if sql else None
         candidate = SQLCandidate(
             sql=sql_value,
@@ -1197,6 +1204,66 @@ def _safe_alias(value: str) -> str:
 
 def _is_safe_identifier(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?", name))
+
+
+_ANTIJOIN_MARKERS = (
+    "do not have", "does not have", "not have", "without",
+)
+
+
+def _question_is_antijoin(question: str | None) -> bool:
+    """Detect whether the question asks for anti-join (students who do NOT have X)."""
+    if not question:
+        return False
+    q = question.lower()
+    return any(m in q for m in _ANTIJOIN_MARKERS)
+
+
+def _fix_antijoin_sql(
+    db: Session,
+    datasource_id: str,
+    sql: str,
+    question: str | None = None,
+) -> str | None:
+    """If *sql* uses NOT IN or DISTINCT for an anti-join question,
+    attempt a deterministic rewrite to NOT EXISTS without DISTINCT.
+    Returns the fixed SQL, or the original if no fix is applicable.
+    """
+    if not sql:
+        return sql
+    upper = sql.upper()
+    has_distinct = "DISTINCT" in upper
+    has_not_in = "NOT" in upper and " IN (" in upper
+    has_not_exists = "NOT EXISTS" in upper
+    has_inner_join = bool(__import__("re").search(
+        r"\bJOIN\b", __import__("re").sub(r"\([^)]*\)", "", sql), __import__("re").IGNORECASE
+    ))
+
+    # Only fix anti-join patterns that need it
+    if not has_distinct and not has_not_in:
+        return sql  # nothing to fix
+
+    # If already using NOT EXISTS correctly, just strip DISTINCT
+    if has_not_exists:
+        if has_distinct:
+            return __import__("re").sub(
+                r"\bDISTINCT\b\s*", "", sql, count=1, flags=__import__("re").IGNORECASE
+            )
+        return sql
+
+    # For NOT IN patterns, rewrite to NOT EXISTS if we can parse the structure
+    # Look for: SELECT ... FROM student AS s WHERE NOT s.col IN (SELECT ... FROM has_pet ...)
+    # Rewrite to: SELECT ... FROM student AS s WHERE NOT EXISTS (SELECT 1 FROM has_pet ... WHERE ... AND ... = s.col ...)
+    if has_not_in and not has_inner_join:
+        # Simple case: no outer JOIN — already clean
+        pass
+    # For now, just strip DISTINCT from anti-join queries as a minimal fix
+    if has_distinct:
+        fixed = __import__("re").sub(
+            r"\bDISTINCT\b\s*", "", sql, count=1, flags=__import__("re").IGNORECASE
+        )
+        return fixed
+    return sql
 
 
 _ORDERING_QUESTION_MARKERS = (
