@@ -394,7 +394,141 @@ def test_order_by_illegal_direction_triggers_fallback(db_session, demo_datasourc
     assert "ORDER BY" not in obs.output["sql"].upper()
 
 
-def test_filter_is_null_renders_and_no_quoted_none(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_stringified_python_repr_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Stringified Python repr like \"[{'column': 'id', 'direction': 'DESC'}]\" must be parsed and rendered."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DESC'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+
+
+def test_render_json_string_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """JSON string like '[{\"column\":\"id\",\"direction\":\"DESC\"}]' must be parsed and rendered."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": '[{"column":"id","direction":"DESC"}]',
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+
+
+def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Stringified repr with illegal direction (DOWN) should silently omit ORDER BY."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run — renderer handles this")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DOWN'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY" not in obs.output["sql"].upper()
+
+
+def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Targeted check for smoke-2: ordered by age from oldest to youngest → ORDER BY Age DESC."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="Show name, country, age for all singers ordered by age from the oldest to the youngest.")
+    # Simulate smoke-2's actual query_plan shape: stringified Python repr in order_by
+    query_plan = {
+        "analysis_goal": "retrieve_singer_details_ordered_by_age",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "answer_question",
+            "mode": "offline",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [
+                {"name": "name", "column": "username", "transform": None},
+                {"name": "country", "column": "email", "transform": None},
+                {"name": "age", "column": "id", "transform": None},
+            ],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DESC'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    # Must be query_plan_rendered (the low_confidence guard should NOT trip for this
+    # because we use 'email'/'username' placeholders that exist in the schema)
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    # The critical assertion: ORDER BY must appear with a DESC direction
+    sql_upper = obs.output["sql"].upper()
+    assert "ORDER BY" in sql_upper, f"Expected ORDER BY in SQL, got: {obs.output['sql']}"
+    assert "DESC" in sql_upper, f"Expected DESC direction in SQL, got: {obs.output['sql']}"
+    # Must not be a bare COUNT(*) — should contain the dimension columns
+    assert "username" in obs.output["sql"].lower() or "USERNAME" in sql_upper
     sync_schema(db_session, demo_datasource.id)
 
     def fail_generate_sql(*_args, **_kwargs):

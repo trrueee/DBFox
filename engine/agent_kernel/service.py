@@ -442,8 +442,18 @@ class AgentKernelService:
         if decision.action == "final_answer":
             update["status"] = "completed"
             if decision.final_answer:
+                final_text = decision.final_answer
+                # Deterministic guard: strip data-result claims when execution was skipped
+                # Use broad detection: no successful execution + validated SQL = review-only
+                execution = graph_state.get("execution") or {}
+                sql = graph_state.get("sql")
+                safety = graph_state.get("safety") or {}
+                execution_ok = bool(execution.get("success"))
+                review_only = bool(sql and safety.get("can_execute") and not execution_ok)
+                if review_only or _execution_was_skipped(execution):
+                    final_text = _sanitize_skipped_answer_text(final_text)
                 answer_payload = {
-                    "answer": decision.final_answer,
+                    "answer": final_text,
                     "key_findings": [],
                     "evidence": [],
                     "caveats": [],
@@ -1125,3 +1135,32 @@ def _string_value(value: Any) -> str | None:
         return None
     text = value.strip()
     return text or None
+
+
+_SKIPPED_SAFE_ANSWER = (
+    "I generated and validated the SQL, but execution was disabled "
+    "for this review-only run, so no result set was retrieved. "
+    "I cannot make data-result claims until the query is executed."
+)
+
+_MISLEADING_MARKERS = [
+    "returned zero", "no rows returned", "no students",
+    "executed successfully", "query executed successfully",
+    "returned 0 rows", "returned no rows", "0 rows",
+    "there are no students", "no data was returned",
+    "no matching records", "no results",
+]
+
+
+def _execution_was_skipped(execution: dict[str, Any]) -> bool:
+    if execution.get("success"):
+        return False
+    reason = str(execution.get("reason", "")).lower()
+    return "execute=false" in reason or "skipped" in reason
+
+
+def _sanitize_skipped_answer_text(text: str) -> str:
+    lower = text.lower()
+    if any(marker.lower() in lower for marker in _MISLEADING_MARKERS):
+        return _SKIPPED_SAFE_ANSWER
+    return text

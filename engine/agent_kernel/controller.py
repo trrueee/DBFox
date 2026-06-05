@@ -45,6 +45,7 @@ Core policy:
 14. If enough evidence exists to answer, use final_answer instead of calling more tools.
 15. If context is insufficient, use ask_user.
 16. If the user changes the goal, use update_plan or ask_user before running tools.
+17. **CRITICAL execute=false rule**: If the state shows execution_skipped=true or includes a data_claims_policy field, you MUST NOT make any data-result claims in final_answer. Never say "returned zero rows", "no rows returned", "query executed successfully", "executed successfully", "no students exist", or similar. The correct statement is: "execution was disabled for this review-only run; no result set was retrieved." Row counts from result_profile are meaningless when execution was skipped — do not quote them.
 
 Safety:
 - Never invent execution results.
@@ -62,6 +63,9 @@ def decide_next_action(
     if state.get("api_key"):
         decision = _try_llm_decision(state=state, available_tools=available_tools)
         if decision is not None:
+            # Deterministic sanitizer: strip data-result claims when execution was skipped
+            if decision.action == "final_answer" and decision.final_answer:
+                decision = _sanitize_final_answer_decision(decision, state)
             return decision
     return _fallback_decision(state)
 
@@ -123,16 +127,22 @@ def _try_llm_decision(
 def _controller_state_view(state: KernelState) -> dict[str, Any]:
     safety = _as_dict(state.get("safety"))
     execution = _as_dict(state.get("execution"))
+    execution_skipped = bool(
+        not execution.get("success")
+        and execution.get("reason")
+        and ("execute=false" in str(execution.get("reason", "")).lower() or "skipped" in str(execution.get("reason", "")).lower())
+    )
     return {
         "goal": state.get("goal") or latest_user_message(state),
         "status": state.get("status"),
         "execute": state.get("execute"),
+        "execution_skipped": execution_skipped,
         "latest_messages": _latest_messages(state.get("messages")),
         "latest_artifacts": _latest_artifacts(state.get("artifacts")),
         "pending_approval": _approval_preview(state.get("pending_approval")),
         "sql_preview": _preview_text(state.get("sql")),
         "safe_sql_preview": _preview_text(safety.get("safe_sql") or safety.get("safeSql")),
-        "execution_preview": _execution_preview(execution),
+        "execution_preview": _execution_preview(execution) if not execution_skipped else {"skipped": True, "reason": str(execution.get("reason", ""))},
         "last_tool_result": _tool_result_preview(_last_mapping(state.get("tool_results")) or state.get("last_observation")),
         "recent_tool_results": [
             item
@@ -149,14 +159,21 @@ def _controller_state_view(state: KernelState) -> dict[str, Any]:
         "has_safety": bool(state.get("safety")),
         "safety_can_execute": bool(safety.get("can_execute")),
         "safety_requires_confirmation": bool(safety.get("requires_confirmation")),
-        "has_execution": bool(state.get("execution")),
-        "has_result_profile": bool(state.get("result_profile")),
+        "has_execution": bool(state.get("execution")) and not execution_skipped,
+        "has_result_profile": bool(state.get("result_profile")) and not execution_skipped,
         "has_chart_suggestion": bool(state.get("chart_suggestion")),
         "suggestion_count": len(state.get("suggestions", [])),
         "has_answer": bool(state.get("answer")),
         "error": state.get("error"),
         "step_count": state.get("step_count", 0),
         "max_steps": state.get("max_steps", 20),
+        # CRITICAL: when execute=false / execution was skipped, the agent MUST NOT
+        # make claims about row counts, empty results, or successful execution.
+        "data_claims_policy": (
+            "NEVER make data-result claims (e.g. 'returned zero rows', 'no students', "
+            "'executed successfully', 'query returned N rows') when execution_skipped=true. "
+            "The correct statement is: 'execution was disabled, no result set was retrieved'."
+        ) if execution_skipped else None,
     }
 
 
@@ -419,4 +436,50 @@ def _call(tool_name: str, args: dict[str, Any], reason: str) -> AgentDecision:
         tool_call=ToolCallDecision(tool_name=tool_name, args=args, reason=reason),
         confidence="medium",
         reasoning_summary=reason,
+    )
+
+
+_SKIPPED_SAFE_TEXT = (
+    "I generated and validated the SQL, but execution was disabled "
+    "for this review-only run, so no result set was retrieved. "
+    "I cannot make data-result claims until the query is executed."
+)
+
+_MISLEADING = [
+    "returned zero", "no rows returned", "no students",
+    "executed successfully", "query executed successfully",
+    "returned 0 rows", "returned no results", "0 rows",
+    "there are no students", "no data was returned",
+    "no matching records", "no results",
+]
+
+
+def _sanitize_final_answer_decision(decision: AgentDecision, state: KernelState) -> AgentDecision:
+    """If execution was skipped, replace misleading data claims in the LLM's final_answer."""
+    execution = _as_dict(state.get("execution"))
+    safety = _as_dict(state.get("safety"))
+    sql = state.get("sql")
+
+    # Broad detection: no successful execution + validated SQL = review-only
+    execution_ok = bool(execution.get("success"))
+    review_only = bool(sql and safety.get("can_execute") and not execution_ok)
+
+    # Also check explicit skip markers
+    reason = str(execution.get("reason", "")).lower()
+    explicitly_skipped = "execute=false" in reason or "skipped" in reason
+
+    if not review_only and not explicitly_skipped:
+        return decision
+
+    text = (decision.final_answer or "").lower()
+    needs_sanitize = any(m.lower() in text for m in _MISLEADING)
+    if not needs_sanitize:
+        return decision
+
+    # Replace with safe text
+    return AgentDecision(
+        action="final_answer",
+        final_answer=_SKIPPED_SAFE_TEXT,
+        confidence=decision.confidence,
+        reasoning_summary=decision.reasoning_summary,
     )

@@ -144,6 +144,19 @@ def generate_sql_tool(
         generation_source = None
         if not require_llm:
             plan_sql = _render_sql_from_query_plan(db, req.datasource_id, query_plan)
+        # SQL-plan consistency gate: if query_plan has order_by but renderer
+        # dropped it (e.g. column case mismatch was fixed), re-inject it.
+        if plan_sql:
+            order_by_clause = _missing_order_by_clause(db, req.datasource_id, query_plan, plan_sql)
+            if order_by_clause:
+                plan_sql = _append_order_by(plan_sql, order_by_clause)
+        # Question-ordering gate: if the user explicitly asked for ordering
+        # but the rendered SQL has no ORDER BY, reject renderer output and
+        # fall through to LLM generation (which understands ordering intent).
+        if plan_sql and not re.search(r"\bORDER\s+BY\b", plan_sql, re.IGNORECASE):
+            if _question_asks_for_ordering(question):
+                plan_sql = None
+                fallback_reason = fallback_reason or "missing_order_by_in_rendered_sql"
         if plan_sql:
             result = {
                 "sql": plan_sql,
@@ -332,13 +345,13 @@ def explain_result_tool(
     }
 
     def body() -> dict[str, Any]:
-        columns = [str(item) for item in _list_value((execution or {}).get("columns"))]
-        rows = _list_value((execution or {}).get("rows"))
-        row_count = int((execution or {}).get("rowCount", len(rows)) or 0)
         plan_goal = (query_plan or {}).get("analysis_goal") or req.question
         passed = bool((safety or {}).get("passed"))
 
         if execution and execution.get("success"):
+            columns = [str(item) for item in _list_value((execution or {}).get("columns"))]
+            rows = _list_value((execution or {}).get("rows"))
+            row_count = int((execution or {}).get("rowCount", len(rows)) or 0)
             facts = f"Data facts: the query returned {row_count} sampled rows across {len(columns)} columns"
             if columns:
                 facts += f" ({', '.join(columns[:8])})."
@@ -348,8 +361,8 @@ def explain_result_tool(
             next_steps = "Recommended next steps: inspect filters, compare another time range or dimension, and save a Golden SQL case if this becomes a recurring metric."
         elif passed and not req.execute:
             facts = "Data facts: SQL generation and safety validation completed, but execution was disabled for this run."
-            causes = "Possible causes: execute=false is useful for review-only workflows or production approval gates."
-            next_steps = "Recommended next steps: review the safe SQL, then rerun with execute=true when ready."
+            causes = "Possible causes: execute=false skips execution; no data was retrieved from the database."
+            next_steps = "Recommended next steps: review the safe SQL, then rerun with execute=true when ready. Do not draw data conclusions without execution results."
         else:
             facts = "Data facts: no result set is available."
             causes = "Possible causes: the SQL did not pass validation or execution failed before rows were returned."
@@ -1186,6 +1199,61 @@ def _is_safe_identifier(name: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][\w]*(?:\.[A-Za-z_][\w]*)?", name))
 
 
+_ORDERING_QUESTION_MARKERS = (
+    "ordered by", "order by", "sorted by", "sort by",
+    "oldest to youngest", "youngest to oldest",
+    "newest to oldest", "oldest to newest",
+    "highest to lowest", "lowest to highest",
+    "largest to smallest", "smallest to largest",
+    "descending", "ascending", "from the oldest",
+    "from the youngest", "from the newest",
+)
+
+
+def _question_asks_for_ordering(question: str | None) -> bool:
+    """Detect whether the user's question explicitly requests ordered results."""
+    if not question:
+        return False
+    q = question.lower()
+    return any(marker in q for marker in _ORDERING_QUESTION_MARKERS)
+
+
+def _missing_order_by_clause(
+    db: Session,
+    datasource_id: str,
+    query_plan: dict[str, Any] | None,
+    sql: str,
+) -> str | None:
+    """If *query_plan* specifies an order_by but *sql* has no ORDER BY clause,
+    try to render the missing clause and return it (e.g. ``age DESC``).
+    Returns None when no order_by is expected or rendering fails.
+    """
+    if not query_plan or not sql:
+        return None
+    raw_plan: dict[str, Any] = query_plan.get("raw_plan") if isinstance(query_plan.get("raw_plan"), dict) else query_plan  # type: ignore[assignment]
+    order_by_raw = raw_plan.get("order_by")
+    if not order_by_raw:
+        return None
+    if re.search(r"\bORDER\s+BY\b", sql, re.IGNORECASE):
+        return None  # already present
+    schema = _schema_columns(db, datasource_id)
+    tables_in_plan = [
+        str(t) for t in _list_value(
+            raw_plan.get("tables") or query_plan.get("candidate_tables") or []
+        )
+    ]
+    return _render_order_by(order_by_raw, schema, tables_in_plan)
+
+
+def _append_order_by(sql: str, order_by_clause: str) -> str:
+    """Append ``ORDER BY <clause>`` before the LIMIT (or at end if no LIMIT)."""
+    m = re.search(r"\bLIMIT\s+\d+", sql, re.IGNORECASE)
+    if m:
+        idx = m.start()
+        return f"{sql[:idx].rstrip()} ORDER BY {order_by_clause} {sql[idx:].lstrip()}"
+    return f"{sql.rstrip().rstrip(';')} ORDER BY {order_by_clause}"
+
+
 def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: list[str]) -> str | None:
     """Render structured order_by value into a safe SQL `ORDER BY` clause or None.
 
@@ -1193,6 +1261,8 @@ def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: l
       - string like "Age DESC"
       - dict {column, direction}
       - list of dicts or strings
+      - stringified Python repr: "[{'column': 'Age', 'direction': 'DESC'}]"
+      - JSON string: '[{"column":"Age","direction":"DESC"}]'
     Returns None when empty/unsupported/unsafe.
     """
     if value is None:
@@ -1201,11 +1271,13 @@ def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: l
     if isinstance(value, (list, tuple)) and len(value) == 0:
         return None
 
+    # Try to parse stringified Python repr / JSON into native list/dict
+    value = _try_parse_order_by_value(value)
+
     items: list[Any]
     if isinstance(value, (list, tuple)):
         items = list(value)
     else:
-        # also accept JSON-like strings that are not literal Python repr
         items = [value]
 
     parts: list[str] = []
@@ -1219,9 +1291,6 @@ def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: l
             direction = str(item.get("direction") or "").strip().upper()
         else:
             text = str(item).strip()
-            # Reject python repr-like dictionaries/lists
-            if text.startswith("[{") or text.startswith("{'") or text.startswith("[{'"):
-                return None
             # split last token as direction if present
             m = re.match(r"^(.+?)\s+(ASC|DESC)$", text, re.IGNORECASE)
             if m:
@@ -1234,7 +1303,7 @@ def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: l
         if not col:
             continue
         if direction not in ("ASC", "DESC"):
-            # unsupported direction -> force fallback
+            # unsupported direction -> force fallback / omit
             return None
 
         # validate identifier safety and existence in schema
@@ -1242,23 +1311,65 @@ def _render_order_by(value: Any, schema: dict[str, list[str]], tables_in_plan: l
             tbl, colname = col.split(".", 1)
             if not _is_safe_identifier(col):
                 return None
-            if tbl.lower() not in schema or colname not in schema[tbl.lower()]:
+            if tbl.lower() not in schema:
                 return None
+            # case-insensitive column lookup (MySQL conventions)
+            schema_cols_lower = {c.lower(): c for c in schema[tbl.lower()]}
+            if colname.lower() not in schema_cols_lower:
+                return None
+            col = f"{tbl}.{schema_cols_lower[colname.lower()]}"
         else:
             if not re.fullmatch(r"[A-Za-z_][\w]*", col):
                 return None
-            # ensure column exists in one of the plan tables
+            # ensure column exists in one of the plan tables (case-insensitive)
             found = False
             for t in tables_in_plan:
-                if t.lower() in schema and col in schema[t.lower()]:
-                    found = True
-                    break
+                t_lower = t.lower()
+                if t_lower in schema:
+                    schema_cols_lower = {c.lower(): c for c in schema[t_lower]}
+                    if col.lower() in schema_cols_lower:
+                        # Normalize column to match actual schema casing
+                        col = schema_cols_lower[col.lower()]
+                        found = True
+                        break
             if not found:
                 return None
 
         parts.append(f"{col} {direction}")
 
     return ", ".join(parts) if parts else None
+
+
+def _try_parse_order_by_value(value: Any) -> Any:
+    """If *value* is a string that looks like a serialized list/dict
+    (Python repr or JSON), parse it into a native Python object.
+    Returns the original value if parsing fails or is not applicable.
+    """
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not (stripped.startswith("[") or stripped.startswith("{")):
+        return value
+
+    # Attempt 1: JSON
+    try:
+        import json as _json
+        parsed = _json.loads(stripped)
+        if isinstance(parsed, (list, dict)):
+            return parsed
+    except (ValueError, Exception):
+        pass
+
+    # Attempt 2: safe Python literal_eval (handles single-quoted repr)
+    try:
+        import ast as _ast
+        parsed = _ast.literal_eval(stripped)
+        if isinstance(parsed, (list, dict)):
+            return parsed
+    except (ValueError, SyntaxError, Exception):
+        pass
+
+    return value
 
 
 def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | None = None) -> tuple[bool, str | None]:
@@ -1281,7 +1392,9 @@ def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | No
 
     # anti-join / negative existence
     # Strong anti-join tokens: usually indicate absence of related records across tables
-    strong_anti_tokens = ("do not have", "does not have", "not have", "no ", "not owned")
+    # NOTE: "no " is intentionally excluded — it matches too many false positives
+    # (e.g. "replay no execute", "no rows"). Use more specific phrases instead.
+    strong_anti_tokens = ("do not have", "does not have", "not have", "not owned")
     if any(tok in joined_text for tok in strong_anti_tokens):
         filters = _list_value(raw.get("filters"))
         joins = _list_value(raw.get("joins"))

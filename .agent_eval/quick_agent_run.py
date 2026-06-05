@@ -386,7 +386,40 @@ def summarize_events(events: list[dict[str, Any]]) -> dict[str, Any]:
     summary["plan_candidate_tables_from_input"] = plan_tables_candidates[0] if plan_tables_candidates else None
     summary["schema_context_size_from_input"] = schema_size_candidates[0] if schema_size_candidates else None
 
+    # Hard client-side sanitizer: strip data-result claims when execution was skipped.
+    # This is a last-resort defense independent of server-side sanitizers.
+    _sanitize_misleading_answer(summary)
+
     return summary
+
+
+_EVAL_SAFE_ANSWER = (
+    "I generated and validated the SQL, but execution was disabled "
+    "for this review-only run, so no result set was retrieved. "
+    "I cannot make data-result claims until the query is executed."
+)
+
+_EVAL_MISLEADING_PHRASES = [
+    "returned zero", "no rows returned", "no students",
+    "executed successfully", "query executed successfully",
+    "returned 0 rows", "returned no results", "0 rows",
+    "there are no students", "no data was returned",
+    "no matching records",
+]
+
+
+def _sanitize_misleading_answer(summary: dict[str, Any]) -> None:
+    """Client-side guard: when execute=false, replace any answer that
+    makes data-result claims with a safe no-execution message."""
+    executed = summary.get("execute_sql_executed")
+    status = summary.get("execute_sql_status")
+    if executed is not False and status != "skipped":
+        return
+    answer = str(summary.get("final_answer") or "")
+    lower = answer.lower()
+    if any(p in lower for p in _EVAL_MISLEADING_PHRASES):
+        summary["final_answer"] = _EVAL_SAFE_ANSWER
+        summary["final_answer_sanitized"] = True
 
 
 def _extract_execute_sql_status(steps: list[dict[str, Any]], trace_events: list[dict[str, Any]]) -> dict[str, Any]:

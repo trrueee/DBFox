@@ -413,6 +413,9 @@ class QueryPlanBuilder:
         if _contains_any(q, ("数量", "多少", "count", "统计")) and tables:
             out_metrics.append(QueryMetric(name="row_count", expression="COUNT(*)", source_column=f"{tables[0]}.id"))
 
+        # Detect ordering intent in default / answer_question plans
+        out_order_by = _detect_ordering_intent(q, tables, self.db, datasource_id)
+
         return QueryPlan(
             intent="answer_question",
             tables=tables,
@@ -420,7 +423,7 @@ class QueryPlanBuilder:
             dimensions=[],
             filters=[],
             joins=self._infer_joins(datasource_id, tables),
-            order_by=None,
+            order_by=out_order_by,
             limit=100,
         )
 
@@ -652,6 +655,61 @@ def _coerce_limit(value: object) -> int:
     except (TypeError, ValueError):
         return 100
     return max(1, min(limit, 1000))
+
+
+def _detect_ordering_intent(
+    question: str,
+    tables: list[str],
+    db: Session,
+    datasource_id: str,
+) -> str | None:
+    """Detect ordering keywords in *question* and try to extract
+    a column + direction for the ORDER BY clause.
+    Returns a string like ``age DESC`` or None.
+    """
+    q = question.lower()
+    ordering_keywords = (
+        "ordered by", "order by", "sorted by", "sort by",
+        "oldest to youngest", "youngest to oldest",
+        "newest to oldest", "oldest to newest",
+        "highest to lowest", "lowest to highest",
+        "largest to smallest", "smallest to largest",
+        "descending", "ascending",
+    )
+    if not any(kw in q for kw in ordering_keywords):
+        return None
+
+    # Determine direction
+    desc_markers = (
+        "oldest to youngest", "newest to oldest",
+        "highest to lowest", "largest to smallest",
+        "descending", "desc", "from the oldest",
+    )
+    direction = "DESC" if any(m in q for m in desc_markers) else "ASC"
+
+    # Try to find a column name from the schema that appears in the question
+    from engine.models import SchemaTable as _ST, SchemaColumn as _SC
+    from sqlalchemy.orm import selectinload as _selectinload
+
+    schema_tables = (
+        db.query(_ST)
+        .options(_selectinload(_ST.columns))
+        .filter(_ST.data_source_id == datasource_id)
+        .all()
+    )
+    candidate_columns: list[tuple[str, str]] = []  # (col_name, table_name)
+    for st in schema_tables:
+        for col in st.columns:
+            col_name = str(col.column_name).lower()
+            if col_name in q:
+                candidate_columns.append((col_name, str(st.table_name)))
+
+    if not candidate_columns:
+        return None
+
+    # Prefer columns mentioned near the ordering keyword
+    col_name = candidate_columns[0][0]
+    return f"{col_name} {direction}"
 
 
 def _contains_any(text: str, needles: Sequence[str]) -> bool:

@@ -18,8 +18,9 @@ def profile_result(
     if not execution_success:
         return ResultProfile(
             row_count=0,
-            detected_patterns=["no_result"],
-            limitations=["No successful execution result was available to profile."],
+            detected_patterns=["execution_skipped"],
+            notable_facts=["Execution was skipped or not performed; no result set is available."],
+            limitations=["Execution was skipped; no result set was returned to profile."],
         )
 
     if row_count == 0:
