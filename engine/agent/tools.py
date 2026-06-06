@@ -202,10 +202,12 @@ def generate_sql_tool(
                     "error": "Complex SQL fallback requires a configured LLM API key.",
                 }
             else:
+                # Initial SQL always uses baseline prompt (contract only for retry)
+                initial_question = _question_with_plan(question, query_plan) if req.api_key else question
                 result = generate_sql(
                     db,
                     req.datasource_id,
-                    _question_with_contract(question, schema_context, query_plan, contract) if (req.api_key and semantic_mode == "retry") else (_question_with_plan(question, query_plan) if req.api_key else question),
+                    initial_question,
                     llm_config=_llm_config(req),
                     optimize_rag=req.optimize_rag,
                 )
