@@ -2,6 +2,8 @@
 .databox_runtime/
 databox_local.db
 databox_local.db.bak_*
+databox_local.db-shm
+databox_local.db-wal
 engine/.secret_key
 engine/.local_token
 desktop/.env.local
