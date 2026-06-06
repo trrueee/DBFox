@@ -22,35 +22,34 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from typing import Generator
 
 # 1. 动态持久化路径解析
-# 判断当前运行环境：是在打包后的桌面环境（Tauri Frozen/Sidecar）中，还是在本地源码开发环境中。
-is_frozen = getattr(sys, "frozen", False)
-if is_frozen:
-    from engine.runtime_paths import private_runtime_dir
-    # 打包运行：数据库保存在系统推荐的用户专有数据目录下，防止卸载或更新时丢失数据
-    DB_PATH = private_runtime_dir("data") / "databox_local.db"
+# 环境变量 DATABOX_DATABASE_URL 允许 eval farm 隔离每个 worker 的 SQLite DB
+_env_db_url = os.environ.get("DATABOX_DATABASE_URL", "")
+if _env_db_url:
+    DATABASE_URL = _env_db_url
 else:
-    # 源码开发：直接保存在项目根目录下，方便开发者查看、调试、备份
-    DB_PATH = Path(__file__).resolve().parent.parent / "databox_local.db"
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        from engine.runtime_paths import private_runtime_dir
+        DB_PATH = private_runtime_dir("data") / "databox_local.db"
+    else:
+        DB_PATH = Path(__file__).resolve().parent.parent / "databox_local.db"
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# 构造标准 SQLite 连接 URL
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Ensure DB_PATH is available for backward compat (checkpointer imports it)
+if "DB_PATH" not in dir():
+    DB_PATH = Path(DATABASE_URL.replace("sqlite:///", ""))
 
-# 创建数据库物理引擎 (Database Engine)
-# Python & SQLAlchemy 知识点:
-#   - `create_engine`：创建物理连接引擎，它是所有数据库操作的核心通道。
-#   - `check_same_thread: False`：SQLite 默认只允许创建连接的线程访问数据库。
-#     但在 Web 开发（如 FastAPI）中，请求是由多线程/多协程并发处理的，因此必须关闭此安全锁。
-# Pre-configure SQLite for WAL mode (must run before engine creation)
+# Pre-configure SQLite for WAL mode (must run before engine creation, sqlite:// only)
 import sqlite3
-_sqlite_db = Path(DATABASE_URL.replace("sqlite:///", ""))
-if not _sqlite_db.exists():
-    _sqlite_db.parent.mkdir(parents=True, exist_ok=True)
-# Set WAL mode via sqlite3 directly (applies globally to the file)
-_conn = sqlite3.connect(str(_sqlite_db))
-_conn.execute("PRAGMA journal_mode=WAL")
-_conn.execute("PRAGMA busy_timeout=30000")
-_conn.execute("PRAGMA synchronous=NORMAL")
-_conn.close()
+if DATABASE_URL.startswith("sqlite:///"):
+    _sqlite_db = Path(DATABASE_URL.replace("sqlite:///", ""))
+    if not _sqlite_db.exists():
+        _sqlite_db.parent.mkdir(parents=True, exist_ok=True)
+    _conn = sqlite3.connect(str(_sqlite_db))
+    _conn.execute("PRAGMA journal_mode=WAL")
+    _conn.execute("PRAGMA busy_timeout=30000")
+    _conn.execute("PRAGMA synchronous=NORMAL")
+    _conn.close()
 
 engine: Engine = create_engine(
     DATABASE_URL,

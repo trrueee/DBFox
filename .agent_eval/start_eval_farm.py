@@ -36,7 +36,8 @@ def stop_farm():
     print("Farm stopped.")
 
 
-def start_farm(workers: int, base_port: int, config_path: str | None):
+def start_farm(workers: int, base_port: int, config_path: str | None,
+               fresh: bool = True, base_db: str = "databox_local.db"):
     RUNTIME.mkdir(parents=True, exist_ok=True)
 
     # Stop any existing farm
@@ -61,20 +62,30 @@ def start_farm(workers: int, base_port: int, config_path: str | None):
                     env_extra["DATABOX_LLM_API_BASE"] = str(llm["api_base"])
 
     workers_info = []
-    base_db_path = Path(BASE_DB)
+    base_db_path = Path(base_db).resolve()
+    print(f"Base DB: {base_db_path}")
 
     for i in range(workers):
         worker_dir = RUNTIME / f"worker_{i}"
         worker_dir.mkdir(parents=True, exist_ok=True)
-        worker_db = worker_dir / "databox_worker.db"
+        worker_db = (worker_dir / "databox_worker.db").resolve()
         port = base_port + i
 
-        # Copy base DB if this worker doesn't have one yet
-        if not worker_db.exists() and base_db_path.exists():
+        # Fresh: delete old DB + WAL/SHM, re-copy from base
+        if fresh and base_db_path.exists():
+            for suffix in ("", "-wal", "-shm"):
+                p = Path(str(worker_db) + suffix)
+                if p.exists():
+                    p.unlink()
+            shutil.copy2(base_db_path, worker_db)
+        elif not worker_db.exists() and base_db_path.exists():
             shutil.copy2(base_db_path, worker_db)
 
-        # Environment
+        print(f"Worker {i}: db={worker_db}")
+
+        # Environment with isolated SQLite DB
         env = os.environ.copy()
+        env["DATABOX_DATABASE_URL"] = f"sqlite:///{worker_db.as_posix()}"
         env["AGENT_PERSISTENCE_MODE"] = "disabled"
         env["AGENT_PERSIST_RUNTIME_EVENTS"] = "false"
         env["AGENT_DB_WRITE_TRACE"] = "false"
@@ -145,13 +156,17 @@ def main():
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--base-port", type=int, default=18625)
     parser.add_argument("--config", default=str(HERE / "config.local.json"))
+    parser.add_argument("--base-db", default=str(BASE_DB))
+    parser.add_argument("--fresh", action="store_true", default=True)
+    parser.add_argument("--reuse-db", action="store_true")
     parser.add_argument("--stop", action="store_true")
     args = parser.parse_args()
 
     if args.stop:
         stop_farm()
     else:
-        start_farm(args.workers, args.base_port, args.config)
+        fresh = not args.reuse_db
+        start_farm(args.workers, args.base_port, args.config, fresh=fresh, base_db=args.base_db)
 
 
 if __name__ == "__main__":

@@ -1325,6 +1325,7 @@ def main() -> None:
         elif case_id in completed_ids:
             continue  # resume: skip already-completed case
         else:
+            _meta = {}
             case_start = time.time()
             events, agent_error, final_status, approval_info = run_agent_case(
                 base_url=base_url,
@@ -1469,6 +1470,8 @@ def main() -> None:
             "serial_retry_attempted": _case_concurrency_meta.get(case_id, {}).get("serial_retry_attempted", False),
             "serial_retry_success": _case_concurrency_meta.get(case_id, {}).get("serial_retry_success", False),
             "original_concurrent_error": _case_concurrency_meta.get(case_id, {}).get("original_concurrent_error"),
+            "backend_url": (_meta or {}).get("backend_url", base_url),
+            "worker_id": (_meta or {}).get("worker_id", -1),
         }
         results.append(record)
 
