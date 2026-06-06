@@ -993,6 +993,10 @@ def main() -> None:
                         help="Limit to first N cases (0 = all)")
     parser.add_argument("--case-filter", default=None,
                         help="Comma-separated case_ids to run")
+    parser.add_argument("--backend-pool", default=None,
+                        help="Comma-separated backend URLs for sharded eval")
+    parser.add_argument("--backend-pool-file", default=None,
+                        help="Path to backend_pool.json from start_eval_farm.py")
     args = parser.parse_args()
 
     # Load config (supports both legacy flat format and nested llm/backend format)
@@ -1087,6 +1091,19 @@ def main() -> None:
     if args.max_cases > 0:
         cases = cases[:args.max_cases]
 
+    # --- Backend pool resolution (sharded multi-backend eval) ---
+    backend_urls: list[str] = []
+    if args.backend_pool_file:
+        pool_path = Path(args.backend_pool_file)
+        if pool_path.exists():
+            pool = json.loads(pool_path.read_text())
+            for w in pool.get("workers", []):
+                backend_urls.append(w.get("base_url", ""))
+    if args.backend_pool:
+        backend_urls.extend(u.strip() for u in args.backend_pool.split(",") if u.strip())
+    if backend_urls:
+        print(f"Backend pool: {len(backend_urls)} workers")
+
     # --- Concurrent pre-fetch (IO-bound agent calls) ---
     _prefetched: dict[str, Any] = {}
     concurrent_stats = {
@@ -1111,14 +1128,22 @@ def main() -> None:
                 "dev_datasource_id", f"ds-spider-{case['db_id'].replace('_', '-')}")
             _case_concurrency_meta[cid] = {"ran_concurrently": True, "serial_retry_attempted": False,
                                             "serial_retry_success": False, "original_concurrent_error": None}
+            # Route to backend pool (round-robin) if available
+            worker_url = base_url
+            worker_id = -1
+            if backend_urls:
+                wi = idx % len(backend_urls)
+                worker_url = backend_urls[wi]
+                worker_id = wi
             t0 = time.time()
             evts, err, st, appr = run_agent_case(
-                base_url=base_url, datasource_id=ds_id, question=case["question"],
+                base_url=worker_url, datasource_id=ds_id, question=case["question"],
                 token=token, model=model, api_key=api_key, api_base=api_base,
                 execute=case.get("execute", global_execute), max_steps=max_steps,
                 semantic_mode=semantic_mode,
             )
-            return (cid, (evts, err, st, appr, time.time() - t0, "concurrent"))
+            return (cid, (evts, err, st, appr, time.time() - t0, "concurrent",
+                          {"backend_url": worker_url, "worker_id": worker_id}))
 
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
             futs = {ex.submit(_fetch, i, c): i for i, c in enumerate(cases)
@@ -1127,7 +1152,7 @@ def main() -> None:
                 cid, result = fut.result()
                 if result is not None:
                     _prefetched[cid] = result
-                    evts, err, st, appr, lat, _source = result
+                    evts, err, st, appr, lat, _source, *_rest = result
                     concurrent_stats["attempted"] += 1
                     if err and "database is locked" in str(err).lower():
                         concurrent_stats["db_locked_error_count"] += 1
@@ -1139,14 +1164,14 @@ def main() -> None:
 
         # Serial retry for DB-locked failures
         if failure_policy == "serial-retry":
-            _retry_ids = [cid for cid, (evts, err, st, _appr, _lat, _src) in _prefetched.items()
-                           if err]
+            _retry_ids = [cid for cid, val in _prefetched.items()
+                           if val[1]]  # val[1] = err
             if _retry_ids:
                 print(f"Serial retry: {len(_retry_ids)} cases...")
                 for cid in _retry_ids:
                     concurrent_stats["serial_retry_count"] += 1
                     _case_concurrency_meta.setdefault(cid, {})["serial_retry_attempted"] = True
-                    cause = str(_prefetched[cid][1])[:100] if _prefetched[cid][1] else "unknown"
+                    cause = str(_prefetched[cid][1])[:100] if len(_prefetched[cid]) > 1 and _prefetched[cid][1] else "unknown"
                     concurrent_stats["retry_reason_counts"][cause] = concurrent_stats["retry_reason_counts"].get(cause, 0) + 1
                     for case in cases:
                         if (case.get("case_id") or case.get("id", "")) == cid:
@@ -1159,7 +1184,8 @@ def main() -> None:
                                 execute=case.get("execute", global_execute), max_steps=max_steps,
                                 semantic_mode=semantic_mode,
                             )
-                            _prefetched[cid] = (evts, err, st, appr, time.time() - t0, "serial_retry")
+                            _prefetched[cid] = (evts, err, st, appr, time.time() - t0, "serial_retry",
+                                                  {"backend_url": base_url, "worker_id": -1})
                             if err:
                                 concurrent_stats["serial_retry_failed"] += 1
                             else:
@@ -1295,7 +1321,7 @@ def main() -> None:
 
         # --- Run agent (use pre-fetched when concurrent) ---
         if case_id in _prefetched:
-            events, agent_error, final_status, approval_info, case_latency, _ = _prefetched[case_id]
+            events, agent_error, final_status, approval_info, case_latency, _, _meta = _prefetched[case_id]
         elif case_id in completed_ids:
             continue  # resume: skip already-completed case
         else:
