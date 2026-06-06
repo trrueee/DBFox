@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import time
 from typing import Any
@@ -174,6 +175,14 @@ def search_demo_sql(question: str) -> str:
 
     # Default fallback
     return "SELECT * FROM products LIMIT 10"
+
+
+def _persist_llm_log(db, log_entry) -> None:
+    """Write LLM log entry to DB if persistence is enabled."""
+    if os.environ.get("AGENT_PERSISTENCE_MODE", "sync") == "disabled":
+        return
+    db.add(log_entry)
+    db.commit()
 
 
 def _has_real_llm_config(api_key: str | None, model_name: str | None) -> bool:
@@ -475,8 +484,7 @@ def generate_sql(
                 model_temperature=0.0,
                 max_tokens=None,
             )
-            db.add(log_entry)
-            db.commit()
+            _persist_llm_log(db, log_entry)
             return {
                 "sql": None,
                 "model": "databox-local-heuristic",
@@ -511,8 +519,7 @@ def generate_sql(
             max_tokens=None,
             schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         
         return {
             "sql": generated_query,
@@ -589,8 +596,7 @@ def generate_sql(
             max_tokens=800,
             schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         
         return {
             "sql": generated_query,
@@ -620,8 +626,7 @@ def generate_sql(
             model_temperature=0.1,
             max_tokens=800
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         raise AIServiceError(f"LLM 接口调用失败: {str(e)}")
 
 

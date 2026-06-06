@@ -54,8 +54,12 @@ class AgentKernelService:
         self.policy_gate = PolicyGate(self.registry)
         self.artifact_emitter = ArtifactEmitter()
         self.response_assembler = AgentKernelResponseAssembler()
-        # Toggle runtime event persistence (disable for eval concurrency)
-        self._persist_events = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true").lower() != "false"
+        from engine.agent_kernel.persistence_sink import create_persistence_sink
+        self.persistence_sink = create_persistence_sink(db)
+        # Combine both env vars: either can disable persistence
+        _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
+        _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
+        self._persist_events = (_mode != "disabled" and _events_flag.lower() != "false")
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
@@ -161,19 +165,7 @@ class AgentKernelService:
         def _save_event(event: AgentRuntimeEvent) -> None:
             if not self._persist_events:
                 return
-            for attempt in range(3):
-                try:
-                    agent_persistence.record_runtime_event(self.db, session_id, event)
-                    return
-                except Exception as exc:
-                    msg = str(exc).lower()
-                    if attempt < 2 and ("database is locked" in msg or "operationalerror" in msg):
-                        self._rollback_quietly()
-                        time.sleep(0.3 * (attempt + 1))
-                        continue
-                    logger.warning("Agent kernel persistence: failed to save event %s: %s", event.event_id, exc)
-                    self._rollback_quietly()
-                    return
+            self.persistence_sink.record_event(session_id, event)
 
         emitter = EventEmitter(run_id, _save_event)
 
@@ -301,11 +293,7 @@ class AgentKernelService:
         def _save_event(event: AgentRuntimeEvent) -> None:
             if not self._persist_events:
                 return
-            try:
-                agent_persistence.record_runtime_event(self.db, session_id, event)
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save resume event %s", event.event_id)
-                self._rollback_quietly()
+            self.persistence_sink.record_event(session_id, event)
 
         emitter = EventEmitter(
             run_id,
@@ -885,11 +873,12 @@ class AgentKernelService:
             emitted_artifact_ids.add(bound.id)
             event = emit("agent.artifact.created", step={"name": observation.name}, artifact=bound)
             yield event
-            try:
-                agent_persistence.record_artifact(self.db, agent_state.session_id or "", agent_state.run_id, bound, len(agent_state.artifacts))
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save artifact %s", bound.id)
-                self._rollback_quietly()
+            if self._persist_events:
+                try:
+                    agent_persistence.record_artifact(self.db, agent_state.session_id or "", agent_state.run_id, bound, len(agent_state.artifacts))
+                except Exception:
+                    logger.warning("Agent kernel persistence: failed to save artifact %s", bound.id)
+                    self._rollback_quietly()
 
     def _final_events(
         self,
@@ -906,10 +895,11 @@ class AgentKernelService:
             emitted_artifact_ids.add(artifact.id)
             event = emit("agent.artifact.created", artifact=artifact)
             yield event
-            try:
-                agent_persistence.record_artifact(self.db, response.session_id, response.run_id, artifact, len(agent_state.artifacts))
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save final artifact %s", artifact.id)
+            if self._persist_events:
+                try:
+                    agent_persistence.record_artifact(self.db, response.session_id, response.run_id, artifact, len(agent_state.artifacts))
+                except Exception:
+                    logger.warning("Agent kernel persistence: failed to save final artifact %s", artifact.id)
                 self._rollback_quietly()
 
         if response.answer is not None:
@@ -938,15 +928,18 @@ class AgentKernelService:
             final_type: AgentRuntimeEventType = "agent.run.completed" if response.success else "agent.run.failed"
             yield emit(final_type, response=response, error=response.error)
 
-        try:
-            if response.success:
-                agent_persistence.complete_run(self.db, response)
-            else:
-                agent_persistence.fail_run(self.db, response.run_id, response.session_id, response.error or response.status or "Agent kernel stopped.", response)
-            self.db.commit()
-        except Exception:
-            logger.warning("Agent kernel persistence: failed to persist final response for run %s", response.run_id)
-            self._rollback_quietly()
+        if self._persist_events:
+            try:
+                if response.success:
+                    self.persistence_sink.complete_run(response)
+                else:
+                    self.persistence_sink.fail_run(
+                        response.run_id, response.session_id,
+                        response.error or response.status or "Agent kernel stopped.", response)
+                self.db.commit()
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to persist final response for run %s", response.run_id)
+                self._rollback_quietly()
 
     def _response(
         self,
@@ -1078,6 +1071,8 @@ class AgentKernelService:
         }
 
     def _start_persistence(self, req: AgentRunRequest, run_id: str, session_id: str) -> None:
+        if not self._persist_events:
+            return
         try:
             agent_persistence.create_or_get_session(self.db, req, run_id)
             agent_persistence.start_run(self.db, req, run_id, session_id)

@@ -87,6 +87,10 @@ def main():
     except Exception:
         pass
 
+    # Eval backend: disable DB persistence to avoid SQLite lock contention
+    if "AGENT_PERSISTENCE_MODE" not in env:
+        env["AGENT_PERSISTENCE_MODE"] = "disabled"
+
     cmd = [sys.executable, "-m", "uvicorn", "engine.main:app", "--host", "127.0.0.1", "--port", "18625", "--log-level", "info"]
 
     STDOUT.parent.mkdir(parents=True, exist_ok=True)
