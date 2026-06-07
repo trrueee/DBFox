@@ -134,11 +134,11 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         }
 
     # 2. Enforce SELECT only
-    # Check if outer node is a Select (or Union of Selects)
+    # Check if outer node is a Select or SetOperation (Union/Intersect/Except of Selects)
     def is_select_node(node: exp.Expression) -> bool:
         if isinstance(node, exp.Select):
             return True
-        if isinstance(node, exp.Union):
+        if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
             return is_select_node(node.left) and is_select_node(node.right)  # type: ignore[arg-type]
         if isinstance(node, exp.Subquery):
             return is_select_node(node.this)
@@ -275,7 +275,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     if not has_limit:
         # Inject LIMIT 1000 to the AST in a type-safe way
         try:
-            if isinstance(expression, (exp.Select, exp.Union)):
+            if isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except)):
                 safe_expression = safe_expression.limit(1000)  # type: ignore[attr-defined]
                 checks.append({
                     "rule": "auto_limit",

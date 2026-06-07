@@ -127,6 +127,10 @@ def build_query_contract(
         confidence=0.55,
     )
 
+    if contract.distinct and contract.distinct.required:
+        contract.notes.append("explicit_distinct_detected")
+        contract.confidence = max(contract.confidence, 0.75)
+
     scalar_filter = _scalar_threshold_filter(q)
     if scalar_filter:
         contract.scalar_filters.append(scalar_filter)
@@ -201,9 +205,35 @@ def _requested_columns_from_question(q: str) -> list[str]:
 
 
 def _distinct_contract(q: str) -> DistinctContract:
-    if any(marker in q for marker in ("distinct", "different", "unique")):
+    # Check for explicit uniqueness intent
+    has_explicit = any(marker in q for marker in (
+        "distinct", "different", "unique", "without duplicates",
+    ))
+    if not has_explicit:
+        return DistinctContract(required=False)
+
+    # Do NOT require DISTINCT for aggregation count questions like "how many different X"
+    if _is_count_distinct_question(q):
+        return DistinctContract(required=False)
+
+    # "different kinds/types/names/entities" — strong explicit intent
+    if re.search(r"different\s+(kinds?|types?|names?|entities)", q):
         return DistinctContract(required=True, reason="explicit_distinct")
+
+    # Generic "distinct / different / unique" in question
+    if any(marker in q for marker in ("distinct", "different", "unique", "without duplicates")):
+        return DistinctContract(required=True, reason="explicit_distinct")
+
     return DistinctContract(required=False)
+
+
+def _is_count_distinct_question(q: str) -> bool:
+    """Returns True if the question is about counting distinct entities, e.g. 'how many different cities'.
+    These should use COUNT(DISTINCT ...) not SELECT DISTINCT."""
+    return bool(re.search(
+        r"how\s+many\s+different\b|\bcount\s+.*\bdistinct\b|\bnumber\s+of\s+different\b",
+        q,
+    ))
 
 
 def _ordering_contract(q: str) -> OrderingContract:
@@ -374,30 +404,38 @@ def _negation_contract(q: str) -> NegationContract | None:
         if re.search(pat, q):
             subject = subj
             break
+    # Detect value-qualified relation like "cat pet" → relation=pet, value=cat
     excluded = None
-    for pattern, relation in (
-        (r"\bfriends?\b", "friend"),
-        (r"\bevaluations?\b", "evaluation"),
-        (r"\bawards?\b", "evaluation"),
-        (r"\bhire\b|\bhiring\b|\bemployees?\b", "hiring"),
-        (r"\bcats?\b", "cat"),
-        (r"\bpets?\b", "pet"),
-        (r"\bflights?\b", "flight"),
-        (r"\bcourses?\b", "course"),
-        (r"\bvisitors?\b", "visitor"),
-        (r"\bEnglish\b", "english_language"),
-        (r"\bcartoons?\b", "cartoon"),
-        (r"\bdogs?\b", "dog"),
-    ):
-        if re.search(pattern, q):
-            excluded = relation
-            break
+    excluded_value: str | None = None
+    _pet_type_match = re.search(r"\b(cat|dog|bird|fish|rabbit|hamster|turtle)s?\s+(pet|pets)\b", q)
+    if _pet_type_match:
+        excluded = "pet"
+        excluded_value = _pet_type_match.group(1)
+    if excluded is None:
+        for pattern, relation in (
+            (r"\bfriends?\b", "friend"),
+            (r"\bevaluations?\b", "evaluation"),
+            (r"\bawards?\b", "evaluation"),
+            (r"\bhire\b|\bhiring\b|\bemployees?\b", "hiring"),
+            (r"\bpets?\b", "pet"),
+            (r"\bcats?\b", "cat"),
+            (r"\bflights?\b", "flight"),
+            (r"\bcourses?\b", "course"),
+            (r"\bvisitors?\b", "visitor"),
+            (r"\bEnglish\b", "english_language"),
+            (r"\bcartoons?\b", "cartoon"),
+            (r"\bdogs?\b", "dog"),
+        ):
+            if re.search(pattern, q):
+                excluded = relation
+                break
     if not excluded:
         return None
     return NegationContract(
         type="absence_of_relation",
         subject_hint=subject,
         excluded_relation_hint=excluded,
+        excluded_value_hint=excluded_value,
         preferred_sql_shape="not_exists",
     )
 

@@ -870,7 +870,8 @@ def _contract_requires_llm(contract: QueryContract) -> tuple[bool, str | None]:
 # Violation codes that may be retried (requires contract confidence >= 0.7)
 _HIGH_CONFIDENCE_RETRYABLE_CODES = frozenset({
     "having_missing", "group_by_missing", "having_count_missing",
-    "antijoin_outer_join", "setlogic_contradictory_and", "projection_select_star",
+    "antijoin_outer_join", "antijoin_not_equal_or_null", "antijoin_missing",
+    "setlogic_contradictory_and", "projection_select_star", "distinct_missing",
 })
 
 
@@ -975,9 +976,13 @@ def _semantic_retry_guidance(violations: list[SemanticViolation]) -> str:
         rules.append("- Remove extra projected columns or COUNT columns unless SQL_CONTRACT explicitly asks to return them.")
     if "distinct_missing" in codes:
         rules.append("- Use SELECT DISTINCT for explicitly distinct/different/unique results.")
-    if codes & {"antijoin_outer_join", "antijoin_missing"}:
+    if codes & {"antijoin_not_equal_or_null", "antijoin_outer_join", "antijoin_missing"}:
         rules.append(
-            "- For absence/never/no-related-record questions, use a correlated NOT EXISTS subquery; do not inner join the excluded relation in the outer query."
+            "- For absence/never/no-related-record questions, use a correlated NOT EXISTS subquery. "
+            "Do NOT use LEFT JOIN patterns (neither `WHERE col <> value OR col IS NULL` nor "
+            "`LEFT JOIN ... AND col = value WHERE key IS NULL`) — both fail when a subject "
+            "has both matching and non-matching related rows. Only NOT EXISTS guarantees "
+            "correct anti-join semantics for value-qualified conditions."
         )
     if codes & {"setlogic_contradictory_and", "setlogic_missing"}:
         rules.append(

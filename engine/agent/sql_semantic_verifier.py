@@ -147,6 +147,13 @@ def _verify_distinct(parsed: exp.Expression, contract: QueryContract) -> list[Se
     select = _first_select(parsed)
     if not select or select.args.get("distinct"):
         return []
+    # GROUP BY already deduplicates rows — no DISTINCT needed
+    group = select.args.get("group")
+    if group and getattr(group, "expressions", None):
+        return []
+    # Aggregation without GROUP BY (e.g. COUNT(*)) does not need DISTINCT
+    if not group and _has_aggregate_in_select(select):
+        return []
     return [
         SemanticViolation(
             code="distinct_missing",
@@ -156,6 +163,14 @@ def _verify_distinct(parsed: exp.Expression, contract: QueryContract) -> list[Se
             actual=select.sql(dialect="mysql"),
         )
     ]
+
+
+def _has_aggregate_in_select(select: exp.Select) -> bool:
+    """Check if SELECT has aggregate functions (COUNT, AVG, etc.) without GROUP BY."""
+    for item in select.expressions:
+        if _contains_aggregate(item):
+            return True
+    return False
 
 
 def _verify_count_threshold(parsed: exp.Expression, contract: QueryContract) -> list[SemanticViolation]:
@@ -246,7 +261,35 @@ def _verify_antijoin(parsed: exp.Expression, contract: QueryContract) -> list[Se
     if not relation:
         return []
 
-    if _has_except(parsed) or _has_not_exists_for_relation(parsed, relation) or _has_left_join_null_antijoin(parsed, relation):
+    # Detect <> x OR IS NULL anti-pattern — always wrong for absence queries
+    antijoin_bad = _detect_antijoin_not_equal_or_null(parsed)
+    if antijoin_bad:
+        return [antijoin_bad]
+
+    has_not_exists = _has_not_exists_for_relation(parsed, relation)
+    has_except = _has_except(parsed)
+    has_left_join_null = _has_left_join_null_antijoin(parsed, relation)
+
+    # When the negation contract specifies an excluded value (e.g. "cat pet"),
+    # LEFT JOIN ... AND value WHERE IS NULL is unreliable — subjects with
+    # multiple related rows (one matching value, one not) will still appear.
+    # Only NOT EXISTS guarantees correct anti-join for value-qualified absence.
+    if negation.excluded_value_hint and not has_not_exists and not has_except:
+        return [
+            SemanticViolation(
+                code="antijoin_missing",
+                severity="retryable",
+                message=(
+                    "For value-qualified absence (e.g. 'no cat pet'), LEFT JOIN patterns "
+                    "are unreliable when the subject may have multiple related rows. "
+                    "Use NOT EXISTS with a correlated subquery that checks the specific value."
+                ),
+                expected="NOT EXISTS (SELECT 1 FROM relation WHERE ... AND attr = value AND key = outer.key)",
+                actual=parsed.sql(dialect="mysql"),
+            )
+        ]
+
+    if has_except or has_not_exists or has_left_join_null:
         return []
 
     select = _first_select(parsed)
@@ -270,6 +313,56 @@ def _verify_antijoin(parsed: exp.Expression, contract: QueryContract) -> list[Se
             actual=parsed.sql(dialect="mysql"),
         )
     ]
+
+
+def _detect_antijoin_not_equal_or_null(parsed: exp.Expression) -> SemanticViolation | None:
+    """Detect the broken anti-join pattern:
+    LEFT JOIN relation ... WHERE relation.attr <> value OR relation.attr IS NULL
+    This is always wrong for absence queries — it preserves subjects that have
+    a matching row AND a non-matching row.
+    """
+    select = _first_select(parsed)
+    if not select:
+        return None
+    where = select.args.get("where")
+    if not where:
+        return None
+
+    # Look for (col <> value OR col IS NULL) pattern
+    for or_node in where.find_all(exp.Or):
+        has_not_equal = False
+        has_is_null = False
+        neq_column: str | None = None
+        null_column: str | None = None
+
+        for child in [or_node.left, or_node.right]:
+            if isinstance(child, exp.NEQ):
+                has_not_equal = True
+                if isinstance(child.left, exp.Column):
+                    neq_column = child.left.name
+            elif isinstance(child, exp.Is):
+                if isinstance(child.expression, exp.Null):
+                    has_is_null = True
+                    if isinstance(child.this, exp.Column):
+                        null_column = child.this.name
+
+        if has_not_equal and has_is_null:
+            # Verify columns are the same or from same table
+            if neq_column and null_column and neq_column == null_column:
+                return SemanticViolation(
+                    code="antijoin_not_equal_or_null",
+                    severity="retryable",
+                    message=(
+                        "LEFT JOIN ... WHERE col <> value OR col IS NULL does not correctly "
+                        "express absence. Subjects with both a matching and non-matching related "
+                        "row will still appear in results. Use NOT EXISTS or a restricted LEFT JOIN "
+                        "to the excluded value only."
+                    ),
+                    expected="NOT EXISTS (SELECT 1 FROM relation WHERE ... AND attr = value) or LEFT JOIN restricted subquery",
+                    actual=or_node.sql(dialect="mysql"),
+                )
+
+    return None
 
 
 def _verify_set_logic(parsed: exp.Expression, contract: QueryContract) -> list[SemanticViolation]:
