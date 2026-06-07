@@ -148,3 +148,43 @@ def test_distinct_required_is_flagged_when_missing() -> None:
         "SELECT Country FROM singer WHERE Age > 20",
         "What are all distinct countries where singers above age 20 are from?",
     ) == {"distinct_missing"}
+
+
+# ============================================================
+# Projection duplicate alias detection
+# ============================================================
+
+def test_duplicate_alias_detected() -> None:
+    """Same column with two different aliases → projection_duplicate_alias."""
+    codes = _codes(
+        "SELECT a.Airline AS airline, a.Airline AS airlines_airline FROM airlines AS a",
+        "Find all airlines that have at least 10 flights.",
+    )
+    assert "projection_duplicate_alias" in codes
+
+
+def test_duplicate_alias_airport_name() -> None:
+    """AirportName AS name + AirportName AS airports_airportname."""
+    codes = _codes(
+        "SELECT AirportName AS name, AirportName AS airports_airportname FROM airports",
+        "Find the name of airports which do not have any flight in and out.",
+    )
+    assert "projection_duplicate_alias" in codes
+
+
+def test_no_duplicate_alias_for_different_columns() -> None:
+    """Different columns should NOT trigger duplicate alias."""
+    codes = _codes(
+        "SELECT PetType, AVG(pet_age) FROM pets GROUP BY PetType",
+        "Find the average age for each type of pet.",
+    )
+    assert "projection_duplicate_alias" not in codes
+
+
+def test_select_star_triggers_extra_columns() -> None:
+    """SELECT many entity columns when question asks for one ID."""
+    codes = _codes(
+        "SELECT student.StuID, student.LName, student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID WHERE student.LName = 'Smith'",
+        "Find the id of the pet owned by student whose last name is Smith.",
+    )
+    assert "projection_extra_columns" in codes

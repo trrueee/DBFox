@@ -246,7 +246,10 @@ def generate_sql_tool(
                 if retry_sql_candidate:
                     retry_violations = verify_sql_against_contract(retry_sql_candidate, contract, schema_context)
                     semantic_retry_violations = _semantic_violation_payload(retry_violations)
-                    if _accept_semantic_retry(semantic_violations, retry_violations, contract):
+                    if _accept_semantic_retry(
+                        semantic_violations, retry_violations, contract,
+                        original_sql=sql, retry_sql=retry_sql_candidate,
+                    ):
                         semantic_retry_accepted = True
                         result = retry_result
                         raw_sql = retry_raw
@@ -872,6 +875,9 @@ _HIGH_CONFIDENCE_RETRYABLE_CODES = frozenset({
     "having_missing", "group_by_missing", "having_count_missing",
     "antijoin_outer_join", "antijoin_not_equal_or_null", "antijoin_missing",
     "setlogic_contradictory_and", "projection_select_star", "distinct_missing",
+    # Projection — guarded retry: only SELECT list may change
+    "projection_extra_columns", "projection_missing_requested_column",
+    "projection_duplicate_alias",
 })
 
 
@@ -909,15 +915,17 @@ def _accept_semantic_retry(
     original_violations: list[Any],
     retry_violations: list[Any],
     contract: QueryContract,
+    original_sql: str = "",
+    retry_sql: str = "",
 ) -> bool:
-    """Accept retry only if it reduces violation severity and introduces no new
-    high-confidence retryable violation codes not present in the original set."""
+    """Accept retry only if it reduces violation severity, introduces no new
+    high-confidence retryable violation codes, and passes structure checks for
+    projection-only retries."""
     if contract.confidence < 0.7:
         return False
     orig_score = _semantic_violation_severity_score(original_violations)
     retry_score = _semantic_violation_severity_score(retry_violations)
-    if retry_score >= orig_score:
-        return False
+
     # Check that retry doesn't introduce NEW high-confidence retryable violations
     orig_codes = {str(v.get("code") if isinstance(v, dict) else v.code)
                   for v in original_violations}
@@ -927,7 +935,51 @@ def _accept_semantic_retry(
         if str(v.get("severity") if isinstance(v, dict) else v.severity) == "retryable"
     }
     new_retryable = retry_high_codes - orig_codes
-    return len(new_retryable) == 0
+    # For projection retries, allow new projection-family codes (e.g.
+    # projection_duplicate_alias replacing projection_extra_columns)
+    new_retryable_non_proj = new_retryable - _PROJECTION_RETRY_CODES
+    if new_retryable_non_proj:
+        return False
+
+    # Projection-specific structural validation:
+    # if the retry targeted projection violations, verify only SELECT list changed
+    orig_proj_codes = orig_codes & _PROJECTION_RETRY_CODES
+    if orig_proj_codes and original_sql and retry_sql:
+        if not _validate_projection_retry(original_sql, retry_sql, contract):
+            return False
+        # For projection retries: accept if projection violations decreased,
+        # even if overall score is unchanged (column name normalization noise)
+        orig_proj_score = _projection_violation_score(original_violations)
+        retry_proj_score = _projection_violation_score(retry_violations)
+        if retry_proj_score >= orig_proj_score:
+            return False
+        # Accept if projection improved and structural check passed
+        return True
+
+    # Non-projection retries: require overall score decrease
+    if retry_score >= orig_score:
+        return False
+    return True
+
+
+def _projection_violation_score(violations: list[Any]) -> int:
+    """Score only projection-related violations."""
+    score = 0
+    for v in violations:
+        code = str(v.get("code") if isinstance(v, dict) else v.code)
+        sev = str(v.get("severity") if isinstance(v, dict) else v.severity)
+        if code in _PROJECTION_RETRY_CODES:
+            if sev == "retryable":
+                score += 10
+            else:
+                score += 1
+    return score
+
+
+_PROJECTION_RETRY_CODES = frozenset({
+    "projection_extra_columns", "projection_missing_requested_column",
+    "projection_duplicate_alias", "projection_select_star", "projection_extra_count",
+})
 
 
 def _has_retryable_semantic_violations(violations: list[SemanticViolation]) -> bool:
@@ -972,8 +1024,20 @@ def _semantic_retry_guidance(violations: list[SemanticViolation]) -> str:
         rules.append(
             "- For related-row thresholds, select only the requested entity columns, GROUP BY them, and put COUNT(...) comparison in HAVING."
         )
-    if codes & {"projection_extra_count", "projection_extra_columns"}:
-        rules.append("- Remove extra projected columns or COUNT columns unless SQL_CONTRACT explicitly asks to return them.")
+    if "projection_select_star" in codes:
+        rules.append("- Replace SELECT * with explicit requested columns from SQL_CONTRACT.")
+    if codes & {"projection_extra_columns", "projection_missing_requested_column",
+                 "projection_duplicate_alias", "projection_extra_count"}:
+        rules.append(
+            "- Fix ONLY the SELECT list. Do not change FROM. Do not change JOIN. "
+            "Do not change WHERE. Do not change GROUP BY. Do not change HAVING. "
+            "Do not change ORDER BY. Do not change LIMIT. "
+            "Remove unrequested columns. Keep only columns explicitly requested by the question. "
+            "If the question asks for an ID (e.g. pet id), return only that requested ID column, "
+            "not all columns of the joined entity. "
+            "Remove duplicate aliases for the same underlying column (keep one). "
+            "Preserve DISTINCT if present in the original SQL or required by SQL_CONTRACT."
+        )
     if "distinct_missing" in codes:
         rules.append("- Use SELECT DISTINCT for explicitly distinct/different/unique results.")
     if codes & {"antijoin_not_equal_or_null", "antijoin_outer_join", "antijoin_missing"}:
@@ -989,6 +1053,94 @@ def _semantic_retry_guidance(violations: list[SemanticViolation]) -> str:
             "- For shared/both/intersection semantics, use EXISTS subqueries or a self-join with DISTINCT; do not combine mutually exclusive predicates in one row scope, and prefer this over INTERSECT."
         )
     return "\n".join(rules)
+
+
+def _validate_projection_retry(
+    original_sql: str,
+    retry_sql: str,
+    contract: QueryContract,
+) -> bool:
+    """Validate that a projection retry only changed the SELECT list.
+
+    Rejects the retry if FROM, JOIN, WHERE, GROUP BY, HAVING, ORDER BY, or
+    LIMIT changed, or if DISTINCT was dropped when required.
+    """
+    import sqlglot
+    from sqlglot import exp
+
+    try:
+        orig = sqlglot.parse_one(original_sql, read="mysql")
+        retry = sqlglot.parse_one(retry_sql, read="mysql")
+    except Exception:
+        return False
+
+    # Helper: normalize an expression to a comparable string
+    def _norm(expr: exp.Expression | None) -> str:
+        if expr is None:
+            return ""
+        return expr.sql(dialect="mysql")
+
+    # Check FROM: table set must be identical
+    orig_tables = {t.name.lower() for t in orig.find_all(exp.Table)}
+    retry_tables = {t.name.lower() for t in retry.find_all(exp.Table)}
+    if orig_tables != retry_tables:
+        return False
+
+    # Check JOIN structure: same join types, same joined tables, same conditions
+    def _join_sig(select_node: exp.Select) -> list[tuple]:
+        sigs: list[tuple] = []
+        for join in (select_node.args.get("joins") or []):
+            side = str(join.args.get("side") or "").lower()
+            table = join.this
+            table_name = table.name.lower() if isinstance(table, exp.Table) else "?"
+            on_clause = _norm(join.args.get("on"))
+            sigs.append((side, table_name, on_clause))
+        return sorted(sigs)
+
+    orig_select = next(orig.find_all(exp.Select), None)
+    retry_select = next(retry.find_all(exp.Select), None)
+    if orig_select and retry_select:
+        if _join_sig(orig_select) != _join_sig(retry_select):
+            return False
+
+    # Check WHERE
+    orig_where = orig_select.args.get("where") if orig_select else None
+    retry_where = retry_select.args.get("where") if retry_select else None
+    if _norm(orig_where) != _norm(retry_where):
+        return False
+
+    # Check GROUP BY
+    orig_group = orig_select.args.get("group") if orig_select else None
+    retry_group = retry_select.args.get("group") if retry_select else None
+    if _norm(orig_group) != _norm(retry_group):
+        return False
+
+    # Check HAVING
+    orig_having = orig_select.args.get("having") if orig_select else None
+    retry_having = retry_select.args.get("having") if retry_select else None
+    if _norm(orig_having) != _norm(retry_having):
+        return False
+
+    # Check ORDER BY
+    orig_order = orig_select.args.get("order") if orig_select else None
+    retry_order = retry_select.args.get("order") if retry_select else None
+    if _norm(orig_order) != _norm(retry_order):
+        return False
+
+    # Check LIMIT
+    orig_limit = orig_select.args.get("limit") if orig_select else None
+    retry_limit = retry_select.args.get("limit") if retry_select else None
+    if _norm(orig_limit) != _norm(retry_limit):
+        return False
+
+    # Check DISTINCT preservation
+    if contract.distinct and contract.distinct.required:
+        orig_distinct = bool(orig_select.args.get("distinct")) if orig_select else False
+        retry_distinct = bool(retry_select.args.get("distinct")) if retry_select else False
+        if orig_distinct and not retry_distinct:
+            return False
+
+    return True
 
 
 def _prepare_generated_sql(db: Session, datasource_id: str, sql: str) -> tuple[str, list[str], dict[str, Any]]:

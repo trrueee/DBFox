@@ -100,6 +100,10 @@ def _verify_projection(parsed: exp.Expression, contract: QueryContract) -> list[
             actual_names = [_projection_name(item) for item in expressions if not _contains_aggregate(item)]
             normalized_actual = [_normalize_identifier(item) for item in actual_names if item]
             normalized_expected = [_normalize_identifier(item) for item in projection.requested_columns]
+
+            # Detect duplicate aliases for the same underlying column
+            _check_duplicate_aliases(expressions, violations)
+
             for expected in normalized_expected:
                 if expected not in normalized_actual:
                     violations.append(
@@ -402,6 +406,47 @@ def _is_star_projection(item: exp.Expression) -> bool:
     return isinstance(inner, exp.Star) or (
         isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star)
     )
+
+
+def _check_duplicate_aliases(
+    expressions: list[exp.Expression],
+    violations: list[SemanticViolation],
+) -> None:
+    """Detect the same underlying column selected multiple times with different aliases.
+
+    Example: SELECT a.Airline AS airline, a.Airline AS airlines_airline
+    → projection_duplicate_alias
+    """
+    column_sources: dict[str, list[str]] = {}
+    for item in expressions:
+        if isinstance(item, exp.Alias):
+            inner = item.this
+            # Build a key from table.column of the underlying expression
+            if isinstance(inner, exp.Column):
+                key = f"{inner.table or ''}.{inner.name}".lower()
+            else:
+                key = inner.sql(dialect="mysql").lower()
+            alias = item.alias.lower() if item.alias else ""
+            column_sources.setdefault(key, []).append(alias)
+        elif isinstance(item, exp.Column):
+            key = f"{item.table or ''}.{item.name}".lower()
+            column_sources.setdefault(key, []).append(key)
+
+    for key, aliases in column_sources.items():
+        unique_aliases = set(a for a in aliases if a)
+        if len(unique_aliases) > 1:
+            violations.append(
+                SemanticViolation(
+                    code="projection_duplicate_alias",
+                    severity="retryable",
+                    message=(
+                        f"Same underlying column '{key}' selected multiple times "
+                        f"with different aliases: {', '.join(sorted(unique_aliases))}"
+                    ),
+                    expected="single alias for each column",
+                    actual=", ".join(sorted(unique_aliases)),
+                )
+            )
 
 
 def _contains_aggregate(item: exp.Expression) -> bool:

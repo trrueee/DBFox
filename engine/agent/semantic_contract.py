@@ -131,6 +131,13 @@ def build_query_contract(
         contract.notes.append("explicit_distinct_detected")
         contract.confidence = max(contract.confidence, 0.75)
 
+    # Bump confidence when specific columns are detected in the question
+    # (e.g. "first name", "age", "id"). This enables projection retry for
+    # explicit column-request cases.
+    if contract.projection.requested_columns:
+        contract.notes.append("explicit_columns_detected")
+        contract.confidence = max(contract.confidence, 0.72)
+
     scalar_filter = _scalar_threshold_filter(q)
     if scalar_filter:
         contract.scalar_filters.append(scalar_filter)

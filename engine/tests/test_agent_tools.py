@@ -715,3 +715,82 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
     assert "DISTINCT" in sql.upper()
     metadata = (obs.output or {}).get("metadata", {})
     assert {item["code"] for item in metadata.get("semantic_violations", [])} == {"antijoin_outer_join"}
+
+
+# ============================================================
+# Projection-only retry validation
+# ============================================================
+
+from engine.agent.tools import _validate_projection_retry
+from engine.agent.semantic_contract import QueryContract, DistinctContract
+
+
+def _make_contract() -> QueryContract:
+    return QueryContract(confidence=0.75)
+
+
+def test_projection_retry_accept_select_only_change() -> None:
+    """SELECT list only changed → accept."""
+    original = "SELECT student.StuID, student.LName, student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID WHERE student.LName = 'Smith' LIMIT 100"
+    retry_sql = "SELECT has_pet.PetID FROM student JOIN has_pet ON student.StuID = has_pet.StuID WHERE student.LName = 'Smith' LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is True
+
+
+def test_projection_retry_reject_where_changed() -> None:
+    """WHERE changed → reject."""
+    original = "SELECT student.StuID, student.LName FROM student WHERE student.LName = 'Smith' LIMIT 100"
+    retry_sql = "SELECT student.StuID FROM student WHERE student.LName = 'Jones' LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_join_removed() -> None:
+    """JOIN removed → reject."""
+    original = "SELECT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT student.Fname FROM student LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_order_by_changed() -> None:
+    """ORDER BY changed → reject."""
+    original = "SELECT Name FROM singer ORDER BY Age DESC LIMIT 10"
+    retry_sql = "SELECT Name FROM singer ORDER BY Age ASC LIMIT 10"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_limit_changed() -> None:
+    """LIMIT changed → reject."""
+    original = "SELECT Name FROM singer LIMIT 100"
+    retry_sql = "SELECT Name FROM singer LIMIT 10"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_distinct_dropped() -> None:
+    """DISTINCT dropped when contract requires it → reject."""
+    contract = _make_contract()
+    contract.distinct = DistinctContract(required=True, reason="explicit_distinct")
+    original = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, contract) is False
+
+
+def test_projection_retry_accept_distinct_preserved() -> None:
+    """DISTINCT preserved when required → accept."""
+    contract = _make_contract()
+    contract.distinct = DistinctContract(required=True, reason="explicit_distinct")
+    original = "SELECT DISTINCT student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, contract) is True
+
+
+def test_projection_retry_accept_no_distinct_required() -> None:
+    """DISTINCT not required in contract → select-only change accepted."""
+    original = "SELECT student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is True
+
+
+def test_projection_retry_reject_group_by_changed() -> None:
+    """GROUP BY changed → reject."""
+    original = "SELECT PetType, AVG(pet_age) FROM pets GROUP BY PetType LIMIT 100"
+    retry_sql = "SELECT PetType, AVG(pet_age) FROM pets GROUP BY PetType, pet_age LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
