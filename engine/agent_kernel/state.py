@@ -30,6 +30,15 @@ class KernelState(TypedDict, total=False):
     plan: dict[str, Any] | None
     plan_events: Annotated[list[dict[str, Any]], add]
 
+    # Seven-step Agent lifecycle state. These fields make the graph's
+    # understand/context/plan/act/observe/reflect/answer loop explicit and
+    # inspectable without replacing the existing controller/tool runtime.
+    agent_intent: dict[str, Any] | None
+    agent_context: dict[str, Any] | None
+    agent_lifecycle_plan: dict[str, Any] | None
+    agent_observation: dict[str, Any] | None
+    agent_reflection: dict[str, Any] | None
+
     pending_decision: dict[str, Any] | None
     pending_tool_call: dict[str, Any] | None
     pending_approval: dict[str, Any] | None
