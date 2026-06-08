@@ -94,10 +94,15 @@ def reflect_node(state: KernelState) -> dict[str, Any]:
     """Reflect: decide whether the loop should continue, revise, ask, or answer."""
 
     reflection = reflect(state)
-    return {
+    update: dict[str, Any] = {
         "agent_reflection": reflection,
         "trace_events": [{"type": "agent.reflect", "payload": reflection}],
     }
+    critique = reflection.get("sql_critique") if isinstance(reflection, dict) else None
+    if isinstance(critique, dict):
+        update["agent_sql_critique"] = critique
+        update["trace_events"].append({"type": "agent.sql_critic", "payload": critique})
+    return update
 
 
 def answer_node(state: KernelState) -> dict[str, Any]:
@@ -174,14 +179,7 @@ def resolve_context(state: KernelState) -> dict[str, Any]:
 
 
 def resolve_reference(state: KernelState) -> dict[str, Any]:
-    """Resolve pronouns like 'this/that/it/刚才/它' to an active artifact/context.
-
-    Preference order is intentionally deterministic:
-    1. explicit workspace selection
-    2. pending approval
-    3. active state SQL/result
-    4. latest matching artifact
-    """
+    """Resolve pronouns like 'this/that/it/刚才/它' to an active artifact/context."""
 
     text = latest_user_message(state).strip().lower()
     has_reference_language = any(word in text for word in REFERENCE_WORDS)
@@ -242,6 +240,7 @@ def plan_route(state: KernelState) -> dict[str, Any]:
             "schema.build_context",
             "query_plan.build",
             "sql.generate",
+            "sql.critic",
             "sql.validate",
             "sql.execute_readonly|sql.skip_execution",
             "result.profile",
@@ -272,6 +271,7 @@ def reflect(state: KernelState) -> dict[str, Any]:
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     answer = state.get("answer") if isinstance(state.get("answer"), dict) else {}
     reference = resolve_reference(state)
+    critique = critique_sql(state)
 
     if state.get("error"):
         if state.get("sql") and not state.get("revision_attempted"):
@@ -280,6 +280,9 @@ def reflect(state: KernelState) -> dict[str, Any]:
         else:
             action = "stop_with_failure"
             reason = "The run has an unrecoverable error or already attempted revision."
+    elif critique.get("needs_revision") and not state.get("revision_attempted"):
+        action = "revise_sql"
+        reason = str(critique.get("summary") or "SQL Critic found issues before validation.")
     elif safety and not safety.get("can_execute"):
         action = "revise_or_explain_block"
         reason = "TrustGate blocked execution or requires a safer SQL path."
@@ -306,7 +309,66 @@ def reflect(state: KernelState) -> dict[str, Any]:
         "has_answer": bool(answer),
         "has_execution": bool(execution),
         "reference": reference,
+        "sql_critique": critique,
         "last_observation_status": observation.get("status") if isinstance(observation, dict) else None,
+    }
+
+
+def critique_sql(state: KernelState) -> dict[str, Any]:
+    """Lightweight SQL Critic that runs after SQL generation and before validation."""
+
+    sql = str(state.get("sql") or "").strip()
+    query_plan = state.get("query_plan") if isinstance(state.get("query_plan"), dict) else {}
+    question = latest_user_message(state).strip().lower()
+    last_tool = str(state.get("last_tool_name") or "")
+    issues: list[str] = []
+    suggestions: list[str] = []
+
+    if not sql:
+        return {"status": "not_applicable", "needs_revision": False, "summary": "No SQL candidate is available yet.", "issues": [], "suggestions": []}
+
+    if last_tool and last_tool not in {"sql.generate", "sql.revise"}:
+        return {"status": "not_applicable", "needs_revision": False, "summary": "SQL Critic only runs immediately after SQL generation or revision.", "issues": [], "suggestions": []}
+
+    lowered_sql = sql.lower()
+    if ";" in sql.rstrip(";"):
+        issues.append("SQL appears to contain multiple statements.")
+        suggestions.append("Return exactly one read-only SELECT statement.")
+    if not lowered_sql.lstrip().startswith("select") and "with" not in lowered_sql[:20]:
+        issues.append("SQL is not a SELECT/CTE query.")
+        suggestions.append("Rewrite as a read-only SELECT query.")
+
+    candidate_tables = [str(table).lower() for table in query_plan.get("candidate_tables", []) if isinstance(table, str)]
+    if candidate_tables and not any(table in lowered_sql for table in candidate_tables):
+        issues.append("SQL does not appear to use any candidate table from the QueryPlan.")
+        suggestions.append(f"Use one of the planned candidate tables: {', '.join(candidate_tables[:5])}.")
+
+    metrics = query_plan.get("metrics") if isinstance(query_plan.get("metrics"), list) else []
+    dimensions = query_plan.get("dimensions") if isinstance(query_plan.get("dimensions"), list) else []
+    if metrics and not any(func in lowered_sql for func in ("sum(", "count(", "avg(", "min(", "max(")):
+        issues.append("QueryPlan expects metrics, but SQL has no obvious aggregate expression.")
+        suggestions.append("Add the required aggregate expression for the planned metric.")
+    if dimensions and any(func in lowered_sql for func in ("sum(", "count(", "avg(", "min(", "max(")) ) and "group by" not in lowered_sql:
+        issues.append("QueryPlan includes dimensions with aggregate metrics, but SQL has no GROUP BY.")
+        suggestions.append("Group by the planned dimension columns.")
+
+    if any(token in question for token in ("top", "最高", "最大", "排名", "前")) and "order by" not in lowered_sql:
+        issues.append("The question asks for ranking/top values, but SQL has no ORDER BY.")
+        suggestions.append("Add ORDER BY on the relevant metric and a LIMIT.")
+    if any(token in question for token in ("month", "monthly", "按月", "每月", "月份")) and not any(token in lowered_sql for token in ("month", "strftime", "date_trunc", "%y-%m", "%m")):
+        issues.append("The question asks for monthly analysis, but SQL has no visible month bucketing.")
+        suggestions.append("Add month-level date bucketing.")
+
+    if "limit" not in lowered_sql and not any(func in lowered_sql for func in ("count(", "sum(", "avg(", "min(", "max("))):
+        suggestions.append("Consider adding a LIMIT for exploratory row-returning queries.")
+
+    needs_revision = bool(issues)
+    return {
+        "status": "needs_revision" if needs_revision else "passed",
+        "needs_revision": needs_revision,
+        "summary": "SQL Critic found issues before validation." if needs_revision else "SQL Critic found no blocking issues before validation.",
+        "issues": issues,
+        "suggestions": suggestions,
     }
 
 
@@ -320,6 +382,8 @@ def _next_focus(state: KernelState, steps: list[str], reference: dict[str, Any] 
         return "answer.synthesize"
     if reference.get("kind") == "result" and "result.profile" in steps and not state.get("result_profile"):
         return "result.profile"
+    if state.get("sql") and not state.get("agent_sql_critique") and "sql.critic" in steps:
+        return "sql.critic"
     if not state.get("schema_context") and "schema.build_context" in steps:
         return "schema.build_context"
     if not state.get("query_plan") and "query_plan.build" in steps:
@@ -343,32 +407,11 @@ def _latest_relevant_artifact(state: KernelState) -> dict[str, Any] | None:
         artifact_type = str(artifact.get("type") or artifact.get("kind") or "")
         sql = payload.get("sql") or payload.get("safe_sql") or payload.get("raw_sql")
         if sql:
-            return {
-                "kind": "sql",
-                "source": "artifact",
-                "id": artifact.get("id") or semantic_id,
-                "semantic_id": semantic_id,
-                "confidence": "medium",
-                "sql_preview": _preview(sql),
-            }
+            return {"kind": "sql", "source": "artifact", "id": artifact.get("id") or semantic_id, "semantic_id": semantic_id, "confidence": "medium", "sql_preview": _preview(sql)}
         if artifact_type in {"table", "result", "result_table"} or semantic_id == "result_table":
-            return {
-                "kind": "result",
-                "source": "artifact",
-                "id": artifact.get("id") or semantic_id,
-                "semantic_id": semantic_id,
-                "confidence": "medium",
-                "row_count": payload.get("rowCount", payload.get("row_count")),
-                "columns": _preview_list(payload.get("columns")),
-            }
+            return {"kind": "result", "source": "artifact", "id": artifact.get("id") or semantic_id, "semantic_id": semantic_id, "confidence": "medium", "row_count": payload.get("rowCount", payload.get("row_count")), "columns": _preview_list(payload.get("columns"))}
         if artifact_type == "approval" or semantic_id == "approval":
-            return {
-                "kind": "approval",
-                "source": "artifact",
-                "id": artifact.get("id") or semantic_id,
-                "semantic_id": semantic_id,
-                "confidence": "medium",
-            }
+            return {"kind": "approval", "source": "artifact", "id": artifact.get("id") or semantic_id, "semantic_id": semantic_id, "confidence": "medium"}
     return None
 
 
