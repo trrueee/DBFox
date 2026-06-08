@@ -406,9 +406,13 @@ class QueryPlanBuilder:
 
         metric_table = matched_tables[0]
         sum_column = self._best_sum_column(matched_tables, question_terms)
-        if sum_column is not None and _contains_any(q_lower, ("sum", "total", "revenue", "销售额", "销量", "销售量", "sold", "amount", "金额")):
+        if sum_column is not None and _contains_any(q_lower, ("sum", "total", "revenue", "销售额", "销量", "销售量", "sold", "amount", "金额", "gmv")):
             metric_table, column = sum_column
-            metric_name = "total_sold" if "quantity" in column.column_name.lower() else f"total_{column.column_name}"
+            col_name = column.column_name
+            if col_name.lower().startswith("total_"):
+                metric_name = col_name.lower()
+            else:
+                metric_name = "total_sold" if "quantity" in col_name.lower() else f"total_{col_name}"
             metrics.append(
                 QueryMetric(
                     name=metric_name,
@@ -454,6 +458,8 @@ class QueryPlanBuilder:
             intent = "rank_products_by_sales_volume"
         elif metrics and metrics[0].name == "order_count":
             intent = "aggregate_order_count"
+        elif metrics and metrics[0].name == "total_amount":
+            intent = "aggregate_order_amount"
 
         return QueryPlan(
             intent=intent,
@@ -807,6 +813,8 @@ _TERM_ALIASES = {
     "销售量": "quantity",
     "销售额": "amount",
     "金额": "amount",
+    "gmv": "amount",
+    "GMV": "amount",
 }
 
 

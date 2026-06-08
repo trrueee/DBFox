@@ -234,3 +234,166 @@ def test_valid_response_passes_contract():
     resp = _make_response()
     result = evaluator.evaluate(task, resp)
     assert result.score > 0.6
+
+
+# ─── new tests for execution isomorphism and comparator ─────────
+
+from engine.evaluation.execution_comparator import ExecutionIsomorphismComparator
+
+def test_execution_isomorphism_comparator():
+    comp = ExecutionIsomorphismComparator()
+    
+    # Identical values, identical keys
+    assert comp.compare(
+        [{"id": 1, "name": "Alice"}],
+        [{"id": 1, "name": "Alice"}]
+    ) is True
+    
+    # Identical values, different keys (aliases)
+    assert comp.compare(
+        [{"id": 1, "name": "Alice"}],
+        [{"user_id": 1, "user_name": "Alice"}]
+    ) is True
+
+    # Mix of float type normalization
+    assert comp.compare(
+        [{"val": 1.2300001}],
+        [{"val": 1.2300002}]
+    ) is True # math.isclose handles minor variations
+
+    # Numeric difference
+    assert comp.compare(
+        [{"val": 1.23}],
+        [{"val": 1.24}]
+    ) is False
+
+    # Row count difference
+    assert comp.compare(
+        [{"id": 1}],
+        [{"id": 1}, {"id": 2}]
+    ) is False
+
+
+def test_evaluator_golden_sql_isomorphism(db_session, demo_datasource, monkeypatch):
+    from engine.models import GoldenSQL
+    # Add a golden sql record
+    golden = GoldenSQL(
+        data_source_id=demo_datasource.id,
+        question="Get all users",
+        golden_sql="SELECT id, username FROM users LIMIT 10"
+    )
+    db_session.add(golden)
+    db_session.commit()
+
+    # Create dummy users table metadata in db
+    from engine.models import SchemaTable, SchemaColumn
+    tbl = SchemaTable(data_source_id=demo_datasource.id, table_schema="demo_shop", table_name="users")
+    db_session.add(tbl)
+    db_session.commit()
+    col1 = SchemaColumn(table_id=tbl.id, column_name="id", column_type="INTEGER")
+    col2 = SchemaColumn(table_id=tbl.id, column_name="username", column_type="VARCHAR")
+    db_session.add_all([col1, col2])
+    db_session.commit()
+
+    results_map = {
+        "SELECT id, username FROM users LIMIT 10": {
+            "success": True,
+            "columns": ["id", "username"],
+            "rows": [{"id": 1, "username": "Alice"}, {"id": 2, "username": "Bob"}]
+        },
+        "SELECT id, username FROM users": {
+            "success": True,
+            "columns": ["id", "username"],
+            "rows": [{"id": 2, "username": "Bob"}, {"id": 1, "username": "Alice"}]
+        },
+        "SELECT username FROM users": {
+            "success": True,
+            "columns": ["username"],
+            "rows": [{"username": "Alice"}, {"username": "Bob"}]
+        }
+    }
+    
+    def mock_execute_query(db, datasource_id, sql, *args, **kwargs):
+        return results_map.get(sql, {"success": False, "error": "mock error"})
+
+    monkeypatch.setattr("engine.executor.execute_query", mock_execute_query)
+
+    evaluator = AgentCaseEvaluator(db=db_session)
+    task = _make_task(datasource_id=demo_datasource.id, question="Get all users")
+    
+    # Test 1: Isomorphic actual SQL
+    resp1 = _make_response(sql="SELECT id, username FROM users")
+    res1 = evaluator.evaluate(task, resp1)
+    assert res1.passed
+    assert res1.score == 1.0
+
+    # Test 2: Non-isomorphic actual SQL (missing column)
+    resp2 = _make_response(sql="SELECT username FROM users")
+    res2 = evaluator.evaluate(task, resp2)
+    assert not res2.passed
+    assert "isomorphic" in "".join(res2.failure_reasons)
+
+
+
+def test_evaluator_plan_similarity_jaccard(db_session, demo_datasource, monkeypatch):
+    # Test fallback query plan Jaccard similarity when execution is skipped
+    from engine.models import GoldenSQL
+    # Add a golden sql record so evaluator uses GoldenSQL path
+    golden = GoldenSQL(
+        data_source_id=demo_datasource.id,
+        question="Get active users",
+        golden_sql="SELECT id FROM users WHERE status = 'active'"
+    )
+    db_session.add(golden)
+    db_session.commit()
+
+    expected_plan_dict = {
+        "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
+        "dimensions": [{"name": "status", "column": "users.status"}],
+        "filters": [{"column": "users.status", "op": "=", "value": "active"}]
+    }
+
+    def mock_build(self, datasource_id, question, *args, **kwargs):
+        # returns a QueryPlan object or dict
+        from engine.agent.types import QueryPlan
+        return QueryPlan.model_validate({
+            "analysis_goal": "lookup",
+            "metrics": expected_plan_dict["metrics"],
+            "dimensions": expected_plan_dict["dimensions"],
+            "filters": expected_plan_dict["filters"],
+            "candidate_tables": ["users"],
+            "raw_plan": {}
+        })
+
+    monkeypatch.setattr("engine.semantic.QueryPlanBuilder.build", mock_build)
+
+    evaluator = AgentCaseEvaluator(db=db_session)
+    task = _make_task(datasource_id=demo_datasource.id, question="Get active users")
+
+    # Test 1: Identical query plan, skipped execution
+    resp1 = _make_response(
+        query_plan={
+            "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
+            "dimensions": [{"name": "status", "column": "users.status"}],
+            "filters": [{"column": "users.status", "op": "=", "value": "active"}]
+        },
+        execution={"reason": "Request execute=false; skipped"}
+    )
+    res1 = evaluator.evaluate(task, resp1)
+    assert res1.passed
+    assert res1.score == 1.0
+
+    # Test 2: Plan with slightly different filter
+    resp2 = _make_response(
+        query_plan={
+            "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
+            "dimensions": [{"name": "status", "column": "users.status"}],
+            "filters": [{"column": "users.status", "op": "=", "value": "inactive"}] # different value
+        },
+        execution={"reason": "Request execute=false; skipped"}
+    )
+    res2 = evaluator.evaluate(task, resp2)
+    assert not res2.passed
+    assert "similarity" in "".join(res2.failure_reasons)
+
+

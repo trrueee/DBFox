@@ -912,6 +912,71 @@ class AgentKernelService:
         args: dict[str, Any],
     ) -> ToolObservation:
         tool = self.registry.require(tool_name)
+        if hasattr(tool, "base_tool") and tool.base_tool is not None:
+            from engine.agent.sandbox.base import ExecutionContext
+            from engine.agent.types import ToolObservation
+
+            # Prepare state-merged inputs for sandbox BaseTool
+            merged_args = dict(args)
+            if "question" not in merged_args:
+                merged_args["question"] = req.question
+            if "schema_context" not in merged_args:
+                merged_args["schema_context"] = state.get("schema_context")
+            if "query_plan" not in merged_args:
+                merged_args["query_plan"] = state.get("query_plan")
+            if "follow_up_context" not in merged_args:
+                merged_args["follow_up_context"] = state.get("followup_context")
+            if "safety" not in merged_args:
+                merged_args["safety"] = state.get("safety")
+            if "execution" not in merged_args:
+                merged_args["execution"] = state.get("execution")
+            if "result_profile" not in merged_args:
+                merged_args["result_profile"] = state.get("result_profile")
+            if "chart_suggestion" not in merged_args:
+                merged_args["chart_suggestion"] = state.get("chart_suggestion")
+            if "suggestions" not in merged_args:
+                merged_args["suggestions"] = state.get("suggestions")
+            if "error" not in merged_args:
+                merged_args["error"] = state.get("error")
+            if "sql" not in merged_args:
+                merged_args["sql"] = state.get("sql")
+
+            exec_ctx = ExecutionContext(
+                thread_id=str(state.get("thread_id") or state.get("session_id") or ""),
+                datasource_id=req.datasource_id,
+                db_dialect="mysql",
+                read_only=tool.spec.policy.side_effect != "write",
+                db_session=self.db,
+            )
+            start_time = time.perf_counter()
+            try:
+                base_tool = tool.base_tool
+                validated_input = base_tool.input_schema.model_validate(merged_args)
+                output_model = base_tool.execute(validated_input, exec_ctx)
+                output_dict = output_model.model_dump(mode="json")
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                status = "skipped" if tool_name == "sql.skip_execution" else "success"
+                obs_name = self._step_name(tool_name)
+                return ToolObservation(
+                    name=obs_name,
+                    status=status,
+                    input=args,
+                    output=output_dict,
+                    error=None,
+                    latency_ms=latency_ms,
+                )
+            except Exception as exc:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                obs_name = self._step_name(tool_name)
+                return ToolObservation(
+                    name=obs_name,
+                    status="failed",
+                    input=args,
+                    output=None,
+                    error=str(exc),
+                    latency_ms=latency_ms,
+                )
+
         ctx = ToolContext(db=self.db, request=req, state=dict(state))
         validated_args = ToolRuntimeGateway.validate_input(tool.spec.name, tool.spec.input_model, args)
         observation = tool.handler(ctx, validated_args)

@@ -563,6 +563,8 @@ def _set_logic_contract(q: str) -> SetLogicContract | None:
     # INTERSECT/EXCEPT patterns from gold SQL semantics
     if any(marker in q for marker in ("also have", "two different", "two types of")):
         markers.append("both")
+    if "shared" in q:
+        markers.append("shared")
     # Before/after temporal set logic
     if "before" in q and "after" in q:
         markers.append("before_after")
@@ -573,9 +575,9 @@ def _set_logic_contract(q: str) -> SetLogicContract | None:
     if not markers:
         return None
     return SetLogicContract(
-        type="intersection" if "both" in markers or "intersection" in markers else "difference",
+        type="intersection" if "both" in markers or "shared" in markers or "intersection" in markers else "difference",
         markers=markers,
-        preferred_sql_shape="exists_pair" if "both" in markers else "not_exists",
+        preferred_sql_shape="exists_pair" if "both" in markers or "shared" in markers else "not_exists",
     )
 
 

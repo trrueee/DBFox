@@ -73,13 +73,28 @@ class SqlExecutionOutput(BaseModel):
 
 
 def register_databox_tools() -> ToolRegistry:
+    from engine.agent.sandbox.tools import (
+        FollowupLoadContextTool,
+        SchemaBuildContextTool,
+        QueryPlanBuildTool,
+        SqlGenerateTool,
+        SqlValidateTool,
+        SqlExecuteReadonlyTool,
+        SqlSkipExecutionTool,
+        SqlReviseTool,
+        ResultProfileTool,
+        ChartSuggestTool,
+        FollowupSuggestTool,
+        AnswerSynthesizeTool,
+    )
+
     registry = ToolRegistry()
 
-    registry.register(_tool("followup.load_context", "Load and normalize follow-up context.", _load_followup_context, input_model=EmptyToolInput))
-    registry.register(_tool("schema.build_context", "Build relevant schema context for a data question.", _schema_build_context, input_model=QuestionToolInput))
-    registry.register(_tool("query_plan.build", "Build a structured query plan from schema context.", _query_plan_build, input_model=EmptyToolInput))
-    registry.register(_tool("sql.generate", "Generate a SQL candidate without executing it.", _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput))
-    registry.register(_tool("sql.validate", "Validate SQL with TrustGate and guardrail checks.", _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput))
+    registry.register(_tool("followup.load_context", "Load and normalize follow-up context.", _load_followup_context, input_model=EmptyToolInput, base_tool=FollowupLoadContextTool()))
+    registry.register(_tool("schema.build_context", "Build relevant schema context for a data question.", _schema_build_context, input_model=QuestionToolInput, base_tool=SchemaBuildContextTool()))
+    registry.register(_tool("query_plan.build", "Build a structured query plan from schema context.", _query_plan_build, input_model=EmptyToolInput, base_tool=QueryPlanBuildTool()))
+    registry.register(_tool("sql.generate", "Generate a SQL candidate without executing it.", _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput, base_tool=SqlGenerateTool()))
+    registry.register(_tool("sql.validate", "Validate SQL with TrustGate and guardrail checks.", _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput, base_tool=SqlValidateTool()))
     registry.register(
         _tool(
             "sql.execute_readonly",
@@ -92,14 +107,15 @@ def register_databox_tools() -> ToolRegistry:
                 side_effect="read",
                 requires_validated_sql=True,
             ),
+            base_tool=SqlExecuteReadonlyTool(),
         )
     )
-    registry.register(_tool("sql.skip_execution", "Record that SQL execution was skipped.", _sql_skip_execution, input_model=EmptyToolInput, output_model=SqlExecutionOutput))
-    registry.register(_tool("sql.revise", "Revise SQL after validation or execution error.", _sql_revise, input_model=SqlRevisionInput))
-    registry.register(_tool("result.profile", "Profile query results and notable facts.", _result_profile, input_model=EmptyToolInput))
-    registry.register(_tool("chart.suggest", "Suggest a chart from query results.", _chart_suggest, input_model=EmptyToolInput))
-    registry.register(_tool("followup.suggest", "Suggest evidence-aware follow-up questions.", _followup_suggest, input_model=EmptyToolInput))
-    registry.register(_tool("answer.synthesize", "Synthesize the final evidence-grounded answer.", _answer_synthesize, input_model=EmptyToolInput))
+    registry.register(_tool("sql.skip_execution", "Record that SQL execution was skipped.", _sql_skip_execution, input_model=EmptyToolInput, output_model=SqlExecutionOutput, base_tool=SqlSkipExecutionTool()))
+    registry.register(_tool("sql.revise", "Revise SQL after validation or execution error.", _sql_revise, input_model=SqlRevisionInput, base_tool=SqlReviseTool()))
+    registry.register(_tool("result.profile", "Profile query results and notable facts.", _result_profile, input_model=EmptyToolInput, base_tool=ResultProfileTool()))
+    registry.register(_tool("chart.suggest", "Suggest a chart from query results.", _chart_suggest, input_model=EmptyToolInput, base_tool=ChartSuggestTool()))
+    registry.register(_tool("followup.suggest", "Suggest evidence-aware follow-up questions.", _followup_suggest, input_model=EmptyToolInput, base_tool=FollowupSuggestTool()))
+    registry.register(_tool("answer.synthesize", "Synthesize the final evidence-grounded answer.", _answer_synthesize, input_model=EmptyToolInput, base_tool=AnswerSynthesizeTool()))
     workspace_tools = {tool.spec.name: tool for tool in build_workspace_tools()}
     for tool_name in WORKSPACE_TOOL_NAMES:
         workspace_tool = workspace_tools[tool_name]
@@ -116,6 +132,7 @@ def _tool(
     input_model: type[BaseModel] | None = None,
     output_model: type[BaseModel] | None = None,
     policy: ToolPolicy | None = None,
+    base_tool: Any = None,
 ) -> RegisteredTool:
     if name in TOOL_SCHEMAS:
         schemas = TOOL_SCHEMAS[name]
@@ -125,7 +142,7 @@ def _tool(
         input_schema = input_model.model_json_schema() if input_model is not None else {"type": "object"}
         output_schema = output_model.model_json_schema() if output_model is not None else {"type": "object"}
 
-    return RegisteredTool(
+    rt = RegisteredTool(
         spec=ToolSpec(
             name=name,
             description=description,
@@ -137,6 +154,8 @@ def _tool(
         ),
         handler=handler,
     )
+    rt.base_tool = base_tool
+    return rt
 
 
 def _object_schema(

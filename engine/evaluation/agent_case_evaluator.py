@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from engine.agent.types import AgentRunResponse
 from engine.models import AgentGoldenTask
@@ -34,13 +35,92 @@ _ANNOTATION_TOOLS = frozenset({
 })
 
 
+def _compare_query_plan_similarity(expected_plan: Any, actual_plan: Any) -> float:
+    if hasattr(expected_plan, "model_dump"):
+        expected_dict = expected_plan.model_dump()
+    elif hasattr(expected_plan, "dict"):
+        expected_dict = expected_plan.dict()
+    elif hasattr(expected_plan, "to_dict"):
+        expected_dict = expected_plan.to_dict()
+    elif isinstance(expected_plan, dict):
+        expected_dict = expected_plan
+    else:
+        expected_dict = {}
+
+    if hasattr(actual_plan, "model_dump"):
+        actual_dict = actual_plan.model_dump()
+    elif hasattr(actual_plan, "dict"):
+        actual_dict = actual_plan.dict()
+    elif hasattr(actual_plan, "to_dict"):
+        actual_dict = actual_plan.to_dict()
+    elif isinstance(actual_plan, dict):
+        actual_dict = actual_plan
+    else:
+        actual_dict = {}
+
+
+    def get_metrics_set(plan_dict: dict[str, Any]) -> set[tuple[str, str]]:
+        metrics = plan_dict.get("metrics") or []
+        res = set()
+        for m in metrics:
+            if isinstance(m, dict):
+                col = str(m.get("column") or m.get("expression") or "")
+                agg = str(m.get("agg") or "")
+                res.add((col, agg))
+        return res
+
+    def get_dimensions_set(plan_dict: dict[str, Any]) -> set[str]:
+        dims = plan_dict.get("dimensions") or []
+        res = set()
+        for d in dims:
+            if isinstance(d, dict):
+                col = str(d.get("column") or d.get("name") or "")
+                res.add(col)
+        return res
+
+    def get_filters_set(plan_dict: dict[str, Any]) -> set[tuple[str, str, str]]:
+        filters = plan_dict.get("filters") or []
+        res = set()
+        for f in filters:
+            if isinstance(f, dict):
+                col = str(f.get("column") or "")
+                op = str(f.get("op") or "")
+                val = str(f.get("value") or "")
+                res.add((col, op, val))
+        return res
+
+    exp_metrics = get_metrics_set(expected_dict)
+    act_metrics = get_metrics_set(actual_dict)
+    exp_dims = get_dimensions_set(expected_dict)
+    act_dims = get_dimensions_set(actual_dict)
+    exp_filts = get_filters_set(expected_dict)
+    act_filts = get_filters_set(actual_dict)
+
+    def jaccard(set_a: set, set_b: set) -> float:
+        if not set_a and not set_b:
+            return 1.0
+        intersection = len(set_a & set_b)
+        union = len(set_a | set_b)
+        return intersection / union
+
+    metric_sim = jaccard(exp_metrics, act_metrics)
+    dim_sim = jaccard(exp_dims, act_dims)
+    filt_sim = jaccard(exp_filts, act_filts)
+
+    return (metric_sim + dim_sim + filt_sim) / 3.0
+
+
 class AgentCaseEvaluator:
+    def __init__(self, db: Session | None = None) -> None:
+        self.db = db
+
     def evaluate(
         self,
         task: AgentGoldenTask,
         response: AgentRunResponse,
         events: list[dict[str, Any]] | None = None,
         trace: list[dict[str, Any]] | None = None,
+        db: Session | None = None,
     ) -> AgentCaseEvaluation:
         failures: list[str] = []
         scores: list[float] = []
@@ -91,17 +171,96 @@ class AgentCaseEvaluator:
                 scores.append(0.4)
                 failures.append(f"missing artifact types: {missing_artifacts}")
 
-        # 5. expected_final_contains
-        if expected_final_contains:
-            matched = [kw for kw in expected_final_contains if kw.lower() in actual_answer.lower()]
-            if len(matched) == len(expected_final_contains):
-                scores.append(1.0)
-            elif matched:
-                scores.append(0.5)
-                failures.append(f"partial keyword match: {matched}/{expected_final_contains}")
+        # 5. Golden SQL check or expected_final_contains fallback
+        golden_sql_record = None
+        current_db = db or getattr(self, "db", None)
+        if current_db:
+            try:
+                from engine.models import GoldenSQL
+                golden_sql_record = current_db.query(GoldenSQL).filter(
+                    GoldenSQL.data_source_id == task.datasource_id,
+                    GoldenSQL.question == task.question
+                ).first()
+            except Exception:
+                golden_sql_record = None
+
+        if golden_sql_record:
+            standard_sql = golden_sql_record.golden_sql
+            actual_sql = response.sql
+
+            # Check if execution was skipped
+            execution_skipped = False
+            if isinstance(response.execution, dict):
+                reason = str(response.execution.get("reason", "")).lower()
+                if "skipped" in reason or "execute=false" in reason:
+                    execution_skipped = True
+            for step in response.steps or []:
+                if step.name == "execute_sql" and step.status == "skipped":
+                    execution_skipped = True
+
+            if execution_skipped:
+                # Semantic Jaccard plan similarity check
+                try:
+                    from engine.semantic import QueryPlanBuilder
+                    expected_plan = QueryPlanBuilder(current_db).build(task.datasource_id, task.question, mode="offline")
+                    actual_plan = response.query_plan or {}
+                    similarity = _compare_query_plan_similarity(expected_plan, actual_plan)
+                    if similarity >= 0.8:
+                        scores.append(1.0)
+                    else:
+                        scores.append(similarity)
+                        failures.append(f"query plan similarity ({similarity:.3f}) is less than 0.8")
+                except Exception as e:
+                    scores.append(0.0)
+                    failures.append(f"failed to compute plan similarity: {e}")
             else:
-                scores.append(0.1)
-                failures.append(f"no keyword match: expected {expected_final_contains}")
+                # Value-set isomorphism check
+                try:
+                    from engine.executor import execute_query
+                    from engine.evaluation.execution_comparator import ExecutionIsomorphismComparator
+
+                    expected_res = execute_query(current_db, task.datasource_id, standard_sql)
+                    if not expected_res.get("success"):
+                        # If the database execution of the golden query failed, print warning but don't fail actual result comparison if both are empty
+                        expected_rows = []
+                    else:
+                        expected_rows = expected_res.get("rows", [])
+
+                    if actual_sql:
+                        actual_res = execute_query(current_db, task.datasource_id, actual_sql)
+                        if actual_res.get("success"):
+                            actual_rows = actual_res.get("rows", [])
+                        else:
+                            actual_rows = None
+                            failures.append(f"actual SQL execution failed: {actual_res.get('error')}")
+                    else:
+                        actual_rows = None
+                        failures.append("actual SQL is missing")
+
+                    if actual_rows is not None:
+                        comparator = ExecutionIsomorphismComparator()
+                        if comparator.compare(expected_rows, actual_rows):
+                            scores.append(1.0)
+                        else:
+                            scores.append(0.0)
+                            failures.append("actual query results are not isomorphic to expected query results")
+                    else:
+                        scores.append(0.0)
+                except Exception as e:
+                    scores.append(0.0)
+                    failures.append(f"failed to compare query result isomorphism: {e}")
+        else:
+            # Fallback to legacy expected_final_contains
+            if expected_final_contains:
+                matched = [kw for kw in expected_final_contains if kw.lower() in actual_answer.lower()]
+                if len(matched) == len(expected_final_contains):
+                    scores.append(1.0)
+                elif matched:
+                    scores.append(0.5)
+                    failures.append(f"partial keyword match: {matched}/{expected_final_contains}")
+                else:
+                    scores.append(0.1)
+                    failures.append(f"no keyword match: expected {expected_final_contains}")
 
         # 6. expected_approval_state
         if task.expected_approval_state:
@@ -291,5 +450,8 @@ def _is_hard_failure(failure: str) -> bool:
         "auto-execute",
         "non-SELECT",
         "multiple statements",
+        "isomorphic",
+        "similarity",
     ]
     return any(kw in failure.lower() for kw in hard_keywords)
+
