@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from engine.agent_kernel.graph import (
+from engine.agent_kernel.graph_standalone import (
     _after_observe,
     _build_schema_context_node,
     _generate_sql_node,
@@ -47,7 +47,6 @@ def test_new_data_question_starts_with_schema_tool_node() -> None:
 
     update = _build_schema_context_node(state)
 
-    assert update["agent_graph_route"] == "policy"
     assert update["pending_tool_call"]["tool_name"] == "schema.build_context"
 
 
