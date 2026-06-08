@@ -50,6 +50,10 @@ class SqlExecutionInput(BaseModel):
 
 class SqlRevisionInput(BaseModel):
     sql: str | None = None
+    safe_sql: str | None = None
+    instruction: str | None = None
+    user_instruction: str | None = None
+    reason: str | None = None
     error: str | None = None
 
 
@@ -394,6 +398,34 @@ TOOL_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
         ),
     },
 }
+
+WORKSPACE_OUTPUT_SCHEMA = _object_schema(
+    "Workspace tool output payload.",
+    {
+        "intent": _prop("string", "The workspace tool intent."),
+        "answer": _prop("string", "Natural-language explanation or answer."),
+        "suggestions": _array_prop("Actionable suggestions for the user."),
+        "proposed_sql": _prop("string", "Proposed SQL statement, if any."),
+        "context_summary": _prop("string", "Summary of workspace context processed."),
+        "safety_notes": _array_prop("Safety notes or guardrail findings.", {"type": "string"}),
+    },
+    required=["intent", "answer"],
+    additional_properties=True,
+)
+
+for _name in [
+    "workspace.explain_sql",
+    "workspace.fix_sql",
+    "workspace.optimize_sql",
+    "workspace.rewrite_sql",
+    "workspace.explain_result",
+    "workspace.continue_from_artifact",
+    "workspace.explain_schema",
+]:
+    TOOL_SCHEMAS[_name] = {
+        "input": QUESTION_INPUT,
+        "output": WORKSPACE_OUTPUT_SCHEMA,
+    }
 
 
 def _request(ctx: ToolContext, args: dict[str, Any]) -> AgentRunRequest:

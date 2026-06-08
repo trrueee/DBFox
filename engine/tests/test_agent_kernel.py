@@ -296,6 +296,48 @@ def test_agent_kernel_tool_registry_schema_snapshot() -> None:
             ],
             "output_required": ["passed", "can_execute", "safe_sql", "requires_confirmation"],
         },
+        "workspace.continue_from_artifact": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.explain_result": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.explain_schema": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.explain_sql": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.fix_sql": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.optimize_sql": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
+        "workspace.rewrite_sql": {
+            "input_props": ["question"],
+            "input_required": [],
+            "output_props": ["answer", "context_summary", "intent", "proposed_sql", "safety_notes", "suggestions"],
+            "output_required": ["intent", "answer"],
+        },
     }
 
     for spec in registry.list_specs():
@@ -1581,17 +1623,12 @@ def test_agent_kernel_resume_after_service_restart_uses_saved_checkpoint(
         session_id="kernel-approve-after-restart",
     )
 
-    original_checkpointer = AgentKernelService._checkpointer
-    AgentKernelService._checkpointer = InMemorySaver()
-    try:
-        resumed = AgentKernelService(db_session).resume_approval(
-            run_id=response.run_id,
-            approval_id=approval.id,
-            approved=True,
-            note="OK after restart",
-        )
-    finally:
-        AgentKernelService._checkpointer = original_checkpointer
+    resumed = AgentKernelService(db_session).resume_approval(
+        run_id=response.run_id,
+        approval_id=approval.id,
+        approved=True,
+        note="OK after restart",
+    )
 
     assert resumed.success is True, resumed.model_dump()
     assert resumed.status == "completed"
