@@ -102,4 +102,21 @@ describe("ApprovalCard", () => {
     expect(api.streamResumeAgentRun).not.toHaveBeenCalled();
     expect(await screen.findByText("Approval rejected.")).toBeTruthy();
   });
+
+  it("shows expired approvals as superseded without approve controls", () => {
+    render(
+      <ApprovalCard
+        approval={{
+          ...pendingApproval,
+          status: "expired",
+          decision_note: "Superseded by user SQL revision before approval.",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("expired")).toBeTruthy();
+    expect(screen.getByText("Approval expired because SQL was revised.")).toBeTruthy();
+    expect(screen.queryByText("Approve execute")).toBeNull();
+    expect(screen.queryByText("Reject")).toBeNull();
+  });
 });

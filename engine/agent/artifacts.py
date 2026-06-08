@@ -16,6 +16,11 @@ class AgentArtifactIdentity:
         self._counter += 1
         return f"agent/run/{self.run_id}/artifact/{self._counter:03d}/{semantic_id}"
 
+    def stable_id(self, semantic_id: str) -> str:
+        if not self.run_id:
+            return semantic_id
+        return f"agent/run/{self.run_id}/artifact/{semantic_id}"
+
 
 def build_agent_artifacts(
     query_plan: dict[str, Any] | None,
@@ -46,7 +51,7 @@ def build_agent_artifacts(
         artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, identity=identity))
 
     if result_profile:
-        artifacts.append(build_profile_artifact(result_profile, safety=safety, identity=identity))
+        artifacts.append(build_profile_artifact(result_profile, execution=execution, safety=safety, identity=identity))
 
     if answer and answer.recommendations:
         artifacts.append(build_recommendations_artifact(answer, identity=identity))
@@ -83,12 +88,13 @@ def build_agent_plan_artifact(
     return _artifact(
         "agent_plan_draft",
         "agent_plan",
-        "Agent plan draft",
+        "Agent plan",
         plan,
         mode="dock",
         priority=90,
         collapsed=True,
         identity=identity,
+        artifact_id=identity.stable_id("agent_plan_draft") if identity else None,
         produced_by_step="plan_agent",
     )
 
@@ -128,11 +134,15 @@ def build_sql_artifact(
     safety: dict[str, Any] | None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    payload: dict[str, Any] = {"sql": sql, "safety_state": _safety_state(safety)}
+    generation_metadata = safety.get("generation_metadata") if isinstance(safety, dict) else None
+    if isinstance(generation_metadata, dict):
+        payload["generation_metadata"] = generation_metadata
     return _artifact(
         "sql_candidate",
         "sql",
         "Validated SQL",
-        {"sql": sql, "safety_state": _safety_state(safety)},
+        payload,
         mode="dock",
         priority=70,
         collapsed=True,
@@ -164,7 +174,7 @@ def build_safety_artifact(
 def build_table_artifact(
     execution: dict[str, Any],
     *,
-    safety: dict[str, Any] | None,
+    safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
     return _artifact(
@@ -189,9 +199,11 @@ def build_table_artifact(
 def build_profile_artifact(
     result_profile: ResultProfile,
     *,
-    safety: dict[str, Any] | None,
+    execution: dict[str, Any] | None = None,
+    safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    depends = ["result_table"] if execution and execution.get("success") else []
     return _artifact(
         "result_profile",
         "insight",
@@ -201,7 +213,7 @@ def build_profile_artifact(
         priority=10,
         identity=identity,
         produced_by_step="profile_result",
-        depends_on=["result_table"],
+        depends_on=depends,
     )
 
 
@@ -304,11 +316,12 @@ def _artifact(
     priority: int,
     collapsed: bool = False,
     identity: AgentArtifactIdentity | None = None,
+    artifact_id: str | None = None,
     produced_by_step: str | None = None,
     depends_on: list[str] | None = None,
 ) -> AgentArtifact:
     return AgentArtifact(
-        id=identity.next_id(semantic_id) if identity else semantic_id,
+        id=artifact_id or (identity.next_id(semantic_id) if identity else semantic_id),
         semantic_id=semantic_id,
         type=artifact_type,  # type: ignore[arg-type]
         title=title,

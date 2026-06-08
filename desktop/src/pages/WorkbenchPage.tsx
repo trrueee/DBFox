@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { MenuBar, type MenuDef } from "../components/MenuBar";
 import { api, createAgentRunDraft, reduceAgentRuntimeEvent } from "../lib/api";
-import type { AgentRunDraftState, AgentRunResponse, AgentRuntimeEvent, AgentSessionRunSummary, DataSource, FollowUpSuggestion, Project, QueryResult, SchemaTable } from "../lib/api";
+import type { AgentRunDraftState, AgentRunResponse, AgentRuntimeEvent, AgentSessionRunSummary, AgentWorkspaceContext, DataSource, FollowUpSuggestion, Project, QueryResult, SchemaTable } from "../lib/api";
 import { EnvironmentsPage } from "./EnvironmentsPage";
 import { BackupsPage } from "./BackupsPage";
 import { DataSourcesPage } from "./DataSourcesPage";
@@ -855,19 +855,24 @@ export const WorkbenchPage = ({
     }
   };
 
-  const handleRunAgentPrompt = useCallback(async (question: string, followUpFrom?: AgentRunResponse | null) => {
+  const handleRunAgentPrompt = useCallback(async (
+    question: string,
+    followUpFrom?: AgentRunResponse | null,
+    submittedWorkspaceContext?: AgentWorkspaceContext | null,
+  ) => {
     if (!question.trim() || !activeDataSource) return;
     const config: Parameters<typeof api.streamAgentQuery>[2] = {
       optimizeRag: true,
       execute: true,
     };
-    const workspaceContext = followUpFrom && agentWorkspaceContext
+    const baseWorkspaceContext = submittedWorkspaceContext ?? agentWorkspaceContext;
+    const workspaceContext = followUpFrom && baseWorkspaceContext
       ? {
-          ...agentWorkspaceContext,
+          ...baseWorkspaceContext,
           recent_agent_run_id: followUpFrom.run_id,
-          selected_artifact_id: followUpFrom.artifacts?.[0]?.id ?? agentWorkspaceContext.selected_artifact_id ?? null,
+          selected_artifact_id: baseWorkspaceContext.selected_artifact_id ?? followUpFrom.artifacts?.[0]?.id ?? null,
         }
-      : agentWorkspaceContext;
+      : baseWorkspaceContext;
     if (workspaceContext) {
       config.workspaceContext = workspaceContext;
     }
@@ -1691,7 +1696,7 @@ export const WorkbenchPage = ({
                     workspaceContext={agentWorkspaceContext}
                     onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
                     onApplySql={handleApplySqlToEditor}
-                    onAsk={agentResponse ? (question) => handleRunAgentPrompt(question, agentResponse) : undefined}
+                    onAsk={agentResponse ? (question, context) => handleRunAgentPrompt(question, agentResponse, context) : undefined}
                     onSuggestion={handleAgentSuggestion}
                     onRuntimeEvent={handleAgentRuntimeEvent}
                     onResumeComplete={handleAgentResumeComplete}
@@ -2002,7 +2007,7 @@ export const WorkbenchPage = ({
                         workspaceContext={agentWorkspaceContext}
                         onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
                         onApplySql={handleApplySqlToEditor}
-                        onAsk={agentResponse ? (question) => handleRunAgentPrompt(question, agentResponse) : undefined}
+                        onAsk={agentResponse ? (question, context) => handleRunAgentPrompt(question, agentResponse, context) : undefined}
                         onSuggestion={handleAgentSuggestion}
                         onRuntimeEvent={handleAgentRuntimeEvent}
                         onResumeComplete={handleAgentResumeComplete}

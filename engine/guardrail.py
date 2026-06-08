@@ -134,11 +134,11 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         }
 
     # 2. Enforce SELECT only
-    # Check if outer node is a Select (or Union of Selects)
+    # Check if outer node is a Select or SetOperation (Union/Intersect/Except of Selects)
     def is_select_node(node: exp.Expression) -> bool:
         if isinstance(node, exp.Select):
             return True
-        if isinstance(node, exp.Union):
+        if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
             return is_select_node(node.left) and is_select_node(node.right)  # type: ignore[arg-type]
         if isinstance(node, exp.Subquery):
             return is_select_node(node.this)
@@ -275,7 +275,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     if not has_limit:
         # Inject LIMIT 1000 to the AST in a type-safe way
         try:
-            if isinstance(expression, (exp.Select, exp.Union)):
+            if isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except)):
                 safe_expression = safe_expression.limit(1000)  # type: ignore[attr-defined]
                 checks.append({
                     "rule": "auto_limit",
@@ -287,7 +287,40 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             pass
             
     safe_sql = safe_expression.sql(dialect=sqlglot_dialect)
-    
+
+    # 6. Post-generation syntax sanity — catch patterns that are valid in
+    #    sqlglot's AST but produce invalid MySQL (BigQuery/Spark-isms).
+    _SAFE_SQL_UPPER = safe_sql.upper()
+    _BROKEN_TOKENS = (
+        "ORDER BY ARRAY(", "ORDER BY STRUCT(", "ORDER BY []",
+        "ARRAY(", "STRUCT(",
+    )
+    for token in _BROKEN_TOKENS:
+        if token in _SAFE_SQL_UPPER:
+            import logging
+            logging.getLogger("databox.guardrail").warning(
+                "guardrail_check: detected broken MySQL syntax token=%r in safe_sql=%r",
+                token, safe_sql,
+            )
+            checks.append({
+                "rule": "mysql_syntax_invalid",
+                "level": "reject",
+                "message": (
+                    "SQL contains a MySQL-unsupported generated ordering expression. "
+                    "请使用标准 MySQL ORDER BY column [ASC|DESC] 语法。"
+                ),
+            })
+            has_errors = True
+
+    if has_errors:
+        return {
+            "result": "reject",
+            "originalSql": sql_str,
+            "safeSql": "",
+            "checks": checks,
+            "message": "拒绝执行：检测到 MySQL 不支持的语法，已被 Guardrail 拦截。",
+        }
+
     # If warnings exist, the overall result is "warn", otherwise "pass"
     warn_count = sum(1 for c in checks if c["level"] == "warn")
     result_status = "warn" if warn_count > 0 else "pass"

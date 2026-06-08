@@ -1,0 +1,23 @@
+[
+  {
+    "case_id": "spider-smoke-1",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "gold_sql": "SELECT count(*) FROM singer",
+    "difficulty": "simple"
+  },
+  {
+    "case_id": "spider-smoke-2",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "gold_sql": "SELECT name ,  country ,  age FROM singer ORDER BY age DESC",
+    "difficulty": "simple"
+  },
+  {
+    "case_id": "spider-smoke-4",
+    "db_id": "concert_singer",
+    "question": "List all song names by singers above the average age.",
+    "gold_sql": "SELECT song_name FROM singer WHERE age  >  (SELECT avg(age) FROM singer)",
+    "difficulty": "medium"
+  }
+]

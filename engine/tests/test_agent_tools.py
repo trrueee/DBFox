@@ -6,12 +6,16 @@ import pytest
 
 from engine.agent import AgentRunRequest
 from engine.agent.tools import (
+    _prepare_generated_sql,
+    _semantic_retry_prompt,
     build_query_plan_tool,
     generate_sql_tool,
     revise_sql_tool,
     suggest_chart_tool,
     validate_sql_tool,
 )
+from engine.agent.semantic_contract import build_query_contract
+from engine.agent.sql_semantic_verifier import SemanticViolation
 from engine.models import SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 
@@ -87,6 +91,183 @@ def test_generate_sql_tool_uses_query_plan_before_fallback(db_session, demo_data
     assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
     assert "COUNT(*) AS total_users" in obs.output["sql"]
     assert "FROM users" in obs.output["sql"]
+
+
+def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT Airline FROM flights GROUP BY Airline",
+            "model": "test",
+            "mode": "online",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="Which airlines have at least 10 flights?",
+        api_key="test",
+        semantic_mode="retry",
+    )
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    metadata = obs.output["metadata"]
+    assert metadata["semantic_contract"]["aggregation"]["type"] == "count_threshold"
+    assert {item["code"] for item in metadata["semantic_violations"]} == {"having_missing"}
+    assert metadata["semantic_retry_attempted"] is True
+    assert metadata["semantic_mode"] == "retry"
+    assert "HAVING" not in obs.output["sql"].upper()
+
+
+def test_generate_sql_tool_retries_once_with_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+    prompts: list[str] = []
+
+    def fake_generate_sql(_db, _datasource_id, prompt, **_kwargs):
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return {
+                "sql": "SELECT Airline FROM flights GROUP BY Airline",
+                "model": "test",
+                "mode": "online",
+                "latencyMs": 1,
+                "schemaValidationWarnings": [],
+            }
+        return {
+            "sql": "SELECT Airline FROM flights GROUP BY Airline HAVING COUNT(*) >= 10",
+            "model": "test",
+            "mode": "online",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(
+        datasource_id=demo_datasource.id,
+        question="Which airlines have at least 10 flights?",
+        api_key="test",
+        semantic_mode="retry",
+    )
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "schema", "schema_context_size": 1}, query_plan={})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert len(prompts) == 2
+    assert "SQL_CONTRACT" in prompts[1]
+    assert "having_missing" in prompts[1]
+    assert "HAVING COUNT(*) >= 10" in obs.output["sql"]
+    assert obs.output["metadata"]["semantic_retry_attempted"] is True
+    assert obs.output["metadata"]["semantic_retry_accepted"] is True
+    assert len(obs.output["metadata"]["semantic_violations"]) == 0
+
+
+def test_semantic_retry_prompt_includes_code_specific_guidance() -> None:
+    contract = build_query_contract(
+        "What are all distinct countries where singers above age 20 are from?",
+        {},
+        {},
+    )
+
+    prompt = _semantic_retry_prompt(
+        question="What are all distinct countries where singers above age 20 are from?",
+        schema_context={},
+        contract=contract,
+        previous_sql="SELECT Country FROM singer WHERE Age > 20",
+        violations=[
+            SemanticViolation(
+                code="distinct_missing",
+                severity="retryable",
+                message="DISTINCT is required.",
+            )
+        ],
+    )
+
+    assert "Use SELECT DISTINCT" in prompt
+
+
+def test_generate_sql_tool_omits_empty_raw_plan_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users")
+    metric = {"name": "total_users", "expression": "COUNT(*)"}
+    query_plan = {
+        "analysis_goal": "count users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [metric],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": "[]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert "ORDER BY" not in obs.output["sql"].upper()
+
+
+@pytest.mark.parametrize(
+    "raw_sql",
+    [
+        "SELECT id FROM users ORDER BY [] LIMIT 100",
+        "SELECT id FROM users ORDER BY ARRAY() LIMIT 100",
+        "SELECT id FROM users ORDER BY ARRAY(STRUCT('id', 'desc')) LIMIT 100",
+        "SELECT id FROM users ORDER BY STRUCT() LIMIT 100",
+        "SELECT id FROM users ORDER BY STRUCT('id', 'desc') LIMIT 100",
+        "SELECT id FROM users ORDER BY JSON_ARRAY(id) LIMIT 100",
+        "SELECT id FROM users ORDER BY () LIMIT 100",
+    ],
+)
+def test_prepare_generated_sql_removes_invalid_order_by(db_session, demo_datasource, raw_sql: str) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    prepared, notes, _metadata = _prepare_generated_sql(db_session, demo_datasource.id, raw_sql)
+
+    assert "ORDER BY []" not in prepared.upper()
+    assert "ORDER BY ARRAY" not in prepared.upper()
+    assert "ORDER BY STRUCT" not in prepared.upper()
+    assert "ORDER BY JSON_ARRAY" not in prepared.upper()
+    assert "ORDER BY ()" not in prepared.upper()
+    assert "invalid_order_by_removed" in notes
+
+
+@pytest.mark.parametrize(
+    ("raw_sql", "expected_order_by"),
+    [
+        ("SELECT id FROM users ORDER BY id DESC LIMIT 100", "ORDER BY id DESC"),
+        ("SELECT id FROM users ORDER BY username ASC LIMIT 100", "ORDER BY username ASC"),
+        ("SELECT id FROM users ORDER BY ABS(id) DESC LIMIT 100", "ORDER BY ABS(id) DESC"),
+    ],
+)
+def test_prepare_generated_sql_preserves_valid_order_by(
+    db_session,
+    demo_datasource,
+    raw_sql: str,
+    expected_order_by: str,
+) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    prepared, notes, _metadata = _prepare_generated_sql(db_session, demo_datasource.id, raw_sql)
+
+    assert expected_order_by in prepared
+    assert "invalid_order_by_removed" not in notes
 
 
 def test_generate_sql_tool_no_key_uses_offline_fallback(db_session, demo_datasource) -> None:
@@ -243,3 +424,373 @@ def test_suggest_chart_category_numeric_returns_bar() -> None:
         "y": "count",
         "reason": "A category field plus a numeric measure is best compared by category.",
     }
+
+
+def test_render_structured_order_by_list_and_dict(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    metric = {"name": "total_users", "expression": "COUNT(*)"}
+    # single dict order_by
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": {"column": "id", "direction": "DESC"},
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY" in obs.output["sql"].upper()
+    assert "DESC" in obs.output["sql"].upper()
+    # multi-field list
+    query_plan["raw_plan"]["order_by"] = [{"column": "id", "direction": "DESC"}, {"column": "username", "direction": "ASC"}]
+    obs2 = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs2.status == "success"
+    assert "ORDER BY" in obs2.output["sql"].upper()
+    assert "username ASC" in obs2.output["sql"] or "USERNAME ASC" in obs2.output["sql"].upper()
+
+
+def test_order_by_illegal_direction_triggers_fallback(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {"sql": "SELECT id FROM users ORDER BY id DESC", "model": "test", "mode": "online", "latencyMs": 1, "schemaValidationWarnings": []}
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": {"column": "id", "direction": "DOWN"},
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    # Renderer silently drops illegal direction (e.g. DOWN) and omits ORDER BY clause
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY" not in obs.output["sql"].upper()
+
+
+def test_render_stringified_python_repr_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Stringified Python repr like \"[{'column': 'id', 'direction': 'DESC'}]\" must be parsed and rendered."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DESC'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+
+
+def test_render_json_string_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """JSON string like '[{\"column\":\"id\",\"direction\":\"DESC\"}]' must be parsed and rendered."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": '[{"column":"id","direction":"DESC"}]',
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+
+
+def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Stringified repr with illegal direction (DOWN) should silently omit ORDER BY."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run — renderer handles this")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
+    query_plan = {
+        "analysis_goal": "list users",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "aggregate",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DOWN'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert "ORDER BY" not in obs.output["sql"].upper()
+
+
+def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasource, monkeypatch) -> None:
+    """Targeted check for smoke-2: ordered by age from oldest to youngest → ORDER BY Age DESC."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="Show name, country, age for all singers ordered by age from the oldest to the youngest.")
+    # Simulate smoke-2's actual query_plan shape: stringified Python repr in order_by
+    query_plan = {
+        "analysis_goal": "retrieve_singer_details_ordered_by_age",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "answer_question",
+            "mode": "offline",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [
+                {"name": "name", "column": "username", "transform": None},
+                {"name": "country", "column": "email", "transform": None},
+                {"name": "age", "column": "id", "transform": None},
+            ],
+            "filters": [],
+            "joins": [],
+            "order_by": "[{'column': 'id', 'direction': 'DESC'}]",
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    # Must be query_plan_rendered (the low_confidence guard should NOT trip for this
+    # because we use 'email'/'username' placeholders that exist in the schema)
+    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    # The critical assertion: ORDER BY must appear with a DESC direction
+    sql_upper = obs.output["sql"].upper()
+    assert "ORDER BY" in sql_upper, f"Expected ORDER BY in SQL, got: {obs.output['sql']}"
+    assert "DESC" in sql_upper, f"Expected DESC direction in SQL, got: {obs.output['sql']}"
+    # Must not be a bare COUNT(*) — should contain the dimension columns
+    assert "username" in obs.output["sql"].lower() or "USERNAME" in sql_upper
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_generate_sql(*_args, **_kwargs):
+        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users without deleted")
+    query_plan = {
+        "analysis_goal": "users without deleted",
+        "candidate_tables": ["users"],
+        "raw_plan": {
+            "intent": "filter",
+            "tables": ["users"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [{"column": "users.deleted_at", "operator": "IS NULL", "value": None}],
+            "joins": [],
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    sql = obs.output["sql"]
+    assert "IS NULL" in sql
+    assert "'None'" not in sql and "\"None\"" not in sql
+
+
+def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasource, monkeypatch) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {"sql": "SELECT id FROM users", "model": "test", "mode": "online", "latencyMs": 1, "schemaValidationWarnings": []}
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have a pet")
+    # Simulate plan with inner join and IS NULL filter semantics
+    query_plan = {
+        "analysis_goal": "users who do not have a pet",
+        "candidate_tables": ["users", "has_pet"],
+        "raw_plan": {
+            "intent": "filter",
+            "tables": ["users", "has_pet"],
+            "metrics": [],
+            "dimensions": [],
+            "filters": [{"column": "has_pet.pet_id", "operator": "IS NULL", "value": None}],
+            "joins": [{"right_table": "has_pet", "condition": "users.id = has_pet.user_id"}],
+            "limit": 100,
+        },
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    assert obs.output is not None
+    # Should fallback to LLM because of anti-join intent
+    assert obs.output["metadata"]["generation_source"] == "generate_sql_fallback"
+
+
+def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, demo_datasource, monkeypatch) -> None:
+    """Semantic verifier reports anti-join shape issues without hard-rewriting SQL."""
+    sync_schema(db_session, demo_datasource.id)
+
+    def fake_generate_sql(*_args, **_kwargs):
+        return {
+            "sql": "SELECT DISTINCT users.id FROM users JOIN has_pet ON users.id = has_pet.user_id LIMIT 100",
+            "model": "test", "mode": "online", "latencyMs": 1,
+            "schemaValidationWarnings": [],
+        }
+
+    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test")
+    query_plan = {
+        "analysis_goal": "find non-admin",
+        "candidate_tables": ["users"],
+        "raw_plan": {"intent": "filter", "tables": ["users"], "metrics": [], "dimensions": [], "filters": [], "joins": [], "limit": 100},
+    }
+
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    assert obs.status == "success"
+    sql = (obs.output or {}).get("sql", "")
+    assert "DISTINCT" in sql.upper()
+    metadata = (obs.output or {}).get("metadata", {})
+    assert {item["code"] for item in metadata.get("semantic_violations", [])} == {"antijoin_outer_join"}
+
+
+# ============================================================
+# Projection-only retry validation
+# ============================================================
+
+from engine.agent.tools import _validate_projection_retry
+from engine.agent.semantic_contract import QueryContract, DistinctContract
+
+
+def _make_contract() -> QueryContract:
+    return QueryContract(confidence=0.75)
+
+
+def test_projection_retry_accept_select_only_change() -> None:
+    """SELECT list only changed → accept."""
+    original = "SELECT student.StuID, student.LName, student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID WHERE student.LName = 'Smith' LIMIT 100"
+    retry_sql = "SELECT has_pet.PetID FROM student JOIN has_pet ON student.StuID = has_pet.StuID WHERE student.LName = 'Smith' LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is True
+
+
+def test_projection_retry_reject_where_changed() -> None:
+    """WHERE changed → reject."""
+    original = "SELECT student.StuID, student.LName FROM student WHERE student.LName = 'Smith' LIMIT 100"
+    retry_sql = "SELECT student.StuID FROM student WHERE student.LName = 'Jones' LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_join_removed() -> None:
+    """JOIN removed → reject."""
+    original = "SELECT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT student.Fname FROM student LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_order_by_changed() -> None:
+    """ORDER BY changed → reject."""
+    original = "SELECT Name FROM singer ORDER BY Age DESC LIMIT 10"
+    retry_sql = "SELECT Name FROM singer ORDER BY Age ASC LIMIT 10"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_limit_changed() -> None:
+    """LIMIT changed → reject."""
+    original = "SELECT Name FROM singer LIMIT 100"
+    retry_sql = "SELECT Name FROM singer LIMIT 10"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False
+
+
+def test_projection_retry_reject_distinct_dropped() -> None:
+    """DISTINCT dropped when contract requires it → reject."""
+    contract = _make_contract()
+    contract.distinct = DistinctContract(required=True, reason="explicit_distinct")
+    original = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, contract) is False
+
+
+def test_projection_retry_accept_distinct_preserved() -> None:
+    """DISTINCT preserved when required → accept."""
+    contract = _make_contract()
+    contract.distinct = DistinctContract(required=True, reason="explicit_distinct")
+    original = "SELECT DISTINCT student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, contract) is True
+
+
+def test_projection_retry_accept_no_distinct_required() -> None:
+    """DISTINCT not required in contract → select-only change accepted."""
+    original = "SELECT student.Fname, student.Age FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    retry_sql = "SELECT DISTINCT student.Fname FROM student JOIN has_pet ON student.StuID = has_pet.StuID LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is True
+
+
+def test_projection_retry_reject_group_by_changed() -> None:
+    """GROUP BY changed → reject."""
+    original = "SELECT PetType, AVG(pet_age) FROM pets GROUP BY PetType LIMIT 100"
+    retry_sql = "SELECT PetType, AVG(pet_age) FROM pets GROUP BY PetType, pet_age LIMIT 100"
+    assert _validate_projection_retry(original, retry_sql, _make_contract()) is False

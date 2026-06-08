@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "imported_dbs": [
+    "car_1",
+    "concert_singer",
+    "employee_hire_evaluation",
+    "flight_2",
+    "museum_visit",
+    "network_1",
+    "orchestra",
+    "pets_1",
+    "singer"
+  ],
+  "total": 9,
+  "details": [
+    {
+      "db_id": "singer",
+      "mysql_database": "spider_singer",
+      "table_count": 2,
+      "tables": [
+        "singer",
+        "song"
+      ],
+      "row_counts": {
+        "singer": 8,
+        "song": 8
+      },
+      "ok": true
+    }
+  ]
+}

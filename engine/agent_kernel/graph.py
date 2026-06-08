@@ -51,6 +51,7 @@ def build_agent_kernel_graph(
         _after_controller,
         {
             "policy": "policy",
+            "controller": "controller",
             "end": END,
         },
     )
@@ -84,7 +85,11 @@ def _noop_node(_state: KernelState) -> dict[str, Any]:
 
 def _after_controller(state: KernelState) -> str:
     decision = state.get("pending_decision") or {}
-    return "policy" if decision.get("action") == "call_tool" else "end"
+    if decision.get("action") == "call_tool":
+        return "policy"
+    if decision.get("action") == "update_plan":
+        return "controller"
+    return "end"
 
 
 def _after_policy(state: KernelState) -> str:

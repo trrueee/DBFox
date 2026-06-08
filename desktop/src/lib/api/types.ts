@@ -423,6 +423,9 @@ export interface AgentWorkspaceContext {
   selected_column_refs?: string[];
   selected_artifact_id?: string | null;
   recent_agent_run_id?: string | null;
+  pending_approval_id?: string;
+  pending_approval_status?: string;
+  pending_approval_reason?: string;
   open_sql_tabs?: Array<Record<string, unknown>>;
   editor_annotations?: Array<Record<string, unknown>>;
   semantic_context?: Record<string, unknown>;

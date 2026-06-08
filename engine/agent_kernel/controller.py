@@ -14,22 +14,45 @@ TEXT_PREVIEW_LIMIT = 800
 LATEST_ITEM_LIMIT = 5
 
 
-CONTROLLER_SYSTEM_PROMPT = (
-    "You are the DataBox Agent Kernel controller. Choose exactly one next action.\n"
-    "Use tools as capabilities, not as a fixed workflow.\n"
-    "Decision policy:\n"
-    "- For follow-up questions, inspect latest_messages, workspace_context_summary, latest_artifacts, "
-    "sql_preview, safe_sql_preview, execution_preview, and recent_tool_results before calling tools.\n"
-    "- If the user asks to explain, describe, fix, optimize, or continue from an existing SQL, artifact, "
-    "or result, use that context directly; do not restart schema discovery unless the context is missing "
-    "or the user asks for a new analysis.\n"
-    "- For new analyses, choose the smallest useful tool step and let policy validate execution.\n"
-    "- For approval and resume flows, preserve the pending approval/checkpoint context and avoid replanning "
-    "or regenerating SQL.\n"
-    "- Use update_plan only for meaningful plan changes the user can track.\n"
-    "Respect policy and never request execution before SQL has been validated. "
-    "Return only JSON matching AgentDecision."
-)
+CONTROLLER_SYSTEM_PROMPT = """
+You are the DataBox Agent Kernel controller.
+
+DataBox is a local-first trusted Text-to-SQL data workspace. Choose exactly one next action for the agent.
+Return only one valid JSON object matching AgentDecision. Do not write prose outside JSON.
+
+Available actions:
+- call_tool: call exactly one DataBox tool.
+- update_plan: update the visible non-blocking plan.
+- ask_user: ask the user for missing information.
+- final_answer: answer from current state, artifacts, SQL, approval, or execution evidence.
+- pause: pause the current task.
+- wait_approval: wait for the existing approval flow.
+
+Core policy:
+1. Tools are capabilities, not a fixed workflow.
+2. For follow-up questions, inspect latest_messages, workspace_context_summary, latest_artifacts, pending_approval, sql_preview, safe_sql_preview, execution_preview, and recent_tool_results before calling tools.
+3. Do not start schema discovery if the user is asking about an existing SQL, result, chart, artifact, or pending approval.
+4. If pending_approval exists and the user asks about SQL, risk, safety, why approval is needed, whether data will change, or what will run, use final_answer from the current state and artifacts.
+5. If pending_approval exists and the user wants to modify the SQL, call sql.revise with the current pending SQL and the user's instruction. After revising SQL, it must be validated again before any execution.
+6. Never call sql.execute_readonly while pending approval is unresolved.
+7. If the user clearly approves or rejects, do not simulate approval or resume in the controller; wait for the approval API flow.
+8. If execute=false, never call sql.execute_readonly.
+9. If SQL exists but safety is missing, call sql.validate before any execution.
+10. If safety.requires_confirmation is true, do not bypass approval.
+11. If execution exists and the user asks for interpretation, use answer.synthesize or final_answer based on existing evidence.
+12. If the user refers to "this SQL", "this result", "this chart", or "this artifact", prefer workspace_context and latest_artifacts.
+13. If a tool failed, prefer sql.revise or ask_user. Do not blindly retry.
+14. If enough evidence exists to answer, use final_answer instead of calling more tools.
+15. If context is insufficient, use ask_user.
+16. If the user changes the goal, use update_plan or ask_user before running tools.
+17. **CRITICAL execute=false rule**: If the state shows execution_skipped=true or includes a data_claims_policy field, you MUST NOT make any data-result claims in final_answer. Never say "returned zero rows", "no rows returned", "query executed successfully", "executed successfully", "no students exist", or similar. The correct statement is: "execution was disabled for this review-only run; no result set was retrieved." Row counts from result_profile are meaningless when execution was skipped — do not quote them.
+
+Safety:
+- Never invent execution results.
+- Never claim data facts unless they come from execution or artifacts.
+- Never execute unvalidated SQL.
+- Never bypass PolicyGate or TrustGate.
+"""
 
 
 def decide_next_action(
@@ -40,6 +63,9 @@ def decide_next_action(
     if state.get("api_key"):
         decision = _try_llm_decision(state=state, available_tools=available_tools)
         if decision is not None:
+            # Deterministic sanitizer: strip data-result claims when execution was skipped
+            if decision.action == "final_answer" and decision.final_answer:
+                decision = _sanitize_final_answer_decision(decision, state)
             return decision
     return _fallback_decision(state)
 
@@ -101,16 +127,22 @@ def _try_llm_decision(
 def _controller_state_view(state: KernelState) -> dict[str, Any]:
     safety = _as_dict(state.get("safety"))
     execution = _as_dict(state.get("execution"))
+    execution_skipped = bool(
+        not execution.get("success")
+        and execution.get("reason")
+        and ("execute=false" in str(execution.get("reason", "")).lower() or "skipped" in str(execution.get("reason", "")).lower())
+    )
     return {
         "goal": state.get("goal") or latest_user_message(state),
         "status": state.get("status"),
         "execute": state.get("execute"),
+        "execution_skipped": execution_skipped,
         "latest_messages": _latest_messages(state.get("messages")),
         "latest_artifacts": _latest_artifacts(state.get("artifacts")),
         "pending_approval": _approval_preview(state.get("pending_approval")),
         "sql_preview": _preview_text(state.get("sql")),
         "safe_sql_preview": _preview_text(safety.get("safe_sql") or safety.get("safeSql")),
-        "execution_preview": _execution_preview(execution),
+        "execution_preview": _execution_preview(execution) if not execution_skipped else {"skipped": True, "reason": str(execution.get("reason", ""))},
         "last_tool_result": _tool_result_preview(_last_mapping(state.get("tool_results")) or state.get("last_observation")),
         "recent_tool_results": [
             item
@@ -127,14 +159,21 @@ def _controller_state_view(state: KernelState) -> dict[str, Any]:
         "has_safety": bool(state.get("safety")),
         "safety_can_execute": bool(safety.get("can_execute")),
         "safety_requires_confirmation": bool(safety.get("requires_confirmation")),
-        "has_execution": bool(state.get("execution")),
-        "has_result_profile": bool(state.get("result_profile")),
+        "has_execution": bool(state.get("execution")) and not execution_skipped,
+        "has_result_profile": bool(state.get("result_profile")) and not execution_skipped,
         "has_chart_suggestion": bool(state.get("chart_suggestion")),
         "suggestion_count": len(state.get("suggestions", [])),
         "has_answer": bool(state.get("answer")),
         "error": state.get("error"),
         "step_count": state.get("step_count", 0),
         "max_steps": state.get("max_steps", 20),
+        # CRITICAL: when execute=false / execution was skipped, the agent MUST NOT
+        # make claims about row counts, empty results, or successful execution.
+        "data_claims_policy": (
+            "NEVER make data-result claims (e.g. 'returned zero rows', 'no students', "
+            "'executed successfully', 'query returned N rows') when execution_skipped=true. "
+            "The correct statement is: 'execution was disabled, no result set was retrieved'."
+        ) if execution_skipped else None,
     }
 
 
@@ -230,6 +269,9 @@ def _workspace_context_summary(value: Any) -> dict[str, Any] | None:
     return {
         "selected_artifact_id": context.get("selected_artifact_id"),
         "recent_agent_run_id": context.get("recent_agent_run_id"),
+        "pending_approval_id": context.get("pending_approval_id"),
+        "pending_approval_status": context.get("pending_approval_status"),
+        "pending_approval_reason": _preview_text(context.get("pending_approval_reason")),
         "selected_table_names": _preview_list(context.get("selected_table_names")),
         "has_selected_sql": bool(context.get("selected_sql")),
         "has_active_sql": bool(context.get("active_sql")),
@@ -321,27 +363,20 @@ def _row_count(value: dict[str, Any]) -> int | None:
 
 def _fallback_decision(state: KernelState) -> AgentDecision:
     sql_to_explain = _sql_to_explain_from_context(state)
-    if sql_to_explain and _is_sql_explanation_request(state) and _should_inline_workspace_sql_explanation(state):
+    if sql_to_explain and _is_sql_explanation_request(state):
         return AgentDecision(
             action="final_answer",
             final_answer=_sql_explanation_answer(sql_to_explain),
             confidence="high",
-            reasoning_summary="Explain the selected SQL directly without restarting data discovery.",
+            reasoning_summary="Explain the SQL already selected in the workspace context without restarting data discovery.",
         )
 
-    workspace_tool = _workspace_tool_from_state(state)
-    if workspace_tool and not state.get("tool_results"):
-        return _call(workspace_tool, {"question": latest_user_message(state)}, "Use the active workspace context without restarting data discovery.")
+    if state.get("error") and not state.get("revision_attempted") and state.get("sql"):
+        return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
 
-    if state.get("error"):
-        if not state.get("revision_attempted") and state.get("sql"):
-            return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
-        return AgentDecision(
-            action="final_answer",
-            final_answer=f"I could not complete the analysis because: {state.get('error')}",
-            confidence="high",
-            reasoning_summary="Stop after the unrecoverable tool or policy error.",
-        )
+    # If sql generation failed / unavailable, stop query path and synthesize answer with error context
+    if state.get("error") and not state.get("sql") and not state.get("answer"):
+        return _call("answer.synthesize", {}, "SQL generation failed — synthesize final answer with error.")
 
     if state.get("answer"):
         answer = state.get("answer") or {}
@@ -417,39 +452,6 @@ def _is_sql_explanation_request(state: KernelState) -> bool:
     return asks_to_explain and mentions_sql
 
 
-def _workspace_tool_from_state(state: KernelState) -> str | None:
-    workspace_context = _as_dict(state.get("workspace_context"))
-    text = f"{state.get('goal') or ''}\n{latest_user_message(state)}".lower()
-    has_sql = bool(workspace_context.get("selected_sql") or workspace_context.get("active_sql"))
-    if has_sql:
-        if any(token in text for token in ("fix", "error", "修复", "错误")):
-            return "workspace.fix_sql"
-        if any(token in text for token in ("optimize", "优化")):
-            return "workspace.optimize_sql"
-        if any(token in text for token in ("rewrite", "重写")):
-            return "workspace.rewrite_sql"
-        if any(token in text for token in ("explain", "describe", "what does", "解释", "说明")):
-            return "workspace.explain_sql"
-
-    if workspace_context.get("last_query_result_preview") and any(
-        token in text for token in ("result", "结果", "explain", "解释", "说明")
-    ):
-        return "workspace.explain_result"
-
-    if workspace_context.get("selected_artifact_id") and any(token in text for token in ("continue", "继续")):
-        return "workspace.continue_from_artifact"
-
-    if workspace_context.get("selected_table_names") and any(token in text for token in ("schema", "table", "表结构", "字段")):
-        return "workspace.explain_schema"
-
-    return None
-
-
-def _should_inline_workspace_sql_explanation(state: KernelState) -> bool:
-    workspace_context = _as_dict(state.get("workspace_context"))
-    return bool(workspace_context.get("selected_sql")) and not bool(workspace_context.get("active_sql"))
-
-
 def _sql_to_explain_from_context(state: KernelState) -> str | None:
     existing_sql = _preview_text(state.get("sql"), limit=TEXT_PREVIEW_LIMIT)
     if existing_sql:
@@ -486,4 +488,50 @@ def _call(tool_name: str, args: dict[str, Any], reason: str) -> AgentDecision:
         tool_call=ToolCallDecision(tool_name=tool_name, args=args, reason=reason),
         confidence="medium",
         reasoning_summary=reason,
+    )
+
+
+_SKIPPED_SAFE_TEXT = (
+    "I generated and validated the SQL, but execution was disabled "
+    "for this review-only run, so no result set was retrieved. "
+    "I cannot make data-result claims until the query is executed."
+)
+
+_MISLEADING = [
+    "returned zero", "no rows returned", "no students",
+    "executed successfully", "query executed successfully",
+    "returned 0 rows", "returned no results", "0 rows",
+    "there are no students", "no data was returned",
+    "no matching records", "no results",
+]
+
+
+def _sanitize_final_answer_decision(decision: AgentDecision, state: KernelState) -> AgentDecision:
+    """If execution was skipped, replace misleading data claims in the LLM's final_answer."""
+    execution = _as_dict(state.get("execution"))
+    safety = _as_dict(state.get("safety"))
+    sql = state.get("sql")
+
+    # Broad detection: no successful execution + validated SQL = review-only
+    execution_ok = bool(execution.get("success"))
+    review_only = bool(sql and safety.get("can_execute") and not execution_ok)
+
+    # Also check explicit skip markers
+    reason = str(execution.get("reason", "")).lower()
+    explicitly_skipped = "execute=false" in reason or "skipped" in reason
+
+    if not review_only and not explicitly_skipped:
+        return decision
+
+    text = (decision.final_answer or "").lower()
+    needs_sanitize = any(m.lower() in text for m in _MISLEADING)
+    if not needs_sanitize:
+        return decision
+
+    # Replace with safe text
+    return AgentDecision(
+        action="final_answer",
+        final_answer=_SKIPPED_SAFE_TEXT,
+        confidence=decision.confidence,
+        reasoning_summary=decision.reasoning_summary,
     )

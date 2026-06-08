@@ -2,11 +2,13 @@ import { useCallback, useMemo, useState } from "react";
 import { ChartArtifactView } from "./artifacts/ChartArtifactView";
 import { ErrorArtifactView } from "./artifacts/ErrorArtifactView";
 import { InsightArtifactView } from "./artifacts/InsightArtifactView";
+import { PlanArtifactView } from "./artifacts/PlanArtifactView";
 import { QueryPlanArtifactView } from "./artifacts/QueryPlanArtifactView";
+import { RecommendationArtifactView } from "./artifacts/RecommendationArtifactView";
 import { SafetyArtifactView } from "./artifacts/SafetyArtifactView";
 import { SqlArtifactView } from "./artifacts/SqlArtifactView";
 import { TableArtifactView } from "./artifacts/TableArtifactView";
-import type { AgentArtifact } from "./types";
+import type { AgentArtifact, AgentWorkspaceContext } from "./types";
 
 interface ArtifactInspectorProps {
   artifacts: AgentArtifact[];
@@ -14,9 +16,19 @@ interface ArtifactInspectorProps {
   onActiveArtifactChange?: (artifactId: string) => void;
   onOpenSql?: (sql: string) => void;
   onApplySql?: (sql: string) => void;
+  onAsk?: (question: string, workspaceContext?: AgentWorkspaceContext | null) => void;
+  workspaceContext?: AgentWorkspaceContext | null;
 }
 
-export function ArtifactInspector({ artifacts, activeArtifactId, onActiveArtifactChange, onOpenSql, onApplySql }: ArtifactInspectorProps) {
+export function ArtifactInspector({
+  artifacts,
+  activeArtifactId,
+  onActiveArtifactChange,
+  onOpenSql,
+  onApplySql,
+  onAsk,
+  workspaceContext,
+}: ArtifactInspectorProps) {
   const dockArtifacts = useMemo(() => artifacts.filter((artifact) => artifact.presentation.mode !== "hidden"), [artifacts]);
   const [localActiveId, setLocalActiveId] = useState(dockArtifacts[0]?.id || "");
   const selectedId = activeArtifactId ?? localActiveId;
@@ -29,6 +41,7 @@ export function ArtifactInspector({ artifacts, activeArtifactId, onActiveArtifac
 
   if (!dockArtifacts.length || !active) return null;
   const actionableSql = extractActionableSql(active);
+  const sqlActionContext = buildArtifactWorkspaceContext(workspaceContext, active, actionableSql);
 
   return (
     <section style={{ padding: 8, background: "var(--bg-secondary)" }}>
@@ -73,8 +86,26 @@ export function ArtifactInspector({ artifacts, activeArtifactId, onActiveArtifac
                 onClick={() => onOpenSql(actionableSql)}
                 style={{ fontSize: "0.62rem", padding: "2px 7px" }}
               >
-                Open in SQL Editor
+                Open SQL
               </button>
+            ) : null}
+            {onAsk ? (
+              <>
+                <button
+                  className="btn-secondary"
+                  onClick={() => onAsk("Explain this SQL", sqlActionContext)}
+                  style={{ fontSize: "0.62rem", padding: "2px 7px" }}
+                >
+                  Explain SQL
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => onAsk("Revise this SQL", sqlActionContext)}
+                  style={{ fontSize: "0.62rem", padding: "2px 7px" }}
+                >
+                  Revise SQL
+                </button>
+              </>
             ) : null}
             <button
               className="btn-secondary"
@@ -85,7 +116,7 @@ export function ArtifactInspector({ artifacts, activeArtifactId, onActiveArtifac
             </button>
           </div>
         ) : null}
-        <ArtifactView artifact={active} onOpenSql={onOpenSql} />
+        <ArtifactView artifact={active} onOpenSql={onOpenSql} onAsk={onAsk} workspaceContext={sqlActionContext} />
       </div>
     </section>
   );
@@ -107,6 +138,20 @@ function extractActionableSql(artifact: AgentArtifact): string {
     }
   }
   return "";
+}
+
+function buildArtifactWorkspaceContext(
+  base: AgentWorkspaceContext | null | undefined,
+  artifact: AgentArtifact,
+  sql: string,
+): AgentWorkspaceContext | null {
+  if (!base) return null;
+  return {
+    ...base,
+    selected_artifact_id: artifact.id,
+    selected_sql: sql || base.selected_sql,
+    active_sql: sql || base.active_sql,
+  };
 }
 
 function exportArtifact(artifact: AgentArtifact) {
@@ -157,13 +202,27 @@ function csvCell(value: unknown): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-function ArtifactView({ artifact, onOpenSql }: { artifact: AgentArtifact; onOpenSql?: (sql: string) => void }) {
+function ArtifactView({
+  artifact,
+  onOpenSql,
+  onAsk,
+  workspaceContext,
+}: {
+  artifact: AgentArtifact;
+  onOpenSql?: (sql: string) => void;
+  onAsk?: (question: string, workspaceContext?: AgentWorkspaceContext | null) => void;
+  workspaceContext?: AgentWorkspaceContext | null;
+}) {
+  if (artifact.type === "agent_plan") return <PlanArtifactView artifact={artifact} />;
   if (artifact.type === "table") return <TableArtifactView artifact={artifact} />;
   if (artifact.type === "chart") return <ChartArtifactView artifact={artifact} />;
   if (artifact.type === "sql") return <SqlArtifactView artifact={artifact} onOpenSql={onOpenSql} />;
   if (artifact.type === "safety") return <SafetyArtifactView artifact={artifact} />;
   if (artifact.type === "query_plan") return <QueryPlanArtifactView artifact={artifact} />;
   if (artifact.type === "insight") return <InsightArtifactView artifact={artifact} />;
+  if (artifact.type === "recommendation") {
+    return <RecommendationArtifactView artifact={artifact} onAsk={onAsk} workspaceContext={workspaceContext} />;
+  }
   if (artifact.type === "error") return <ErrorArtifactView artifact={artifact} />;
 
   return (

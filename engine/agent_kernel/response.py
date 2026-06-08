@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from engine.agent.answer import synthesize_agent_answer
+from engine.agent.answer import sanitize_answer_for_skipped_execution, synthesize_agent_answer
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
     build_agent_artifacts,
@@ -72,6 +72,16 @@ class AgentKernelResponseAssembler:
                 error=error,
             )
             explanation = explanation or parsed_answer.answer
+
+        # Deterministic sanitizer: strip data-result claims when execution was skipped
+        parsed_answer = sanitize_answer_for_skipped_execution(
+            parsed_answer, execution, sql=sql, safety=safety,
+        )
+
+        # SQL-plan consistency: if query_plan specifies order_by but generated SQL
+        # has no ORDER BY (e.g. LLM controller re-planned after sql generation),
+        # inject the missing ORDER BY clause.
+        sql = _inject_missing_order_by(sql, query_plan)
 
         response_artifacts = self._response_artifacts(
             artifacts=artifacts,
@@ -210,8 +220,31 @@ class AgentKernelResponseAssembler:
 
     def _bind_artifact_dependencies(self, artifacts: list[AgentArtifact]) -> None:
         semantic_to_id = {artifact.semantic_id or artifact.id: artifact.id for artifact in artifacts}
+        artifact_ids = {artifact.id for artifact in artifacts}
         for artifact in artifacts:
-            artifact.depends_on = [semantic_to_id.get(dependency, dependency) for dependency in artifact.depends_on]
+            dependencies = artifact.depends_on
+            if artifact.type == "recommendation":
+                dependencies = self._recommendation_dependency_keys(dependencies, semantic_to_id, artifact_ids)
+            artifact.depends_on = [semantic_to_id.get(dependency, dependency) for dependency in dependencies]
+
+    def _recommendation_dependency_keys(
+        self,
+        dependencies: list[str],
+        semantic_to_id: dict[str, str],
+        artifact_ids: set[str],
+    ) -> list[str]:
+        existing_dependencies = [
+            dependency
+            for dependency in dependencies
+            if dependency in semantic_to_id or dependency in artifact_ids
+        ]
+        if existing_dependencies:
+            return existing_dependencies
+
+        for semantic_id in ("result_profile", "result_table", "sql_candidate", "safety_report"):
+            if semantic_id in semantic_to_id:
+                return [semantic_id]
+        return []
 
     def _session_id(self, req: AgentRunRequest) -> str:
         if req.session_id:
@@ -219,3 +252,77 @@ class AgentKernelResponseAssembler:
         if req.follow_up_context and req.follow_up_context.session_id:
             return req.follow_up_context.session_id
         return str(uuid.uuid4())
+
+
+def _inject_missing_order_by(sql: str | None, query_plan: dict[str, Any] | None) -> str | None:
+    """If *query_plan* specifies an order_by but *sql* has no ORDER BY clause,
+    parse the order_by value and inject it before LIMIT (or at end).
+    Returns the (possibly modified) SQL.
+    """
+    if not sql or not query_plan:
+        return sql
+    raw: dict[str, Any] = query_plan.get("raw_plan") if isinstance(query_plan.get("raw_plan"), dict) else query_plan  # type: ignore[assignment]
+    ob = raw.get("order_by")
+    if not ob:
+        return sql
+    if __import__("re").search(r"\bORDER\s+BY\b", sql, __import__("re").IGNORECASE):
+        return sql
+
+    # Extract column + direction from order_by value (supports repr/JSON/native)
+    col, direction = _extract_order_by_col_dir(ob)
+    if not col:
+        return sql
+
+    clause = f"{col} {direction}"
+    m = __import__("re").search(r"\bLIMIT\s+\d+", sql, __import__("re").IGNORECASE)
+    if m:
+        idx = m.start()
+        return f"{sql[:idx].rstrip()} ORDER BY {clause} {sql[idx:].lstrip()}"
+    return f"{sql.rstrip().rstrip(';')} ORDER BY {clause}"
+
+
+def _extract_order_by_col_dir(value: Any) -> tuple[str | None, str]:
+    """Parse *value* (repr string, JSON string, or native list/dict/string)
+    and return (column, direction).  direction defaults to 'ASC'.
+    """
+    # Parse if string
+    if isinstance(value, str):
+        stripped = value.strip()
+        # JSON
+        try:
+            parsed = __import__("json").loads(stripped)
+            if isinstance(parsed, (list, dict)):
+                value = parsed
+        except Exception:
+            pass
+        # Python repr
+        if isinstance(value, str):
+            try:
+                parsed = __import__("ast").literal_eval(stripped)
+                if isinstance(parsed, (list, dict)):
+                    value = parsed
+            except Exception:
+                pass
+
+    item: Any = None
+    if isinstance(value, list):
+        item = value[0] if value else None
+    elif isinstance(value, dict):
+        item = value
+    elif isinstance(value, str):
+        # plain string like "Age DESC"
+        m = __import__("re").match(r"^(.+?)\s+(ASC|DESC)$", value.strip(), __import__("re").IGNORECASE)
+        if m:
+            return m.group(1).strip(), m.group(2).strip().upper()
+        return value.strip(), "ASC"
+    else:
+        return None, "ASC"
+
+    if isinstance(item, dict):
+        col = str(item.get("column") or "").strip() or None
+        direction = str(item.get("direction") or "ASC").strip().upper()
+        if direction not in ("ASC", "DESC"):
+            direction = "ASC"
+        return col, direction
+
+    return None, "ASC"

@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to config.local.json and fill in your values. config.local.json is git-ignored.",
+  "base_url": "http://127.0.0.1:18625",
+  "api_key": "",
+  "model": "gpt-4o-mini",
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3307,
+    "user": "root",
+    "password": "root"
+  },
+  "execute": true,
+  "max_steps": 15
+}

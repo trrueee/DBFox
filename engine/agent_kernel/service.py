@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
 import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -35,6 +37,7 @@ from engine.agent_kernel.databinding import apply_tool_result_to_state, merge_st
 from engine.agent_kernel.databox_tools import register_databox_tools
 from engine.agent_kernel.event_bridge import events_from_graph_update
 from engine.agent_kernel.graph import build_agent_kernel_graph
+from engine.agent_kernel.plan_state import apply_plan_patches, plan_patches_for_tool_execution
 from engine.agent_kernel.policy import PolicyGate
 from engine.agent_kernel.response import AgentKernelResponseAssembler
 from engine.agent_kernel.state import KernelState, latest_user_message
@@ -44,14 +47,20 @@ logger = logging.getLogger("databox.agent_kernel.service")
 
 
 class AgentKernelService:
-    _checkpointer = build_agent_kernel_checkpointer()
-
+    # Per-instance checkpointer to prevent state accumulation across farm worker requests
     def __init__(self, db: Session, registry: ToolRegistry | None = None):
         self.db = db
         self.registry = registry or register_databox_tools()
         self.policy_gate = PolicyGate(self.registry)
         self.artifact_emitter = ArtifactEmitter()
         self.response_assembler = AgentKernelResponseAssembler()
+        self._checkpointer = build_agent_kernel_checkpointer()
+        from engine.agent_kernel.persistence_sink import create_persistence_sink
+        self.persistence_sink = create_persistence_sink(db)
+        # Combine both env vars: either can disable persistence
+        _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
+        _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
+        self._persist_events = (_mode != "disabled" and _events_flag.lower() != "false")
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
@@ -162,11 +171,9 @@ class AgentKernelService:
         emitted_artifact_ids: set[str] = set()
 
         def _save_event(event: AgentRuntimeEvent) -> None:
-            try:
-                agent_persistence.record_runtime_event(self.db, session_id, event)
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save event %s", event.event_id)
-                self._rollback_quietly()
+            if not self._persist_events:
+                return
+            self.persistence_sink.record_event(session_id, event)
 
         emitter = EventEmitter(run_id, _save_event)
 
@@ -212,6 +219,14 @@ class AgentKernelService:
                 if not isinstance(update, dict):
                     continue
                 merge_state(state, update)
+                if str(node_name) != "execute_tool" and isinstance(update.get("plan"), dict):
+                    yield from self._plan_artifact_events(
+                        emit,
+                        state,
+                        agent_state,
+                        artifact_identity,
+                        emitted_artifact_ids,
+                    )
                 yield from events_from_graph_update(
                     emit=emit,
                     node_name=str(node_name),
@@ -226,6 +241,14 @@ class AgentKernelService:
                         emitted_artifact_ids,
                     ),
                 )
+                if str(node_name) == "execute_tool" and isinstance(update.get("plan"), dict):
+                    yield from self._plan_artifact_events(
+                        emit,
+                        state,
+                        agent_state,
+                        artifact_identity,
+                        emitted_artifact_ids,
+                    )
 
         approval = self._approval_from_state(state)
         waiting_approval = state.get("status") == "waiting_approval"
@@ -287,11 +310,9 @@ class AgentKernelService:
             state = dict(self._initial_state(req, run_id, session_id))
 
         def _save_event(event: AgentRuntimeEvent) -> None:
-            try:
-                agent_persistence.record_runtime_event(self.db, session_id, event)
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save resume event %s", event.event_id)
-                self._rollback_quietly()
+            if not self._persist_events:
+                return
+            self.persistence_sink.record_event(session_id, event)
 
         emitter = EventEmitter(
             run_id,
@@ -347,6 +368,14 @@ class AgentKernelService:
                     if not isinstance(update, dict):
                         continue
                     merge_state(state, update)
+                    if str(node_name) != "execute_tool" and isinstance(update.get("plan"), dict):
+                        yield from self._plan_artifact_events(
+                            emit,
+                            state,
+                            agent_state,
+                            artifact_identity,
+                            emitted_artifact_ids,
+                        )
                     yield from events_from_graph_update(
                         emit=emit,
                         node_name=str(node_name),
@@ -361,6 +390,14 @@ class AgentKernelService:
                             emitted_artifact_ids,
                         ),
                     )
+                    if str(node_name) == "execute_tool" and isinstance(update.get("plan"), dict):
+                        yield from self._plan_artifact_events(
+                            emit,
+                            state,
+                            agent_state,
+                            artifact_identity,
+                            emitted_artifact_ids,
+                        )
 
         yield from stream_graph_updates(
             app.stream(
@@ -422,6 +459,11 @@ class AgentKernelService:
         if decision.plan_patches:
             update["plan_events"] = [patch.model_dump(mode="json") for patch in decision.plan_patches]
 
+        if decision.action == "update_plan":
+            update["plan"] = apply_plan_patches(graph_state.get("plan"), decision.plan_patches)
+            update["status"] = "running"
+            return update
+
         if decision.action == "call_tool" and decision.tool_call:
             update["pending_tool_call"] = decision.tool_call.model_dump(mode="json")
             return update
@@ -429,8 +471,18 @@ class AgentKernelService:
         if decision.action == "final_answer":
             update["status"] = "completed"
             if decision.final_answer:
+                final_text = decision.final_answer
+                # Deterministic guard: strip data-result claims when execution was skipped
+                # Use broad detection: no successful execution + validated SQL = review-only
+                execution = graph_state.get("execution") or {}
+                sql = graph_state.get("sql")
+                safety = graph_state.get("safety") or {}
+                execution_ok = bool(execution.get("success"))
+                review_only = bool(sql and safety.get("can_execute") and not execution_ok)
+                if review_only or _execution_was_skipped(execution):
+                    final_text = _sanitize_skipped_answer_text(final_text)
                 answer_payload = {
-                    "answer": decision.final_answer,
+                    "answer": final_text,
                     "key_findings": [],
                     "evidence": [],
                     "caveats": [],
@@ -504,10 +556,46 @@ class AgentKernelService:
             tool_name=tool_name,
             observation=observation,
         )
+        self._expire_superseded_approval(dict(graph_state), tool_name, observation)
+        plan_patches = plan_patches_for_tool_execution(
+            graph_state.get("plan"),
+            tool_name=tool_name,
+            status=observation.status,
+        )
+        if plan_patches:
+            update["plan_events"] = [patch.model_dump(mode="json") for patch in plan_patches]
+            update["plan"] = apply_plan_patches(graph_state.get("plan"), plan_patches)
         update["pending_tool_call"] = None
         update["last_tool_name"] = tool_name
         update["last_observation"] = observation.model_dump(mode="json")
         return update
+
+    def _expire_superseded_approval(
+        self,
+        graph_state: dict[str, Any],
+        tool_name: str,
+        observation: ToolObservation,
+    ) -> None:
+        if tool_name != "sql.revise" or observation.status != "success":
+            return
+        fixed_sql = str((observation.output or {}).get("fixed_sql") or "").strip()
+        if not fixed_sql:
+            return
+        approval = graph_state.get("pending_approval")
+        if not isinstance(approval, dict):
+            return
+        approval_id = str(approval.get("id") or "").strip()
+        if not approval_id:
+            return
+        try:
+            agent_persistence.expire_approval(
+                self.db,
+                approval_id=approval_id,
+                note="Superseded by user SQL revision before approval.",
+            )
+        except Exception:
+            logger.warning("Agent kernel persistence: failed to expire superseded approval %s", approval_id)
+            self._rollback_quietly()
 
     def _approval_interrupt_node(self, graph_state: KernelState) -> dict[str, Any]:
         approval = graph_state.get("pending_approval") or {}
@@ -714,6 +802,72 @@ class AgentKernelService:
         if isinstance(sql, str):
             agent_state.sql = sql
 
+    def _sync_plan_artifact(
+        self,
+        agent_state: AgentState,
+        state: dict[str, Any],
+        artifact_identity: AgentArtifactIdentity,
+    ) -> None:
+        plan = state.get("plan")
+        if not isinstance(plan, dict):
+            return
+        for artifact in self.artifact_emitter.from_plan(plan, artifact_identity):
+            bound = self.artifact_emitter.bind_dependencies(agent_state.artifacts, artifact)
+            existing_index = next(
+                (
+                    index
+                    for index, existing in enumerate(agent_state.artifacts)
+                    if (existing.semantic_id or existing.id) == (bound.semantic_id or bound.id)
+                ),
+                None,
+            )
+            if existing_index is None:
+                agent_state.artifacts.append(bound)
+            else:
+                agent_state.artifacts[existing_index] = bound
+
+    def _plan_artifact_events(
+        self,
+        emit: Any,
+        state: dict[str, Any],
+        agent_state: AgentState,
+        artifact_identity: AgentArtifactIdentity,
+        emitted_artifact_ids: set[str],
+    ) -> Iterator[AgentRuntimeEvent]:
+        plan = state.get("plan")
+        if not isinstance(plan, dict):
+            return
+        for artifact in self.artifact_emitter.from_plan(plan, artifact_identity):
+            bound = self.artifact_emitter.bind_dependencies(agent_state.artifacts, artifact)
+            existing_index = next(
+                (
+                    index
+                    for index, existing in enumerate(agent_state.artifacts)
+                    if (existing.semantic_id or existing.id) == (bound.semantic_id or bound.id)
+                ),
+                None,
+            )
+            if existing_index is None:
+                agent_state.artifacts.append(bound)
+            else:
+                agent_state.artifacts[existing_index] = bound
+            first_emit = bound.id not in emitted_artifact_ids
+            emitted_artifact_ids.add(bound.id)
+            yield emit("agent.artifact.created", artifact=bound)
+            if not first_emit:
+                continue
+            try:
+                agent_persistence.record_artifact(
+                    self.db,
+                    agent_state.session_id or "",
+                    agent_state.run_id,
+                    bound,
+                    len(agent_state.artifacts),
+                )
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to save plan artifact %s", bound.id)
+                self._rollback_quietly()
+
     def _execute_tool(
         self,
         req: AgentRunRequest,
@@ -767,11 +921,12 @@ class AgentKernelService:
             emitted_artifact_ids.add(bound.id)
             event = emit("agent.artifact.created", step={"name": observation.name}, artifact=bound)
             yield event
-            try:
-                agent_persistence.record_artifact(self.db, agent_state.session_id or "", agent_state.run_id, bound, len(agent_state.artifacts))
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save artifact %s", bound.id)
-                self._rollback_quietly()
+            if self._persist_events:
+                try:
+                    agent_persistence.record_artifact(self.db, agent_state.session_id or "", agent_state.run_id, bound, len(agent_state.artifacts))
+                except Exception:
+                    logger.warning("Agent kernel persistence: failed to save artifact %s", bound.id)
+                    self._rollback_quietly()
 
     def _final_events(
         self,
@@ -788,10 +943,11 @@ class AgentKernelService:
             emitted_artifact_ids.add(artifact.id)
             event = emit("agent.artifact.created", artifact=artifact)
             yield event
-            try:
-                agent_persistence.record_artifact(self.db, response.session_id, response.run_id, artifact, len(agent_state.artifacts))
-            except Exception:
-                logger.warning("Agent kernel persistence: failed to save final artifact %s", artifact.id)
+            if self._persist_events:
+                try:
+                    agent_persistence.record_artifact(self.db, response.session_id, response.run_id, artifact, len(agent_state.artifacts))
+                except Exception:
+                    logger.warning("Agent kernel persistence: failed to save final artifact %s", artifact.id)
                 self._rollback_quietly()
 
         if response.answer is not None:
@@ -820,15 +976,18 @@ class AgentKernelService:
             final_type: AgentRuntimeEventType = "agent.run.completed" if response.success else "agent.run.failed"
             yield emit(final_type, response=response, error=response.error)
 
-        try:
-            if response.success:
-                agent_persistence.complete_run(self.db, response)
-            else:
-                agent_persistence.fail_run(self.db, response.run_id, response.session_id, response.error or response.status or "Agent kernel stopped.", response)
-            self.db.commit()
-        except Exception:
-            logger.warning("Agent kernel persistence: failed to persist final response for run %s", response.run_id)
-            self._rollback_quietly()
+        if self._persist_events:
+            try:
+                if response.success:
+                    self.persistence_sink.complete_run(response)
+                else:
+                    self.persistence_sink.fail_run(
+                        response.run_id, response.session_id,
+                        response.error or response.status or "Agent kernel stopped.", response)
+                self.db.commit()
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to persist final response for run %s", response.run_id)
+                self._rollback_quietly()
 
     def _response(
         self,
@@ -844,6 +1003,7 @@ class AgentKernelService:
         checkpoint: AgentCheckpointRecord | None = None,
     ) -> AgentRunResponse:
         self._sync_agent_state_from_graph_state(agent_state, state)
+        self._sync_plan_artifact(agent_state, state, artifact_identity)
         error = state.get("error")
         return self.response_assembler.build_response(
             req=req,
@@ -874,6 +1034,9 @@ class AgentKernelService:
         return state.get("status")
 
     def _initial_state(self, req: AgentRunRequest, run_id: str, session_id: str) -> KernelState:
+        pending_approval = self._pending_approval_from_workspace(req)
+        pending_sql = self._approval_sql(pending_approval)
+        pending_safety = self._pending_approval_safety(pending_approval, pending_sql)
         return KernelState(
             thread_id=session_id,
             run_id=run_id,
@@ -888,7 +1051,7 @@ class AgentKernelService:
             plan_events=[],
             pending_decision=None,
             pending_tool_call=None,
-            pending_approval=None,
+            pending_approval=pending_approval,
             last_tool_name=None,
             last_observation=None,
             tool_results=[],
@@ -898,8 +1061,8 @@ class AgentKernelService:
             schema_context=None,
             query_plan=None,
             sql_candidate=None,
-            sql=None,
-            safety=None,
+            sql=pending_sql,
+            safety=pending_safety,
             execution=None,
             result_profile=None,
             chart_suggestion=None,
@@ -915,7 +1078,54 @@ class AgentKernelService:
             model_name=req.model_name,
         )
 
+    def _pending_approval_from_workspace(self, req: AgentRunRequest) -> dict[str, Any] | None:
+        workspace = req.workspace_context
+        approval_id = getattr(workspace, "pending_approval_id", None)
+        if not approval_id:
+            return None
+        approval = agent_persistence.get_approval(self.db, str(approval_id))
+        if approval is None or approval.status != "pending":
+            return None
+        return approval.model_dump(mode="json")
+
+    def _approval_sql(self, approval: dict[str, Any] | None) -> str | None:
+        if not isinstance(approval, dict):
+            return None
+        requested = approval.get("requested_action")
+        if not isinstance(requested, dict):
+            return None
+        args = requested.get("args")
+        direct_sql = _string_value(requested.get("safe_sql")) or _string_value(requested.get("sql"))
+        if direct_sql:
+            return direct_sql
+        if isinstance(args, dict):
+            return _string_value(args.get("safe_sql")) or _string_value(args.get("sql"))
+        return None
+
+    def _pending_approval_safety(
+        self,
+        approval: dict[str, Any] | None,
+        sql: str | None,
+    ) -> dict[str, Any] | None:
+        if not approval or not sql:
+            return None
+        messages = []
+        if approval.get("reason"):
+            messages.append(str(approval["reason"]))
+        return {
+            "passed": True,
+            "can_execute": True,
+            "safe_sql": sql,
+            "original_sql": sql,
+            "requires_confirmation": True,
+            "blocked_reasons": ["requires_confirmation"],
+            "messages": messages,
+            "approval": {"id": approval.get("id"), "status": approval.get("status")},
+        }
+
     def _start_persistence(self, req: AgentRunRequest, run_id: str, session_id: str) -> None:
+        if not self._persist_events:
+            return
         try:
             agent_persistence.create_or_get_session(self.db, req, run_id)
             agent_persistence.start_run(self.db, req, run_id, session_id)
@@ -982,3 +1192,39 @@ class AgentKernelService:
 
 def latest_message_for_debug(state: KernelState) -> str:
     return str(latest_user_message(state))
+
+
+def _string_value(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+_SKIPPED_SAFE_ANSWER = (
+    "I generated and validated the SQL, but execution was disabled "
+    "for this review-only run, so no result set was retrieved. "
+    "I cannot make data-result claims until the query is executed."
+)
+
+_MISLEADING_MARKERS = [
+    "returned zero", "no rows returned", "no students",
+    "executed successfully", "query executed successfully",
+    "returned 0 rows", "returned no rows", "0 rows",
+    "there are no students", "no data was returned",
+    "no matching records", "no results",
+]
+
+
+def _execution_was_skipped(execution: dict[str, Any]) -> bool:
+    if execution.get("success"):
+        return False
+    reason = str(execution.get("reason", "")).lower()
+    return "execute=false" in reason or "skipped" in reason
+
+
+def _sanitize_skipped_answer_text(text: str) -> str:
+    lower = text.lower()
+    if any(marker.lower() in lower for marker in _MISLEADING_MARKERS):
+        return _SKIPPED_SAFE_ANSWER
+    return text

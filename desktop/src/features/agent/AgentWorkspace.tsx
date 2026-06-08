@@ -52,6 +52,15 @@ export function AgentWorkspace({
   const activeArtifactId = selectedArtifactId && artifacts.some((artifact) => artifact.id === selectedArtifactId)
     ? selectedArtifactId
     : artifacts[0]?.id || "";
+  const responseForContext = result || draft?.response || null;
+  const composerWorkspaceContext = isWaitingApproval
+    ? buildApprovalAwareWorkspaceContext({
+        base: workspaceContext,
+        approval,
+        response: responseForContext,
+        activeArtifactId,
+      })
+    : workspaceContext;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: "0.68rem", lineHeight: 1.45 }}>
@@ -95,18 +104,66 @@ export function AgentWorkspace({
         onActiveArtifactChange={setSelectedArtifactId}
         onOpenSql={onOpenSql}
         onApplySql={onApplySql}
+        onAsk={onAsk}
+        workspaceContext={composerWorkspaceContext}
       />
-      {onAsk && result && !isWaitingApproval ? (
+      {onAsk && responseForContext ? (
         <AgentComposer
           disabled={disabled}
-          placeholder="Ask a follow-up about this result"
-          workspaceContext={workspaceContext}
+          placeholder={isWaitingApproval ? "Ask about this pending approval, SQL, or risk" : "Ask a follow-up about this result"}
+          workspaceContext={composerWorkspaceContext}
           onSubmit={onAsk}
         />
       ) : null}
       <TraceDrawer steps={steps} traceEvents={traceEvents} />
     </div>
   );
+}
+
+function buildApprovalAwareWorkspaceContext({
+  base,
+  approval,
+  response,
+  activeArtifactId,
+}: {
+  base?: AgentWorkspaceContext | null;
+  approval?: AgentRunResponse["approval"] | null;
+  response?: AgentRunResponse | null;
+  activeArtifactId?: string;
+}): AgentWorkspaceContext | null {
+  const responseDatasourceId = stringifyValue(asRecord(response).datasource_id);
+  if (!base && !responseDatasourceId) return null;
+  const approvalSql = sqlFromApproval(approval);
+  const selectedSql = approvalSql || stringifyValue(response?.sql) || stringifyValue(base?.selected_sql) || stringifyValue(base?.active_sql);
+  return {
+    ...(base || {}),
+    datasource_id: base?.datasource_id || responseDatasourceId,
+    selected_sql: selectedSql || base?.selected_sql,
+    active_sql: selectedSql || base?.active_sql,
+    selected_artifact_id: activeArtifactId || base?.selected_artifact_id,
+    pending_approval_id: approval?.id,
+    pending_approval_status: approval?.status,
+    pending_approval_reason: approval?.reason || undefined,
+  };
+}
+
+function sqlFromApproval(approval?: AgentRunResponse["approval"] | null): string {
+  const requested = asRecord(approval?.requested_action);
+  const args = asRecord(requested.args);
+  return (
+    stringifyValue(requested.safe_sql) ||
+    stringifyValue(requested.sql) ||
+    stringifyValue(args.safe_sql) ||
+    stringifyValue(args.sql)
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringifyValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function WorkspaceContextIndicator({ context }: { context?: AgentWorkspaceContext | null }) {

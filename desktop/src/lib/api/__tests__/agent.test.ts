@@ -6,7 +6,7 @@ import {
   rejectAgentApproval,
   streamResumeAgentRun,
 } from "../agent";
-import type { AgentApproval, AgentRunResponse, AgentRuntimeEvent } from "../types";
+import type { AgentApproval, AgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "../types";
 
 const approval: AgentApproval = {
   id: "approval_1",
@@ -64,6 +64,41 @@ describe("agent runtime reducer", () => {
 
     expect(draft.status).toBe("completed");
     expect(draft.response?.run_id).toBe("run_1");
+  });
+
+  it("replaces streamed plan artifacts by semantic id", () => {
+    const firstPlan = planArtifact("artifact-plan-1", "pending");
+    const updatedPlan = planArtifact("artifact-plan-2", "completed");
+    let draft = createAgentRunDraft("list users");
+
+    draft = reduceAgentRuntimeEvent(draft, event("agent.artifact.created", { artifact: firstPlan }));
+    draft = reduceAgentRuntimeEvent(draft, event("agent.artifact.created", { artifact: updatedPlan }));
+
+    expect(draft.artifacts).toHaveLength(1);
+    expect(draft.artifacts[0].id).toBe("artifact-plan-2");
+    expect((draft.artifacts[0].payload.steps as Array<Record<string, unknown>>)[0].status).toBe("completed");
+  });
+
+  it("keeps a new pending approval when an old approval resolves later", () => {
+    const newApproval: AgentApproval = {
+      ...approval,
+      id: "approval_2",
+      run_id: "run_2",
+      requested_action: { sql: "SELECT id FROM users LIMIT 10" },
+    };
+    const oldExpired: AgentApproval = {
+      ...approval,
+      status: "expired",
+      decision_note: "Superseded by user SQL revision before approval.",
+    };
+    let draft = createAgentRunDraft("change limit");
+
+    draft = reduceAgentRuntimeEvent(draft, event("agent.approval.required", { approval: newApproval, run_id: "run_2" }));
+    draft = reduceAgentRuntimeEvent(draft, event("agent.approval.resolved", { approval: oldExpired }));
+
+    expect(draft.approval?.id).toBe("approval_2");
+    expect(draft.approval?.status).toBe("pending");
+    expect(draft.error).toBeNull();
   });
 });
 
@@ -167,5 +202,19 @@ function event(type: AgentRuntimeEvent["type"], patch: Partial<AgentRuntimeEvent
     created_at_ms: 1,
     type,
     ...patch,
+  };
+}
+
+function planArtifact(id: string, status: string): AgentArtifact {
+  return {
+    id,
+    semantic_id: "agent_plan_draft",
+    type: "agent_plan",
+    title: "Agent plan",
+    payload: {
+      version: "agent-plan/v1",
+      steps: [{ id: "schema", title: "Inspect schema", status, tool_name: "schema.build_context" }],
+    },
+    presentation: { mode: "dock", priority: 90 },
   };
 }

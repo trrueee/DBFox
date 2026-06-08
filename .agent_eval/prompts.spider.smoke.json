@@ -1,0 +1,72 @@
+[
+  {
+    "case_id": "spider-smoke-1",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "gold_sql": "SELECT count(*) FROM singer",
+    "difficulty": "simple"
+  },
+  {
+    "case_id": "spider-smoke-2",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "gold_sql": "SELECT name ,  country ,  age FROM singer ORDER BY age DESC",
+    "difficulty": "simple"
+  },
+  {
+    "case_id": "spider-smoke-3",
+    "db_id": "concert_singer",
+    "question": "Show all countries and the number of singers in each country.",
+    "gold_sql": "SELECT country ,  count(*) FROM singer GROUP BY country",
+    "difficulty": "medium"
+  },
+  {
+    "case_id": "spider-smoke-4",
+    "db_id": "concert_singer",
+    "question": "List all song names by singers above the average age.",
+    "gold_sql": "SELECT song_name FROM singer WHERE age  >  (SELECT avg(age) FROM singer)",
+    "difficulty": "medium"
+  },
+  {
+    "case_id": "spider-smoke-5",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "gold_sql": "SELECT count(*) FROM pets WHERE weight  >  10",
+    "difficulty": "simple"
+  },
+  {
+    "case_id": "spider-smoke-6",
+    "db_id": "pets_1",
+    "question": "Find the maximum weight for each type of pet. List the maximum weight and pet type.",
+    "gold_sql": "SELECT max(weight) ,  petType FROM pets GROUP BY petType",
+    "difficulty": "medium"
+  },
+  {
+    "case_id": "spider-smoke-7",
+    "db_id": "pets_1",
+    "question": "Find number of pets owned by students who are older than 20.",
+    "gold_sql": "SELECT count(*) FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid WHERE T1.age  >  20",
+    "difficulty": "medium"
+  },
+  {
+    "case_id": "spider-smoke-8",
+    "db_id": "pets_1",
+    "question": "Find the number of dog pets that are raised by female students (with sex F).",
+    "gold_sql": "SELECT count(*) FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T2.petid  =  T3.petid WHERE T1.sex  =  'F' AND T3.pettype  =  'dog'",
+    "difficulty": "hard"
+  },
+  {
+    "case_id": "spider-smoke-9",
+    "db_id": "pets_1",
+    "question": "Find the major and age of students who do not have a cat pet.",
+    "gold_sql": "SELECT major ,  age FROM student WHERE stuid NOT IN (SELECT T1.stuid FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T3.petid  =  T2.petid WHERE T3.pettype  =  'cat')",
+    "difficulty": "hard"
+  },
+  {
+    "case_id": "spider-smoke-10",
+    "db_id": "pets_1",
+    "question": "Find the first name of students who have both cat and dog pets .",
+    "gold_sql": "SELECT T1.Fname FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T3.petid  =  T2.petid WHERE T3.pettype  =  'cat' INTERSECT SELECT T1.Fname FROM student AS T1 JOIN has_pet AS T2 ON T1.stuid  =  T2.stuid JOIN pets AS T3 ON T3.petid  =  T2.petid WHERE T3.pettype  =  'dog'",
+    "difficulty": "extra hard"
+  }
+]

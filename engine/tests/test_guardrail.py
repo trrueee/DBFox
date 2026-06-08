@@ -157,6 +157,18 @@ def test_syntax_error() -> None:
     assert any(c["rule"] == "syntax_error" for c in r["checks"])
 
 
+def test_mysql_syntax_invalid_message_does_not_echo_broken_order_tokens() -> None:
+    sql = "SELECT Name FROM singer ORDER BY [{'column': 'Age', 'direction': 'DESC'}] LIMIT 100"
+
+    r = guardrail_check(sql)
+    serialized = str(r).upper()
+
+    assert r["result"] == "reject"
+    assert any(c["rule"] == "mysql_syntax_invalid" for c in r["checks"])
+    assert "ORDER BY ARRAY" not in serialized
+    assert "ORDER BY STRUCT" not in serialized
+
+
 # ============================================================
 # NEW IN SPRINT 1: RECURSIVE CTE, ROW LOCKING, & DYNAMIC DIALECT
 # ============================================================
@@ -207,3 +219,74 @@ def test_dialect_specific_guardrail() -> None:
     r_my = guardrail_check(sql_my, dialect="mysql")
     assert r_my["result"] == "reject"
     assert any(c["rule"] == "row_locking_blocked" for c in r_my["checks"])
+
+
+# ============================================================
+# PASS — INTERSECT / EXCEPT / UNION set operations
+# ============================================================
+
+def test_intersect_allowed() -> None:
+    """INTERSECT between two SELECTs is read-only and must pass."""
+    r = guardrail_check(
+        "SELECT a FROM t1 INTERSECT SELECT a FROM t2"
+    )
+    assert r["result"] in ("pass", "warn")  # warn if auto-LIMIT injected
+    assert "guardrail_reject" not in str(r.get("checks", ""))
+    # Safe SQL must still contain INTERSECT
+    assert "INTERSECT" in r["safeSql"].upper()
+
+
+def test_except_allowed() -> None:
+    """EXCEPT between two SELECTs is read-only and must pass."""
+    r = guardrail_check(
+        "SELECT a FROM t1 EXCEPT SELECT a FROM t2"
+    )
+    assert r["result"] in ("pass", "warn")
+    assert "guardrail_reject" not in str(r.get("checks", ""))
+    assert "EXCEPT" in r["safeSql"].upper()
+
+
+def test_union_allowed() -> None:
+    """UNION between two SELECTs is read-only and must pass."""
+    r = guardrail_check(
+        "SELECT a FROM t1 UNION SELECT a FROM t2"
+    )
+    assert r["result"] in ("pass", "warn")
+    assert "guardrail_reject" not in str(r.get("checks", ""))
+
+
+def test_intersect_with_limit() -> None:
+    """INTERSECT with explicit LIMIT should pass cleanly."""
+    r = guardrail_check(
+        "SELECT a FROM t1 INTERSECT SELECT a FROM t2 LIMIT 50"
+    )
+    assert r["result"] == "pass"
+    assert "INTERSECT" in r["safeSql"].upper()
+
+
+def test_intersect_auto_limit_injected() -> None:
+    """INTERSECT without LIMIT gets auto-LIMIT 1000."""
+    r = guardrail_check(
+        "SELECT a FROM t1 INTERSECT SELECT a FROM t2"
+    )
+    assert r["result"] == "warn"
+    assert "LIMIT 1000" in r["safeSql"].upper()
+
+
+# ============================================================
+# REJECT — set operation with DML still blocked
+# ============================================================
+
+def test_intersect_with_drop_blocked() -> None:
+    """INTERSECT followed by DROP must be rejected as multi-statement."""
+    r = guardrail_check(
+        "SELECT a FROM t1 INTERSECT SELECT a FROM t2; DROP TABLE t1"
+    )
+    assert r["result"] == "reject"
+    assert any(c["rule"] == "multi_statement" for c in r["checks"])
+
+
+def test_insert_still_blocked() -> None:
+    """INSERT must still be rejected."""
+    r = guardrail_check("INSERT INTO t VALUES (1)")
+    assert r["result"] == "reject"

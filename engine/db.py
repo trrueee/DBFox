@@ -9,7 +9,11 @@ DataBox 数据库连接与迁移管理模块 (Database Connection & Migration Ma
 4. 在服务启动时，安全地执行数据库版本控制与结构平滑迁移（兼容老版本的手写 SQL 迁移并过渡到 Alembic 管理）。
 """
 
+import contextvars
+import os
 import sys
+import threading
+import traceback
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine
@@ -18,28 +22,110 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from typing import Generator
 
 # 1. 动态持久化路径解析
-# 判断当前运行环境：是在打包后的桌面环境（Tauri Frozen/Sidecar）中，还是在本地源码开发环境中。
-is_frozen = getattr(sys, "frozen", False)
-if is_frozen:
-    from engine.runtime_paths import private_runtime_dir
-    # 打包运行：数据库保存在系统推荐的用户专有数据目录下，防止卸载或更新时丢失数据
-    DB_PATH = private_runtime_dir("data") / "databox_local.db"
+# 环境变量 DATABOX_DATABASE_URL 允许 eval farm 隔离每个 worker 的 SQLite DB
+_env_db_url = os.environ.get("DATABOX_DATABASE_URL", "")
+if _env_db_url:
+    DATABASE_URL = _env_db_url
 else:
-    # 源码开发：直接保存在项目根目录下，方便开发者查看、调试、备份
-    DB_PATH = Path(__file__).resolve().parent.parent / "databox_local.db"
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        from engine.runtime_paths import private_runtime_dir
+        DB_PATH = private_runtime_dir("data") / "databox_local.db"
+    else:
+        DB_PATH = Path(__file__).resolve().parent.parent / "databox_local.db"
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# 构造标准 SQLite 连接 URL
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Ensure DB_PATH is available for backward compat (checkpointer imports it)
+if "DB_PATH" not in dir():
+    DB_PATH = Path(DATABASE_URL.replace("sqlite:///", ""))
 
-# 创建数据库物理引擎 (Database Engine)
-# Python & SQLAlchemy 知识点:
-#   - `create_engine`：创建物理连接引擎，它是所有数据库操作的核心通道。
-#   - `check_same_thread: False`：SQLite 默认只允许创建连接的线程访问数据库。
-#     但在 Web 开发（如 FastAPI）中，请求是由多线程/多协程并发处理的，因此必须关闭此安全锁。
+# Pre-configure SQLite for WAL mode (must run before engine creation, sqlite:// only)
+import sqlite3
+if DATABASE_URL.startswith("sqlite:///"):
+    _sqlite_db = Path(DATABASE_URL.replace("sqlite:///", ""))
+    if not _sqlite_db.exists():
+        _sqlite_db.parent.mkdir(parents=True, exist_ok=True)
+    _conn = sqlite3.connect(str(_sqlite_db))
+    _conn.execute("PRAGMA journal_mode=WAL")
+    _conn.execute("PRAGMA busy_timeout=30000")
+    _conn.execute("PRAGMA synchronous=NORMAL")
+    _conn.close()
+
 engine: Engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30,
+    },
+    pool_size=20,
+    max_overflow=20,
+    pool_pre_ping=True,
 )
+
+# ---------------------------------------------------------------------------
+# DB write tracing (for diagnosing concurrent eval SQLite lock issues)
+# Set AGENT_DB_WRITE_TRACE=true to log all INSERT/UPDATE/DELETE to JSONL
+# ---------------------------------------------------------------------------
+current_run_id: contextvars.ContextVar[str] = contextvars.ContextVar("current_run_id", default="")
+current_session_id: contextvars.ContextVar[str] = contextvars.ContextVar("current_session_id", default="")
+
+if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
+    _trace_file = None
+    _trace_lock = threading.Lock()
+    import sys as _sys
+    print("DB_WRITE_TRACE: tracing enabled", file=_sys.stderr, flush=True)
+
+    def _open_trace():
+        global _trace_file
+        if _trace_file is None:
+            from pathlib import Path as _Path
+            _dir = _Path(__file__).resolve().parent.parent / ".agent_eval" / "outputs"
+            _dir.mkdir(parents=True, exist_ok=True)
+            import time as _t_time
+            _ts = _t_time.strftime("%Y%m%d_%H%M%S")
+            _trace_file = open(str(_dir / f"db_write_trace_{_ts}.jsonl"), "a", encoding="utf-8")
+
+    from sqlalchemy import event as _ev3
+    @_ev3.listens_for(engine, "before_cursor_execute")
+    def _trace_before(conn, cursor, statement, parameters, context, executemany):
+        stmt_type = statement.strip().upper().split()[0] if statement.strip() else "?"
+        if stmt_type in ("INSERT", "UPDATE", "DELETE"):
+            _open_trace()
+            import json as _json
+            # Extract table name
+            table = "?"
+            for word in statement.strip().upper().split():
+                if word == "INTO" or word == "FROM":
+                    continue
+                if word not in ("INSERT", "UPDATE", "DELETE", "OR", "ROLLBACK", "SET", "VALUES", "WHERE", "AND", "INTO"):
+                    table = word.lower().rstrip("(")
+                    break
+            stacks = []
+            for frame in traceback.extract_stack(limit=12)[:-2]:
+                stacks.append(f"{frame.filename.split(chr(92))[-1]}:{frame.lineno} {frame.name}")
+            rec = {
+                "type": stmt_type, "table": table, "thread": threading.current_thread().name,
+                "run_id": current_run_id.get(), "session_id": current_session_id.get(),
+                "stack": stacks[-6:],
+            }
+            with _trace_lock:
+                _trace_file.write(_json.dumps(rec, default=str) + "\n")
+                _trace_file.flush()
+
+    @_ev3.listens_for(engine, "handle_error")
+    def _trace_error(context):
+        exc = context.original_exception
+        if exc and "database is locked" in str(exc).lower():
+            _open_trace()
+            import json as _json
+            rec = {
+                "type": "ERROR", "error": str(exc)[:200], "table": "?",
+                "thread": threading.current_thread().name,
+                "run_id": current_run_id.get(), "session_id": current_session_id.get(),
+            }
+            with _trace_lock:
+                _trace_file.write(_json.dumps(rec, default=str) + "\n")
+                _trace_file.flush()
 
 # 创建本地数据库会话工厂 (Session Factory)
 # autocommit=False: 开启事务管理，所有写操作必须显式调用 commit() 才会保存，防止数据写一半出错导致脏数据。

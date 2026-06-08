@@ -115,7 +115,7 @@ export function ApprovalCard({
           </>
         ) : (
           <span style={{ color: "var(--text-muted)" }}>
-            {currentApproval.status === "approved" ? "Approval resolved. Resume is in progress or completed." : "Approval rejected."}
+            {resolvedApprovalMessage(currentApproval.status)}
           </span>
         )}
         <button className="btn-ghost" type="button" onClick={() => setExpanded((value) => !value)}>
@@ -143,4 +143,10 @@ function statusClass(status: AgentApproval["status"]): string {
   if (status === "approved") return "status-badge-success";
   if (status === "rejected" || status === "expired") return "status-badge-error";
   return "status-badge-neutral";
+}
+
+function resolvedApprovalMessage(status: AgentApproval["status"]): string {
+  if (status === "approved") return "Approval resolved. Resume is in progress or completed.";
+  if (status === "expired") return "Approval expired because SQL was revised.";
+  return "Approval rejected.";
 }

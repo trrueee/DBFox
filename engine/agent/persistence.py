@@ -365,6 +365,34 @@ def resolve_approval(
     return _approval_record(approval)
 
 
+def expire_approval(
+    db: Session,
+    *,
+    approval_id: str,
+    note: str,
+    decided_by: str | None = "agent-kernel",
+) -> AgentApprovalRecord | None:
+    approval = db.query(AgentApproval).filter(AgentApproval.id == approval_id).first()
+    if approval is None:
+        return None
+    if approval.status != "pending":
+        return _approval_record(approval)
+
+    approval.status = "expired"  # type: ignore[assignment]
+    approval.decided_by = decided_by  # type: ignore[assignment]
+    approval.decision_note = note  # type: ignore[assignment]
+    approval.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+
+    run = db.query(AgentRun).filter(AgentRun.id == approval.run_id).first()
+    if run is not None and run.waiting_approval_id == approval.id:
+        run.waiting_approval_id = None  # type: ignore[assignment]
+        run.current_step_name = None  # type: ignore[assignment]
+        run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+
+    db.flush()
+    return _approval_record(approval)
+
+
 def save_checkpoint(
     db: Session,
     *,

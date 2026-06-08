@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import time
 from typing import Any
@@ -176,6 +177,40 @@ def search_demo_sql(question: str) -> str:
     return "SELECT * FROM products LIMIT 10"
 
 
+def _persist_llm_log(db, log_entry) -> None:
+    """Write LLM log entry to DB if persistence is enabled."""
+    if os.environ.get("AGENT_PERSISTENCE_MODE", "sync") == "disabled":
+        return
+    db.add(log_entry)
+    db.commit()
+
+
+def _has_real_llm_config(api_key: str | None, model_name: str | None) -> bool:
+    return bool(api_key and model_name)
+
+
+def _query_plan_requires_llm(query_plan: dict[str, Any] | None) -> bool:
+    """Conservative heuristic: inspect a query_plan dict and detect anti-join, set logic, nested queries or explicit unsupported ops."""
+    if not query_plan:
+        return False
+    raw = query_plan.get("raw_plan") if isinstance(query_plan.get("raw_plan"), dict) else query_plan
+    txt = str(raw).lower()
+    markers = ("anti_join", "not exists", "not in", "intersect", "except", "set_logic", "nested", "nested_query", "having", "exists")
+    if any(m in txt for m in markers):
+        return True
+    # also check intent/warnings
+    intent = str(raw.get("intent") or "").lower()
+    if intent in ("answer_question",) and raw.get("mode") == "offline":
+        # if offline answer_question but plan contains only count metric and no projections, consider requiring LLM
+        metrics = raw.get("metrics") or []
+        dimensions = raw.get("dimensions") or []
+        if metrics and not dimensions:
+            # heuristic: metric expressions with count only
+            if all("count" in str((m or {}).get("expression") or "").lower() for m in metrics if isinstance(m, dict)):
+                return True
+    return False
+
+
 def select_relevant_tables(tables: list[SchemaTable], question: str) -> list[SchemaTable]:
     """
     RAG Heuristic: Selects the most relevant tables for the given question
@@ -283,9 +318,9 @@ def generate_schema_context(db: Session, datasource_id: str, question: str | Non
     return schema_context
 
 
-PROMPT_VERSION = "v1.1"
+PROMPT_VERSION = "v1.2"
 
-SYSTEM_PROMPT = (
+LEGACY_SYSTEM_PROMPT = (
     "You are an expert MySQL developer and data analyst.\n"
     "Your task is to generate a valid, high-performance SELECT statement to answer the user's question "
     "based on the provided schema definitions.\n\n"
@@ -294,7 +329,39 @@ SYSTEM_PROMPT = (
     "2. Only write SELECT queries. DDL or DML statements (like INSERT, UPDATE, DROP, ALTER) are STRICTLY forbidden.\n"
     "3. Use correct table joining paths and reference fields exactly as they are defined.\n"
     "4. Always append a LIMIT clause (default to LIMIT 100) to keep results safe.\n"
-    "5. Output must use standard MySQL syntax dialect."
+    "5. Output must use standard MySQL syntax dialect.\n"
+    "6. Use ONLY tables and columns present in the provided schema context; do not invent table or column names.\n"
+    "7. Do NOT use BigQuery-specific functions or types such as ARRAY(), STRUCT(), UNNEST(), or ARRAY_AGG() in the SQL.\n"
+    "8. For negative/anti-join intents (e.g., 'do not have', 'without', 'students who do not have X'):\n"
+    "   a. ALWAYS use NOT EXISTS with a correlated subquery. NEVER use NOT IN (it fails on NULL values).\n"
+    "   b. The outer FROM must reference ONLY the subject table (e.g. FROM student AS s).\n"
+    "   c. Do NOT JOIN the subject table to other tables in the outer query.\n"
+    "   d. The correlated subquery must join the junction table to the lookup table inside NOT EXISTS.\n"
+    "   e. NEVER add DISTINCT to anti-join queries — it silently drops duplicate rows.\n"
+    "   f. Template: SELECT cols FROM subject AS s WHERE NOT EXISTS (SELECT 1 FROM junction AS j JOIN lookup AS l ON j.fk = l.pk WHERE j.subject_fk = s.pk AND l.filter_col = 'value')\n"
+    "9. For 'both A and B' style constraints, prefer GROUP BY ... HAVING COUNT(DISTINCT ...) = N or an equivalent self-join; avoid ad-hoc client-side filtering.\n"
+    "10. Return ONLY the SQL statement; do not include explanations, examples, or surrounding markdown other than an optional sql code block."
+)
+
+SYSTEM_PROMPT = (
+    "You are an expert MySQL developer and data analyst.\n"
+    "Generate one valid MySQL SELECT statement from the provided schema definitions.\n"
+    "If SQL_CONTRACT JSON is present in the user message, satisfy that contract.\n\n"
+    "Rules:\n"
+    "1. Return SQL only; no explanation.\n"
+    "2. Use only tables and columns from the schema context.\n"
+    "3. CRITICAL — Projection precision:\n"
+    "   a. If the question asks for specific columns (e.g. 'name', 'id', 'first name'), SELECT ONLY those columns.\n"
+    "   b. NEVER use SELECT * — always list explicit column names.\n"
+    "   c. NEVER add COUNT(*) or aggregate functions unless the question explicitly asks for a count/aggregate.\n"
+    "   d. NEVER add extra entity columns the user did not request.\n"
+    "   e. If the question asks for 'how many' or 'number of', SELECT COUNT(*) [alias], nothing else.\n"
+    "4. Use WHERE for scalar filters (e.g. age > 20, weight > 10).\n"
+    "5. Use GROUP BY + HAVING COUNT(...) for thresholds over related rows (e.g. 'at least N flights').\n"
+    "6. Use NOT EXISTS for absence of related rows (e.g. 'students without pets').\n"
+    "7. Use EXISTS-pair or GROUP BY/HAVING for shared/both/intersection semantics.\n"
+    "8. Do not use BigQuery-specific ARRAY(), STRUCT(), UNNEST(), or ARRAY_AGG().\n"
+    "9. Append a safe LIMIT unless the query already has a bounded LIMIT."
 )
 
 USER_PROMPT_TEMPLATE = (
@@ -399,7 +466,42 @@ def generate_sql(
     
     # 2. Check if we are running in Offline Demo Mode
     if not api_key:
-        # Run local heuristic matcher
+        # If the query plan indicates complex intent that requires LLM, we must fail-closed here.
+        try:
+            qp_dict = query_plan.to_dict() if query_plan is not None else {}
+        except Exception:
+            qp_dict = {}
+
+        if _query_plan_requires_llm(qp_dict):
+            latency_ms = int((time.time() - start_time) * 1000)
+            # Log the attempted offline fallback as a blocked/unsupported operation
+            log_entry = LLMLog(
+                request_type="text_to_sql",
+                data_source_id=datasource_id,
+                prompt_hash=prompt_hash,
+                model_name="databox-local-heuristic",
+                latency_ms=latency_ms,
+                status="blocked",
+                error_message="LLM fallback required but no API key configured",
+                prompt_version=PROMPT_VERSION,
+                prompt_template_hash=PROMPT_TEMPLATE_HASH,
+                model_temperature=0.0,
+                max_tokens=None,
+            )
+            _persist_llm_log(db, log_entry)
+            return {
+                "sql": None,
+                "model": "databox-local-heuristic",
+                "mode": "fallback_unavailable",
+                "latencyMs": latency_ms,
+                "schemaValidationWarnings": [],
+                "queryPlan": qp_dict,
+                **schema_metadata,
+                "metadata": {"generation_source": "generate_sql_fallback", "fallback_reason": "no_llm_api_key", "blocked_reason": "no_llm_api_key"},
+                "error": "Complex SQL fallback requires a configured LLM API key.",
+            }
+
+        # Otherwise run local heuristic matcher (only for simple offline cases)
         generated_query = search_demo_sql(question)
         latency_ms = int((time.time() - start_time) * 1000)
         
@@ -421,8 +523,7 @@ def generate_sql(
             max_tokens=None,
             schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         
         return {
             "sql": generated_query,
@@ -499,8 +600,7 @@ def generate_sql(
             max_tokens=800,
             schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         
         return {
             "sql": generated_query,
@@ -530,8 +630,7 @@ def generate_sql(
             model_temperature=0.1,
             max_tokens=800
         )
-        db.add(log_entry)
-        db.commit()
+        _persist_llm_log(db, log_entry)
         raise AIServiceError(f"LLM 接口调用失败: {str(e)}")
 
 

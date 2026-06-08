@@ -52,7 +52,7 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
   }
 
   if (event.type === "agent.approval.required") {
-    return { ...next, approval: event.approval || draft.approval || null };
+    return { ...next, approval: mergeApproval(draft.approval, event.approval) };
   }
 
   if (event.type === "agent.checkpoint.saved") {
@@ -60,10 +60,11 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
   }
 
   if (event.type === "agent.approval.resolved") {
+    const approval = mergeApproval(draft.approval, event.approval);
     return {
       ...next,
-      approval: event.approval || draft.approval || null,
-      error: event.approval?.status === "rejected" ? "Approval rejected" : draft.error,
+      approval,
+      error: approval?.id === event.approval?.id && event.approval?.status === "rejected" ? "Approval rejected" : draft.error,
     };
   }
 
@@ -72,7 +73,7 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
       ...next,
       status: "waiting_approval",
       response: event.response || draft.response || null,
-      approval: event.approval || event.response?.approval || draft.approval || null,
+      approval: mergeApproval(draft.approval, event.approval || event.response?.approval),
       checkpoint: event.checkpoint || event.response?.checkpoint || draft.checkpoint || null,
       artifacts: mergeArtifacts(draft.artifacts, event.response?.artifacts || []),
       error: null,
@@ -83,7 +84,7 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
     return {
       ...next,
       status: "running",
-      approval: event.approval || draft.approval || null,
+      approval: mergeApproval(draft.approval, event.approval),
       checkpoint: event.checkpoint || draft.checkpoint || null,
       error: null,
     };
@@ -115,11 +116,26 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
 }
 
 function mergeArtifacts(current: AgentArtifact[], incoming: AgentArtifact[]): AgentArtifact[] {
-  const byId = new Map(current.map((artifact) => [artifact.id, artifact]));
+  const byId = new Map(current.map((artifact) => [artifactKey(artifact), artifact]));
   for (const artifact of incoming) {
-    byId.set(artifact.id, artifact);
+    byId.set(artifactKey(artifact), artifact);
   }
   return Array.from(byId.values());
+}
+
+function artifactKey(artifact: AgentArtifact): string {
+  return artifact.semantic_id || artifact.id;
+}
+
+function mergeApproval(
+  current: AgentApproval | null | undefined,
+  incoming: AgentApproval | null | undefined,
+): AgentApproval | null {
+  if (!incoming) return current || null;
+  if (current?.status === "pending" && current.id !== incoming.id && incoming.status !== "pending") {
+    return current;
+  }
+  return incoming;
 }
 
 function buildAgentRunPayload(datasourceId: string, question: string, config?: AgentRunConfig) {

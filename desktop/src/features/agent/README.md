@@ -10,6 +10,14 @@ Owned here:
 - Agent follow-up context creation
 - Agent draft state rendering while SSE events are still arriving
 
+Plan artifacts:
+- Agent Kernel `update_plan` decisions are rendered as `agent_plan` artifacts.
+- The frontend displays `agent_plan` as a read-only checklist; editing remains out of scope for this surface.
+
+Approval follow-ups:
+- Waiting-approval follow-ups pass approval context to the backend; the controller decides whether to answer, revise SQL, or route through approval APIs.
+- Revising pending SQL supersedes the old approval and keeps execution gated behind validation and approval.
+
 Backend counterpart:
 
 ```text

@@ -18,6 +18,12 @@ class PlanStep(BaseModel):
     ] = "pending"
     tool_name: str | None = None
     artifact_ids: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class PlanState(BaseModel):
+    version: str = "agent-plan/v1"
+    steps: list[PlanStep] = Field(default_factory=list)
 
 
 class PlanPatch(BaseModel):
@@ -25,6 +31,9 @@ class PlanPatch(BaseModel):
         "create_plan",
         "add_step",
         "update_step",
+        "mark_running",
+        "mark_completed",
+        "mark_failed",
         "complete_step",
         "fail_step",
         "skip_step",

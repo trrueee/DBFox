@@ -999,3 +999,76 @@ QueryPlan 是领域优势，应作为 AgentPlan 的子结构保留。
 最终定位：
 
 > DataBox Agent Runtime 不是通用开源 Agent 框架的复制品，而是面向本地优先可信数据探索场景的垂直 Agent Runtime。它应该在 Databox 问数和数据分析场景中达到甚至超过通用开源 runtime 的实际效果。
+# 2026-06-04 Agent Kernel Implementation Contract
+
+This section records the current Agent Kernel behavior after the approval-aware follow-up and artifact-streaming work.
+
+## Division of responsibility
+
+The frontend provides context only. It does not classify whether the user wants to explain, approve, reject, or modify SQL.
+
+The backend controller decides intent from current state, workspace context, artifacts, pending approval, SQL, safety, and recent tool results.
+
+PolicyGate enforces tool safety. TrustGate validates SQL before execution. Approval API endpoints are the only path for clear approve or reject decisions.
+
+## PlanState and tool execution sync
+
+Controller `update_plan` decisions produce PlanState patches. The reducer supports creating, updating, clearing, running, completing, failing, and skipping steps.
+
+Tool execution also updates PlanState automatically:
+
+- before a matched tool final status, the plan step is marked running
+- successful tools mark the matched step completed
+- failed tools mark the matched step failed
+- skipped tools mark the matched step skipped
+
+The `agent_plan` artifact is streamed as soon as a plan is available, before the planned tool runs. Its stable semantic id is `agent_plan_draft`; its UI title is `Agent plan`.
+
+## Artifact identity and dependencies
+
+Artifacts should expose stable `semantic_id` values so streamed drafts and final artifacts can be merged without duplicate cards. The frontend reducer keys artifacts by `semantic_id` when present, otherwise by `id`.
+
+Artifact dependencies are bound from semantic ids to real artifact ids before the final response contract is validated. Answer evidence uses real artifact ids as well.
+
+Recommendation artifacts may depend on `result_profile`, but if no profile artifact exists they fall back to an existing artifact in this order:
+
+```text
+result_profile
+result_table
+sql_candidate
+safety_report
+```
+
+This avoids dangling dependencies in responses that have recommendations but no profile artifact.
+
+## Pending approval revision state machine
+
+When `pending_approval` exists:
+
+- questions about SQL, risk, safety, or why approval is needed can be answered from current state
+- user-requested SQL modifications go through `sql.revise`
+- revised SQL is never executed directly
+- revised SQL must be validated again before execution
+- clear approve or reject intent goes through the approval API flow
+
+`sql.revise` accepts `instruction`, `user_instruction`, `reason`, and `error`. It resolves SQL from explicit args first, then current state, then pending approval requested action SQL.
+
+If `sql.revise` returns no `fixed_sql`, the previous pending approval remains valid. The old approval is not expired, and stale safety or execution state is not cleared.
+
+If `sql.revise` returns `fixed_sql`, stale safety, execution, profile, chart, and suggestions are cleared. Any previous pending approval is expired as superseded. The revised SQL must pass `sql.validate` before any execution can be considered.
+
+If validation of the revised SQL still requires confirmation, PolicyGate creates a new pending approval. The final waiting response points to the new pending approval; the expired approval is only historical state.
+
+## Recommendation artifact frontend
+
+`RecommendationArtifactView` renders recommendation artifacts as actionable next steps and follow-up questions. Follow-up buttons call `onAsk(question, workspace_context)` and preserve the workspace context supplied by `AgentWorkspace`.
+
+During `waiting_approval`, `AgentWorkspace` still shows `AgentComposer` with the approval-specific placeholder:
+
+```text
+Ask about this pending approval, SQL, or risk
+```
+
+The workspace context includes pending approval id, status, reason, selected SQL, active SQL, and selected artifact id. The backend controller decides whether the follow-up is explanatory or requires `sql.revise`.
+
+---

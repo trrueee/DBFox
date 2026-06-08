@@ -44,12 +44,26 @@ def apply_tool_result_to_state(
         update["query_plan"] = output
 
     elif tool_name == "sql.generate":
-        sql = str(output.get("sql") or "").strip()
+        sql = str(output.get("sql") or "").strip() or None
+        if sql:
+            sql = sql.strip() or None
         update["sql_candidate"] = output
         update["sql"] = sql or state.get("sql")
+        # sql=None indicates generation unavailable (e.g. no LLM key for complex fallback)
+        if not sql and output.get("mode") == "fallback_unavailable":
+            update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
 
     elif tool_name == "sql.validate":
         safe_sql = str(output.get("safe_sql") or "").strip()
+        sql_candidate = state.get("sql_candidate")
+        generation_metadata = (
+            sql_candidate.get("metadata")
+            if isinstance(sql_candidate, dict) and isinstance(sql_candidate.get("metadata"), dict)
+            else None
+        )
+        if generation_metadata and "generation_metadata" not in output:
+            output = dict(output)
+            output["generation_metadata"] = generation_metadata
         update["safety"] = output
         if safe_sql:
             update["sql"] = safe_sql
@@ -66,6 +80,19 @@ def apply_tool_result_to_state(
         if fixed_sql:
             update["sql"] = fixed_sql
             update["error"] = None
+            update["safety"] = None
+            update["execution"] = None
+            update["result_profile"] = None
+            update["chart_suggestion"] = None
+            update["suggestions"] = []
+            if state.get("pending_approval"):
+                update["pending_approval"] = None
+                update["trace_events"].append(
+                    {
+                        "type": "approval.superseded",
+                        "payload": {"reason": "User requested SQL revision before approval."},
+                    }
+                )
         else:
             update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
 

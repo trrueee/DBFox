@@ -2,6 +2,8 @@
 .databox_runtime/
 databox_local.db
 databox_local.db.bak_*
+databox_local.db-shm
+databox_local.db-wal
 engine/.secret_key
 engine/.local_token
 desktop/.env.local
@@ -17,6 +19,17 @@ desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
 desktop/src-tauri/binaries/
+
+# Eval local config (contains API keys — DO NOT COMMIT)
+.agent_eval/config.local.json
+.agent_eval/outputs/
+.agent_eval/agent_only_events/
+.agent_eval/results/
+.agent_eval/reports/
+.agent_eval/backend_eval.pid
+.agent_eval/backend_eval_stdout.log
+.agent_eval/backend_eval_stderr.log
+.agent_eval/_tmp_*.json
 
 # IDE / Assistant / Tool states
 .claude/

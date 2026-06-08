@@ -118,6 +118,9 @@ class AgentWorkspaceContext(BaseModel):
     selected_column_refs: list[str] = Field(default_factory=list)
     selected_artifact_id: str | None = None
     recent_agent_run_id: str | None = None
+    pending_approval_id: str | None = None
+    pending_approval_status: str | None = None
+    pending_approval_reason: str | None = None
     open_sql_tabs: list[dict[str, Any]] = Field(default_factory=list)
     editor_annotations: list[dict[str, Any]] = Field(default_factory=list)
     semantic_context: dict[str, Any] = Field(default_factory=dict)
@@ -163,6 +166,7 @@ class AgentRunRequest(BaseModel):
     optimize_rag: bool = True
     execute: bool = True
     max_steps: int = Field(default=12, ge=1, le=20)
+    semantic_mode: Literal["off", "shadow", "retry"] = "shadow"
 
 
 class AgentStep(BaseModel):
@@ -187,7 +191,7 @@ class QueryPlan(BaseModel):
 
 
 class SQLCandidate(BaseModel):
-    sql: str
+    sql: str | None = None
     raw_sql: str | None = None
     model: str | None = None
     mode: str | None = None
