@@ -5,8 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from engine.agent_kernel.schemas import AgentDecision, ToolCallDecision
 from engine.agent_kernel.state import KernelState, latest_user_message
@@ -19,41 +18,20 @@ LATEST_ITEM_LIMIT = 5
 CONTROLLER_SYSTEM_PROMPT = """
 You are the DataBox Agent Kernel controller.
 
-DataBox is a local-first trusted Text-to-SQL data workspace. Choose exactly one next action for the agent.
-Return only one valid JSON object matching AgentDecision. Do not write prose outside JSON.
+Use the seven-step lifecycle state when choosing exactly one next action:
+- Understand: agent_intent
+- Context: agent_context and workspace_context
+- Plan: agent_lifecycle_plan.next_focus
+- Act: call exactly one tool through PolicyGate
+- Observe: agent_observation and recent_tool_results
+- Reflect: agent_reflection
+- Answer: only from evidence, artifacts, SQL, approval, safety, or execution
 
-Available actions:
-- call_tool: call exactly one DataBox tool.
-- update_plan: update the visible non-blocking plan.
-- ask_user: ask the user for missing information.
-- final_answer: answer from current state, artifacts, SQL, approval, or execution evidence.
-- pause: pause the current task.
-- wait_approval: wait for the existing approval flow.
-
-Core policy:
-1. Tools are capabilities, not a fixed workflow.
-2. For follow-up questions, inspect latest_messages, workspace_context_summary, latest_artifacts, pending_approval, sql_preview, safe_sql_preview, execution_preview, and recent_tool_results before calling tools.
-3. Do not start schema discovery if the user is asking about an existing SQL, result, chart, artifact, or pending approval.
-4. If pending_approval exists and the user asks about SQL, risk, safety, why approval is needed, whether data will change, or what will run, use final_answer from the current state and artifacts.
-5. If pending_approval exists and the user wants to modify the SQL, call sql.revise with the current pending SQL and the user's instruction. After revising SQL, it must be validated again before any execution.
-6. Never call sql.execute_readonly while pending approval is unresolved.
-7. If the user clearly approves or rejects, do not simulate approval or resume in the controller; wait for the approval API flow.
-8. If execute=false, never call sql.execute_readonly.
-9. If SQL exists but safety is missing, call sql.validate before any execution.
-10. If safety.requires_confirmation is true, do not bypass approval.
-11. If execution exists and the user asks for interpretation, use answer.synthesize or final_answer based on existing evidence.
-12. If the user refers to "this SQL", "this result", "this chart", or "this artifact", prefer workspace_context and latest_artifacts.
-13. If a tool failed, prefer sql.revise or ask_user. Do not blindly retry.
-14. If enough evidence exists to answer, use final_answer instead of calling more tools.
-15. If context is insufficient, use ask_user.
-16. If the user changes the goal, use update_plan or ask_user before running tools.
-17. **CRITICAL execute=false rule**: If the state shows execution_skipped=true or includes a data_claims_policy field, you MUST NOT make any data-result claims in final_answer. Never say "returned zero rows", "no rows returned", "query executed successfully", "executed successfully", "no students exist", or similar. The correct statement is: "execution was disabled for this review-only run; no result set was retrieved." Row counts from result_profile are meaningless when execution was skipped — do not quote them.
-
-Safety:
-- Never invent execution results.
-- Never claim data facts unless they come from execution or artifacts.
+Rules:
+- Do not start schema discovery if the user is asking about existing SQL, result, chart, artifact, or pending approval.
 - Never execute unvalidated SQL.
 - Never bypass PolicyGate or TrustGate.
+- If execute=false or execution was skipped, do not make data-result claims.
 """
 
 
@@ -62,71 +40,7 @@ def decide_next_action(
     state: KernelState,
     available_tools: list[dict[str, Any]],
 ) -> AgentDecision:
-    if state.get("api_key"):
-        decision = _try_llm_decision(state=state, available_tools=available_tools)
-        if decision is not None:
-            if decision.action == "final_answer" and _review_only_without_execution(state):
-                return _call(
-                    "answer.synthesize",
-                    {},
-                    "Synthesize a review-only answer from structured state instead of accepting unsupported result claims.",
-                )
-            return decision
     return _fallback_decision(state)
-
-
-def _try_llm_decision(
-    *,
-    state: KernelState,
-    available_tools: list[dict[str, Any]],
-) -> AgentDecision | None:
-    api_key = str(state.get("api_key") or "").strip()
-    if not api_key:
-        return None
-
-    api_base = str(state.get("api_base") or "https://api.openai.com/v1").rstrip("/")
-    model_name = str(state.get("model_name") or "gpt-4o-mini")
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": CONTROLLER_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "state": _controller_state_view(state),
-                        "available_tools": available_tools,
-                        "agent_decision_schema": {
-                            "action": "call_tool | update_plan | ask_user | final_answer | pause | wait_approval",
-                            "tool_call": {"tool_name": "string", "args": {}, "reason": "string"},
-                            "plan_patches": [],
-                            "user_message": "string | null",
-                            "final_answer": "string | null",
-                            "confidence": "low | medium | high",
-                            "reasoning_summary": "short explanation",
-                        },
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ],
-        "temperature": 0.0,
-        "max_tokens": 700,
-        "response_format": {"type": "json_object"},
-    }
-    try:
-        response = httpx.post(
-            f"{api_base}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=payload,
-            timeout=20.0,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        raw = json.loads(content)
-        return AgentDecision.model_validate(raw)
-    except (httpx.HTTPError, KeyError, TypeError, ValueError, ValidationError):
-        return None
 
 
 def _controller_state_view(state: KernelState) -> dict[str, Any]:
@@ -142,6 +56,11 @@ def _controller_state_view(state: KernelState) -> dict[str, Any]:
         "status": state.get("status"),
         "execute": state.get("execute"),
         "execution_skipped": execution_skipped,
+        "agent_intent": _compact_mapping(_as_dict(state.get("agent_intent"))),
+        "agent_context": _compact_mapping(_as_dict(state.get("agent_context"))),
+        "agent_lifecycle_plan": _compact_mapping(_as_dict(state.get("agent_lifecycle_plan"))),
+        "agent_observation": _compact_mapping(_as_dict(state.get("agent_observation"))),
+        "agent_reflection": _compact_mapping(_as_dict(state.get("agent_reflection"))),
         "latest_messages": _latest_messages(state.get("messages")),
         "latest_artifacts": _latest_artifacts(state.get("artifacts")),
         "pending_approval": _approval_preview(state.get("pending_approval")),
@@ -172,12 +91,9 @@ def _controller_state_view(state: KernelState) -> dict[str, Any]:
         "error": state.get("error"),
         "step_count": state.get("step_count", 0),
         "max_steps": state.get("max_steps", 20),
-        # CRITICAL: when execute=false / execution was skipped, the agent MUST NOT
-        # make claims about row counts, empty results, or successful execution.
         "data_claims_policy": (
-            "NEVER make data-result claims (e.g. 'returned zero rows', 'no students', "
-            "'executed successfully', 'query returned N rows') when execution_skipped=true. "
-            "The correct statement is: 'execution was disabled, no result set was retrieved'."
+            "NEVER make data-result claims when execution_skipped=true. "
+            "The correct statement is: execution was disabled, no result set was retrieved."
         ) if execution_skipped else None,
     }
 
@@ -187,12 +103,7 @@ def _latest_messages(value: Any) -> list[dict[str, str]]:
     compacted: list[dict[str, str]] = []
     for message in messages:
         content = _preview_text(message.get("content"), limit=TEXT_PREVIEW_LIMIT)
-        compacted.append(
-            {
-                "role": str(message.get("role") or "unknown"),
-                "content": content or "",
-            }
-        )
+        compacted.append({"role": str(message.get("role") or "unknown"), "content": content or ""})
     return compacted
 
 
@@ -248,11 +159,7 @@ def _execution_preview(execution: dict[str, Any]) -> dict[str, Any] | None:
     if not execution:
         return None
     row_count = _row_count(execution)
-    return {
-        "success": execution.get("success"),
-        "row_count": row_count,
-        "columns": _preview_list(execution.get("columns")),
-    }
+    return {"success": execution.get("success"), "row_count": row_count, "columns": _preview_list(execution.get("columns"))}
 
 
 def _tool_result_preview(value: Any) -> dict[str, Any] | None:
@@ -288,11 +195,7 @@ def _workspace_context_summary(value: Any) -> dict[str, Any] | None:
 def _latest_plan_events(value: Any) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for event in _latest_mappings(value):
-        compacted = {
-            "operation": event.get("operation"),
-            "step_id": event.get("step_id"),
-            "reason": _preview_text(event.get("reason")),
-        }
+        compacted = {"operation": event.get("operation"), "step_id": event.get("step_id"), "reason": _preview_text(event.get("reason"))}
         step = _as_dict(event.get("step"))
         if step:
             compacted["step"] = {
@@ -351,9 +254,7 @@ def _preview_text(value: Any, *, limit: int = TEXT_PREVIEW_LIMIT) -> str | None:
     else:
         text = json.dumps(value, ensure_ascii=False, default=str, sort_keys=True)
     text = text.strip()
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}..."
+    return text if len(text) <= limit else f"{text[:limit]}..."
 
 
 def _row_count(value: dict[str, Any]) -> int | None:
@@ -378,6 +279,91 @@ def _fallback_decision(state: KernelState) -> AgentDecision:
         if transition.predicate(state):
             return transition.decide(state)
     return _call("answer.synthesize", {}, "Synthesize the final answer from artifacts.")
+
+
+def _lifecycle_intent(state: KernelState) -> str:
+    return str(_as_dict(state.get("agent_intent")).get("intent") or "")
+
+
+def _lifecycle_reflection_action(state: KernelState) -> str:
+    return str(_as_dict(state.get("agent_reflection")).get("action") or "")
+
+
+def _lifecycle_next_focus(state: KernelState) -> str:
+    return str(_as_dict(state.get("agent_lifecycle_plan")).get("next_focus") or "")
+
+
+def _has_lifecycle_revision_intent(state: KernelState) -> bool:
+    return _lifecycle_intent(state) == "revise_sql" and bool(_sql_to_explain_from_context(state)) and not state.get("safety")
+
+
+def _lifecycle_revision_decision(state: KernelState) -> AgentDecision:
+    return _call(
+        "sql.revise",
+        {"sql": _sql_to_explain_from_context(state), "user_instruction": latest_user_message(state)},
+        "Lifecycle intent is revise_sql; revise existing SQL instead of restarting schema discovery.",
+    )
+
+
+def _has_lifecycle_explain_sql_intent(state: KernelState) -> bool:
+    return _lifecycle_intent(state) == "explain_sql" and bool(_sql_to_explain_from_context(state))
+
+
+def _lifecycle_explain_sql_decision(state: KernelState) -> AgentDecision:
+    if _should_inline_workspace_sql_explanation(state):
+        return _inline_workspace_sql_explanation(state)
+    workspace_tool = _workspace_tool_from_state(state)
+    if workspace_tool:
+        return _call(workspace_tool, {"question": latest_user_message(state)}, "Lifecycle intent is explain_sql; use workspace SQL context.")
+    return AgentDecision(
+        action="final_answer",
+        final_answer=_sql_explanation_answer(_sql_to_explain_from_context(state) or ""),
+        confidence="high",
+        reasoning_summary="Explain existing SQL from lifecycle context without schema discovery.",
+    )
+
+
+def _has_lifecycle_approval_help_intent(state: KernelState) -> bool:
+    return _lifecycle_intent(state) == "approval_help" and bool(state.get("pending_approval") or _as_dict(state.get("workspace_context")).get("pending_approval_id"))
+
+
+def _lifecycle_approval_help_decision(state: KernelState) -> AgentDecision:
+    approval = _approval_preview(state.get("pending_approval")) or _workspace_context_summary(state.get("workspace_context")) or {}
+    return AgentDecision(
+        action="final_answer",
+        final_answer=(
+            "This run is waiting for approval before the agent can continue. "
+            "The controller will not execute the pending action or simulate approval in chat. "
+            f"Approval context: {json.dumps(approval, ensure_ascii=False, default=str)}"
+        ),
+        confidence="high",
+        reasoning_summary="Lifecycle intent is approval_help; explain the existing approval instead of calling tools.",
+    )
+
+
+def _has_lifecycle_chart_request(state: KernelState) -> bool:
+    return _lifecycle_intent(state) == "chart_request" and not bool(state.get("chart_suggestion"))
+
+
+def _lifecycle_chart_decision(state: KernelState) -> AgentDecision:
+    return _call("chart.suggest", {}, "Lifecycle intent is chart_request; suggest a chart from existing result context.")
+
+
+def _has_reflection_revision(state: KernelState) -> bool:
+    return _lifecycle_reflection_action(state) == "revise_sql" and bool(state.get("sql")) and not state.get("revision_attempted")
+
+
+def _reflection_revision_decision(state: KernelState) -> AgentDecision:
+    execution = _as_dict(state.get("execution"))
+    return _call(
+        "sql.revise",
+        {"sql": state.get("sql"), "error": execution.get("revise_suggestion") or state.get("error") or "Agent reflection requested SQL revision."},
+        "Agent reflection requested one SQL revision before continuing.",
+    )
+
+
+def _has_lifecycle_next_focus(state: KernelState, tool_name: str) -> bool:
+    return _lifecycle_next_focus(state) == tool_name
 
 
 def _can_inline_workspace_sql_explanation(state: KernelState) -> bool:
@@ -418,12 +404,7 @@ def _recover_or_stop_on_error(state: KernelState) -> AgentDecision:
 
 def _return_ready_answer(state: KernelState) -> AgentDecision:
     answer = _as_dict(state.get("answer"))
-    return AgentDecision(
-        action="final_answer",
-        final_answer=str(answer.get("answer") or ""),
-        confidence="high",
-        reasoning_summary="The answer artifact is ready.",
-    )
+    return AgentDecision(action="final_answer", final_answer=str(answer.get("answer") or ""), confidence="high", reasoning_summary="The answer artifact is ready.")
 
 
 def _load_followup_context(state: KernelState) -> AgentDecision:
@@ -460,11 +441,7 @@ def _policy_block_decision(state: KernelState) -> AgentDecision:
             return _call("sql.skip_execution", {}, "The request is review-only, so execution is skipped.")
         return _call("sql.execute_readonly", {}, "Route confirmed SQL execution through policy approval.")
     if not state.get("revision_attempted"):
-        return _call(
-            "sql.revise",
-            {"sql": state.get("sql"), "error": safety.get("revise_suggestion") or "SQL did not pass TrustGate."},
-            "Ask the revision tool for deterministic recovery guidance.",
-        )
+        return _call("sql.revise", {"sql": state.get("sql"), "error": safety.get("revise_suggestion") or "SQL did not pass TrustGate."}, "Ask the revision tool for deterministic recovery guidance.")
     return _call("answer.synthesize", {}, "Explain why the agent cannot continue safely.")
 
 
@@ -485,27 +462,28 @@ def _execution_failed_without_revision(state: KernelState) -> bool:
 
 def _revise_after_execution_failure(state: KernelState) -> AgentDecision:
     execution = _as_dict(state.get("execution"))
-    return _call(
-        "sql.revise",
-        {"sql": state.get("sql"), "error": execution.get("revise_suggestion") or state.get("error") or "SQL execution failed."},
-        "Revise after execution failure.",
-    )
+    return _call("sql.revise", {"sql": state.get("sql"), "error": execution.get("revise_suggestion") or state.get("error") or "SQL execution failed."}, "Revise after execution failure.")
 
 
 _FALLBACK_TRANSITIONS: tuple[FallbackTransition, ...] = (
+    FallbackTransition("lifecycle_approval_help", _has_lifecycle_approval_help_intent, _lifecycle_approval_help_decision),
+    FallbackTransition("lifecycle_explain_sql", _has_lifecycle_explain_sql_intent, _lifecycle_explain_sql_decision),
+    FallbackTransition("lifecycle_revision", _has_lifecycle_revision_intent, _lifecycle_revision_decision),
+    FallbackTransition("lifecycle_chart_request", _has_lifecycle_chart_request, _lifecycle_chart_decision),
+    FallbackTransition("reflection_revision", _has_reflection_revision, _reflection_revision_decision),
     FallbackTransition("inline_workspace_sql_explanation", _can_inline_workspace_sql_explanation, _inline_workspace_sql_explanation),
     FallbackTransition("workspace_assist", _has_workspace_assist, _workspace_assist_decision),
     FallbackTransition("recover_or_stop_on_error", lambda state: bool(state.get("error")), _recover_or_stop_on_error),
     FallbackTransition("return_ready_answer", lambda state: bool(state.get("answer")), _return_ready_answer),
-    FallbackTransition(
-        "load_followup_context",
-        lambda state: bool(state.get("follow_up_context") and not state.get("followup_context")),
-        _load_followup_context,
-    ),
-    FallbackTransition("build_schema_context", lambda state: not bool(state.get("schema_context")), _build_schema_context),
-    FallbackTransition("build_query_plan", lambda state: not bool(state.get("query_plan")), _build_query_plan),
-    FallbackTransition("generate_sql", lambda state: not bool(state.get("sql")), _generate_sql),
-    FallbackTransition("validate_sql", lambda state: not bool(state.get("safety")), _validate_sql),
+    FallbackTransition("load_followup_context", lambda state: bool(state.get("follow_up_context") and not state.get("followup_context")), _load_followup_context),
+    FallbackTransition("build_schema_context", lambda state: not bool(state.get("schema_context")) and _has_lifecycle_next_focus(state, "schema.build_context"), _build_schema_context),
+    FallbackTransition("build_query_plan", lambda state: not bool(state.get("query_plan")) and _has_lifecycle_next_focus(state, "query_plan.build"), _build_query_plan),
+    FallbackTransition("generate_sql", lambda state: not bool(state.get("sql")) and _has_lifecycle_next_focus(state, "sql.generate"), _generate_sql),
+    FallbackTransition("validate_sql", lambda state: not bool(state.get("safety")) and _has_lifecycle_next_focus(state, "sql.validate"), _validate_sql),
+    FallbackTransition("build_schema_context_default", lambda state: not bool(state.get("schema_context")), _build_schema_context),
+    FallbackTransition("build_query_plan_default", lambda state: not bool(state.get("query_plan")), _build_query_plan),
+    FallbackTransition("generate_sql_default", lambda state: not bool(state.get("sql")), _generate_sql),
+    FallbackTransition("validate_sql_default", lambda state: not bool(state.get("safety")), _validate_sql),
     FallbackTransition("policy_block", _sql_is_blocked_by_policy, _policy_block_decision),
     FallbackTransition("execute_or_skip_sql", _needs_execution_decision, _execution_decision),
     FallbackTransition("revise_execution_failure", _execution_failed_without_revision, _revise_after_execution_failure),
@@ -532,22 +510,16 @@ def _workspace_tool_from_state(state: KernelState) -> str | None:
             return "workspace.fix_sql"
         if any(token in text for token in ("optimize", "优化")):
             return "workspace.optimize_sql"
-        if any(token in text for token in ("rewrite", "重写")):
+        if any(token in text for token in ("rewrite", "重写", "修改", "改成", "换成")):
             return "workspace.rewrite_sql"
         if any(token in text for token in ("explain", "describe", "what does", "解释", "说明")):
             return "workspace.explain_sql"
-
-    if workspace_context.get("last_query_result_preview") and any(
-        token in text for token in ("result", "结果", "explain", "解释", "说明")
-    ):
+    if workspace_context.get("last_query_result_preview") and any(token in text for token in ("result", "结果", "explain", "解释", "说明")):
         return "workspace.explain_result"
-
     if workspace_context.get("selected_artifact_id") and any(token in text for token in ("continue", "继续")):
         return "workspace.continue_from_artifact"
-
     if workspace_context.get("selected_table_names") and any(token in text for token in ("schema", "table", "表结构", "字段")):
         return "workspace.explain_schema"
-
     return None
 
 
@@ -560,12 +532,10 @@ def _sql_to_explain_from_context(state: KernelState) -> str | None:
     existing_sql = _preview_text(state.get("sql"), limit=TEXT_PREVIEW_LIMIT)
     if existing_sql:
         return existing_sql
-
     workspace_context = _as_dict(state.get("workspace_context"))
     workspace_sql = _preview_text(workspace_context.get("selected_sql") or workspace_context.get("active_sql"), limit=TEXT_PREVIEW_LIMIT)
     if workspace_sql:
         return workspace_sql
-
     for context_key in ("follow_up_context", "followup_context"):
         context = _as_dict(state.get(context_key))
         for artifact in _latest_mappings(context.get("artifacts")):
@@ -578,21 +548,14 @@ def _sql_to_explain_from_context(state: KernelState) -> str | None:
 
 def _sql_explanation_answer(sql: str) -> str:
     return (
-        "This request is asking about the SQL already selected in the current thread, so no new schema discovery or "
-        "query execution is needed.\n\n"
+        "This request is asking about the SQL already selected in the current thread, so no new schema discovery or query execution is needed.\n\n"
         f"SQL:\n```sql\n{sql}\n```\n\n"
-        "At a high level, this is a read-only query. It selects the requested columns or expressions from the referenced "
-        "table(s), then applies any filtering, grouping, ordering, or limit clauses shown in the statement."
+        "At a high level, this is a read-only query. It selects the requested columns or expressions from the referenced table(s), then applies any filtering, grouping, ordering, or limit clauses shown in the statement."
     )
 
 
 def _call(tool_name: str, args: dict[str, Any], reason: str) -> AgentDecision:
-    return AgentDecision(
-        action="call_tool",
-        tool_call=ToolCallDecision(tool_name=tool_name, args=args, reason=reason),
-        confidence="medium",
-        reasoning_summary=reason,
-    )
+    return AgentDecision(action="call_tool", tool_call=ToolCallDecision(tool_name=tool_name, args=args, reason=reason), confidence="medium", reasoning_summary=reason)
 
 
 def _review_only_without_execution(state: KernelState) -> bool:
