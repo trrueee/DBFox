@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from engine.agent.answer import sanitize_answer_for_skipped_execution, synthesize_agent_answer
+from engine.agent.answer import synthesize_agent_answer
 from engine.agent.artifacts import (
     AgentArtifactIdentity,
     build_agent_artifacts,
@@ -72,11 +72,6 @@ class AgentKernelResponseAssembler:
                 error=error,
             )
             explanation = explanation or parsed_answer.answer
-
-        # Deterministic sanitizer: strip data-result claims when execution was skipped
-        parsed_answer = sanitize_answer_for_skipped_execution(
-            parsed_answer, execution, sql=sql, safety=safety,
-        )
 
         # SQL-plan consistency: if query_plan specifies order_by but generated SQL
         # has no ORDER BY (e.g. LLM controller re-planned after sql generation),

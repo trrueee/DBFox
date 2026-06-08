@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from engine.agent.types import AgentRunResponse, AgentRuntimeEvent
 from engine.evaluation.agent_eval import AgentEvalRunner
 from engine.models import AgentGoldenTask, AgentEvalRun, AgentEvalCaseResult
 from engine.schemas.agent_eval import AgentEvalRunRequest
@@ -80,6 +81,58 @@ def test_eval_runner_saves_case_result(db_session, demo_datasource):
     assert len(cases) == 1
     assert cases[0].task_id == task.id
     assert cases[0].status in ("passed", "failed", "error")
+
+
+def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, demo_datasource, monkeypatch):
+    task = _make_task(
+        db_session,
+        demo_datasource.id,
+        expected_tools_json='["sql.validate"]',
+    )
+
+    class FakeRuntime:
+        def __init__(self, _db):
+            pass
+
+        def run_iter(self, _req):
+            response = AgentRunResponse(
+                run_id="eval-run-1",
+                session_id="eval-session-1",
+                success=True,
+                status="success",
+                question="say hello",
+                sql="SELECT 1",
+                steps=[],
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-1",
+                run_id="eval-run-1",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.step.completed",
+                step={"name": "sql.validate", "tool_name": "sql.validate"},
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-2",
+                run_id="eval-run-1",
+                sequence=2,
+                created_at_ms=2,
+                type="agent.run.completed",
+                response=response,
+            )
+
+    monkeypatch.setattr("engine.evaluation.agent_eval.DataBoxAgentRuntime", FakeRuntime)
+
+    result = AgentEvalRunner(db_session).run(
+        AgentEvalRunRequest(datasource_id=demo_datasource.id, task_ids=[task.id], execute=False)
+    )
+
+    assert result.case_results[0].status == "passed"
+    case = db_session.query(AgentEvalCaseResult).filter(
+        AgentEvalCaseResult.eval_run_id == result.id
+    ).one()
+    assert json.loads(case.actual_sql_json) == ["SELECT 1"]
+    assert "sql.validate" in json.loads(case.actual_tools_json)
 
 
 def test_eval_runner_execute_defaults_false(db_session, demo_datasource):

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from engine.models import SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 from engine.semantic import QueryDimension, QueryMetric, QueryPlan, QueryPlanBuilder
 
@@ -39,6 +40,45 @@ def test_query_plan_top_selling_products(db_session, demo_datasource) -> None:
     assert any(metric.name == "total_sold" and metric.source_column == "order_items.quantity" for metric in plan.metrics)
     assert any(dimension.column == "products.name" for dimension in plan.dimensions)
     assert any("order_items.product_id = products.id" == join.condition for join in plan.joins)
+
+
+def test_query_plan_offline_uses_schema_matching_without_domain_templates(db_session, demo_datasource) -> None:
+    students = SchemaTable(
+        data_source_id=demo_datasource.id,
+        table_schema="main",
+        table_name="students",
+        table_comment="Learners enrolled in courses",
+    )
+    courses = SchemaTable(
+        data_source_id=demo_datasource.id,
+        table_schema="main",
+        table_name="courses",
+        table_comment="Course catalog",
+    )
+    db_session.add_all([students, courses])
+    db_session.flush()
+    db_session.add_all(
+        [
+            SchemaColumn(table_id=students.id, column_name="id", data_type="int", is_primary_key=True),
+            SchemaColumn(table_id=students.id, column_name="country", data_type="varchar"),
+            SchemaColumn(table_id=students.id, column_name="age", data_type="int"),
+            SchemaColumn(table_id=courses.id, column_name="id", data_type="int", is_primary_key=True),
+            SchemaColumn(table_id=courses.id, column_name="title", data_type="varchar"),
+        ]
+    )
+    db_session.commit()
+
+    plan = QueryPlanBuilder(db_session).build(
+        datasource_id=demo_datasource.id,
+        question="count students by country",
+        mode="offline",
+    )
+
+    assert plan.intent == "schema_matched_aggregate"
+    assert plan.tables == ["students"]
+    assert any(metric.expression == "COUNT(*)" and metric.source_column == "students.id" for metric in plan.metrics)
+    assert any(dimension.column == "students.country" for dimension in plan.dimensions)
+    assert plan.warnings == []
 
 
 def test_query_plan_validation_collects_missing_schema_warnings(db_session, demo_datasource) -> None:
