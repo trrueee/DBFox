@@ -31,6 +31,28 @@ REFERENCE_WORDS = (
     "之前",
 )
 
+DATA_CLAIM_WORDS = (
+    "returned",
+    "rows",
+    "records",
+    "decreased",
+    "increased",
+    "highest",
+    "lowest",
+    "total",
+    "average",
+    "sum",
+    "返回",
+    "行",
+    "记录",
+    "下降",
+    "增长",
+    "最高",
+    "最低",
+    "总计",
+    "平均",
+)
+
 
 def understand_node(state: KernelState) -> dict[str, Any]:
     """Understand: classify the user's current intent before tool routing."""
@@ -106,20 +128,30 @@ def reflect_node(state: KernelState) -> dict[str, Any]:
 
 
 def answer_node(state: KernelState) -> dict[str, Any]:
-    """Answer: mark the final answer as evidence-aware in lifecycle trace."""
+    """Answer: mark and guard the final answer before the graph ends."""
 
     answer = state.get("answer") or state.get("final_answer") or {}
+    critique = critique_answer(state)
+    effective_answer = _corrected_answer(answer, critique) if critique.get("needs_correction") else answer
     payload = {
-        "has_answer": bool(answer),
-        "answer_preview": _preview((answer or {}).get("answer") if isinstance(answer, dict) else answer),
+        "has_answer": bool(effective_answer),
+        "answer_preview": _preview((effective_answer or {}).get("answer") if isinstance(effective_answer, dict) else effective_answer),
         "has_execution": bool(state.get("execution")),
         "has_sql": bool(state.get("sql")),
         "artifact_count": len(state.get("artifacts", [])),
         "reference": resolve_reference(state),
+        "answer_critique": critique,
     }
-    return {
-        "trace_events": [{"type": "agent.answer", "payload": payload}],
+    update: dict[str, Any] = {
+        "trace_events": [
+            {"type": "agent.answer_critic", "payload": critique},
+            {"type": "agent.answer", "payload": payload},
+        ],
     }
+    if critique.get("needs_correction") and isinstance(effective_answer, dict):
+        update["answer"] = effective_answer
+        update["final_answer"] = effective_answer
+    return update
 
 
 def classify_intent(state: KernelState) -> AgentIntent:
@@ -187,42 +219,18 @@ def resolve_reference(state: KernelState) -> dict[str, Any]:
 
     selected_sql = workspace_context.get("selected_sql") or workspace_context.get("active_sql")
     if selected_sql:
-        return {
-            "kind": "sql",
-            "source": "workspace_context",
-            "id": workspace_context.get("selected_artifact_id") or workspace_context.get("recent_agent_run_id"),
-            "confidence": "high" if has_reference_language else "medium",
-            "sql_preview": _preview(selected_sql),
-        }
+        return {"kind": "sql", "source": "workspace_context", "id": workspace_context.get("selected_artifact_id") or workspace_context.get("recent_agent_run_id"), "confidence": "high" if has_reference_language else "medium", "sql_preview": _preview(selected_sql)}
 
     pending_approval = state.get("pending_approval") or workspace_context.get("pending_approval_id")
     if pending_approval:
-        return {
-            "kind": "approval",
-            "source": "pending_approval",
-            "id": pending_approval.get("id") if isinstance(pending_approval, dict) else pending_approval,
-            "confidence": "high" if has_reference_language else "medium",
-        }
+        return {"kind": "approval", "source": "pending_approval", "id": pending_approval.get("id") if isinstance(pending_approval, dict) else pending_approval, "confidence": "high" if has_reference_language else "medium"}
 
     if state.get("sql"):
-        return {
-            "kind": "sql",
-            "source": "state.sql",
-            "id": None,
-            "confidence": "high" if has_reference_language else "medium",
-            "sql_preview": _preview(state.get("sql")),
-        }
+        return {"kind": "sql", "source": "state.sql", "id": None, "confidence": "high" if has_reference_language else "medium", "sql_preview": _preview(state.get("sql"))}
 
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     if execution:
-        return {
-            "kind": "result",
-            "source": "state.execution",
-            "id": execution.get("executionId") or execution.get("historyId"),
-            "confidence": "high" if has_reference_language else "medium",
-            "row_count": execution.get("rowCount", execution.get("row_count")),
-            "columns": _preview_list(execution.get("columns")),
-        }
+        return {"kind": "result", "source": "state.execution", "id": execution.get("executionId") or execution.get("historyId"), "confidence": "high" if has_reference_language else "medium", "row_count": execution.get("rowCount", execution.get("row_count")), "columns": _preview_list(execution.get("columns"))}
 
     latest_artifact = _latest_relevant_artifact(state)
     if latest_artifact:
@@ -236,18 +244,7 @@ def plan_route(state: KernelState) -> dict[str, Any]:
     intent = str(intent_payload.get("intent") or classify_intent(state))
     reference = intent_payload.get("reference") if isinstance(intent_payload.get("reference"), dict) else resolve_reference(state)
     routes: dict[str, list[str]] = {
-        "new_data_question": [
-            "schema.build_context",
-            "query_plan.build",
-            "sql.generate",
-            "sql.critic",
-            "sql.validate",
-            "sql.execute_readonly|sql.skip_execution",
-            "result.profile",
-            "chart.suggest",
-            "followup.suggest",
-            "answer.synthesize",
-        ],
+        "new_data_question": ["schema.build_context", "query_plan.build", "sql.generate", "sql.critic", "sql.validate", "sql.execute_readonly|sql.skip_execution", "result.profile", "chart.suggest", "followup.suggest", "answer.synthesize"],
         "followup_on_result": ["followup.load_context", "result.profile", "answer.synthesize"],
         "explain_sql": ["answer.synthesize"],
         "revise_sql": ["sql.revise", "sql.validate", "answer.synthesize"],
@@ -256,13 +253,7 @@ def plan_route(state: KernelState) -> dict[str, Any]:
         "clarification": ["ask_user|answer.synthesize"],
     }
     steps = routes.get(intent, routes["new_data_question"])
-    return {
-        "intent": intent,
-        "route": steps,
-        "next_focus": _next_focus(state, steps, reference),
-        "is_review_only": not bool(state.get("execute", True)),
-        "reference": reference,
-    }
+    return {"intent": intent, "route": steps, "next_focus": _next_focus(state, steps, reference), "is_review_only": not bool(state.get("execute", True)), "reference": reference}
 
 
 def reflect(state: KernelState) -> dict[str, Any]:
@@ -302,16 +293,7 @@ def reflect(state: KernelState) -> dict[str, Any]:
         action = "continue"
         reason = "More evidence or synthesis is still needed."
 
-    return {
-        "action": action,
-        "reason": reason,
-        "last_tool_name": state.get("last_tool_name"),
-        "has_answer": bool(answer),
-        "has_execution": bool(execution),
-        "reference": reference,
-        "sql_critique": critique,
-        "last_observation_status": observation.get("status") if isinstance(observation, dict) else None,
-    }
+    return {"action": action, "reason": reason, "last_tool_name": state.get("last_tool_name"), "has_answer": bool(answer), "has_execution": bool(execution), "reference": reference, "sql_critique": critique, "last_observation_status": observation.get("status") if isinstance(observation, dict) else None}
 
 
 def critique_sql(state: KernelState) -> dict[str, Any]:
@@ -326,7 +308,6 @@ def critique_sql(state: KernelState) -> dict[str, Any]:
 
     if not sql:
         return {"status": "not_applicable", "needs_revision": False, "summary": "No SQL candidate is available yet.", "issues": [], "suggestions": []}
-
     if last_tool and last_tool not in {"sql.generate", "sql.revise"}:
         return {"status": "not_applicable", "needs_revision": False, "summary": "SQL Critic only runs immediately after SQL generation or revision.", "issues": [], "suggestions": []}
 
@@ -358,18 +339,58 @@ def critique_sql(state: KernelState) -> dict[str, Any]:
     if any(token in question for token in ("month", "monthly", "按月", "每月", "月份")) and not any(token in lowered_sql for token in ("month", "strftime", "date_trunc", "%y-%m", "%m")):
         issues.append("The question asks for monthly analysis, but SQL has no visible month bucketing.")
         suggestions.append("Add month-level date bucketing.")
-
     if "limit" not in lowered_sql and not any(func in lowered_sql for func in ("count(", "sum(", "avg(", "min(", "max("))):
         suggestions.append("Consider adding a LIMIT for exploratory row-returning queries.")
 
     needs_revision = bool(issues)
+    return {"status": "needs_revision" if needs_revision else "passed", "needs_revision": needs_revision, "summary": "SQL Critic found issues before validation." if needs_revision else "SQL Critic found no blocking issues before validation.", "issues": issues, "suggestions": suggestions}
+
+
+def critique_answer(state: KernelState) -> dict[str, Any]:
+    """Final answer guardrail that prevents unsupported data claims."""
+
+    answer = state.get("answer") or state.get("final_answer") or {}
+    answer_text = str(answer.get("answer") if isinstance(answer, dict) else answer or "")
+    lowered = answer_text.lower()
+    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    execution_success = execution.get("success") is True
+    execution_reason = str(execution.get("reason") or "").lower()
+    execution_skipped = bool((not execution_success and execution_reason and ("skip" in execution_reason or "execute=false" in execution_reason)) or (state.get("execute") is False and not execution_success))
+    data_claim_detected = any(word in lowered for word in DATA_CLAIM_WORDS)
+    has_result_evidence = execution_success or bool(state.get("result_profile"))
+    issues: list[str] = []
+
+    if execution_skipped and data_claim_detected:
+        issues.append("Answer appears to make data-result claims even though execution was skipped.")
+    elif not has_result_evidence and data_claim_detected:
+        issues.append("Answer appears to make data-result claims without execution or result-profile evidence.")
+    if not answer_text and state.get("error"):
+        issues.append("Answer is empty while the run has an error that should be explained.")
+
+    needs_correction = bool(issues)
     return {
-        "status": "needs_revision" if needs_revision else "passed",
-        "needs_revision": needs_revision,
-        "summary": "SQL Critic found issues before validation." if needs_revision else "SQL Critic found no blocking issues before validation.",
+        "status": "needs_correction" if needs_correction else "passed",
+        "needs_correction": needs_correction,
+        "summary": "Answer Critic found unsupported claims." if needs_correction else "Answer Critic found no blocking issue.",
         "issues": issues,
-        "suggestions": suggestions,
+        "execution_success": execution_success,
+        "execution_skipped": execution_skipped,
+        "has_result_evidence": has_result_evidence,
+        "data_claim_detected": data_claim_detected,
     }
+
+
+def _corrected_answer(answer: Any, critique: dict[str, Any]) -> dict[str, Any]:
+    answer_dict = dict(answer) if isinstance(answer, dict) else {"answer": str(answer or "")}
+    original = str(answer_dict.get("answer") or "").strip()
+    correction = "Execution evidence is not available for this response, so any data-result conclusion should be treated as unsupported until the query is executed."
+    if critique.get("execution_skipped"):
+        correction = "Execution was disabled or skipped for this run, so no result set was retrieved and I cannot make data-result claims."
+    answer_dict["answer"] = f"{original}\n\n{correction}" if original else correction
+    caveats = answer_dict.get("caveats") if isinstance(answer_dict.get("caveats"), list) else []
+    caveats = [*caveats, *[str(issue) for issue in critique.get("issues", [])]]
+    answer_dict["caveats"] = caveats
+    return answer_dict
 
 
 def _next_focus(state: KernelState, steps: list[str], reference: dict[str, Any] | None = None) -> str:
