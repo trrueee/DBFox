@@ -700,6 +700,56 @@ def test_agent_kernel_controller_prompt_teaches_followup_artifact_and_approval_p
     assert "never invent execution results" in prompt
 
 
+def test_fallback_controller_uses_named_transition_table() -> None:
+    from engine.agent_kernel.controller import _FALLBACK_TRANSITIONS, _fallback_decision
+
+    transition_names = [transition.name for transition in _FALLBACK_TRANSITIONS]
+
+    assert transition_names[:6] == [
+        "inline_workspace_sql_explanation",
+        "workspace_assist",
+        "recover_or_stop_on_error",
+        "return_ready_answer",
+        "load_followup_context",
+        "build_schema_context",
+    ]
+    assert transition_names[-1] == "synthesize_answer"
+
+    decision = _fallback_decision({})
+    assert decision.action == "call_tool"
+    assert decision.tool_call is not None
+    assert decision.tool_call.tool_name == "schema.build_context"
+
+
+def test_controller_routes_review_only_final_answer_to_answer_synthesizer(monkeypatch) -> None:
+    from engine.agent_kernel.controller import decide_next_action
+
+    monkeypatch.setattr(
+        "engine.agent_kernel.controller._try_llm_decision",
+        lambda **_kwargs: AgentDecision(
+            action="final_answer",
+            final_answer="The query executed successfully and returned zero rows.",
+            confidence="high",
+            reasoning_summary="LLM made an unsupported result claim.",
+        ),
+    )
+
+    decision = decide_next_action(
+        state={
+            "api_key": "test-key",
+            "execute": False,
+            "sql": "SELECT id FROM users LIMIT 10",
+            "safety": {"can_execute": True},
+            "execution": {"reason": "Request execute=false; SQL was not executed."},
+        },
+        available_tools=[],
+    )
+
+    assert decision.action == "call_tool"
+    assert decision.tool_call is not None
+    assert decision.tool_call.tool_name == "answer.synthesize"
+
+
 def test_agent_kernel_sql_revise_accepts_instruction_and_pending_approval_sql(
     db_session,
     demo_datasource,

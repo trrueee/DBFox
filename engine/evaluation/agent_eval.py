@@ -87,11 +87,20 @@ class AgentEvalRunner:
                     model_name=req.model_name,
                     workspace_context=workspace_ctx,
                 )
-                response = runtime.run(agent_req)
+                events_payload: list[dict[str, Any]] = []
+                response = None
+                for event in runtime.run_iter(agent_req):
+                    events_payload.append(event.model_dump(mode="json"))
+                    if event.response is not None:
+                        response = event.response
+                if response is None:
+                    raise RuntimeError("Agent eval case completed without a final response.")
                 latency_ms = int((time.monotonic() - start) * 1000)
                 total_latency += latency_ms
 
-                evaluation = self.evaluator.evaluate(task, response, events=None, trace=None)
+                trace_payload = [event.model_dump(mode="json") for event in response.trace_events]
+                actual_sql = _actual_sql_values(response, events_payload)
+                evaluation = self.evaluator.evaluate(task, response, events=events_payload, trace=trace_payload)
 
                 case_result = AgentEvalCaseResult(
                     eval_run_id=str(eval_run.id),
@@ -104,7 +113,7 @@ class AgentEvalRunner:
                     actual_tools_json=json.dumps(evaluation.actual.get("actual_tools", [])),
                     actual_artifact_types_json=json.dumps(evaluation.actual.get("actual_artifact_types", [])),
                     actual_approval_state=evaluation.actual.get("actual_approval_state"),
-                    actual_sql_json="[]",
+                    actual_sql_json=json.dumps(actual_sql),
                     failure_reasons_json=json.dumps(evaluation.failure_reasons),
                     response_json=_safe_response_json(response),
                     created_at=datetime.now(UTC),
@@ -235,3 +244,32 @@ def _safe_response_json(response: Any) -> str:
         return json.dumps(data, ensure_ascii=False, default=str)
     except Exception:
         return "{}"
+
+
+def _actual_sql_values(response: Any, events: list[dict[str, Any]]) -> list[str]:
+    values: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str):
+            sql = value.strip()
+            if sql and sql not in values:
+                values.append(sql)
+
+    add(getattr(response, "sql", None))
+    for step in getattr(response, "steps", []) or []:
+        output = getattr(step, "output", None)
+        if isinstance(output, dict):
+            add(output.get("sql"))
+            add(output.get("safe_sql"))
+            decision = output.get("execution_safety_decision")
+            if isinstance(decision, dict):
+                add(decision.get("safe_sql"))
+                add(decision.get("original_sql"))
+
+    for event in events:
+        step = event.get("step")
+        if not isinstance(step, dict):
+            continue
+        add(step.get("sql"))
+        add(step.get("safe_sql"))
+    return values

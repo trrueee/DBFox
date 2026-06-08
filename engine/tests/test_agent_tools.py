@@ -5,9 +5,9 @@ import uuid
 import pytest
 
 from engine.agent import AgentRunRequest
+from engine.agent.semantic_retry_policy import semantic_retry_prompt
 from engine.agent.tools import (
     _prepare_generated_sql,
-    _semantic_retry_prompt,
     build_query_plan_tool,
     generate_sql_tool,
     revise_sql_tool,
@@ -175,7 +175,7 @@ def test_semantic_retry_prompt_includes_code_specific_guidance() -> None:
         {},
     )
 
-    prompt = _semantic_retry_prompt(
+    prompt = semantic_retry_prompt(
         question="What are all distinct countries where singers above age 20 are from?",
         schema_context={},
         contract=contract,
@@ -721,12 +721,16 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
 # Projection-only retry validation
 # ============================================================
 
-from engine.agent.tools import _validate_projection_retry
 from engine.agent.semantic_contract import QueryContract, DistinctContract
+from engine.sql.compiler import SQLProjectionConstraintVerifier
 
 
 def _make_contract() -> QueryContract:
     return QueryContract(confidence=0.75)
+
+
+def _validate_projection_retry(original_sql: str, retry_sql: str, contract: QueryContract) -> bool:
+    return SQLProjectionConstraintVerifier().validate_retry(original_sql, retry_sql, contract)
 
 
 def test_projection_retry_accept_select_only_change() -> None:

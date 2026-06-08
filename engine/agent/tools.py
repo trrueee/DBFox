@@ -16,7 +16,13 @@ from engine.agent.prompts import RESULT_EXPLANATION_SECTIONS
 from engine.agent.recommendations import suggest_followups
 from engine.agent.result_profiler import profile_result
 from engine.agent.semantic_contract import QueryContract, build_query_contract
-from engine.agent.sql_semantic_verifier import SemanticViolation, verify_sql_against_contract
+from engine.agent.semantic_retry_policy import (
+    accept_semantic_retry,
+    semantic_retry_prompt,
+    semantic_violation_payload,
+    should_retry_semantic,
+)
+from engine.agent.sql_semantic_verifier import verify_sql_against_contract
 from engine.agent.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCandidate, ToolObservation
 from engine.errors import DataBoxError
 from engine.executor import execute_query
@@ -223,16 +229,17 @@ def generate_sql_tool(
         semantic_violations: list[Any] = []
         semantic_retry_violations: list[Any] = []
 
-        if sql and semantic_mode != "off":
-            semantic_violations = verify_sql_against_contract(sql, contract, schema_context)
-            semantic_initial_violations = _semantic_violation_payload(semantic_violations)
+        semantic_contract = contract
+        if sql and semantic_mode != "off" and semantic_contract is not None:
+            semantic_violations = verify_sql_against_contract(sql, semantic_contract, schema_context)
+            semantic_initial_violations = semantic_violation_payload(semantic_violations)
 
-            if semantic_mode == "retry" and _should_retry_semantic(contract, semantic_violations, req.api_key):
+            if semantic_mode == "retry" and should_retry_semantic(semantic_contract, semantic_violations, req.api_key):
                 semantic_retry_attempted = True
-                retry_prompt = _semantic_retry_prompt(
+                retry_prompt = semantic_retry_prompt(
                     question=question,
                     schema_context=schema_context,
-                    contract=contract,
+                    contract=semantic_contract,
                     previous_sql=sql,
                     violations=semantic_violations,
                 )
@@ -244,10 +251,10 @@ def generate_sql_tool(
                 retry_raw = str(retry_result.get("sql", "") or "").strip()
                 retry_sql_candidate, retry_notes, retry_meta = _prepare_generated_sql(db, req.datasource_id, retry_raw)
                 if retry_sql_candidate:
-                    retry_violations = verify_sql_against_contract(retry_sql_candidate, contract, schema_context)
-                    semantic_retry_violations = _semantic_violation_payload(retry_violations)
-                    if _accept_semantic_retry(
-                        semantic_violations, retry_violations, contract,
+                    retry_violations = verify_sql_against_contract(retry_sql_candidate, semantic_contract, schema_context)
+                    semantic_retry_violations = semantic_violation_payload(retry_violations)
+                    if accept_semantic_retry(
+                        semantic_violations, retry_violations, semantic_contract,
                         original_sql=sql, retry_sql=retry_sql_candidate,
                     ):
                         semantic_retry_accepted = True
@@ -281,8 +288,8 @@ def generate_sql_tool(
                 "rewrite": rewrite_metadata,
                 "fallback_reason": fallback_reason if 'fallback_reason' in locals() else None,
                 "semantic_mode": semantic_mode,
-                "semantic_contract": contract.to_dict(),
-                "semantic_violations": _semantic_violation_payload(semantic_violations),
+                "semantic_contract": semantic_contract.to_dict() if semantic_contract is not None else None,
+                "semantic_violations": semantic_violation_payload(semantic_violations),
                 "semantic_initial_violations": semantic_initial_violations,
                 "semantic_retry_attempted": semantic_retry_attempted,
                 "semantic_retry_accepted": semantic_retry_accepted,
@@ -870,279 +877,6 @@ def _contract_requires_llm(contract: QueryContract) -> tuple[bool, str | None]:
     return False, None
 
 
-# Violation codes that may be retried (requires contract confidence >= 0.7)
-_HIGH_CONFIDENCE_RETRYABLE_CODES = frozenset({
-    "having_missing", "group_by_missing", "having_count_missing",
-    "antijoin_outer_join", "antijoin_not_equal_or_null", "antijoin_missing",
-    "setlogic_contradictory_and", "projection_select_star", "distinct_missing",
-    # Projection — guarded retry: only SELECT list may change
-    "projection_extra_columns", "projection_missing_requested_column",
-    "projection_duplicate_alias",
-})
-
-
-def _should_retry_semantic(
-    contract: QueryContract,
-    violations: list[SemanticViolation],
-    has_api_key: str | None,
-) -> bool:
-    """Only retry when contract is high-confidence, violations are in the retryable set,
-    and an API key is available."""
-    if not has_api_key:
-        return False
-    if contract.confidence < 0.7:
-        return False
-    return any(v.code in _HIGH_CONFIDENCE_RETRYABLE_CODES for v in violations
-               if v.severity == "retryable")
-
-
-def _semantic_violation_severity_score(violations: list[Any]) -> int:
-    """Score violations: blocking=100, retryable=10, warning=1."""
-    score = 0
-    for v in violations:
-        code = str(v.get("code") if isinstance(v, dict) else v.code)
-        sev = str(v.get("severity") if isinstance(v, dict) else v.severity)
-        if sev == "blocking":
-            score += 100
-        elif sev == "retryable":
-            score += 10
-        else:
-            score += 1
-    return score
-
-
-def _accept_semantic_retry(
-    original_violations: list[Any],
-    retry_violations: list[Any],
-    contract: QueryContract,
-    original_sql: str = "",
-    retry_sql: str = "",
-) -> bool:
-    """Accept retry only if it reduces violation severity, introduces no new
-    high-confidence retryable violation codes, and passes structure checks for
-    projection-only retries."""
-    if contract.confidence < 0.7:
-        return False
-    orig_score = _semantic_violation_severity_score(original_violations)
-    retry_score = _semantic_violation_severity_score(retry_violations)
-
-    # Check that retry doesn't introduce NEW high-confidence retryable violations
-    orig_codes = {str(v.get("code") if isinstance(v, dict) else v.code)
-                  for v in original_violations}
-    retry_high_codes = {
-        str(v.get("code") if isinstance(v, dict) else v.code)
-        for v in retry_violations
-        if str(v.get("severity") if isinstance(v, dict) else v.severity) == "retryable"
-    }
-    new_retryable = retry_high_codes - orig_codes
-    # For projection retries, allow new projection-family codes (e.g.
-    # projection_duplicate_alias replacing projection_extra_columns)
-    new_retryable_non_proj = new_retryable - _PROJECTION_RETRY_CODES
-    if new_retryable_non_proj:
-        return False
-
-    # Projection-specific structural validation:
-    # if the retry targeted projection violations, verify only SELECT list changed
-    orig_proj_codes = orig_codes & _PROJECTION_RETRY_CODES
-    if orig_proj_codes and original_sql and retry_sql:
-        if not _validate_projection_retry(original_sql, retry_sql, contract):
-            return False
-        # For projection retries: accept if projection violations decreased,
-        # even if overall score is unchanged (column name normalization noise)
-        orig_proj_score = _projection_violation_score(original_violations)
-        retry_proj_score = _projection_violation_score(retry_violations)
-        if retry_proj_score >= orig_proj_score:
-            return False
-        # Accept if projection improved and structural check passed
-        return True
-
-    # Non-projection retries: require overall score decrease
-    if retry_score >= orig_score:
-        return False
-    return True
-
-
-def _projection_violation_score(violations: list[Any]) -> int:
-    """Score only projection-related violations."""
-    score = 0
-    for v in violations:
-        code = str(v.get("code") if isinstance(v, dict) else v.code)
-        sev = str(v.get("severity") if isinstance(v, dict) else v.severity)
-        if code in _PROJECTION_RETRY_CODES:
-            if sev == "retryable":
-                score += 10
-            else:
-                score += 1
-    return score
-
-
-_PROJECTION_RETRY_CODES = frozenset({
-    "projection_extra_columns", "projection_missing_requested_column",
-    "projection_duplicate_alias", "projection_select_star", "projection_extra_count",
-})
-
-
-def _has_retryable_semantic_violations(violations: list[SemanticViolation]) -> bool:
-    return any(violation.severity == "retryable" for violation in violations)
-
-
-def _semantic_violation_payload(violations: list[SemanticViolation]) -> list[dict[str, Any]]:
-    return [violation.to_dict() for violation in violations]
-
-
-def _semantic_retry_prompt(
-    *,
-    question: str,
-    schema_context: dict[str, Any],
-    contract: QueryContract,
-    previous_sql: str,
-    violations: list[SemanticViolation],
-) -> str:
-    schema_text = str(schema_context.get("schema_context") or "")
-    schema_block = f"\nSchema context:\n{schema_text[:12000]}\n" if schema_text else ""
-    guidance = _semantic_retry_guidance(violations)
-    guidance_block = f"\nCorrection rules:\n{guidance}\n" if guidance else ""
-    return (
-        "Previous SQL violated the semantic contract.\n\n"
-        f"Original question:\n{question}\n"
-        f"{schema_block}\n"
-        "SQL_CONTRACT:\n"
-        f"{json.dumps(contract.to_dict(), ensure_ascii=False, indent=2)}\n\n"
-        "Previous SQL:\n"
-        f"{previous_sql}\n\n"
-        "Violations:\n"
-        f"{json.dumps(_semantic_violation_payload(violations), ensure_ascii=False, indent=2)}\n\n"
-        f"{guidance_block}"
-        "Regenerate one MySQL SELECT query that satisfies the contract. Return SQL only."
-    )
-
-
-def _semantic_retry_guidance(violations: list[SemanticViolation]) -> str:
-    codes = {violation.code for violation in violations}
-    rules: list[str] = []
-    if codes & {"group_by_missing", "having_missing", "having_count_missing", "having_threshold_mismatch"}:
-        rules.append(
-            "- For related-row thresholds, select only the requested entity columns, GROUP BY them, and put COUNT(...) comparison in HAVING."
-        )
-    if "projection_select_star" in codes:
-        rules.append("- Replace SELECT * with explicit requested columns from SQL_CONTRACT.")
-    if codes & {"projection_extra_columns", "projection_missing_requested_column",
-                 "projection_duplicate_alias", "projection_extra_count"}:
-        rules.append(
-            "- Fix ONLY the SELECT list. Do not change FROM. Do not change JOIN. "
-            "Do not change WHERE. Do not change GROUP BY. Do not change HAVING. "
-            "Do not change ORDER BY. Do not change LIMIT. "
-            "Remove unrequested columns. Keep only columns explicitly requested by the question. "
-            "If the question asks for an ID (e.g. pet id), return only that requested ID column, "
-            "not all columns of the joined entity. "
-            "Remove duplicate aliases for the same underlying column (keep one). "
-            "Preserve DISTINCT if present in the original SQL or required by SQL_CONTRACT."
-        )
-    if "distinct_missing" in codes:
-        rules.append("- Use SELECT DISTINCT for explicitly distinct/different/unique results.")
-    if codes & {"antijoin_not_equal_or_null", "antijoin_outer_join", "antijoin_missing"}:
-        rules.append(
-            "- For absence/never/no-related-record questions, use a correlated NOT EXISTS subquery. "
-            "Do NOT use LEFT JOIN patterns (neither `WHERE col <> value OR col IS NULL` nor "
-            "`LEFT JOIN ... AND col = value WHERE key IS NULL`) — both fail when a subject "
-            "has both matching and non-matching related rows. Only NOT EXISTS guarantees "
-            "correct anti-join semantics for value-qualified conditions."
-        )
-    if codes & {"setlogic_contradictory_and", "setlogic_missing"}:
-        rules.append(
-            "- For shared/both/intersection semantics, use EXISTS subqueries or a self-join with DISTINCT; do not combine mutually exclusive predicates in one row scope, and prefer this over INTERSECT."
-        )
-    return "\n".join(rules)
-
-
-def _validate_projection_retry(
-    original_sql: str,
-    retry_sql: str,
-    contract: QueryContract,
-) -> bool:
-    """Validate that a projection retry only changed the SELECT list.
-
-    Rejects the retry if FROM, JOIN, WHERE, GROUP BY, HAVING, ORDER BY, or
-    LIMIT changed, or if DISTINCT was dropped when required.
-    """
-    import sqlglot
-    from sqlglot import exp
-
-    try:
-        orig = sqlglot.parse_one(original_sql, read="mysql")
-        retry = sqlglot.parse_one(retry_sql, read="mysql")
-    except Exception:
-        return False
-
-    # Helper: normalize an expression to a comparable string
-    def _norm(expr: exp.Expression | None) -> str:
-        if expr is None:
-            return ""
-        return expr.sql(dialect="mysql")
-
-    # Check FROM: table set must be identical
-    orig_tables = {t.name.lower() for t in orig.find_all(exp.Table)}
-    retry_tables = {t.name.lower() for t in retry.find_all(exp.Table)}
-    if orig_tables != retry_tables:
-        return False
-
-    # Check JOIN structure: same join types, same joined tables, same conditions
-    def _join_sig(select_node: exp.Select) -> list[tuple]:
-        sigs: list[tuple] = []
-        for join in (select_node.args.get("joins") or []):
-            side = str(join.args.get("side") or "").lower()
-            table = join.this
-            table_name = table.name.lower() if isinstance(table, exp.Table) else "?"
-            on_clause = _norm(join.args.get("on"))
-            sigs.append((side, table_name, on_clause))
-        return sorted(sigs)
-
-    orig_select = next(orig.find_all(exp.Select), None)
-    retry_select = next(retry.find_all(exp.Select), None)
-    if orig_select and retry_select:
-        if _join_sig(orig_select) != _join_sig(retry_select):
-            return False
-
-    # Check WHERE
-    orig_where = orig_select.args.get("where") if orig_select else None
-    retry_where = retry_select.args.get("where") if retry_select else None
-    if _norm(orig_where) != _norm(retry_where):
-        return False
-
-    # Check GROUP BY
-    orig_group = orig_select.args.get("group") if orig_select else None
-    retry_group = retry_select.args.get("group") if retry_select else None
-    if _norm(orig_group) != _norm(retry_group):
-        return False
-
-    # Check HAVING
-    orig_having = orig_select.args.get("having") if orig_select else None
-    retry_having = retry_select.args.get("having") if retry_select else None
-    if _norm(orig_having) != _norm(retry_having):
-        return False
-
-    # Check ORDER BY
-    orig_order = orig_select.args.get("order") if orig_select else None
-    retry_order = retry_select.args.get("order") if retry_select else None
-    if _norm(orig_order) != _norm(retry_order):
-        return False
-
-    # Check LIMIT
-    orig_limit = orig_select.args.get("limit") if orig_select else None
-    retry_limit = retry_select.args.get("limit") if retry_select else None
-    if _norm(orig_limit) != _norm(retry_limit):
-        return False
-
-    # Check DISTINCT preservation
-    if contract.distinct and contract.distinct.required:
-        orig_distinct = bool(orig_select.args.get("distinct")) if orig_select else False
-        retry_distinct = bool(retry_select.args.get("distinct")) if retry_select else False
-        if orig_distinct and not retry_distinct:
-            return False
-
-    return True
-
-
 def _prepare_generated_sql(db: Session, datasource_id: str, sql: str) -> tuple[str, list[str], dict[str, Any]]:
     cleaned = sql.strip().rstrip(";")
     if not cleaned:
@@ -1599,8 +1333,8 @@ def _fix_antijoin_sql(
     has_distinct = "DISTINCT" in upper
     has_not_in = "NOT" in upper and " IN (" in upper
     has_not_exists = "NOT EXISTS" in upper
-    has_inner_join = bool(__import__("re").search(
-        r"\bJOIN\b", __import__("re").sub(r"\([^)]*\)", "", sql), __import__("re").IGNORECASE
+    has_inner_join = bool(re.search(
+        r"\bJOIN\b", re.sub(r"\([^)]*\)", "", sql), re.IGNORECASE
     ))
 
     # Only fix anti-join patterns that need it
@@ -1610,8 +1344,8 @@ def _fix_antijoin_sql(
     # If already using NOT EXISTS correctly, just strip DISTINCT
     if has_not_exists:
         if has_distinct:
-            return __import__("re").sub(
-                r"\bDISTINCT\b\s*", "", sql, count=1, flags=__import__("re").IGNORECASE
+            return re.sub(
+                r"\bDISTINCT\b\s*", "", sql, count=1, flags=re.IGNORECASE
             )
         return sql
 
@@ -1623,8 +1357,8 @@ def _fix_antijoin_sql(
         pass
     # For now, just strip DISTINCT from anti-join queries as a minimal fix
     if has_distinct:
-        fixed = __import__("re").sub(
-            r"\bDISTINCT\b\s*", "", sql, count=1, flags=__import__("re").IGNORECASE
+        fixed = re.sub(
+            r"\bDISTINCT\b\s*", "", sql, count=1, flags=re.IGNORECASE
         )
         return fixed
     return sql
@@ -1810,8 +1544,9 @@ def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | No
     """
     if not query_plan:
         return False, None
-    raw = query_plan.get("raw_plan") if isinstance(query_plan.get("raw_plan"), dict) else query_plan
-    text_sources = []
+    raw_value = query_plan.get("raw_plan")
+    raw: dict[str, Any] = raw_value if isinstance(raw_value, dict) else query_plan
+    text_sources: list[str] = []
     if question:
         text_sources.append(str(question))
     text_sources.append(str(raw.get("intent") or ""))
@@ -1830,7 +1565,7 @@ def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | No
         filters = _list_value(raw.get("filters"))
         joins = _list_value(raw.get("joins"))
         has_is_null = any(
-            str((f or {}).get("operator") or "").upper() in ("IS NULL", "IS NOT NULL")
+            isinstance(f, dict) and str(f.get("operator") or "").upper() in ("IS NULL", "IS NOT NULL")
             for f in filters
         )
         # If plan has JOINs: IS NULL on a joined table column is anti-join pattern
@@ -1843,7 +1578,7 @@ def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | No
     if "without" in joined_text:
         filters = _list_value(raw.get("filters"))
         has_is_null = any(
-            str((f or {}).get("operator") or "").upper() in ("IS NULL", "IS NOT NULL")
+            isinstance(f, dict) and str(f.get("operator") or "").upper() in ("IS NULL", "IS NOT NULL")
             for f in filters
         )
         if not has_is_null:
@@ -1864,12 +1599,18 @@ def _plan_requires_llm_sql(query_plan: dict[str, Any] | None, question: str | No
         return True, "complex_intent: aggregate_comparison"
     # filter values containing subquery indicators
     for f in _list_value(raw.get("filters")):
-        v = str((f or {}).get("value") or "")
+        if not isinstance(f, dict):
+            continue
+        v = str(f.get("value") or "")
         if re.match(r"\(\s*select\b", v, re.IGNORECASE) or "avg(" in v.lower():
             return True, "complex_intent: nested_query"
 
     # unsupported operators
-    ops = str(raw.get("operators") or "") + " " + " ".join([str((f or {}).get("operator") or "") for f in _list_value(raw.get("filters"))])
+    ops = str(raw.get("operators") or "") + " " + " ".join(
+        str(f.get("operator") or "")
+        for f in _list_value(raw.get("filters"))
+        if isinstance(f, dict)
+    )
     unsupported_ops = ("not exists", "exists", "not in", "intersect", "except", "having")
     if any(op in ops.lower() for op in unsupported_ops):
         return True, "complex_intent: unsupported_operator"
@@ -1884,7 +1625,8 @@ def _plan_is_low_confidence_for_render(query_plan: dict[str, Any] | None, questi
     """
     if not query_plan:
         return False, None
-    raw = query_plan.get("raw_plan") if isinstance(query_plan.get("raw_plan"), dict) else query_plan
+    raw_value = query_plan.get("raw_plan")
+    raw: dict[str, Any] = raw_value if isinstance(raw_value, dict) else query_plan
     q = (question or query_plan.get("analysis_goal") or raw.get("intent") or "").lower()
 
     mode = str(raw.get("mode") or "").lower()
@@ -1908,7 +1650,8 @@ def _plan_is_low_confidence_for_render(query_plan: dict[str, Any] | None, questi
     # entity mismatch: question mentions entity but plan tables don't
     if "singer" in q:
         metrics = raw.get("metrics") or []
-        if metrics and not (raw.get("tables") and any("singer" in str(t).lower() for t in raw.get("tables"))):
+        tables = _list_value(raw.get("tables"))
+        if metrics and not any("singer" in str(t).lower() for t in tables):
             return True, "low_confidence_plan: entity_table_mismatch"
 
     return False, None

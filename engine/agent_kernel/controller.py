@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -63,9 +65,12 @@ def decide_next_action(
     if state.get("api_key"):
         decision = _try_llm_decision(state=state, available_tools=available_tools)
         if decision is not None:
-            # Deterministic sanitizer: strip data-result claims when execution was skipped
-            if decision.action == "final_answer" and decision.final_answer:
-                decision = _sanitize_final_answer_decision(decision, state)
+            if decision.action == "final_answer" and _review_only_without_execution(state):
+                return _call(
+                    "answer.synthesize",
+                    {},
+                    "Synthesize a review-only answer from structured state instead of accepting unsupported result claims.",
+                )
             return decision
     return _fallback_decision(state)
 
@@ -361,95 +366,154 @@ def _row_count(value: dict[str, Any]) -> int | None:
     return None
 
 
+@dataclass(frozen=True)
+class FallbackTransition:
+    name: str
+    predicate: Callable[[KernelState], bool]
+    decide: Callable[[KernelState], AgentDecision]
+
+
 def _fallback_decision(state: KernelState) -> AgentDecision:
+    for transition in _FALLBACK_TRANSITIONS:
+        if transition.predicate(state):
+            return transition.decide(state)
+    return _call("answer.synthesize", {}, "Synthesize the final answer from artifacts.")
+
+
+def _can_inline_workspace_sql_explanation(state: KernelState) -> bool:
     sql_to_explain = _sql_to_explain_from_context(state)
-    if sql_to_explain and _is_sql_explanation_request(state) and _should_inline_workspace_sql_explanation(state):
-        return AgentDecision(
-            action="final_answer",
-            final_answer=_sql_explanation_answer(sql_to_explain),
-            confidence="high",
-            reasoning_summary="Explain the selected SQL directly without restarting data discovery.",
-        )
+    return bool(sql_to_explain and _is_sql_explanation_request(state) and _should_inline_workspace_sql_explanation(state))
 
+
+def _inline_workspace_sql_explanation(state: KernelState) -> AgentDecision:
+    sql_to_explain = _sql_to_explain_from_context(state) or ""
+    return AgentDecision(
+        action="final_answer",
+        final_answer=_sql_explanation_answer(sql_to_explain),
+        confidence="high",
+        reasoning_summary="Explain the selected SQL directly without restarting data discovery.",
+    )
+
+
+def _has_workspace_assist(state: KernelState) -> bool:
     workspace_tool = _workspace_tool_from_state(state)
-    if workspace_tool and not state.get("tool_results"):
-        return _call(workspace_tool, {"question": latest_user_message(state)}, "Use the active workspace context without restarting data discovery.")
+    return bool(workspace_tool and not state.get("tool_results"))
 
-    if state.get("error"):
-        if not state.get("revision_attempted") and state.get("sql"):
-            return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
-        return AgentDecision(
-            action="final_answer",
-            final_answer=f"I could not complete the analysis because: {state.get('error')}",
-            confidence="high",
-            reasoning_summary="Stop after the unrecoverable tool or policy error.",
-        )
 
-    if state.get("answer"):
-        answer = state.get("answer") or {}
-        return AgentDecision(
-            action="final_answer",
-            final_answer=str(answer.get("answer") or ""),
-            confidence="high",
-            reasoning_summary="The answer artifact is ready.",
-        )
+def _workspace_assist_decision(state: KernelState) -> AgentDecision:
+    workspace_tool = _workspace_tool_from_state(state) or "workspace.continue_from_artifact"
+    return _call(workspace_tool, {"question": latest_user_message(state)}, "Use the active workspace context without restarting data discovery.")
 
-    if state.get("follow_up_context") and not state.get("followup_context"):
-        return _call("followup.load_context", {}, "Normalize prior artifacts for this thread.")
 
-    if not state.get("schema_context"):
-        return _call("schema.build_context", {"question": latest_user_message(state)}, "Build schema context before data work.")
+def _recover_or_stop_on_error(state: KernelState) -> AgentDecision:
+    if not state.get("revision_attempted") and state.get("sql"):
+        return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
+    return AgentDecision(
+        action="final_answer",
+        final_answer=f"I could not complete the analysis because: {state.get('error')}",
+        confidence="high",
+        reasoning_summary="Stop after the unrecoverable tool or policy error.",
+    )
 
-    if not state.get("query_plan"):
-        return _call("query_plan.build", {}, "Build a query plan from the current schema context.")
 
-    if not state.get("sql"):
-        return _call("sql.generate", {}, "Generate a SQL candidate.")
+def _return_ready_answer(state: KernelState) -> AgentDecision:
+    answer = _as_dict(state.get("answer"))
+    return AgentDecision(
+        action="final_answer",
+        final_answer=str(answer.get("answer") or ""),
+        confidence="high",
+        reasoning_summary="The answer artifact is ready.",
+    )
 
-    if not state.get("safety"):
-        return _call("sql.validate", {"sql": state.get("sql")}, "Validate SQL before any execution.")
 
-    raw_safety = state.get("safety")
-    safety: dict[str, Any] = raw_safety if isinstance(raw_safety, dict) else {}
-    if not safety.get("can_execute"):
-        blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
-        hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
-        if safety.get("requires_confirmation") and not hard_blockers:
-            if not state.get("execute", True):
-                return _call("sql.skip_execution", {}, "The request is review-only, so execution is skipped.")
-            return _call("sql.execute_readonly", {}, "Route confirmed SQL execution through policy approval.")
-        if not state.get("revision_attempted"):
-            return _call(
-                "sql.revise",
-                {"sql": state.get("sql"), "error": safety.get("revise_suggestion") or "SQL did not pass TrustGate."},
-                "Ask the revision tool for deterministic recovery guidance.",
-            )
-        return _call("answer.synthesize", {}, "Explain why the agent cannot continue safely.")
+def _load_followup_context(state: KernelState) -> AgentDecision:
+    return _call("followup.load_context", {}, "Normalize prior artifacts for this thread.")
 
-    if not state.get("execution"):
+
+def _build_schema_context(state: KernelState) -> AgentDecision:
+    return _call("schema.build_context", {"question": latest_user_message(state)}, "Build schema context before data work.")
+
+
+def _build_query_plan(state: KernelState) -> AgentDecision:
+    return _call("query_plan.build", {}, "Build a query plan from the current schema context.")
+
+
+def _generate_sql(state: KernelState) -> AgentDecision:
+    return _call("sql.generate", {}, "Generate a SQL candidate.")
+
+
+def _validate_sql(state: KernelState) -> AgentDecision:
+    return _call("sql.validate", {"sql": state.get("sql")}, "Validate SQL before any execution.")
+
+
+def _sql_is_blocked_by_policy(state: KernelState) -> bool:
+    safety = _as_dict(state.get("safety"))
+    return bool(safety and not safety.get("can_execute"))
+
+
+def _policy_block_decision(state: KernelState) -> AgentDecision:
+    safety = _as_dict(state.get("safety"))
+    blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
+    hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
+    if safety.get("requires_confirmation") and not hard_blockers:
         if not state.get("execute", True):
             return _call("sql.skip_execution", {}, "The request is review-only, so execution is skipped.")
-        return _call("sql.execute_readonly", {}, "Execute the validated read-only SQL.")
-
-    raw_execution = state.get("execution")
-    execution: dict[str, Any] = raw_execution if isinstance(raw_execution, dict) else {}
-    if execution.get("success") is False and not state.get("revision_attempted"):
+        return _call("sql.execute_readonly", {}, "Route confirmed SQL execution through policy approval.")
+    if not state.get("revision_attempted"):
         return _call(
             "sql.revise",
-            {"sql": state.get("sql"), "error": execution.get("revise_suggestion") or state.get("error") or "SQL execution failed."},
-            "Revise after execution failure.",
+            {"sql": state.get("sql"), "error": safety.get("revise_suggestion") or "SQL did not pass TrustGate."},
+            "Ask the revision tool for deterministic recovery guidance.",
         )
+    return _call("answer.synthesize", {}, "Explain why the agent cannot continue safely.")
 
-    if not state.get("result_profile"):
-        return _call("result.profile", {}, "Profile the result for answer synthesis.")
 
-    if not state.get("chart_suggestion"):
-        return _call("chart.suggest", {}, "Suggest a chart when the result supports one.")
+def _needs_execution_decision(state: KernelState) -> bool:
+    return not bool(state.get("execution"))
 
-    if not state.get("suggestions"):
-        return _call("followup.suggest", {}, "Suggest useful follow-up questions.")
 
-    return _call("answer.synthesize", {}, "Synthesize the final answer from artifacts.")
+def _execution_decision(state: KernelState) -> AgentDecision:
+    if not state.get("execute", True):
+        return _call("sql.skip_execution", {}, "The request is review-only, so execution is skipped.")
+    return _call("sql.execute_readonly", {}, "Execute the validated read-only SQL.")
+
+
+def _execution_failed_without_revision(state: KernelState) -> bool:
+    execution = _as_dict(state.get("execution"))
+    return bool(execution.get("success") is False and not state.get("revision_attempted"))
+
+
+def _revise_after_execution_failure(state: KernelState) -> AgentDecision:
+    execution = _as_dict(state.get("execution"))
+    return _call(
+        "sql.revise",
+        {"sql": state.get("sql"), "error": execution.get("revise_suggestion") or state.get("error") or "SQL execution failed."},
+        "Revise after execution failure.",
+    )
+
+
+_FALLBACK_TRANSITIONS: tuple[FallbackTransition, ...] = (
+    FallbackTransition("inline_workspace_sql_explanation", _can_inline_workspace_sql_explanation, _inline_workspace_sql_explanation),
+    FallbackTransition("workspace_assist", _has_workspace_assist, _workspace_assist_decision),
+    FallbackTransition("recover_or_stop_on_error", lambda state: bool(state.get("error")), _recover_or_stop_on_error),
+    FallbackTransition("return_ready_answer", lambda state: bool(state.get("answer")), _return_ready_answer),
+    FallbackTransition(
+        "load_followup_context",
+        lambda state: bool(state.get("follow_up_context") and not state.get("followup_context")),
+        _load_followup_context,
+    ),
+    FallbackTransition("build_schema_context", lambda state: not bool(state.get("schema_context")), _build_schema_context),
+    FallbackTransition("build_query_plan", lambda state: not bool(state.get("query_plan")), _build_query_plan),
+    FallbackTransition("generate_sql", lambda state: not bool(state.get("sql")), _generate_sql),
+    FallbackTransition("validate_sql", lambda state: not bool(state.get("safety")), _validate_sql),
+    FallbackTransition("policy_block", _sql_is_blocked_by_policy, _policy_block_decision),
+    FallbackTransition("execute_or_skip_sql", _needs_execution_decision, _execution_decision),
+    FallbackTransition("revise_execution_failure", _execution_failed_without_revision, _revise_after_execution_failure),
+    FallbackTransition("profile_result", lambda state: not bool(state.get("result_profile")), lambda state: _call("result.profile", {}, "Profile the result for answer synthesis.")),
+    FallbackTransition("suggest_chart", lambda state: not bool(state.get("chart_suggestion")), lambda state: _call("chart.suggest", {}, "Suggest a chart when the result supports one.")),
+    FallbackTransition("suggest_followups", lambda state: not bool(state.get("suggestions")), lambda state: _call("followup.suggest", {}, "Suggest useful follow-up questions.")),
+    FallbackTransition("synthesize_answer", lambda _state: True, lambda _state: _call("answer.synthesize", {}, "Synthesize the final answer from artifacts.")),
+)
 
 
 def _is_sql_explanation_request(state: KernelState) -> bool:
@@ -531,47 +595,12 @@ def _call(tool_name: str, args: dict[str, Any], reason: str) -> AgentDecision:
     )
 
 
-_SKIPPED_SAFE_TEXT = (
-    "I generated and validated the SQL, but execution was disabled "
-    "for this review-only run, so no result set was retrieved. "
-    "I cannot make data-result claims until the query is executed."
-)
-
-_MISLEADING = [
-    "returned zero", "no rows returned", "no students",
-    "executed successfully", "query executed successfully",
-    "returned 0 rows", "returned no results", "0 rows",
-    "there are no students", "no data was returned",
-    "no matching records", "no results",
-]
-
-
-def _sanitize_final_answer_decision(decision: AgentDecision, state: KernelState) -> AgentDecision:
-    """If execution was skipped, replace misleading data claims in the LLM's final_answer."""
+def _review_only_without_execution(state: KernelState) -> bool:
     execution = _as_dict(state.get("execution"))
     safety = _as_dict(state.get("safety"))
     sql = state.get("sql")
-
-    # Broad detection: no successful execution + validated SQL = review-only
-    execution_ok = bool(execution.get("success"))
-    review_only = bool(sql and safety.get("can_execute") and not execution_ok)
-
-    # Also check explicit skip markers
+    if execution.get("success"):
+        return False
     reason = str(execution.get("reason", "")).lower()
     explicitly_skipped = "execute=false" in reason or "skipped" in reason
-
-    if not review_only and not explicitly_skipped:
-        return decision
-
-    text = (decision.final_answer or "").lower()
-    needs_sanitize = any(m.lower() in text for m in _MISLEADING)
-    if not needs_sanitize:
-        return decision
-
-    # Replace with safe text
-    return AgentDecision(
-        action="final_answer",
-        final_answer=_SKIPPED_SAFE_TEXT,
-        confidence=decision.confidence,
-        reasoning_summary=decision.reasoning_summary,
-    )
+    return explicitly_skipped or bool(sql and safety.get("can_execute"))

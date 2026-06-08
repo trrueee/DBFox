@@ -60,62 +60,6 @@ def synthesize_agent_answer(
     )
 
 
-_SKIPPED_EXECUTION_SAFE_ANSWER = (
-    "I generated and validated the SQL, but execution was disabled "
-    "for this review-only run, so no result set was retrieved. "
-    "I cannot make data-result claims until the query is executed."
-)
-
-_MISLEADING_DATA_CLAIMS = [
-    "returned zero", "no rows returned", "no students",
-    "executed successfully", "query executed successfully",
-    "returned 0 rows", "returned no rows", "0 rows",
-    "there are no students", "no data was returned",
-]
-
-
-def sanitize_answer_for_skipped_execution(
-    answer: AgentAnswer | None,
-    execution: dict[str, Any] | None,
-    *,
-    sql: str | None = None,
-    safety: dict[str, Any] | None = None,
-) -> AgentAnswer | None:
-    """Deterministic sanitizer: when execution was skipped/disabled, replace
-    any data-result claims with a safe no-execution message.
-
-    This is a hard post-check — it does NOT rely on LLM prompt compliance.
-    """
-    if answer is None:
-        return answer
-    execution_success = bool((execution or {}).get("success"))
-    if execution_success:
-        return answer
-
-    # Detect review-only / skipped-execution scenarios broadly:
-    # 1. explicit execute=false in execution reason, or
-    # 2. sql validated but no successful execution (review-only pattern)
-    reason = str((execution or {}).get("reason", "")).lower()
-    explicitly_skipped = "execute=false" in reason or "skipped" in reason
-    review_only_pattern = bool(sql and (safety or {}).get("can_execute") and not execution_success)
-    if not explicitly_skipped and not review_only_pattern:
-        return answer
-
-    text = answer.answer.lower()
-    needs_sanitize = any(marker.lower() in text for marker in _MISLEADING_DATA_CLAIMS)
-    if not needs_sanitize:
-        return answer
-
-    return AgentAnswer(
-        answer=_SKIPPED_EXECUTION_SAFE_ANSWER,
-        key_findings=[],
-        evidence=answer.evidence,
-        caveats=_dedupe(["Execution was skipped; no result set is available."] + list(answer.caveats)),
-        recommendations=answer.recommendations,
-        follow_up_questions=answer.follow_up_questions,
-    )
-
-
 def _base_evidence(
     sql: str | None,
     safety: dict[str, Any] | None,
@@ -123,13 +67,14 @@ def _base_evidence(
     result_profile: ResultProfile | None,
 ) -> list[AnswerEvidence]:
     evidence: list[AnswerEvidence] = []
-    execution_success = bool(execution and execution.get("success"))
+    execution_data = execution or {}
+    execution_success = bool(execution_data.get("success"))
     if execution_success:
         evidence.append(
             AnswerEvidence(
                 artifact_id="result_table",
                 label="Rows returned",
-                value=execution.get("rowCount", len(execution.get("rows", []) or [])),
+                value=execution_data.get("rowCount", len(execution_data.get("rows", []) or [])),
             )
         )
     if result_profile:

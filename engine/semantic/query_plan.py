@@ -156,7 +156,7 @@ class QueryPlanBuilder:
         api_key = str(config.get("api_key", "") or "").strip()
         actual_mode: Literal["offline", "online"] = "online" if mode == "auto" and api_key else "offline"
         if mode in ("offline", "online"):
-            actual_mode = mode  # type: ignore[assignment]
+            actual_mode = mode
 
         if actual_mode == "online" and api_key:
             try:
@@ -332,98 +332,16 @@ class QueryPlanBuilder:
                 limit=100,
             )
 
-        # 2. Existing offline heuristics (unchanged)
-        if self._has_sales_volume_intent(q):
-            tables = self._available_tables(datasource_id, ["order_items", "products"], selected_tables)
-            return QueryPlan(
-                intent="rank_products_by_sales_volume",
-                tables=tables,
-                metrics=[
-                    QueryMetric(
-                        name="total_sold",
-                        expression="SUM(order_items.quantity)",
-                        source_column="order_items.quantity",
-                    )
-                ],
-                dimensions=[QueryDimension(name="product_name", column="products.name", transform=None)],
-                joins=self._infer_joins(datasource_id, tables),
-                order_by="total_sold DESC",
-                limit=10,
-            )
-
-        if self._has_order_count_intent(q):
-            tables = self._available_tables(datasource_id, ["orders"], selected_tables)
-            out_dimensions: list[QueryDimension] = []
-            if _contains_any(q, ("每天", "每日", "按天", "daily", "per day")):
-                out_dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
-            return QueryPlan(
-                intent="aggregate_order_count",
-                tables=tables,
-                metrics=[
-                    QueryMetric(
-                        name="order_count",
-                        expression="COUNT(*)",
-                        source_column="orders.id",
-                    )
-                ],
-                dimensions=out_dimensions,
-                filters=self._order_status_filters(q),
-                joins=[],
-                order_by="order_date DESC" if out_dimensions else None,
-                limit=100,
-            )
-
-        if self._has_amount_intent(q):
-            tables = self._available_tables(datasource_id, ["orders"], selected_tables)
-            out_dimensions = []
-            if _contains_any(q, ("每天", "每日", "按天", "daily", "per day")):
-                out_dimensions.append(QueryDimension(name="order_date", column="orders.created_at", transform="DATE"))
-            return QueryPlan(
-                intent="aggregate_order_amount",
-                tables=tables,
-                metrics=[
-                    QueryMetric(
-                        name="total_amount",
-                        expression="SUM(orders.total_amount)",
-                        source_column="orders.total_amount",
-                    )
-                ],
-                dimensions=out_dimensions,
-                filters=self._order_status_filters(q),
-                joins=[],
-                order_by="order_date DESC" if out_dimensions else None,
-                limit=100,
-            )
-
-        if _contains_any(q, ("用户", "客户", "user", "customer")) and _contains_any(q, ("数量", "多少", "count", "统计")):
-            tables = self._available_tables(datasource_id, ["users"], selected_tables)
-            return QueryPlan(
-                intent="aggregate_user_count",
-                tables=tables,
-                metrics=[QueryMetric(name="user_count", expression="COUNT(*)", source_column="users.id")],
-                dimensions=[],
-                filters=[],
-                joins=[],
-                order_by=None,
-                limit=100,
-            )
+        schema_plan = self._build_schema_matched_offline(datasource_id, q, selected_tables)
+        if schema_plan is not None:
+            return schema_plan
 
         tables = self._fallback_tables(datasource_id, selected_tables)
-        out_metrics: list[QueryMetric] = []
-        if _contains_any(q, ("数量", "多少", "count", "统计")) and tables:
-            out_metrics.append(QueryMetric(name="row_count", expression="COUNT(*)", source_column=f"{tables[0]}.id"))
-
-        # Detect ordering intent in default / answer_question plans
-        out_order_by = _detect_ordering_intent(q, tables, self.db, datasource_id)
-
         return QueryPlan(
             intent="answer_question",
             tables=tables,
-            metrics=out_metrics,
-            dimensions=[],
-            filters=[],
             joins=self._infer_joins(datasource_id, tables),
-            order_by=out_order_by,
+            order_by=_detect_ordering_intent(q, tables, self.db, datasource_id),
             limit=100,
         )
 
@@ -456,17 +374,182 @@ class QueryPlanBuilder:
                 matched.append(d)
         return matched
 
-    def _has_sales_volume_intent(self, q: str) -> bool:
-        return _contains_any(q, ("销量", "销售量", "total_sold", "sold")) and _contains_any(
-            q,
-            ("商品", "产品", "product", "最高", "top", "排行", "排名"),
+    def _build_schema_matched_offline(
+        self,
+        datasource_id: str,
+        q_lower: str,
+        selected_tables: Sequence[str] | None,
+    ) -> QueryPlan | None:
+        if _contains_any(q_lower, ("delete", "drop", "truncate", "update", "insert", "删除", "清空", "更新", "写入")):
+            return None
+
+        schema_tables = self._load_schema_tables(datasource_id, selected_tables)
+        if not schema_tables:
+            return None
+
+        question_terms = _question_terms(q_lower)
+        ranked_tables = sorted(
+            ((self._table_match_score(table, question_terms), table) for table in schema_tables),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        matched_tables = [table for score, table in ranked_tables if score > 0]
+        if not matched_tables:
+            return None
+
+        aggregate = _contains_any(q_lower, ("数量", "多少", "count", "统计", "总数", "量", "sum", "total", "revenue", "销售额", "销量"))
+        rank = _contains_any(q_lower, ("top", "highest", "最大", "最高", "排行", "排名"))
+        daily = _contains_any(q_lower, ("每天", "每日", "按天", "daily", "per day"))
+
+        metrics: list[QueryMetric] = []
+        dimensions: list[QueryDimension] = []
+
+        metric_table = matched_tables[0]
+        sum_column = self._best_sum_column(matched_tables, question_terms)
+        if sum_column is not None and _contains_any(q_lower, ("sum", "total", "revenue", "销售额", "销量", "销售量", "sold", "amount", "金额")):
+            metric_table, column = sum_column
+            metric_name = "total_sold" if "quantity" in column.column_name.lower() else f"total_{column.column_name}"
+            metrics.append(
+                QueryMetric(
+                    name=metric_name,
+                    expression=f"SUM({metric_table.table_name}.{column.column_name})",
+                    source_column=f"{metric_table.table_name}.{column.column_name}",
+                )
+            )
+        elif aggregate:
+            source_column = self._primary_or_first_column(metric_table)
+            metrics.append(
+                QueryMetric(
+                    name=f"{_singular(str(metric_table.table_name))}_count",
+                    expression="COUNT(*)",
+                    source_column=f"{metric_table.table_name}.{source_column}",
+                )
+            )
+
+        dimension_column = self._best_dimension_column(matched_tables, question_terms, daily=daily)
+        if dimension_column is not None:
+            dimension_table, column, transform = dimension_column
+            dimensions.append(
+                QueryDimension(
+                    name=f"{_singular(str(dimension_table.table_name))}_{column.column_name if not transform else 'date'}",
+                    column=f"{dimension_table.table_name}.{column.column_name}",
+                    transform=transform,
+                )
+            )
+
+        tables = _ordered_unique(
+            [str(metric_table.table_name)]
+            + [str(table.table_name) for table in matched_tables[:2]]
+            + [_extract_table_from_ref(metric.source_column) for metric in metrics]
+            + [_extract_table_from_ref(dimension.column) for dimension in dimensions]
+        )
+        order_by = None
+        if rank and metrics:
+            order_by = f"{metrics[0].name} DESC"
+        elif daily and dimensions:
+            order_by = f"{dimensions[0].name} DESC"
+
+        intent = "schema_matched_aggregate" if metrics else "schema_matched_lookup"
+        if order_by and metrics and any(metric.name == "total_sold" for metric in metrics):
+            intent = "rank_products_by_sales_volume"
+        elif metrics and metrics[0].name == "order_count":
+            intent = "aggregate_order_count"
+
+        return QueryPlan(
+            intent=intent,
+            tables=tables,
+            metrics=metrics,
+            dimensions=dimensions,
+            filters=self._schema_matched_filters(q_lower, tables),
+            joins=self._infer_joins(datasource_id, tables),
+            order_by=order_by,
+            limit=10 if rank else 100,
         )
 
-    def _has_order_count_intent(self, q: str) -> bool:
-        return _contains_any(q, ("订单量", "订单数", "订单数量", "order count", "orders count"))
+    def _load_schema_tables(self, datasource_id: str, selected_tables: Sequence[str] | None) -> list[SchemaTable]:
+        query = (
+            self.db.query(SchemaTable)
+            .options(selectinload(SchemaTable.columns))
+            .filter(SchemaTable.data_source_id == datasource_id)
+        )
+        tables = query.all()
+        if selected_tables:
+            selected = {table.lower() for table in selected_tables}
+            tables = [table for table in tables if str(table.table_name).lower() in selected]
+        return tables
 
-    def _has_amount_intent(self, q: str) -> bool:
-        return _contains_any(q, ("销售额", "gmv", "订单金额", "总金额", "total_amount", "revenue"))
+    def _table_match_score(self, table: SchemaTable, question_terms: set[str]) -> int:
+        labels = _schema_terms(str(table.table_name), str(table.table_comment or ""))
+        for column in table.columns:
+            labels.update(_schema_terms(str(column.column_name), str(column.column_comment or "")))
+        return len(labels & question_terms)
+
+    def _best_sum_column(
+        self,
+        tables: Sequence[SchemaTable],
+        question_terms: set[str],
+    ) -> tuple[SchemaTable, SchemaColumn] | None:
+        numeric_types = ("int", "decimal", "numeric", "float", "double", "real")
+        candidates: list[tuple[int, SchemaTable, SchemaColumn]] = []
+        for table in tables:
+            for column in table.columns:
+                type_text = f"{column.data_type or ''} {column.column_type or ''}".lower()
+                if not any(token in type_text for token in numeric_types):
+                    continue
+                terms = _schema_terms(str(column.column_name), str(column.column_comment or ""))
+                score = len(terms & question_terms)
+                if terms & {"quantity", "amount", "total", "price", "revenue", "sold", "sales"}:
+                    score += 2
+                candidates.append((score, table, column))
+        if not candidates:
+            return None
+        score, table, column = max(candidates, key=lambda item: item[0])
+        return (table, column) if score > 0 else None
+
+    def _best_dimension_column(
+        self,
+        tables: Sequence[SchemaTable],
+        question_terms: set[str],
+        *,
+        daily: bool,
+    ) -> tuple[SchemaTable, SchemaColumn, str | None] | None:
+        if daily:
+            for table in tables:
+                for column in table.columns:
+                    name = str(column.column_name).lower()
+                    type_text = f"{column.data_type or ''} {column.column_type or ''}".lower()
+                    if "date" in name or "time" in name or "date" in type_text or "time" in type_text:
+                        return table, column, "DATE"
+
+        candidates: list[tuple[int, SchemaTable, SchemaColumn]] = []
+        for table in tables:
+            table_terms = _schema_terms(str(table.table_name), str(table.table_comment or ""))
+            for column in table.columns:
+                column_name = str(column.column_name).lower()
+                if column.is_primary_key or column.is_foreign_key or column_name.endswith("_id"):
+                    continue
+                terms = _schema_terms(str(column.column_name), str(column.column_comment or ""))
+                score = len(terms & question_terms)
+                if terms & {"name", "title", "country", "category", "status"}:
+                    score += 1
+                if (table_terms & question_terms) and (terms & {"name", "title"}):
+                    score += 3
+                candidates.append((score, table, column))
+        if not candidates:
+            return None
+        score, table, column = max(candidates, key=lambda item: item[0])
+        return (table, column, None) if score > 0 else None
+
+    def _primary_or_first_column(self, table: SchemaTable) -> str:
+        for column in table.columns:
+            if column.is_primary_key:
+                return str(column.column_name)
+        return str(table.columns[0].column_name) if table.columns else "id"
+
+    def _schema_matched_filters(self, q_lower: str, tables: Sequence[str]) -> list[QueryFilter]:
+        if "orders" in {table.lower() for table in tables}:
+            return self._order_status_filters(q_lower)
+        return []
 
     def _order_status_filters(self, q: str) -> list[QueryFilter]:
         if _contains_any(q, ("取消", "cancelled", "canceled")):
@@ -474,18 +557,6 @@ class QueryPlanBuilder:
         if _contains_any(q, ("完成", "completed")):
             return [QueryFilter(column="orders.status", operator="=", value="completed")]
         return []
-
-    def _available_tables(
-        self,
-        datasource_id: str,
-        preferred: Sequence[str],
-        selected_tables: Sequence[str] | None,
-    ) -> list[str]:
-        schema = self._load_schema(datasource_id)
-        preferred_existing = [table for table in preferred if table.lower() in schema]
-        if preferred_existing:
-            return preferred_existing
-        return self._fallback_tables(datasource_id, selected_tables)
 
     def _fallback_tables(self, datasource_id: str, selected_tables: Sequence[str] | None) -> list[str]:
         schema = self._load_schema(datasource_id)
@@ -714,6 +785,64 @@ def _detect_ordering_intent(
 
 def _contains_any(text: str, needles: Sequence[str]) -> bool:
     return any(needle.lower() in text for needle in needles)
+
+
+_TERM_ALIASES = {
+    "订单": "order",
+    "订单量": "order",
+    "订单数": "order",
+    "商品": "product",
+    "产品": "product",
+    "用户": "user",
+    "客户": "customer",
+    "学生": "student",
+    "学员": "student",
+    "课程": "course",
+    "国家": "country",
+    "地区": "country",
+    "每天": "daily",
+    "每日": "daily",
+    "按天": "daily",
+    "销量": "quantity",
+    "销售量": "quantity",
+    "销售额": "amount",
+    "金额": "amount",
+}
+
+
+def _question_terms(text: str) -> set[str]:
+    terms = _schema_terms(text)
+    for source, target in _TERM_ALIASES.items():
+        if source in text:
+            terms.add(target)
+    return terms
+
+
+def _schema_terms(*parts: str) -> set[str]:
+    text = " ".join(parts).lower().replace("_", " ")
+    raw_terms = set(re.findall(r"[a-z][a-z0-9]*", text))
+    expanded = set(raw_terms)
+    for term in raw_terms:
+        expanded.add(_singular(term))
+    return {term for term in expanded if term}
+
+
+def _singular(value: str) -> str:
+    value = value.lower()
+    if value.endswith("ies") and len(value) > 3:
+        return f"{value[:-3]}y"
+    if value.endswith("s") and len(value) > 1:
+        return value[:-1]
+    return value
+
+
+def _ordered_unique(values: Sequence[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        item = value.strip()
+        if item and item not in result:
+            result.append(item)
+    return result
 
 
 def _split_column_ref(ref: str) -> tuple[str, str] | None:
