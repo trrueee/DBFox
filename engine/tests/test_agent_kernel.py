@@ -1534,14 +1534,10 @@ def test_agent_kernel_service_uses_graph_factory(db_session, demo_datasource, mo
 def test_agent_kernel_response_assembler_does_not_call_legacy_runtime(
     db_session,
     demo_datasource,
-    monkeypatch,
 ) -> None:
     sync_schema(db_session, demo_datasource.id)
 
-    def fail_legacy_response(*_args, **_kwargs):
-        raise AssertionError("AgentKernelService must not call DataBoxAgentRuntime._response")
-
-    monkeypatch.setattr(DataBoxAgentRuntime, "_response", fail_legacy_response)
+    assert not hasattr(DataBoxAgentRuntime, "_response")
 
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", execute=False)
     res = AgentKernelService(db_session).run(req)

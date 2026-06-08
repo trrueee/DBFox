@@ -363,20 +363,27 @@ def _row_count(value: dict[str, Any]) -> int | None:
 
 def _fallback_decision(state: KernelState) -> AgentDecision:
     sql_to_explain = _sql_to_explain_from_context(state)
-    if sql_to_explain and _is_sql_explanation_request(state):
+    if sql_to_explain and _is_sql_explanation_request(state) and _should_inline_workspace_sql_explanation(state):
         return AgentDecision(
             action="final_answer",
             final_answer=_sql_explanation_answer(sql_to_explain),
             confidence="high",
-            reasoning_summary="Explain the SQL already selected in the workspace context without restarting data discovery.",
+            reasoning_summary="Explain the selected SQL directly without restarting data discovery.",
         )
 
-    if state.get("error") and not state.get("revision_attempted") and state.get("sql"):
-        return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
+    workspace_tool = _workspace_tool_from_state(state)
+    if workspace_tool and not state.get("tool_results"):
+        return _call(workspace_tool, {"question": latest_user_message(state)}, "Use the active workspace context without restarting data discovery.")
 
-    # If sql generation failed / unavailable, stop query path and synthesize answer with error context
-    if state.get("error") and not state.get("sql") and not state.get("answer"):
-        return _call("answer.synthesize", {}, "SQL generation failed — synthesize final answer with error.")
+    if state.get("error"):
+        if not state.get("revision_attempted") and state.get("sql"):
+            return _call("sql.revise", {"sql": state.get("sql"), "error": state.get("error")}, "Revise SQL after the current error.")
+        return AgentDecision(
+            action="final_answer",
+            final_answer=f"I could not complete the analysis because: {state.get('error')}",
+            confidence="high",
+            reasoning_summary="Stop after the unrecoverable tool or policy error.",
+        )
 
     if state.get("answer"):
         answer = state.get("answer") or {}
@@ -450,6 +457,39 @@ def _is_sql_explanation_request(state: KernelState) -> bool:
     asks_to_explain = any(token in text for token in ("explain", "describe", "what does", "解释", "说明"))
     mentions_sql = "sql" in text or "query" in text or "查询" in text
     return asks_to_explain and mentions_sql
+
+
+def _workspace_tool_from_state(state: KernelState) -> str | None:
+    workspace_context = _as_dict(state.get("workspace_context"))
+    text = f"{state.get('goal') or ''}\n{latest_user_message(state)}".lower()
+    has_sql = bool(workspace_context.get("selected_sql") or workspace_context.get("active_sql"))
+    if has_sql:
+        if any(token in text for token in ("fix", "error", "修复", "错误")):
+            return "workspace.fix_sql"
+        if any(token in text for token in ("optimize", "优化")):
+            return "workspace.optimize_sql"
+        if any(token in text for token in ("rewrite", "重写")):
+            return "workspace.rewrite_sql"
+        if any(token in text for token in ("explain", "describe", "what does", "解释", "说明")):
+            return "workspace.explain_sql"
+
+    if workspace_context.get("last_query_result_preview") and any(
+        token in text for token in ("result", "结果", "explain", "解释", "说明")
+    ):
+        return "workspace.explain_result"
+
+    if workspace_context.get("selected_artifact_id") and any(token in text for token in ("continue", "继续")):
+        return "workspace.continue_from_artifact"
+
+    if workspace_context.get("selected_table_names") and any(token in text for token in ("schema", "table", "表结构", "字段")):
+        return "workspace.explain_schema"
+
+    return None
+
+
+def _should_inline_workspace_sql_explanation(state: KernelState) -> bool:
+    workspace_context = _as_dict(state.get("workspace_context"))
+    return bool(workspace_context.get("selected_sql")) and not bool(workspace_context.get("active_sql"))
 
 
 def _sql_to_explain_from_context(state: KernelState) -> str | None:

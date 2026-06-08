@@ -9,6 +9,7 @@ Three modes:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -34,7 +35,7 @@ class AgentPersistenceSink:
     def expire_approval(self, approval_id: str) -> None:
         pass
 
-    def save_checkpoint(self, run_id: str, session_id: str, state: dict, tool_name: str) -> None:
+    def save_checkpoint(self, run_id: str, session_id: str, state: dict[str, Any], tool_name: str) -> None:
         pass
 
     def mark_run_waiting(self, run_id: str, session_id: str, approval_id: str) -> None:
@@ -51,7 +52,7 @@ class AgentPersistenceSink:
 
     def create_approval_record(self, run_id: str, session_id: str, tool_name: str,
                                 reason: str, risk_level: str,
-                                requested_action: dict) -> Any | None:
+                                requested_action: dict[str, Any]) -> Any | None:
         return None
 
     def flush(self) -> None:
@@ -62,6 +63,30 @@ class NoopPersistenceSink(AgentPersistenceSink):
     """No-op sink: never touches SQLAlchemy, never raises."""
 
 
+class SessionPersistenceSink(AgentPersistenceSink):
+    """Write persistence through the caller-owned SQLAlchemy session."""
+
+    def __init__(self, db: Session):
+        self._db = db
+
+    def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
+        from engine.agent import persistence as ap
+        ap.create_or_get_session(self._db, req, run_id)
+        ap.start_run(self._db, req, run_id, session_id)
+
+    def record_event(self, session_id: str, event: Any) -> None:
+        from engine.agent import persistence as ap
+        ap.record_runtime_event(self._db, session_id, event)
+
+    def complete_run(self, response: Any) -> None:
+        from engine.agent import persistence as ap
+        ap.complete_run(self._db, response)
+
+    def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
+        from engine.agent import persistence as ap
+        ap.fail_run(self._db, run_id, session_id, error, response)
+
+
 class SyncPersistenceSink(AgentPersistenceSink):
     """Write persistence using dedicated SessionLocal (independent of main agent session)."""
 
@@ -69,7 +94,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
         self._main_db = main_db
         self._session_factory = SessionLocal
 
-    def _write(self, fn):
+    def _write(self, fn: Callable[[Session], None]) -> None:
         """Execute *fn* with a dedicated session. Failures are logged, never raised."""
         db = self._session_factory()
         try:
@@ -89,7 +114,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
     def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
         import logging
         _log = logging.getLogger("databox.persistence")
-        def _do(db):
+        def _do(db: Session) -> None:
             from engine.agent import persistence as ap
             ap.create_or_get_session(db, type("Req", (), {
                 "datasource_id": datasource_id, "question": question,
@@ -99,6 +124,13 @@ class SyncPersistenceSink(AgentPersistenceSink):
                 "datasource_id": datasource_id, "question": question,
                 "session_id": session_id, "max_steps": 20,
             })(), run_id, session_id)
+        self._write(_do)
+
+    def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
+        def _do(db: Session) -> None:
+            from engine.agent import persistence as ap
+            ap.create_or_get_session(db, req, run_id)
+            ap.start_run(db, req, run_id, session_id)
         self._write(_do)
 
     def record_event(self, session_id: str, event: Any) -> None:
@@ -122,6 +154,8 @@ class SyncPersistenceSink(AgentPersistenceSink):
 def create_persistence_sink(db: Session) -> AgentPersistenceSink:
     """Factory: create the appropriate sink based on AGENT_PERSISTENCE_MODE."""
     mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync").lower()
+    if os.environ.get("DATABOX_TESTING") == "1":
+        return SessionPersistenceSink(db)
     if mode == "disabled":
         return NoopPersistenceSink()
     if mode == "buffered":
