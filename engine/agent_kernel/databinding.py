@@ -49,6 +49,8 @@ def apply_tool_result_to_state(
             sql = sql.strip() or None
         update["sql_candidate"] = output
         update["sql"] = sql or state.get("sql")
+        update["agent_sql_critique"] = None
+        update["safety"] = None
         # sql=None indicates generation unavailable (e.g. no LLM key for complex fallback)
         if not sql and output.get("mode") == "fallback_unavailable":
             update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
@@ -75,6 +77,8 @@ def apply_tool_result_to_state(
         update["execution"] = output
 
     elif tool_name == "sql.revise":
+        previous_count = state.get("revision_count") if isinstance(state.get("revision_count"), int) else 0
+        update["revision_count"] = previous_count + 1
         update["revision_attempted"] = True
         fixed_sql = str(output.get("fixed_sql") or "").strip()
         if fixed_sql:
@@ -85,6 +89,8 @@ def apply_tool_result_to_state(
             update["result_profile"] = None
             update["chart_suggestion"] = None
             update["suggestions"] = []
+            update["agent_sql_critique"] = None
+            update["agent_reflection"] = None
             if state.get("pending_approval"):
                 update["pending_approval"] = None
                 update["trace_events"].append(
