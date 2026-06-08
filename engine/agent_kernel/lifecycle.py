@@ -14,21 +14,35 @@ AgentIntent = Literal[
     "clarification",
 ]
 
+REFERENCE_WORDS = (
+    "this",
+    "that",
+    "it",
+    "previous",
+    "last",
+    "above",
+    "current",
+    "这个",
+    "那个",
+    "它",
+    "刚才",
+    "上面",
+    "当前",
+    "之前",
+)
+
 
 def understand_node(state: KernelState) -> dict[str, Any]:
-    """Understand: classify the user's current intent before tool routing.
-
-    This is intentionally deterministic and local. The LLM controller may still
-    override local heuristics later, but the graph state now has an explicit
-    intent signal instead of forcing every controller decision to rediscover it.
-    """
+    """Understand: classify the user's current intent before tool routing."""
 
     intent = classify_intent(state)
+    reference = resolve_reference(state)
     payload = {
         "intent": intent,
-        "confidence": _intent_confidence(intent, state),
+        "confidence": _intent_confidence(intent, state, reference),
         "reason": _intent_reason(intent),
         "needs_execution": _intent_needs_execution(intent, state),
+        "reference": reference,
     }
     return {
         "status": "running",
@@ -38,7 +52,7 @@ def understand_node(state: KernelState) -> dict[str, Any]:
 
 
 def context_node(state: KernelState) -> dict[str, Any]:
-    """Context: summarize the reusable workspace/run context for routing."""
+    """Context: summarize reusable workspace/run/artifact context for routing."""
 
     context = resolve_context(state)
     return {
@@ -77,12 +91,7 @@ def observe_node(state: KernelState) -> dict[str, Any]:
 
 
 def reflect_node(state: KernelState) -> dict[str, Any]:
-    """Reflect: decide whether the loop should continue, revise, ask, or answer.
-
-    This node does not replace the controller. It writes a compact reflection
-    that the controller can use, and makes the graph trace show why the agent is
-    continuing or stopping.
-    """
+    """Reflect: decide whether the loop should continue, revise, ask, or answer."""
 
     reflection = reflect(state)
     return {
@@ -101,6 +110,7 @@ def answer_node(state: KernelState) -> dict[str, Any]:
         "has_execution": bool(state.get("execution")),
         "has_sql": bool(state.get("sql")),
         "artifact_count": len(state.get("artifacts", [])),
+        "reference": resolve_reference(state),
     }
     return {
         "trace_events": [{"type": "agent.answer", "payload": payload}],
@@ -110,9 +120,10 @@ def answer_node(state: KernelState) -> dict[str, Any]:
 def classify_intent(state: KernelState) -> AgentIntent:
     text = latest_user_message(state).strip().lower()
     workspace_context = state.get("workspace_context") if isinstance(state.get("workspace_context"), dict) else {}
+    reference = resolve_reference(state)
     pending_approval = state.get("pending_approval") or workspace_context.get("pending_approval_id")
-    has_result = bool(state.get("execution") or workspace_context.get("last_query_result_preview"))
-    has_sql = bool(state.get("sql") or workspace_context.get("selected_sql") or workspace_context.get("active_sql"))
+    has_result = bool(state.get("execution") or workspace_context.get("last_query_result_preview") or reference.get("kind") == "result")
+    has_sql = bool(state.get("sql") or workspace_context.get("selected_sql") or workspace_context.get("active_sql") or reference.get("kind") == "sql")
 
     approval_words = ("approval", "approve", "confirm", "risk", "safe", "审批", "确认", "风险", "危险", "安全吗", "为什么要")
     revise_words = ("revise", "rewrite", "modify", "change", "fix", "改", "修改", "重写", "修", "换成", "改成")
@@ -140,19 +151,21 @@ def resolve_context(state: KernelState) -> dict[str, Any]:
     workspace_context = state.get("workspace_context") if isinstance(state.get("workspace_context"), dict) else {}
     safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    reference = resolve_reference(state)
     return {
         "datasource_id": state.get("datasource_id"),
+        "resolved_reference": reference,
         "has_workspace_context": bool(workspace_context),
         "has_follow_up_context": bool(state.get("follow_up_context") or state.get("followup_context")),
-        "has_selected_sql": bool(workspace_context.get("selected_sql") or workspace_context.get("active_sql") or state.get("sql")),
-        "has_pending_approval": bool(state.get("pending_approval") or workspace_context.get("pending_approval_id")),
+        "has_selected_sql": bool(workspace_context.get("selected_sql") or workspace_context.get("active_sql") or state.get("sql") or reference.get("kind") == "sql"),
+        "has_pending_approval": bool(state.get("pending_approval") or workspace_context.get("pending_approval_id") or reference.get("kind") == "approval"),
         "has_schema_context": bool(state.get("schema_context")),
         "has_query_plan": bool(state.get("query_plan")),
-        "has_sql": bool(state.get("sql")),
+        "has_sql": bool(state.get("sql") or reference.get("kind") == "sql"),
         "has_safety": bool(safety),
         "safety_can_execute": bool(safety.get("can_execute")),
         "safety_requires_confirmation": bool(safety.get("requires_confirmation")),
-        "has_execution": bool(execution),
+        "has_execution": bool(execution or reference.get("kind") == "result"),
         "execution_success": execution.get("success") if execution else None,
         "has_result_profile": bool(state.get("result_profile")),
         "has_chart_suggestion": bool(state.get("chart_suggestion")),
@@ -160,9 +173,70 @@ def resolve_context(state: KernelState) -> dict[str, Any]:
     }
 
 
+def resolve_reference(state: KernelState) -> dict[str, Any]:
+    """Resolve pronouns like 'this/that/it/刚才/它' to an active artifact/context.
+
+    Preference order is intentionally deterministic:
+    1. explicit workspace selection
+    2. pending approval
+    3. active state SQL/result
+    4. latest matching artifact
+    """
+
+    text = latest_user_message(state).strip().lower()
+    has_reference_language = any(word in text for word in REFERENCE_WORDS)
+    workspace_context = state.get("workspace_context") if isinstance(state.get("workspace_context"), dict) else {}
+
+    selected_sql = workspace_context.get("selected_sql") or workspace_context.get("active_sql")
+    if selected_sql:
+        return {
+            "kind": "sql",
+            "source": "workspace_context",
+            "id": workspace_context.get("selected_artifact_id") or workspace_context.get("recent_agent_run_id"),
+            "confidence": "high" if has_reference_language else "medium",
+            "sql_preview": _preview(selected_sql),
+        }
+
+    pending_approval = state.get("pending_approval") or workspace_context.get("pending_approval_id")
+    if pending_approval:
+        return {
+            "kind": "approval",
+            "source": "pending_approval",
+            "id": pending_approval.get("id") if isinstance(pending_approval, dict) else pending_approval,
+            "confidence": "high" if has_reference_language else "medium",
+        }
+
+    if state.get("sql"):
+        return {
+            "kind": "sql",
+            "source": "state.sql",
+            "id": None,
+            "confidence": "high" if has_reference_language else "medium",
+            "sql_preview": _preview(state.get("sql")),
+        }
+
+    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    if execution:
+        return {
+            "kind": "result",
+            "source": "state.execution",
+            "id": execution.get("executionId") or execution.get("historyId"),
+            "confidence": "high" if has_reference_language else "medium",
+            "row_count": execution.get("rowCount", execution.get("row_count")),
+            "columns": _preview_list(execution.get("columns")),
+        }
+
+    latest_artifact = _latest_relevant_artifact(state)
+    if latest_artifact:
+        return latest_artifact
+
+    return {"kind": None, "source": None, "id": None, "confidence": "low"}
+
+
 def plan_route(state: KernelState) -> dict[str, Any]:
     intent_payload = state.get("agent_intent") if isinstance(state.get("agent_intent"), dict) else {}
     intent = str(intent_payload.get("intent") or classify_intent(state))
+    reference = intent_payload.get("reference") if isinstance(intent_payload.get("reference"), dict) else resolve_reference(state)
     routes: dict[str, list[str]] = {
         "new_data_question": [
             "schema.build_context",
@@ -186,8 +260,9 @@ def plan_route(state: KernelState) -> dict[str, Any]:
     return {
         "intent": intent,
         "route": steps,
-        "next_focus": _next_focus(state, steps),
+        "next_focus": _next_focus(state, steps, reference),
         "is_review_only": not bool(state.get("execute", True)),
+        "reference": reference,
     }
 
 
@@ -196,6 +271,7 @@ def reflect(state: KernelState) -> dict[str, Any]:
     safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     answer = state.get("answer") if isinstance(state.get("answer"), dict) else {}
+    reference = resolve_reference(state)
 
     if state.get("error"):
         if state.get("sql") and not state.get("revision_attempted"):
@@ -216,6 +292,9 @@ def reflect(state: KernelState) -> dict[str, Any]:
     elif answer:
         action = "final_answer"
         reason = "An answer artifact exists."
+    elif reference.get("kind") in {"sql", "result", "approval"} and classify_intent(state) != "new_data_question":
+        action = "use_reference_context"
+        reason = "The user referred to existing context, so continue from the resolved reference."
     else:
         action = "continue"
         reason = "More evidence or synthesis is still needed."
@@ -226,10 +305,21 @@ def reflect(state: KernelState) -> dict[str, Any]:
         "last_tool_name": state.get("last_tool_name"),
         "has_answer": bool(answer),
         "has_execution": bool(execution),
+        "reference": reference,
+        "last_observation_status": observation.get("status") if isinstance(observation, dict) else None,
     }
 
 
-def _next_focus(state: KernelState, steps: list[str]) -> str:
+def _next_focus(state: KernelState, steps: list[str], reference: dict[str, Any] | None = None) -> str:
+    reference = reference or {}
+    if reference.get("kind") == "approval" and "answer.synthesize" in steps:
+        return "answer.synthesize"
+    if reference.get("kind") == "sql" and "sql.revise" in steps and not state.get("safety"):
+        return "sql.revise"
+    if reference.get("kind") == "sql" and "answer.synthesize" in steps and "sql.revise" not in steps:
+        return "answer.synthesize"
+    if reference.get("kind") == "result" and "result.profile" in steps and not state.get("result_profile"):
+        return "result.profile"
     if not state.get("schema_context") and "schema.build_context" in steps:
         return "schema.build_context"
     if not state.get("query_plan") and "query_plan.build" in steps:
@@ -245,16 +335,56 @@ def _next_focus(state: KernelState, steps: list[str]) -> str:
     return "final_answer"
 
 
+def _latest_relevant_artifact(state: KernelState) -> dict[str, Any] | None:
+    artifacts = state.get("artifacts") if isinstance(state.get("artifacts"), list) else []
+    for artifact in reversed([item for item in artifacts if isinstance(item, dict)]):
+        payload = artifact.get("payload") if isinstance(artifact.get("payload"), dict) else {}
+        semantic_id = str(artifact.get("semantic_id") or artifact.get("id") or "")
+        artifact_type = str(artifact.get("type") or artifact.get("kind") or "")
+        sql = payload.get("sql") or payload.get("safe_sql") or payload.get("raw_sql")
+        if sql:
+            return {
+                "kind": "sql",
+                "source": "artifact",
+                "id": artifact.get("id") or semantic_id,
+                "semantic_id": semantic_id,
+                "confidence": "medium",
+                "sql_preview": _preview(sql),
+            }
+        if artifact_type in {"table", "result", "result_table"} or semantic_id == "result_table":
+            return {
+                "kind": "result",
+                "source": "artifact",
+                "id": artifact.get("id") or semantic_id,
+                "semantic_id": semantic_id,
+                "confidence": "medium",
+                "row_count": payload.get("rowCount", payload.get("row_count")),
+                "columns": _preview_list(payload.get("columns")),
+            }
+        if artifact_type == "approval" or semantic_id == "approval":
+            return {
+                "kind": "approval",
+                "source": "artifact",
+                "id": artifact.get("id") or semantic_id,
+                "semantic_id": semantic_id,
+                "confidence": "medium",
+            }
+    return None
+
+
 def _intent_needs_execution(intent: AgentIntent, state: KernelState) -> bool:
     if not state.get("execute", True):
         return False
     return intent in {"new_data_question", "followup_on_result", "chart_request"}
 
 
-def _intent_confidence(intent: AgentIntent, state: KernelState) -> str:
+def _intent_confidence(intent: AgentIntent, state: KernelState, reference: dict[str, Any] | None = None) -> str:
     text = latest_user_message(state).strip()
+    reference = reference or {}
     if not text:
         return "low"
+    if reference.get("kind") and intent != "new_data_question":
+        return "high"
     if intent == "new_data_question":
         return "medium"
     return "high"
@@ -282,3 +412,9 @@ def _preview(value: Any, limit: int = 240) -> str | None:
         return None
     text = str(value).strip()
     return text if len(text) <= limit else f"{text[:limit]}..."
+
+
+def _preview_list(value: Any) -> list[Any]:
+    if not isinstance(value, list):
+        return []
+    return value[:8]
