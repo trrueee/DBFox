@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent.types import AgentRunRequest, ToolObservation
@@ -22,10 +22,14 @@ class ToolPolicy(BaseModel):
 
 
 class ToolSpec(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     name: str
     description: str
     input_schema: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
+    input_model: type[BaseModel] | None = Field(default=None, exclude=True)
+    output_model: type[BaseModel] | None = Field(default=None, exclude=True)
     policy: ToolPolicy = Field(default_factory=ToolPolicy)
 
 

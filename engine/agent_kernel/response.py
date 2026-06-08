@@ -22,6 +22,7 @@ from engine.agent.types import (
     AgentRunRequest,
     AgentRunResponse,
     AgentStep,
+    AnswerEvidence,
     FollowUpSuggestion,
     ResultProfile,
 )
@@ -180,12 +181,32 @@ class AgentKernelResponseAssembler:
         artifact_ids = {artifact.id for artifact in artifacts}
         answer.evidence = [
             evidence
-            if evidence.artifact_id in artifact_ids
-            else evidence.model_copy(
-                update={"artifact_id": semantic_to_id.get(evidence.artifact_id, evidence.artifact_id)}
+            for evidence in (
+                evidence
+                if evidence.artifact_id in artifact_ids
+                else evidence.model_copy(update={"artifact_id": semantic_to_id.get(evidence.artifact_id, evidence.artifact_id)})
+                for evidence in answer.evidence
             )
-            for evidence in answer.evidence
+            if evidence.artifact_id in artifact_ids
         ]
+        if not answer.evidence and artifacts:
+            preferred_artifact = self._preferred_evidence_artifact(artifacts)
+            answer.evidence = [
+                AnswerEvidence(
+                    artifact_id=preferred_artifact.id,
+                    label=preferred_artifact.title,
+                    value=preferred_artifact.summary if hasattr(preferred_artifact, "summary") else preferred_artifact.type,
+                )
+            ]
+
+    def _preferred_evidence_artifact(self, artifacts: list[AgentArtifact]) -> AgentArtifact:
+        preferred_semantic_ids = ("result_profile", "result_table", "safety_report", "sql_candidate", "query_plan")
+        by_semantic_id = {artifact.semantic_id: artifact for artifact in artifacts if artifact.semantic_id}
+        for semantic_id in preferred_semantic_ids:
+            artifact = by_semantic_id.get(semantic_id)
+            if artifact is not None:
+                return artifact
+        return artifacts[0]
 
     def _bind_artifact_dependencies(self, artifacts: list[AgentArtifact]) -> None:
         semantic_to_id = {artifact.semantic_id or artifact.id: artifact.id for artifact in artifacts}

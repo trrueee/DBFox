@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import gsap from "gsap";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -21,7 +23,36 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      tlRef.current?.kill();
+      const tl = gsap.timeline();
+      tl.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" })
+        .fromTo(
+          cardRef.current,
+          { opacity: 0, scale: 0.92 },
+          { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.3)" },
+          "-=0.05",
+        );
+      tlRef.current = tl;
+    } else if (!open && mounted) {
+      tlRef.current?.kill();
+      const tl = gsap.timeline({
+        onComplete: () => setMounted(false),
+      });
+      tl.to(cardRef.current, { opacity: 0, scale: 0.95, duration: 0.15, ease: "power2.in" })
+        .to(backdropRef.current, { opacity: 0, duration: 0.12, ease: "power1.in" }, "-=0.06");
+      tlRef.current = tl;
+    }
+  }, [open, mounted]);
+
+  if (!mounted) return null;
 
   const confirmBg =
     variant === "danger"
@@ -39,6 +70,7 @@ export function ConfirmDialog({
 
   return (
     <div
+      ref={backdropRef}
       style={{
         position: "fixed",
         top: 0,
@@ -55,7 +87,7 @@ export function ConfirmDialog({
       onClick={onCancel}
     >
       <div
-        className="animate-slide-down"
+        ref={cardRef}
         style={{
           background: "var(--bg-surface)",
           borderRadius: "var(--radius-lg)",

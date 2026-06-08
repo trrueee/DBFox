@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckCircle2, X, AlertTriangle, Info, XCircle } from "lucide-react";
+import gsap from "gsap";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -24,16 +25,46 @@ let nextId = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
   const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const remove = useCallback((id: number) => {
-    setItems((prev) => prev.filter((it) => it.id !== id));
+    if (exitingIds.has(id)) return;
+    setExitingIds((prev) => new Set(prev).add(id));
+
+    const el = itemRefs.current.get(id);
+    if (el) {
+      gsap.to(el, {
+        opacity: 0,
+        x: 40,
+        duration: 0.25,
+        ease: "power2.in",
+        onComplete: () => {
+          setItems((prev) => prev.filter((it) => it.id !== id));
+          setExitingIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          itemRefs.current.delete(id);
+        },
+      });
+    } else {
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      setExitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+
     const t = timersRef.current.get(id);
     if (t) {
       clearTimeout(t);
       timersRef.current.delete(id);
     }
-  }, []);
+  }, [exitingIds]);
 
   const toast = useCallback(
     (message: string, type: ToastType = "info") => {
@@ -44,6 +75,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [remove],
   );
+
+  const setItemRef = useCallback((id: number, el: HTMLDivElement | null) => {
+    if (el) {
+      itemRefs.current.set(id, el);
+      // Animate in
+      gsap.fromTo(el, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4, ease: "back.out(1.4)" });
+    }
+  }, []);
 
   useEffect(() => {
     const timers = timersRef.current;
@@ -82,7 +121,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((item) => (
           <div
             key={item.id}
-            className="animate-slide-up"
+            ref={(el) => setItemRef(item.id, el)}
             style={{
               display: "flex",
               alignItems: "center",

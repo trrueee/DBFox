@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Search, Terminal } from "lucide-react";
+import gsap from "gsap";
 
 export interface CommandItem {
   id: string;
@@ -19,8 +20,37 @@ interface CommandPaletteProps {
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, commands }) => {
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  // Enter/exit animation
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      tlRef.current?.kill();
+      const tl = gsap.timeline();
+      tl.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" })
+        .fromTo(
+          cardRef.current,
+          { opacity: 0, y: -16, scale: 0.96 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "back.out(1.4)" },
+          "-=0.05",
+        );
+      tlRef.current = tl;
+    } else if (!open && mounted) {
+      tlRef.current?.kill();
+      const tl = gsap.timeline({
+        onComplete: () => setMounted(false),
+      });
+      tl.to(cardRef.current, { opacity: 0, y: -8, scale: 0.97, duration: 0.18, ease: "power2.in" })
+        .to(backdropRef.current, { opacity: 0, duration: 0.12, ease: "power1.in" }, "-=0.08");
+      tlRef.current = tl;
+    }
+  }, [open, mounted]);
 
   // Reset states when opened
   useEffect(() => {
@@ -86,10 +116,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
     }
   }, [selectedIndex]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return (
     <div
+      ref={backdropRef}
       style={{
         position: "fixed",
         top: 0,
@@ -106,7 +137,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
       onClick={onClose}
     >
       <div
-        className="lab-card animate-slide-down"
+        ref={cardRef}
+        className="lab-card"
         style={{
           background: "var(--bg-surface)",
           width: "min(540px, 94vw)",

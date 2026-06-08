@@ -1,5 +1,6 @@
 // Force Vite Hot-Reload to clear stale parser cache
-import { lazy, Suspense, useState, useMemo, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useMemo, useEffect, useCallback, useRef } from "react";
+import gsap from "gsap";
 import {
   Database,
   Table2,
@@ -616,6 +617,15 @@ export const WorkbenchPage = ({
   const activeTab = useMemo(() => {
     return tabs.find(t => t.id === activeTabId) || null;
   }, [tabs, activeTabId]);
+
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Subtle fade in on tab/content switch
+  useEffect(() => {
+    if (contentRef.current) {
+      gsap.fromTo(contentRef.current, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.2, ease: "power1.out" });
+    }
+  }, [activeTabId]);
 
   const selectedSchemaTable = useMemo(() => {
     if (activeTab?.type !== "table" || !activeTab.tableName) return null;
@@ -1774,7 +1784,7 @@ export const WorkbenchPage = ({
                 </div>
               )
             ) : (
-              <div style={{ height: "100%", width: "100%" }}>
+              <div ref={contentRef} style={{ height: "100%", width: "100%" }}>
                 {activeTab?.type === "query" && activeDataSource && (
                   <ErrorBoundary title="SQL 终端加载异常">
                     <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>

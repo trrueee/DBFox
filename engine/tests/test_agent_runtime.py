@@ -1,7 +1,47 @@
 from __future__ import annotations
 
 from engine.agent import AgentContextArtifact, AgentFollowUpContext, AgentRunRequest, DataBoxAgentRuntime
+from engine.agent.types import AgentRunResponse, AgentRuntimeEvent
 from engine.schema_sync import sync_schema
+
+
+def test_agent_runtime_delegates_run_iter_to_kernel_service(db_session, monkeypatch) -> None:
+    calls: list[AgentRunRequest] = []
+
+    class FakeKernelService:
+        def __init__(self, db):
+            self.db = db
+
+        def run_iter(self, req: AgentRunRequest):
+            calls.append(req)
+            response = AgentRunResponse(
+                run_id="kernel-run",
+                session_id=req.session_id or "kernel-session",
+                success=True,
+                status="success",
+                question=req.question,
+                context_summary="kernel",
+                steps=[],
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-1",
+                run_id="kernel-run",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.completed",
+                response=response,
+            )
+
+    monkeypatch.setattr("engine.agent.runtime.AgentKernelService", FakeKernelService)
+
+    events = list(DataBoxAgentRuntime(db_session).run_iter(
+        AgentRunRequest(datasource_id="ds-test", question="list users", session_id="session-test")
+    ))
+
+    assert len(calls) == 1
+    assert calls[0].question == "list users"
+    assert events[-1].response is not None
+    assert events[-1].response.run_id == "kernel-run"
 
 
 def test_agent_runtime_default_plan_uses_fixed_registered_tools(db_session, demo_datasource) -> None:

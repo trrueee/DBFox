@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ShieldAlert, X, Loader2 } from "lucide-react";
+import gsap from "gsap";
 
 export interface ConfirmationDetails {
   confirm_token: string;
@@ -17,8 +18,38 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
-  if (!details) return null;
+  useEffect(() => {
+    if (details) {
+      setMounted(true);
+      setInputText("");
+      setError("");
+      tlRef.current?.kill();
+      const tl = gsap.timeline();
+      tl.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" })
+        .fromTo(
+          cardRef.current,
+          { opacity: 0, scale: 0.92 },
+          { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.3)" },
+          "-=0.05",
+        );
+      tlRef.current = tl;
+    } else if (!details && mounted) {
+      tlRef.current?.kill();
+      const tl = gsap.timeline({
+        onComplete: () => setMounted(false),
+      });
+      tl.to(cardRef.current, { opacity: 0, scale: 0.95, duration: 0.15, ease: "power2.in" })
+        .to(backdropRef.current, { opacity: 0, duration: 0.12, ease: "power1.in" }, "-=0.06");
+      tlRef.current = tl;
+    }
+  }, [details, mounted]);
+
+  if (!mounted) return null;
 
   const handleConfirm = async () => {
     if (inputText.trim() !== details.expected_confirm_text) {
@@ -38,6 +69,7 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
 
   return (
     <div
+      ref={backdropRef}
       style={{
         position: "fixed",
         top: 0,
@@ -51,10 +83,10 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
         justifyContent: "center",
         zIndex: 10000,
         padding: 24,
-        animation: "fadeIn 0.2s ease",
       }}
     >
       <div
+        ref={cardRef}
         className="lab-card lab-card-elevated"
         style={{
           width: "100%",

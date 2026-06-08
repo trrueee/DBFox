@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from engine.agent.executor import AgentStepSpec, StepExecutor
 from engine.agent.registry import AgentToolContext, FunctionAgentTool, ToolRegistry, ToolSpec
 from engine.agent.state import AgentState
@@ -21,6 +23,14 @@ def _ctx(state: AgentState) -> AgentToolContext:
         request=AgentRunRequest(datasource_id="ds-test", question="list users"),
         state=state,
     )
+
+
+class DemoToolInput(BaseModel):
+    question: str
+
+
+class DemoToolOutput(BaseModel):
+    sql: str
 
 
 def test_step_executor_runs_registered_tool_and_returns_step() -> None:
@@ -73,6 +83,70 @@ def test_step_executor_catches_tool_exceptions() -> None:
     assert observation.status == "failed"
     assert observation.error == "tool exploded"
     assert observation.input == {}
+
+
+def test_step_executor_rejects_input_that_violates_tool_contract() -> None:
+    registry = ToolRegistry().register(
+        FunctionAgentTool(
+            spec=ToolSpec(
+                name="demo.contract_input",
+                description="Demo contract input tool.",
+                input_model=DemoToolInput,
+                output_model=DemoToolOutput,
+            ),
+            handler=lambda tool_input, _ctx: ToolObservation(
+                name="demo_step",
+                status="success",
+                input=tool_input,
+                output={"sql": "SELECT 1"},
+                latency_ms=1,
+            ),
+        )
+    )
+    state = _state()
+
+    step, observation = StepExecutor(registry).execute_step(
+        AgentStepSpec(name="demo_step", tool_name="demo.contract_input"),
+        state,
+        _ctx(state),
+        input_override={"question": 123},
+    )
+
+    assert step.status == "failed"
+    assert observation.status == "failed"
+    assert "Input contract failed for tool `demo.contract_input`" in str(observation.error)
+
+
+def test_step_executor_rejects_output_that_violates_tool_contract() -> None:
+    registry = ToolRegistry().register(
+        FunctionAgentTool(
+            spec=ToolSpec(
+                name="demo.contract_output",
+                description="Demo contract output tool.",
+                input_model=DemoToolInput,
+                output_model=DemoToolOutput,
+            ),
+            handler=lambda tool_input, _ctx: ToolObservation(
+                name="demo_step",
+                status="success",
+                input=tool_input,
+                output={"not_sql": "SELECT 1"},
+                latency_ms=1,
+            ),
+        )
+    )
+    state = _state()
+
+    step, observation = StepExecutor(registry).execute_step(
+        AgentStepSpec(name="demo_step", tool_name="demo.contract_output"),
+        state,
+        _ctx(state),
+        input_override={"question": "list users"},
+    )
+
+    assert step.status == "failed"
+    assert observation.status == "failed"
+    assert "Output contract failed for tool `demo.contract_output`" in str(observation.error)
 
 
 def test_agent_state_apply_observation_updates_runtime_fields() -> None:

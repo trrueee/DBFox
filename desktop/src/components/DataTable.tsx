@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Database, EyeOff, FileJson, ListPlus, MoreVertical, X, Filter } from "lucide-react";
 import { buildInsertSql, buildRowJson, normalizeCopyValue } from "../lib/sqlCopy";
 import { useDataTableView } from "../hooks/useDataTableView";
+import gsap from "gsap";
 
 interface DataTableProps {
   columns: string[];
@@ -136,7 +137,19 @@ const JsonTree: React.FC<{ data: JsonValue; depth?: number }> = ({ data, depth =
 export function DataTable({ columns, rows, numericColumns, maxHeight, tableName, databaseName, columnTypes }: DataTableProps) {
   const numericSet = new Set(numericColumns ?? []);
   const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; column: string } | null>(null);
-  
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+
+  // Stagger row animation when visibleRows changes
+  useEffect(() => {
+    if (!tbodyRef.current) return;
+    const rows = tbodyRef.current.querySelectorAll("tr");
+    gsap.fromTo(
+      rows,
+      { opacity: 0, y: 4 },
+      { opacity: 1, y: 0, duration: 0.18, stagger: 0.03, ease: "power1.out" },
+    );
+  }, [visibleRows]);
+
   const {
     visibleColumns,
     visibleRows,
@@ -841,7 +854,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
             })}
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={tbodyRef}>
           {visibleRows.map((row, ri) => {
             const isRowSelected = selectedCell?.rowIndex === ri;
             return (

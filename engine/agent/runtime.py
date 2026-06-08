@@ -44,6 +44,7 @@ from engine.agent.types import (
     ToolObservation,
 )
 from engine.agent.workspace_context import build_agent_context_bundle
+from engine.agent_kernel.service import AgentKernelService
 from engine.errors import DataBoxError
 from engine.models import AgentRun
 
@@ -60,8 +61,62 @@ class DataBoxAgentRuntime:
         self.artifact_emitter = ArtifactEmitter()
         self.planner = AgentPlanner(self.registry)
         self.plan_validator = AgentPlanValidator(self.registry)
+        self.kernel = AgentKernelService(db)
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
+        return self._facade_response(self.kernel.run(req))
+
+    def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
+        for event in self.kernel.run_iter(req):
+            yield self._facade_event(event)
+
+    def resume(self, run_id: str, approval_id: str | None = None) -> AgentRunResponse:
+        final_response: AgentRunResponse | None = None
+        for event in self.resume_iter(run_id, approval_id):
+            if event.response is not None:
+                final_response = event.response
+        if final_response is None:
+            raise RuntimeError("Agent kernel resume completed without a final response.")
+        return final_response
+
+    def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
+        resolved_approval_id = approval_id
+        if not resolved_approval_id:
+            pending = agent_persistence.get_pending_approval_for_run(self.db, run_id)
+            resolved_approval_id = pending.id if pending is not None else ""
+        if not resolved_approval_id:
+            raise DataBoxError("No approval id was supplied for resume.", code="APPROVAL_NOT_FOUND")
+
+        approval = agent_persistence.get_approval(self.db, resolved_approval_id)
+        if approval is None:
+            raise DataBoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+        if approval.run_id != run_id:
+            raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
+        if approval.status == "pending":
+            raise DataBoxError("Approval is still pending.", code="APPROVAL_PENDING")
+        if approval.status == "rejected":
+            agent_persistence.fail_run(self.db, run_id, str(approval.session_id), "Approval rejected")
+            self.db.commit()
+            raise DataBoxError("Approval rejected.", code="APPROVAL_REJECTED")
+        approved = approval is not None and approval.status == "approved"
+        for event in self.kernel.resume_approval_iter(
+            run_id=run_id,
+            approval_id=resolved_approval_id,
+            approved=approved,
+        ):
+            yield self._facade_event(event)
+
+    def _facade_event(self, event: AgentRuntimeEvent) -> AgentRuntimeEvent:
+        if event.response is None:
+            return event
+        return event.model_copy(update={"response": self._facade_response(event.response)})
+
+    def _facade_response(self, response: AgentRunResponse) -> AgentRunResponse:
+        if response.success and response.status == "completed":
+            return response.model_copy(update={"status": "success"})
+        return response
+
+    def _legacy_run(self, req: AgentRunRequest) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
         for event in self.run_iter(req):
             if event.response is not None:
@@ -89,7 +144,7 @@ class DataBoxAgentRuntime:
         )
         return steps
 
-    def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
+    def _legacy_run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
 
@@ -649,7 +704,7 @@ class DataBoxAgentRuntime:
         )
         yield from final_events(response)
 
-    def resume(self, run_id: str, approval_id: str | None = None) -> AgentRunResponse:
+    def _legacy_resume(self, run_id: str, approval_id: str | None = None) -> AgentRunResponse:
         final_response: AgentRunResponse | None = None
         for event in self.resume_iter(run_id, approval_id):
             if event.response is not None:
@@ -658,7 +713,7 @@ class DataBoxAgentRuntime:
             raise RuntimeError("Agent runtime resume completed without a final response.")
         return final_response
 
-    def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
+    def _legacy_resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
         run = self.db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if run is None:
             raise DataBoxError(f"Agent run {run_id} not found.", code="RUN_NOT_FOUND")

@@ -65,6 +65,9 @@ def apply_tool_result_to_state(
         fixed_sql = str(output.get("fixed_sql") or "").strip()
         if fixed_sql:
             update["sql"] = fixed_sql
+            update["error"] = None
+        else:
+            update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
 
     elif tool_name == "result.profile":
         update["result_profile"] = output
@@ -82,7 +85,31 @@ def apply_tool_result_to_state(
         update["final_answer"] = output
         update["status"] = "completed"
 
+    elif tool_name.startswith("workspace."):
+        suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
+        evidence: list[dict[str, Any]] = []
+        if suggestions or output.get("proposed_sql"):
+            evidence.append(
+                {
+                    "artifact_id": "sql_suggestion",
+                    "label": "SQL suggestion",
+                    "value": suggestions[0].get("title") if suggestions and isinstance(suggestions[0], dict) else "workspace suggestion",
+                }
+            )
+        update["answer"] = {
+            "answer": str(output.get("answer") or ""),
+            "key_findings": [],
+            "evidence": evidence,
+            "caveats": [],
+            "recommendations": [],
+            "follow_up_questions": [],
+        }
+        update["final_answer"] = update["answer"]
+        update["status"] = "completed"
+
     if tool_name in {"sql.generate", "sql.validate", "sql.execute_readonly", "result.profile", "chart.suggest", "answer.synthesize"}:
+        update["artifacts"] = [_artifact_event(tool_name, output)]
+    if tool_name.startswith("workspace."):
         update["artifacts"] = [_artifact_event(tool_name, output)]
 
     return update

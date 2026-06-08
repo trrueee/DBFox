@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 
 from engine.agent import persistence as agent_persistence
 from engine.agent.artifact_emitter import ArtifactEmitter
-from engine.agent.artifacts import AgentArtifactIdentity
+from engine.agent.artifacts import AgentArtifactIdentity, build_agent_plan_artifact
 from engine.agent.events import EventEmitter
 from engine.agent.state import AgentState
+from engine.agent.tool_runtime_gateway import ToolRuntimeGateway
 from engine.agent.types import (
     AgentApprovalRecord,
     AgentAnswer,
@@ -139,6 +140,13 @@ class AgentKernelService:
         }
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
+        if req.follow_up_context is None and req.parent_run_id:
+            reconstructed = agent_persistence.build_followup_context_from_run(self.db, req.parent_run_id)
+            if reconstructed is not None:
+                req.follow_up_context = reconstructed
+                if not req.session_id and reconstructed.session_id:
+                    req.session_id = reconstructed.session_id
+
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
         artifact_identity = AgentArtifactIdentity(run_id)
@@ -250,13 +258,24 @@ class AgentKernelService:
         approved: bool,
         note: str | None = None,
     ) -> Iterator[AgentRuntimeEvent]:
-        approval = agent_persistence.resolve_approval(
-            self.db,
-            run_id=run_id,
-            approval_id=approval_id,
-            decision="approved" if approved else "rejected",
-            note=note,
-        )
+        existing_approval = agent_persistence.get_approval(self.db, approval_id)
+        if existing_approval is None:
+            raise DataBoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+        if existing_approval.run_id != run_id:
+            raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
+        resolved_now = False
+        if existing_approval.status == "pending":
+            approval = agent_persistence.resolve_approval(
+                self.db,
+                run_id=run_id,
+                approval_id=approval_id,
+                decision="approved" if approved else "rejected",
+                note=note,
+            )
+            resolved_now = True
+        else:
+            approval = existing_approval
+            approved = approval.status == "approved"
         req = self._request_from_run(run_id)
         session_id = approval.session_id
         checkpoint_payload = agent_persistence.get_latest_checkpoint_payload(self.db, run_id)
@@ -302,11 +321,12 @@ class AgentKernelService:
                 error=error,
             )
 
-        yield emit(
-            "agent.approval.resolved",
-            step={"name": approval.step_name, "status": approval.status},
-            approval=approval,
-        )
+        if resolved_now:
+            yield emit(
+                "agent.approval.resolved",
+                step={"name": approval.step_name, "status": approval.status},
+                approval=approval,
+            )
 
         if approved:
             agent_persistence.mark_run_resumed(self.db, run_id=run_id, current_step_name="execute_sql")
@@ -375,9 +395,14 @@ class AgentKernelService:
 
     def _controller_node(self, graph_state: KernelState) -> dict[str, Any]:
         if int(graph_state.get("step_count", 0)) >= int(graph_state.get("max_steps", 20)):
+            error = (
+                "Agent stopped before SQL validation because max_steps was reached."
+                if not graph_state.get("safety")
+                else "Max agent steps reached."
+            )
             return {
                 "status": "failed",
-                "error": "Max agent steps reached.",
+                "error": error,
                 "pending_decision": {
                     "action": "final_answer",
                     "final_answer": "Agent stopped before completion because max_steps was reached.",
@@ -474,13 +499,10 @@ class AgentKernelService:
         raw_args = tool_call.get("args")
         args: dict[str, Any] = dict(raw_args) if isinstance(raw_args, dict) else {}
         observation = self._execute_tool(req, dict(graph_state), tool_name, args)
-        update = cast(
-            dict[str, Any],
-            apply_tool_result_to_state(
-                state=dict(graph_state),
-                tool_name=tool_name,
-                observation=observation,
-            ),
+        update = apply_tool_result_to_state(
+            state=dict(graph_state),
+            tool_name=tool_name,
+            observation=observation,
         )
         update["pending_tool_call"] = None
         update["last_tool_name"] = tool_name
@@ -562,7 +584,7 @@ class AgentKernelService:
             run_id=agent_state.run_id,
             session_id=agent_state.session_id or approval.session_id,
             status="waiting_approval",
-            current_step_name="approval_interrupt",
+            current_step_name=agent_state.steps[-1].name if agent_state.steps else "approval_interrupt",
             next_step_name=self._step_name(approval.tool_name or approval.step_name),
             plan=state.get("plan"),
             state=state,
@@ -701,7 +723,9 @@ class AgentKernelService:
     ) -> ToolObservation:
         tool = self.registry.require(tool_name)
         ctx = ToolContext(db=self.db, request=req, state=dict(state))
-        return tool.handler(ctx, args)
+        validated_args = ToolRuntimeGateway.validate_input(tool.spec.name, tool.spec.input_model, args)
+        observation = tool.handler(ctx, validated_args)
+        return ToolRuntimeGateway.validate_observation_output(tool.spec.name, tool.spec.output_model, observation)
 
     def _artifact_events(
         self,
@@ -711,6 +735,30 @@ class AgentKernelService:
         artifact_identity: AgentArtifactIdentity,
         emitted_artifact_ids: set[str],
     ) -> Iterator[AgentRuntimeEvent]:
+        if observation.name.startswith("workspace.") and not any(
+            artifact.semantic_id == "agent_plan_draft" for artifact in agent_state.artifacts
+        ):
+            plan_artifact = self.artifact_emitter.bind_dependencies(
+                agent_state.artifacts,
+                build_agent_plan_artifact(
+                    {
+                        "intent": observation.name.removeprefix("workspace."),
+                        "tool_name": observation.name,
+                        "source": "workspace_context",
+                    },
+                    identity=artifact_identity,
+                ),
+            )
+            agent_state.artifacts.append(plan_artifact)
+            emitted_artifact_ids.add(plan_artifact.id)
+            event = emit("agent.artifact.created", step={"name": observation.name}, artifact=plan_artifact)
+            yield event
+            try:
+                agent_persistence.record_artifact(self.db, agent_state.session_id or "", agent_state.run_id, plan_artifact, len(agent_state.artifacts))
+            except Exception:
+                logger.warning("Agent kernel persistence: failed to save workspace plan artifact %s", plan_artifact.id)
+                self._rollback_quietly()
+
         for artifact in self.artifact_emitter.from_observation(observation.name, observation, agent_state, artifact_identity):
             bound = self.artifact_emitter.bind_dependencies(agent_state.artifacts, artifact)
             agent_state.artifacts.append(bound)
@@ -815,10 +863,15 @@ class AgentKernelService:
             session_id=session_id,
             artifacts=agent_state.artifacts,
             artifact_identity=artifact_identity,
-            status=state.get("status"),
+            status=self._response_status(state, error),
             approval=approval,
             checkpoint=checkpoint,
         )
+
+    def _response_status(self, state: dict[str, Any], error: Any) -> str | None:
+        if error:
+            return "failed"
+        return state.get("status")
 
     def _initial_state(self, req: AgentRunRequest, run_id: str, session_id: str) -> KernelState:
         return KernelState(

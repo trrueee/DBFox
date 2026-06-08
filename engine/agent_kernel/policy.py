@@ -40,6 +40,16 @@ class PolicyGate:
             safety: dict[str, Any] = raw_safety if isinstance(raw_safety, dict) else {}
             can_execute = bool(safety.get("can_execute"))
             safe_sql = str(safety.get("safe_sql") or "").strip()
+            original_sql = str(safety.get("original_sql") or state.get("sql") or "").strip()
+            blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
+            hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
+            if safety.get("requires_confirmation") and not hard_blockers and original_sql:
+                return PolicyDecision(
+                    status="approval_required",
+                    reason="This SQL execution requires human approval.",
+                    risk_level="warning",
+                    safe_args={"sql": safe_sql or original_sql},
+                )
             if not can_execute or not safe_sql:
                 return PolicyDecision(
                     status="blocked",

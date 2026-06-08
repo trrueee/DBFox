@@ -20,18 +20,11 @@ class PolicyEngine:
         try:
             expressions = sqlglot.parse(sql_str)
         except Exception as exc:
-            # If parsing fails, fall back to simple string check to prevent SQL injection bypass
-            logger.warning("SQL parsing failed in PolicyEngine, fallback to string checks: %s", exc)
-            sql_lower = sql_str.lower().strip()
-            # If read-only, block common mutation verbs
-            if ds.is_read_only:
-                for verb in ["insert", "update", "delete", "drop", "create", "alter", "truncate", "replace", "grant"]:
-                    if sql_lower.startswith(verb) or f" {verb} " in sql_lower:
-                        raise DataBoxError(
-                            code="READ_ONLY_VIOLATION",
-                            message=f"数据源 '{ds.name}' 已被设置为只读模式，禁止执行任何更改或写入 SQL 语句。"
-                        )
-            return
+            logger.warning("SQL parsing failed in PolicyEngine; blocking query: %s", exc)
+            raise DataBoxError(
+                code="POLICY_PARSE_ERROR",
+                message=f"SQL 无法被安全策略引擎解析，已按潜在注入风险阻断。数据源: '{ds.name}'。"
+            ) from exc
 
         # Walk AST to detect mutations
         mutations = (

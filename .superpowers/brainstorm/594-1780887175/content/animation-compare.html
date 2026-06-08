@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataBox 动画风格对比</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; padding: 20px; }
+  h2 { font-size: 1.4em; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 0.9em; margin-bottom: 20px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .card { flex: 1; min-width: 300px; max-width: 420px; border: 1px solid #30363d; border-radius: 12px; overflow: hidden; background: #161b22; }
+  .card-header { padding: 12px 16px; font-weight: 600; font-size: 0.95em; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+  .card-body { padding: 0; }
+  .badge { font-size: 0.75em; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-a { background: #1a3a5c; color: #58a6ff; } .badge-b { background: #1a2e1a; color: #7ee787; } .badge-c { background: #3a1a5c; color: #d2a8ff; }
+
+  /* Mock DataBox UI */
+  .mock-ui { padding: 12px 16px; }
+  .mock-sidebar { display: flex; gap: 6px; margin-bottom: 12px; }
+  .mock-sidebar-item { padding: 5px 12px; border-radius: 6px; font-size: 0.78em; color: #8b949e; cursor: pointer; background: transparent; border: none; transition: background 0.15s; }
+  .mock-sidebar-item.active { background: #1f2937; color: #e1e4e8; }
+  .mock-table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .mock-table-name { font-size: 0.82em; font-weight: 600; }
+  .mock-table-count { font-size: 0.72em; color: #8b949e; }
+  .mock-row { display: flex; padding: 6px 8px; border-bottom: 1px solid #21262d; font-size: 0.78em; align-items: center; gap: 12px; border-radius: 4px; }
+  .mock-row-col { flex: 1; color: #c9d1d9; }
+  .mock-row-col.header { color: #8b949e; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.5px; }
+  .mock-cell-id { color: #58a6ff; font-family: monospace; font-size: 0.76em; }
+
+  .btn-row { display: flex; gap: 6px; margin-top: 12px; }
+  .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 0.78em; }
+  .btn.primary { background: #238636; border-color: #2ea043; color: #fff; }
+
+  /* Animation trigger area */
+  .replay-btn { font-size: 0.75em; padding: 4px 10px; border-radius: 4px; border: 1px solid #30363d; background: transparent; color: #8b949e; cursor: pointer; }
+  .replay-btn:hover { background: #21262d; color: #e1e4e8; }
+
+  @keyframes subtleFade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes subtleScaleIn {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div style="margin-bottom: 20px;">
+  <h2>三种动画风格 · 实际对比</h2>
+  <p class="subtitle">每个卡片点击 <b style="color:#e1e4e8">Refresh</b> 按钮查看动画效果，体会节奏差异</p>
+</div>
+
+<div class="row">
+
+  <!-- ====== A: Professional & Subtle ====== -->
+  <div class="card" id="card-a">
+    <div class="card-header">
+      <span>A · 专业克制</span>
+      <span class="badge badge-a">快速 · 不打扰</span>
+      <button class="replay-btn" onclick="replayA()">Refresh</button>
+    </div>
+    <div class="mock-ui">
+      <div class="mock-sidebar">
+        <button class="mock-sidebar-item active">Tables</button>
+        <button class="mock-sidebar-item">Views</button>
+        <button class="mock-sidebar-item">Queries</button>
+      </div>
+      <div class="mock-table-header">
+        <span class="mock-table-name">📋 users</span>
+        <span class="mock-table-count">1,234 rows</span>
+      </div>
+      <div class="mock-row" style="background:#1a1e25;">
+        <span class="mock-row-col header">ID</span>
+        <span class="mock-row-col header">Name</span>
+        <span class="mock-row-col header">Email</span>
+      </div>
+      <div id="a-rows">
+        <div class="mock-row a-row" style="opacity:0"><span class="mock-cell-id">a1b2c3</span><span class="mock-row-col">Alice</span><span class="mock-row-col">alice@acme.co</span></div>
+        <div class="mock-row a-row" style="opacity:0"><span class="mock-cell-id">d4e5f6</span><span class="mock-row-col">Bob</span><span class="mock-row-col">bob@widgets.io</span></div>
+        <div class="mock-row a-row" style="opacity:0"><span class="mock-cell-id">g7h8i9</span><span class="mock-row-col">Carol</span><span class="mock-row-col">carol@tech.dev</span></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary">+ New Row</button>
+        <button class="btn">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== B: Polished & Delightful ====== -->
+  <div class="card" id="card-b">
+    <div class="card-header">
+      <span>B · 精致愉悦</span>
+      <span class="badge badge-b">弹性 · 质感</span>
+      <button class="replay-btn" onclick="replayB()">Refresh</button>
+    </div>
+    <div class="mock-ui">
+      <div class="mock-sidebar">
+        <button class="mock-sidebar-item active">Tables</button>
+        <button class="mock-sidebar-item">Views</button>
+        <button class="mock-sidebar-item">Queries</button>
+      </div>
+      <div class="mock-table-header">
+        <span class="mock-table-name">📋 users</span>
+        <span class="mock-table-count">1,234 rows</span>
+      </div>
+      <div class="mock-row" style="background:#1a1e25;">
+        <span class="mock-row-col header">ID</span>
+        <span class="mock-row-col header">Name</span>
+        <span class="mock-row-col header">Email</span>
+      </div>
+      <div id="b-rows">
+        <div class="mock-row b-row" style="opacity:0;transform:translateX(-20px)"><span class="mock-cell-id">a1b2c3</span><span class="mock-row-col">Alice</span><span class="mock-row-col">alice@acme.co</span></div>
+        <div class="mock-row b-row" style="opacity:0;transform:translateX(-20px)"><span class="mock-cell-id">d4e5f6</span><span class="mock-row-col">Bob</span><span class="mock-row-col">bob@widgets.io</span></div>
+        <div class="mock-row b-row" style="opacity:0;transform:translateX(-20px)"><span class="mock-cell-id">g7h8i9</span><span class="mock-row-col">Carol</span><span class="mock-row-col">carol@tech.dev</span></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="b-btn">+ New Row</button>
+        <button class="btn">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== C: Dynamic & Narrative ====== -->
+  <div class="card" id="card-c">
+    <div class="card-header">
+      <span>C · 动态叙事</span>
+      <span class="badge badge-c">舞台感 · 沉浸</span>
+      <button class="replay-btn" onclick="replayC()">Refresh</button>
+    </div>
+    <div class="mock-ui">
+      <div class="mock-sidebar">
+        <button class="mock-sidebar-item active">Agent</button>
+        <button class="mock-sidebar-item">Timeline</button>
+        <button class="mock-sidebar-item">Results</button>
+      </div>
+      <div id="c-stage" style="min-height:160px;position:relative;">
+        <div id="c-thinking" style="padding:16px;text-align:center;color:#8b949e;font-size:0.82em;">🤔 Analyzing query intent...</div>
+        <div id="c-tool" style="padding:16px;opacity:0;position:absolute;top:0;left:0;right:0;">
+          <div style="background:#1a2332;border:1px solid #1f6feb;border-radius:8px;padding:10px;font-size:0.78em;">
+            <span style="color:#58a6ff;">🔧 tool_call:</span> <span style="color:#c9d1d9;">list_tables(database="main")</span>
+          </div>
+        </div>
+        <div id="c-result" style="padding:12px;opacity:0;position:absolute;top:0;left:0;right:0;">
+          <div class="mock-row"><span class="mock-cell-id">✓</span><span class="mock-row-col">users</span><span class="mock-row-col" style="color:#7ee787">ready</span></div>
+          <div class="mock-row"><span class="mock-cell-id">✓</span><span class="mock-row-col">orders</span><span class="mock-row-col" style="color:#7ee787">ready</span></div>
+          <div class="mock-row"><span class="mock-cell-id">✓</span><span class="mock-row-col">products</span><span class="mock-row-col" style="color:#7ee787">ready</span></div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary">Execute</button>
+        <button class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function replayA() {
+  const rows = document.querySelectorAll('.a-row');
+  gsap.set(rows, { opacity: 0, y: 4 });
+  gsap.to(rows, {
+    opacity: 1, y: 0,
+    duration: 0.15,
+    stagger: 0.05,
+    ease: "power1.out"
+  });
+}
+
+function replayB() {
+  const rows = document.querySelectorAll('.b-row');
+  gsap.set(rows, { opacity: 0, x: -20 });
+  gsap.to(rows, {
+    opacity: 1, x: 0,
+    duration: 0.45,
+    stagger: 0.12,
+    ease: "back.out(1.4)"
+  });
+  // Button subtle pulse
+  gsap.fromTo('#b-btn', { scale: 1 }, { scale: 1.04, duration: 0.25, yoyo: true, repeat: 1, ease: "power1.inOut", delay: 0.5 });
+}
+
+function replayC() {
+  const tl = gsap.timeline();
+  tl.set('#c-thinking', { opacity: 1, scale: 1, position: 'relative' });
+  tl.set('#c-tool', { opacity: 0, scale: 0.95, position: 'absolute' });
+  tl.set('#c-result', { opacity: 0, scale: 0.95, position: 'absolute' });
+
+  tl.to('#c-thinking', { opacity: 0, scale: 0.95, duration: 0.3, ease: "power2.in", delay: 0.3 })
+    .set('#c-thinking', { position: 'absolute' })
+    .set('#c-tool', { position: 'relative' })
+    .to('#c-tool', { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.3)" }, "+=0.1")
+    .to('#c-tool', { opacity: 0, scale: 0.95, duration: 0.25, ease: "power2.in", delay: 0.8 })
+    .set('#c-tool', { position: 'absolute' })
+    .set('#c-result', { position: 'relative' })
+    .to('#c-result', { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.2)" });
+}
+
+// Auto-play on load
+setTimeout(() => { replayA(); replayB(); replayC(); }, 400);
+</script>
+</body>
+</html>
