@@ -134,10 +134,16 @@ class AgentKernelService:
             checkpointer=self._checkpointer,
         )
         snapshot = app.get_state({"configurable": {"thread_id": thread_id}})
+        next_nodes = list(snapshot.next)
+        values = dict(snapshot.values) if isinstance(snapshot.values, dict) else snapshot.values
+        if not next_nodes:
+            fallback = self._thread_state_from_checkpoint(thread_id)
+            if fallback is not None:
+                return fallback
         return {
             "thread_id": thread_id,
-            "values": dict(snapshot.values) if isinstance(snapshot.values, dict) else snapshot.values,
-            "next": list(snapshot.next),
+            "values": values,
+            "next": next_nodes,
             "interrupts": [
                 {
                     "id": item.id,
@@ -146,6 +152,37 @@ class AgentKernelService:
                 for item in snapshot.interrupts
             ],
             "config": snapshot.config,
+        }
+
+    def _thread_state_from_checkpoint(self, thread_id: str) -> dict[str, Any] | None:
+        run = (
+            self.db.query(AgentRun)
+            .filter(AgentRun.session_id == thread_id, AgentRun.status == "waiting_approval")
+            .order_by(AgentRun.updated_at.desc())
+            .first()
+        )
+        if run is None:
+            return None
+        checkpoint_payload = agent_persistence.get_latest_checkpoint_payload(self.db, str(run.id))
+        if checkpoint_payload is None:
+            return None
+        state = checkpoint_payload.get("state")
+        record = checkpoint_payload.get("record")
+        next_step = getattr(record, "next_step_name", None)
+        return {
+            "thread_id": thread_id,
+            "values": state if isinstance(state, dict) else {},
+            "next": ["approval_interrupt"] if next_step else [],
+            "interrupts": [
+                {
+                    "id": f"checkpoint-{getattr(record, 'checkpoint_index', 0)}",
+                    "value": {
+                        "type": "approval_required",
+                        "approval": (state or {}).get("pending_approval") if isinstance(state, dict) else None,
+                    },
+                }
+            ] if next_step else [],
+            "config": {"configurable": {"thread_id": thread_id}},
         }
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
@@ -361,6 +398,8 @@ class AgentKernelService:
             checkpointer=self._checkpointer,
         )
         config = {"configurable": {"thread_id": session_id}}
+        graph_snapshot = app.get_state(config)
+        has_graph_checkpoint = bool(graph_snapshot.next) or bool(graph_snapshot.values)
 
         def stream_graph_updates(chunks: Any) -> Iterator[AgentRuntimeEvent]:
             for chunk in chunks:
@@ -399,13 +438,20 @@ class AgentKernelService:
                             emitted_artifact_ids,
                         )
 
-        yield from stream_graph_updates(
-            app.stream(
-                Command(resume={"decision": "approved" if approved else "rejected", "note": note}),
-                config=config,
-                stream_mode="updates",
+        if has_graph_checkpoint:
+            yield from stream_graph_updates(
+                app.stream(
+                    Command(resume={"decision": "approved" if approved else "rejected", "note": note}),
+                    config=config,
+                    stream_mode="updates",
+                )
             )
-        )
+
+        if not approved:
+            state["status"] = "failed"
+            state["error"] = "User rejected approval."
+            state["pending_approval"] = None
+            state["pending_tool_call"] = None
 
         if approved and state.get("status") == "waiting_approval":
             logger.warning(
@@ -948,7 +994,7 @@ class AgentKernelService:
                     agent_persistence.record_artifact(self.db, response.session_id, response.run_id, artifact, len(agent_state.artifacts))
                 except Exception:
                     logger.warning("Agent kernel persistence: failed to save final artifact %s", artifact.id)
-                self._rollback_quietly()
+                    self._rollback_quietly()
 
         if response.answer is not None:
             event = emit("agent.answer.completed", answer_payload=response.answer)
@@ -1127,8 +1173,7 @@ class AgentKernelService:
         if not self._persist_events:
             return
         try:
-            agent_persistence.create_or_get_session(self.db, req, run_id)
-            agent_persistence.start_run(self.db, req, run_id, session_id)
+            self.persistence_sink.init_run_session(req, run_id, session_id)
         except Exception:
             logger.warning("Agent kernel persistence: failed to start run %s", run_id)
             self._rollback_quietly()

@@ -32,7 +32,7 @@ def test_agent_runtime_delegates_run_iter_to_kernel_service(db_session, monkeypa
                 response=response,
             )
 
-    monkeypatch.setattr("engine.agent.runtime.AgentKernelService", FakeKernelService)
+    monkeypatch.setattr("engine.agent_kernel.service.AgentKernelService", FakeKernelService)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(
         AgentRunRequest(datasource_id="ds-test", question="list users", session_id="session-test")

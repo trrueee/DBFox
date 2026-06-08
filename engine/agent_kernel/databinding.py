@@ -94,7 +94,8 @@ def apply_tool_result_to_state(
                     }
                 )
         else:
-            update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
+            if not state.get("pending_approval"):
+                update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
 
     elif tool_name == "result.profile":
         update["result_profile"] = output
