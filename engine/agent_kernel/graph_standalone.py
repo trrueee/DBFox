@@ -100,8 +100,6 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("followup_suggest", _after_followup_suggest, {"policy": "policy", "synthesize_answer": "synthesize_answer"})
     graph.add_conditional_edges("synthesize_answer", _after_synthesize_answer, {"policy": "policy", "answer": "answer"})
     graph.add_conditional_edges("load_followup_context", _after_load_followup_context, {"policy": "policy", "profile_result": "profile_result"})
-    graph.add_conditional_edges("chart_request", _after_chart_request, {"chart_suggest": "chart_suggest", "synthesize_answer": "synthesize_answer", "answer": "answer"})
-
     controller_routes: dict[Hashable, str] = {"policy": "policy", "route_intent": "route_intent", "answer": "answer", "end": END}
     if approval_interrupt_node is not None:
         controller_routes["approval_interrupt"] = "approval_interrupt"
@@ -308,10 +306,30 @@ def _load_followup_context_node(state: KernelState) -> dict[str, Any]:
     return _call("followup.load_context", {}, "Load parent run context for follow-up.")
 
 
-def _chart_request_node(state: KernelState) -> dict[str, Any]:
+def _chart_request_node(state: KernelState) -> Any:
+    from langgraph.types import Command
+
     if not state.get("execution") and not state.get("result_profile"):
-        return _go("synthesize_answer", "Chart request has no result context.")
-    return _go("chart_suggest", "Chart request uses existing result context.")
+        return Command(
+            update={
+                "status": "running",
+                "trace_events": [{
+                    "type": "agent.graph.route",
+                    "payload": {"route": "synthesize_answer", "reason": "Chart request has no result context."},
+                }],
+            },
+            goto="synthesize_answer",
+        )
+    return Command(
+        update={
+            "status": "running",
+            "trace_events": [{
+                "type": "agent.graph.route",
+                "payload": {"route": "chart_suggest", "reason": "Chart request uses existing result context."},
+            }],
+        },
+        goto="chart_suggest",
+    )
 
 
 def _explain_sql_node(state: KernelState) -> dict[str, Any]:
@@ -335,15 +353,22 @@ def _clarification_node(_state: KernelState) -> dict[str, Any]:
 def _observe_node(state: KernelState) -> dict[str, Any]:
     """Normalize latest tool result into agent_observation for routing and diagnostics."""
     observation = state.get("last_observation") if isinstance(state.get("last_observation"), dict) else {}
+    telemetry = _error_telemetry(state)
     metadata = state.get("last_tool_metadata")
     next_route = metadata.get("next_route") if isinstance(metadata, dict) else None
     tool_name = state.get("last_tool_name")
+    status = observation.get("status")
+    error = observation.get("error")
     payload = {
         "tool_name": tool_name,
-        "status": observation.get("status"),
-        "has_error": bool(observation.get("error")),
-        "retryable": bool(_error_telemetry(state).get("retryable")),
+        "status": status,
+        "success": status == "success",
+        "has_error": bool(error),
+        "retryable": bool(telemetry.get("retryable")),
+        "semantic_error": _is_sql_or_db_semantic_error(state),
+        "error_type": telemetry.get("error_type"),
         "next_route": next_route,
+        "route_source": "tool_metadata" if next_route else "fallback_map",
     }
     return {"agent_observation": payload, "trace_events": [{"type": "agent.observe", "payload": payload}]}
 
@@ -398,11 +423,6 @@ def _after_load_followup_context(state: KernelState) -> str:
     return "policy" if _has_tool_call(state) else "profile_result"
 
 
-def _after_chart_request(state: KernelState) -> str:
-    route = str(state.get("agent_graph_route") or "")
-    return route if route in {"chart_suggest", "synthesize_answer", "answer"} else "synthesize_answer"
-
-
 def _after_controller(state: KernelState) -> str:
     decision = state.get("pending_decision") or {}
     if decision.get("action") == "call_tool":
@@ -451,21 +471,30 @@ TOOL_FALLBACK_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
 
 
 def _after_observe(state: KernelState) -> str:
-    telemetry = _error_telemetry(state)
-    if telemetry.get("retryable"):
+    obs = state.get("agent_observation") if isinstance(state.get("agent_observation"), dict) else {}
+
+    # Error paths: read normalized observation fields first,
+    # fall back to raw state fields for backward compatibility.
+    retryable = obs.get("retryable") if "retryable" in obs else bool(_error_telemetry(state).get("retryable"))
+    semantic_error = obs.get("semantic_error") if "semantic_error" in obs else _is_sql_or_db_semantic_error(state)
+    has_error = obs.get("has_error") if "has_error" in obs else bool(state.get("error") or (state.get("last_error_telemetry") and True))
+
+    if retryable:
         return "transient_retry" if _can_retry_transient(state) else "synthesize_answer"
-    if telemetry and _is_sql_or_db_semantic_error(state) and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
+    if semantic_error and has_error and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
         return "revise_sql"
-    if state.get("error") and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
+    if has_error and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
         return "revise_sql"
-    if state.get("error"):
+    if has_error:
         return "synthesize_answer"
-    observation = state.get("agent_observation") if isinstance(state.get("agent_observation"), dict) else {}
-    next_route = observation.get("next_route")
+
+    # Happy path: tool metadata next_route first, then fallback map.
+    next_route = obs.get("next_route")
     if isinstance(next_route, str) and next_route:
         if next_route == "followup_suggest" and _intent(state) != "new_data_question":
             return "synthesize_answer"
         return next_route
+    # Fallback: last_tool_metadata (for backward compatibility).
     metadata = state.get("last_tool_metadata")
     if isinstance(metadata, dict):
         next_route = metadata.get("next_route")
