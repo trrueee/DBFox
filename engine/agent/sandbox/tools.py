@@ -182,6 +182,9 @@ def _dummy_request(context: ExecutionContext, question: Optional[str]) -> AgentR
         datasource_id=context.datasource_id,
         question=question or "",
         session_id=context.thread_id,
+        api_key=context.api_key,
+        api_base=context.api_base,
+        model_name=context.model_name,
     )
 
 

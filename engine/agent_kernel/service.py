@@ -976,6 +976,9 @@ class AgentKernelService:
                 db_dialect="mysql",
                 read_only=tool.spec.policy.side_effect != "write",
                 db_session=self.db,
+                api_key=req.api_key,
+                api_base=req.api_base,
+                model_name=req.model_name,
             )
             start_time = time.perf_counter()
             try:
