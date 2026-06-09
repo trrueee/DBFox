@@ -5,6 +5,7 @@ import { InsightArtifactView } from "./artifacts/InsightArtifactView";
 import { PlanArtifactView } from "./artifacts/PlanArtifactView";
 import { QueryPlanArtifactView } from "./artifacts/QueryPlanArtifactView";
 import { RecommendationArtifactView } from "./artifacts/RecommendationArtifactView";
+import { SqlSuggestionArtifactView } from "./artifacts/SqlSuggestionArtifactView";
 import { SafetyArtifactView } from "./artifacts/SafetyArtifactView";
 import { SqlArtifactView } from "./artifacts/SqlArtifactView";
 import { TableArtifactView } from "./artifacts/TableArtifactView";
@@ -224,6 +225,8 @@ function ArtifactView({
     return <RecommendationArtifactView artifact={artifact} onAsk={onAsk} workspaceContext={workspaceContext} />;
   }
   if (artifact.type === "error") return <ErrorArtifactView artifact={artifact} />;
+  if (artifact.type === "sql_suggestion")
+    return <SqlSuggestionArtifactView artifact={artifact} onOpenSql={onOpenSql} onApplySql={undefined} />;
 
   return (
     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.64rem", background: "#fff", padding: 8, overflowX: "auto" }}>

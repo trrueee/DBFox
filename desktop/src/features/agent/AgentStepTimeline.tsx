@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent, AgentStep } from "./types";
+import { stepDisplayName } from "./stepDisplayNames";
 
 type TimelineStatus = AgentStep["status"] | "running";
 
@@ -52,8 +53,8 @@ export function AgentStepTimeline({ steps, runtimeEvents = [] }: AgentStepTimeli
                 justifySelf: "center",
               }}
             />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={step.name}>
-              {step.name}
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${step.name} (${stepDisplayName(step.name)})`}>
+              {stepDisplayName(step.name)}
             </span>
             <span className={`status-badge ${statusClass(step.status)}`} style={{ fontSize: "0.58rem" }}>
               {step.status}
