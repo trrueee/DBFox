@@ -94,7 +94,11 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("synthesize_answer", _after_synthesize_answer, {"policy": "policy", "answer": "answer"})
     graph.add_conditional_edges("load_followup_context", _after_load_followup_context, {"policy": "policy", "profile_result": "profile_result"})
     graph.add_conditional_edges("chart_request", _after_chart_request, {"chart_suggest": "chart_suggest", "synthesize_answer": "synthesize_answer", "answer": "answer"})
-    graph.add_conditional_edges("controller", _after_controller, {"policy": "policy", "route_intent": "route_intent", "answer": "answer", "end": END})
+
+    controller_routes: dict[Hashable, str] = {"policy": "policy", "route_intent": "route_intent", "answer": "answer", "end": END}
+    if approval_interrupt_node is not None:
+        controller_routes["approval_interrupt"] = "approval_interrupt"
+    graph.add_conditional_edges("controller", _after_controller, controller_routes)
 
     policy_routes: dict[Hashable, str] = {"execute_tool": "execute_tool", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "end": END}
     if approval_interrupt_node is not None:
@@ -336,7 +340,9 @@ def _after_controller(state: KernelState) -> str:
         return "policy"
     if decision.get("action") == "update_plan":
         return "route_intent"
-    if decision.get("action") in {"final_answer", "ask_user", "pause", "wait_approval"}:
+    if decision.get("action") == "wait_approval":
+        return "approval_interrupt"
+    if decision.get("action") in {"final_answer", "ask_user", "pause"}:
         return "answer"
     return "end"
 
