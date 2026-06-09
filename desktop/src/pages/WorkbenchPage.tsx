@@ -31,6 +31,7 @@ import { DemoTourGuide } from "../components/DemoTourGuide";
 import { useToast } from "../components/Toast";
 import { buildAgentFollowUpContext } from "../features/agent/context";
 import { AgentWorkspace } from "../features/agent/AgentWorkspace";
+import { AgentCopilotPanel } from "../features/agent/AgentCopilotPanel";
 import { buildAgentWorkspaceContext } from "../features/agent/workspaceContext";
 import { SemanticSettingsPanel } from "../features/semantic/SemanticSettingsPanel";
 
@@ -1878,192 +1879,18 @@ export const WorkbenchPage = ({
             zIndex: 100
           }}
         >
-          {aiPanelCollapsed ? (
-            /* Collapsed narrow strip vertical toolbar */
-            <div
-              style={{
-                width: 48,
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                paddingTop: 12,
-                gap: 16,
-                background: "var(--bg-secondary)",
-                userSelect: "none"
-              }}
-            >
-              <button
-                onClick={() => setAiPanelCollapsed(false)}
-                className="btn-ghost hover-lift"
-                style={{ padding: 4, borderRadius: "50%", background: "rgba(74,91,192,0.1)", color: "var(--accent-indigo)" }}
-                title="展开 AI Agent 工具箱 (Alt+A)"
-              >
-                <Sparkles size={16} />
-              </button>
-            </div>
-          ) : (
-            /* Expanded rich tools and prompt console */
-            <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
-              {/* Header bar */}
-              <div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}>
-                  <Sparkles size={12} style={{ color: "var(--accent-indigo)" }} />
-                  DataBox AI Copilot
-                </span>
-                <button
-                  onClick={() => setAiPanelCollapsed(true)}
-                  className="btn-ghost"
-                  style={{ padding: 2 }}
-                  title="折叠面板"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, padding: "2px 10px 10px" }}>
-                <section>
-                  <div style={{ fontSize: "0.64rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 5 }}>
-                    上下文
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "62px 1fr", rowGap: 3, columnGap: 8, fontSize: "0.66rem", color: "var(--text-secondary)" }}>
-                    <span style={{ color: "var(--text-muted)" }}>数据库</span>
-                    <strong style={{ color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {activeDataSource?.database_name || "未连接"}
-                    </strong>
-                    <span style={{ color: "var(--text-muted)" }}>当前会话</span>
-                    <strong style={{ color: "var(--text-primary)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {activeTab ? activeTab.title : "无"}
-                    </strong>
-                    <span style={{ color: "var(--text-muted)" }}>最近 SQL</span>
-                    <code style={{ color: "var(--text-primary)", fontSize: "0.62rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {activeTab?.type === "query" && activeTab.sqlDraft?.trim() ? activeTab.sqlDraft.trim().slice(0, 72) : "无"}
-                    </code>
-                    <span style={{ color: "var(--text-muted)" }}>最近结果</span>
-                    <span style={{ color: "var(--text-primary)" }}>
-                      {activeTab?.resultState && activeTab.resultState !== "idle" ? activeTab.resultState : "无"}
-                    </span>
-                  </div>
-                </section>
-
-                <section>
-                  <div style={{ fontSize: "0.64rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 5 }}>
-                    快捷动作
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                    <button onClick={() => handleAiContextAction("根据当前数据库上下文生成一条可执行的 SELECT SQL。")}
-                      className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24, justifyContent: "center" }}>生成 SQL</button>
-                    <button onClick={() => handleAiContextAction("解释当前 SQL 的查询意图、字段逻辑和潜在风险。")}
-                      className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24, justifyContent: "center" }}>解释当前 SQL</button>
-                    <button onClick={() => handleAiContextAction("诊断当前数据库结构，指出高价值表、索引和关联线索。")}
-                      className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24, justifyContent: "center" }}>诊断结构</button>
-                    <button onClick={() => handleAiContextAction(`找出和 ${activeTab?.tableName || "当前查询"} 相关的表，并给出 JOIN 线索。`)}
-                      className="btn-secondary" style={{ fontSize: "0.66rem", padding: "2px 7px", height: 24, justifyContent: "center" }}>找相关表</button>
-                  </div>
-                </section>
-
-                <section style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-                  {hasLiveAgentDraft || agentResponse ? (
-                    <>
-                      <AgentWorkspace
-                        result={agentResponse}
-                        draft={agentDraft}
-                        disabled={aiLoading}
-                        replaying={!agentResponse?.run_id ? false : agentResponse.run_id !== agentDraft?.response?.run_id}
-                        workspaceContext={agentWorkspaceContext}
-                        onOpenSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
-                        onApplySql={handleApplySqlToEditor}
-                        onAsk={agentResponse ? (question, context) => handleRunAgentPrompt(question, agentResponse, context) : undefined}
-                        onSuggestion={handleAgentSuggestion}
-                        onRuntimeEvent={handleAgentRuntimeEvent}
-                        onResumeComplete={handleAgentResumeComplete}
-                      />
-                      {sessionRuns.length > 1 && (
-                        <SessionHistoryPanel
-                          runs={sessionRuns}
-                          activeRunId={agentResponse?.run_id || agentDraft?.runId || null}
-                          replayingRunId={replayingRunId}
-                          onReplay={handleReplayRun}
-                        />
-                      )}
-                    </>
-                  ) : aiResponse ? (
-                    <div style={{ padding: 7, background: "var(--bg-secondary)", fontSize: "0.68rem", lineHeight: 1.45 }}>
-                      <div style={{ fontWeight: 700, color: "var(--accent-indigo)", marginBottom: 4, fontSize: "0.64rem" }}>
-                        Copilot 结果
-                      </div>
-                      <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.66rem", color: "var(--text-primary)", background: "#fff", padding: 4, overflowX: "auto", margin: 0 }}>
-                        {aiResponse}
-                      </pre>
-                      {aiResponse.includes("SELECT") && (
-                        <div style={{ marginTop: 4 }}>
-                          <button onClick={() => {
-                            const match = aiResponse.match(/SELECT[\s\S]+?;/i);
-                            handleOpenQueryTab(match ? match[0] : aiResponse, "AI 生成 SQL");
-                          }}
-                            className="btn-primary" style={{ padding: "2px 0", fontSize: "0.64rem", width: "100%", justifyContent: "center" }}>
-                            插入新控制台
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : aiLoading ? (
-                    aiMode === "agent" ? (
-                      <AgentLoadingNarrative compact prompt={aiPrompt} events={currentAgentEvents} />
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px 0", color: "var(--text-muted)", fontSize: "0.66rem" }}>
-                        <span className="animate-spin" style={{ fontSize: 12 }}>↻</span> AI 推理中...
-                      </div>
-                    )
-                  ) : (
-                    <div style={{ fontSize: "0.66rem", color: "var(--text-secondary)", lineHeight: 1.55 }}>
-                      <div style={{ fontWeight: 700, marginBottom: 5, color: "var(--text-muted)" }}>建议</div>
-                      {[
-                        "统计 login_sessions 各状态数量",
-                        "给当前查询加 @export 导出动作",
-                        "解释当前库里的账号模块",
-                        activeTab?.tableName ? `找出 ${activeTab.tableName} 的相关表` : "找出数据库中的核心关系表",
-                      ].map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          onClick={() => setAiPrompt(suggestion)}
-                          style={{
-                            display: "block",
-                            width: "100%",
-                            padding: "2px 0",
-                            border: "none",
-                            background: "transparent",
-                            color: "var(--text-secondary)",
-                            cursor: "pointer",
-                            textAlign: "left",
-                            fontSize: "0.66rem",
-                          }}
-                        >
-                          - {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </div>
-
-              {/* Input form */}
-              <form onSubmit={handleAskGeneralAi}
-                style={{ padding: "6px 8px", borderTop: "1px solid var(--border-light)", background: "var(--bg-secondary)", display: "flex", flexDirection: "column", gap: 3 }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--text-secondary)", padding: "0 4px" }}>
-                  Agent Copilot
-                </span>
-                <textarea className="input-field" placeholder="向 Agent 提问..."
-                  value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
-                  style={{ height: 34, fontSize: "0.7rem", resize: "none" }}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleAskGeneralAi(e); } }} />
-                <button type="submit" className="btn-primary" disabled={aiLoading || !aiPrompt.trim()}
-                  style={{ padding: "2px 0", fontSize: "0.68rem", width: "100%", justifyContent: "center" }}>
-                  运行 Agent
-                </button>
-              </form>
-            </div>
-          )}
+          <AgentCopilotPanel
+            datasource={activeDataSource}
+            activeTableName={activeTab?.tableName}
+            activeSql={activeTab?.type === "query" ? activeTab.sqlDraft || "" : ""}
+            lastQueryResult={activeTab?.type === "query" ? activeTab.lastQueryResultPreview || null : null}
+            lastError={activeTab?.type === "query" ? activeTab.lastError || null : null}
+            isCollapsed={aiPanelCollapsed}
+            onCollapse={() => setAiPanelCollapsed(!aiPanelCollapsed)}
+            onInsertSql={handleApplySqlToEditor}
+            onRunSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
+            onOpenQueryTab={handleOpenQueryTab}
+          />
         </aside>
       </main>
 

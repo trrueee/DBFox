@@ -167,6 +167,7 @@ class AgentRunRequest(BaseModel):
     execute: bool = True
     max_steps: int = Field(default=12, ge=1, le=20)
     semantic_mode: Literal["off", "shadow", "retry"] = "off"
+    execution_mode: Literal["none", "suggest_only", "user_requested_read", "agent_autonomous_read"] | None = None
 
 
 class AgentErrorOutput(BaseModel):

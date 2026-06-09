@@ -91,7 +91,7 @@ class TestSqlExecutionPolicy:
         state = {"execute": False}
         decision = gate.check(state, "sql.execute_readonly", {})
         assert decision.status == "blocked"
-        assert "disabled" in decision.reason.lower()
+        assert "not allowed" in decision.reason.lower()
 
     def test_execute_without_validation_blocked(self):
         gate = PolicyGate(self._registry_with_execute_tool())

@@ -37,6 +37,11 @@ class DataBoxAgentState(TypedDict, total=False):
     step_count: int
     status: AgentStatus
 
+    # ---- Planner output ----------------------------------------------------
+    plan_directive: dict[str, Any] | None
+    execution_mode: str
+    allowed_tool_groups: list[str]
+
     # ---- Request-level context --------------------------------------------
     workspace_context: dict[str, Any] | None
     follow_up_context: dict[str, Any] | None
@@ -63,6 +68,13 @@ class DataBoxAgentState(TypedDict, total=False):
     last_observation: dict[str, Any] | None
     last_tool_name: str | None
     last_tool_metadata: dict[str, Any] | None
+
+    # ---- Progress Judge output ---------------------------------------------
+    progress_decision: dict[str, Any] | None
+
+    # ---- Anti-loop ---------------------------------------------------------
+    replan_count: int
+    consecutive_blocks: int
 
     # ---- Human-in-the-loop approval ---------------------------------------
     pending_approval: dict[str, Any] | None

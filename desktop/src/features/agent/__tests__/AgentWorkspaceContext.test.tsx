@@ -232,7 +232,10 @@ describe("AgentWorkspace workspace context", () => {
     fireEvent.change(screen.getByPlaceholderText("Ask a follow-up about this result"), {
       target: { value: "continue" },
     });
-    fireEvent.click(screen.getByText("Ask"));
+    // New Composer uses a Send icon button instead of "Ask" text
+    const submitBtn = document.querySelector('button[type="submit"]');
+    expect(submitBtn).not.toBeNull();
+    fireEvent.click(submitBtn!);
 
     expect(onAsk).toHaveBeenCalledWith("continue", workspaceContext);
   });
@@ -251,7 +254,10 @@ describe("AgentWorkspace workspace context", () => {
     fireEvent.change(screen.getByPlaceholderText("Ask about this pending approval, SQL, or risk"), {
       target: { value: "Why does this need approval?" },
     });
-    fireEvent.click(screen.getByText("Ask"));
+    // New Composer uses a Send icon button instead of "Ask" text
+    const submitBtn = document.querySelector('button[type="submit"]');
+    expect(submitBtn).not.toBeNull();
+    fireEvent.click(submitBtn!);
 
     expect(onAsk).toHaveBeenCalledWith(
       "Why does this need approval?",
