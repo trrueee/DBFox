@@ -2,16 +2,48 @@
 
 These tools give the agent the ability to discover, refresh, and
 understand the database environment it operates in.
+
+All tools delegate to EnvironmentService for deterministic fact retrieval.
 """
+
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from engine.agent.types import ToolObservation
 from engine.agent.tool_registry import ToolContext
-from engine.models import SchemaTable, SchemaColumn
-from engine.databox_agent.environment.schema_catalog_sync import ensure_catalog
-from engine.databox_agent.environment.schema_introspector import introspect_datasource
+from engine.databox_agent.environment.service import EnvironmentService
+
+logger = logging.getLogger("databox.environment.tools")
+
+_svc = EnvironmentService()
+
+
+# ---------------------------------------------------------------------------
+# environment.get_profile
+# ---------------------------------------------------------------------------
+
+def environment_get_profile(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Return a DataEnvironmentProfile with env/dialect/catalog_status/table_count/warnings."""
+    datasource_id = _datasource_id(ctx)
+    try:
+        profile = _svc.get_profile(ctx.db, datasource_id)
+        return ToolObservation(
+            name="get_profile",
+            status="success",
+            input=args,
+            output=profile.model_dump(mode="json"),
+            latency_ms=0,
+        )
+    except Exception as exc:
+        return ToolObservation(
+            name="get_profile",
+            status="failed",
+            input=args,
+            error=str(exc),
+            latency_ms=0,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -21,34 +53,25 @@ from engine.databox_agent.environment.schema_introspector import introspect_data
 def schema_list_tables(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """List all known tables for the current datasource from the system catalog."""
     datasource_id = _datasource_id(ctx)
-    tables = (
-        ctx.db.query(SchemaTable)
-        .filter(SchemaTable.data_source_id == datasource_id)
-        .order_by(SchemaTable.table_name)
-        .all()
-    )
 
-    if not tables:
-        sync_result = ensure_catalog(ctx.db, datasource_id)
-        tables = (
-            ctx.db.query(SchemaTable)
-            .filter(SchemaTable.data_source_id == datasource_id)
-            .order_by(SchemaTable.table_name)
-            .all()
-        )
+    snapshot = _svc.get_catalog_snapshot(ctx.db, datasource_id)
+
+    if not snapshot.tables:
+        # Catalog is empty — try refreshing
+        sync_result = _svc.ensure_catalog(ctx.db, datasource_id)
+        snapshot = _svc.get_catalog_snapshot(ctx.db, datasource_id)
         msg = f"Catalog was empty. Auto-refreshed: {sync_result.tables_created} tables found."
     else:
-        msg = f"Found {len(tables)} table(s)."
+        msg = f"Found {len(snapshot.tables)} table(s)."
 
     table_list = [
         {
             "table_name": t.table_name,
-            "columns_count": ctx.db.query(SchemaColumn)
-            .filter(SchemaColumn.table_id == t.id).count(),
+            "columns_count": t.column_count,
             "row_count_estimate": t.row_count_estimate,
-            "table_type": t.table_type or "table",
+            "table_type": t.table_type,
         }
-        for t in tables
+        for t in snapshot.tables
     ]
 
     return ToolObservation(
@@ -69,16 +92,8 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
     datasource_id = _datasource_id(ctx)
     table_name = str(args.get("table_name") or "")
 
-    table = (
-        ctx.db.query(SchemaTable)
-        .filter(
-            SchemaTable.data_source_id == datasource_id,
-            SchemaTable.table_name == table_name,
-        )
-        .first()
-    )
-
-    if table is None:
+    table_snapshot = _svc.describe_table(ctx.db, datasource_id, table_name)
+    if table_snapshot is None:
         return ToolObservation(
             name="describe_table",
             status="failed",
@@ -86,13 +101,6 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
             error=f"Table '{table_name}' not found in catalog.",
             latency_ms=0,
         )
-
-    columns = (
-        ctx.db.query(SchemaColumn)
-        .filter(SchemaColumn.table_id == table.id)
-        .order_by(SchemaColumn.column_name)
-        .all()
-    )
 
     col_list = [
         {
@@ -103,9 +111,11 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
             "is_foreign_key": c.is_foreign_key,
             "column_default": c.column_default,
         }
-        for c in columns
+        for c in table_snapshot.columns
     ]
 
+    # Sample rows still come from live introspection (not catalog)
+    from engine.databox_agent.environment.schema_introspector import introspect_datasource
     inventory = introspect_datasource(ctx.db, datasource_id)
     sample_rows = next(
         (t.sample_rows for t in inventory.tables if t.table_name == table_name),
@@ -120,7 +130,7 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
             "table_name": table_name,
             "columns": col_list,
             "sample_rows": sample_rows,
-            "row_count_estimate": table.row_count_estimate,
+            "row_count_estimate": table_snapshot.row_count_estimate,
         },
         latency_ms=0,
     )
@@ -136,7 +146,7 @@ def schema_refresh_catalog(ctx: ToolContext, args: dict[str, Any]) -> ToolObserv
     reason = str(args.get("reason") or "")
 
     try:
-        result = ensure_catalog(ctx.db, datasource_id)
+        result = _svc.ensure_catalog(ctx.db, datasource_id)
         return ToolObservation(
             name="refresh_catalog",
             status="success",

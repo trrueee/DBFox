@@ -21,7 +21,28 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
     if workspace:
         parts.append(f"- **Workspace Context**: {workspace}")
 
-    # 3. Schema Context
+    # 3. Environment Profile
+    env_profile = state.get("environment_profile")
+    if env_profile:
+        if isinstance(env_profile, dict):
+            parts.append(
+                f"- **Environment**: dialect={env_profile.get('dialect')}, "
+                f"env={env_profile.get('env')}, "
+                f"catalog={env_profile.get('catalog_status')}, "
+                f"tables={env_profile.get('table_count')}"
+            )
+            warnings = env_profile.get("warnings") or []
+            if warnings:
+                parts.append(f"  - Warnings: {'; '.join(str(w) for w in warnings[:5])}")
+
+    # 4. Semantic Resolution
+    sem_res = state.get("semantic_resolution")
+    if sem_res and isinstance(sem_res, dict):
+        sem_text = sem_res.get("semantic_context_text", "")
+        if sem_text:
+            parts.append(f"- **Semantic Context**: {sem_text}")
+
+    # 5. Schema Context
     schema = state.get("schema_context")
     if schema:
         tables = schema.get("selected_tables") if isinstance(schema, dict) else None
@@ -31,17 +52,17 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
         if raw_schema:
             parts.append(f"- **Schema Context DDL snippet**:\n```sql\n{raw_schema[:3000]}\n```")
 
-    # 4. Query Plan
+    # 5. Query Plan
     query_plan = state.get("query_plan")
     if query_plan:
         parts.append(f"- **Structured Query Plan**:\n```json\n{query_plan}\n```")
 
-    # 5. SQL candidate
+    # 6. SQL candidate
     sql = state.get("sql")
     if sql:
         parts.append(f"- **Current SQL Candidate**:\n```sql\n{sql}\n```")
 
-    # 6. Safety check (validate result)
+    # 7. Safety check (validate result)
     safety = state.get("safety")
     if safety:
         parts.append(
@@ -55,7 +76,7 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
         if safety.get("messages"):
             parts.append(f"  - Safety Messages: {safety.get('messages')}")
 
-    # 7. Query Execution
+    # 8. Query Execution
     execution = state.get("execution")
     if execution:
         success = execution.get("success")
@@ -68,12 +89,12 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
         else:
             parts.append(f"  - Execution Error: {execution.get('error')}")
 
-    # 8. Profile result
+    # 9. Profile result
     profile = state.get("result_profile")
     if profile:
         parts.append(f"- **Result Profile**:\n```json\n{profile}\n```")
 
-    # 9. Errors
+    # 10. Errors
     error = state.get("error")
     if error:
         parts.append(f"- **Runtime Error Warning**: {error}")
