@@ -837,22 +837,11 @@ export const WorkbenchPage = ({
 
   const handleAiContextAction = async (promptText: string) => {
     if (!activeDataSource) return;
-    setAiPanelCollapsed(false);
-    setAiLoading(true);
-    setAiResponse("");
-    setAgentResponse(null);
-    setAgentDraft(null);
-    setAgentStreamEvents([]);
+    // Phase 1: Old Text-to-SQL AI context action replaced by Agent Copilot.
+    // Direct the prompt to the Agent chat panel instead.
     setAiPrompt(promptText);
-    try {
-      const prompt = `数据源: ${activeDataSource.name} (${activeDataSource.database_name})\n当前聚焦表: ${activeTab?.tableName || "无"}\n当前指令: ${promptText}\n请提供专业的 DDL 修改、优化的标准 SQL，或详细的数据结构建模建议。`;
-      const res = await api.generateSql(activeDataSource.id, prompt);
-      setAiResponse(res.sql || res.guardrail?.message || "AI 诊断完毕，建议执行结构同步。");
-    } catch (err: unknown) {
-      setAiResponse(`请求失败: ${getErrorMessage(err, "AI request failed")}`);
-    } finally {
-      setAiLoading(false);
-    }
+    setAiPanelCollapsed(false);
+    handleRunAgentPrompt(promptText);
   };
 
   const handleRunAgentPrompt = useCallback(async (
@@ -954,16 +943,8 @@ export const WorkbenchPage = ({
 
   const handleAgentSuggestion = useCallback(async (suggestion: FollowUpSuggestion, result: AgentRunResponse) => {
     if (suggestion.action_type === "save_golden_sql") {
-      if (!activeDataSource || !result.sql) {
-        showToast("没有可保存为 Golden SQL 的安全 SQL", "info");
-        return;
-      }
-      try {
-        await api.createGoldenSql(activeDataSource.id, result.question, result.sql);
-        showToast("已保存为 Golden SQL", "success");
-      } catch (err: unknown) {
-        showToast(`保存 Golden SQL 失败: ${getErrorMessage(err, "request failed")}`, "error");
-      }
+      // Phase 1: Golden SQL deprecated. Use Agent eval tasks (/agent-eval) for golden test cases.
+      showToast("Golden SQL 功能已迁移至 Agent 评测模块", "info");
       return;
     }
 
@@ -984,23 +965,8 @@ export const WorkbenchPage = ({
   const handleAskGeneralAi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aiPrompt.trim() || !activeDataSource) return;
-    if (aiMode === "agent") {
-      await handleRunAgentPrompt(aiPrompt);
-      return;
-    }
-    setAiLoading(true);
-    setAiResponse("");
-    setAgentResponse(null);
-    setAgentDraft(null);
-    setAgentStreamEvents([]);
-    try {
-      const res = await api.generateSql(activeDataSource.id, aiPrompt);
-        setAiResponse(res.sql || `生成 SQL:\n${res.sql}\n\n安全校验: ${res.guardrail?.message ?? "通过"}`);
-    } catch (err: unknown) {
-      setAiResponse(`生成失败: ${getErrorMessage(err, "AI request failed")}`);
-    } finally {
-      setAiLoading(false);
-    }
+    // Phase 1: All AI queries now route through the Agent Copilot.
+    await handleRunAgentPrompt(aiPrompt);
   };
 
   const handleSaveCurrentSql = useCallback((saveAs = false) => {
@@ -2084,41 +2050,16 @@ export const WorkbenchPage = ({
               {/* Input form */}
               <form onSubmit={handleAskGeneralAi}
                 style={{ padding: "6px 8px", borderTop: "1px solid var(--border-light)", background: "var(--bg-secondary)", display: "flex", flexDirection: "column", gap: 3 }}>
-                <div className="pill-tabs" style={{ width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-                  <button
-                    type="button"
-                    className={`pill-tab ${aiMode === "sql" ? "active" : ""}`}
-                    onClick={() => {
-                      setAiMode("sql");
-                      setAgentResponse(null);
-                      setAgentDraft(null);
-                      setAgentStreamEvents([]);
-                    }}
-                    style={{ justifyContent: "center" }}
-                  >
-                    SQL 模式
-                  </button>
-                  <button
-                    type="button"
-                    className={`pill-tab ${aiMode === "agent" ? "active" : ""}`}
-                    onClick={() => {
-                      setAiMode("agent");
-                      setAiResponse("");
-                      setAgentDraft(null);
-                      setAgentStreamEvents([]);
-                    }}
-                    style={{ justifyContent: "center" }}
-                  >
-                    Agent 模式
-                  </button>
-                </div>
-                <textarea className="input-field" placeholder="Ask 数据库、SQL、结构..."
+                <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--text-secondary)", padding: "0 4px" }}>
+                  Agent Copilot
+                </span>
+                <textarea className="input-field" placeholder="向 Agent 提问..."
                   value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
                   style={{ height: 34, fontSize: "0.7rem", resize: "none" }}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleAskGeneralAi(e); } }} />
                 <button type="submit" className="btn-primary" disabled={aiLoading || !aiPrompt.trim()}
                   style={{ padding: "2px 0", fontSize: "0.68rem", width: "100%", justifyContent: "center" }}>
-                  {aiMode === "agent" ? "运行 Agent" : "发送"}
+                  运行 Agent
                 </button>
               </form>
             </div>

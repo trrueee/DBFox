@@ -124,7 +124,7 @@ def test_resume_sse_event_payloads_are_json_serializable(db_session, demo_dataso
         decision="approved",
     )
 
-    from engine.api.ai import _format_sse_event
+    from engine.api.agent import _format_sse_event
 
     events = list(DataBoxAgentRuntime(db_session).resume_iter(response.run_id, approval.id))
     formatted = [_format_sse_event(event) for event in events]
