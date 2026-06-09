@@ -114,21 +114,24 @@ def _classify_via_llm(
         reference_kind=reference_kind,
     )
 
+    from engine.ai import prepare_chat_payload
+    payload = prepare_chat_payload(
+        model_name=model_name,
+        messages=[
+            {"role": "system", "content": "Return exactly one JSON object. No markdown, no extra text."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.0,
+        max_tokens=800,
+        response_format={"type": "json_object"},
+    )
     response = httpx.post(
         f"{api_base}/chat/completions",
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": "Return exactly one JSON object. No markdown, no extra text."},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        },
+        json=payload,
         timeout=15,
     )
     response.raise_for_status()

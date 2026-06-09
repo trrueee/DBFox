@@ -420,6 +420,42 @@ def _extract_sql_from_llm_response(response_text: str) -> str:
     return generated_query.strip().rstrip(";")
 
 
+def prepare_chat_payload(
+    model_name: str,
+    messages: list[dict[str, str]],
+    temperature: float = 0.0,
+    max_tokens: int = 800,
+    response_format: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    is_reasoning = any(term in model_name.lower() for term in ("o1", "o3", "reasoner", "deepseek-reasoner"))
+    payload: dict[str, Any] = {
+        "model": model_name,
+    }
+    if is_reasoning:
+        payload["max_completion_tokens"] = 4000
+        new_messages = []
+        system_content = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_content.append(msg.get("content", ""))
+            else:
+                new_messages.append(dict(msg))
+        if system_content:
+            first_user_idx = next((i for i, m in enumerate(new_messages) if m.get("role") == "user"), None)
+            if first_user_idx is not None:
+                new_messages[first_user_idx]["content"] = "\n".join(system_content) + "\n\n" + new_messages[first_user_idx]["content"]
+            else:
+                new_messages.insert(0, {"role": "user", "content": "\n".join(system_content)})
+        payload["messages"] = new_messages
+    else:
+        payload["messages"] = messages
+        payload["temperature"] = temperature
+        payload["max_tokens"] = max_tokens
+    if response_format:
+        payload["response_format"] = response_format
+    return payload
+
+
 def generate_sql_from_schema_context(
     *,
     question: str,
@@ -466,15 +502,15 @@ def generate_sql_from_schema_context(
         schema_context=schema_context,
         dialect=dialect_name,
     )
-    payload = {
-        "model": model_name,
-        "messages": [
+    payload = prepare_chat_payload(
+        model_name=model_name,
+        messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0,
-        "max_tokens": 800,
-    }
+        temperature=0.0,
+        max_tokens=800,
+    )
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -710,15 +746,15 @@ def generate_sql(
     
     user_prompt = USER_PROMPT_TEMPLATE.format(schema_context=schema_context, question=question)
     
-    payload = {
-        "model": model_name,
-        "messages": [
+    payload = prepare_chat_payload(
+        model_name=model_name,
+        messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.1,
-        "max_tokens": 800
-    }
+        temperature=0.1,
+        max_tokens=800,
+    )
     
     try:
         response = httpx.post(
@@ -956,16 +992,16 @@ def generate_table_design_ai(
         "Content-Type": "application/json"
     }
 
-    payload = {
-        "model": model_name,
-        "messages": [
+    payload = prepare_chat_payload(
+        model_name=model_name,
+        messages=[
             {"role": "system", "content": AI_TABLE_DESIGN_SYSTEM_PROMPT},
             {"role": "user", "content": f"User Request: \"{question}\"\nGenerate Table Design JSON:"}
         ],
-        "temperature": 0.2,
-        "max_tokens": 1200,
-        "response_format": {"type": "json_object"}
-    }
+        temperature=0.2,
+        max_tokens=1200,
+        response_format={"type": "json_object"},
+    )
 
     try:
         response = httpx.post(
@@ -1049,15 +1085,15 @@ def generate_schema_alteration_ai(
         f"Generate DDL Diffs:"
     )
 
-    payload = {
-        "model": model_name,
-        "messages": [
+    payload = prepare_chat_payload(
+        model_name=model_name,
+        messages=[
             {"role": "system", "content": AI_SCHEMA_ALTERATION_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.1,
-        "max_tokens": 1000
-    }
+        temperature=0.1,
+        max_tokens=1000,
+    )
 
     try:
         response = httpx.post(

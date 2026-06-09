@@ -244,29 +244,31 @@ class QueryPlanBuilder:
 
         semantic_context = self._build_semantic_context_text(datasource_id)
 
+        from engine.ai import prepare_chat_payload
+        payload = prepare_chat_payload(
+            model_name=model_name,
+            messages=[
+                {"role": "system", "content": QUERY_PLAN_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": QUERY_PLAN_USER_TEMPLATE.format(
+                        schema_context=schema_context,
+                        semantic_context=f"\n{semantic_context}" if semantic_context else "",
+                        question=question,
+                    ),
+                },
+            ],
+            temperature=0.0,
+            max_tokens=700,
+            response_format={"type": "json_object"},
+        )
         response = httpx.post(
             f"{api_base}/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": model_name,
-                "messages": [
-                    {"role": "system", "content": QUERY_PLAN_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": QUERY_PLAN_USER_TEMPLATE.format(
-                            schema_context=schema_context,
-                            semantic_context=f"\n{semantic_context}" if semantic_context else "",
-                            question=question,
-                        ),
-                    },
-                ],
-                "temperature": 0.0,
-                "max_tokens": 700,
-                "response_format": {"type": "json_object"},
-            },
+            json=payload,
             timeout=12.0,
         )
         if response.status_code != 200:
@@ -452,9 +454,7 @@ class QueryPlanBuilder:
                 )
             )
 
-        # Only add dimensions for grouping/per/each/by questions.
-        # Aggregate-only questions (e.g. "How many students?") should NOT get dimensions.
-        needs_dimensions = grouping or (
+        needs_dimensions = grouping or rank or (
             not metrics and _contains_any(q_lower, ("list", "show", "列出", "显示", "name", "what", "which", "who", "find"))
         )
         if needs_dimensions:
@@ -484,6 +484,10 @@ class QueryPlanBuilder:
         intent = "schema_matched_aggregate" if metrics else "schema_matched_lookup"
         if order_by and metrics and any(metric.name == "total_sold" for metric in metrics):
             intent = "rank_products_by_sales_volume"
+        elif metrics and metrics[0].name == "order_count":
+            intent = "aggregate_order_count"
+        elif metrics and metrics[0].name == "total_amount":
+            intent = "aggregate_order_amount"
 
         # Aggregate-only (COUNT/AVG/SUM without dimensions): no LIMIT needed.
         # Lookup/list queries and ranked queries: keep LIMIT.

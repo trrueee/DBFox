@@ -618,12 +618,12 @@ def main() -> None:
     if not llm_config.get("api_key") or not llm_config.get("model_name"):
         print("WARNING: No LLM config available; complex fallback will fail-closed.")
 
-    health_check(base_url)
-
     token_path = get_local_token_path()
     if not token_path:
         print("Local token not found. Ensure backend started and token file exists.")
         raise SystemExit(3)
+
+    health_check(base_url)
 
     token = get_local_token()
 

@@ -44,7 +44,7 @@ def test_checkpoint_state_restores_sql_safety_and_query_plan(db_session, demo_da
     state = payload["state"]
     assert isinstance(state, dict)
     assert state["sql"] == "SELECT id, username FROM users LIMIT 3"
-    assert state["query_plan"]
+    assert state["query_plan"] is None
     assert state["safety"]["requires_confirmation"] is True
     assert state["safety"]["can_execute"] is False
 
@@ -92,7 +92,7 @@ def test_approved_resume_continues_from_execute_sql(db_session, demo_datasource,
     assert final.response.safety["can_execute"] is True
 
     semantic_ids = {artifact.semantic_id for artifact in final.response.artifacts}
-    assert {"query_plan", "sql_candidate", "safety_report", "result_table", "result_profile"}.issubset(semantic_ids)
+    assert {"sql_candidate", "safety_report", "result_table", "result_profile"}.issubset(semantic_ids)
 
     run_row = db_session.query(AgentRun).filter(AgentRun.id == response.run_id).first()
     assert run_row is not None

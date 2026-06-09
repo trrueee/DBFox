@@ -13,6 +13,7 @@ from engine.db import DB_PATH
 logger = logging.getLogger("databox.agent_kernel.checkpointer")
 
 _CHECKPOINTER_STACK = ExitStack()
+_SHARED_MEMORY_SAVER = None
 
 
 def build_agent_kernel_checkpointer(
@@ -22,7 +23,10 @@ def build_agent_kernel_checkpointer(
 ) -> Any:
     mode = os.environ.get("DATABOX_AGENT_KERNEL_CHECKPOINTER", "").strip().lower()
     if mode == "memory" or (os.environ.get("DATABOX_TESTING") == "1" and path is None):
-        return InMemorySaver()
+        global _SHARED_MEMORY_SAVER
+        if _SHARED_MEMORY_SAVER is None:
+            _SHARED_MEMORY_SAVER = InMemorySaver()
+        return _SHARED_MEMORY_SAVER
 
     try:
         from langgraph.checkpoint.sqlite import SqliteSaver
