@@ -41,7 +41,6 @@ def build_agent_kernel_graph(
     if LangGraphStateGraph is None:
         raise RuntimeError("LangGraph is not installed; install `langgraph` to build AgentKernelGraph.")
 
-    from langgraph.types import CachePolicy
     from langgraph.cache.memory import InMemoryCache
 
     graph = cast(Any, LangGraphStateGraph)(KernelState)
@@ -55,20 +54,20 @@ def build_agent_kernel_graph(
     graph.add_node("approval_help", cast(Any, _approval_help_node))
     graph.add_node("clarification", cast(Any, _clarification_node))
 
-    graph.add_node("build_schema_context", cast(Any, _build_schema_context_node), cache_policy=CachePolicy(ttl=600))
-    graph.add_node("build_query_plan", cast(Any, _build_query_plan_node), cache_policy=CachePolicy(ttl=600))
+    graph.add_node("build_schema_context", cast(Any, _build_schema_context_node))
+    graph.add_node("build_query_plan", cast(Any, _build_query_plan_node))
     graph.add_node("generate_sql", cast(Any, _generate_sql_node))
     graph.add_node("sql_critic", cast(Any, reflect_node))
     graph.add_node("revise_sql", cast(Any, _revise_sql_node))
-    graph.add_node("validate_sql", cast(Any, _validate_sql_node), cache_policy=CachePolicy(ttl=600))
+    graph.add_node("validate_sql", cast(Any, _validate_sql_node))
     graph.add_node("validation_route", cast(Any, _validation_route_node))
     graph.add_node("execution_decision", cast(Any, _execution_decision_node))
     graph.add_node("execute_sql", cast(Any, _execute_sql_node))
     graph.add_node("skip_execution", cast(Any, _skip_execution_node))
     graph.add_node("execution_result_route", cast(Any, _execution_result_route_node))
     graph.add_node("transient_retry", cast(Any, _transient_retry_node))
-    graph.add_node("profile_result", cast(Any, _profile_result_node), cache_policy=CachePolicy(ttl=600))
-    graph.add_node("chart_suggest", cast(Any, _chart_suggest_node), cache_policy=CachePolicy(ttl=600))
+    graph.add_node("profile_result", cast(Any, _profile_result_node))
+    graph.add_node("chart_suggest", cast(Any, _chart_suggest_node))
     graph.add_node("followup_suggest", cast(Any, _followup_suggest_node))
     graph.add_node("synthesize_answer", cast(Any, _synthesize_answer_node))
     graph.add_node("load_followup_context", cast(Any, _load_followup_context_node))
