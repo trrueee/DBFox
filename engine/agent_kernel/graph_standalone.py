@@ -20,6 +20,9 @@ except ImportError:  # pragma: no cover
 
 GraphNode = Callable[[KernelState], dict[str, Any]]
 MAX_SQL_REVISIONS = 3
+MAX_TRANSIENT_RETRIES = 3
+RETRY_BACKOFF_BASE_MS = 250
+RETRY_BACKOFF_MAX_MS = 2_000
 
 
 def langgraph_available() -> bool:
@@ -60,6 +63,7 @@ def build_agent_kernel_graph(
     graph.add_node("execute_sql", cast(Any, _execute_sql_node))
     graph.add_node("skip_execution", cast(Any, _skip_execution_node))
     graph.add_node("execution_result_route", cast(Any, _execution_result_route_node))
+    graph.add_node("transient_retry", cast(Any, _transient_retry_node))
     graph.add_node("profile_result", cast(Any, _profile_result_node))
     graph.add_node("chart_suggest", cast(Any, _chart_suggest_node))
     graph.add_node("followup_suggest", cast(Any, _followup_suggest_node))
@@ -88,6 +92,7 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("validate_sql", _after_validate_sql, {"policy": "policy", "validation_route": "validation_route"})
     graph.add_edge("execute_sql", "policy")
     graph.add_edge("skip_execution", "policy")
+    graph.add_conditional_edges("transient_retry", _after_transient_retry, {"policy": "policy", "synthesize_answer": "synthesize_answer"})
     graph.add_conditional_edges("profile_result", _after_profile_result, {"policy": "policy", "chart_suggest": "chart_suggest", "synthesize_answer": "synthesize_answer"})
     graph.add_conditional_edges("chart_suggest", _after_chart_suggest, {"policy": "policy", "followup_suggest": "followup_suggest"})
     graph.add_conditional_edges("followup_suggest", _after_followup_suggest, {"policy": "policy", "synthesize_answer": "synthesize_answer"})
@@ -212,6 +217,11 @@ def _skip_execution_node(_state: KernelState) -> dict[str, Any]:
 
 def _execution_result_route_node(state: KernelState) -> dict[str, Any]:
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    telemetry = _error_telemetry(state)
+    if telemetry and telemetry.get("retryable"):
+        return _go("transient_retry", "Execution failed with retryable telemetry.")
+    if telemetry and _is_sql_or_db_semantic_error(state) and _revision_count(state) < MAX_SQL_REVISIONS:
+        return _go("revise_sql", "Execution failed with non-retryable SQL/DB error; revise SQL.")
     if not execution:
         return _go("execution_decision", "Missing execution result.")
     if execution.get("success") is False and _revision_count(state) < MAX_SQL_REVISIONS:
@@ -219,6 +229,47 @@ def _execution_result_route_node(state: KernelState) -> dict[str, Any]:
     if execution.get("success") is False:
         return _call("answer.synthesize", {}, "Explain execution failure after retry limit.")
     return _go("profile_result", "Execution succeeded.")
+
+
+def _transient_retry_node(state: KernelState) -> dict[str, Any]:
+    telemetry = _error_telemetry(state)
+    failed_tool_call = state.get("last_failed_tool_call") if isinstance(state.get("last_failed_tool_call"), dict) else {}
+    tool_name = str(failed_tool_call.get("tool_name") or telemetry.get("tool_name") or state.get("last_tool_name") or "")
+    if not tool_name or not failed_tool_call:
+        return _call("answer.synthesize", {}, "Cannot retry because failed tool context is missing.")
+
+    counters = dict(state.get("retry_counters") or {})
+    current_attempts = int(counters.get(tool_name, 0))
+    if current_attempts >= MAX_TRANSIENT_RETRIES:
+        return {
+            "status": "running",
+            "error": str(state.get("error") or telemetry.get("error_type") or "Retry limit reached."),
+            "pending_tool_call": None,
+            "agent_graph_route": "synthesize_answer",
+            "trace_events": [
+                {
+                    "type": "agent.retry.exhausted",
+                    "payload": {"tool_name": tool_name, "attempts": current_attempts, "telemetry": telemetry},
+                }
+            ],
+        }
+
+    next_attempt = current_attempts + 1
+    counters[tool_name] = next_attempt
+    backoff_ms = min(RETRY_BACKOFF_BASE_MS * (2 ** max(next_attempt - 1, 0)), RETRY_BACKOFF_MAX_MS)
+    retry_call = {"tool_name": tool_name, "args": dict(failed_tool_call.get("args") or {})}
+    return {
+        "status": "running",
+        "error": None,
+        "pending_tool_call": retry_call,
+        "retry_counters": counters,
+        "trace_events": [
+            {
+                "type": "agent.retry.scheduled",
+                "payload": {"tool_name": tool_name, "attempt": next_attempt, "backoff_ms": backoff_ms, "telemetry": telemetry},
+            }
+        ],
+    }
 
 
 def _profile_result_node(state: KernelState) -> dict[str, Any]:
@@ -279,7 +330,7 @@ def _clarification_node(_state: KernelState) -> dict[str, Any]:
 
 def _observe_node(state: KernelState) -> dict[str, Any]:
     observation = state.get("last_observation") if isinstance(state.get("last_observation"), dict) else {}
-    payload = {"tool_name": state.get("last_tool_name"), "status": observation.get("status"), "has_error": bool(observation.get("error"))}
+    payload = {"tool_name": state.get("last_tool_name"), "status": observation.get("status"), "has_error": bool(observation.get("error")), "retryable": bool(_error_telemetry(state).get("retryable"))}
     return {"agent_observation": payload, "trace_events": [{"type": "agent.observe", "payload": payload}]}
 
 
@@ -305,6 +356,10 @@ def _after_revise_sql(state: KernelState) -> str:
 
 def _after_validate_sql(state: KernelState) -> str:
     return "policy" if _has_tool_call(state) else "validation_route"
+
+
+def _after_transient_retry(state: KernelState) -> str:
+    return "policy" if _has_tool_call(state) else "synthesize_answer"
 
 
 def _after_profile_result(state: KernelState) -> str:
@@ -366,6 +421,11 @@ def _after_approval(state: KernelState) -> str:
 
 
 def _after_observe(state: KernelState) -> str:
+    telemetry = _error_telemetry(state)
+    if telemetry.get("retryable"):
+        return "transient_retry" if _can_retry_transient(state) else "synthesize_answer"
+    if telemetry and _is_sql_or_db_semantic_error(state) and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
+        return "revise_sql"
     if state.get("error") and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
         return "revise_sql"
     if state.get("error"):
@@ -395,7 +455,7 @@ def _after_observe(state: KernelState) -> str:
 
 
 def _observe_routes() -> dict[Hashable, str]:
-    return {"build_query_plan": "build_query_plan", "generate_sql": "generate_sql", "sql_critic": "sql_critic", "validation_route": "validation_route", "execution_result_route": "execution_result_route", "profile_result": "profile_result", "chart_suggest": "chart_suggest", "followup_suggest": "followup_suggest", "synthesize_answer": "synthesize_answer", "revise_sql": "revise_sql", "answer": "answer", "route_intent": "route_intent"}
+    return {"build_query_plan": "build_query_plan", "generate_sql": "generate_sql", "sql_critic": "sql_critic", "validation_route": "validation_route", "execution_result_route": "execution_result_route", "transient_retry": "transient_retry", "profile_result": "profile_result", "chart_suggest": "chart_suggest", "followup_suggest": "followup_suggest", "synthesize_answer": "synthesize_answer", "revise_sql": "revise_sql", "answer": "answer", "route_intent": "route_intent"}
 
 
 def _after_sql_critic(state: KernelState) -> str:
@@ -418,7 +478,7 @@ def _after_execution_decision(state: KernelState) -> str:
 
 def _after_execution_result_route(state: KernelState) -> str:
     route = str(state.get("agent_graph_route") or "")
-    return route if route in {"profile_result", "revise_sql", "synthesize_answer", "answer", "execution_decision"} else "synthesize_answer"
+    return route if route in {"profile_result", "revise_sql", "synthesize_answer", "answer", "execution_decision", "transient_retry"} else "synthesize_answer"
 
 
 def _intent(state: KernelState) -> str:
@@ -439,6 +499,35 @@ def _answer(answer: str, reason: str) -> dict[str, Any]:
     return {"status": "completed", "agent_graph_route": "answer", "answer": payload, "final_answer": payload, "trace_events": [{"type": "agent.graph.answer", "payload": {"reason": reason}}]}
 
 
+def _error_telemetry(state: KernelState) -> dict[str, Any]:
+    telemetry = state.get("last_error_telemetry")
+    return telemetry if isinstance(telemetry, dict) else {}
+
+
+def _failed_tool_name(state: KernelState) -> str:
+    failed_tool_call = state.get("last_failed_tool_call") if isinstance(state.get("last_failed_tool_call"), dict) else {}
+    telemetry = _error_telemetry(state)
+    return str(failed_tool_call.get("tool_name") or telemetry.get("tool_name") or state.get("last_tool_name") or "")
+
+
+def _can_retry_transient(state: KernelState) -> bool:
+    tool_name = _failed_tool_name(state)
+    if not tool_name:
+        return False
+    counters = state.get("retry_counters") if isinstance(state.get("retry_counters"), dict) else {}
+    return int(counters.get(tool_name, 0)) < MAX_TRANSIENT_RETRIES
+
+
+def _is_sql_or_db_semantic_error(state: KernelState) -> bool:
+    telemetry = _error_telemetry(state)
+    tool_name = _failed_tool_name(state)
+    error_type = str(telemetry.get("error_type") or "").lower()
+    if tool_name in {"sql.execute_readonly", "sql.validate"}:
+        return True
+    semantic_tokens = ("sql", "database", "dbapi", "programmingerror", "operationalerror", "databaseerror", "syntax", "sqlite")
+    return any(token in error_type for token in semantic_tokens)
+
+
 def _reference_sql(state: KernelState) -> str | None:
     reference = resolve_reference(state)
     sql_preview = reference.get("sql_preview")
@@ -450,6 +539,9 @@ def _revision_reason(state: KernelState) -> str:
     critique = reflection.get("sql_critique") if isinstance(reflection.get("sql_critique"), dict) else state.get("agent_sql_critique")
     if isinstance(critique, dict) and critique.get("issues"):
         return "; ".join(str(issue) for issue in critique.get("issues", []))
+    telemetry = _error_telemetry(state)
+    if telemetry:
+        return str(telemetry.get("error_type") or state.get("error") or "Tool execution failed.")
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     return str(execution.get("revise_suggestion") or state.get("error") or latest_user_message(state) or "Revise SQL.")
 
