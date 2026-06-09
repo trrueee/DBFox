@@ -25,6 +25,7 @@ def test_trust_gate_schema_warning_requires_confirmation(db_session, demo_dataso
     result = TrustGate(db_session, validate_sql_schema).evaluate(
         demo_datasource.id,
         "SELECT imaginary_column FROM users LIMIT 10",
+        policy="agent_readonly",
     )
 
     assert result["riskLevel"] == "warning"
@@ -55,6 +56,7 @@ def test_trust_gate_prod_datasource_requires_confirmation(db_session, demo_datas
     result = TrustGate(db_session, validate_sql_schema).evaluate(
         demo_datasource.id,
         "SELECT id, username FROM users LIMIT 10",
+        policy="agent_readonly",
     )
 
     assert result["riskLevel"] == "safe"

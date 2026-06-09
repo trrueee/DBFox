@@ -173,4 +173,5 @@ def _answer_synthesizer(_input: dict[str, Any], ctx: AgentToolContext) -> ToolOb
         execution=state.execution,
         result_profile=state.result_profile,
         suggestions=state.suggestions,
+        error=state.error,
     )

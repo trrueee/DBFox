@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.agent.types import ToolObservation
-from engine.agent_kernel.tool_registry import ToolContext
+from engine.agent.tool_registry import ToolContext
 from engine.models import SchemaTable, SchemaColumn
 from engine.databox_agent.environment.schema_catalog_sync import ensure_catalog
 from engine.databox_agent.environment.schema_introspector import introspect_datasource

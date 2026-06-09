@@ -19,9 +19,13 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
     step_count = int(state.get("step_count", 0))
     max_steps = int(state.get("max_steps", 20))
     if step_count >= max_steps:
+        if not state.get("safety"):
+            err = "Agent stopped before SQL validation because max_steps was reached."
+        else:
+            err = f"Agent exceeded max_steps ({max_steps})."
         return {
             "status": "failed",
-            "error": f"Agent exceeded max_steps ({max_steps}).",
+            "error": err,
             "trace_events": [
                 {
                     "type": "agent.max_steps_exceeded",

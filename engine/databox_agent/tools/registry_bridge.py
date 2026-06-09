@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 from langchain_core.tools import StructuredTool
 
-from engine.agent_kernel.tool_registry import ToolRegistry
+from engine.agent.tool_registry import ToolRegistry
 from engine.databox_agent.tools.tool_manifest import enrich_description
 from engine.databox_agent.tools.tool_aliases import to_alias
 

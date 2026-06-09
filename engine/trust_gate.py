@@ -14,7 +14,15 @@ from engine.sql_dry_run import dry_run_query
 
 
 RiskLevel = Literal["safe", "warning", "danger"]
-ExecutionPolicy = Literal["readonly", "agent_readonly", "explain"]
+ExecutionPolicy = Literal[
+    "readonly",
+    "user_readonly",
+    "agent_readonly",
+    "table_preview",
+    "schema_introspection",
+    "explain",
+    "export",
+]
 SchemaValidator = Callable[[str, Session, str], list[str]]
 
 
@@ -52,7 +60,7 @@ class TrustGate:
         self.db = db
         self.schema_validator = schema_validator
 
-    def evaluate(self, datasource_id: str, sql: str) -> TrustGateResult:
+    def evaluate(self, datasource_id: str, sql: str, policy: ExecutionPolicy = "readonly") -> TrustGateResult:
         datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
         dialect = str(datasource.db_type or "mysql") if datasource else "mysql"
         env = str(datasource.env or "dev").lower() if datasource else "dev"
@@ -75,10 +83,14 @@ class TrustGate:
             risk_level = "safe"
             messages.append("SQL passed schema validation and guardrail checks.")
 
-        requires_confirmation = risk_level == "warning"
-        if env == "prod":
-            requires_confirmation = True
-            messages.append("Production datasource requires manual confirmation.")
+        requires_confirmation = _requires_confirmation(
+            env=env, policy=policy, risk_level=risk_level,
+        )
+        if requires_confirmation:
+            if env == "prod":
+                messages.append("Production datasource agent execution requires manual confirmation.")
+            else:
+                messages.append("Execution requires manual confirmation.")
 
         can_execute = guardrail_result != "reject"
 
@@ -99,7 +111,7 @@ class TrustGate:
         policy: ExecutionPolicy = "readonly",
     ) -> ExecutionSafetyDecision:
         datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
-        trust_gate = self.evaluate(datasource_id, sql)
+        trust_gate = self.evaluate(datasource_id, sql, policy=policy)
         guardrail = trust_gate["guardrail"]
         schema_warnings = list(trust_gate.get("schemaWarnings", []))
         messages = list(trust_gate.get("messages", []))
@@ -111,7 +123,9 @@ class TrustGate:
             policy == "agent_readonly"
             and any(check.get("rule") == "select_star" for check in guardrail_checks)
         )
-        requires_confirmation = env == "prod"
+        requires_confirmation = _requires_confirmation(
+            env=env, policy=policy, risk_level=trust_gate["riskLevel"],
+        )
         blocked_reasons: list[str] = []
 
         if not datasource:
@@ -178,6 +192,38 @@ class TrustGate:
             blocked_reasons=blocked_reasons,
             messages=messages,
         )
+
+
+def _requires_confirmation(
+    *,
+    env: str,
+    policy: ExecutionPolicy,
+    risk_level: RiskLevel,
+) -> bool:
+    """Determine whether human confirmation is required.
+
+    Key principle: prod ≠ blocked.  The decision depends on WHO is
+    executing (user vs agent) and WHAT they are doing (browsing vs
+    generating SQL autonomously).
+    """
+    # Non-intrusive operations — never require confirmation
+    if policy in {"table_preview", "schema_introspection", "explain"}:
+        return False
+
+    # User manually executing their own SQL — allow with guardrail
+    if policy == "user_readonly":
+        return False
+
+    # Agent autonomously executing SQL — stricter
+    if policy == "agent_readonly":
+        return env == "prod" or risk_level == "warning"
+
+    # Export — allowed (export of existing result, not re-execution)
+    if policy == "export":
+        return False
+
+    # Legacy / fallback — danger is blocked, not confirmed
+    return False
 
 
 def _should_dry_run(sql: str) -> bool:

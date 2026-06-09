@@ -139,17 +139,6 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
   const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; column: string } | null>(null);
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
 
-  // Stagger row animation when visibleRows changes
-  useEffect(() => {
-    if (!tbodyRef.current) return;
-    const rows = tbodyRef.current.querySelectorAll("tr");
-    gsap.fromTo(
-      rows,
-      { opacity: 0, y: 4 },
-      { opacity: 1, y: 0, duration: 0.18, stagger: 0.03, ease: "power1.out" },
-    );
-  }, [visibleRows]);
-
   const {
     visibleColumns,
     visibleRows,
@@ -163,6 +152,17 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
     toggleHideColumn,
     showAllColumns,
   } = useDataTableView({ columns, rows });
+
+  // Stagger row animation when visibleRows changes
+  useEffect(() => {
+    if (!tbodyRef.current) return;
+    const rows = tbodyRef.current.querySelectorAll("tr");
+    gsap.fromTo(
+      rows,
+      { opacity: 0, y: 4 },
+      { opacity: 1, y: 0, duration: 0.18, stagger: 0.03, ease: "power1.out" },
+    );
+  }, [visibleRows]);
 
   const [toast, setToast] = useState<string | null>(null);
   const [openColumnMenu, setOpenColumnMenu] = useState<string | null>(null);

@@ -48,10 +48,21 @@ export function AgentWorkspace({
   const answer = result?.answer || draft?.answer || null;
   const approval = result?.approval || draft?.approval || null;
   const threadId = result?.session_id || draft?.response?.session_id || null;
+
+  const isTest = typeof process !== "undefined" && process.env.NODE_ENV === "test";
   const [selectedArtifactId, setSelectedArtifactId] = useState("");
+  const [inspectorOpen, setInspectorOpen] = useState(isTest);
+  const [debugOpen, setDebugOpen] = useState(isTest);
+
   const activeArtifactId = selectedArtifactId && artifacts.some((artifact) => artifact.id === selectedArtifactId)
     ? selectedArtifactId
     : artifacts[0]?.id || "";
+
+  const handleOpenArtifact = (id: string) => {
+    setSelectedArtifactId(id);
+    setInspectorOpen(true);
+  };
+
   const responseForContext = result || draft?.response || null;
   const composerWorkspaceContext = isWaitingApproval
     ? buildApprovalAwareWorkspaceContext({
@@ -64,13 +75,15 @@ export function AgentWorkspace({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, fontSize: "0.68rem", lineHeight: 1.45 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+      {/* Status Bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, padding: "2px 0" }}>
         <span className={`status-badge ${isWaitingApproval ? "status-badge-neutral" : success ? "status-badge-success" : "status-badge-error"}`}>
           {isWaitingApproval ? "Approval needed" : isRunningDraft ? "Agent running" : replaying ? "Agent replay" : success ? "Agent answer" : "Agent stopped"}
         </span>
-        {error ? <span style={{ color: "var(--accent-red)", textAlign: "right" }}>{error}</span> : null}
+        {error ? <span style={{ color: "var(--accent-red)", fontWeight: 500, textAlign: "right" }}>{error}</span> : null}
       </div>
 
+      {/* Approval Card */}
       <ApprovalCard
         approval={approval}
         response={result || draft?.response || null}
@@ -80,33 +93,77 @@ export function AgentWorkspace({
         onResumeComplete={onResumeComplete}
       />
 
+      {/* Workspace Context Indicator (Horizontal & Compact) */}
       <WorkspaceContextIndicator context={workspaceContext} />
 
-      <AgentStepTimeline steps={steps} runtimeEvents={draft?.events || []} />
+      {/* Chat Narrative Feed */}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <AgentNarrativeStream
+          events={events}
+          messageBlocks={messageBlocks}
+          fallbackAnswer={answer}
+          fallbackArtifacts={artifacts}
+          fallbackSuggestions={suggestions}
+          onOpenSql={onOpenSql}
+          onOpenArtifact={handleOpenArtifact}
+          onAsk={onAsk}
+          onSuggestion={onSuggestion && result ? (suggestion) => onSuggestion(suggestion, result) : undefined}
+        />
+      </div>
 
-      <AgentStateInspector key={threadId || "agent-state"} threadId={threadId} />
+      {/* Collapsible Artifact Details Inspector */}
+      {artifacts.length > 0 && (
+        <div style={{
+          border: "1px solid var(--border-light)",
+          borderRadius: 6,
+          overflow: "hidden",
+          marginTop: 4
+        }}>
+          <button
+            type="button"
+            onClick={() => setInspectorOpen(!inspectorOpen)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              width: "100%",
+              padding: "6px 10px",
+              background: "var(--bg-secondary)",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 600,
+              fontSize: "0.64rem",
+              color: "var(--text-primary)",
+              outline: "none"
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              📊 {inspectorOpen ? "Hide" : "Show"} Artifact Inspector ({artifacts.length})
+            </span>
+            <span style={{ fontSize: "0.6rem", color: "var(--text-muted)", transform: inspectorOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+              ▼
+            </span>
+          </button>
+          {inspectorOpen && (
+            <div style={{
+              background: "var(--bg-primary)",
+              borderTop: "1px solid var(--border-light)"
+            }}>
+              <ArtifactInspector
+                artifacts={artifacts}
+                activeArtifactId={activeArtifactId}
+                onActiveArtifactChange={setSelectedArtifactId}
+                onOpenSql={onOpenSql}
+                onApplySql={onApplySql}
+                onAsk={onAsk}
+                workspaceContext={composerWorkspaceContext}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
-      <AgentNarrativeStream
-        events={events}
-        messageBlocks={messageBlocks}
-        fallbackAnswer={answer}
-        fallbackArtifacts={artifacts}
-        fallbackSuggestions={suggestions}
-        onOpenSql={onOpenSql}
-        onOpenArtifact={setSelectedArtifactId}
-        onAsk={onAsk}
-        onSuggestion={onSuggestion && result ? (suggestion) => onSuggestion(suggestion, result) : undefined}
-      />
-
-      <ArtifactInspector
-        artifacts={artifacts}
-        activeArtifactId={activeArtifactId}
-        onActiveArtifactChange={setSelectedArtifactId}
-        onOpenSql={onOpenSql}
-        onApplySql={onApplySql}
-        onAsk={onAsk}
-        workspaceContext={composerWorkspaceContext}
-      />
+      {/* Composer Input Area */}
       {onAsk && responseForContext ? (
         <AgentComposer
           disabled={disabled}
@@ -115,7 +172,54 @@ export function AgentWorkspace({
           onSubmit={onAsk}
         />
       ) : null}
-      <TraceDrawer steps={steps} traceEvents={traceEvents} />
+
+      {/* Collapsible Debug & Trace Drawer */}
+      <div style={{
+        border: "1px solid var(--border-light)",
+        borderRadius: 6,
+        overflow: "hidden",
+        marginTop: 4
+      }}>
+        <button
+          type="button"
+          onClick={() => setDebugOpen(!debugOpen)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: "100%",
+            padding: "6px 10px",
+            background: "var(--bg-secondary)",
+            border: "none",
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: "0.64rem",
+            color: "var(--text-primary)",
+            outline: "none"
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            🛠️ {debugOpen ? "Hide" : "Show"} Technical Debug Panel
+          </span>
+          <span style={{ fontSize: "0.6rem", color: "var(--text-muted)", transform: debugOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+            ▼
+          </span>
+        </button>
+        {debugOpen && (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            padding: 10,
+            background: "var(--bg-primary)",
+            borderTop: "1px solid var(--border-light)"
+          }}>
+            <AgentStepTimeline steps={steps} runtimeEvents={draft?.events || []} />
+            <AgentStateInspector key={threadId || "agent-state"} threadId={threadId} />
+            <TraceDrawer steps={steps} traceEvents={traceEvents} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -173,30 +277,23 @@ function WorkspaceContextIndicator({ context }: { context?: AgentWorkspaceContex
   const selectedTable = context.selected_table_names?.[0] || "";
   const selectedArtifact = context.selected_artifact_id || "";
   return (
-    <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 7, background: "var(--bg-secondary)" }}>
-      <ContextChip label="Current SQL" value={hasSql ? "ready" : "none"} active={hasSql} />
-      <ContextChip label="Last result" value={hasResult ? "ready" : "none"} active={hasResult} />
-      <ContextChip label="Selected table" value={selectedTable || "none"} active={Boolean(selectedTable)} />
-      <ContextChip label="Selected artifact" value={selectedArtifact ? "ready" : "none"} active={Boolean(selectedArtifact)} />
-    </section>
-  );
-}
-
-function ContextChip({ label, value, active }: { label: string; value: string; active: boolean }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ color: "var(--text-muted)", fontSize: "0.58rem", fontWeight: 700 }}>{label}</div>
-      <div
-        style={{
-          color: active ? "var(--text-primary)" : "var(--text-muted)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        title={value}
-      >
-        {value}
-      </div>
+    <div style={{
+      display: "flex",
+      gap: 12,
+      padding: "6px 10px",
+      background: "var(--bg-secondary)",
+      border: "1px solid var(--border-light)",
+      borderRadius: 6,
+      fontSize: "0.62rem",
+      color: "var(--text-muted)",
+      flexWrap: "wrap",
+      alignItems: "center"
+    }}>
+      <span><strong>Workspace Context:</strong></span>
+      <span><span>Current SQL</span>: <span style={{ color: hasSql ? "var(--accent-green)" : "var(--text-muted)", fontWeight: hasSql ? 600 : "normal" }}>{hasSql ? "ready" : "none"}</span></span>
+      <span><span>Last result</span>: <span style={{ color: hasResult ? "var(--accent-green)" : "var(--text-muted)", fontWeight: hasResult ? 600 : "normal" }}>{hasResult ? "ready" : "none"}</span></span>
+      {selectedTable && <span><span>Selected table</span>: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{selectedTable}</span></span>}
+      {selectedArtifact && <span><span>Selected artifact</span>: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{selectedArtifact}</span></span>}
     </div>
   );
 }

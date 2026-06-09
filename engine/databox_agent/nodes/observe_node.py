@@ -5,7 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.types import ToolObservation
-from engine.agent_kernel.databinding import apply_tool_result_to_state
+from engine.agent.databinding import apply_tool_result_to_state
 from engine.databox_agent.graph.state import DataBoxAgentState
 from engine.agent import persistence as ap
 from engine.agent.artifacts import (

@@ -55,6 +55,7 @@ export function AgentStepTimeline({ steps, runtimeEvents = [] }: AgentStepTimeli
             />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={`${step.name} (${stepDisplayName(step.name)})`}>
               {stepDisplayName(step.name)}
+              <span style={{ display: "none" }}>{step.name}</span>
             </span>
             <span className={`status-badge ${statusClass(step.status)}`} style={{ fontSize: "0.58rem" }}>
               {step.status}

@@ -197,7 +197,7 @@ class FollowupLoadContextTool(BaseTool[EmptyToolInput, FollowupLoadContextOutput
     output_schema = FollowupLoadContextOutput
 
     def _run(self, tool_input: EmptyToolInput, context: ExecutionContext) -> FollowupLoadContextOutput:
-        from engine.agent_kernel.databox_tools import load_followup_context_tool
+        from engine.agent.tools import load_followup_context_tool
         req = _dummy_request(context, "")
         obs = load_followup_context_tool(req)
         return FollowupLoadContextOutput.model_validate(obs.output or {})
@@ -210,7 +210,7 @@ class SchemaBuildContextTool(BaseTool[SchemaBuildContextInput, SchemaBuildContex
     output_schema = SchemaBuildContextOutput
 
     def _run(self, tool_input: SchemaBuildContextInput, context: ExecutionContext) -> SchemaBuildContextOutput:
-        from engine.agent_kernel.databox_tools import build_schema_context_tool
+        from engine.agent.tools import build_schema_context_tool
         req = _dummy_request(context, tool_input.question)
         req.optimize_rag = tool_input.optimize_rag
         obs = build_schema_context_tool(context.db_session, req)
@@ -224,7 +224,7 @@ class QueryPlanBuildTool(BaseTool[QueryPlanBuildInput, QueryPlanBuildOutput]):
     output_schema = QueryPlanBuildOutput
 
     def _run(self, tool_input: QueryPlanBuildInput, context: ExecutionContext) -> QueryPlanBuildOutput:
-        from engine.agent_kernel.databox_tools import build_query_plan_tool
+        from engine.agent.tools import build_query_plan_tool
         req = _dummy_request(context, tool_input.question)
         obs = build_query_plan_tool(context.db_session, req, schema_context=tool_input.schema_context)
         return QueryPlanBuildOutput.model_validate(obs.output or {})
@@ -237,7 +237,7 @@ class SqlGenerateTool(BaseTool[SqlGenerateInput, SqlCandidateOutput]):
     output_schema = SqlCandidateOutput
 
     def _run(self, tool_input: SqlGenerateInput, context: ExecutionContext) -> SqlCandidateOutput:
-        from engine.agent_kernel.databox_tools import generate_sql_tool
+        from engine.agent.tools import generate_sql_tool
         req = _dummy_request(context, tool_input.question)
         obs = generate_sql_tool(
             context.db_session,
@@ -260,7 +260,7 @@ class SqlValidateTool(BaseTool[SqlValidateInput, SqlSafetyOutput]):
     output_schema = SqlSafetyOutput
 
     def _run(self, tool_input: SqlValidateInput, context: ExecutionContext) -> SqlSafetyOutput:
-        from engine.agent_kernel.databox_tools import validate_sql_tool
+        from engine.agent.tools import validate_sql_tool
         obs = validate_sql_tool(context.db_session, context.datasource_id, tool_input.sql or "")
         return SqlSafetyOutput.model_validate(obs.output or {})
 
@@ -272,7 +272,7 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecutionInput, SqlExecutionOutput]):
     output_schema = SqlExecutionOutput
 
     def _run(self, tool_input: SqlExecutionInput, context: ExecutionContext) -> SqlExecutionOutput:
-        from engine.agent_kernel.databox_tools import execute_sql_tool
+        from engine.agent.tools import execute_sql_tool
         req = _dummy_request(context, tool_input.question)
         safety = tool_input.safety or {}
         sql = tool_input.sql or safety.get("safe_sql") or ""
@@ -287,7 +287,7 @@ class SqlSkipExecutionTool(BaseTool[EmptyToolInput, SqlSkipExecutionOutput]):
     output_schema = SqlSkipExecutionOutput
 
     def _run(self, tool_input: EmptyToolInput, context: ExecutionContext) -> SqlSkipExecutionOutput:
-        from engine.agent_kernel.databox_tools import skipped_execute_observation
+        from engine.agent.tools import skipped_execute_observation
         obs = skipped_execute_observation()
         return SqlSkipExecutionOutput.model_validate(obs.output or {})
 
@@ -299,7 +299,7 @@ class SqlReviseTool(BaseTool[SqlRevisionInput, SqlRevisionOutput]):
     output_schema = SqlRevisionOutput
 
     def _run(self, tool_input: SqlRevisionInput, context: ExecutionContext) -> SqlRevisionOutput:
-        from engine.agent_kernel.databox_tools import revise_sql_tool
+        from engine.agent.tools import revise_sql_tool
         instruction = (
             tool_input.instruction
             or tool_input.user_instruction
@@ -326,7 +326,7 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfileOutput]):
     output_schema = ResultProfileOutput
 
     def _run(self, tool_input: ResultProfileInput, context: ExecutionContext) -> ResultProfileOutput:
-        from engine.agent_kernel.databox_tools import profile_result_tool
+        from engine.agent.tools import profile_result_tool
         req = _dummy_request(context, tool_input.question)
         obs = profile_result_tool(req, tool_input.query_plan, tool_input.execution)
         return ResultProfileOutput.model_validate(obs.output or {})
@@ -339,7 +339,7 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, ChartSuggestOutput]):
     output_schema = ChartSuggestOutput
 
     def _run(self, tool_input: ChartSuggestInput, context: ExecutionContext) -> ChartSuggestOutput:
-        from engine.agent_kernel.databox_tools import suggest_chart_tool
+        from engine.agent.tools import suggest_chart_tool
         obs = suggest_chart_tool(tool_input.execution)
         return ChartSuggestOutput.model_validate(obs.output or {})
 
@@ -351,7 +351,7 @@ class FollowupSuggestTool(BaseTool[FollowupSuggestInput, FollowupSuggestOutput])
     output_schema = FollowupSuggestOutput
 
     def _run(self, tool_input: FollowupSuggestInput, context: ExecutionContext) -> FollowupSuggestOutput:
-        from engine.agent_kernel.databox_tools import suggest_followups_tool
+        from engine.agent.tools import suggest_followups_tool
         req = _dummy_request(context, tool_input.question)
         obs = suggest_followups_tool(
             req,
@@ -371,7 +371,7 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AnswerSynthesizeOutpu
     output_schema = AnswerSynthesizeOutput
 
     def _run(self, tool_input: AnswerSynthesizeInput, context: ExecutionContext) -> AnswerSynthesizeOutput:
-        from engine.agent_kernel.databox_tools import answer_synthesizer_tool
+        from engine.agent.tools import answer_synthesizer_tool
         req = _dummy_request(context, tool_input.question)
         obs = answer_synthesizer_tool(
             req=req,

@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from engine.agent.types import ToolObservation
-from engine.agent_kernel.tool_registry import ToolContext
+from engine.agent.tool_registry import ToolContext
 from engine.databox_agent.memory.long_term_store import get_long_term_store
 from engine.databox_agent.memory.memory_policy import is_safe_for_long_term, default_status
 from engine.databox_agent.memory.memory_schema import MemoryRecord, MemoryType, MemorySource

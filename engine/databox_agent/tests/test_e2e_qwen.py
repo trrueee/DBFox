@@ -84,7 +84,7 @@ class TestRealModelToolCalling:
     def test_model_sees_alias_tool_names(self):
         """Model should receive underscore-aliased tool names, not dotted names."""
         from engine.databox_agent.tools.registry_bridge import build_langchain_tools
-        from engine.agent_kernel.databox_tools import register_databox_tools
+        from engine.agent.databox_tools import register_databox_tools
 
         registry = register_databox_tools()
         tools = build_langchain_tools(registry)
