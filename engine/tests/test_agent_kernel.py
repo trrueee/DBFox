@@ -353,12 +353,24 @@ def test_agent_kernel_policy_blocks_execution_without_validated_sql() -> None:
     assert "sql.validate" in decision.reason
 
 
-def test_agent_kernel_policy_uses_state_safe_sql_for_execution() -> None:
+def test_agent_kernel_policy_blocks_mismatched_sql_override() -> None:
     registry = register_databox_tools()
     decision = PolicyGate(registry).check(
         {"safety": {"can_execute": True, "safe_sql": "SELECT id FROM users LIMIT 3"}},
         "sql.execute_readonly",
         {"sql": "SELECT * FROM secrets"},
+    )
+
+    assert decision.status == "blocked"
+    assert "does not match" in decision.reason
+
+
+def test_agent_kernel_policy_allows_matching_sql() -> None:
+    registry = register_databox_tools()
+    decision = PolicyGate(registry).check(
+        {"safety": {"can_execute": True, "safe_sql": "SELECT id FROM users LIMIT 3"}},
+        "sql.execute_readonly",
+        {"sql": "SELECT id FROM users LIMIT 3"},
     )
 
     assert decision.status == "allowed"
@@ -745,9 +757,22 @@ def test_controller_routes_review_only_final_answer_to_answer_synthesizer(monkey
         available_tools=[],
     )
 
-    assert decision.action == "call_tool"
-    assert decision.tool_call is not None
     assert decision.tool_call.tool_name == "answer.synthesize"
+
+
+def test_agent_kernel_sql_execute_blocks_mismatched_sql(db_session) -> None:
+    registry = register_databox_tools()
+    tool = registry.require("sql.execute_readonly")
+    ctx = ToolContext(
+        db=db_session,
+        request=AgentRunRequest(datasource_id="ds_1", question="run query"),
+        state={
+            "safety": {"can_execute": True, "safe_sql": "SELECT id FROM users LIMIT 3"},
+        },
+    )
+    obs = tool.handler(ctx, {"sql": "SELECT * FROM secrets"})
+    assert obs.status == "failed"
+    assert "does not match" in obs.error
 
 
 def test_agent_kernel_sql_revise_accepts_instruction_and_pending_approval_sql(

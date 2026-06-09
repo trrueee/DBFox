@@ -401,3 +401,84 @@ def test_ai_first_llm_json_inside_markdown_fence(monkeypatch) -> None:
     assert intent == "chart_request"
     assert source == "llm"
     assert llm_trace is not None
+
+
+def test_clarification_trusted_even_at_low_confidence(monkeypatch) -> None:
+    """LLM returns clarification with low confidence → trusted, not fallen back.
+
+    Falling back would risk reclassifying the message as new_data_question
+    and starting an unwanted SQL pipeline.  Clarification is the safe intent.
+    """
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({
+                                "intent": "clarification",
+                                "confidence": "low",
+                                "reason": "The user's message is too vague.",
+                                "needs_execution": False,
+                            })
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+
+    state = {
+        "messages": [{"role": "user", "content": "嗯..."}],
+        "api_key": "sk-test",
+    }
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    assert intent == "clarification"
+    assert source == "llm"
+    assert llm_trace is not None
+
+
+def test_trace_event_includes_source_and_llm_trace(monkeypatch) -> None:
+    """The agent.understand trace event payload carries source + llm_trace."""
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({
+                                "intent": "new_data_question",
+                                "confidence": "low",
+                                "reason": "Unclear.",
+                                "needs_execution": False,
+                            })
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+
+    state: dict = {
+        "messages": [{"role": "user", "content": "查一下 GMV"}],
+        "api_key": "sk-test",
+    }
+    result = understand_node(state)
+    trace_events = result.get("trace_events", [])
+    assert len(trace_events) == 1
+    trace_payload = trace_events[0]["payload"]
+    assert trace_payload["source"] == "rule_fallback"
+    assert "llm_trace" in trace_payload
+    assert trace_payload["llm_trace"]["fallback_reason"] == "llm_low_confidence"

@@ -485,7 +485,22 @@ def _sql_validate(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
 def _sql_execute_readonly(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     raw_safety = ctx.state.get("safety")
     safety: dict[str, Any] = raw_safety if isinstance(raw_safety, dict) else {}
-    safe_sql = args.get("sql") or safety.get("safe_sql") or ctx.state.get("sql")
+    state_safe_sql = str(safety.get("safe_sql") or "").strip()
+    
+    args_sql = str(args.get("sql") or "").strip()
+    if args_sql and state_safe_sql:
+        normalized_args_sql = " ".join(args_sql.lower().split())
+        normalized_safe_sql = " ".join(state_safe_sql.lower().split())
+        if normalized_args_sql != normalized_safe_sql:
+            return ToolObservation(
+                name="sql.execute_readonly",
+                status="failed",
+                input=args,
+                error="Execution SQL parameter does not match the validated safety SQL.",
+                latency_ms=0,
+            )
+            
+    safe_sql = state_safe_sql or args_sql or ctx.state.get("sql")
     return execute_sql_tool(ctx.db, _request(ctx, args), str(safe_sql or ""), safety=safety)
 
 

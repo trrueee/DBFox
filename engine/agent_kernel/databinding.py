@@ -1,9 +1,219 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
 from engine.agent.types import ToolObservation
+
+# ---------------------------------------------------------------------------
+# Per-tool state-applier functions — one handler per tool name.
+# Each receives (state, output, observation) and returns a dict of
+# state updates to merge.  The caller handles the common prefix
+# (tool_results, trace_events, failed-telemetry, artifacts).
+#
+# To emit extra trace events from a handler, include a ``"_trace"`` key
+# containing a list of event dicts.  The caller appends them to the
+# shared trace_events list and strips ``"_trace"`` before merging.
+# ---------------------------------------------------------------------------
+
+_ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[str, Any]]
+
+
+# ---------------------------------------------------------------------------
+# State reset namespaces
+# ---------------------------------------------------------------------------
+RESET_SQL_FLOW: dict[str, Any] = {
+    "safety": None,
+}
+
+RESET_EXECUTION_FLOW: dict[str, Any] = {
+    "execution": None,
+    "result_profile": None,
+    "chart_suggestion": None,
+    "suggestions": [],
+}
+
+RESET_ANSWER_FLOW: dict[str, Any] = {
+    "error": None,
+}
+
+RESET_SELF_HEALING: dict[str, Any] = {
+    "last_error_telemetry": None,
+    "last_failed_tool_call": None,
+}
+
+RESET_LIFECYCLE: dict[str, Any] = {
+    "agent_sql_critique": None,
+    "agent_reflection": None,
+}
+
+
+def _apply_followup_load_context(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"followup_context": output}
+
+
+def _apply_schema_build_context(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"schema_context": output}
+
+
+def _apply_query_plan_build(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"query_plan": output}
+
+
+def _apply_sql_generate(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    sql = str(output.get("sql") or "").strip() or None
+    update: dict[str, Any] = {
+        "sql_candidate": output,
+        "sql": sql or state.get("sql"),
+        "agent_sql_critique": None,
+        "safety": None,
+        **RESET_SELF_HEALING,
+    }
+    if not sql and output.get("mode") == "fallback_unavailable":
+        update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
+    return update
+
+
+def _apply_sql_validate(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    safe_sql = str(output.get("safe_sql") or "").strip()
+    sql_candidate = state.get("sql_candidate")
+    generation_metadata = (
+        sql_candidate.get("metadata")
+        if isinstance(sql_candidate, dict) and isinstance(sql_candidate.get("metadata"), dict)
+        else None
+    )
+    if generation_metadata and "generation_metadata" not in output:
+        output = dict(output)
+        output["generation_metadata"] = generation_metadata
+    update: dict[str, Any] = {
+        "safety": output,
+        **RESET_SELF_HEALING,
+    }
+    if safe_sql:
+        update["sql"] = safe_sql
+    return update
+
+
+def _apply_sql_execute_readonly(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {
+        "execution": output,
+        **RESET_SELF_HEALING,
+    }
+
+
+def _apply_sql_skip_execution(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {
+        "execution": output,
+        **RESET_SELF_HEALING,
+    }
+
+
+def _apply_sql_revise(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    previous_count = state.get("revision_count") if isinstance(state.get("revision_count"), int) else 0
+    fixed_sql = str(output.get("fixed_sql") or "").strip()
+    update: dict[str, Any] = {
+        "revision_count": previous_count + 1,
+        "revision_attempted": True,
+    }
+    if fixed_sql:
+        update.update({
+            "sql": fixed_sql,
+            **RESET_SQL_FLOW,
+            **RESET_EXECUTION_FLOW,
+            **RESET_ANSWER_FLOW,
+            **RESET_SELF_HEALING,
+            **RESET_LIFECYCLE,
+        })
+        if state.get("pending_approval"):
+            update["pending_approval"] = None
+            update["_trace"] = [
+                {
+                    "type": "approval.superseded",
+                    "payload": {"reason": "User requested SQL revision before approval."},
+                }
+            ]
+    else:
+        if not state.get("pending_approval"):
+            update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
+    return update
+
+
+def _apply_result_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"result_profile": output}
+
+
+def _apply_chart_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"chart_suggestion": output}
+
+
+def _apply_followup_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    raw_suggestions = output.get("suggestions")
+    if isinstance(raw_suggestions, list):
+        return {"suggestions": [dict(item) for item in raw_suggestions if isinstance(item, dict)]}
+    return {}
+
+
+def _apply_answer_synthesize(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {
+        "answer": output,
+        "final_answer": output,
+        "status": "completed",
+    }
+
+
+def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
+    evidence: list[dict[str, Any]] = []
+    if suggestions or output.get("proposed_sql"):
+        evidence.append({
+            "artifact_id": "sql_suggestion",
+            "label": "SQL suggestion",
+            "value": suggestions[0].get("title") if suggestions and isinstance(suggestions[0], dict) else "workspace suggestion",
+        })
+    answer = {
+        "answer": str(output.get("answer") or ""),
+        "key_findings": [],
+        "evidence": evidence,
+        "caveats": [],
+        "recommendations": [],
+        "follow_up_questions": [],
+    }
+    return {
+        "answer": answer,
+        "final_answer": answer,
+        "status": "completed",
+    }
+
+
+TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
+    "followup.load_context": _apply_followup_load_context,
+    "schema.build_context": _apply_schema_build_context,
+    "query_plan.build": _apply_query_plan_build,
+    "sql.generate": _apply_sql_generate,
+    "sql.validate": _apply_sql_validate,
+    "sql.execute_readonly": _apply_sql_execute_readonly,
+    "sql.skip_execution": _apply_sql_skip_execution,
+    "sql.revise": _apply_sql_revise,
+    "result.profile": _apply_result_profile,
+    "chart.suggest": _apply_chart_suggest,
+    "followup.suggest": _apply_followup_suggest,
+    "answer.synthesize": _apply_answer_synthesize,
+}
+
+_ARTIFACT_TOOLS: frozenset[str] = frozenset({
+    "sql.generate",
+    "sql.validate",
+    "sql.execute_readonly",
+    "result.profile",
+    "chart.suggest",
+    "answer.synthesize",
+})
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 
 def apply_tool_result_to_state(
@@ -27,161 +237,71 @@ def apply_tool_result_to_state(
         ],
     }
 
+    # ---- failed path (common) ----------------------------------------------
     if observation.status == "failed":
-        telemetry = dict(output) if isinstance(output, dict) else {}
-        failed_tool_call = state.get("pending_tool_call") if isinstance(state.get("pending_tool_call"), dict) else {"tool_name": tool_name, "args": {}}
-        update["last_failed_tool_call"] = dict(failed_tool_call)
-        update["last_error_telemetry"] = telemetry or {
-            "error_type": "ToolExecutionError",
-            "tool_name": tool_name,
-            "step_name": observation.name,
-            "retryable": False,
-        }
-        update["trace_events"].append(
-            {
-                "type": "tool.failed.telemetry",
-                "payload": {
-                    "tool_name": tool_name,
-                    "error_type": update["last_error_telemetry"].get("error_type"),
-                    "retryable": bool(update["last_error_telemetry"].get("retryable")),
-                },
-            }
-        )
-        if tool_name == "sql.execute_readonly":
-            update["execution"] = {
-                "success": False,
-                "error": observation.error,
-                "error_telemetry": update["last_error_telemetry"],
-            }
-        if not bool(update["last_error_telemetry"].get("retryable")):
-            update["error"] = observation.error or f"{tool_name} failed."
-        else:
-            update["error"] = None
+        _apply_failed_telemetry(state, tool_name, observation, output, update)
         return update
 
-    if tool_name == "followup.load_context":
-        update["followup_context"] = output
-
-    elif tool_name == "schema.build_context":
-        update["schema_context"] = output
-
-    elif tool_name == "query_plan.build":
-        update["query_plan"] = output
-
-    elif tool_name == "sql.generate":
-        sql = str(output.get("sql") or "").strip() or None
-        if sql:
-            sql = sql.strip() or None
-        update["sql_candidate"] = output
-        update["sql"] = sql or state.get("sql")
-        update["agent_sql_critique"] = None
-        update["safety"] = None
-        update["last_error_telemetry"] = None
-        update["last_failed_tool_call"] = None
-        # sql=None indicates generation unavailable (e.g. no LLM key for complex fallback)
-        if not sql and output.get("mode") == "fallback_unavailable":
-            update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
-
-    elif tool_name == "sql.validate":
-        safe_sql = str(output.get("safe_sql") or "").strip()
-        sql_candidate = state.get("sql_candidate")
-        generation_metadata = (
-            sql_candidate.get("metadata")
-            if isinstance(sql_candidate, dict) and isinstance(sql_candidate.get("metadata"), dict)
-            else None
-        )
-        if generation_metadata and "generation_metadata" not in output:
-            output = dict(output)
-            output["generation_metadata"] = generation_metadata
-        update["safety"] = output
-        update["last_error_telemetry"] = None
-        update["last_failed_tool_call"] = None
-        if safe_sql:
-            update["sql"] = safe_sql
-
-    elif tool_name == "sql.execute_readonly":
-        update["execution"] = output
-        update["last_error_telemetry"] = None
-        update["last_failed_tool_call"] = None
-
-    elif tool_name == "sql.skip_execution":
-        update["execution"] = output
-        update["last_error_telemetry"] = None
-        update["last_failed_tool_call"] = None
-
-    elif tool_name == "sql.revise":
-        previous_count = state.get("revision_count") if isinstance(state.get("revision_count"), int) else 0
-        update["revision_count"] = previous_count + 1
-        update["revision_attempted"] = True
-        fixed_sql = str(output.get("fixed_sql") or "").strip()
-        if fixed_sql:
-            update["sql"] = fixed_sql
-            update["error"] = None
-            update["safety"] = None
-            update["execution"] = None
-            update["result_profile"] = None
-            update["chart_suggestion"] = None
-            update["suggestions"] = []
-            update["agent_sql_critique"] = None
-            update["agent_reflection"] = None
-            update["last_error_telemetry"] = None
-            update["last_failed_tool_call"] = None
-            if state.get("pending_approval"):
-                update["pending_approval"] = None
-                update["trace_events"].append(
-                    {
-                        "type": "approval.superseded",
-                        "payload": {"reason": "User requested SQL revision before approval."},
-                    }
-                )
-        else:
-            if not state.get("pending_approval"):
-                update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
-
-    elif tool_name == "result.profile":
-        update["result_profile"] = output
-
-    elif tool_name == "chart.suggest":
-        update["chart_suggestion"] = output
-
-    elif tool_name == "followup.suggest":
-        raw_suggestions = output.get("suggestions")
-        if isinstance(raw_suggestions, list):
-            update["suggestions"] = [dict(item) for item in raw_suggestions if isinstance(item, dict)]
-
-    elif tool_name == "answer.synthesize":
-        update["answer"] = output
-        update["final_answer"] = output
-        update["status"] = "completed"
-
+    # ---- success path: dispatch via handler map -----------------------------
+    handler = TOOL_STATE_APPLIERS.get(tool_name)
+    if handler is not None:
+        tool_update = handler(state, output, observation)
     elif tool_name.startswith("workspace."):
-        suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
-        evidence: list[dict[str, Any]] = []
-        if suggestions or output.get("proposed_sql"):
-            evidence.append(
-                {
-                    "artifact_id": "sql_suggestion",
-                    "label": "SQL suggestion",
-                    "value": suggestions[0].get("title") if suggestions and isinstance(suggestions[0], dict) else "workspace suggestion",
-                }
-            )
-        update["answer"] = {
-            "answer": str(output.get("answer") or ""),
-            "key_findings": [],
-            "evidence": evidence,
-            "caveats": [],
-            "recommendations": [],
-            "follow_up_questions": [],
-        }
-        update["final_answer"] = update["answer"]
-        update["status"] = "completed"
+        tool_update = _apply_workspace_prefix(state, output, observation)
+    else:
+        tool_update = {}
 
-    if tool_name in {"sql.generate", "sql.validate", "sql.execute_readonly", "result.profile", "chart.suggest", "answer.synthesize"}:
-        update["artifacts"] = [_artifact_event(tool_name, output)]
-    if tool_name.startswith("workspace."):
+    extra_trace = tool_update.pop("_trace", None)
+    if isinstance(extra_trace, list):
+        update["trace_events"].extend(extra_trace)
+    update.update(tool_update)
+
+    # ---- artifact emission (common postfix) ---------------------------------
+    if tool_name in _ARTIFACT_TOOLS or tool_name.startswith("workspace."):
         update["artifacts"] = [_artifact_event(tool_name, output)]
 
     return update
+
+
+def _apply_failed_telemetry(
+    state: dict[str, Any],
+    tool_name: str,
+    observation: ToolObservation,
+    output: dict[str, Any],
+    update: dict[str, Any],
+) -> None:
+    telemetry = dict(output) if isinstance(output, dict) else {}
+    failed_tool_call = state.get("pending_tool_call") if isinstance(state.get("pending_tool_call"), dict) else {"tool_name": tool_name, "args": {}}
+    update["last_failed_tool_call"] = dict(failed_tool_call)
+    update["last_error_telemetry"] = telemetry or {
+        "error_type": "ToolExecutionError",
+        "tool_name": tool_name,
+        "step_name": observation.name,
+        "retryable": False,
+    }
+    update["trace_events"].append({
+        "type": "tool.failed.telemetry",
+        "payload": {
+            "tool_name": tool_name,
+            "error_type": update["last_error_telemetry"].get("error_type"),
+            "retryable": bool(update["last_error_telemetry"].get("retryable")),
+        },
+    })
+    if tool_name == "sql.execute_readonly":
+        update["execution"] = {
+            "success": False,
+            "error": observation.error,
+            "error_telemetry": update["last_error_telemetry"],
+        }
+    if not bool(update["last_error_telemetry"].get("retryable")):
+        update["error"] = observation.error or f"{tool_name} failed."
+    else:
+        update["error"] = None
+
+
+# ---------------------------------------------------------------------------
+# State merging
+# ---------------------------------------------------------------------------
 
 
 def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
@@ -195,6 +315,11 @@ def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
                 state[key] = value
         else:
             state[key] = value
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def _artifact_event(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
