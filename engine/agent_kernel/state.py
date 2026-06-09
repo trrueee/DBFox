@@ -103,6 +103,17 @@ class AnswerFlowState(TypedDict, total=False):
     error: str | None
 
 
+class LoopFlowState(TypedDict, total=False):
+    agent_plan: dict[str, Any] | None
+    current_step_id: str | None
+    completed_step_ids: list[str]
+    failed_step_ids: list[str]
+    loop_iteration: int
+    reflect_decision: dict[str, Any] | None
+    needs_replan: bool
+    last_plan_patch: dict[str, Any] | None
+
+
 class KernelState(
     BaseKernelState,
     AgentLifecycleState,
@@ -110,6 +121,7 @@ class KernelState(
     SqlFlowState,
     ExecutionFlowState,
     AnswerFlowState,
+    LoopFlowState,
 ):
     pass
 

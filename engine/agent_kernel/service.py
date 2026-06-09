@@ -1210,7 +1210,12 @@ class AgentKernelService:
 
     def _pending_approval_from_workspace(self, req: AgentRunRequest) -> dict[str, Any] | None:
         workspace = req.workspace_context
-        approval_id = getattr(workspace, "pending_approval_id", None)
+        if not workspace:
+            return None
+        if isinstance(workspace, dict):
+            approval_id = workspace.get("pending_approval_id")
+        else:
+            approval_id = getattr(workspace, "pending_approval_id", None)
         if not approval_id:
             return None
         approval = agent_persistence.get_approval(self.db, str(approval_id))
