@@ -41,6 +41,9 @@ def build_agent_kernel_graph(
     if LangGraphStateGraph is None:
         raise RuntimeError("LangGraph is not installed; install `langgraph` to build AgentKernelGraph.")
 
+    from langgraph.types import CachePolicy
+    from langgraph.cache.memory import InMemoryCache
+
     graph = cast(Any, LangGraphStateGraph)(KernelState)
 
     graph.add_node("ingest_message", cast(Any, ingest_message_node or _noop_node))
@@ -52,20 +55,20 @@ def build_agent_kernel_graph(
     graph.add_node("approval_help", cast(Any, _approval_help_node))
     graph.add_node("clarification", cast(Any, _clarification_node))
 
-    graph.add_node("build_schema_context", cast(Any, _build_schema_context_node))
-    graph.add_node("build_query_plan", cast(Any, _build_query_plan_node))
+    graph.add_node("build_schema_context", cast(Any, _build_schema_context_node), cache_policy=CachePolicy(ttl=600))
+    graph.add_node("build_query_plan", cast(Any, _build_query_plan_node), cache_policy=CachePolicy(ttl=600))
     graph.add_node("generate_sql", cast(Any, _generate_sql_node))
     graph.add_node("sql_critic", cast(Any, reflect_node))
     graph.add_node("revise_sql", cast(Any, _revise_sql_node))
-    graph.add_node("validate_sql", cast(Any, _validate_sql_node))
+    graph.add_node("validate_sql", cast(Any, _validate_sql_node), cache_policy=CachePolicy(ttl=600))
     graph.add_node("validation_route", cast(Any, _validation_route_node))
     graph.add_node("execution_decision", cast(Any, _execution_decision_node))
     graph.add_node("execute_sql", cast(Any, _execute_sql_node))
     graph.add_node("skip_execution", cast(Any, _skip_execution_node))
     graph.add_node("execution_result_route", cast(Any, _execution_result_route_node))
     graph.add_node("transient_retry", cast(Any, _transient_retry_node))
-    graph.add_node("profile_result", cast(Any, _profile_result_node))
-    graph.add_node("chart_suggest", cast(Any, _chart_suggest_node))
+    graph.add_node("profile_result", cast(Any, _profile_result_node), cache_policy=CachePolicy(ttl=600))
+    graph.add_node("chart_suggest", cast(Any, _chart_suggest_node), cache_policy=CachePolicy(ttl=600))
     graph.add_node("followup_suggest", cast(Any, _followup_suggest_node))
     graph.add_node("synthesize_answer", cast(Any, _synthesize_answer_node))
     graph.add_node("load_followup_context", cast(Any, _load_followup_context_node))
@@ -120,7 +123,7 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("execution_decision", _after_execution_decision, {"execute_sql": "execute_sql", "skip_execution": "skip_execution", "synthesize_answer": "synthesize_answer"})
     graph.add_conditional_edges("execution_result_route", _after_execution_result_route, {"profile_result": "profile_result", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "execution_decision": "execution_decision"})
     graph.add_edge("answer", END)
-    return graph.compile(checkpointer=checkpointer)
+    return graph.compile(checkpointer=checkpointer, cache=InMemoryCache())
 
 
 def _noop_node(_state: KernelState) -> dict[str, Any]:
@@ -480,17 +483,43 @@ def _after_sql_critic(state: KernelState) -> str:
 
 def _after_validation_route(state: KernelState) -> str:
     route = str(state.get("agent_graph_route") or "")
-    return route if route in {"execution_decision", "revise_sql", "synthesize_answer", "answer", "validate_sql"} else "synthesize_answer"
+    if route in {"execution_decision", "revise_sql", "synthesize_answer", "answer", "validate_sql"}:
+        return route
+    # Fallback direct state checks
+    safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
+    if not safety:
+        return "validate_sql"
+    if safety.get("can_execute") or safety.get("requires_confirmation"):
+        return "execution_decision"
+    if _revision_count(state) < MAX_SQL_REVISIONS:
+        return "revise_sql"
+    return "synthesize_answer"
 
 
 def _after_execution_decision(state: KernelState) -> str:
     route = str(state.get("agent_graph_route") or "")
-    return route if route in {"execute_sql", "skip_execution", "synthesize_answer"} else "synthesize_answer"
+    if route in {"execute_sql", "skip_execution", "synthesize_answer"}:
+        return route
+    # Fallback direct state checks
+    return "execute_sql" if state.get("execute", True) else "skip_execution"
 
 
 def _after_execution_result_route(state: KernelState) -> str:
     route = str(state.get("agent_graph_route") or "")
-    return route if route in {"profile_result", "revise_sql", "synthesize_answer", "answer", "execution_decision", "transient_retry"} else "synthesize_answer"
+    if route in {"profile_result", "revise_sql", "synthesize_answer", "answer", "execution_decision", "transient_retry"}:
+        return route
+    # Fallback direct state checks
+    telemetry = _error_telemetry(state)
+    if telemetry.get("retryable"):
+        return "transient_retry" if _can_retry_transient(state) else "synthesize_answer"
+    if telemetry and _is_sql_or_db_semantic_error(state) and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
+        return "revise_sql"
+    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    if not execution:
+        return "execution_decision"
+    if execution.get("success") is False:
+        return "revise_sql" if _revision_count(state) < MAX_SQL_REVISIONS else "synthesize_answer"
+    return "profile_result"
 
 
 def _intent(state: KernelState) -> str:

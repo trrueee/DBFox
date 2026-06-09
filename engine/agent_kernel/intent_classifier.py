@@ -39,6 +39,9 @@ def classify_intent_ai_first(
     state: KernelState,
     *,
     fallback: Callable[[KernelState], AgentIntent],
+    api_key: str | None = None,
+    api_base: str | None = None,
+    model_name: str | None = None,
 ) -> tuple[AgentIntent, str, dict[str, Any] | None]:
     """Classify user intent AI-first with keyword fallback.
 
@@ -49,12 +52,18 @@ def classify_intent_ai_first(
     The graph reads only *intent*; *source* and *llm_trace* are for
     observability / debugging.
     """
-    api_key = str(state.get("api_key") or "").strip()
+    api_key = str(api_key or state.get("api_key") or "").strip()
     if not api_key:
         return fallback(state), "rule_fallback", None
 
     try:
-        return _classify_via_llm(state, api_key, fallback=fallback)
+        return _classify_via_llm(
+            state,
+            api_key,
+            fallback=fallback,
+            api_base=api_base,
+            model_name=model_name,
+        )
     except Exception:
         return fallback(state), "rule_fallback", None
 
@@ -69,9 +78,11 @@ def _classify_via_llm(
     api_key: str,
     *,
     fallback: Callable[[KernelState], AgentIntent],
+    api_base: str | None = None,
+    model_name: str | None = None,
 ) -> tuple[AgentIntent, str, dict[str, Any] | None]:
-    api_base = str(state.get("api_base") or "https://api.openai.com/v1").rstrip("/")
-    model_name = str(state.get("model_name") or "gpt-4o-mini")
+    api_base = str(api_base or state.get("api_base") or "https://api.openai.com/v1").rstrip("/")
+    model_name = str(model_name or state.get("model_name") or "gpt-4o-mini")
     text = latest_user_message(state).strip()
 
     workspace_context = state.get("workspace_context") if isinstance(state.get("workspace_context"), dict) else {}

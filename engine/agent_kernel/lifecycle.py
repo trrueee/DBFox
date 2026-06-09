@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from engine.agent_kernel.intent_classifier import classify_intent_ai_first
 from engine.agent_kernel.intent_fallback import classify_intent_fallback, classify_intent, AgentIntent
@@ -10,9 +10,26 @@ from engine.agent_kernel.plan_templates import plan_route
 from engine.agent_kernel.state import KernelState, latest_user_message
 
 
-def understand_node(state: KernelState) -> dict[str, Any]:
+try:
+    from langchain_core.runnables import RunnableConfig
+except ImportError:
+    RunnableConfig = Any
+
+
+def understand_node(state: KernelState, config: Optional[RunnableConfig] = None) -> dict[str, Any]:
     """Understand: classify the user's current intent before tool routing."""
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    configurable = config.get("configurable", {}) if config else {}
+    api_key = configurable.get("api_key") or state.get("api_key")
+    api_base = configurable.get("api_base") or state.get("api_base")
+    model_name = configurable.get("model_name") or state.get("model_name")
+
+    intent, source, llm_trace = classify_intent_ai_first(
+        state,
+        fallback=classify_intent_fallback,
+        api_key=api_key,
+        api_base=api_base,
+        model_name=model_name,
+    )
     reference = resolve_reference(state)
     payload = {
         "intent": intent,

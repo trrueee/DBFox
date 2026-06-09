@@ -249,7 +249,15 @@ class AgentKernelService:
             approval_interrupt_node=self._approval_interrupt_node,
             checkpointer=self._checkpointer,
         )
-        config = {"configurable": {"thread_id": session_id}}
+        config = {
+            "configurable": {
+                "thread_id": session_id,
+                "api_key": req.api_key,
+                "api_base": req.api_base,
+                "model_name": req.model_name,
+            },
+            "recursion_limit": max(req.max_steps * 4, 100),
+        }
 
         for chunk in app.stream(graph_state, config=config, stream_mode="updates"):
             for node_name, update in chunk.items():
@@ -397,7 +405,15 @@ class AgentKernelService:
             approval_interrupt_node=self._approval_interrupt_node,
             checkpointer=self._checkpointer,
         )
-        config = {"configurable": {"thread_id": session_id}}
+        config = {
+            "configurable": {
+                "thread_id": session_id,
+                "api_key": req.api_key,
+                "api_base": req.api_base,
+                "model_name": req.model_name,
+            },
+            "recursion_limit": max(req.max_steps * 4, 100),
+        }
         graph_snapshot = app.get_state(config)
         has_graph_checkpoint = bool(graph_snapshot.next) or bool(graph_snapshot.values)
 
@@ -1157,9 +1173,9 @@ class AgentKernelService:
             revision_attempted=False,
             step_count=0,
             max_steps=req.max_steps,
-            api_key=req.api_key,
-            api_base=req.api_base,
-            model_name=req.model_name,
+            api_key=None,
+            api_base=None,
+            model_name=None,
         )
 
     def _pending_approval_from_workspace(self, req: AgentRunRequest) -> dict[str, Any] | None:
