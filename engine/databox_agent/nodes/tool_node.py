@@ -228,8 +228,16 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         can_fix = output.get("can_fix", False)
         fixed = output.get("fixed_sql", "")
         reason = output.get("reason", "")
+        if not can_fix:
+            return (
+                f"[sql.revise] can_fix=False. The SQL validator rejected this query "
+                f"and it CANNOT be automatically fixed. DO NOT call sql.revise again. "
+                f"Instead, either generate a completely new SQL with sql.generate, "
+                f"or explain the issue to the user and finalize. "
+                f"Reason: {reason}"
+            )
         preview = fixed[:200] + ("..." if len(fixed) > 200 else "") if fixed else ""
-        return f"[sql.revise] can_fix={can_fix}, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
+        return f"[sql.revise] can_fix=True, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
 
     if tool_name == "result.profile":
         row_count = output.get("row_count", 0)
