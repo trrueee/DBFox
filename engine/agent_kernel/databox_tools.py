@@ -567,10 +567,13 @@ def _answer_synthesize(ctx: ToolContext, args: dict[str, Any]) -> ToolObservatio
 
 
 def _workspace_assist(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    pending_call = ctx.state.get("pending_tool_call")
-    tool_name = ""
-    if isinstance(pending_call, dict):
-        tool_name = str(pending_call.get("tool_name") or "")
+    # Prefer _current_tool_name from the new ReAct graph; fall back to
+    # pending_tool_call for backward compatibility with agent_kernel.
+    tool_name = str(ctx.state.get("_current_tool_name") or "")
+    if not tool_name:
+        pending_call = ctx.state.get("pending_tool_call")
+        if isinstance(pending_call, dict):
+            tool_name = str(pending_call.get("tool_name") or "")
     workspace_tool = {tool.spec.name: tool for tool in build_workspace_tools()}[tool_name]
     req = _request(ctx, args)
     bundle = build_agent_context_bundle(ctx.db, req)
