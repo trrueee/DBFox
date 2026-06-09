@@ -24,7 +24,7 @@ def _waiting_run(db_session, demo_datasource, monkeypatch):
     demo_datasource.env = "prod"
     db_session.commit()
     monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql", _fake_select_sql)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", _fake_select_sql)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(
         AgentRunRequest(
@@ -51,7 +51,6 @@ def test_prod_datasource_enters_waiting_approval_instead_of_failed(db_session, d
     assert response.approval.id == approval.id
     assert [step.name for step in response.steps] == [
         "build_schema_context",
-        "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
     ]
@@ -116,7 +115,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
     db_session.commit()
     monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", lambda *_args, **_kwargs: {
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
         "sql": "DELETE FROM users",
         "model": "test",
         "mode": "offline",
@@ -130,7 +129,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
     assert guardrail_response.status == "failed"
     assert guardrail_response.approval is None
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", lambda *_args, **_kwargs: {
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
         "sql": "SELECT imaginary_column FROM users LIMIT 10",
         "model": "test",
         "mode": "offline",

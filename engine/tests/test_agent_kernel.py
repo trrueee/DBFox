@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from engine.agent import AgentRunRequest, ToolObservation
@@ -29,16 +30,22 @@ def _fake_select_sql(*_args, **_kwargs):
     return {
         "sql": "SELECT id, username FROM users LIMIT 3",
         "model": "test",
-        "mode": "offline",
+        "mode": "schema_direct",
         "latencyMs": 1,
         "schemaValidationWarnings": [],
+        "metadata": {"generation_source": "schema_direct_llm"},
     }
+
+
+@pytest.fixture(autouse=True)
+def _patch_schema_direct_sql_generate(monkeypatch):
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", _fake_select_sql)
 
 
 def _kernel_waiting_run(db_session, demo_datasource, monkeypatch, session_id: str = "kernel-approval-session"):
     sync_schema(db_session, demo_datasource.id)
     monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql", _fake_select_sql)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", _fake_select_sql)
     monkeypatch.setattr("engine.agent_kernel.databox_tools.validate_sql_tool", _fake_approval_validation)
 
     events = list(AgentKernelService(db_session).run_iter(
@@ -256,6 +263,7 @@ def test_agent_kernel_tool_registry_schema_snapshot() -> None:
             "input_props": ["question"],
             "input_required": [],
             "output_props": [
+                "error",
                 "latency_ms",
                 "metadata",
                 "mode",
@@ -265,7 +273,7 @@ def test_agent_kernel_tool_registry_schema_snapshot() -> None:
                 "schema_validation_warnings",
                 "sql",
             ],
-            "output_required": ["sql"],
+            "output_required": [],
         },
         "sql.revise": {
             "input_props": ["error", "instruction", "reason", "safe_sql", "sql", "user_instruction"],
@@ -1012,7 +1020,6 @@ def test_agent_kernel_fallback_execute_false_returns_review_response(db_session,
     assert res.answer is not None
     assert [step.name for step in res.steps] == [
         "build_schema_context",
-        "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
         "execute_sql",
@@ -1021,7 +1028,7 @@ def test_agent_kernel_fallback_execute_false_returns_review_response(db_session,
         "suggest_followups",
         "answer_synthesizer",
     ]
-    assert res.steps[4].status == "skipped"
+    assert res.steps[3].status == "skipped"
 
 
 def test_agent_kernel_controller_final_answer_uses_workspace_sql_without_schema_restart(

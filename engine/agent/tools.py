@@ -9,7 +9,7 @@ import sqlglot
 from sqlalchemy.orm import Session, selectinload
 from sqlglot import exp
 
-from engine.ai import generate_sql, generate_sql_from_schema_context, validate_sql_schema
+from engine.ai import generate_sql_from_schema_context, validate_sql_schema
 from engine.agent.answer import synthesize_agent_answer
 from engine.agent.context import analysis_question, context_summary, referenced_artifact_ids, schema_linking_question
 from engine.agent.prompts import RESULT_EXPLANATION_SECTIONS
@@ -143,40 +143,27 @@ def generate_sql_tool(
 
     def body() -> dict[str, Any]:
         semantic_mode = getattr(req, "semantic_mode", "shadow") or "shadow"
-        contract = build_query_contract(question, schema_context, None) if semantic_mode != "off" else None
         dialect = _datasource_dialect(db, req.datasource_id)
         schema_text = str(schema_context.get("schema_context") or "")
-        if not req.api_key and _is_demo_datasource(db, req.datasource_id):
-            result = generate_sql(db, req.datasource_id, req.question, llm_config={}, optimize_rag=req.optimize_rag)
-            result["metadata"] = {
-                **(result.get("metadata") if isinstance(result.get("metadata"), dict) else {}),
-                "generation_source": "demo_fallback",
-                "dialect": dialect,
-                "used_query_plan": False,
-                "used_renderer": False,
-                "used_demo_fallback": True,
-            }
-            generation_source = "demo_fallback"
-        else:
-            result = generate_sql_from_schema_context(
-                question=req.question,
-                schema_context=schema_text,
-                dialect=dialect,
-                llm_config=_llm_config(req),
-            )
-            generation_source = "schema_direct_llm"
+        result = generate_sql_from_schema_context(
+            question=req.question,
+            schema_context=schema_text,
+            dialect=dialect,
+            llm_config=_llm_config(req),
+        )
         raw_sql = str(result.get("sql", "") or "").strip()
-        sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, req.datasource_id, raw_sql)
-        # Semantic verification and guarded retry
-        semantic_mode = getattr(req, "semantic_mode", "shadow") or "shadow"
+        sql = raw_sql or None
+
         semantic_retry_attempted = False
         semantic_retry_accepted = False
         semantic_retry_rejected_reason: str | None = None
         semantic_initial_violations: list[dict[str, Any]] = []
         semantic_violations: list[Any] = []
         semantic_retry_violations: list[Any] = []
+        semantic_contract = (
+            build_query_contract(question, schema_context, None) if semantic_mode != "off" else None
+        )
 
-        semantic_contract = contract
         if sql and semantic_mode != "off" and semantic_contract is not None:
             semantic_violations = verify_sql_against_contract(sql, semantic_contract, schema_context)
             semantic_initial_violations = semantic_violation_payload(semantic_violations)
@@ -196,51 +183,53 @@ def generate_sql_tool(
                     dialect=dialect,
                     llm_config=_llm_config(req),
                 )
-                retry_raw = str(retry_result.get("sql", "") or "").strip()
-                retry_sql_candidate, retry_notes, retry_meta = _prepare_generated_sql(db, req.datasource_id, retry_raw)
+                retry_sql_candidate = str(retry_result.get("sql", "") or "").strip()
                 if retry_sql_candidate:
-                    retry_violations = verify_sql_against_contract(retry_sql_candidate, semantic_contract, schema_context)
+                    retry_violations = verify_sql_against_contract(
+                        retry_sql_candidate, semantic_contract, schema_context
+                    )
                     semantic_retry_violations = semantic_violation_payload(retry_violations)
                     if accept_semantic_retry(
-                        semantic_violations, retry_violations, semantic_contract,
-                        original_sql=sql, retry_sql=retry_sql_candidate,
+                        semantic_violations,
+                        retry_violations,
+                        semantic_contract,
+                        original_sql=sql,
+                        retry_sql=retry_sql_candidate,
                     ):
                         semantic_retry_accepted = True
                         result = retry_result
-                        raw_sql = retry_raw
+                        raw_sql = retry_sql_candidate
                         sql = retry_sql_candidate
-                        rewrite_notes.extend(f"semantic_retry:{note}" for note in retry_notes)
-                        rewrite_metadata = {**rewrite_metadata, "semantic_retry": retry_meta}
                         semantic_violations = retry_violations
                     else:
                         semantic_retry_rejected_reason = "retry_did_not_improve_violations"
                 else:
                     semantic_retry_rejected_reason = "retry_produced_empty_sql"
 
-        sql_value = sql if sql else None
         result_metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
         candidate = SQLCandidate(
-            sql=sql_value,
+            sql=sql,
             raw_sql=raw_sql if sql != raw_sql else None,
             model=str(result.get("model", "")) or None,
             mode=str(result.get("mode", "")) or None,
             latency_ms=int(result.get("latencyMs", 0) or 0),
             schema_validation_warnings=[str(item) for item in _list_value(result.get("schemaValidationWarnings"))],
-            rewrite_notes=rewrite_notes,
+            rewrite_notes=[],
             error=str(result.get("error")) if result.get("error") else None,
             metadata={
                 **result_metadata,
-                "generation_source": generation_source,
+                "generation_source": "schema_direct_llm",
                 "used_renderer": False,
                 "used_query_plan": False,
                 "used_query_plan_as_prompt": False,
                 "used_demo_fallback": False,
+                "used_guardrail_in_generate": False,
+                "used_semantic_retry": semantic_retry_accepted,
                 "agent_query_plan": query_plan,
                 "query_plan": result.get("queryPlan"),
                 "selected_tables": result.get("selectedTables", []),
                 "selected_columns": result.get("selectedColumns", []),
                 "schema_context_size": result.get("schemaContextSize"),
-                "rewrite": rewrite_metadata,
                 "error": result.get("error"),
                 "semantic_mode": semantic_mode,
                 "semantic_contract": semantic_contract.to_dict() if semantic_contract is not None else None,
@@ -261,9 +250,11 @@ def validate_sql_tool(db: Session, datasource_id: str, sql: str) -> ToolObservat
     tool_input = {"datasource_id": datasource_id, "sql_preview": _preview_sql(sql)}
 
     def body() -> dict[str, Any]:
+        prepared_sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, datasource_id, sql)
+        candidate_sql = prepared_sql or sql
         gate = TrustGate(db, validate_sql_schema)
-        trust_gate = gate.evaluate(datasource_id, sql)
-        execution_decision = gate.execution_decision(datasource_id, sql, policy="agent_readonly")
+        trust_gate = gate.evaluate(datasource_id, candidate_sql)
+        execution_decision = gate.execution_decision(datasource_id, candidate_sql, policy="agent_readonly")
         guardrail = execution_decision.guardrail
         schema_warnings = list(execution_decision.schema_warnings)
         revise_suggestion = None if execution_decision.can_execute else _revise_suggestion(
@@ -277,6 +268,9 @@ def validate_sql_tool(db: Session, datasource_id: str, sql: str) -> ToolObservat
             "can_execute": execution_decision.can_execute,
             "safe_sql": execution_decision.safe_sql,
             "original_sql": sql,
+            "prepared_sql": prepared_sql,
+            "rewrite_notes": rewrite_notes,
+            "rewrite": rewrite_metadata,
             "schema_warnings": schema_warnings,
             "guardrail": dict(guardrail),
             "trust_gate": dict(trust_gate),
