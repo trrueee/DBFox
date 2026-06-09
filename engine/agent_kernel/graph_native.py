@@ -7,7 +7,6 @@ from typing import Any, Hashable, cast
 from engine.agent_kernel.graph import (
     MAX_SQL_REVISIONS,
     _after_approval,
-    _after_chart_request,
     _after_controller,
     _after_execution_decision,
     _after_execution_result_route,
@@ -136,7 +135,6 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("synthesize_answer", _after_synthesize_answer, {"policy": "policy", "answer": "answer"})
     graph.add_conditional_edges("load_followup_context", _after_load_followup_context, {"policy": "policy", "profile_result": "profile_result"})
 
-    graph.add_conditional_edges("chart_request", _after_chart_request, {"chart_suggest": "chart_suggest", "synthesize_answer": "synthesize_answer", "answer": "answer"})
     graph.add_conditional_edges("controller", _after_controller, {"policy": "policy", "route_intent": "route_intent", "answer": "answer", "end": END})
 
     policy_routes: dict[Hashable, str] = {"execute_tool": "execute_tool", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "end": END}
