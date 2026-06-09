@@ -25,7 +25,7 @@ WORKSPACE_TOOL_BY_INTENT = {
 ANALYSIS_TOOL_SEQUENCE = [
     "schema.build_context",
     "query_plan.build",
-    "sql.generate_candidate",
+    "sql.generate",
     "sql.validate",
     "sql.execute_readonly",
     "answer.synthesize",
@@ -131,7 +131,7 @@ class AgentPlanner:
                 intent=AgentIntentPlan(
                     intent=intent,  # type: ignore[arg-type]
                     confidence="medium",
-                    rationale="Deterministic workspace-assist fallback selected from supplied editor context.",
+                    rationale="Conservative workspace-assist fallback selected from supplied editor context.",
                     requires_context=_required_context(intent),
                 ),
                 steps=[
@@ -147,8 +147,9 @@ class AgentPlanner:
                 safety_notes=[
                     "Workspace assistance may propose editor SQL, but it must not execute SQL automatically.",
                     "Annotations beginning with @ remain editor directives, not Agent tools.",
+                    "Ambiguous or negated workspace requests fall back to analysis instead of forcing fix/optimize/rewrite.",
                 ],
-                model="databox-deterministic-planner",
+                model="databox-conservative-fallback-planner",
                 raw_response={"source": "fallback"},
             )
 
@@ -170,7 +171,7 @@ class AgentPlanner:
             intent=AgentIntentPlan(
                 intent="analysis",
                 confidence="medium",
-                rationale="Deterministic analysis fallback keeps the existing schema-query-SQL-validation pipeline.",
+                rationale="Conservative fallback uses the graph-backed schema-query-SQL-validation path.",
                 requires_context=[],
             ),
             steps=steps,
@@ -179,7 +180,7 @@ class AgentPlanner:
             safety_notes=[
                 "SQL generation, validation, and optional execution remain bound to registered runtime tools.",
             ],
-            model="databox-deterministic-planner",
+            model="databox-conservative-fallback-planner",
             raw_response={"source": "fallback"},
         )
 
@@ -221,6 +222,7 @@ def _planner_prompt(
             "output_schema": contract,
             "hard_rules": [
                 "Use only registered tool names. Do not invent tools.",
+                "Prefer semantic interpretation over keyword matching.",
                 "Do not represent @ annotations as tools.",
                 "Do not plan DDL, DML, backup, restore, export, shell, file, or network operations.",
                 "Do not plan automatic SQL execution for workspace explanation/fix/optimize/rewrite/result/schema assistance.",
@@ -242,21 +244,21 @@ def _infer_intent(req: AgentRunRequest, context_bundle: dict[str, Any]) -> str:
     has_artifact = bool(workspace.get("selected_artifact_id") or context_bundle.get("selected_artifact"))
     selected_tables = workspace.get("selected_table_names") or []
 
-    if has_error and has_sql and _contains_any(question, ["fix", "repair", "error", "报错", "修复", "纠错"]):
+    if has_error and has_sql and _contains_positive_any(question, ["fix", "repair", "error", "报错", "修复", "纠错"]):
         return "fix_sql"
-    if has_sql and _contains_any(question, ["optimize", "优化", "performance", "性能", "slow", "慢"]):
+    if has_sql and _contains_positive_any(question, ["optimize", "优化", "performance", "性能", "slow", "慢"]):
         return "optimize_sql"
-    if has_sql and _contains_any(question, ["rewrite", "改写", "重写", "refactor", "简化"]):
+    if has_sql and _contains_positive_any(question, ["rewrite", "改写", "重写", "refactor", "简化"]):
         return "rewrite_sql"
-    if has_sql and _contains_any(question, ["explain sql", "explain this sql", "解释 sql", "解释当前 sql", "看懂"]):
+    if has_sql and _contains_positive_any(question, ["explain sql", "explain this sql", "解释 sql", "解释当前 sql", "看懂"]):
         return "explain_sql"
-    if has_result and _contains_any(question, ["result", "结果", "why", "为什么", "解释结果", "explain"]):
+    if has_result and _contains_positive_any(question, ["result", "结果", "why", "为什么", "解释结果", "explain"]):
         return "explain_result"
-    if has_artifact and _contains_any(question, ["continue", "artifact", "继续", "基于这个", "接着"]):
+    if has_artifact and _contains_positive_any(question, ["continue", "artifact", "继续", "基于这个", "接着"]):
         return "continue_from_artifact"
-    if selected_tables and _contains_any(question, ["schema", "table", "columns", "结构", "表", "字段"]):
+    if selected_tables and _contains_positive_any(question, ["schema", "table", "columns", "结构", "表", "字段"]):
         return "explain_schema"
-    if has_sql and _contains_any(question, ["explain", "解释"]):
+    if has_sql and _contains_positive_any(question, ["explain", "解释"]):
         return "explain_sql"
     return "analysis"
 
@@ -273,37 +275,43 @@ def _required_context(intent: str) -> list[str]:
     }.get(intent, [])
 
 
-def _contains_any(value: str, needles: list[str]) -> bool:
-    return any(needle in value for needle in needles)
+def _contains_positive_any(value: str, needles: list[str]) -> bool:
+    for needle in needles:
+        if needle not in value:
+            continue
+        if _is_negated_near(value, needle):
+            continue
+        return True
+    return False
+
+
+def _is_negated_near(value: str, needle: str) -> bool:
+    negation_patterns = (
+        rf"(no|not|don't|do not|without|无需|不需要|不用|不要|别|不是).{{0,24}}{re.escape(needle)}",
+        rf"{re.escape(needle)}.{{0,24}}(not|不要|不用|不需要|无需)",
+    )
+    return any(re.search(pattern, value, flags=re.IGNORECASE) for pattern in negation_patterns)
 
 
 def _extract_json_object(text: str) -> str:
-    stripped = text.strip()
-    fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", stripped, flags=re.IGNORECASE)
-    if fence:
-        return fence.group(1)
-    start = stripped.find("{")
-    end = stripped.rfind("}")
-    if start == -1 or end == -1 or end <= start:
+    text = text.strip()
+    if text.startswith("{") and text.endswith("}"):
+        return text
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
         raise ValueError("No JSON object found in planner response.")
-    return stripped[start : end + 1]
+    return match.group(0)
 
 
 def _repair_json_text(text: str) -> str:
-    raw = _extract_json_object(text)
-    raw = re.sub(r",\s*([}\]])", r"\1", raw)
-    return raw
+    extracted = _extract_json_object(text)
+    # Common markdown fences
+    extracted = extracted.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    return extracted
 
 
-def _compact_for_prompt(value: dict[str, Any]) -> dict[str, Any]:
+def _compact_for_prompt(value: Any, *, limit: int = 6000) -> Any:
     text = json.dumps(value, ensure_ascii=False, default=str)
-    if len(text) <= 8000:
+    if len(text) <= limit:
         return value
-    compact = dict(value)
-    if isinstance(compact.get("schema_linking"), dict):
-        schema_linking = dict(compact["schema_linking"])
-        schema_linking["schema_context"] = str(schema_linking.get("schema_context") or "")[:2000]
-        compact["schema_linking"] = schema_linking
-    if isinstance(compact.get("selected_table_schema"), list):
-        compact["selected_table_schema"] = compact["selected_table_schema"][:4]
-    return compact
+    return {"truncated_json": text[:limit]}
