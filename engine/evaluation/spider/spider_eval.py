@@ -30,6 +30,7 @@ class SpiderCaseResult:
     tool_sequence: list[str] | None = None
     datasource_id: str | None = None
     synced_table_names: list[str] | None = None
+    generation_metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -55,6 +56,26 @@ def _extract_tool_sequence(events: list[dict[str, Any]]) -> list[str]:
             if isinstance(tool, str) and tool and tool not in tools:
                 tools.append(tool)
     return tools
+
+
+def _extract_generation_metadata(response: Any, events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    safety = getattr(response, "safety", None)
+    if isinstance(safety, dict) and isinstance(safety.get("generation_metadata"), dict):
+        return dict(safety["generation_metadata"])
+    for event in reversed(events):
+        step = event.get("step")
+        if isinstance(step, dict):
+            output = step.get("output")
+            if isinstance(output, dict) and isinstance(output.get("metadata"), dict):
+                return dict(output["metadata"])
+            if isinstance(output, dict) and isinstance(output.get("generation_metadata"), dict):
+                return dict(output["generation_metadata"])
+        event_response = event.get("response")
+        if isinstance(event_response, dict):
+            event_safety = event_response.get("safety")
+            if isinstance(event_safety, dict) and isinstance(event_safety.get("generation_metadata"), dict):
+                return dict(event_safety["generation_metadata"])
+    return None
 
 
 def classify_failure(result: SpiderCaseResult) -> str | None:
@@ -151,6 +172,7 @@ class SpiderEvalRunner:
             )
 
         predicted_sql = extract_final_sql(response, events_payload)
+        generation_metadata = _extract_generation_metadata(response, events_payload)
         if not predicted_sql:
             return SpiderCaseResult(
                 db_id=example.db_id, question=example.question,
@@ -161,6 +183,7 @@ class SpiderEvalRunner:
                 tool_sequence=_extract_tool_sequence(events_payload),
                 datasource_id=datasource_id,
                 synced_table_names=synced_table_names,
+                generation_metadata=generation_metadata,
             )
 
         if self.execute:
@@ -178,6 +201,7 @@ class SpiderEvalRunner:
                 tool_sequence=_extract_tool_sequence(events_payload),
                 datasource_id=datasource_id,
                 synced_table_names=synced_table_names,
+                generation_metadata=generation_metadata,
             )
 
         return SpiderCaseResult(
@@ -189,6 +213,7 @@ class SpiderEvalRunner:
             tool_sequence=_extract_tool_sequence(events_payload),
             datasource_id=datasource_id,
             synced_table_names=synced_table_names,
+            generation_metadata=generation_metadata,
         )
 
     def run(

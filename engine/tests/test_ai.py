@@ -2,8 +2,108 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from engine.ai import search_demo_sql, generate_sql, DEMO_TRANSLATIONS
+from engine.ai import (
+    DEMO_TRANSLATIONS,
+    build_schema_direct_prompt,
+    generate_sql,
+    generate_sql_from_schema_context,
+    search_demo_sql,
+)
 from engine.errors import AIServiceError
+from engine.models import DataSource
+
+
+def test_schema_direct_prompt_is_sqlite_dialect_aware() -> None:
+    system_prompt, user_prompt = build_schema_direct_prompt(
+        question="How many students are there?",
+        schema_context="TABLE students(id, name)",
+        dialect="sqlite",
+    )
+
+    assert "SQLite SELECT" in system_prompt
+    assert "MySQL" not in system_prompt
+    assert "How many students are there?" in user_prompt
+
+
+def test_schema_direct_prompt_contains_aggregate_and_limit_rules() -> None:
+    system_prompt, _user_prompt = build_schema_direct_prompt(
+        question="What is the average score?",
+        schema_context="TABLE courses(score)",
+        dialect="postgresql",
+    )
+
+    assert "PostgreSQL SELECT" in system_prompt
+    assert 'how many", "number of", or "count", use COUNT(*)' in system_prompt
+    assert 'average", "avg", or "mean", use AVG(column)' in system_prompt
+    assert "Do not add LIMIT to aggregate-only queries" in system_prompt
+
+
+def test_generate_sql_from_schema_context_returns_schema_direct_metadata(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class MockResponse:
+        status_code = 200
+        text = "ok"
+
+        def json(self):
+            return {"choices": [{"message": {"content": "SELECT COUNT(*) FROM students"}}]}
+
+    def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return MockResponse()
+
+    monkeypatch.setattr("engine.ai.httpx.post", fake_post)
+
+    result = generate_sql_from_schema_context(
+        question="How many students are there?",
+        schema_context="TABLE students(id, name)",
+        dialect="sqlite",
+        llm_config={"api_key": "sk-test", "api_base": "https://test/v1", "model": "deepseek-test"},
+    )
+
+    messages = captured["json"]["messages"]  # type: ignore[index]
+    assert "SQLite SELECT" in messages[0]["content"]
+    assert "MySQL" not in messages[0]["content"]
+    assert result["sql"] == "SELECT COUNT(*) FROM students"
+    assert result["metadata"]["generation_source"] == "schema_direct_llm"
+    assert result["metadata"]["used_renderer"] is False
+    assert result["metadata"]["used_demo_fallback"] is False
+
+
+def test_generate_sql_from_schema_context_without_api_key_fails_closed() -> None:
+    result = generate_sql_from_schema_context(
+        question="list products",
+        schema_context="TABLE students(id, name)",
+        dialect="sqlite",
+        llm_config={},
+    )
+
+    assert result["sql"] is None
+    assert result["error"] == "LLM API key required for non-demo Text-to-SQL generation"
+    assert result["metadata"]["used_demo_fallback"] is False
+
+
+def test_legacy_generate_sql_non_demo_without_api_key_does_not_use_demo_fallback(db_session) -> None:
+    ds = DataSource(
+        id="real-sqlite-no-key",
+        name="real_sqlite",
+        db_type="sqlite",
+        host="localhost",
+        port=0,
+        database_name="/tmp/real.sqlite",
+        username="",
+        password_ciphertext="",
+        password_nonce="",
+        status="active",
+    )
+    db_session.add(ds)
+    db_session.commit()
+
+    result = generate_sql(db_session, ds.id, "list products")
+
+    assert result["sql"] is None
+    assert result["error"] == "LLM API key required for non-demo Text-to-SQL generation"
+    assert result["metadata"]["used_demo_fallback"] is False
 
 
 # ============================================================

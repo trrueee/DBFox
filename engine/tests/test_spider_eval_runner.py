@@ -190,6 +190,59 @@ class TestSpiderE2E:
         assert "tiny_school.sqlite" in ds.database_name
 
     @pytest.mark.e2e
+    def test_spider_tiny_databox_schema_direct_counts_and_avg(self, db_session, monkeypatch) -> None:
+        """DataBox mode should use schema_direct metadata and match tiny aggregate cases."""
+        from engine.evaluation.spider.spider_eval import (
+            SpiderEvalRunner,
+            create_databox_sqlite_run_fn,
+        )
+
+        fixture_root = Path("engine/tests/fixtures/spider_tiny")
+        if not fixture_root.exists():
+            pytest.skip("Spider tiny fixture not found")
+
+        def fake_schema_direct(*, question: str, schema_context: str, dialect: str, llm_config: dict):
+            if "average score" in question.lower():
+                sql = "SELECT AVG(score) FROM courses"
+            else:
+                sql = "SELECT COUNT(*) FROM students"
+            return {
+                "sql": sql,
+                "model": "schema-direct-test",
+                "mode": "schema_direct",
+                "latencyMs": 1,
+                "schemaValidationWarnings": [],
+                "metadata": {
+                    "generation_source": "schema_direct_llm",
+                    "dialect": dialect,
+                    "used_query_plan": False,
+                    "used_renderer": False,
+                    "used_demo_fallback": False,
+                },
+            }
+
+        monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+        run_fn = create_databox_sqlite_run_fn(
+            db_session=db_session,
+            api_key="sk-test",
+            api_base="https://test/v1",
+            model_name="schema-direct-test",
+            execute=True,
+            max_steps=12,
+        )
+        runner = SpiderEvalRunner(run_fn=run_fn, execute=True, runner_mode="databox")
+        results, summary = runner.run(fixture_root, limit=2)
+
+        assert summary.runner_mode == "databox"
+        assert summary.is_databox_score is True
+        assert summary.execution_accuracy == 1.0
+        assert all(r.generation_metadata is not None for r in results)
+        for result in results:
+            assert result.generation_metadata["generation_source"] == "schema_direct_llm"
+            assert result.generation_metadata["used_renderer"] is False
+            assert result.generation_metadata["used_demo_fallback"] is False
+
+    @pytest.mark.e2e
     def test_spider_databox_run_with_api_key(self, db_session) -> None:
         """Full DataBox pipeline against Spider tiny fixture with real LLM."""
         import os

@@ -12,7 +12,6 @@ from engine.agent_kernel.reference_resolver import resolve_reference
 INTENT_ROUTES: dict[str, list[str]] = {
     "new_data_question": [
         "schema.build_context",
-        "query_plan.build",
         "sql.generate",
         "sql.critic",
         "sql.validate",

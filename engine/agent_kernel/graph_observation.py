@@ -14,7 +14,7 @@ from engine.agent_kernel.state import KernelState
 
 
 TOOL_FALLBACK_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
-    "schema.build_context": "build_query_plan",
+    "schema.build_context": "generate_sql",
     "query_plan.build": "generate_sql",
     "sql.generate": "sql_critic",
     "sql.revise": "sql_critic",

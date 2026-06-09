@@ -16,7 +16,7 @@ from engine.agent.tools import (
 )
 from engine.agent.semantic_contract import build_query_contract
 from engine.agent.sql_semantic_verifier import SemanticViolation
-from engine.models import SchemaColumn, SchemaTable
+from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 
 
@@ -35,17 +35,24 @@ def test_build_query_plan_tool_for_chinese_question(db_session, demo_datasource)
 def test_generate_sql_tool_rewrites_select_star(db_session, demo_datasource, monkeypatch) -> None:
     sync_schema(db_session, demo_datasource.id)
 
-    def fake_generate_sql(*_args, **_kwargs):
+    def fake_generate_sql_from_schema_context(**_kwargs):
         return {
             "sql": "SELECT * FROM users",
             "model": "test",
-            "mode": "offline",
+            "mode": "schema_direct",
             "latencyMs": 1,
             "schemaValidationWarnings": [],
+            "metadata": {
+                "generation_source": "schema_direct_llm",
+                "dialect": "mysql",
+                "used_query_plan": False,
+                "used_renderer": False,
+                "used_demo_fallback": False,
+            },
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户")
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", api_key="sk-test")
 
     obs = generate_sql_tool(db_session, req)
 
@@ -58,14 +65,39 @@ def test_generate_sql_tool_rewrites_select_star(db_session, demo_datasource, mon
     assert obs.output["metadata"]["rewrite"]["select_star_column_limit"] == 12
 
 
-def test_generate_sql_tool_uses_query_plan_before_fallback(db_session, demo_datasource, monkeypatch) -> None:
+def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_generate_sql(
+    db_session, demo_datasource, monkeypatch
+) -> None:
     sync_schema(db_session, demo_datasource.id)
+    calls: list[dict[str, object]] = []
 
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
+    def fail_renderer(*_args, **_kwargs):
+        raise AssertionError("renderer should not run in default schema_direct path")
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users")
+    def fake_schema_direct(**kwargs):
+        calls.append(kwargs)
+        return {
+            "sql": "SELECT COUNT(*) AS total_users FROM users",
+            "model": "test",
+            "mode": "schema_direct",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+            "metadata": {
+                "generation_source": "schema_direct_llm",
+                "dialect": kwargs["dialect"],
+                "used_query_plan": False,
+                "used_renderer": False,
+                "used_demo_fallback": False,
+            },
+        }
+
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", fail_renderer)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+    monkeypatch.setattr(
+        "engine.agent.tools.QueryPlanBuilder.build",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("QueryPlanBuilder should not run in sql.generate")),
+    )
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
     metric = {"name": "total_users", "expression": "COUNT(*)"}
     query_plan = {
         "analysis_goal": "count users",
@@ -88,9 +120,39 @@ def test_generate_sql_tool_uses_query_plan_before_fallback(db_session, demo_data
 
     assert obs.status == "success"
     assert obs.output is not None
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
+    assert calls and calls[0]["question"] == "count users"
+    assert obs.output["metadata"]["generation_source"] == "schema_direct_llm"
+    assert obs.output["metadata"]["used_renderer"] is False
+    assert obs.output["metadata"]["used_query_plan_as_prompt"] is False
+    assert obs.output["metadata"]["used_demo_fallback"] is False
     assert "COUNT(*) AS total_users" in obs.output["sql"]
     assert "FROM users" in obs.output["sql"]
+
+
+def test_generate_sql_tool_non_demo_without_api_key_fails_closed(db_session) -> None:
+    ds = DataSource(
+        id=str(uuid.uuid4()),
+        name="sqlite_real",
+        db_type="sqlite",
+        host="localhost",
+        port=0,
+        database_name="/tmp/real.sqlite",
+        username="",
+        password_ciphertext="",
+        password_nonce="",
+        status="active",
+    )
+    db_session.add(ds)
+    db_session.commit()
+
+    req = AgentRunRequest(datasource_id=ds.id, question="list products")
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "TABLE students(id, name)"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["sql"] is None
+    assert obs.output["error"] == "LLM API key required for non-demo Text-to-SQL generation"
+    assert obs.output["metadata"]["used_demo_fallback"] is False
 
 
 def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
@@ -105,7 +167,7 @@ def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda **_kwargs: fake_generate_sql())
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
         question="Which airlines have at least 10 flights?",
@@ -129,25 +191,27 @@ def test_generate_sql_tool_retries_once_with_contract_violations(db_session, dem
     sync_schema(db_session, demo_datasource.id)
     prompts: list[str] = []
 
-    def fake_generate_sql(_db, _datasource_id, prompt, **_kwargs):
-        prompts.append(prompt)
+    def fake_generate_sql_from_schema_context(**kwargs):
+        prompts.append(str(kwargs["question"]))
         if len(prompts) == 1:
             return {
                 "sql": "SELECT Airline FROM flights GROUP BY Airline",
                 "model": "test",
-                "mode": "online",
+                "mode": "schema_direct",
                 "latencyMs": 1,
                 "schemaValidationWarnings": [],
+                "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False, "used_demo_fallback": False},
             }
         return {
             "sql": "SELECT Airline FROM flights GROUP BY Airline HAVING COUNT(*) >= 10",
             "model": "test",
-            "mode": "online",
+            "mode": "schema_direct",
             "latencyMs": 1,
             "schemaValidationWarnings": [],
+            "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False, "used_demo_fallback": False},
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
         question="Which airlines have at least 10 flights?",
