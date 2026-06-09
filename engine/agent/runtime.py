@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
@@ -11,20 +12,35 @@ from engine.agent.context import has_follow_up_context
 from engine.errors import DataBoxError
 
 
-class DataBoxAgentRuntime:
-    """Compatibility facade for the graph-backed Agent Kernel runtime.
+def _use_next_gen() -> bool:
+    engine_flag = os.environ.get("DATABOX_AGENT_ENGINE", "").strip().lower()
+    if engine_flag in ("databox_agent", "next", "nextgen"):
+        return True
+    if engine_flag in ("legacy_kernel", "legacy", "old"):
+        return False
+    # Default: use next-gen when explicitly "databox_agent", otherwise legacy.
+    # Flip this default once Phase 7 testing is complete.
+    return engine_flag == "databox_agent"
 
-    The old imperative runtime has been removed from this class. Public callers
-    keep using the historical DataBoxAgentRuntime entrypoint while all control
-    flow, routing, checkpointing, approvals, and tool execution are delegated to
-    AgentKernelService.
+
+class DataBoxAgentRuntime:
+    """Compatibility facade for the agent runtime.
+
+    When DATABOX_AGENT_ENGINE=databox_agent, delegates to DataBoxAgentService
+    (next-gen ReAct agent). Otherwise delegates to AgentKernelService (legacy).
+
+    Public callers keep using DataBoxAgentRuntime unchanged.
     """
 
     def __init__(self, db: Session):
         self.db = db
-        from engine.agent_kernel.service import AgentKernelService
 
-        self.kernel = AgentKernelService(db)
+        if _use_next_gen():
+            from engine.databox_agent.app.service import DataBoxAgentService
+            self.kernel = DataBoxAgentService(db)
+        else:
+            from engine.agent_kernel.service import AgentKernelService
+            self.kernel = AgentKernelService(db)
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         return self._facade_response(self.kernel.run(req))
