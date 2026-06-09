@@ -118,6 +118,35 @@ def register_databox_tools() -> ToolRegistry:
     registry.register(_tool("chart.suggest", "Suggest a chart from query results.", _chart_suggest, input_model=EmptyToolInput, base_tool=ChartSuggestTool(), metadata={"next_route": "followup_suggest"}))
     registry.register(_tool("followup.suggest", "Suggest evidence-aware follow-up questions.", _followup_suggest, input_model=EmptyToolInput, base_tool=FollowupSuggestTool(), metadata={"next_route": "synthesize_answer"}))
     registry.register(_tool("answer.synthesize", "Synthesize the final evidence-grounded answer.", _answer_synthesize, input_model=EmptyToolInput, base_tool=AnswerSynthesizeTool(), metadata={"next_route": "answer"}))
+
+    # Environment tools (no base_tool — handler-only)
+    from engine.databox_agent.environment.tools import (
+        schema_list_tables,
+        schema_describe_table,
+        schema_refresh_catalog,
+    )
+    registry.register(_tool(
+        "schema.list_tables",
+        "List all known tables in the datasource's schema catalog. Use when schema.build_context returns zero tables.",
+        schema_list_tables,
+        input_model=EmptyToolInput,
+        metadata={"next_route": "answer"},
+    ))
+    registry.register(_tool(
+        "schema.describe_table",
+        "Describe a specific table: columns, types, keys, and sample rows. Input: table_name.",
+        schema_describe_table,
+        input_model=QuestionToolInput,
+        metadata={"next_route": "answer"},
+    ))
+    registry.register(_tool(
+        "schema.refresh_catalog",
+        "Re-introspect the live datasource and sync its schema to the DataBox catalog. Use when catalog appears empty or stale.",
+        schema_refresh_catalog,
+        input_model=EmptyToolInput,
+        metadata={"next_route": "answer"},
+    ))
+
     workspace_tools = {tool.spec.name: tool for tool in build_workspace_tools()}
     for tool_name in WORKSPACE_TOOL_NAMES:
         workspace_tool = workspace_tools[tool_name]
