@@ -8,6 +8,7 @@ from engine.agent import AgentRunRequest
 from engine.agent.semantic_retry_policy import semantic_retry_prompt
 from engine.agent.tools import (
     _prepare_generated_sql,
+    _render_sql_from_query_plan,
     build_query_plan_tool,
     generate_sql_tool,
     revise_sql_tool,
@@ -32,7 +33,7 @@ def test_build_query_plan_tool_for_chinese_question(db_session, demo_datasource)
     assert "orders" in obs.output["candidate_tables"]
 
 
-def test_generate_sql_tool_rewrites_select_star(db_session, demo_datasource, monkeypatch) -> None:
+def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, demo_datasource, monkeypatch) -> None:
     sync_schema(db_session, demo_datasource.id)
 
     def fake_generate_sql_from_schema_context(**_kwargs):
@@ -58,11 +59,57 @@ def test_generate_sql_tool_rewrites_select_star(db_session, demo_datasource, mon
 
     assert obs.status == "success"
     assert obs.output is not None
-    assert "SELECT *" not in obs.output["sql"].upper()
-    assert "users.id" in obs.output["sql"]
-    assert "LIMIT" in obs.output["sql"].upper()
-    assert "select_star_rewritten_to_explicit_columns" in obs.output["rewrite_notes"]
-    assert obs.output["metadata"]["rewrite"]["select_star_column_limit"] == 12
+    assert obs.output["sql"] == "SELECT * FROM users"
+    assert obs.output["rewrite_notes"] == []
+    assert obs.output["metadata"]["used_guardrail_in_generate"] is False
+    assert obs.output["metadata"]["used_semantic_retry"] is False
+
+
+def test_generate_sql_tool_default_path_does_not_call_prepare_guardrail_renderer_legacy_or_retry_prompt(
+    db_session, demo_datasource, monkeypatch
+) -> None:
+    sync_schema(db_session, demo_datasource.id)
+
+    def fail_prepare(*_args, **_kwargs):
+        raise AssertionError("_prepare_generated_sql must not run in sql.generate")
+
+    def fail_guardrail(*_args, **_kwargs):
+        raise AssertionError("guardrail_check must not run in sql.generate")
+
+    def fail_renderer(*_args, **_kwargs):
+        raise AssertionError("_render_sql_from_query_plan must not run in sql.generate")
+
+    def fail_legacy(*_args, **_kwargs):
+        raise AssertionError("legacy generate_sql must not run in sql.generate")
+
+    def fail_retry_prompt(*_args, **_kwargs):
+        raise AssertionError("semantic_retry_prompt must not run in default sql.generate")
+
+    def fake_schema_direct(**_kwargs):
+        return {
+            "sql": "SELECT COUNT(*) FROM users",
+            "model": "test",
+            "mode": "schema_direct",
+            "latencyMs": 1,
+            "schemaValidationWarnings": [],
+            "metadata": {"generation_source": "schema_direct_llm"},
+        }
+
+    monkeypatch.setattr("engine.agent.tools._prepare_generated_sql", fail_prepare)
+    monkeypatch.setattr("engine.agent.tools.guardrail_check", fail_guardrail)
+    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", fail_renderer)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+    monkeypatch.setattr("engine.agent.tools.semantic_retry_prompt", fail_retry_prompt)
+    monkeypatch.setattr("engine.ai.generate_sql", fail_legacy)
+
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "TABLE users(id)"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["metadata"]["generation_source"] == "schema_direct_llm"
+    assert obs.output["metadata"]["used_guardrail_in_generate"] is False
+    assert obs.output["metadata"]["used_semantic_retry"] is False
 
 
 def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_generate_sql(
@@ -256,14 +303,8 @@ def test_semantic_retry_prompt_includes_code_specific_guidance() -> None:
     assert "Use SELECT DISTINCT" in prompt
 
 
-def test_generate_sql_tool_omits_empty_raw_plan_order_by(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_sql_from_query_plan_omits_empty_raw_plan_order_by(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users")
     metric = {"name": "total_users", "expression": "COUNT(*)"}
     query_plan = {
         "analysis_goal": "count users",
@@ -280,11 +321,10 @@ def test_generate_sql_tool_omits_empty_raw_plan_order_by(db_session, demo_dataso
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
 
-    assert obs.status == "success"
-    assert obs.output is not None
-    assert "ORDER BY" not in obs.output["sql"].upper()
+    assert sql is not None
+    assert "ORDER BY" not in sql.upper()
 
 
 @pytest.mark.parametrize(
@@ -334,7 +374,7 @@ def test_prepare_generated_sql_preserves_valid_order_by(
     assert "invalid_order_by_removed" not in notes
 
 
-def test_generate_sql_tool_no_key_uses_offline_fallback(db_session, demo_datasource) -> None:
+def test_generate_sql_tool_demo_without_api_key_fails_closed(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="list products", api_key=None)
 
@@ -344,11 +384,12 @@ def test_generate_sql_tool_no_key_uses_offline_fallback(db_session, demo_datasou
     assert obs.input is not None
     assert obs.input["has_api_key"] is False
     assert obs.output is not None
-    assert obs.output["model"] == "databox-local-heuristic"
-    assert obs.output["mode"] == "offline"
+    assert obs.output["sql"] is None
+    assert obs.output["error"] == "LLM API key required for non-demo Text-to-SQL generation"
+    assert obs.output["metadata"]["used_demo_fallback"] is False
 
 
-def test_generate_sql_tool_reports_select_star_truncation_limit(db_session, demo_datasource, monkeypatch) -> None:
+def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
     table = SchemaTable(
         id=str(uuid.uuid4()),
@@ -377,27 +418,19 @@ def test_generate_sql_tool_reports_select_star_truncation_limit(db_session, demo
     )
     db_session.commit()
 
-    def fake_generate_sql(*_args, **_kwargs):
-        return {
-            "sql": "SELECT * FROM wide_table",
-            "model": "test",
-            "mode": "offline",
-            "latencyMs": 1,
-            "schemaValidationWarnings": [],
-        }
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="wide table")
-
-    obs = generate_sql_tool(db_session, req)
+    obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT * FROM wide_table")
 
     assert obs.status == "success"
     assert obs.output is not None
-    rewrite = obs.output["metadata"]["rewrite"]
+    rewrite = obs.output["rewrite"]
     assert rewrite["select_star_column_limit"] == 12
     assert rewrite["truncated_tables"] == ["wide_table"]
     assert "first 12 columns" in rewrite["message"]
-    assert "col_13" not in obs.output["sql"]
+    assert "select_star_rewritten_to_explicit_columns" in obs.output["rewrite_notes"]
+    prepared_sql = obs.output["prepared_sql"]
+    assert prepared_sql is not None
+    assert "col_13" not in prepared_sql
+    assert obs.output["guardrail"]["result"] in {"pass", "warn", "reject"}
 
 
 @pytest.mark.parametrize("sql", ["DELETE FROM users", "UPDATE users SET role = 'admin'", "DROP TABLE users"])
@@ -412,17 +445,19 @@ def test_validate_sql_tool_blocks_write_operations(db_session, demo_datasource, 
     assert obs.output["guardrail"]["result"] == "reject"
 
 
-def test_validate_sql_tool_blocks_unrewritten_select_star(db_session, demo_datasource) -> None:
+def test_validate_sql_tool_rewrites_select_star_and_produces_safe_sql(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
 
     obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT * FROM users")
 
     assert obs.status == "success"
     assert obs.output is not None
-    assert obs.output["can_execute"] is False
-    assert obs.output["execution_safety_decision"]["policy"] == "agent_readonly"
-    assert "select_star" in obs.output["execution_safety_decision"]["blocked_reasons"]
-    assert "explicit column" in obs.output["revise_suggestion"]
+    assert obs.output["can_execute"] is True
+    assert obs.output["safe_sql"] is not None
+    assert "SELECT *" not in obs.output["safe_sql"].upper()
+    assert "users.id" in obs.output["safe_sql"]
+    assert "select_star_rewritten_to_explicit_columns" in obs.output["rewrite_notes"]
+    assert obs.output["guardrail"]["result"] in {"pass", "warn"}
 
 
 def test_validate_sql_tool_blocks_schema_hallucination(db_session, demo_datasource) -> None:
@@ -490,16 +525,9 @@ def test_suggest_chart_category_numeric_returns_bar() -> None:
     }
 
 
-def test_render_structured_order_by_list_and_dict(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_structured_order_by_list_and_dict(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
     metric = {"name": "total_users", "expression": "COUNT(*)"}
-    # single dict order_by
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -515,28 +543,19 @@ def test_render_structured_order_by_list_and_dict(db_session, demo_datasource, m
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    assert "ORDER BY" in obs.output["sql"].upper()
-    assert "DESC" in obs.output["sql"].upper()
-    # multi-field list
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    assert "ORDER BY" in sql.upper()
+    assert "DESC" in sql.upper()
     query_plan["raw_plan"]["order_by"] = [{"column": "id", "direction": "DESC"}, {"column": "username", "direction": "ASC"}]
-    obs2 = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs2.status == "success"
-    assert "ORDER BY" in obs2.output["sql"].upper()
-    assert "username ASC" in obs2.output["sql"] or "USERNAME ASC" in obs2.output["sql"].upper()
+    sql2 = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql2 is not None
+    assert "ORDER BY" in sql2.upper()
+    assert "username ASC" in sql2 or "USERNAME ASC" in sql2.upper()
 
 
-def test_order_by_illegal_direction_triggers_fallback(db_session, demo_datasource, monkeypatch) -> None:
+def test_order_by_illegal_direction_omits_order_by(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
-
-    def fake_generate_sql(*_args, **_kwargs):
-        return {"sql": "SELECT id FROM users ORDER BY id DESC", "model": "test", "mode": "online", "latencyMs": 1, "schemaValidationWarnings": []}
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -552,23 +571,14 @@ def test_order_by_illegal_direction_triggers_fallback(db_session, demo_datasourc
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    # Renderer silently drops illegal direction (e.g. DOWN) and omits ORDER BY clause
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    assert "ORDER BY" not in obs.output["sql"].upper()
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    assert "ORDER BY" not in sql.upper()
 
 
-def test_render_stringified_python_repr_order_by(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_stringified_python_repr_order_by(db_session, demo_datasource) -> None:
     """Stringified Python repr like \"[{'column': 'id', 'direction': 'DESC'}]\" must be parsed and rendered."""
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -584,22 +594,14 @@ def test_render_stringified_python_repr_order_by(db_session, demo_datasource, mo
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    assert "ORDER BY id DESC" in sql or "ORDER BY ID DESC" in sql.upper()
 
 
-def test_render_json_string_order_by(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_json_string_order_by(db_session, demo_datasource) -> None:
     """JSON string like '[{\"column\":\"id\",\"direction\":\"DESC\"}]' must be parsed and rendered."""
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -615,22 +617,14 @@ def test_render_json_string_order_by(db_session, demo_datasource, monkeypatch) -
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    assert "ORDER BY id DESC" in obs.output["sql"] or "ORDER BY ID DESC" in obs.output["sql"].upper()
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    assert "ORDER BY id DESC" in sql or "ORDER BY ID DESC" in sql.upper()
 
 
-def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, demo_datasource, monkeypatch) -> None:
+def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, demo_datasource) -> None:
     """Stringified repr with illegal direction (DOWN) should silently omit ORDER BY."""
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run — renderer handles this")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users")
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -646,23 +640,14 @@ def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, de
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    assert "ORDER BY" not in obs.output["sql"].upper()
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    assert "ORDER BY" not in sql.upper()
 
 
-def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasource, monkeypatch) -> None:
-    """Targeted check for smoke-2: ordered by age from oldest to youngest → ORDER BY Age DESC."""
+def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasource) -> None:
+    """Experimental renderer: ordered by age from oldest to youngest → ORDER BY Age DESC."""
     sync_schema(db_session, demo_datasource.id)
-
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="Show name, country, age for all singers ordered by age from the oldest to the youngest.")
-    # Simulate smoke-2's actual query_plan shape: stringified Python repr in order_by
     query_plan = {
         "analysis_goal": "retrieve_singer_details_ordered_by_age",
         "candidate_tables": ["users"],
@@ -683,25 +668,13 @@ def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasour
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    # Must be query_plan_rendered (the low_confidence guard should NOT trip for this
-    # because we use 'email'/'username' placeholders that exist in the schema)
-    assert obs.output["metadata"]["generation_source"] == "query_plan_rendered"
-    # The critical assertion: ORDER BY must appear with a DESC direction
-    sql_upper = obs.output["sql"].upper()
-    assert "ORDER BY" in sql_upper, f"Expected ORDER BY in SQL, got: {obs.output['sql']}"
-    assert "DESC" in sql_upper, f"Expected DESC direction in SQL, got: {obs.output['sql']}"
-    # Must not be a bare COUNT(*) — should contain the dimension columns
-    assert "username" in obs.output["sql"].lower() or "USERNAME" in sql_upper
-    sync_schema(db_session, demo_datasource.id)
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
+    sql_upper = sql.upper()
+    assert "ORDER BY" in sql_upper
+    assert "DESC" in sql_upper
+    assert "username" in sql.lower() or "USERNAME" in sql_upper
 
-    def fail_generate_sql(*_args, **_kwargs):
-        raise AssertionError("generate_sql fallback should not run for a renderable plan")
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fail_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users without deleted")
     query_plan = {
         "analysis_goal": "users without deleted",
         "candidate_tables": ["users"],
@@ -716,23 +689,14 @@ def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasour
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    sql = obs.output["sql"]
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is not None
     assert "IS NULL" in sql
     assert "'None'" not in sql and "\"None\"" not in sql
 
 
-def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasource, monkeypatch) -> None:
+def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
-
-    def fake_generate_sql(*_args, **_kwargs):
-        return {"sql": "SELECT id FROM users", "model": "test", "mode": "online", "latencyMs": 1, "schemaValidationWarnings": []}
-
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have a pet")
-    # Simulate plan with inner join and IS NULL filter semantics
     query_plan = {
         "analysis_goal": "users who do not have a pet",
         "candidate_tables": ["users", "has_pet"],
@@ -747,37 +711,33 @@ def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasour
         },
     }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
-    assert obs.status == "success"
-    assert obs.output is not None
-    # Should fallback to LLM because of anti-join intent
-    assert obs.output["metadata"]["generation_source"] == "generate_sql_fallback"
+    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    assert sql is None
 
 
 def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, demo_datasource, monkeypatch) -> None:
     """Semantic verifier reports anti-join shape issues without hard-rewriting SQL."""
     sync_schema(db_session, demo_datasource.id)
 
-    def fake_generate_sql(*_args, **_kwargs):
+    def fake_schema_direct(**_kwargs):
         return {
             "sql": "SELECT DISTINCT users.id FROM users JOIN has_pet ON users.id = has_pet.user_id LIMIT 100",
-            "model": "test", "mode": "online", "latencyMs": 1,
+            "model": "test",
+            "mode": "schema_direct",
+            "latencyMs": 1,
             "schemaValidationWarnings": [],
+            "metadata": {"generation_source": "schema_direct_llm"},
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql", fake_generate_sql)
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test")
-    query_plan = {
-        "analysis_goal": "find non-admin",
-        "candidate_tables": ["users"],
-        "raw_plan": {"intent": "filter", "tables": ["users"], "metrics": [], "dimensions": [], "filters": [], "joins": [], "limit": 100},
-    }
 
-    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan=query_plan)
+    obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})
     assert obs.status == "success"
     sql = (obs.output or {}).get("sql", "")
     assert "DISTINCT" in sql.upper()
     metadata = (obs.output or {}).get("metadata", {})
+    assert metadata["used_guardrail_in_generate"] is False
     assert {item["code"] for item in metadata.get("semantic_violations", [])} == {"antijoin_outer_join"}
 
 

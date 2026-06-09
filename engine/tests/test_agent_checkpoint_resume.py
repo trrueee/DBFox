@@ -16,7 +16,7 @@ def _prepare_waiting_run(db_session, demo_datasource, monkeypatch):
     demo_datasource.env = "prod"
     db_session.commit()
     monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql", lambda *_args, **_kwargs: {
+    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
         "sql": "SELECT id, username FROM users LIMIT 3",
         "model": "test",
         "mode": "offline",
@@ -79,7 +79,6 @@ def test_approved_resume_continues_from_execute_sql(db_session, demo_datasource,
     assert "agent.answer.completed" in event_types
     assert [step.name for step in final.response.steps] == [
         "build_schema_context",
-        "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
         "execute_sql",

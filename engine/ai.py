@@ -443,8 +443,11 @@ def generate_sql_from_schema_context(
         "generation_source": "schema_direct_llm",
         "dialect": dialect,
         "used_query_plan": False,
+        "used_query_plan_as_prompt": False,
         "used_renderer": False,
         "used_demo_fallback": False,
+        "used_guardrail_in_generate": False,
+        "used_semantic_retry": False,
     }
 
     if not api_key:

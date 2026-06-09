@@ -241,6 +241,7 @@ class TestSpiderE2E:
             assert result.generation_metadata["generation_source"] == "schema_direct_llm"
             assert result.generation_metadata["used_renderer"] is False
             assert result.generation_metadata["used_demo_fallback"] is False
+            assert result.generation_metadata["used_guardrail_in_generate"] is False
 
     @pytest.mark.e2e
     def test_spider_databox_run_with_api_key(self, db_session) -> None:
