@@ -604,6 +604,9 @@ class AgentKernelService:
         update["pending_tool_call"] = None
         update["last_tool_name"] = tool_name
         update["last_observation"] = observation.model_dump(mode="json")
+        registered_tool = self.registry.get(tool_name)
+        if registered_tool is not None:
+            update["last_tool_metadata"] = registered_tool.spec.metadata
         return update
 
     def _expire_superseded_approval(

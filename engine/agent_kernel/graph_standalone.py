@@ -430,6 +430,13 @@ def _after_observe(state: KernelState) -> str:
         return "revise_sql"
     if state.get("error"):
         return "synthesize_answer"
+    metadata = state.get("last_tool_metadata")
+    if isinstance(metadata, dict):
+        next_route = metadata.get("next_route")
+        if isinstance(next_route, str) and next_route:
+            if next_route == "followup_suggest" and _intent(state) != "new_data_question":
+                return "synthesize_answer"
+            return next_route
     tool_name = str(state.get("last_tool_name") or "")
     if tool_name == "schema.build_context":
         return "build_query_plan"
