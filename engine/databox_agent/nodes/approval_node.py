@@ -25,9 +25,15 @@ def approval_interrupt(state: DataBoxAgentState, config: RunnableConfig) -> dict
     # decision is the value passed via Command(resume=...)
     if isinstance(decision, dict) and decision.get("decision") == "approved":
         requested = pending.get("requested_action") if isinstance(pending, dict) else {}
+        # Build id from pending approval context so DataBoxToolNode can use call["id"]
+        call_id = (
+            (pending.get("tool_call_id") if isinstance(pending, dict) else None)
+            or f"approved_{pending.get('id', 'unknown')}"
+        )
         approved_tool_call = {
             "name": str(requested.get("tool_name") or pending.get("tool_name") or ""),
             "args": dict(requested.get("args") or {}),
+            "id": str(call_id),
         }
         return {
             "status": "running",

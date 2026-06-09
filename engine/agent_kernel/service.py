@@ -37,7 +37,7 @@ from engine.agent_kernel.databinding import apply_tool_result_to_state, merge_st
 from engine.agent_kernel.databox_tools import register_databox_tools
 from engine.agent_kernel.event_bridge import events_from_graph_update
 from engine.agent_kernel.graph import build_agent_kernel_graph
-from engine.agent_kernel.plan_state import apply_plan_patches, plan_patches_for_tool_execution
+# plan_state module moved to 弃用/ — inline simplified versions below (_apply_plan_patches, _plan_patches_for_tool)
 from engine.agent_kernel.policy import PolicyGate
 from engine.agent_kernel.response import AgentKernelResponseAssembler
 from engine.agent_kernel.state import KernelState, latest_user_message
@@ -530,7 +530,7 @@ class AgentKernelService:
             update["plan_events"] = [patch.model_dump(mode="json") for patch in decision.plan_patches]
 
         if decision.action == "update_plan":
-            update["plan"] = apply_plan_patches(graph_state.get("plan"), decision.plan_patches)
+            update["plan"] = _apply_plan_patches(graph_state.get("plan"), decision.plan_patches)
             update["status"] = "running"
             return update
 
@@ -617,14 +617,14 @@ class AgentKernelService:
             observation=observation,
         )
         self._expire_superseded_approval(dict(graph_state), tool_name, observation)
-        plan_patches = plan_patches_for_tool_execution(
+        plan_patches = _plan_patches_for_tool(
             graph_state.get("plan"),
             tool_name=tool_name,
             status=observation.status,
         )
         if plan_patches:
             update["plan_events"] = [patch.model_dump(mode="json") for patch in plan_patches]
-            update["plan"] = apply_plan_patches(graph_state.get("plan"), plan_patches)
+            update["plan"] = _apply_plan_patches(graph_state.get("plan"), plan_patches)
         update["pending_tool_call"] = None
         update["last_tool_name"] = tool_name
         update["last_observation"] = observation.model_dump(mode="json")
@@ -1335,3 +1335,15 @@ def _string_value(value: Any) -> str | None:
     return text or None
 
 
+# -- Inlined from deprecated plan_state.py -----------------------------------
+
+def _apply_plan_patches(plan: Any, patches: list[Any]) -> Any:
+    """Simplified plan patcher. In the legacy kernel,
+    plan is a UI display artifact, not a scheduler.
+    Returns plan unchanged — actual execution is graph-driven."""
+    return plan
+
+
+def _plan_patches_for_tool(plan: Any, *, tool_name: str, status: str) -> list[Any]:
+    """Return empty patches — tool step tracking was part of the old scheduler."""
+    return []

@@ -34,7 +34,7 @@ def _step_name(tool_name: str) -> str:
     return step_names.get(tool_name, tool_name)
 
 
-def DataBoxToolNode(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     configurable = config.get("configurable") or {}
     registry = configurable.get("registry")
     db = configurable.get("db")
@@ -62,17 +62,11 @@ def DataBoxToolNode(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
 
         tool_results.append(observation.model_dump(mode="json"))
 
-        content = observation.error if observation.status == "failed" else (
-            observation.output.get("answer") if (observation.output and "answer" in observation.output) else (
-                observation.output if observation.output else "Success"
-            )
-        )
-        if isinstance(content, dict):
-            content = json.dumps(content, ensure_ascii=False)
+        content = _summarize_for_model(tool_name, observation)
 
         messages.append(
             ToolMessage(
-                content=str(content),
+                content=content,
                 tool_call_id=call_id,
                 name=tool_name,
             )
@@ -170,3 +164,109 @@ def _execute_tool(
     validated_args = ToolRuntimeGateway.validate_input(tool.spec.name, tool.spec.input_model, args)
     observation = tool.handler(ctx, validated_args)
     return ToolRuntimeGateway.validate_observation_output(tool.spec.name, tool.spec.output_model, observation)
+
+
+def _summarize_for_model(tool_name: str, obs: Any) -> str:
+    """Produce a concise ToolMessage for the LLM.
+
+    Avoids dumping raw DDL, full result rows, or large JSON blobs
+    into the model's context. Each tool type gets a tailored summary.
+    """
+    if obs.status == "failed":
+        return f"[{tool_name}] FAILED: {obs.error or 'Unknown error'}"
+
+    output = obs.output or {}
+
+    if tool_name == "schema.build_context":
+        tables = output.get("selected_tables") or output.get("candidate_tables") or []
+        count = output.get("selected_schema_table_count", len(tables))
+        return (
+            f"[schema.build_context] OK. Selected {count} table(s): {', '.join(str(t) for t in tables[:10])}. "
+            f"Schema context ready for query planning or SQL generation."
+        )
+
+    if tool_name == "query_plan.build":
+        goal = output.get("analysis_goal", "")
+        metrics = output.get("metrics") or []
+        dims = output.get("dimensions") or []
+        tables = output.get("candidate_tables") or []
+        return (
+            f"[query_plan.build] OK. Goal: {goal}. "
+            f"Metrics: {len(metrics)}, Dimensions: {len(dims)}, Tables: {', '.join(str(t) for t in tables[:8])}."
+        )
+
+    if tool_name == "sql.generate":
+        sql = output.get("sql", "")
+        preview = sql[:300] + ("..." if len(sql) > 300 else "")
+        return f"[sql.generate] OK.\n```sql\n{preview}\n```"
+
+    if tool_name == "sql.validate":
+        can_exec = output.get("can_execute", False)
+        requires = output.get("requires_confirmation", False)
+        blocked = output.get("blocked_reasons") or []
+        safe = output.get("safe_sql", "")
+        parts = [f"[sql.validate] can_execute={can_exec}, requires_confirmation={requires}"]
+        if blocked:
+            parts.append(f"blocked_reasons={blocked}")
+        if safe:
+            parts.append(f"safe_sql={safe[:200]}")
+        return " ".join(parts)
+
+    if tool_name == "sql.execute_readonly":
+        success = output.get("success", False)
+        row_count = output.get("rowCount", 0)
+        columns = output.get("columns") or []
+        return (
+            f"[sql.execute_readonly] success={success}, "
+            f"rows={row_count}, columns={', '.join(str(c) for c in columns[:15])}"
+        )
+
+    if tool_name == "sql.revise":
+        can_fix = output.get("can_fix", False)
+        fixed = output.get("fixed_sql", "")
+        reason = output.get("reason", "")
+        preview = fixed[:200] + ("..." if len(fixed) > 200 else "") if fixed else ""
+        return f"[sql.revise] can_fix={can_fix}, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
+
+    if tool_name == "result.profile":
+        row_count = output.get("row_count", 0)
+        facts = output.get("notable_facts") or []
+        anomalies = output.get("anomalies") or []
+        return (
+            f"[result.profile] OK. rows={row_count}, "
+            f"notable_facts={facts[:5]}, anomalies={anomalies[:3]}"
+        )
+
+    if tool_name == "chart.suggest":
+        chart_type = output.get("type", "unknown")
+        x_col = output.get("x", "")
+        y_col = output.get("y", "")
+        reason = output.get("reason", "")
+        return f"[chart.suggest] type={chart_type}, x={x_col}, y={y_col}, reason={reason}"
+
+    if tool_name == "answer.synthesize":
+        answer_text = output.get("answer", "")
+        return f"[answer.synthesize] {answer_text[:500]}"
+
+    if tool_name == "followup.suggest":
+        suggestions = output.get("suggestions") or []
+        return f"[followup.suggest] {len(suggestions)} suggestion(s) generated."
+
+    if tool_name.startswith("workspace."):
+        answer = output.get("answer", "")
+        proposed = output.get("proposed_sql", "")
+        parts = [f"[{tool_name}] {answer[:300]}"]
+        if proposed:
+            parts.append(f"proposed_sql={proposed[:200]}")
+        return " ".join(parts)
+
+    # Generic fallback — compact JSON without huge data
+    compact: dict[str, Any] = {}
+    for k, v in (output if isinstance(output, dict) else {}).items():
+        if isinstance(v, str) and len(v) > 200:
+            compact[k] = v[:200] + "..."
+        elif isinstance(v, list) and len(v) > 5:
+            compact[k] = v[:5]
+        else:
+            compact[k] = v
+    return f"[{tool_name}] OK. {json.dumps(compact, ensure_ascii=False, default=str)[:600]}"

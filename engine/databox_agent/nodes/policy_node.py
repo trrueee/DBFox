@@ -78,6 +78,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                     requested_action=requested_action,
                 )
                 pending_app = approval_rec.model_dump(mode="json")
+                pending_app["tool_call_id"] = call_id
             else:
                 pending_app = {
                     "id": f"approval_mock_{uuid4().hex[:8]}",
@@ -90,6 +91,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                     "reason": decision.reason,
                     "policy_decision": policy_decision,
                     "requested_action": requested_action,
+                    "tool_call_id": call_id,
                 }
 
             return {
@@ -115,11 +117,45 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                 )
             )
 
+    MAX_CONSECUTIVE_BLOCKS = 2
+
     if blocked_messages:
+        # Anti-loop: track how many consecutive blocks for the same tool set
+        prior_blocked = state.get("blocked_tool_calls") or []
+        prior_blocked_names = {c["name"] for c in prior_blocked if isinstance(c, dict)}
+        current_blocked_names = {c["name"] for c in tool_calls}
+        same_tools_blocked = prior_blocked_names == current_blocked_names
+        consecutive_blocks = (state.get("consecutive_blocks") or 0) + 1 if same_tools_blocked else 1
+
+        if consecutive_blocks > MAX_CONSECUTIVE_BLOCKS and same_tools_blocked:
+            # Force finalize — model is stuck in a blocked loop
+            return {
+                "messages": blocked_messages + [
+                    ToolMessage(
+                        content=f"Policy has blocked the same tool(s) {consecutive_blocks} times. "
+                                "Stop calling blocked tools and explain to the user why the request cannot be fulfilled.",
+                        tool_call_id="policy_anti_loop",
+                    )
+                ],
+                "status": "failed",
+                "error": f"Agent exceeded blocked tool call limit for: {', '.join(sorted(current_blocked_names))}.",
+                "allowed_tool_calls": [],
+                "blocked_tool_calls": tool_calls,
+                "consecutive_blocks": consecutive_blocks,
+                "trace_events": [
+                    {
+                        "type": "agent.policy.blocked_loop_limit",
+                        "tool_names": sorted(current_blocked_names),
+                        "consecutive_blocks": consecutive_blocks,
+                    }
+                ],
+            }
+
         return {
             "messages": blocked_messages,
             "blocked_tool_calls": tool_calls,
             "allowed_tool_calls": [],
+            "consecutive_blocks": consecutive_blocks,
             "trace_events": [
                 {
                     "type": "agent.policy.blocked",
@@ -130,6 +166,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
 
     return {
         "allowed_tool_calls": allowed,
+        "consecutive_blocks": 0,
         "trace_events": [
             {
                 "type": "agent.policy.allowed",

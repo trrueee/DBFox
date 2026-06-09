@@ -136,7 +136,7 @@ class DataBoxAgentService:
             session_id=session_id,
             state=final_state,
             steps=agent_state.steps,
-            artifacts=agent_state.artifacts,
+            artifacts=self._artifacts_from_state(final_state, agent_state),
             success=success,
             error=final_state.get("error"),
             status=final_state.get("status"),
@@ -244,7 +244,7 @@ class DataBoxAgentService:
             session_id=session_id,
             state=final_state,
             steps=agent_state.steps,
-            artifacts=agent_state.artifacts,
+            artifacts=self._artifacts_from_state(final_state, agent_state),
             success=success,
             error=final_state.get("error"),
             status=final_state.get("status"),
@@ -343,9 +343,33 @@ class DataBoxAgentService:
             if not isinstance(art_dict, dict):
                 continue
             artifact = AgentArtifact.model_validate(art_dict)
+            # Sync to agent_state so response builder can pick them up
+            if hasattr(agent_state, 'artifacts'):
+                agent_state.artifacts.append(artifact)
             if artifact.id not in emitted_ids:
                 emitted_ids.add(artifact.id)
                 yield emit("agent.artifact.created", artifact=artifact)
+
+    def _artifacts_from_state(
+        self, final_state: dict[str, Any], agent_state: Any
+    ) -> list[AgentArtifact]:
+        """Build artifacts list from final_state + agent_state merged."""
+        seen: set[str] = set()
+        result: list[AgentArtifact] = []
+        # Prioritize final_state artifacts (from graph) then agent_state artifacts
+        for source in [
+            final_state.get("artifacts") or [],
+            getattr(agent_state, 'artifacts', []) or [],
+        ]:
+            for item in source:
+                try:
+                    art = AgentArtifact.model_validate(item) if isinstance(item, dict) else item
+                    if art.id not in seen:
+                        seen.add(art.id)
+                        result.append(art)
+                except Exception:
+                    pass
+        return result
 
     def _trace_to_events(
         self, emit: Any, trace: dict[str, Any]
