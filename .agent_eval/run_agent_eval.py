@@ -723,7 +723,7 @@ def run_agent_case(
     session_id: str | None = None,
     parent_run_id: str | None = None,
     workspace_context: dict[str, Any] | None = None,
-    semantic_mode: str = "shadow",
+    semantic_mode: str = "off",
 ) -> tuple[list[dict[str, Any]], str | None, str | None, dict | None]:
     """Run a single agent case against the DataBox streaming API.
 
@@ -1078,7 +1078,7 @@ def main() -> None:
     api_key = args.api_key or cfg.get("api_key") or os.environ.get("OPENAI_API_KEY", "")
     api_base = cfg.get("api_base", "")
     model = args.model or cfg.get("model", "gpt-4o-mini")
-    semantic_mode = args.semantic_mode or cfg.get("semantic_mode", "shadow")
+    semantic_mode = args.semantic_mode or cfg.get("semantic_mode", "off")
     mysql_cfg = cfg.get("mysql", {})
     mysql_host = args.mysql_host or mysql_cfg.get("host", "127.0.0.1")
     mysql_port = args.mysql_port or mysql_cfg.get("port", 3307)

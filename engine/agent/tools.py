@@ -142,7 +142,7 @@ def generate_sql_tool(
     }
 
     def body() -> dict[str, Any]:
-        semantic_mode = getattr(req, "semantic_mode", "shadow") or "shadow"
+        semantic_mode = getattr(req, "semantic_mode", "off") or "off"
         dialect = _datasource_dialect(db, req.datasource_id)
         schema_text = str(schema_context.get("schema_context") or "")
         result = generate_sql_from_schema_context(

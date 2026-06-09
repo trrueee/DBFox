@@ -166,7 +166,7 @@ class AgentRunRequest(BaseModel):
     optimize_rag: bool = True
     execute: bool = True
     max_steps: int = Field(default=12, ge=1, le=20)
-    semantic_mode: Literal["off", "shadow", "retry"] = "shadow"
+    semantic_mode: Literal["off", "shadow", "retry"] = "off"
 
 
 class AgentErrorOutput(BaseModel):

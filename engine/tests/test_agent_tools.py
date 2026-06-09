@@ -730,7 +730,7 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
         }
 
     monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test")
+    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test", semantic_mode="shadow")
 
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})
     assert obs.status == "success"
