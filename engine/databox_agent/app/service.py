@@ -294,6 +294,9 @@ class DataBoxAgentService:
             progress_decision=None,
             replan_count=0,
             consecutive_blocks=0,
+            # ---- Environment / Semantic layers ----
+            environment_profile=None,
+            semantic_resolution=None,
             # ---- Tool-call / policy routing ----
             pending_tool_calls=[],
             allowed_tool_calls=[],

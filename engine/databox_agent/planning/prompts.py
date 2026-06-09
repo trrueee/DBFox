@@ -56,8 +56,8 @@ What is the deepest layer of context needed?
 
 Choose which tool groups the ReAct model may use:
 - **workspace**: workspace.explain_sql, workspace.fix_sql, workspace.optimize_sql, workspace.rewrite_sql, workspace.explain_result, workspace.continue_from_artifact, workspace.explain_schema
-- **schema**: schema.list_tables, schema.describe_table, schema.build_context, schema.refresh_catalog
-- **semantic**: semantic.* tools (resolve_terms, link_schema, resolve_metrics, suggest_join_paths)
+- **schema**: environment.get_profile, schema.list_tables, schema.describe_table, schema.build_context, schema.refresh_catalog
+- **semantic**: semantic.resolve (business term/metric/dimension/join path resolution)
 - **query_plan**: query_plan.build
 - **sql_generation**: sql.generate
 - **sql_validation**: sql.validate
@@ -73,7 +73,7 @@ Choose which tool groups the ReAct model may use:
 - Workspace explanation: use workspace tools. Do NOT query the live database.
 - Schema questions about a NAMED table: use schema tools. Do NOT use workspace.explain_schema.
 - SQL generation: include sql_generation + sql_validation groups. Do NOT include execution unless execution_mode allows it.
-- Data lookup: include schema + query_plan + sql_generation + sql_validation + execution + result.
+- Data lookup with business terms: include schema + semantic + query_plan + sql_generation + sql_validation + execution + result. The semantic group helps resolve business jargon.
 - If the user's request is ambiguous (could mean multiple things with different queries), set needs_clarification=true.
 - Never allow destructive operations.
 - Set risk_notes when the task touches PROD data, large tables, or financial/healthcare metrics.

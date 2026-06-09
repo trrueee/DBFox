@@ -159,10 +159,22 @@ def register_databox_tools() -> ToolRegistry:
 
     # Environment tools (no base_tool — handler-only)
     from engine.databox_agent.environment.tools import (
+        environment_get_profile,
         schema_list_tables,
         schema_describe_table,
         schema_refresh_catalog,
     )
+    registry.register(_tool(
+        "environment.get_profile",
+        "Get the datasource environment profile: env tier (dev/staging/prod), dialect, "
+        "catalog status (fresh/stale/empty), table count, and warnings. "
+        "Use this to understand the datasource environment before planning queries. "
+        "No input required — reads from current datasource context. "
+        "Outputs: datasource_id, env, dialect, catalog_status, table_count, selected_tables, warnings.",
+        environment_get_profile,
+        input_model=EmptyToolInput,
+        metadata={"next_route": "answer"},
+    ))
     registry.register(_tool(
         "schema.list_tables",
         "List ALL tables in the current live datasource. "
@@ -187,6 +199,24 @@ def register_databox_tools() -> ToolRegistry:
         "Input: reason (optional). Outputs: tables_created, columns_created, synced=true/false.",
         schema_refresh_catalog,
         input_model=RefreshCatalogInput,
+        metadata={"next_route": "answer"},
+    ))
+
+    # Semantic tools
+    from engine.semantic.tools import semantic_resolve
+    registry.register(_tool(
+        "semantic.resolve",
+        "Resolve business semantics for the current user question. "
+        "Maps business terms, metrics, dimensions, filters, and join paths "
+        "to actual database objects using LLM understanding + catalog verification. "
+        "Use BEFORE sql.generate when the question contains business terms like "
+        "'GMV', 'DAU', '转化率', or when you need to understand which tables and "
+        "columns are relevant. Input: none required (reads question from state). "
+        "Outputs: SemanticResolution with resolved_terms, resolved_metrics, "
+        "resolved_dimensions, candidate_tables, join_paths, ambiguity, "
+        "semantic_context_text.",
+        semantic_resolve,
+        input_model=EmptyToolInput,
         metadata={"next_route": "answer"},
     ))
 

@@ -16,6 +16,7 @@ logger = logging.getLogger("databox.databox_agent.tools.registry_bridge")
 # Matching is prefix-based, with exact matches taking priority.
 TOOL_GROUP_MAP: dict[str, str] = {
     "workspace.": "workspace",
+    "environment.": "schema",
     "schema.": "schema",
     "semantic.": "semantic",
     "query_plan.": "query_plan",

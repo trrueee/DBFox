@@ -42,6 +42,10 @@ class DataBoxAgentState(TypedDict, total=False):
     execution_mode: str
     allowed_tool_groups: list[str]
 
+    # ---- Environment / Semantic layers -------------------------------------
+    environment_profile: dict[str, Any] | None
+    semantic_resolution: dict[str, Any] | None
+
     # ---- Request-level context --------------------------------------------
     workspace_context: dict[str, Any] | None
     follow_up_context: dict[str, Any] | None
