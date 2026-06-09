@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Literal
 
-import httpx
-from pydantic import BaseModel, ValidationError
-
+from engine.agent_kernel.intent_classifier import classify_intent_ai_first
 from engine.agent_kernel.state import KernelState, latest_user_message
 
 AgentIntent = Literal[
@@ -17,24 +14,6 @@ AgentIntent = Literal[
     "chart_request",
     "clarification",
 ]
-
-VALID_INTENTS: frozenset[str] = frozenset({
-    "new_data_question",
-    "followup_on_result",
-    "explain_sql",
-    "revise_sql",
-    "approval_help",
-    "chart_request",
-    "clarification",
-})
-
-
-class IntentClassification(BaseModel):
-    intent: str
-    confidence: Literal["low", "medium", "high"]
-    reason: str = ""
-    needs_execution: bool = False
-
 
 REFERENCE_WORDS = (
     "this",
@@ -79,7 +58,7 @@ DATA_CLAIM_WORDS = (
 def understand_node(state: KernelState) -> dict[str, Any]:
     """Understand: classify the user's current intent before tool routing."""
 
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     reference = resolve_reference(state)
     payload = {
         "intent": intent,
@@ -89,6 +68,8 @@ def understand_node(state: KernelState) -> dict[str, Any]:
         "source": source,
         "reference": reference,
     }
+    if llm_trace:
+        payload["llm_trace"] = llm_trace
     return {
         "status": "running",
         "agent_intent": payload,
@@ -505,152 +486,6 @@ def _preview_list(value: Any) -> list[Any]:
     if not isinstance(value, list):
         return []
     return value[:8]
-
-
-# ---------------------------------------------------------------------------
-# AI-first intent classifier (P0: primary intent routing)
-# ---------------------------------------------------------------------------
-
-
-def classify_intent_ai_first(state: KernelState) -> tuple[AgentIntent, str]:
-    """Classify user intent AI-first with keyword fallback.
-
-    Returns (intent, source) where source is ``"llm"`` or ``"rule_fallback"``.
-    The graph reads only ``intent``; ``source`` is for observability.
-    """
-    api_key = str(state.get("api_key") or "").strip()
-    if not api_key:
-        return classify_intent_fallback(state), "rule_fallback"
-
-    try:
-        return _classify_via_llm(state, api_key)
-    except Exception:
-        return classify_intent_fallback(state), "rule_fallback"
-
-
-def _classify_via_llm(state: KernelState, api_key: str) -> tuple[AgentIntent, str]:
-    api_base = str(state.get("api_base") or "https://api.openai.com/v1").rstrip("/")
-    model_name = str(state.get("model_name") or "gpt-4o-mini")
-    text = latest_user_message(state).strip()
-
-    workspace_context = state.get("workspace_context") if isinstance(state.get("workspace_context"), dict) else {}
-    has_sql = bool(state.get("sql") or workspace_context.get("selected_sql") or workspace_context.get("active_sql"))
-    has_result = bool(state.get("execution") or workspace_context.get("last_query_result_preview"))
-    has_approval = bool(state.get("pending_approval") or workspace_context.get("pending_approval_id"))
-
-    prompt = _build_intent_classifier_prompt(text, has_sql=has_sql, has_result=has_result, has_approval=has_approval)
-
-    response = httpx.post(
-        f"{api_base}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": "Return exactly one JSON object. No markdown, no extra text."},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    raw = str(payload["choices"][0]["message"]["content"])
-
-    parsed = _parse_intent_json(raw, model_name=model_name)
-
-    if parsed.confidence == "low":
-        return classify_intent_fallback(state), "rule_fallback"
-
-    if parsed.intent not in VALID_INTENTS:
-        return classify_intent_fallback(state), "rule_fallback"
-
-    return parsed.intent, "llm"  # type: ignore[return-value]
-
-
-def _parse_intent_json(raw: str, *, model_name: str) -> IntentClassification:
-    try:
-        data = json.loads(_extract_json_from_text(raw))
-        return IntentClassification.model_validate(data)
-    except (json.JSONDecodeError, ValidationError, ValueError, TypeError):
-        pass
-
-    try:
-        repaired = _repair_json_text(raw)
-        if repaired != raw:
-            data = json.loads(_extract_json_from_text(repaired))
-            return IntentClassification.model_validate(data)
-    except (json.JSONDecodeError, ValidationError, ValueError, TypeError):
-        pass
-
-    raise ValueError(f"Intent classifier returned unparseable JSON (model={model_name}).")
-
-
-def _build_intent_classifier_prompt(
-    text: str,
-    *,
-    has_sql: bool,
-    has_result: bool,
-    has_approval: bool,
-) -> str:
-    options = [
-        "new_data_question   - a new data-analysis question",
-        "followup_on_result  - asking about a previous result or analysis",
-        "explain_sql         - asking to explain existing SQL",
-        "revise_sql          - asking to modify, fix, or rewrite SQL",
-        "approval_help       - asking about a pending approval or safety decision",
-        "chart_request       - requesting a chart or visualization",
-        "clarification       - the user needs clarification before proceeding",
-    ]
-    return json.dumps(
-        {
-            "task": "Classify the user message into exactly one intent.",
-            "message": text,
-            "context": {
-                "has_sql_in_context": has_sql,
-                "has_result_in_context": has_result,
-                "has_pending_approval": has_approval,
-            },
-            "output_schema": {
-                "intent": "one of the intent values listed below",
-                "confidence": "low | medium | high",
-                "reason": "brief justification (1 sentence)",
-                "needs_execution": "boolean: true for new_data_question, followup_on_result, chart_request only",
-            },
-            "intent_options": options,
-            "rules": [
-                "Choose the single best-matching intent. Do not invent new intents.",
-                "If the message asks about an existing SQL statement or result, prefer explain_sql, revise_sql, or followup_on_result over new_data_question.",
-                "If the message asks for a chart or visualization, use chart_request.",
-                "If the message is too vague to classify confidently, use clarification with confidence=low.",
-                "Set needs_execution=true only for new_data_question, followup_on_result, and chart_request.",
-                "Return JSON only.",
-            ],
-        },
-        ensure_ascii=False,
-    )
-
-
-def _extract_json_from_text(text: str) -> str:
-    text = text.strip()
-    if text.startswith("{") and text.endswith("}"):
-        return text
-    import re
-
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError("No JSON object found in intent classifier response.")
-    return match.group(0)
-
-
-def _repair_json_text(text: str) -> str:
-    extracted = _extract_json_from_text(text)
-    extracted = extracted.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    return extracted
 
 
 # Backward-compatibility alias — existing importers of ``classify_intent``

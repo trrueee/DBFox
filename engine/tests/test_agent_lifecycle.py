@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
+from engine.agent_kernel.intent_classifier import classify_intent_ai_first
 from engine.agent_kernel.lifecycle import (
     classify_intent,
-    classify_intent_ai_first,
     classify_intent_fallback,
     plan_route,
     reflect,
@@ -122,13 +122,14 @@ def test_classify_intent_backward_compat_alias() -> None:
 
 
 def test_ai_first_falls_back_when_no_api_key() -> None:
-    """When state has no api_key, classify_intent_ai_first returns rule_fallback source."""
+    """When state has no api_key, returns rule_fallback source and llm_trace=None."""
     state = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "new_data_question"
     assert source == "rule_fallback"
+    assert llm_trace is None
 
 
 def test_ai_first_falls_back_when_api_key_is_empty_string() -> None:
@@ -137,9 +138,10 @@ def test_ai_first_falls_back_when_api_key_is_empty_string() -> None:
         "api_key": "",
         "sql": "SELECT * FROM orders",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "explain_sql"
     assert source == "rule_fallback"
+    assert llm_trace is None
 
 
 def test_ai_first_uses_llm_when_api_key_present(monkeypatch) -> None:
@@ -167,20 +169,22 @@ def test_ai_first_uses_llm_when_api_key_present(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
 
     state = {
         "messages": [{"role": "user", "content": "把刚才的 SQL 改成按月统计"}],
         "api_key": "sk-test",
         "sql": "SELECT * FROM orders",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "revise_sql"
     assert source == "llm"
+    assert llm_trace is not None
+    assert "llm_candidate" in llm_trace
 
 
 def test_ai_first_falls_back_when_llm_confidence_is_low(monkeypatch) -> None:
-    """LLM returns confidence=low → fallback to rule-based classification."""
+    """LLM returns confidence=low → fallback with llm_trace containing fallback_reason."""
 
     class FakeResponse:
         status_code = 200
@@ -204,19 +208,22 @@ def test_ai_first_falls_back_when_llm_confidence_is_low(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
 
     state = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
         "api_key": "sk-test",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "new_data_question"
     assert source == "rule_fallback"
+    assert llm_trace is not None
+    assert llm_trace["fallback_reason"] == "llm_low_confidence"
+    assert llm_trace["llm_candidate"]["confidence"] == "low"
 
 
 def test_ai_first_falls_back_when_llm_returns_invalid_intent(monkeypatch) -> None:
-    """LLM returns an intent not in VALID_INTENTS → fallback."""
+    """LLM returns an intent not in VALID_INTENTS → fallback with trace."""
 
     class FakeResponse:
         status_code = 200
@@ -240,13 +247,13 @@ def test_ai_first_falls_back_when_llm_returns_invalid_intent(monkeypatch) -> Non
                 ]
             }
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
 
     state = {
         "messages": [{"role": "user", "content": "删掉 users 表"}],
         "api_key": "sk-test",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent in {
         "new_data_question",
         "followup_on_result",
@@ -257,10 +264,12 @@ def test_ai_first_falls_back_when_llm_returns_invalid_intent(monkeypatch) -> Non
         "clarification",
     }
     assert source == "rule_fallback"
+    assert llm_trace is not None
+    assert llm_trace["fallback_reason"] == "llm_invalid_intent"
 
 
 def test_ai_first_falls_back_when_llm_returns_malformed_json(monkeypatch) -> None:
-    """LLM returns unparseable text → fallback."""
+    """LLM returns unparseable text → fallback with llm_trace=None."""
 
     class FakeResponse:
         status_code = 200
@@ -271,32 +280,34 @@ def test_ai_first_falls_back_when_llm_returns_malformed_json(monkeypatch) -> Non
         def json(self):
             return {"choices": [{"message": {"content": "not valid json at all"}}]}
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
 
     state = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
         "api_key": "sk-test",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "new_data_question"
     assert source == "rule_fallback"
+    assert llm_trace is None
 
 
 def test_ai_first_falls_back_when_httpx_raises(monkeypatch) -> None:
-    """Network/HTTP error → fallback."""
+    """Network/HTTP error → fallback with llm_trace=None."""
 
     def _raise(*_args, **_kwargs):
         raise OSError("Connection refused")
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", _raise)
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", _raise)
 
     state = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
         "api_key": "sk-test",
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "new_data_question"
     assert source == "rule_fallback"
+    assert llm_trace is None
 
 
 def test_understand_node_includes_source_field() -> None:
@@ -321,6 +332,44 @@ def test_understand_node_source_is_rule_fallback_without_api_key() -> None:
     assert result["agent_intent"]["intent"] == "explain_sql"
 
 
+def test_understand_node_includes_llm_trace_when_llm_rejected(monkeypatch) -> None:
+    """When LLM returns low confidence, understand_node records llm_trace."""
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps({
+                                "intent": "new_data_question",
+                                "confidence": "low",
+                                "reason": "Unsure about the request.",
+                                "needs_execution": False,
+                            })
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+
+    state: dict = {
+        "messages": [{"role": "user", "content": "查一下 GMV"}],
+        "api_key": "sk-test",
+    }
+    result = understand_node(state)
+    payload = result["agent_intent"]
+    assert payload["source"] == "rule_fallback"
+    assert "llm_trace" in payload
+    assert payload["llm_trace"]["fallback_reason"] == "llm_low_confidence"
+
+
 def test_ai_first_llm_json_inside_markdown_fence(monkeypatch) -> None:
     """LLM response wrapped in ```json fence is still parsed correctly."""
 
@@ -341,13 +390,14 @@ def test_ai_first_llm_json_inside_markdown_fence(monkeypatch) -> None:
                 ]
             }
 
-    monkeypatch.setattr("engine.agent_kernel.lifecycle.httpx.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr("engine.agent_kernel.intent_classifier.httpx.post", lambda *_args, **_kwargs: FakeResponse())
 
     state = {
         "messages": [{"role": "user", "content": "画个柱状图"}],
         "api_key": "sk-test",
         "execution": {"success": True},
     }
-    intent, source = classify_intent_ai_first(state)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
     assert intent == "chart_request"
     assert source == "llm"
+    assert llm_trace is not None
