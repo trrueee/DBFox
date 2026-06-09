@@ -28,10 +28,35 @@ def apply_tool_result_to_state(
     }
 
     if observation.status == "failed":
-        update["error"] = observation.error or f"{tool_name} failed."
-        if output:
-            if tool_name == "sql.execute_readonly":
-                update["execution"] = output
+        telemetry = dict(output) if isinstance(output, dict) else {}
+        failed_tool_call = state.get("pending_tool_call") if isinstance(state.get("pending_tool_call"), dict) else {"tool_name": tool_name, "args": {}}
+        update["last_failed_tool_call"] = dict(failed_tool_call)
+        update["last_error_telemetry"] = telemetry or {
+            "error_type": "ToolExecutionError",
+            "tool_name": tool_name,
+            "step_name": observation.name,
+            "retryable": False,
+        }
+        update["trace_events"].append(
+            {
+                "type": "tool.failed.telemetry",
+                "payload": {
+                    "tool_name": tool_name,
+                    "error_type": update["last_error_telemetry"].get("error_type"),
+                    "retryable": bool(update["last_error_telemetry"].get("retryable")),
+                },
+            }
+        )
+        if tool_name == "sql.execute_readonly":
+            update["execution"] = {
+                "success": False,
+                "error": observation.error,
+                "error_telemetry": update["last_error_telemetry"],
+            }
+        if not bool(update["last_error_telemetry"].get("retryable")):
+            update["error"] = observation.error or f"{tool_name} failed."
+        else:
+            update["error"] = None
         return update
 
     if tool_name == "followup.load_context":
@@ -51,6 +76,8 @@ def apply_tool_result_to_state(
         update["sql"] = sql or state.get("sql")
         update["agent_sql_critique"] = None
         update["safety"] = None
+        update["last_error_telemetry"] = None
+        update["last_failed_tool_call"] = None
         # sql=None indicates generation unavailable (e.g. no LLM key for complex fallback)
         if not sql and output.get("mode") == "fallback_unavailable":
             update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
@@ -67,14 +94,20 @@ def apply_tool_result_to_state(
             output = dict(output)
             output["generation_metadata"] = generation_metadata
         update["safety"] = output
+        update["last_error_telemetry"] = None
+        update["last_failed_tool_call"] = None
         if safe_sql:
             update["sql"] = safe_sql
 
     elif tool_name == "sql.execute_readonly":
         update["execution"] = output
+        update["last_error_telemetry"] = None
+        update["last_failed_tool_call"] = None
 
     elif tool_name == "sql.skip_execution":
         update["execution"] = output
+        update["last_error_telemetry"] = None
+        update["last_failed_tool_call"] = None
 
     elif tool_name == "sql.revise":
         previous_count = state.get("revision_count") if isinstance(state.get("revision_count"), int) else 0
@@ -91,6 +124,8 @@ def apply_tool_result_to_state(
             update["suggestions"] = []
             update["agent_sql_critique"] = None
             update["agent_reflection"] = None
+            update["last_error_telemetry"] = None
+            update["last_failed_tool_call"] = None
             if state.get("pending_approval"):
                 update["pending_approval"] = None
                 update["trace_events"].append(
