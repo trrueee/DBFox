@@ -16,8 +16,8 @@ def test_sql_critic_requests_revision_when_query_plan_table_is_missing() -> None
 
     assert critique["needs_revision"] is True
     assert any("candidate table" in issue for issue in critique["issues"])
-    assert reflection["action"] == "revise_sql"
     assert reflection["sql_critique"]["needs_revision"] is True
+    assert reflection["has_error"] is False
 
 
 def test_sql_critic_passes_reasonable_grouped_metric_sql() -> None:
@@ -37,4 +37,5 @@ def test_sql_critic_passes_reasonable_grouped_metric_sql() -> None:
 
     assert critique["needs_revision"] is False
     assert critique["status"] == "passed"
-    assert reflection["action"] == "continue"
+    assert reflection["sql_critique"]["needs_revision"] is False
+    assert reflection["has_error"] is False

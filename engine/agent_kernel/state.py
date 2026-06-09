@@ -3,6 +3,21 @@ from __future__ import annotations
 from operator import add
 from typing import Annotated, Any, Literal, TypedDict
 
+from langgraph.graph.message import add_messages
+
+# Single-source-of-truth for additive (reducer-backed) state keys.
+# Must match every Annotated[list[...], add] field in BaseKernelState.
+# merge_state() in databinding.py imports this to stay in sync.
+# NOTE: "messages" uses add_messages, NOT operator.add — it is tracked
+# separately via MESSAGE_STATE_KEY.
+ADDITIVE_STATE_KEYS: frozenset[str] = frozenset({
+    "plan_events",
+    "tool_results",
+    "artifacts",
+    "trace_events",
+})
+
+MESSAGE_STATE_KEY: str = "messages"
 
 KernelStatus = Literal[
     "running",
@@ -21,7 +36,7 @@ class BaseKernelState(TypedDict, total=False):
     execute: bool
 
     status: KernelStatus
-    messages: Annotated[list[dict[str, Any]], add]
+    messages: Annotated[list[Any], add_messages]
 
     workspace_context: Any | None
     follow_up_context: Any | None
@@ -36,10 +51,6 @@ class BaseKernelState(TypedDict, total=False):
 
     step_count: int
     max_steps: int
-
-    api_key: str | None
-    api_base: str | None
-    model_name: str | None
 
 
 class AgentLifecycleState(TypedDict, total=False):
@@ -105,6 +116,20 @@ class KernelState(
 
 def latest_user_message(state: KernelState) -> str:
     for message in reversed(state.get("messages", [])):
-        if message.get("role") == "user":
-            return str(message.get("content") or "")
+        if isinstance(message, dict):
+            if message.get("role") == "user":
+                return str(message.get("content") or "")
+        else:
+            # LangChain BaseMessage (HumanMessage, etc.)
+            try:
+                msg_type = getattr(message, "type", "")
+                if msg_type == "human":
+                    content = getattr(message, "content", "")
+                    if isinstance(content, str):
+                        return content
+                    if isinstance(content, list):
+                        parts = [str(p.get("text", "")) for p in content if isinstance(p, dict)]
+                        return " ".join(parts).strip()
+            except Exception:
+                continue
     return ""

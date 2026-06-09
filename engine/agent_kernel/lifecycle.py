@@ -19,9 +19,9 @@ except ImportError:
 def understand_node(state: KernelState, config: Optional[RunnableConfig] = None) -> dict[str, Any]:
     """Understand: classify the user's current intent before tool routing."""
     configurable = config.get("configurable", {}) if config else {}
-    api_key = configurable.get("api_key") or state.get("api_key")
-    api_base = configurable.get("api_base") or state.get("api_base")
-    model_name = configurable.get("model_name") or state.get("model_name")
+    api_key = configurable.get("api_key")
+    api_base = configurable.get("api_base")
+    model_name = configurable.get("model_name")
 
     intent, source, llm_trace = classify_intent_ai_first(
         state,
@@ -66,24 +66,6 @@ def plan_node(state: KernelState) -> dict[str, Any]:
     }
 
 
-def observe_node(state: KernelState) -> dict[str, Any]:
-    """Observe: normalize the latest tool result after Act."""
-    observation = state.get("last_observation") or {}
-    tool_name = state.get("last_tool_name")
-    payload = {
-        "tool_name": tool_name,
-        "status": observation.get("status") if isinstance(observation, dict) else None,
-        "has_error": bool((observation or {}).get("error")) if isinstance(observation, dict) else False,
-        "output_keys": sorted(((observation or {}).get("output") or {}).keys())[:12]
-        if isinstance(observation, dict) and isinstance((observation or {}).get("output"), dict)
-        else [],
-    }
-    return {
-        "agent_observation": payload,
-        "trace_events": [{"type": "agent.observe", "payload": payload}],
-    }
-
-
 def reflect_node(state: KernelState) -> dict[str, Any]:
     """Reflect: decide whether the loop should continue, revise, ask, or answer."""
     reflection = reflect(state)
@@ -125,9 +107,7 @@ def answer_node(state: KernelState) -> dict[str, Any]:
 
 
 def reflect(state: KernelState) -> dict[str, Any]:
-    # reflect() produces diagnostic reflection for graph state.
-    # Actual route transitions are controlled by graph_standalone conditional edges.
-    # Do not add new execution routing logic here.
+    """Diagnostic reflection. Actual route transitions are controlled by graph_standalone conditional edges."""
     observation = state.get("last_observation") if isinstance(state.get("last_observation"), dict) else {}
     safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
@@ -135,41 +115,15 @@ def reflect(state: KernelState) -> dict[str, Any]:
     reference = resolve_reference(state)
     critique = critique_sql(state)
 
-    if state.get("error"):
-        if state.get("sql") and not state.get("revision_attempted"):
-            action = "revise_sql"
-            reason = "The run has an error and SQL exists, so one revision attempt is allowed."
-        else:
-            action = "stop_with_failure"
-            reason = "The run has an unrecoverable error or already attempted revision."
-    elif critique.get("needs_revision") and not state.get("revision_attempted"):
-        action = "revise_sql"
-        reason = str(critique.get("summary") or "SQL Critic found issues before validation.")
-    elif safety and not safety.get("can_execute"):
-        action = "revise_or_explain_block"
-        reason = "TrustGate blocked execution or requires a safer SQL path."
-    elif safety.get("requires_confirmation"):
-        action = "wait_approval"
-        reason = "The validated SQL requires human approval before execution."
-    elif execution.get("success") is False and not state.get("revision_attempted"):
-        action = "revise_sql"
-        reason = "Execution failed and no revision has been attempted yet."
-    elif answer:
-        action = "final_answer"
-        reason = "An answer artifact exists."
-    elif reference.get("kind") in {"sql", "result", "approval"} and classify_intent_fallback(state) != "new_data_question":
-        action = "use_reference_context"
-        reason = "The user referred to existing context, so continue from the resolved reference."
-    else:
-        action = "continue"
-        reason = "More evidence or synthesis is still needed."
-
     return {
-        "action": action,
-        "reason": reason,
         "last_tool_name": state.get("last_tool_name"),
         "has_answer": bool(answer),
         "has_execution": bool(execution),
+        "has_error": bool(state.get("error")),
+        "has_safety": bool(safety),
+        "safety_blocked": bool(safety and not safety.get("can_execute")),
+        "safety_requires_confirmation": bool(safety.get("requires_confirmation")),
+        "revision_attempted": bool(state.get("revision_attempted")),
         "reference": reference,
         "sql_critique": critique,
         "last_observation_status": observation.get("status") if isinstance(observation, dict) else None,

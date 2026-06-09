@@ -47,7 +47,7 @@ def test_lifecycle_context_and_reflection_are_structured() -> None:
     assert context["has_safety"] is True
     assert context["artifact_count"] == 1
     assert context["resolved_reference"]["kind"] == "sql"
-    assert reflection["action"] == "revise_or_explain_block"
+    assert reflection["safety_blocked"] is True
 
 
 def test_lifecycle_resolves_latest_sql_artifact_for_pronoun_reference() -> None:
@@ -173,10 +173,9 @@ def test_ai_first_uses_llm_when_api_key_present(monkeypatch) -> None:
 
     state = {
         "messages": [{"role": "user", "content": "把刚才的 SQL 改成按月统计"}],
-        "api_key": "sk-test",
         "sql": "SELECT * FROM orders",
     }
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback, api_key="sk-test")
     assert intent == "revise_sql"
     assert source == "llm"
     assert llm_trace is not None
@@ -212,9 +211,8 @@ def test_ai_first_falls_back_when_llm_confidence_is_low(monkeypatch) -> None:
 
     state = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
-        "api_key": "sk-test",
     }
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback, api_key="sk-test")
     assert intent == "new_data_question"
     assert source == "rule_fallback"
     assert llm_trace is not None
@@ -251,9 +249,8 @@ def test_ai_first_falls_back_when_llm_returns_invalid_intent(monkeypatch) -> Non
 
     state = {
         "messages": [{"role": "user", "content": "删掉 users 表"}],
-        "api_key": "sk-test",
     }
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback, api_key="sk-test")
     assert intent in {
         "new_data_question",
         "followup_on_result",
@@ -361,9 +358,8 @@ def test_understand_node_includes_llm_trace_when_llm_rejected(monkeypatch) -> No
 
     state: dict = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
-        "api_key": "sk-test",
     }
-    result = understand_node(state)
+    result = understand_node(state, config={"configurable": {"api_key": "sk-test"}})
     payload = result["agent_intent"]
     assert payload["source"] == "rule_fallback"
     assert "llm_trace" in payload
@@ -394,10 +390,9 @@ def test_ai_first_llm_json_inside_markdown_fence(monkeypatch) -> None:
 
     state = {
         "messages": [{"role": "user", "content": "画个柱状图"}],
-        "api_key": "sk-test",
         "execution": {"success": True},
     }
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback, api_key="sk-test")
     assert intent == "chart_request"
     assert source == "llm"
     assert llm_trace is not None
@@ -436,9 +431,8 @@ def test_clarification_trusted_even_at_low_confidence(monkeypatch) -> None:
 
     state = {
         "messages": [{"role": "user", "content": "嗯..."}],
-        "api_key": "sk-test",
     }
-    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback)
+    intent, source, llm_trace = classify_intent_ai_first(state, fallback=classify_intent_fallback, api_key="sk-test")
     assert intent == "clarification"
     assert source == "llm"
     assert llm_trace is not None
@@ -473,9 +467,8 @@ def test_trace_event_includes_source_and_llm_trace(monkeypatch) -> None:
 
     state: dict = {
         "messages": [{"role": "user", "content": "查一下 GMV"}],
-        "api_key": "sk-test",
     }
-    result = understand_node(state)
+    result = understand_node(state, config={"configurable": {"api_key": "sk-test"}})
     trace_events = result.get("trace_events", [])
     assert len(trace_events) == 1
     trace_payload = trace_events[0]["payload"]

@@ -302,12 +302,27 @@ def _apply_failed_telemetry(
 # ---------------------------------------------------------------------------
 # State merging
 # ---------------------------------------------------------------------------
+#
+# merge_state is for streaming event view only, NOT the source of truth.
+# During streaming, it mirrors LangGraph's internal state accumulation so that
+# intermediate event emitters (plan_artifact_events, events_from_graph_update)
+# have access to the latest accumulated state.
+#
+# After the stream completes, app.get_state(config).values is the authoritative
+# source for final response/checkpoint/persistence.
 
 
 def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
-    additive_keys = {"messages", "plan_events", "tool_results", "artifacts", "trace_events"}
+    """Accumulate node updates into a streaming event view (NOT source of truth)."""
+    from engine.agent_kernel.state import ADDITIVE_STATE_KEYS, MESSAGE_STATE_KEY
+
     for key, value in update.items():
-        if key in additive_keys:
+        if key == MESSAGE_STATE_KEY:
+            from langgraph.graph.message import add_messages
+
+            current = state.get(key, [])
+            state[key] = add_messages(current, value)
+        elif key in ADDITIVE_STATE_KEYS:
             current = state.setdefault(key, [])
             if isinstance(current, list) and isinstance(value, list):
                 current.extend(value)

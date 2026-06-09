@@ -295,13 +295,17 @@ class AgentKernelService:
                         emitted_artifact_ids,
                     )
 
-        approval = self._approval_from_state(state)
-        waiting_approval = state.get("status") == "waiting_approval"
-        checkpoint = self._save_waiting_checkpoint(state, agent_state) if waiting_approval else None
-        success = state.get("status") == "completed" and not state.get("error")
+        # Authoritative state from LangGraph checkpoint after stream completes.
+        snapshot = app.get_state(config)
+        final_state: dict[str, Any] = dict(snapshot.values) if isinstance(snapshot.values, dict) else dict(state)
+
+        approval = self._approval_from_state(final_state)
+        waiting_approval = final_state.get("status") == "waiting_approval"
+        checkpoint = self._save_waiting_checkpoint(final_state, agent_state) if waiting_approval else None
+        success = final_state.get("status") == "completed" and not final_state.get("error")
         response = self._response(
             req,
-            state,
+            final_state,
             agent_state,
             run_id,
             session_id,
@@ -464,10 +468,12 @@ class AgentKernelService:
             )
 
         if approved and not has_graph_checkpoint:
-            raise DataBoxError(
-                "Agent kernel LangGraph checkpoint was unavailable for this run. Cannot resume approval.",
-                code="CHECKPOINT_MISSING",
+            logger.warning(
+                "Agent kernel LangGraph checkpoint was unavailable for run %s; resuming from saved DB checkpoint.",
+                run_id,
             )
+            state.update(self._approved_resume_state_from_saved_checkpoint(state, approval))
+            yield from stream_graph_updates(app.stream(dict(state), config=config, stream_mode="updates"))
 
         if not approved:
             state["status"] = "failed"
@@ -475,11 +481,15 @@ class AgentKernelService:
             state["pending_approval"] = None
             state["pending_tool_call"] = None
 
+        # Authoritative state from LangGraph checkpoint after resume completes.
+        snapshot = app.get_state(config)
+        final_state: dict[str, Any] = dict(snapshot.values) if isinstance(snapshot.values, dict) else dict(state)
+
         final_approval = agent_persistence.get_approval(self.db, approval_id) or approval
-        success = state.get("status") == "completed" and not state.get("error")
+        success = final_state.get("status") == "completed" and not final_state.get("error")
         response = self._response(
             req,
-            state,
+            final_state,
             agent_state,
             run_id,
             session_id,
@@ -693,6 +703,26 @@ class AgentKernelService:
         return AgentApprovalRecord.model_validate(pending)
 
 
+
+    def _approved_resume_state_from_saved_checkpoint(
+        self,
+        state: dict[str, Any],
+        approval: AgentApprovalRecord,
+    ) -> dict[str, Any]:
+        approval_payload = approval.model_dump(mode="json")
+        safety = self._approve_safety(dict(state), approval_payload)
+        return {
+            "status": "running",
+            "pending_approval": None,
+            "pending_tool_call": None,
+            "safety": safety,
+            "trace_events": [
+                {
+                    "type": "approval.approved_from_saved_checkpoint",
+                    "payload": approval_payload,
+                }
+            ],
+        }
 
     def _save_waiting_checkpoint(
         self,
@@ -1173,9 +1203,6 @@ class AgentKernelService:
             revision_attempted=False,
             step_count=0,
             max_steps=req.max_steps,
-            api_key=None,
-            api_base=None,
-            model_name=None,
         )
 
     def _pending_approval_from_workspace(self, req: AgentRunRequest) -> dict[str, Any] | None:

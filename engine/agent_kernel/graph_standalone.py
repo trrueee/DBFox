@@ -334,8 +334,18 @@ def _clarification_node(_state: KernelState) -> dict[str, Any]:
 
 
 def _observe_node(state: KernelState) -> dict[str, Any]:
+    """Normalize latest tool result into agent_observation for routing and diagnostics."""
     observation = state.get("last_observation") if isinstance(state.get("last_observation"), dict) else {}
-    payload = {"tool_name": state.get("last_tool_name"), "status": observation.get("status"), "has_error": bool(observation.get("error")), "retryable": bool(_error_telemetry(state).get("retryable"))}
+    metadata = state.get("last_tool_metadata")
+    next_route = metadata.get("next_route") if isinstance(metadata, dict) else None
+    tool_name = state.get("last_tool_name")
+    payload = {
+        "tool_name": tool_name,
+        "status": observation.get("status"),
+        "has_error": bool(observation.get("error")),
+        "retryable": bool(_error_telemetry(state).get("retryable")),
+        "next_route": next_route,
+    }
     return {"agent_observation": payload, "trace_events": [{"type": "agent.observe", "payload": payload}]}
 
 
@@ -451,6 +461,12 @@ def _after_observe(state: KernelState) -> str:
         return "revise_sql"
     if state.get("error"):
         return "synthesize_answer"
+    observation = state.get("agent_observation") if isinstance(state.get("agent_observation"), dict) else {}
+    next_route = observation.get("next_route")
+    if isinstance(next_route, str) and next_route:
+        if next_route == "followup_suggest" and _intent(state) != "new_data_question":
+            return "synthesize_answer"
+        return next_route
     metadata = state.get("last_tool_metadata")
     if isinstance(metadata, dict):
         next_route = metadata.get("next_route")
@@ -466,11 +482,11 @@ def _after_observe(state: KernelState) -> str:
         return route
     if callable(route):
         return route(state)
-    return "route_intent"
+    return "synthesize_answer"
 
 
 def _observe_routes() -> dict[Hashable, str]:
-    return {"build_query_plan": "build_query_plan", "generate_sql": "generate_sql", "sql_critic": "sql_critic", "validation_route": "validation_route", "execution_result_route": "execution_result_route", "transient_retry": "transient_retry", "profile_result": "profile_result", "chart_suggest": "chart_suggest", "followup_suggest": "followup_suggest", "synthesize_answer": "synthesize_answer", "revise_sql": "revise_sql", "answer": "answer", "route_intent": "route_intent"}
+    return {"build_query_plan": "build_query_plan", "generate_sql": "generate_sql", "sql_critic": "sql_critic", "validation_route": "validation_route", "execution_result_route": "execution_result_route", "transient_retry": "transient_retry", "profile_result": "profile_result", "chart_suggest": "chart_suggest", "followup_suggest": "followup_suggest", "synthesize_answer": "synthesize_answer", "revise_sql": "revise_sql", "answer": "answer"}
 
 
 def _after_sql_critic(state: KernelState) -> str:

@@ -106,9 +106,8 @@ def test_understand_node_source_with_llm(monkeypatch) -> None:
 
     state: KernelState = {
         "messages": [{"role": "user", "content": "how many users?"}],
-        "api_key": "sk-test",
     }
-    result = understand_node(state)
+    result = understand_node(state, config={"configurable": {"api_key": "sk-test"}})
     assert result["agent_intent"]["source"] == "llm"
 
 
