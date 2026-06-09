@@ -3,11 +3,11 @@
     "total_cases": 5,
     "generated_sql_cases": 5,
     "execution_success_cases": 2,
-    "execution_match_cases": 0,
+    "execution_match_cases": 2,
     "generated_sql_rate": 1.0,
     "execution_success_rate": 0.4,
-    "execution_accuracy": 0.0,
-    "avg_latency_ms": 1722.4,
+    "execution_accuracy": 0.4,
+    "avg_latency_ms": 1798.4,
     "runner_mode": "databox",
     "is_databox_score": true
   },
@@ -16,14 +16,14 @@
       "db_id": "tiny_school",
       "question": "How many students are there?",
       "gold_sql": "SELECT COUNT(*) FROM students",
-      "predicted_sql": "SELECT students.name AS student_name FROM students LIMIT 100",
+      "predicted_sql": "SELECT COUNT(*) AS student_count FROM students LIMIT 1000",
       "generated_sql": true,
       "execution_success": true,
-      "execution_match": false,
-      "latency_ms": 3005,
+      "execution_match": true,
+      "latency_ms": 3438,
       "error": null,
       "gold_rows_count": 1,
-      "predicted_rows_count": 3,
+      "predicted_rows_count": 1,
       "tool_sequence": [
         "schema.build_context",
         "query_plan.build",
@@ -39,7 +39,7 @@
         "followup.suggest",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_ad5732f2",
+      "datasource_id": "spider_tiny_school_0eb96e03",
       "synced_table_names": [
         "courses",
         "students"
@@ -49,14 +49,14 @@
       "db_id": "tiny_school",
       "question": "What is the average score?",
       "gold_sql": "SELECT AVG(score) FROM courses",
-      "predicted_sql": "SELECT courses.name AS course_name FROM courses LIMIT 100",
+      "predicted_sql": "SELECT AVG(courses.score) AS avg_score FROM courses LIMIT 1000",
       "generated_sql": true,
       "execution_success": true,
-      "execution_match": false,
-      "latency_ms": 1663,
+      "execution_match": true,
+      "latency_ms": 1518,
       "error": null,
       "gold_rows_count": 1,
-      "predicted_rows_count": 4,
+      "predicted_rows_count": 1,
       "tool_sequence": [
         "schema.build_context",
         "query_plan.build",
@@ -72,7 +72,7 @@
         "followup.suggest",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_ad5732f2",
+      "datasource_id": "spider_tiny_school_0eb96e03",
       "synced_table_names": [
         "courses",
         "students"
@@ -86,7 +86,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1340,
+      "latency_ms": 1265,
       "error": "no such column: students.name",
       "gold_rows_count": 3,
       "predicted_rows_count": 0,
@@ -100,7 +100,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_ad5732f2",
+      "datasource_id": "spider_tiny_school_0eb96e03",
       "synced_table_names": [
         "courses",
         "students"
@@ -114,7 +114,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1269,
+      "latency_ms": 1473,
       "error": "no such column: students.name",
       "gold_rows_count": 3,
       "predicted_rows_count": 0,
@@ -128,7 +128,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_ad5732f2",
+      "datasource_id": "spider_tiny_school_0eb96e03",
       "synced_table_names": [
         "courses",
         "students"
@@ -142,7 +142,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1335,
+      "latency_ms": 1298,
       "error": "no such table: products",
       "gold_rows_count": 0,
       "predicted_rows_count": 0,
@@ -154,7 +154,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_ad5732f2",
+      "datasource_id": "spider_tiny_school_0eb96e03",
       "synced_table_names": [
         "courses",
         "students"

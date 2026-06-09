@@ -397,9 +397,11 @@ class QueryPlanBuilder:
         if not matched_tables:
             return None
 
-        aggregate = _contains_any(q_lower, ("数量", "多少", "count", "统计", "总数", "量", "sum", "total", "revenue", "销售额", "销量"))
-        rank = _contains_any(q_lower, ("top", "highest", "最大", "最高", "排行", "排名"))
+        aggregate = _contains_any(q_lower, ("数量", "多少", "count", "统计", "总数", "量", "sum", "total", "revenue", "销售额", "销量", "how many", "number of", "how much"))
+        avg_intent = _contains_any(q_lower, ("average", "avg", "mean", "平均", "均值"))
+        rank = _contains_any(q_lower, ("top", "highest", "最大", "最高", "排行", "排名", "most", "least", "最少", "最低"))
         daily = _contains_any(q_lower, ("每天", "每日", "按天", "daily", "per day"))
+        grouping = _contains_any(q_lower, ("per", "each", "by", "每", "按", "每个", "group by", "分组"))
 
         metrics: list[QueryMetric] = []
         dimensions: list[QueryDimension] = []
@@ -420,6 +422,26 @@ class QueryPlanBuilder:
                     source_column=f"{metric_table.table_name}.{column.column_name}",
                 )
             )
+        elif avg_intent:
+            best_col = self._best_numeric_column(matched_tables, metric_table)
+            if best_col is not None:
+                col_name = best_col.column_name
+                tbl_name = metric_table.table_name
+                metrics.append(
+                    QueryMetric(
+                        name=f"avg_{col_name}",
+                        expression=f"AVG({tbl_name}.{col_name})",
+                        source_column=f"{tbl_name}.{col_name}",
+                    )
+                )
+            else:
+                metrics.append(
+                    QueryMetric(
+                        name=f"{_singular(str(metric_table.table_name))}_count",
+                        expression="COUNT(*)",
+                        source_column=f"{metric_table.table_name}.{self._primary_or_first_column(metric_table)}",
+                    )
+                )
         elif aggregate:
             source_column = self._primary_or_first_column(metric_table)
             metrics.append(
@@ -430,16 +452,22 @@ class QueryPlanBuilder:
                 )
             )
 
-        dimension_column = self._best_dimension_column(matched_tables, question_terms, daily=daily)
-        if dimension_column is not None:
-            dimension_table, column, transform = dimension_column
-            dimensions.append(
-                QueryDimension(
-                    name=f"{_singular(str(dimension_table.table_name))}_{column.column_name if not transform else 'date'}",
-                    column=f"{dimension_table.table_name}.{column.column_name}",
-                    transform=transform,
+        # Only add dimensions for grouping/per/each/by questions.
+        # Aggregate-only questions (e.g. "How many students?") should NOT get dimensions.
+        needs_dimensions = grouping or (
+            not metrics and _contains_any(q_lower, ("list", "show", "列出", "显示", "name", "what", "which", "who", "find"))
+        )
+        if needs_dimensions:
+            dimension_column = self._best_dimension_column(matched_tables, question_terms, daily=daily)
+            if dimension_column is not None:
+                dimension_table, column, transform = dimension_column
+                dimensions.append(
+                    QueryDimension(
+                        name=f"{_singular(str(dimension_table.table_name))}_{column.column_name if not transform else 'date'}",
+                        column=f"{dimension_table.table_name}.{column.column_name}",
+                        transform=transform,
+                    )
                 )
-            )
 
         tables = _ordered_unique(
             [str(metric_table.table_name)]
@@ -456,10 +484,10 @@ class QueryPlanBuilder:
         intent = "schema_matched_aggregate" if metrics else "schema_matched_lookup"
         if order_by and metrics and any(metric.name == "total_sold" for metric in metrics):
             intent = "rank_products_by_sales_volume"
-        elif metrics and metrics[0].name == "order_count":
-            intent = "aggregate_order_count"
-        elif metrics and metrics[0].name == "total_amount":
-            intent = "aggregate_order_amount"
+
+        # Aggregate-only (COUNT/AVG/SUM without dimensions): no LIMIT needed.
+        # Lookup/list queries and ranked queries: keep LIMIT.
+        is_aggregate_only = bool(metrics and not dimensions and not rank)
 
         return QueryPlan(
             intent=intent,
@@ -469,7 +497,7 @@ class QueryPlanBuilder:
             filters=self._schema_matched_filters(q_lower, tables),
             joins=self._infer_joins(datasource_id, tables),
             order_by=order_by,
-            limit=10 if rank else 100,
+            limit=None if is_aggregate_only else (10 if rank else 100),
         )
 
     def _load_schema_tables(self, datasource_id: str, selected_tables: Sequence[str] | None) -> list[SchemaTable]:
@@ -489,6 +517,31 @@ class QueryPlanBuilder:
         for column in table.columns:
             labels.update(_schema_terms(str(column.column_name), str(column.column_comment or "")))
         return len(labels & question_terms)
+
+    def _best_numeric_column(
+        self,
+        tables: Sequence[SchemaTable],
+        fallback_table: SchemaTable,
+    ) -> SchemaColumn | None:
+        """Find the most likely numeric column for AVG/statistical queries."""
+        numeric_types = ("int", "decimal", "numeric", "float", "double", "real")
+        # Prefer columns in the fallback_table, then scan all tables.
+        ordered = [fallback_table] + [t for t in tables if t.table_name != fallback_table.table_name]
+        for table in ordered:
+            for column in table.columns:
+                type_text = f"{column.data_type or ''} {column.column_type or ''}".lower()
+                if not any(token in type_text for token in numeric_types):
+                    continue
+                name = str(column.column_name).lower()
+                # Prefer metric-like columns: score, amount, price, value, etc.
+                if any(token in name for token in ("score", "amount", "price", "value", "gmv", "revenue", "sales")):
+                    return column
+            # Fallback: first numeric column in this table
+            for column in table.columns:
+                type_text = f"{column.data_type or ''} {column.column_type or ''}".lower()
+                if any(token in type_text for token in numeric_types):
+                    return column
+        return None
 
     def _best_sum_column(
         self,
