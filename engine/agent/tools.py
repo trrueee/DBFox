@@ -9,7 +9,7 @@ import sqlglot
 from sqlalchemy.orm import Session, selectinload
 from sqlglot import exp
 
-from engine.ai import generate_sql, validate_sql_schema
+from engine.ai import generate_sql, generate_sql_from_schema_context, validate_sql_schema
 from engine.agent.answer import synthesize_agent_answer
 from engine.agent.context import analysis_question, context_summary, referenced_artifact_ids, schema_linking_question
 from engine.agent.prompts import RESULT_EXPLANATION_SECTIONS
@@ -27,6 +27,7 @@ from engine.agent.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCand
 from engine.errors import DataBoxError
 from engine.executor import execute_query
 from engine.guardrail import GuardrailResult, guardrail_check
+from engine.datasource import is_demo_db
 from engine.models import DataSource, SchemaTable
 from engine.semantic import QueryPlanBuilder, SchemaContextBuilder, SchemaLinker
 from engine.trust_gate import TrustGate
@@ -142,82 +143,28 @@ def generate_sql_tool(
 
     def body() -> dict[str, Any]:
         semantic_mode = getattr(req, "semantic_mode", "shadow") or "shadow"
-        contract = build_query_contract(question, schema_context, query_plan) if semantic_mode != "off" else None
-        # Decide whether plan requires LLM fallback first
-        require_llm, fallback_reason = _plan_requires_llm_sql(query_plan, question=question)
-        # Contract routing decisions ONLY in retry mode
-        if semantic_mode == "retry" and contract is not None:
-            contract_requires_llm, contract_reason = _contract_requires_llm(contract)
-            if contract_requires_llm:
-                require_llm = True
-                fallback_reason = fallback_reason or contract_reason
-        # Check low-confidence BEFORE attempting deterministic renderer (P1 guard)
-        if not require_llm:
-            low_conf, low_reason = _plan_is_low_confidence_for_render(query_plan, question=question)
-            if low_conf:
-                fallback_reason = fallback_reason or low_reason
-                require_llm = True
-        plan_sql = None
-        generation_source = None
-        if not require_llm:
-            plan_sql = _render_sql_from_query_plan(db, req.datasource_id, query_plan)
-        # SQL-plan consistency gate: if query_plan has order_by but renderer
-        # dropped it (e.g. column case mismatch was fixed), re-inject it.
-        if plan_sql:
-            order_by_clause = _missing_order_by_clause(db, req.datasource_id, query_plan, plan_sql)
-            if order_by_clause:
-                plan_sql = _append_order_by(plan_sql, order_by_clause)
-        # Question-ordering gate: if the user explicitly asked for ordering
-        # but the rendered SQL has no ORDER BY, reject renderer output and
-        # fall through to LLM generation (which understands ordering intent).
-        if plan_sql and not re.search(r"\bORDER\s+BY\b", plan_sql, re.IGNORECASE):
-            if _question_asks_for_ordering(question):
-                plan_sql = None
-                fallback_reason = fallback_reason or "missing_order_by_in_rendered_sql"
-        if plan_sql:
-            result = {
-                "sql": plan_sql,
-                "model": "databox-query-plan-renderer",
-                "mode": "plan_guided",
-                "latencyMs": 0,
-                "schemaValidationWarnings": [],
-                "queryPlan": query_plan.get("raw_plan") or query_plan,
-                "selectedTables": query_plan.get("candidate_tables", []),
-                "selectedColumns": schema_context.get("candidate_columns", []),
-                "schemaContextSize": schema_context.get("schema_context_size"),
+        contract = build_query_contract(question, schema_context, None) if semantic_mode != "off" else None
+        dialect = _datasource_dialect(db, req.datasource_id)
+        schema_text = str(schema_context.get("schema_context") or "")
+        if not req.api_key and _is_demo_datasource(db, req.datasource_id):
+            result = generate_sql(db, req.datasource_id, req.question, llm_config={}, optimize_rag=req.optimize_rag)
+            result["metadata"] = {
+                **(result.get("metadata") if isinstance(result.get("metadata"), dict) else {}),
+                "generation_source": "demo_fallback",
+                "dialect": dialect,
+                "used_query_plan": False,
+                "used_renderer": False,
+                "used_demo_fallback": True,
             }
-            generation_source = "query_plan_rendered"
+            generation_source = "demo_fallback"
         else:
-            if (require_llm or fallback_reason) and not req.api_key:
-                result = {
-                    "sql": None,
-                    "model": "databox-local-heuristic",
-                    "mode": "fallback_unavailable",
-                    "latencyMs": 0,
-                    "schemaValidationWarnings": [],
-                    "queryPlan": query_plan.get("raw_plan") or query_plan,
-                    "selectedTables": query_plan.get("candidate_tables", []),
-                    "selectedColumns": schema_context.get("candidate_columns", []),
-                    "schemaContextSize": schema_context.get("schema_context_size"),
-                    "metadata": {
-                        "generation_source": "generate_sql_fallback",
-                        "fallback_reason": fallback_reason or "no_llm_api_key",
-                        "blocked_reason": "no_llm_api_key",
-                        "requires_llm": True,
-                    },
-                    "error": "Complex SQL fallback requires a configured LLM API key.",
-                }
-            else:
-                # Initial SQL always uses baseline prompt (contract only for retry)
-                initial_question = _question_with_plan(question, query_plan) if req.api_key else question
-                result = generate_sql(
-                    db,
-                    req.datasource_id,
-                    initial_question,
-                    llm_config=_llm_config(req),
-                    optimize_rag=req.optimize_rag,
-                )
-            generation_source = "generate_sql_fallback"
+            result = generate_sql_from_schema_context(
+                question=req.question,
+                schema_context=schema_text,
+                dialect=dialect,
+                llm_config=_llm_config(req),
+            )
+            generation_source = "schema_direct_llm"
         raw_sql = str(result.get("sql", "") or "").strip()
         sql, rewrite_notes, rewrite_metadata = _prepare_generated_sql(db, req.datasource_id, raw_sql)
         # Semantic verification and guarded retry
@@ -243,10 +190,11 @@ def generate_sql_tool(
                     previous_sql=sql,
                     violations=semantic_violations,
                 )
-                retry_result = generate_sql(
-                    db, req.datasource_id, retry_prompt,
+                retry_result = generate_sql_from_schema_context(
+                    question=retry_prompt,
+                    schema_context=schema_text,
+                    dialect=dialect,
                     llm_config=_llm_config(req),
-                    optimize_rag=req.optimize_rag,
                 )
                 retry_raw = str(retry_result.get("sql", "") or "").strip()
                 retry_sql_candidate, retry_notes, retry_meta = _prepare_generated_sql(db, req.datasource_id, retry_raw)
@@ -270,6 +218,7 @@ def generate_sql_tool(
                     semantic_retry_rejected_reason = "retry_produced_empty_sql"
 
         sql_value = sql if sql else None
+        result_metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
         candidate = SQLCandidate(
             sql=sql_value,
             raw_sql=raw_sql if sql != raw_sql else None,
@@ -278,15 +227,21 @@ def generate_sql_tool(
             latency_ms=int(result.get("latencyMs", 0) or 0),
             schema_validation_warnings=[str(item) for item in _list_value(result.get("schemaValidationWarnings"))],
             rewrite_notes=rewrite_notes,
+            error=str(result.get("error")) if result.get("error") else None,
             metadata={
+                **result_metadata,
                 "generation_source": generation_source,
+                "used_renderer": False,
+                "used_query_plan": False,
+                "used_query_plan_as_prompt": False,
+                "used_demo_fallback": False,
                 "agent_query_plan": query_plan,
                 "query_plan": result.get("queryPlan"),
                 "selected_tables": result.get("selectedTables", []),
                 "selected_columns": result.get("selectedColumns", []),
                 "schema_context_size": result.get("schemaContextSize"),
                 "rewrite": rewrite_metadata,
-                "fallback_reason": fallback_reason if 'fallback_reason' in locals() else None,
+                "error": result.get("error"),
                 "semantic_mode": semantic_mode,
                 "semantic_contract": semantic_contract.to_dict() if semantic_contract is not None else None,
                 "semantic_violations": semantic_violation_payload(semantic_violations),
@@ -733,6 +688,7 @@ def _render_sql_from_query_plan(
     datasource_id: str,
     query_plan: dict[str, Any] | None,
 ) -> str | None:
+    """EXPERIMENTAL: not used in default Text-to-SQL path."""
     if not query_plan:
         return None
 
@@ -847,8 +803,8 @@ def _question_with_plan(question: str, query_plan: dict[str, Any]) -> str:
     }
     return (
         f"{question}\n\n"
-        "You may use this Query Plan as guidance for SQL generation. "
-        "If the plan conflicts with the user's question, ALWAYS follow the user's question. "
+        "The query plan is optional guidance only. The user question and schema are authoritative. "
+        "If the plan conflicts with the user question, follow the user question. "
         f"Query Plan: {plan_summary}"
     )
 
@@ -1113,6 +1069,13 @@ def _first_schema_tables(db: Session, datasource_id: str) -> list[str]:
 def _datasource_dialect(db: Session, datasource_id: str) -> str:
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     return str(datasource.db_type or "mysql") if datasource else "mysql"
+
+
+def _is_demo_datasource(db: Session, datasource_id: str) -> bool:
+    datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if datasource is None:
+        return False
+    return is_demo_db(str(datasource.host or ""), str(datasource.database_name or ""))
 
 
 def _sqlglot_dialect(dialect: str) -> str:

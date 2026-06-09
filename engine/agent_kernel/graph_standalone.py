@@ -168,7 +168,7 @@ def build_agent_kernel_graph(
     graph.add_edge("context", "route_intent")
     graph.add_conditional_edges("route_intent", _route_intent, _route_intent_routes())
 
-    graph.add_conditional_edges("build_schema_context", _after_build_schema_context, {"policy": "policy", "build_query_plan": "build_query_plan"})
+    graph.add_conditional_edges("build_schema_context", _after_build_schema_context, {"policy": "policy", "generate_sql": "generate_sql"})
     graph.add_conditional_edges("build_query_plan", _after_build_query_plan, {"policy": "policy", "generate_sql": "generate_sql"})
     graph.add_conditional_edges("generate_sql", _after_generate_sql, {"policy": "policy", "sql_critic": "sql_critic"})
     graph.add_conditional_edges("revise_sql", _after_revise_sql, {"policy": "policy", "answer": "answer"})

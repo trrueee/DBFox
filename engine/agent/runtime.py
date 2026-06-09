@@ -85,7 +85,6 @@ class DataBoxAgentRuntime:
         steps.extend(
             [
                 AgentStepSpec(name="build_schema_context", tool_name="schema.build_context"),
-                AgentStepSpec(name="build_query_plan", tool_name="query_plan.build"),
                 AgentStepSpec(name="generate_sql_candidate", tool_name="sql.generate"),
                 AgentStepSpec(name="validate_sql", tool_name="sql.validate"),
                 AgentStepSpec(name="execute_sql", tool_name="sql.execute_readonly", required=request.execute),

@@ -51,7 +51,6 @@ def test_agent_runtime_default_plan_uses_fixed_registered_tools(db_session, demo
 
     assert [step.name for step in plan] == [
         "build_schema_context",
-        "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
         "execute_sql",
@@ -62,8 +61,7 @@ def test_agent_runtime_default_plan_uses_fixed_registered_tools(db_session, demo
     ]
     assert [step.tool_name for step in plan] == [
         "schema.build_context",
-        "query_plan.build",
-        "sql.generate_candidate",
+        "sql.generate",
         "sql.validate",
         "sql.execute_readonly",
         "result.profile",
@@ -84,7 +82,6 @@ def test_agent_runtime_execute_false_generates_full_review_response(db_session, 
     assert res.run_id
     assert res.session_id
     assert res.context_summary
-    assert res.query_plan is not None
     assert res.sql is not None
     assert res.sql.upper().startswith("SELECT")
     assert "SELECT *" not in res.sql.upper()
@@ -121,7 +118,6 @@ def test_agent_runtime_execute_false_generates_full_review_response(db_session, 
     assert len({event.event_id for event in res.trace_events}) == len(res.trace_events)
     assert [step.name for step in res.steps] == [
         "build_schema_context",
-        "build_query_plan",
         "generate_sql_candidate",
         "validate_sql",
         "execute_sql",
@@ -130,7 +126,7 @@ def test_agent_runtime_execute_false_generates_full_review_response(db_session, 
         "suggest_followups",
         "answer_synthesizer",
     ]
-    assert res.steps[4].status == "skipped"
+    assert res.steps[3].status == "skipped"
 
 
 def test_agent_runtime_run_iter_emits_ordered_events_and_final_response(db_session, demo_datasource) -> None:

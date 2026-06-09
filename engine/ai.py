@@ -11,8 +11,9 @@ import sqlglot
 from sqlglot import exp
 from sqlalchemy.orm import Session
 
+from engine.datasource import is_demo_db
 from engine.errors import AIServiceError
-from engine.models import LLMLog, SchemaColumn, SchemaTable
+from engine.models import DataSource, LLMLog, SchemaColumn, SchemaTable
 from engine.semantic import QueryPlanBuilder, SchemaContextBuilder, SchemaLinker
 from engine.trust_gate import TrustGate
 
@@ -364,6 +365,141 @@ SYSTEM_PROMPT = (
     "9. Append a safe LIMIT unless the query already has a bounded LIMIT."
 )
 
+SCHEMA_DIRECT_PROMPT_VERSION = "schema_direct_v1"
+
+
+def _dialect_label(dialect: str) -> str:
+    normalized = str(dialect or "mysql").lower()
+    if normalized in {"postgres", "postgresql"}:
+        return "PostgreSQL"
+    if normalized == "sqlite":
+        return "SQLite"
+    if normalized == "mysql":
+        return "MySQL"
+    return dialect.strip() or "SQL"
+
+
+def build_schema_direct_prompt(
+    *,
+    question: str,
+    schema_context: str,
+    dialect: str,
+) -> tuple[str, str]:
+    dialect_name = _dialect_label(dialect)
+    system_prompt = (
+        "You are a Text-to-SQL generator.\n"
+        f"Generate one valid {dialect_name} SELECT statement using only the provided schema.\n"
+        "Rules:\n"
+        "- Return SQL only. No markdown, no explanation.\n"
+        "- Use only tables and columns in schema context.\n"
+        "- Preserve the user question semantics.\n"
+        "- If the question asks \"how many\", \"number of\", or \"count\", use COUNT(*).\n"
+        "- If the question asks \"average\", \"avg\", or \"mean\", use AVG(column).\n"
+        "- If the question asks \"sum\" or \"total\", use SUM(column).\n"
+        "- Do not add LIMIT to aggregate-only queries.\n"
+        "- Add LIMIT only for list/detail/sample queries.\n"
+        "- Do not invent tables or columns.\n"
+        "- Do not use SELECT *."
+    )
+    user_prompt = (
+        "Schema context:\n"
+        f"{schema_context}\n\n"
+        "User question:\n"
+        f"{question}\n\n"
+        "SQL:"
+    )
+    return system_prompt, user_prompt
+
+
+def _extract_sql_from_llm_response(response_text: str) -> str:
+    sql_match = re.search(r"```sql\s*(.*?)\s*```", response_text, re.DOTALL | re.IGNORECASE)
+    if sql_match:
+        generated_query = sql_match.group(1).strip()
+    else:
+        generated_query = re.sub(r"^```\w*\s*|\s*```$", "", response_text).strip()
+    return generated_query.strip().rstrip(";")
+
+
+def generate_sql_from_schema_context(
+    *,
+    question: str,
+    schema_context: str,
+    dialect: str,
+    llm_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Generate SQL from an already-linked schema context.
+
+    This is the default AgentKernel Text-to-SQL path. It intentionally does
+    not query schema metadata, call SchemaLinker/QueryPlanBuilder, use the
+    deterministic renderer, or use demo SQL fallbacks.
+    """
+    start_time = time.time()
+    llm_config = llm_config or {}
+    api_key = str(llm_config.get("api_key") or "").strip()
+    api_base = str(llm_config.get("api_base") or "https://api.openai.com/v1").strip()
+    model_name = str(llm_config.get("model") or llm_config.get("model_name") or "gpt-4o-mini").strip()
+    dialect_name = _dialect_label(dialect)
+    metadata = {
+        "generation_source": "schema_direct_llm",
+        "dialect": dialect,
+        "used_query_plan": False,
+        "used_renderer": False,
+        "used_demo_fallback": False,
+    }
+
+    if not api_key:
+        return {
+            "sql": None,
+            "model": model_name,
+            "mode": "schema_direct",
+            "latencyMs": int((time.time() - start_time) * 1000),
+            "schemaValidationWarnings": [],
+            "metadata": metadata,
+            "error": "LLM API key required for non-demo Text-to-SQL generation",
+        }
+
+    system_prompt, user_prompt = build_schema_direct_prompt(
+        question=question,
+        schema_context=schema_context,
+        dialect=dialect_name,
+    )
+    payload = {
+        "model": model_name,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0,
+        "max_tokens": 800,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = httpx.post(
+            f"{api_base}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=15.0,
+        )
+        latency_ms = int((time.time() - start_time) * 1000)
+        if response.status_code != 200:
+            raise AIServiceError(f"LLM API returned an error (HTTP {response.status_code}): {response.text}")
+        data = response.json()
+        response_text = data["choices"][0]["message"]["content"].strip()
+        return {
+            "sql": _extract_sql_from_llm_response(response_text),
+            "model": model_name,
+            "mode": "schema_direct",
+            "latencyMs": latency_ms,
+            "schemaValidationWarnings": [],
+            "metadata": metadata,
+        }
+    except Exception as exc:
+        raise AIServiceError(f"LLM 接口调用失败: {str(exc)}")
+
 USER_PROMPT_TEMPLATE = (
     "Available Database Tables Schema:\n"
     "```sql\n"
@@ -438,9 +574,11 @@ def generate_sql(
     db: Session, datasource_id: str, question: str, llm_config: dict[str, Any] | None = None, optimize_rag: bool = False
 ) -> dict[str, Any]:
     """
-    Translates a natural language question into standard SQL.
-    If no LLM configuration (api_key) is active, automatically falls back
-    to the built-in demo offline translator for excellent, worry-free execution.
+    LEGACY/demo compatibility only.
+
+    AgentKernel's default Text-to-SQL path must use
+    generate_sql_from_schema_context() after schema.build_context has already
+    selected and rendered the local schema context.
     """
     start_time = time.time()
     
@@ -466,6 +604,29 @@ def generate_sql(
     
     # 2. Check if we are running in Offline Demo Mode
     if not api_key:
+        datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+        is_demo_datasource = bool(
+            datasource is not None
+            and is_demo_db(str(datasource.host or ""), str(datasource.database_name or ""))
+        )
+        if not is_demo_datasource:
+            latency_ms = int((time.time() - start_time) * 1000)
+            return {
+                "sql": None,
+                "model": "databox-local-heuristic",
+                "mode": "fallback_unavailable",
+                "latencyMs": latency_ms,
+                "schemaValidationWarnings": [],
+                "queryPlan": query_plan.to_dict(),
+                **schema_metadata,
+                "metadata": {
+                    "generation_source": "legacy_generate_sql",
+                    "fallback_reason": "no_llm_api_key",
+                    "blocked_reason": "no_llm_api_key",
+                    "used_demo_fallback": False,
+                },
+                "error": "LLM API key required for non-demo Text-to-SQL generation",
+            }
         # If the query plan indicates complex intent that requires LLM, we must fail-closed here.
         try:
             qp_dict = query_plan.to_dict() if query_plan is not None else {}

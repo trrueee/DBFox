@@ -14,6 +14,8 @@ from engine.agent.runtime import DataBoxAgentRuntime
 from engine.agent_kernel.controller import CONTROLLER_SYSTEM_PROMPT, _controller_state_view
 from engine.agent_kernel.databinding import apply_tool_result_to_state
 from engine.agent_kernel.databox_tools import register_databox_tools
+from engine.agent_kernel.graph_sql_nodes import _after_build_schema_context
+from engine.agent_kernel.plan_templates import plan_route
 from engine.agent_kernel.graph import build_agent_kernel_graph, langgraph_available
 from engine.agent_kernel.policy import PolicyGate
 from engine.agent_kernel.response import AgentKernelResponseAssembler
@@ -126,6 +128,14 @@ def test_agent_kernel_registry_exposes_domain_tools() -> None:
     execute_spec = registry.require("sql.execute_readonly").spec
     assert execute_spec.policy.requires_validated_sql is True
     assert execute_spec.policy.side_effect == "read"
+
+
+def test_default_text_to_sql_route_skips_query_plan_build() -> None:
+    route = plan_route({"agent_intent": {"intent": "new_data_question"}})
+
+    assert route["route"][:3] == ["schema.build_context", "sql.generate", "sql.critic"]
+    assert "query_plan.build" not in route["route"]
+    assert _after_build_schema_context({"pending_tool_call": None}) == "generate_sql"
 
 
 def test_agent_kernel_tool_registry_schema_snapshot() -> None:

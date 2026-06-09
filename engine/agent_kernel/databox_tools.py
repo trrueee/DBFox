@@ -58,8 +58,9 @@ class SqlRevisionInput(BaseModel):
 
 
 class SqlCandidateOutput(BaseModel):
-    sql: str
+    sql: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
 
 
 class SqlSafetyOutput(BaseModel):
@@ -91,7 +92,7 @@ def register_databox_tools() -> ToolRegistry:
     registry = ToolRegistry()
 
     registry.register(_tool("followup.load_context", "Load and normalize follow-up context.", _load_followup_context, input_model=EmptyToolInput, base_tool=FollowupLoadContextTool(), metadata={"next_route": "profile_result"}))
-    registry.register(_tool("schema.build_context", "Build relevant schema context for a data question.", _schema_build_context, input_model=QuestionToolInput, base_tool=SchemaBuildContextTool(), metadata={"next_route": "build_query_plan"}))
+    registry.register(_tool("schema.build_context", "Build relevant schema context for a data question.", _schema_build_context, input_model=QuestionToolInput, base_tool=SchemaBuildContextTool(), metadata={"next_route": "generate_sql"}))
     registry.register(_tool("query_plan.build", "Build a structured query plan from schema context.", _query_plan_build, input_model=EmptyToolInput, base_tool=QueryPlanBuildTool(), metadata={"next_route": "generate_sql"}))
     registry.register(_tool("sql.generate", "Generate a SQL candidate without executing it.", _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput, base_tool=SqlGenerateTool(), metadata={"next_route": "sql_critic"}))
     registry.register(_tool("sql.validate", "Validate SQL with TrustGate and guardrail checks.", _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput, base_tool=SqlValidateTool(), metadata={"next_route": "validation_route"}))
@@ -269,8 +270,9 @@ TOOL_SCHEMAS: dict[str, dict[str, dict[str, Any]]] = {
                 "schema_validation_warnings": _array_prop("Schema validation warning strings.", {"type": "string"}),
                 "rewrite_notes": _array_prop("Deterministic SQL rewrite notes.", {"type": "string"}),
                 "metadata": _map_prop("Generation metadata."),
+                "error": _prop("string", "Generation error when SQL could not be produced."),
             },
-            required=["sql"],
+            required=[],
             additional_properties=True,
         ),
     },

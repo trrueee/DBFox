@@ -29,7 +29,7 @@ from engine.agent_kernel.state import KernelState, latest_user_message
 
 def _build_schema_context_node(state: KernelState) -> dict[str, Any]:
     if state.get("schema_context"):
-        return _go("build_query_plan", "Schema context already exists.")
+        return _go("generate_sql", "Schema context already exists.")
     return _call("schema.build_context", {"question": latest_user_message(state)}, "Build schema context for data question.")
 
 
@@ -256,7 +256,7 @@ def _clarification_node(_state: KernelState) -> dict[str, Any]:
 
 
 def _after_build_schema_context(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "build_query_plan"
+    return "policy" if _has_tool_call(state) else "generate_sql"
 
 
 def _after_build_query_plan(state: KernelState) -> str:
