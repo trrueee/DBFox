@@ -4,7 +4,6 @@ import { AgentComposer } from "./AgentComposer";
 import { AgentNarrativeStream } from "./AgentNarrativeStream";
 import { ApprovalCard } from "./ApprovalCard";
 import { AgentStepTimeline } from "./AgentStepTimeline";
-import { AgentStateInspector } from "./AgentStateInspector";
 import { TraceDrawer } from "./TraceDrawer";
 import type { AgentRunDraftState, AgentRunResponse, AgentRuntimeEvent, AgentStep, AgentVisibleEvent, AgentWorkspaceContext, FollowUpSuggestion } from "./types";
 
@@ -215,7 +214,6 @@ export function AgentWorkspace({
             borderTop: "1px solid var(--border-light)"
           }}>
             <AgentStepTimeline steps={steps} runtimeEvents={draft?.events || []} />
-            <AgentStateInspector key={threadId || "agent-state"} threadId={threadId} />
             <TraceDrawer steps={steps} traceEvents={traceEvents} />
           </div>
         )}

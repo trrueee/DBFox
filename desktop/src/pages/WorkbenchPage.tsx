@@ -27,7 +27,6 @@ import { DataSourcesPage } from "./DataSourcesPage";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { PromptDialog } from "../components/PromptDialog";
 import { CommandPalette, type CommandItem } from "../components/CommandPalette";
-import { DemoTourGuide } from "../components/DemoTourGuide";
 import { useToast } from "../components/Toast";
 import { buildAgentFollowUpContext } from "../features/agent/context";
 import { AgentWorkspace } from "../features/agent/AgentWorkspace";
@@ -595,8 +594,6 @@ export const WorkbenchPage = ({
   // Command Palette
   const [showCommandPalette, setShowCommandPalette] = useState(false);
 
-  // Stepper Tour Guide Dialog state in bottom status bar
-  const [showTourDialog, setShowTourDialog] = useState(false);
 
   // ── Recover recent agent run on page refresh ──
   useEffect(() => {
@@ -1119,13 +1116,6 @@ export const WorkbenchPage = ({
         icon: <Activity size={13} />,
         action: () => setShowDashboardModal(true)
       },
-      {
-        id: "trigger-tour",
-        name: "演示 Demo 引导向导",
-        category: "教程",
-        icon: <Sparkles size={13} />,
-        action: () => setShowTourDialog(true)
-      }
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDataSource, handleOpenQueryTab, onRefreshSchemaTables, schemaTables]);
@@ -1240,8 +1230,6 @@ export const WorkbenchPage = ({
         label: "帮助",
         items: [
           { label: "快捷键参考", action: () => setShowCommandPalette(true) },
-          { label: "引导向导", action: () => setShowTourDialog(true) },
-          { separator: true, label: "" },
           { label: "性能监控面板", action: () => setShowDashboardModal(true) },
           { label: "Docker 环境管理", action: () => setShowEnvironmentsModal(true) },
           { separator: true, label: "" },
@@ -1249,7 +1237,7 @@ export const WorkbenchPage = ({
         ],
       },
     ];
-  }, [activeDataSource, handleExportConnectionConfig, handleImportConnectionConfig, handleOpenQueryTab, handleOpenTableTab, handleAiContextAction, handleSaveCurrentSql, handleTestActiveConnection, onRefreshSchemaTables, triggerActiveTabAction, schemaTables, setAiPanelCollapsed, setShowCommandPalette, setShowSettingsModal, setShowBackupsModal, setShowDashboardModal, setShowEnvironmentsModal, setShowTourDialog, setActiveDataSource]);
+  }, [activeDataSource, handleExportConnectionConfig, handleImportConnectionConfig, handleOpenQueryTab, handleOpenTableTab, handleAiContextAction, handleSaveCurrentSql, handleTestActiveConnection, onRefreshSchemaTables, triggerActiveTabAction, schemaTables, setAiPanelCollapsed, setShowCommandPalette, setShowSettingsModal, setShowBackupsModal, setShowDashboardModal, setShowEnvironmentsModal, setActiveDataSource]);
 
   const currentAgentEvents = agentDraft?.events.length ? agentDraft.events : agentStreamEvents;
   const hasLiveAgentDraft = Boolean(
@@ -2006,23 +1994,6 @@ export const WorkbenchPage = ({
               已执行
             </span>
           )}
-          <button
-            onClick={() => setShowTourDialog(!showTourDialog)}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "0.76rem",
-              color: "var(--accent-indigo)",
-              display: "flex",
-              alignItems: "center",
-              gap: 3,
-              fontWeight: 600
-            }}
-          >
-            <Sparkles size={10} />
-            引导向导
-          </button>
         </div>
       </footer>
 
@@ -2130,32 +2101,6 @@ export const WorkbenchPage = ({
         onClose={() => setShowCommandPalette(false)}
         commands={commandItems}
       />
-
-      {/* Quiet Stepper Tour Guide Dialog triggered from status bar */}
-      {showTourDialog && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(3px)", zIndex: 1999, display: "grid", placeItems: "center" }}>
-          <div style={{ background: "var(--bg-surface)", width: 440, borderRadius: 12, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "var(--shadow-xl)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
-              <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 5 }}><Sparkles size={13} />体验 Demo 引导向导</span>
-              <button onClick={() => setShowTourDialog(false)} className="btn-ghost" style={{ padding: 4 }}><X size={16} /></button>
-            </div>
-            <div style={{ padding: 10, overflow: "auto", maxHeight: "70vh" }}>
-              <DemoTourGuide
-                activeTab={activeTab?.type || "workbench"}
-                setActiveTab={() => {}}
-                projects={projects}
-                activeProject={activeProject}
-                datasources={datasources}
-                activeDataSource={activeDataSource}
-                schemaTables={schemaTables}
-                handleCreateProject={async (name) => {
-                  await onCreateProject(name || "演示项目");
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Settings Modal (Datasources Manager) */}
       {showSettingsModal && (
