@@ -116,9 +116,6 @@ def build_agent_kernel_graph(
     graph.add_edge("execute_tool", "observe")
     graph.add_conditional_edges("observe", _after_observe, _observe_routes())
     graph.add_conditional_edges("sql_critic", _after_sql_critic, {"revise_sql": "revise_sql", "validate_sql": "validate_sql", "synthesize_answer": "synthesize_answer", "answer": "answer"})
-    graph.add_conditional_edges("validation_route", _after_validation_route, {"execution_decision": "execution_decision", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "validate_sql": "validate_sql"})
-    graph.add_conditional_edges("execution_decision", _after_execution_decision, {"execute_sql": "execute_sql", "skip_execution": "skip_execution", "synthesize_answer": "synthesize_answer"})
-    graph.add_conditional_edges("execution_result_route", _after_execution_result_route, {"profile_result": "profile_result", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "execution_decision": "execution_decision"})
     graph.add_edge("answer", END)
     return graph.compile(checkpointer=checkpointer, cache=InMemoryCache())
 
@@ -190,23 +187,27 @@ def _validate_sql_node(state: KernelState) -> dict[str, Any]:
     return _call("sql.validate", {"sql": state.get("sql")}, "Validate SQL before execution.")
 
 
-def _validation_route_node(state: KernelState) -> dict[str, Any]:
+def _validation_route_node(state: KernelState) -> Any:
+    from langgraph.types import Command
     safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
     if not safety:
-        return _go("validate_sql", "Missing validation result.")
+        return Command(update=_route_trace("validate_sql", "Missing validation result."), goto="validate_sql")
     if safety.get("can_execute"):
-        return _go("execution_decision", "SQL passed TrustGate.")
+        return Command(update=_route_trace("execution_decision", "SQL passed TrustGate."), goto="execution_decision")
     blocked = [str(reason) for reason in safety.get("blocked_reasons", [])]
     hard_blockers = [reason for reason in blocked if reason != "requires_confirmation"]
     if hard_blockers and _revision_count(state) < MAX_SQL_REVISIONS:
-        return _go("revise_sql", "TrustGate blocked SQL; revise.")
+        return Command(update=_route_trace("revise_sql", "TrustGate blocked SQL; revise."), goto="revise_sql")
     if safety.get("requires_confirmation") and not hard_blockers:
-        return _go("execution_decision", "SQL requires approval before execution.")
-    return _call("answer.synthesize", {}, "Explain why SQL cannot be executed safely.")
+        return Command(update=_route_trace("execution_decision", "SQL requires approval before execution."), goto="execution_decision")
+    return Command(update=_route_trace("synthesize_answer", "Explain why SQL cannot be executed safely."), goto="synthesize_answer")
 
 
-def _execution_decision_node(state: KernelState) -> dict[str, Any]:
-    return _go("execute_sql", "Execution enabled.") if state.get("execute", True) else _go("skip_execution", "Execution disabled by request.")
+def _execution_decision_node(state: KernelState) -> Any:
+    from langgraph.types import Command
+    if state.get("execute", True):
+        return Command(update=_route_trace("execute_sql", "Execution enabled."), goto="execute_sql")
+    return Command(update=_route_trace("skip_execution", "Execution disabled by request."), goto="skip_execution")
 
 
 def _execute_sql_node(_state: KernelState) -> dict[str, Any]:
@@ -217,20 +218,21 @@ def _skip_execution_node(_state: KernelState) -> dict[str, Any]:
     return _call("sql.skip_execution", {}, "Record review-only execution skip.")
 
 
-def _execution_result_route_node(state: KernelState) -> dict[str, Any]:
+def _execution_result_route_node(state: KernelState) -> Any:
+    from langgraph.types import Command
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     telemetry = _error_telemetry(state)
     if telemetry and telemetry.get("retryable"):
-        return _go("transient_retry", "Execution failed with retryable telemetry.")
+        return Command(update=_route_trace("transient_retry", "Execution failed with retryable telemetry."), goto="transient_retry")
     if telemetry and _is_sql_or_db_semantic_error(state) and _revision_count(state) < MAX_SQL_REVISIONS:
-        return _go("revise_sql", "Execution failed with non-retryable SQL/DB error; revise SQL.")
+        return Command(update=_route_trace("revise_sql", "Execution failed with non-retryable SQL/DB error; revise SQL."), goto="revise_sql")
     if not execution:
-        return _go("execution_decision", "Missing execution result.")
+        return Command(update=_route_trace("execution_decision", "Missing execution result."), goto="execution_decision")
     if execution.get("success") is False and _revision_count(state) < MAX_SQL_REVISIONS:
-        return _go("revise_sql", "Execution failed; revise SQL.")
+        return Command(update=_route_trace("revise_sql", "Execution failed; revise SQL."), goto="revise_sql")
     if execution.get("success") is False:
-        return _call("answer.synthesize", {}, "Explain execution failure after retry limit.")
-    return _go("profile_result", "Execution succeeded.")
+        return Command(update=_route_trace("synthesize_answer", "Explain execution failure after retry limit."), goto="synthesize_answer")
+    return Command(update=_route_trace("profile_result", "Execution succeeded."), goto="profile_result")
 
 
 def _transient_retry_node(state: KernelState) -> dict[str, Any]:
@@ -525,45 +527,8 @@ def _after_sql_critic(state: KernelState) -> str:
     return "validate_sql"
 
 
-def _after_validation_route(state: KernelState) -> str:
-    route = str(state.get("agent_graph_route") or "")
-    if route in {"execution_decision", "revise_sql", "synthesize_answer", "answer", "validate_sql"}:
-        return route
-    # Fallback direct state checks
-    safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
-    if not safety:
-        return "validate_sql"
-    if safety.get("can_execute") or safety.get("requires_confirmation"):
-        return "execution_decision"
-    if _revision_count(state) < MAX_SQL_REVISIONS:
-        return "revise_sql"
-    return "synthesize_answer"
-
-
-def _after_execution_decision(state: KernelState) -> str:
-    route = str(state.get("agent_graph_route") or "")
-    if route in {"execute_sql", "skip_execution", "synthesize_answer"}:
-        return route
-    # Fallback direct state checks
-    return "execute_sql" if state.get("execute", True) else "skip_execution"
-
-
-def _after_execution_result_route(state: KernelState) -> str:
-    route = str(state.get("agent_graph_route") or "")
-    if route in {"profile_result", "revise_sql", "synthesize_answer", "answer", "execution_decision", "transient_retry"}:
-        return route
-    # Fallback direct state checks
-    telemetry = _error_telemetry(state)
-    if telemetry.get("retryable"):
-        return "transient_retry" if _can_retry_transient(state) else "synthesize_answer"
-    if telemetry and _is_sql_or_db_semantic_error(state) and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
-        return "revise_sql"
-    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
-    if not execution:
-        return "execution_decision"
-    if execution.get("success") is False:
-        return "revise_sql" if _revision_count(state) < MAX_SQL_REVISIONS else "synthesize_answer"
-    return "profile_result"
+def _route_trace(route: str, reason: str) -> dict[str, Any]:
+    return {"status": "running", "trace_events": [{"type": "agent.graph.route", "payload": {"route": route, "reason": reason}}]}
 
 
 def _intent(state: KernelState) -> str:
@@ -576,7 +541,7 @@ def _call(tool_name: str, args: dict[str, Any], reason: str) -> dict[str, Any]:
 
 
 def _go(route: str, reason: str) -> dict[str, Any]:
-    return {"status": "running", "agent_graph_route": route, "trace_events": [{"type": "agent.graph.route", "payload": {"route": route, "reason": reason}}]}
+    return _route_trace(route, reason)
 
 
 def _answer(answer: str, reason: str) -> dict[str, Any]:
