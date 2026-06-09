@@ -8,12 +8,9 @@ from engine.agent_kernel.graph import (
     MAX_SQL_REVISIONS,
     _after_approval,
     _after_controller,
-    _after_execution_decision,
-    _after_execution_result_route,
     _after_observe,
     _after_policy,
     _after_sql_critic,
-    _after_validation_route,
     _approval_help_node,
     _build_query_plan_node,
     _build_schema_context_node,
@@ -148,9 +145,6 @@ def build_agent_kernel_graph(
     graph.add_edge("execute_tool", "observe")
     graph.add_conditional_edges("observe", _after_observe, _observe_routes())
     graph.add_conditional_edges("sql_critic", _after_sql_critic, {"revise_sql": "revise_sql", "validate_sql": "validate_sql", "synthesize_answer": "synthesize_answer", "answer": "answer"})
-    graph.add_conditional_edges("validation_route", _after_validation_route, {"execution_decision": "execution_decision", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "validate_sql": "validate_sql"})
-    graph.add_conditional_edges("execution_decision", _after_execution_decision, {"execute_sql": "execute_sql", "skip_execution": "skip_execution", "synthesize_answer": "synthesize_answer"})
-    graph.add_conditional_edges("execution_result_route", _after_execution_result_route, {"profile_result": "profile_result", "revise_sql": "revise_sql", "synthesize_answer": "synthesize_answer", "answer": "answer", "execution_decision": "execution_decision"})
     graph.add_edge("answer", END)
     return graph.compile(checkpointer=checkpointer)
 
