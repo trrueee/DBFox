@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import time
+import traceback
 from typing import Any
 
 from pydantic import BaseModel
@@ -8,6 +10,8 @@ from pydantic import BaseModel
 from engine.agent.registry import AgentToolContext, ToolRegistry
 from engine.agent.state import AgentState
 from engine.agent.types import AgentStep, ToolObservation
+
+logger = logging.getLogger("databox.agent.executor")
 
 
 class AgentStepSpec(BaseModel):
@@ -37,11 +41,25 @@ class StepExecutor:
             observation = tool.execute(tool_input, ctx)
         except Exception as exc:
             latency_ms = int((time.perf_counter() - started) * 1000)
+            error_type = type(exc).__name__
+            error_traceback = traceback.format_exc()
+            logger.exception(
+                "Agent step execution failed: step=%s tool=%s error_type=%s",
+                step.name,
+                step.tool_name,
+                error_type,
+            )
             observation = ToolObservation(
                 name=step.name,
                 status="failed",
                 input=tool_input,
-                output=None,
+                output={
+                    "error_type": error_type,
+                    "tool_name": step.tool_name,
+                    "step_name": step.name,
+                    "traceback": error_traceback,
+                    "retryable": _is_retryable_exception(exc),
+                },
                 error=str(exc),
                 latency_ms=latency_ms,
             )
@@ -55,3 +73,22 @@ class StepExecutor:
             latency_ms=observation.latency_ms,
         )
         return agent_step, observation
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    name = type(exc).__name__.lower()
+    message = str(exc).lower()
+    retry_tokens = (
+        "timeout",
+        "temporarily",
+        "temporary",
+        "connection reset",
+        "connection refused",
+        "connection aborted",
+        "deadlock",
+        "lock wait timeout",
+        "too many connections",
+        "server has gone away",
+        "operationalerror",
+    )
+    return any(token in name or token in message for token in retry_tokens)
