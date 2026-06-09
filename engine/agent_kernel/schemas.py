@@ -50,6 +50,15 @@ class ToolCallDecision(BaseModel):
     reason: str
 
 
+class ApprovalDecisionContext(BaseModel):
+    approval_id: str | None = None
+    tool_name: str | None = None
+    risk_level: str | None = None
+    status: str | None = None
+    reason: str | None = None
+    source: str = "controller_fallback"
+
+
 class AgentDecision(BaseModel):
     action: Literal[
         "call_tool",
@@ -62,6 +71,7 @@ class AgentDecision(BaseModel):
 
     tool_call: ToolCallDecision | None = None
     plan_patches: list[PlanPatch] = Field(default_factory=list)
+    approval_context: ApprovalDecisionContext | None = None
 
     user_message: str | None = None
     final_answer: str | None = None
@@ -75,4 +85,6 @@ class AgentDecision(BaseModel):
     def _validate_tool_call(self) -> AgentDecision:
         if self.action == "call_tool" and self.tool_call is None:
             raise ValueError("tool_call is required when action is call_tool.")
+        if self.action == "wait_approval" and self.approval_context is None:
+            raise ValueError("approval_context is required when action is wait_approval.")
         return self
