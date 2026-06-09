@@ -19,7 +19,13 @@ class PolicyGate:
     def __init__(self, registry: ToolRegistry):
         self.registry = registry
 
-    def check(self, state: dict[str, Any], tool_name: str, args: dict[str, Any]) -> PolicyDecision:
+    def check(
+        self,
+        state: dict[str, Any],
+        tool_name: str,
+        args: dict[str, Any],
+        execution_mode: str = "user_requested_read",
+    ) -> PolicyDecision:
         tool = self.registry.get(tool_name)
         if tool is None:
             return PolicyDecision(
@@ -36,13 +42,22 @@ class PolicyGate:
                 risk_level="danger",
             )
 
-        # Enforce execution=false constraint
-        if tool_name == "sql.execute_readonly" and not state.get("execute", True):
-            return PolicyDecision(
-                status="blocked",
-                reason="SQL execution is disabled in the request configuration.",
-                risk_level="danger",
-            )
+        # Enforce execution mode constraint for SQL execution
+        if tool_name == "sql.execute_readonly":
+            # Backward-compat: derive from state["execute"] if execution_mode not explicitly set
+            effective_mode = execution_mode
+            if execution_mode == "user_requested_read" and not state.get("execute", True):
+                effective_mode = "suggest_only"
+            if effective_mode in ("none", "suggest_only"):
+                return PolicyDecision(
+                    status="blocked",
+                    reason=f"SQL execution is not allowed in {effective_mode} mode.",
+                    risk_level="danger",
+                )
+            # agent_autonomous_read is stricter — may require approval
+            if effective_mode == "agent_autonomous_read":
+                # Allow but flag for potential approval downstream
+                pass
 
         if policy.requires_validated_sql:
             raw_safety = state.get("safety")
@@ -106,6 +121,19 @@ class PolicyGate:
             return PolicyDecision(
                 status="approval_required",
                 reason=f"Tool {tool_name} requires approval.",
+                risk_level=policy.risk_level,
+                safe_args=args,
+            )
+
+        # agent_autonomous_read on PROD/warning datasources may require approval
+        if (
+            tool_name == "sql.execute_readonly"
+            and execution_mode == "agent_autonomous_read"
+            and policy.risk_level in ("warning", "danger")
+        ):
+            return PolicyDecision(
+                status="approval_required",
+                reason="Agent-autonomous data read on a sensitive datasource requires approval.",
                 risk_level=policy.risk_level,
                 safe_args=args,
             )

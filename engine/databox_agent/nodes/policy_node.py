@@ -51,6 +51,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
     deferred_messages: list[Any] = []
 
     policy_gate = PolicyGate(registry)
+    execution_mode = state.get("execution_mode", "user_requested_read")
 
     # Enforce one-tool-per-turn: when the model issues multiple tool_calls
     # in a single response, later tools may depend on state produced by
@@ -81,7 +82,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
         args = call["args"] or {}
         call_id = call["id"]
 
-        decision = policy_gate.check(state, internal_name, args)
+        decision = policy_gate.check(state, internal_name, args, execution_mode=execution_mode)
         safe_tool_call = {"name": internal_name, "args": decision.safe_args, "id": call_id}
 
         if decision.status == "allowed":

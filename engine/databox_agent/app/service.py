@@ -271,6 +271,11 @@ class DataBoxAgentService:
         self, req: AgentRunRequest, run_id: str, session_id: str
     ) -> DataBoxAgentState:
         pending_approval = self._pending_approval_from_workspace(req)
+        # Derive execution_mode from the new field or fall back to execute bool
+        if req.execution_mode:
+            execution_mode = req.execution_mode
+        else:
+            execution_mode = "user_requested_read" if req.execute else "suggest_only"
         return DataBoxAgentState(
             run_id=run_id,
             thread_id=session_id,
@@ -282,6 +287,14 @@ class DataBoxAgentService:
             follow_up_context=req.follow_up_context.model_dump(mode="json") if req.follow_up_context else None,
             max_steps=req.max_steps,
             step_count=0,
+            # ---- Planner / Progress Judge state ----
+            plan_directive=None,
+            execution_mode=execution_mode,
+            allowed_tool_groups=[],
+            progress_decision=None,
+            replan_count=0,
+            consecutive_blocks=0,
+            # ---- Tool-call / policy routing ----
             pending_tool_calls=[],
             allowed_tool_calls=[],
             blocked_tool_calls=[],

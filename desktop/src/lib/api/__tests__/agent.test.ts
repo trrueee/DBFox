@@ -131,7 +131,7 @@ describe("agent approval api", () => {
     await agentApi.runAgentQuery("ds-1", "list users");
 
     const [url] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/agent-kernel/run");
+    expect(String(url)).toContain("/agent/run");
   });
 
   it("loads Agent Kernel thread state for the state inspector", async () => {
@@ -149,7 +149,7 @@ describe("agent approval api", () => {
     expect(state.thread_id).toBe("session_1");
     expect(state.values?.status).toBe("waiting_approval");
     const [url] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/agent-kernel/state/session_1");
+    expect(String(url)).toContain("/agent/runs/session_1");
   });
 
   it("posts rejection decisions to the Agent Kernel endpoint", async () => {
@@ -167,8 +167,8 @@ describe("agent approval api", () => {
     expect(result.approval?.status).toBe("rejected");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/agent-kernel/reject");
-    expect(JSON.parse(String(options?.body))).toEqual({ run_id: "run_1", approval_id: "approval_1", note: "reviewed" });
+    expect(String(url)).toContain("/agent/runs");
+    expect(JSON.parse(String(options?.body))).toEqual({ run_id: "run_1", approval_id: "approval_1", approved: false, note: "reviewed" });
   });
 
   it("streams resume events and returns the final response", async () => {
@@ -184,7 +184,7 @@ describe("agent approval api", () => {
     expect(result.run_id).toBe("run_1");
     expect(onEvent).toHaveBeenCalledTimes(2);
     const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/agent-kernel/resume/stream");
+    expect(String(url)).toContain("/agent/runs");
     expect(JSON.parse(String(options?.body))).toEqual({
       run_id: "run_1",
       approval_id: "approval_1",

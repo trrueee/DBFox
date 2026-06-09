@@ -184,7 +184,7 @@ export async function streamResumeAgentRun(
   options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void; note?: string | null },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    `/agent/runs/${runId}/resume/stream`",
+    `/agent/runs/${runId}/resume/stream`,
     {
       run_id: runId,
       approval_id: approvalId,
