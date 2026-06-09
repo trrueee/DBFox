@@ -455,7 +455,7 @@ def test_agent_runtime_stops_on_schema_hallucination_without_execution(db_sessio
 
 
 def test_sse_event_format(db_session, demo_datasource) -> None:
-    from engine.api.ai import _format_sse_event
+    from engine.api.agent import _format_sse_event
     from engine.agent.types import AgentRuntimeEvent, AgentArtifact, AgentArtifactPresentation
 
     artifact = AgentArtifact(

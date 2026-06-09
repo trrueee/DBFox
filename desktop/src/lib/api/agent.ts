@@ -172,7 +172,7 @@ async function streamAgentRun(
   options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    "/query/agent-run/stream",
+    "/agent/run/stream",
     buildAgentRunPayload(datasourceId, question, config),
     options,
   );
@@ -184,7 +184,7 @@ export async function streamResumeAgentRun(
   options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void; note?: string | null },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    `/query/agent-runs/${runId}/resume/stream`",
+    `/agent/runs/${runId}/resume/stream`",
     {
       run_id: runId,
       approval_id: approvalId,
@@ -270,10 +270,10 @@ async function streamAgentEndpoint(
 }
 
 export const listAgentRunApprovals = (runId: string) =>
-  request<AgentApproval[]>(`/query/agent-runs/${encodeURIComponent(runId)}/approvals`);
+  request<AgentApproval[]>(`/agent/runs/${encodeURIComponent(runId)}/approvals`);
 
 export const listAgentRunCheckpoints = (runId: string) =>
-  request<AgentCheckpoint[]>(`/query/agent-runs/${encodeURIComponent(runId)}/checkpoints`);
+  request<AgentCheckpoint[]>(`/agent/runs/${encodeURIComponent(runId)}/checkpoints`);
 
 export const resolveAgentApproval = (
   runId: string,
@@ -281,13 +281,13 @@ export const resolveAgentApproval = (
   decision: "approved" | "rejected",
   note?: string,
 ) =>
-  request<AgentApproval>(`/query/agent-runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`, {
+  request<AgentApproval>(`/agent/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`, {
     method: "POST",
     body: JSON.stringify({ decision, note }),
   });
 
 export const resumeAgentRun = (runId: string, approvalId: string) =>
-  request<AgentRunResponse>(`/query/agent-runs/${encodeURIComponent(runId)}/resume`, {
+  request<AgentRunResponse>(`/agent/runs/${encodeURIComponent(runId)}/resume`, {
     method: "POST",
     body: JSON.stringify({ run_id: runId, approval_id: approvalId, approved: true, note: null }),
   });
@@ -297,14 +297,14 @@ export const rejectAgentApproval = (
   approvalId: string,
   note?: string,
 ) =>
-  request<AgentRunResponse>(`/query/agent-runs/${encodeURIComponent(runId)}/resume`, {
+  request<AgentRunResponse>(`/agent/runs/${encodeURIComponent(runId)}/resume`, {
     method: "POST",
     body: JSON.stringify({ run_id: runId, approval_id: approvalId, approved: false, note }),
   });
 
 export const agentApi = {
   runAgentQuery: (datasourceId: string, question: string, config?: AgentRunConfig, signal?: AbortSignal) =>
-    request<AgentRunResponse>("/query/agent-run", {
+    request<AgentRunResponse>("/agent/run", {
       method: "POST",
       body: JSON.stringify(buildAgentRunPayload(datasourceId, question, config)),
       signal,
@@ -318,25 +318,25 @@ export const agentApi = {
   ) => streamAgentRun(datasourceId, question, config, options),
 
   getAgentRun: (runId: string) =>
-    request<AgentRunResponse | null>(`/query/agent-runs/${encodeURIComponent(runId)}`),
+    request<AgentRunResponse | null>(`/agent/runs/${encodeURIComponent(runId)}`),
 
   listAgentSessionRuns: (sessionId: string) =>
-    request<AgentSessionRunSummary[]>(`/query/agent-sessions/${encodeURIComponent(sessionId)}/runs`),
+    request<AgentSessionRunSummary[]>(`/agent/sessions/${encodeURIComponent(sessionId)}/runs`),
 
   getRecentAgentRun: (datasourceId: string) =>
-    request<AgentRunResponse | null>(`/query/agent-runs/recent?datasource_id=${encodeURIComponent(datasourceId)}`),
+    request<AgentRunResponse | null>(`/agent/runs/recent?datasource_id=${encodeURIComponent(datasourceId)}`),
 
   getAgentRunArtifacts: (runId: string) =>
-    request<AgentArtifactRecord[]>(`/query/agent-runs/${encodeURIComponent(runId)}/artifacts`),
+    request<AgentArtifactRecord[]>(`/agent/runs/${encodeURIComponent(runId)}/artifacts`),
 
   getAgentRunEvents: (runId: string) =>
-    request<AgentRuntimeEventRecord[]>(`/query/agent-runs/${encodeURIComponent(runId)}/events`),
+    request<AgentRuntimeEventRecord[]>(`/agent/runs/${encodeURIComponent(runId)}/events`),
 
   getAgentRunTrace: (runId: string) =>
-    request<AgentTraceEventRecord[]>(`/query/agent-runs/${encodeURIComponent(runId)}/trace`),
+    request<AgentTraceEventRecord[]>(`/agent/runs/${encodeURIComponent(runId)}/trace`),
 
   getAgentThreadState: (threadId: string) =>
-    request<AgentKernelThreadState>(`/query/agent-runs/${encodeURIComponent(threadId)}/checkpoints`),
+    request<AgentKernelThreadState>(`/agent/runs/${encodeURIComponent(threadId)}/checkpoints`),
 
   listAgentRunApprovals,
 
