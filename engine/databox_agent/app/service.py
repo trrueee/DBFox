@@ -109,24 +109,35 @@ class DataBoxAgentService:
                         emit, update, agent_state, artifact_identity, emitted_artifact_ids
                     )
 
-                # Emit trace events
+                # Emit trace events (including approval-related traffic
+                # that the approval_node emits before/after interrupt())
                 if "trace_events" in update:
                     for te in update["trace_events"]:
                         if isinstance(te, dict):
                             yield from self._trace_to_events(emit, te)
 
-                # Check for approval
-                if update.get("status") == "waiting_approval" and update.get("pending_approval"):
-                    yield from self._approval_events(
-                        emit, update, agent_state, run_id, session_id, req
-                    )
-                    # After yielding approval events, stop — graph is interrupted
-                    return
-
-        # Get authoritative state from checkpoint
+        # ---- after the stream loop: check for LangGraph interrupt ----------
+        # The graph may have been paused by approval_interrupt() calling
+        # interrupt().  We detect this via snapshot.interrupts rather than
+        # inspecting per-node updates, because the approval node never
+        # returns a normal update — it suspends mid-execution.
         snapshot = app.get_state(config)
+        if snapshot is not None and getattr(snapshot, "interrupts", None):
+            # Graph was paused for human approval — persist the FULL state
+            # (not just the last policy update) so resume has everything.
+            interrupt_state: dict[str, Any] = (
+                dict(snapshot.values) if isinstance(snapshot.values, dict)
+                else dict(accumulated_state)
+            )
+            yield from self._approval_events(
+                emit, interrupt_state, agent_state, run_id, session_id, req
+            )
+            return
+
+        # ---- normal completion (no interrupt) -------------------------------
         final_state: dict[str, Any] = (
-            dict(snapshot.values) if isinstance(snapshot.values, dict) else dict(accumulated_state)
+            dict(snapshot.values) if (snapshot is not None and isinstance(snapshot.values, dict))
+            else dict(accumulated_state)
         )
 
         success = final_state.get("status") == "completed" and not final_state.get("error")
@@ -387,13 +398,13 @@ class DataBoxAgentService:
     def _approval_events(
         self,
         emit: Any,
-        update: dict[str, Any],
+        full_state: dict[str, Any],
         agent_state: Any,
         run_id: str,
         session_id: str,
         req: AgentRunRequest,
     ) -> Iterator[AgentRuntimeEvent]:
-        pending = update.get("pending_approval") or {}
+        pending = full_state.get("pending_approval") or {}
         approval = AgentApprovalRecord.model_validate(pending) if isinstance(pending, dict) else None
 
         checkpoint = agent_persistence.save_checkpoint(
@@ -403,8 +414,8 @@ class DataBoxAgentService:
             status="waiting_approval",
             current_step_name="approval_interrupt",
             next_step_name=str(pending.get("tool_name", "")),
-            plan=update.get("plan"),
-            state=dict(update),
+            plan=full_state.get("plan"),
+            state=dict(full_state),
             completed_steps=[s.model_dump(mode="json") for s in agent_state.steps],
             pending_steps=[
                 {

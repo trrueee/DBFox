@@ -12,6 +12,25 @@ from engine.databox_agent.graph.state import DataBoxAgentState
 
 
 def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+    # Hard block: do not invoke the model if we have already reached max_steps.
+    # Without this check the model would emit one more set of tool_calls after
+    # the step limit was hit, which wastes tokens and can produce confusing
+    # ToolMessages for tools that will never execute.
+    step_count = int(state.get("step_count", 0))
+    max_steps = int(state.get("max_steps", 20))
+    if step_count >= max_steps:
+        return {
+            "status": "failed",
+            "error": f"Agent exceeded max_steps ({max_steps}).",
+            "trace_events": [
+                {
+                    "type": "agent.max_steps_exceeded",
+                    "step_count": step_count,
+                    "max_steps": max_steps,
+                }
+            ],
+        }
+
     configurable = config.get("configurable") or {}
     model_name = configurable.get("model_name")
     api_key = configurable.get("api_key")

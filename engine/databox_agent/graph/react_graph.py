@@ -46,6 +46,7 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
             "tools": "tools",
             "approval": "approval",
             "model": "model",
+            "finalize": "finalize",
         },
     )
 

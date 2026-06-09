@@ -12,6 +12,7 @@ from engine.agent.types import ToolObservation
 from engine.agent.tool_runtime_gateway import ToolRuntimeGateway
 from engine.agent_kernel.tool_registry import ToolContext
 from engine.databox_agent.graph.state import DataBoxAgentState
+from engine.databox_agent.tools.tool_aliases import to_internal, to_alias
 
 logger = logging.getLogger("databox.databox_agent.nodes.tool_node")
 
@@ -24,7 +25,7 @@ def _step_name(tool_name: str) -> str:
         "sql.generate": "generate_sql_candidate",
         "sql.validate": "validate_sql",
         "sql.execute_readonly": "execute_sql",
-        "sql.skip_execution": "execute_sql",
+        "sql.skip_execution": "skip_execution",
         "sql.revise": "revise_sql",
         "result.profile": "profile_result",
         "chart.suggest": "suggest_chart",
@@ -47,34 +48,36 @@ def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> d
     trace_events = []
 
     for call in allowed_tool_calls:
-        tool_name = call["name"]
+        raw_name = call["name"]
+        internal_name = to_internal(raw_name)
+        alias_name = to_alias(internal_name)
         args = call["args"] or {}
         call_id = call["id"]
 
-        logger.info("Executing tool %s with args %s", tool_name, args)
+        logger.info("Executing tool %s with args %s", internal_name, args)
 
         trace_events.append({
             "type": "agent.tool.started",
-            "tool_name": tool_name,
+            "tool_name": internal_name,
         })
 
-        observation = _execute_tool(registry, db, req, state, tool_name, args)
+        observation = _execute_tool(registry, db, req, state, internal_name, args)
 
         tool_results.append(observation.model_dump(mode="json"))
 
-        content = _summarize_for_model(tool_name, observation)
+        content = _summarize_for_model(internal_name, observation)
 
         messages.append(
             ToolMessage(
                 content=content,
                 tool_call_id=call_id,
-                name=tool_name,
+                name=alias_name,
             )
         )
 
         trace_events.append({
             "type": "agent.tool.completed",
-            "tool_name": tool_name,
+            "tool_name": internal_name,
             "status": observation.status,
             "latency_ms": observation.latency_ms,
         })
