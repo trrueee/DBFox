@@ -37,6 +37,10 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "workspace_explain_result": "workspace.explain_result",
     "workspace_continue_from_artifact": "workspace.continue_from_artifact",
     "workspace_explain_schema": "workspace.explain_schema",
+    # Environment tools
+    "schema_list_tables": "schema.list_tables",
+    "schema_describe_table": "schema.describe_table",
+    "schema_refresh_catalog": "schema.refresh_catalog",
 }
 
 # Internal name → alias (reverse lookup, built once at import time)

@@ -27,6 +27,9 @@ def _step_name(tool_name: str) -> str:
         "chart.suggest": "suggest_chart",
         "followup.suggest": "suggest_followups",
         "answer.synthesize": "answer_synthesizer",
+        "schema.list_tables": "list_tables",
+        "schema.describe_table": "describe_table",
+        "schema.refresh_catalog": "refresh_catalog",
     }
     return step_names.get(tool_name, tool_name)
 

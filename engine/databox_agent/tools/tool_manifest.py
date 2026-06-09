@@ -68,6 +68,25 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "Use when enough information is available to answer the user's question. "
         "After this, do NOT call more tools — you are done."
     ),
+    "schema.list_tables": (
+        "List all known tables in the current datasource's schema catalog. "
+        "Use when schema.build_context returns zero tables, or when you need "
+        "to discover what tables are available. Outputs: table names, column "
+        "counts, row estimates. Does NOT generate SQL."
+    ),
+    "schema.describe_table": (
+        "Describe a specific table: columns, types, keys, and sample rows. "
+        "Use when you need to understand the structure of a particular table "
+        "before writing queries. Input: table_name. "
+        "Outputs: column details and sample data rows."
+    ),
+    "schema.refresh_catalog": (
+        "Re-introspect the live datasource and sync its schema to the DataBox "
+        "catalog. Use when the catalog appears empty or stale (e.g., when "
+        "schema.build_context or schema.list_tables returns zero results). "
+        "Input: reason (optional). Outputs: sync counts. "
+        "Side-effect: writes metadata to the system catalog (safe)."
+    ),
 }
 
 WORKSPACE_AFFORDANCE: dict[str, str] = {

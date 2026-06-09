@@ -13,6 +13,7 @@ from engine.agent.tool_runtime_gateway import ToolRuntimeGateway
 from engine.agent_kernel.tool_registry import ToolContext
 from engine.databox_agent.graph.state import DataBoxAgentState
 from engine.databox_agent.tools.tool_aliases import to_internal, to_alias
+from engine.databox_agent.environment.dialect_resolver import resolve_datasource_dialect
 
 logger = logging.getLogger("databox.databox_agent.nodes.tool_node")
 
@@ -31,6 +32,9 @@ def _step_name(tool_name: str) -> str:
         "chart.suggest": "suggest_chart",
         "followup.suggest": "suggest_followups",
         "answer.synthesize": "answer_synthesizer",
+        "schema.list_tables": "list_tables",
+        "schema.describe_table": "describe_table",
+        "schema.refresh_catalog": "refresh_catalog",
     }
     return step_names.get(tool_name, tool_name)
 
@@ -124,10 +128,12 @@ def _execute_tool(
         if "sql" not in merged_args:
             merged_args["sql"] = state.get("sql")
 
+        datasource_id = req.datasource_id if req else ""
+        dialect = resolve_datasource_dialect(db, datasource_id) if db else "mysql"
         exec_ctx = ExecutionContext(
             thread_id=str(state.get("thread_id") or state.get("session_id") or ""),
-            datasource_id=req.datasource_id if req else "",
-            db_dialect="mysql",
+            datasource_id=datasource_id,
+            db_dialect=dialect,
             read_only=tool.spec.policy.side_effect != "write",
             db_session=db,
             api_key=req.api_key if req else None,
@@ -272,6 +278,23 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         if proposed:
             parts.append(f"proposed_sql={proposed[:200]}")
         return " ".join(parts)
+
+    if tool_name == "schema.list_tables":
+        tables = output.get("tables") or []
+        names = [t.get("table_name", "") for t in tables[:20]]
+        return f"[schema.list_tables] {len(tables)} table(s): {', '.join(names)}"
+
+    if tool_name == "schema.describe_table":
+        cols = output.get("columns") or []
+        col_names = [c.get("column_name", "") for c in cols[:20]]
+        return f"[schema.describe_table] {output.get('table_name', '?')}: {len(cols)} column(s): {', '.join(col_names)}"
+
+    if tool_name == "schema.refresh_catalog":
+        return (
+            f"[schema.refresh_catalog] synced={output.get('synced')}, "
+            f"tables_created={output.get('tables_created')}, "
+            f"columns_created={output.get('columns_created')}"
+        )
 
     # Generic fallback — compact JSON without huge data
     compact: dict[str, Any] = {}
