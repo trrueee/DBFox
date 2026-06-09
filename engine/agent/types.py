@@ -169,6 +169,15 @@ class AgentRunRequest(BaseModel):
     semantic_mode: Literal["off", "shadow", "retry"] = "shadow"
 
 
+class AgentErrorOutput(BaseModel):
+    error_type: str
+    tool_name: str
+    step_name: str
+    traceback: str | None = None
+    retryable: bool = False
+    retry_reason: str | None = None
+
+
 class AgentStep(BaseModel):
     name: str
     status: AgentStepStatus
@@ -258,118 +267,3 @@ class AgentAnswer(BaseModel):
     caveats: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
-
-
-class AgentMessageBlock(BaseModel):
-    block_id: str | None = None
-    sequence: int | None = None
-    type: Literal["text", "artifact_ref", "answer", "suggestions"]
-    content: str | None = None
-    artifact_id: str | None = None
-    display: Literal["compact", "full"] | None = None
-    answer: AgentAnswer | None = None
-    suggestions: list[FollowUpSuggestion] = Field(default_factory=list)
-
-
-class ColumnProfile(BaseModel):
-    kind: Literal["numeric", "category", "time", "unknown"]
-    count: int
-    null_count: int = 0
-    distinct_count: int = 0
-    sample_values: list[Any] = Field(default_factory=list)
-    min: float | str | None = None
-    max: float | str | None = None
-    sum: float | None = None
-    avg: float | None = None
-    top_values: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class ResultProfile(BaseModel):
-    row_count: int
-    column_profiles: dict[str, ColumnProfile] = Field(default_factory=dict)
-    detected_patterns: list[str] = Field(default_factory=list)
-    notable_facts: list[str] = Field(default_factory=list)
-    anomalies: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-
-
-class AgentVisibleEvent(BaseModel):
-    event_id: str | None = None
-    sequence: int | None = None
-    created_at_ms: int | None = None
-    type: Literal[
-        "agent.narration.delta",
-        "agent.narration.completed",
-        "agent.artifact.created",
-        "agent.answer.delta",
-        "agent.answer.completed",
-        "agent.suggestions.created",
-    ]
-    content: str | None = None
-    artifact: AgentArtifact | None = None
-    answer: AgentAnswer | None = None
-    suggestions: list[FollowUpSuggestion] = Field(default_factory=list)
-
-
-class AgentTraceEvent(BaseModel):
-    event_id: str | None = None
-    sequence: int | None = None
-    created_at_ms: int | None = None
-    type: Literal["agent.trace.step_started", "agent.trace.step_completed"]
-    step_id: str
-    name: str
-    status: AgentStepStatus | None = None
-    input: dict[str, Any] | None = None
-    output: dict[str, Any] | None = None
-    error: str | None = None
-    latency_ms: int | None = None
-
-
-class AgentError(BaseModel):
-    code: str
-    message: str
-    details: dict[str, Any] | None = None
-    revise_suggestion: str | None = None
-
-
-class AgentRunResponse(BaseModel):
-    run_id: str
-    session_id: str
-    parent_run_id: str | None = None
-    success: bool
-    status: str | None = None
-    question: str
-    context_summary: str | None = None
-    referenced_artifact_ids: list[str] = Field(default_factory=list)
-    query_plan: dict[str, Any] | None = None
-    sql: str | None = None
-    safety: dict[str, Any] | None = None
-    execution: dict[str, Any] | None = None
-    explanation: str | None = None
-    chart_suggestion: dict[str, Any] | None = None
-    result_profile: ResultProfile | None = None
-    answer: AgentAnswer | None = None
-    suggestions: list[FollowUpSuggestion] = Field(default_factory=list)
-    artifacts: list[AgentArtifact] = Field(default_factory=list)
-    message_blocks: list[AgentMessageBlock] = Field(default_factory=list)
-    events: list[AgentVisibleEvent] = Field(default_factory=list)
-    trace_events: list[AgentTraceEvent] = Field(default_factory=list)
-    steps: list[AgentStep] = Field(default_factory=list)
-    error: str | None = None
-    approval: AgentApprovalRecord | None = None
-    checkpoint: AgentCheckpointRecord | None = None
-
-
-class AgentRuntimeEvent(BaseModel):
-    event_id: str
-    run_id: str
-    sequence: int
-    created_at_ms: int
-    type: AgentRuntimeEventType
-    step: dict[str, Any] | None = None
-    artifact: AgentArtifact | None = None
-    answer: AgentAnswer | None = None
-    response: AgentRunResponse | None = None
-    approval: AgentApprovalRecord | None = None
-    checkpoint: AgentCheckpointRecord | None = None
-    error: str | None = None
