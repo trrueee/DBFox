@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -11,6 +11,7 @@ from engine.agent_kernel.state import KernelState, latest_user_message
 
 # Must stay in sync with lifecycle.AgentIntent.
 AgentIntent = str
+IntentConfidence = Literal["low", "medium", "high"]
 
 VALID_INTENTS: frozenset[str] = frozenset({
     "new_data_question",
@@ -25,7 +26,7 @@ VALID_INTENTS: frozenset[str] = frozenset({
 
 class IntentClassification(BaseModel):
     intent: str
-    confidence: str  # "low" | "medium" | "high"
+    confidence: IntentConfidence
     reason: str = ""
     needs_execution: bool = False
 
