@@ -32,23 +32,27 @@ from engine.agent_kernel.tool_registry import (
 
 
 class EmptyToolInput(BaseModel):
-    pass
+    """Tool that reads all context from agent state — no explicit arguments needed."""
 
 
 class QuestionToolInput(BaseModel):
+    """Tool that accepts an optional question override."""
     question: str | None = None
 
 
 class SqlToolInput(BaseModel):
+    """Tool that accepts a SQL string."""
     sql: str | None = None
 
 
 class SqlExecutionInput(BaseModel):
+    """Execute a validated SQL query."""
     sql: str | None = None
     question: str | None = None
 
 
 class SqlRevisionInput(BaseModel):
+    """Revise a SQL query that failed validation or execution."""
     sql: str | None = None
     safe_sql: str | None = None
     instruction: str | None = None
@@ -71,6 +75,40 @@ class SqlSafetyOutput(BaseModel):
 
 class SqlExecutionOutput(BaseModel):
     success: bool
+
+
+# ---------------------------------------------------------------------------
+# Environment tool inputs (explicit schemas for model-visible args)
+# ---------------------------------------------------------------------------
+
+class DescribeTableInput(BaseModel):
+    """Describe a named table from the live datasource."""
+    table_name: str = Field(..., description="The exact table name to describe, e.g. 'singer', 'orders'.")
+
+
+class RefreshCatalogInput(BaseModel):
+    """Refresh the schema catalog from the live datasource."""
+    reason: str | None = Field(None, description="Why the catalog needs refreshing, e.g. 'schema.build_context returned zero tables'.")
+
+
+class MemorySearchInput(BaseModel):
+    """Search long-term memory for relevant context."""
+    query: str = Field(..., description="What to search for, e.g. 'sales metric definition', 'singer table alias'.")
+    scope: list[str] | None = Field(None, description="Where to search: 'user', 'project', 'datasource'.")
+    memory_types: list[str] | None = Field(None, description="Filter by type: 'metric_definition', 'schema_alias', 'join_path', 'user_preference', 'successful_trajectory'.")
+
+
+class MemoryWriteInput(BaseModel):
+    """Write a new memory entry."""
+    type: str = Field(..., description="Memory type: 'user_preference', 'schema_alias', 'metric_definition', 'join_path', 'project_rule'.")
+    text: str = Field(..., description="Human-readable memory text. E.g. '销售额 = orders.total_amount where status is paid or completed.'")
+    content: dict[str, Any] | None = Field(None, description="Structured content for this memory type.")
+
+
+class MemoryDeleteInput(BaseModel):
+    """Delete a memory entry."""
+    memory_id: str = Field(..., description="The ID of the memory to delete.")
+    reason: str | None = Field("user_requested", description="Why this memory is being deleted.")
 
 
 def register_databox_tools() -> ToolRegistry:
@@ -127,22 +165,73 @@ def register_databox_tools() -> ToolRegistry:
     )
     registry.register(_tool(
         "schema.list_tables",
-        "List all known tables in the datasource's schema catalog. Use when schema.build_context returns zero tables.",
+        "List ALL tables in the current live datasource. "
+        "Outputs: table names, column counts, row estimates, table types.",
         schema_list_tables,
         input_model=EmptyToolInput,
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "schema.describe_table",
-        "Describe a specific table: columns, types, keys, and sample rows. Input: table_name.",
+        "Describe a NAMED table from the live datasource: columns, types, keys, foreign keys, sample rows. "
+        "Use when user asks for schema/columns/fields/structure of a specific table. "
+        "Input: table_name (exact table name). Outputs: column list, keys, sample rows.",
         schema_describe_table,
-        input_model=QuestionToolInput,
+        input_model=DescribeTableInput,
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "schema.refresh_catalog",
-        "Re-introspect the live datasource and sync its schema to the DataBox catalog. Use when catalog appears empty or stale.",
+        "Re-introspect the live datasource and sync its schema to the DataBox catalog. "
+        "Use when schema.build_context or schema.list_tables returns zero results. "
+        "Input: reason (optional). Outputs: tables_created, columns_created, synced=true/false.",
         schema_refresh_catalog,
+        input_model=RefreshCatalogInput,
+        metadata={"next_route": "answer"},
+    ))
+
+    # Memory tools
+    from engine.databox_agent.memory.memory_tools import (
+        memory_search,
+        memory_write,
+        memory_delete,
+        memory_summarize_session,
+    )
+    registry.register(_tool(
+        "memory.search",
+        "Search long-term memory: user preferences, metric definitions, schema aliases, "
+        "join paths, past successful queries, failure lessons. "
+        "Use BEFORE planning a query to leverage past knowledge. "
+        "Input: query (required), scope (optional), memory_types (optional). "
+        "Outputs: list of matching memory records with type, text, confidence.",
+        memory_search,
+        input_model=MemorySearchInput,
+        metadata={"next_route": "answer"},
+    ))
+    registry.register(_tool(
+        "memory.write",
+        "Write a new memory entry. Use when user explicitly asks to remember something. "
+        "Input: type (memory type), text (human-readable), content (structured, optional). "
+        "Outputs: memory_id, type, status. "
+        "Types: 'user_preference', 'schema_alias', 'metric_definition', 'join_path', 'project_rule'.",
+        memory_write,
+        input_model=MemoryWriteInput,
+        metadata={"next_route": "answer"},
+    ))
+    registry.register(_tool(
+        "memory.delete",
+        "Delete or forget a memory. Use when user asks to forget or correct something. "
+        "Input: memory_id (required), reason (optional). Outputs: deleted=true/false.",
+        memory_delete,
+        input_model=MemoryDeleteInput,
+        metadata={"next_route": "answer"},
+    ))
+    registry.register(_tool(
+        "memory.summarize_session",
+        "Summarize the current session for future recall. "
+        "Use at the end of an analysis session to preserve key findings and context. "
+        "No input required. Outputs: session summary text, run/artifact counts.",
+        memory_summarize_session,
         input_model=EmptyToolInput,
         metadata={"next_route": "answer"},
     ))

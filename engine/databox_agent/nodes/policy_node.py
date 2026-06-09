@@ -30,6 +30,10 @@ def _step_name(tool_name: str) -> str:
         "schema.list_tables": "list_tables",
         "schema.describe_table": "describe_table",
         "schema.refresh_catalog": "refresh_catalog",
+        "memory.search": "memory_search",
+        "memory.write": "memory_write",
+        "memory.delete": "memory_delete",
+        "memory.summarize_session": "summarize_session",
     }
     return step_names.get(tool_name, tool_name)
 

@@ -41,6 +41,11 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "schema_list_tables": "schema.list_tables",
     "schema_describe_table": "schema.describe_table",
     "schema_refresh_catalog": "schema.refresh_catalog",
+    # Memory tools
+    "memory_search": "memory.search",
+    "memory_write": "memory.write",
+    "memory_delete": "memory.delete",
+    "memory_summarize_session": "memory.summarize_session",
 }
 
 # Internal name → alias (reverse lookup, built once at import time)
