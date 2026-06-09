@@ -38,13 +38,12 @@ interface DashboardStats {
 }
 
 async function loadDashboardPayload(datasourceId: string) {
-  const [statsData, historyData] = await Promise.all([
-    api.getLlmStats(datasourceId),
-    api.listHistory(datasourceId),
-  ]);
+  // Phase 1: LLM stats API removed. Dashboard now focuses on query history.
+  // Phase 2 will add Agent observability stats.
+  const historyData = await api.listHistory(datasourceId);
 
   return {
-    stats: statsData as DashboardStats,
+    stats: null, // LLM stats deprecated — replaced by Agent observability in Phase 2
     history: historyData,
   };
 }

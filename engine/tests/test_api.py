@@ -397,7 +397,7 @@ def test_agent_run_endpoint_review_mode(client) -> None:
     ds_id = resp.json()["id"]
     client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
 
-    resp = client.post("/api/v1/query/agent-run", json={
+    resp = client.post("/api/v1/agent/run", json={
         "datasource_id": ds_id,
         "question": "查询所有用户",
         "execute": False,
@@ -444,7 +444,7 @@ def test_agent_run_stream_endpoint_returns_sse_final_response(client) -> None:
     ds_id = resp.json()["id"]
     client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
 
-    resp = client.post("/api/v1/query/agent-run/stream", json={
+    resp = client.post("/api/v1/agent/run/stream", json={
         "datasource_id": ds_id,
         "question": "list users",
         "execute": False,
@@ -489,7 +489,7 @@ def test_agent_run_stream_endpoint_returns_sse_final_response(client) -> None:
     assert "sql_candidate" in streamed_semantic_ids
     assert "safety_report" in streamed_semantic_ids
 
-    fallback_resp = client.post("/api/v1/query/agent-run", json={
+    fallback_resp = client.post("/api/v1/agent/run", json={
         "datasource_id": ds_id,
         "question": "list users",
         "execute": False,
@@ -516,7 +516,7 @@ def test_agent_run_endpoint_accepts_followup_context(client) -> None:
     ds_id = resp.json()["id"]
     client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
 
-    resp = client.post("/api/v1/query/agent-run", json={
+    resp = client.post("/api/v1/agent/run", json={
         "datasource_id": ds_id,
         "question": "Break it down by role",
         "execute": False,

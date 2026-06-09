@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { DataSource, GeneratedSqlResult, QueryResult } from "../lib/api";
-import { AiBenchmarkDrawer } from "../components/AiBenchmarkDrawer";
+import type { DataSource, QueryResult } from "../lib/api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { useQueryExecution } from "../hooks/useQueryExecution";
@@ -100,10 +99,6 @@ function keywordFormat(sql: string) {
 export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChange }: QueryPageProps) => {
   const toast = useToast();
   const [consoleBlocks, setConsoleBlocks] = useState<ConsoleBlock[]>([]);
-  const [showBenchmarkDrawer, setShowBenchmarkDrawer] = useState(false);
-  const [goldenPresetQuestion, setGoldenPresetQuestion] = useState("");
-  const [goldenPresetSql, setGoldenPresetSql] = useState("");
-  const [aiGenerating, setAiGenerating] = useState(false);
   const handledActionNonceRef = useRef<number | undefined>(undefined);
   const pendingRunRef = useRef<PendingConsoleRun | null>(null);
 
@@ -127,22 +122,6 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     confirmRequest,
     resolveConfirm,
   } = useQueryExecution(datasource);
-
-  const appendAiSqlSafetyBlock = useCallback((title: string, result: GeneratedSqlResult) => {
-    if (!result.sql) return;
-    setConsoleBlocks((prev) => [
-      ...prev,
-      {
-        id: makeConsoleId("ai-sql"),
-        type: "aiSql",
-        sql: result.sql,
-        title,
-        trustGate: result.trustGate,
-        queryPlan: result.queryPlan,
-        createdAt: Date.now(),
-      },
-    ]);
-  }, []);
 
   useEffect(() => {
     if (!initialDraft?.sql) return;
@@ -348,87 +327,27 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     [activeEditorTab, executeConsoleSql, updateActiveTab],
   );
 
+  // Phase 1: Old Text-to-SQL AI handlers replaced by Agent Copilot.
+  // These no-ops keep ConsoleTranscript props interface intact.
   const handleAiOptimizeSql = useCallback(
-    async (sqlOverride?: string) => {
-      const sql = (sqlOverride ?? activeEditorTab?.sql ?? "").trim();
-      if (!sql) return;
-      try {
-        setAiGenerating(true);
-        const prompt = `针对以下 SQL 进行性能优化，只返回更稳妥、可执行的 SQL，并在末尾用中文简要说明优化点：\n\n${sql}`;
-        const result = await api.generateSql(datasource.id, prompt);
-        if (result.sql) {
-          updateActiveTab(() => ({ sql: result.sql, queryError: null }));
-          appendAiSqlSafetyBlock("AI SQL 校验", result);
-          toast.toast(
-            result.trustGate?.requiresConfirmation
-              ? "AI SQL 已写入，存在风险提示，需要确认后执行"
-              : "AI 优化完成，已写入当前输入行",
-            result.trustGate?.requiresConfirmation ? "warning" : "success",
-          );
-        } else {
-          toast.toast("AI 未返回优化 SQL", "warning");
-        }
-      } catch (error: unknown) {
-        toast.toast(`优化失败: ${getErrorMessage(error, "AI SQL optimization failed")}`, "error");
-      } finally {
-        setAiGenerating(false);
-      }
+    (_sqlOverride?: string) => {
+      toast.toast("AI SQL 优化已迁移至 Agent Copilot — 请在左侧对话面板使用", "info");
     },
-    [activeEditorTab, appendAiSqlSafetyBlock, datasource.id, toast, updateActiveTab],
+    [toast],
   );
 
   const handleAiExplainSql = useCallback(
-    async (sqlOverride?: string) => {
-      const sql = (sqlOverride ?? activeEditorTab?.sql ?? "").trim();
-      if (!sql) return;
-      try {
-        setAiGenerating(true);
-        const prompt = `请用中文解释以下 SQL 的查询意图、关联字段逻辑、潜在风险和结果含义，不要改写 SQL：\n\n${sql}`;
-        const result = await api.generateSql(datasource.id, prompt);
-        setConsoleBlocks((prev) => [
-          ...prev,
-          {
-            id: makeConsoleId("ai"),
-            type: "explain",
-            sql,
-            title: "AI 解读",
-            message: result.sql || result.guardrail?.message || "AI 已完成解读。",
-            createdAt: Date.now(),
-          },
-        ]);
-      } catch (error: unknown) {
-        toast.toast(`解释失败: ${getErrorMessage(error, "AI SQL explanation failed")}`, "error");
-      } finally {
-        setAiGenerating(false);
-      }
+    (_sqlOverride?: string) => {
+      toast.toast("AI SQL 解读已迁移至 Agent Copilot — 请在左侧对话面板使用", "info");
     },
-    [activeEditorTab, datasource.id, toast],
+    [toast],
   );
 
   const handleAiFixError = useCallback(
-    async (sql: string, message: string) => {
-      if (!sql.trim()) return;
-      try {
-        setAiGenerating(true);
-        const prompt = `以下 SQL 执行报错，请修复为可执行 SQL，只返回修复后的 SQL，并简要说明原因。\n\nSQL:\n${sql}\n\n错误:\n${message}`;
-        const result = await api.generateSql(datasource.id, prompt);
-        if (result.sql) {
-          updateActiveTab(() => ({ sql: result.sql }));
-          appendAiSqlSafetyBlock("AI 修复校验", result);
-          toast.toast(
-            result.trustGate?.requiresConfirmation
-              ? "AI 修复 SQL 已写入，存在风险提示，需要确认后执行"
-              : "AI 修复建议已写入当前输入行",
-            result.trustGate?.requiresConfirmation ? "warning" : "success",
-          );
-        }
-      } catch (error: unknown) {
-        toast.toast(`修复失败: ${getErrorMessage(error, "AI error fix failed")}`, "error");
-      } finally {
-        setAiGenerating(false);
-      }
+    (_sql: string, _message: string) => {
+      toast.toast("AI SQL 修复已迁移至 Agent Copilot — 请在左侧对话面板使用", "info");
     },
-    [appendAiSqlSafetyBlock, datasource.id, toast, updateActiveTab],
+    [toast],
   );
 
   const handleGenerateChart = useCallback(
@@ -448,13 +367,12 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
     [executeConsoleSql, updateActiveTab],
   );
 
+  // Phase 1: Golden SQL deprecated. Use Agent eval tasks for golden test cases.
   const handleSaveQuery = useCallback(
-    (sql: string) => {
-      setGoldenPresetQuestion(activeEditorTab?.title ?? "Console Query");
-      setGoldenPresetSql(sql);
-      setShowBenchmarkDrawer(true);
+    (_sql: string) => {
+      toast.toast("保存查询已迁移至 Agent 评测模块 — 请使用 /agent-eval 管理黄金测试用例", "info");
     },
-    [activeEditorTab?.title],
+    [toast],
   );
 
   useEffect(() => {
@@ -501,7 +419,7 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
   }, [executeConsoleSql]);
 
   const currentSql = activeEditorTab?.sql ?? "";
-  const running = activeEditorTab?.status === "running" || aiGenerating;
+  const running = activeEditorTab?.status === "running";
 
   return (
     <div className="query-page-console">
@@ -526,16 +444,6 @@ export const QueryPage = ({ datasource, initialDraft, actionTrigger, onStateChan
         databaseName={datasource.database_name}
         engineLabel={datasource.db_type}
       />
-
-      {showBenchmarkDrawer && (
-        <AiBenchmarkDrawer
-          datasource={datasource}
-          aiConfig={aiConfig}
-          initialQuestion={goldenPresetQuestion}
-          initialSql={goldenPresetSql}
-          onClose={() => setShowBenchmarkDrawer(false)}
-        />
-      )}
 
       <ConfirmDialog
         open={confirmRequest !== null}
