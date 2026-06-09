@@ -91,6 +91,25 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "Input: reason (optional). Outputs: sync counts. "
         "Side-effect: writes metadata to the system catalog (safe)."
     ),
+    "environment.get_profile": (
+        "Get the datasource environment profile: env tier (dev/staging/prod), "
+        "dialect (mysql/postgres/sqlite/duckdb), catalog status (fresh/stale/empty), "
+        "table count, and warnings. Use to understand the datasource environment "
+        "before planning queries. No input required. Outputs: datasource_id, env, "
+        "dialect, catalog_status, table_count, selected_tables, warnings."
+    ),
+    "semantic.resolve": (
+        "Resolve business semantics for the current user question. "
+        "Maps business terms (e.g. 'GMV', 'DAU'), metrics, dimensions, "
+        "filters, and join paths to actual database objects. "
+        "Use BEFORE sql.generate when the question contains business "
+        "jargon or when you need to understand which tables/columns are "
+        "relevant. Combines LLM understanding with catalog verification — "
+        "tables and columns that don't exist are flagged as errors. "
+        "Input: none required. Outputs: resolved_terms, resolved_metrics, "
+        "resolved_dimensions, candidate_tables, join_paths, ambiguity, "
+        "semantic_context_text."
+    ),
     "memory.search": (
         "Search long-term memory for relevant context: user preferences, "
         "metric definitions, schema aliases, join paths, past successful "

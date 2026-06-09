@@ -30,14 +30,15 @@ class TestGraphCompilation:
 
 
 class TestPlannerRoute:
-    def test_no_tools_routes_to_finalize(self):
+    def test_no_tools_still_routes_to_model(self):
+        """Chat with no tools must go through model → progress → finalize, not skip model."""
         plan = {"task_type": "chat", "should_call_tools": False, "needs_clarification": False}
         state: DataBoxAgentState = {
             "plan_directive": plan,
             "allowed_tool_groups": [],
             "status": "running",
         }
-        assert route_planner_output(state) == "finalize"
+        assert route_planner_output(state) == "model"
 
     def test_with_tools_routes_to_model(self):
         plan = {"task_type": "data_lookup", "should_call_tools": True, "needs_clarification": False}
