@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.agent.types import AgentRunRequest, AgentRunResponse
-from engine.agent_kernel.tool_registry import ToolRegistry
+from engine.agent.tool_registry import ToolRegistry
 from engine.databox_agent.app.runtime_config import RuntimeConfig
 
 
@@ -17,7 +17,7 @@ class RequestContext:
         request: AgentRunRequest,
         registry: ToolRegistry | None = None,
     ):
-        from engine.agent_kernel.databox_tools import register_databox_tools
+        from engine.agent.databox_tools import register_databox_tools
 
         self.db = db
         self.request = request

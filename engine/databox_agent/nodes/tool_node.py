@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from engine.agent.sandbox.base import ExecutionContext
 from engine.agent.types import ToolObservation
 from engine.agent.tool_runtime_gateway import ToolRuntimeGateway
-from engine.agent_kernel.tool_registry import ToolContext
+from engine.agent.tool_registry import ToolContext
 from engine.databox_agent.graph.state import DataBoxAgentState
 from engine.databox_agent.tools.tool_aliases import to_internal, to_alias
 from engine.databox_agent.environment.dialect_resolver import resolve_datasource_dialect
@@ -211,7 +211,7 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         )
 
     if tool_name == "sql.generate":
-        sql = output.get("sql", "")
+        sql = output.get("sql") or ""
         preview = sql[:300] + ("..." if len(sql) > 300 else "")
         return f"[sql.generate] OK.\n```sql\n{preview}\n```"
 
@@ -219,7 +219,7 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         can_exec = output.get("can_execute", False)
         requires = output.get("requires_confirmation", False)
         blocked = output.get("blocked_reasons") or []
-        safe = output.get("safe_sql", "")
+        safe = output.get("safe_sql") or ""
         parts = [f"[sql.validate] can_execute={can_exec}, requires_confirmation={requires}"]
         if blocked:
             parts.append(f"blocked_reasons={blocked}")

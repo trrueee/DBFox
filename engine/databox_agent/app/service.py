@@ -23,8 +23,8 @@ from engine.agent.types import (
 )
 from engine.errors import DataBoxError
 from engine.models import AgentRun
-from engine.agent_kernel.checkpointer import build_agent_kernel_checkpointer
-from engine.agent_kernel.databox_tools import register_databox_tools
+from engine.agent.checkpointer import build_agent_kernel_checkpointer
+from engine.agent.databox_tools import register_databox_tools
 from engine.agent.artifact_emitter import ArtifactEmitter
 from engine.agent.artifacts import AgentArtifactIdentity
 from engine.agent.events import EventEmitter
@@ -51,7 +51,7 @@ class DataBoxAgentService:
         _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
         _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
         self._persist_events = _mode != "disabled" and _events_flag.lower() != "false"
-        from engine.agent_kernel.persistence_sink import create_persistence_sink
+        from engine.agent.persistence_sink import create_persistence_sink
         self.persistence_sink = create_persistence_sink(db)
 
     # ---- Public API ----------------------------------------------------------
