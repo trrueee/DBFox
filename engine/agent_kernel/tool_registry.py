@@ -31,6 +31,7 @@ class ToolSpec(BaseModel):
     input_model: type[BaseModel] | None = Field(default=None, exclude=True)
     output_model: type[BaseModel] | None = Field(default=None, exclude=True)
     policy: ToolPolicy = Field(default_factory=ToolPolicy)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 @dataclass
