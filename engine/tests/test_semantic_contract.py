@@ -81,6 +81,23 @@ def test_song_names_projection_prefers_song_name_column() -> None:
     assert contract.projection.allow_extra_columns is False
 
 
+def test_song_name_and_release_year_do_not_request_singer_name() -> None:
+    contract = build_query_contract(
+        "Show the name and the release year of the song by the youngest singer.",
+        schema_context={},
+        query_plan={
+            "dimensions": [
+                {"name": "name", "column": "Name"},
+                {"name": "song_name", "column": "Song_Name"},
+                {"name": "song_release_year", "column": "Song_release_year"},
+            ],
+        },
+    )
+
+    assert contract.projection.requested_columns == ["Song_Name", "Song_release_year"]
+    assert contract.projection.allow_extra_columns is False
+
+
 def test_builds_absence_of_relation_contract_for_no_friends() -> None:
     contract = build_query_contract(
         "Students with no friends",

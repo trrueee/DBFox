@@ -200,12 +200,15 @@ def _projection_contract(q: str, query_plan: dict[str, Any] | None) -> Projectio
         elif hint not in resolved:
             resolved.append(hint)
 
-    # Add plan columns not already covered by resolved hints
-    resolved_norm = {_extract_column_name(c).lower() for c in resolved}
-    for pc in plan_columns:
-        if _extract_column_name(pc).lower() not in resolved_norm:
-            resolved.append(pc)
-            resolved_norm.add(_extract_column_name(pc).lower())
+    # If the question did not surface explicit columns, fall back to plan
+    # dimensions. When explicit hints exist, do not let a broad query-plan
+    # dimension (for example singer.Name) widen the requested projection.
+    if not surface_hints:
+        resolved_norm = {_extract_column_name(c).lower() for c in resolved}
+        for pc in plan_columns:
+            if _extract_column_name(pc).lower() not in resolved_norm:
+                resolved.append(pc)
+                resolved_norm.add(_extract_column_name(pc).lower())
 
     requested = _dedupe(resolved)
     if requested:
@@ -292,8 +295,16 @@ def _requested_columns_from_question(q: str) -> list[str]:
             return True
         return False
 
-    if re.search(r"\bsong names?\b", q):
+    asks_song_name = bool(
+        re.search(r"\bsong names?\b", q)
+        or re.search(r"\bnames?\b.*\bsongs?\b", q)
+        or re.search(r"\bnames?\b.*\bof\s+the\s+songs?\b", q)
+        or re.search(r"\bsongs?\b.*\bnames?\b", q)
+    )
+    if asks_song_name:
         requested.append("song_name")
+    if re.search(r"\brelease years?\b", q):
+        requested.append("song_release_year")
     mappings = [
         (r"\brecord companies?\b", "record_company"),
         (r"\bairlines?\b", "airline"),
@@ -311,7 +322,7 @@ def _requested_columns_from_question(q: str) -> list[str]:
         requested.append("country")
 
     # "name" as a requested column — only when not in a filter context
-    if re.search(r"\bnames?\b", q) and not re.search(r"\bsong names?\b", q):
+    if re.search(r"\bnames?\b", q) and not asks_song_name:
         if not re.search(r"\blast\s+name\b|\bfirst\s+name\b|\bwhose\s+name\b|\bname\s+is\b", q):
             requested.append("name")
     return requested

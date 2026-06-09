@@ -1,0 +1,106 @@
+{
+  "summary": {
+    "total_cases": 5,
+    "generated_sql_cases": 5,
+    "execution_success_cases": 2,
+    "execution_match_cases": 2,
+    "generated_sql_rate": 1.0,
+    "execution_success_rate": 0.4,
+    "execution_accuracy": 0.4,
+    "avg_latency_ms": 1035.4,
+    "runner_mode": "qwen-baseline",
+    "is_databox_score": false
+  },
+  "cases": [
+    {
+      "db_id": "tiny_school",
+      "question": "How many students are there?",
+      "gold_sql": "SELECT COUNT(*) FROM students",
+      "predicted_sql": "SELECT COUNT(*) FROM students;",
+      "generated_sql": true,
+      "execution_success": true,
+      "execution_match": true,
+      "latency_ms": 807,
+      "error": null,
+      "gold_rows_count": 1,
+      "predicted_rows_count": 1,
+      "tool_sequence": [
+        "sql.generate"
+      ],
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "What is the average score?",
+      "gold_sql": "SELECT AVG(score) FROM courses",
+      "predicted_sql": "SELECT AVG(score) FROM scores;",
+      "generated_sql": true,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 1142,
+      "error": "no such table: scores",
+      "gold_rows_count": 1,
+      "predicted_rows_count": 0,
+      "tool_sequence": [
+        "sql.generate"
+      ],
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "List all student names.",
+      "gold_sql": "SELECT name FROM students",
+      "predicted_sql": "SELECT name FROM students;",
+      "generated_sql": true,
+      "execution_success": true,
+      "execution_match": true,
+      "latency_ms": 988,
+      "error": null,
+      "gold_rows_count": 3,
+      "predicted_rows_count": 3,
+      "tool_sequence": [
+        "sql.generate"
+      ],
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "Show the highest score for each student.",
+      "gold_sql": "SELECT students.name, MAX(courses.score) FROM students JOIN courses ON students.id = courses.student_id GROUP BY students.id",
+      "predicted_sql": "SELECT student_id, MAX(score) AS highest_score FROM scores GROUP BY student_id;",
+      "generated_sql": true,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 1136,
+      "error": "no such table: scores",
+      "gold_rows_count": 3,
+      "predicted_rows_count": 0,
+      "tool_sequence": [
+        "sql.generate"
+      ],
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "Who scored above 85?",
+      "gold_sql": "SELECT name FROM students JOIN courses ON students.id = courses.student_id WHERE score > 85",
+      "predicted_sql": "SELECT * FROM students WHERE score > 85;",
+      "generated_sql": true,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 1104,
+      "error": "no such column: score",
+      "gold_rows_count": 0,
+      "predicted_rows_count": 0,
+      "tool_sequence": [
+        "sql.generate"
+      ],
+      "datasource_id": null,
+      "synced_table_names": null
+    }
+  ]
+}

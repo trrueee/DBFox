@@ -452,7 +452,8 @@ def _run_fake_cli(args: Any, db_ids: set[str] | None) -> None:
 
 
 def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
-    api_key = args.api_key or os.environ.get("DATABOX_LLM_API_KEY")
+    import os as _os
+    api_key = args.api_key or _os.environ.get("DATABOX_LLM_API_KEY")
     if not api_key:
         raise RuntimeError("--api-key required for qwen-baseline mode")
     run_fn = create_qwen_text_to_sql_baseline_run_fn(

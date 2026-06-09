@@ -7,7 +7,7 @@
     "generated_sql_rate": 1.0,
     "execution_success_rate": 0.4,
     "execution_accuracy": 0.0,
-    "avg_latency_ms": 1673.6,
+    "avg_latency_ms": 1722.4,
     "runner_mode": "databox",
     "is_databox_score": true
   },
@@ -20,7 +20,7 @@
       "generated_sql": true,
       "execution_success": true,
       "execution_match": false,
-      "latency_ms": 2661,
+      "latency_ms": 3005,
       "error": null,
       "gold_rows_count": 1,
       "predicted_rows_count": 3,
@@ -39,7 +39,7 @@
         "followup.suggest",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_23505fe0",
+      "datasource_id": "spider_tiny_school_ad5732f2",
       "synced_table_names": [
         "courses",
         "students"
@@ -53,7 +53,7 @@
       "generated_sql": true,
       "execution_success": true,
       "execution_match": false,
-      "latency_ms": 1343,
+      "latency_ms": 1663,
       "error": null,
       "gold_rows_count": 1,
       "predicted_rows_count": 4,
@@ -72,7 +72,7 @@
         "followup.suggest",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_23505fe0",
+      "datasource_id": "spider_tiny_school_ad5732f2",
       "synced_table_names": [
         "courses",
         "students"
@@ -86,7 +86,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1240,
+      "latency_ms": 1340,
       "error": "no such column: students.name",
       "gold_rows_count": 3,
       "predicted_rows_count": 0,
@@ -100,7 +100,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_23505fe0",
+      "datasource_id": "spider_tiny_school_ad5732f2",
       "synced_table_names": [
         "courses",
         "students"
@@ -114,7 +114,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1460,
+      "latency_ms": 1269,
       "error": "no such column: students.name",
       "gold_rows_count": 3,
       "predicted_rows_count": 0,
@@ -128,7 +128,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_23505fe0",
+      "datasource_id": "spider_tiny_school_ad5732f2",
       "synced_table_names": [
         "courses",
         "students"
@@ -142,7 +142,7 @@
       "generated_sql": true,
       "execution_success": false,
       "execution_match": false,
-      "latency_ms": 1664,
+      "latency_ms": 1335,
       "error": "no such table: products",
       "gold_rows_count": 0,
       "predicted_rows_count": 0,
@@ -154,7 +154,7 @@
         "sql.revise",
         "answer.synthesize"
       ],
-      "datasource_id": "spider_tiny_school_23505fe0",
+      "datasource_id": "spider_tiny_school_ad5732f2",
       "synced_table_names": [
         "courses",
         "students"
