@@ -16,7 +16,7 @@ class DataBoxAgentRuntime:
 
     The old imperative runtime has been removed from this class. Public callers
     keep using the historical DataBoxAgentRuntime entrypoint while all control
-    flow, routing, checkpointing, and tool execution are delegated to
+    flow, routing, checkpointing, approvals, and tool execution are delegated to
     AgentKernelService.
     """
 
@@ -43,6 +43,13 @@ class DataBoxAgentRuntime:
         return final_response
 
     def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
+        """Resume a resolved approval through the graph-backed kernel.
+
+        This facade intentionally does not fail runs or commit database
+        transactions. The kernel service owns approval state transitions and
+        persistence side effects.
+        """
+
         resolved_approval_id = approval_id
         if not resolved_approval_id:
             pending = agent_persistence.get_pending_approval_for_run(self.db, run_id)
@@ -57,10 +64,6 @@ class DataBoxAgentRuntime:
             raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
         if approval.status == "pending":
             raise DataBoxError("Approval is still pending.", code="APPROVAL_PENDING")
-        if approval.status == "rejected":
-            agent_persistence.fail_run(self.db, run_id, str(approval.session_id), "Approval rejected")
-            self.db.commit()
-            raise DataBoxError("Approval rejected.", code="APPROVAL_REJECTED")
 
         for event in self.kernel.resume_approval_iter(
             run_id=run_id,
@@ -73,7 +76,7 @@ class DataBoxAgentRuntime:
         """Return the legacy-visible default tool order for UI/tests.
 
         This is metadata only. Execution no longer follows this list directly;
-        the Agent Kernel controller chooses tool calls and LangGraph routes them.
+        the graph-backed Agent Kernel routes control flow.
         """
 
         steps: list[AgentStepSpec] = []
@@ -83,7 +86,7 @@ class DataBoxAgentRuntime:
             [
                 AgentStepSpec(name="build_schema_context", tool_name="schema.build_context"),
                 AgentStepSpec(name="build_query_plan", tool_name="query_plan.build"),
-                AgentStepSpec(name="generate_sql_candidate", tool_name="sql.generate_candidate"),
+                AgentStepSpec(name="generate_sql_candidate", tool_name="sql.generate"),
                 AgentStepSpec(name="validate_sql", tool_name="sql.validate"),
                 AgentStepSpec(name="execute_sql", tool_name="sql.execute_readonly", required=request.execute),
                 AgentStepSpec(name="profile_result", tool_name="result.profile", required=False),
