@@ -69,16 +69,20 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "After this, do NOT call more tools — you are done."
     ),
     "schema.list_tables": (
-        "List all known tables in the current datasource's schema catalog. "
-        "Use when schema.build_context returns zero tables, or when you need "
-        "to discover what tables are available. Outputs: table names, column "
-        "counts, row estimates. Does NOT generate SQL."
+        "List ALL tables in the current DATASOURCE (the live database). "
+        "Use when the user asks \"what tables are available?\", \"有哪些表?\", "
+        "or when schema.build_context returns zero tables. "
+        "Outputs: table names, column counts, row estimates. "
+        "Does NOT generate SQL. Does NOT require a workspace."
     ),
     "schema.describe_table": (
-        "Describe a specific table: columns, types, keys, and sample rows. "
-        "Use when you need to understand the structure of a particular table "
-        "before writing queries. Input: table_name. "
-        "Outputs: column details and sample data rows."
+        "Describe a NAMED table from the live datasource: columns, types, "
+        "keys, foreign keys, and sample rows. "
+        "Use this when the user asks for the schema, columns, fields, or "
+        "structure of a specific table (e.g. \"show me the singer table\", "
+        "\"orders 表有哪些字段\", \"describe concert\"). "
+        "Input: table_name. Outputs: column details, keys, sample data rows. "
+        "This is the PRIMARY tool for table schema lookup."
     ),
     "schema.refresh_catalog": (
         "Re-introspect the live datasource and sync its schema to the DataBox "
@@ -87,12 +91,34 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "Input: reason (optional). Outputs: sync counts. "
         "Side-effect: writes metadata to the system catalog (safe)."
     ),
+    "memory.search": (
+        "Search long-term memory for relevant context: user preferences, "
+        "metric definitions, schema aliases, join paths, past successful "
+        "queries, and lessons from failures. Use BEFORE planning a query "
+        "to leverage past knowledge. Input: query, scope, memory_types."
+    ),
+    "memory.write": (
+        "Write a new memory entry. Use when the user explicitly asks to "
+        "remember something (e.g., \"记住销售额是 orders.total_amount\"). "
+        "Input: type, text, content. Side-effect: writes to long-term store."
+    ),
+    "memory.delete": (
+        "Delete a memory entry. Use when the user asks to forget or "
+        "correct something. Input: memory_id, reason."
+    ),
+    "memory.summarize_session": (
+        "Summarize the current session for future recall. "
+        "Use at the end of an analysis session. Input: (none). "
+        "Outputs: session summary with key findings and artifacts."
+    ),
 }
 
 WORKSPACE_AFFORDANCE: dict[str, str] = {
     "workspace.explain_sql": (
-        "Explain an existing SQL statement in the editor. "
-        "Operates on the user's current editor SQL. Does NOT generate or execute new SQL."
+        "Explain the SQL statement currently in the USER'S EDITOR. "
+        "Only works when there is active SQL in the workspace editor. "
+        "Do NOT use to explain SQL you just generated — use that result directly. "
+        "Do NOT use to look up tables — use schema.describe_table instead."
     ),
     "workspace.fix_sql": (
         "Fix errors in the user's existing editor SQL. "
@@ -113,7 +139,13 @@ WORKSPACE_AFFORDANCE: dict[str, str] = {
         "Uses the selected artifact as context."
     ),
     "workspace.explain_schema": (
-        "Explain the schema/structure of selected tables. Does NOT execute SQL."
+        "Explain schema information already present in the CURRENT WORKSPACE "
+        "CONTEXT, such as a selected schema artifact or prior schema-linking "
+        "result. Only works when a workspace is active with selected tables. "
+        "Do NOT use this tool to look up a table from the live datasource. "
+        "If the user asks for the schema of a named table (e.g. \"show me "
+        "the singer table\", \"orders 表结构\"), use schema_describe_table "
+        "or schema_build_context instead."
     ),
 }
 

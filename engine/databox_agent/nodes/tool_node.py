@@ -35,6 +35,10 @@ def _step_name(tool_name: str) -> str:
         "schema.list_tables": "list_tables",
         "schema.describe_table": "describe_table",
         "schema.refresh_catalog": "refresh_catalog",
+        "memory.search": "memory_search",
+        "memory.write": "memory_write",
+        "memory.delete": "memory_delete",
+        "memory.summarize_session": "summarize_session",
     }
     return step_names.get(tool_name, tool_name)
 
@@ -295,6 +299,22 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
             f"tables_created={output.get('tables_created')}, "
             f"columns_created={output.get('columns_created')}"
         )
+
+    if tool_name == "memory.search":
+        memories = output.get("memories") or []
+        lines = [f"[memory.search] {len(memories)} result(s):"]
+        for m in memories[:5]:
+            lines.append(f"  [{m.get('type')}] {m.get('text', '')[:120]}")
+        return "\n".join(lines)
+
+    if tool_name == "memory.write":
+        return f"[memory.write] {output.get('type')} → {output.get('status')} (id={output.get('memory_id', '?')})"
+
+    if tool_name == "memory.delete":
+        return f"[memory.delete] deleted={output.get('deleted')}"
+
+    if tool_name == "memory.summarize_session":
+        return f"[memory.summarize_session] {output.get('summary', '')[:300]}"
 
     # Generic fallback — compact JSON without huge data
     compact: dict[str, Any] = {}

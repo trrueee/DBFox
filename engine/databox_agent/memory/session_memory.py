@@ -1,0 +1,111 @@
+"""SessionMemory service — maintains per-session context across runs.
+
+Tracks the last question, SQL, execution, and artifacts so follow-up
+requests ("export that", "revise the query", "chart the result") work
+without the agent rediscovering the full schema.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from engine.databox_agent.memory.memory_schema import SessionMemory
+
+logger = logging.getLogger("databox.memory.session")
+
+
+class SessionMemoryService:
+    """CRUD for SessionMemory backed by in-memory dict + optional DB."""
+
+    def __init__(self) -> None:
+        self._cache: dict[str, SessionMemory] = {}
+
+    def get(self, session_id: str) -> SessionMemory:
+        if session_id not in self._cache:
+            self._cache[session_id] = SessionMemory(session_id=session_id)
+        return self._cache[session_id]
+
+    def update_from_run(
+        self,
+        *,
+        session_id: str,
+        run_id: str,
+        question: str,
+        final_state: dict[str, Any],
+        response: Any,  # AgentRunResponse
+    ) -> SessionMemory:
+        mem = self.get(session_id)
+        mem.last_question = question
+        mem.recent_run_ids.append(run_id)
+        # Keep only last 10 runs
+        mem.recent_run_ids = mem.recent_run_ids[-10:]
+
+        # SQL
+        sql = final_state.get("sql")
+        if sql:
+            mem.last_sql = str(sql)
+
+        # Execution
+        execution = final_state.get("execution")
+        if isinstance(execution, dict) and execution.get("id"):
+            mem.last_execution_id = str(execution.get("id"))
+
+        # Artifacts from response
+        artifacts = getattr(response, "artifacts", []) or []
+        for art in artifacts:
+            art_id = getattr(art, "id", None)
+            art_type = getattr(art, "type", None)
+            if not art_id:
+                continue
+            mem.recent_artifact_ids.append(str(art_id))
+            mem.recent_artifact_ids = mem.recent_artifact_ids[-20:]
+            if art_type == "table":
+                mem.last_table_artifact_id = str(art_id)
+            elif art_type == "chart":
+                mem.last_chart_artifact_id = str(art_id)
+            elif art_type == "report":
+                mem.last_report_artifact_id = str(art_id)
+
+        mem.updated_at = SessionMemory.model_fields["updated_at"].default_factory()  # type: ignore[attr-defined]
+
+        self._cache[session_id] = mem
+        logger.debug("SessionMemory updated: session=%s run=%s", session_id, run_id)
+        return mem
+
+    def build_context_text(self, session_id: str) -> str:
+        """Return a short context block for injection into the system prompt."""
+        mem = self.get(session_id)
+        parts: list[str] = []
+        if mem.last_question:
+            parts.append(f"Last question: {mem.last_question}")
+        if mem.last_sql:
+            parts.append(f"Last SQL (for reference): {mem.last_sql}")
+        if mem.current_topic:
+            parts.append(f"Current analysis topic: {mem.current_topic}")
+        if mem.current_dataset_summary:
+            parts.append(f"Current dataset: {mem.current_dataset_summary}")
+
+        if not parts:
+            return ""
+        return "### Session Context\n" + "\n".join(f"- {p}" for p in parts) + "\n"
+
+    def set_topic(self, session_id: str, topic: str) -> None:
+        mem = self.get(session_id)
+        mem.current_topic = topic
+
+    def set_dataset_summary(self, session_id: str, summary: str) -> None:
+        mem = self.get(session_id)
+        mem.current_dataset_summary = summary
+
+
+# Module-level singleton
+_session_service: SessionMemoryService | None = None
+
+
+def get_session_memory_service() -> SessionMemoryService:
+    global _session_service
+    if _session_service is None:
+        _session_service = SessionMemoryService()
+    return _session_service
