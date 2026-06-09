@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from engine.agent_kernel.graph_standalone import (
+    _after_controller,
     _after_observe,
     _build_schema_context_node,
     _generate_sql_node,
@@ -69,6 +70,12 @@ def test_observe_routes_sql_generation_to_sql_critic() -> None:
     state = {"last_tool_name": "sql.generate", "last_observation": {"status": "success"}}
 
     assert _after_observe(state) == "sql_critic"
+
+
+def test_controller_wait_approval_routes_to_interrupt() -> None:
+    state = {"pending_decision": {"action": "wait_approval"}}
+
+    assert _after_controller(state) == "approval_interrupt"
 
 
 def test_revise_branch_stops_after_revision_limit() -> None:
