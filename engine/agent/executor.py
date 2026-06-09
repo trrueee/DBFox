@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from engine.agent.registry import AgentToolContext, ToolRegistry
 from engine.agent.state import AgentState
-from engine.agent.types import AgentStep, ToolObservation
+from engine.agent.types import AgentErrorOutput, AgentStep, ToolObservation
 
 logger = logging.getLogger("databox.agent.executor")
 
@@ -43,23 +43,27 @@ class StepExecutor:
             latency_ms = int((time.perf_counter() - started) * 1000)
             error_type = type(exc).__name__
             error_traceback = traceback.format_exc()
+            retryable = _is_retryable_exception(exc)
             logger.exception(
-                "Agent step execution failed: step=%s tool=%s error_type=%s",
+                "Agent step execution failed: step=%s tool=%s error_type=%s retryable=%s",
                 step.name,
                 step.tool_name,
                 error_type,
+                retryable,
+            )
+            error_output = AgentErrorOutput(
+                error_type=error_type,
+                tool_name=step.tool_name,
+                step_name=step.name,
+                traceback=error_traceback,
+                retryable=retryable,
+                retry_reason="transient_database_or_connection_error" if retryable else None,
             )
             observation = ToolObservation(
                 name=step.name,
                 status="failed",
                 input=tool_input,
-                output={
-                    "error_type": error_type,
-                    "tool_name": step.tool_name,
-                    "step_name": step.name,
-                    "traceback": error_traceback,
-                    "retryable": _is_retryable_exception(exc),
-                },
+                output=error_output.model_dump(mode="json"),
                 error=str(exc),
                 latency_ms=latency_ms,
             )
