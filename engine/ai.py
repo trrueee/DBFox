@@ -427,12 +427,15 @@ def prepare_chat_payload(
     max_tokens: int = 800,
     response_format: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    is_reasoning = any(term in model_name.lower() for term in ("o1", "o3", "reasoner", "deepseek-reasoner"))
+    model_lower = model_name.lower()
+    is_openai_reasoning = any(term in model_lower for term in ("o1", "o3"))
+    is_other_reasoning = any(term in model_lower for term in ("r1", "reasoner", "reasoning", "qwq"))
+    is_reasoning = is_openai_reasoning or is_other_reasoning
+
     payload: dict[str, Any] = {
         "model": model_name,
     }
     if is_reasoning:
-        payload["max_completion_tokens"] = 4000
         new_messages = []
         system_content = []
         for msg in messages:
@@ -447,6 +450,12 @@ def prepare_chat_payload(
             else:
                 new_messages.insert(0, {"role": "user", "content": "\n".join(system_content)})
         payload["messages"] = new_messages
+
+        if is_openai_reasoning:
+            payload["max_completion_tokens"] = 4000
+        else:
+            payload["max_tokens"] = 4000
+            payload["temperature"] = temperature
     else:
         payload["messages"] = messages
         payload["temperature"] = temperature

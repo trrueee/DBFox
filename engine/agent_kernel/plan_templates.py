@@ -1,14 +1,12 @@
 from __future__ import annotations
-
+import uuid
 from typing import Any
-
-from engine.agent_kernel.state import KernelState
+from engine.agent_kernel.state import KernelState, latest_user_message
 from engine.agent_kernel.intent_fallback import classify_intent_fallback
 from engine.agent_kernel.reference_resolver import resolve_reference
+from engine.agent_kernel.plan_schema import AgentPlan, PlanStep
 
-# This is a presentation plan skeleton, not the execution graph controller.
-# Execution is controlled by graph_standalone.py and ToolSpec metadata.
-
+# Legacy route table for backward compatibility
 INTENT_ROUTES: dict[str, list[str]] = {
     "new_data_question": [
         "schema.build_context",
@@ -69,3 +67,87 @@ def _next_focus(state: KernelState, steps: list[str], reference: dict[str, Any] 
     if not state.get("answer"):
         return "answer.synthesize"
     return "final_answer"
+
+
+def build_default_plan(state: KernelState) -> AgentPlan:
+    # 1. Determine intent
+    intent_payload = state.get("agent_intent") if isinstance(state.get("agent_intent"), dict) else {}
+    intent = str(intent_payload.get("intent") or classify_intent_fallback(state))
+    goal = state.get("goal") or latest_user_message(state) or "Analyze request"
+    
+    # 2. Build steps based on intent
+    steps = []
+    
+    if intent == "new_data_question":
+        steps.append(PlanStep(id="step_schema", tool_name="schema.build_context", purpose="Build schema context", title="Build schema context"))
+        steps.append(PlanStep(id="step_generate", tool_name="sql.generate", purpose="Generate SQL candidate", title="Generate SQL candidate", depends_on=["step_schema"]))
+        steps.append(PlanStep(id="step_validate", tool_name="sql.validate", purpose="Validate SQL with TrustGate", title="Validate SQL with TrustGate", depends_on=["step_generate"]))
+        
+        execute = state.get("execute", True)
+        exec_tool = "sql.execute_readonly" if execute else "sql.skip_execution"
+        steps.append(PlanStep(id="step_execute", tool_name=exec_tool, purpose="Execute SQL", title="Execute SQL", depends_on=["step_validate"]))
+        steps.append(PlanStep(id="step_profile", tool_name="result.profile", purpose="Profile execution results", title="Profile execution results", depends_on=["step_execute"]))
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Synthesize final answer", title="Synthesize final answer", depends_on=["step_profile"]))
+        
+    elif intent == "followup_on_result":
+        steps.append(PlanStep(id="step_load_context", tool_name="followup.load_context", purpose="Load follow-up context", title="Load follow-up context"))
+        steps.append(PlanStep(id="step_profile", tool_name="result.profile", purpose="Profile execution results", title="Profile execution results", depends_on=["step_load_context"]))
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Synthesize final answer", title="Synthesize final answer", depends_on=["step_profile"]))
+        
+    elif intent == "explain_sql":
+        steps.append(PlanStep(id="step_explain", tool_name="workspace.explain_sql", purpose="Explain SQL", title="Explain SQL"))
+        
+    elif intent == "revise_sql":
+        steps.append(PlanStep(id="step_revise", tool_name="sql.revise", purpose="Revise SQL", title="Revise SQL"))
+        steps.append(PlanStep(id="step_validate", tool_name="sql.validate", purpose="Validate revised SQL", title="Validate revised SQL", depends_on=["step_revise"]))
+        
+        execute = state.get("execute", True)
+        exec_tool = "sql.execute_readonly" if execute else "sql.skip_execution"
+        steps.append(PlanStep(id="step_execute", tool_name=exec_tool, purpose="Execute revised SQL", title="Execute revised SQL", depends_on=["step_validate"]))
+        steps.append(PlanStep(id="step_profile", tool_name="result.profile", purpose="Profile results", title="Profile results", depends_on=["step_execute"]))
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Synthesize final answer", title="Synthesize final answer", depends_on=["step_profile"]))
+        
+    elif intent == "approval_help":
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Explain pending approval status", title="Explain pending approval status"))
+        
+    elif intent == "chart_request":
+        steps.append(PlanStep(id="step_chart", tool_name="chart.suggest", purpose="Suggest chart", title="Suggest chart"))
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Synthesize answer", title="Synthesize answer", depends_on=["step_chart"]))
+        
+    elif intent == "clarification":
+        pass
+        
+    else:
+        steps.append(PlanStep(id="step_synthesize", tool_name="answer.synthesize", purpose="Synthesize answer"))
+        
+    plan = AgentPlan(
+        id=f"plan_{uuid.uuid4().hex[:8]}",
+        goal=goal,
+        status="created",
+        steps=steps
+    )
+    
+    optimize_plan_with_state(plan, state)
+    
+    return plan
+
+
+def optimize_plan_with_state(plan: AgentPlan, state: KernelState) -> None:
+    # Mark steps completed if state already contains their output.
+    for step in plan.steps:
+        if step.tool_name == "schema.build_context" and state.get("schema_context"):
+            step.status = "completed"
+        elif step.tool_name == "query_plan.build" and state.get("query_plan"):
+            step.status = "completed"
+        elif step.tool_name == "sql.generate" and state.get("sql"):
+            step.status = "completed"
+        elif step.tool_name == "sql.validate" and state.get("safety"):
+            step.status = "completed"
+        elif step.tool_name in ("sql.execute_readonly", "sql.skip_execution") and state.get("execution"):
+            step.status = "completed"
+        elif step.tool_name == "result.profile" and state.get("result_profile"):
+            step.status = "completed"
+        elif step.tool_name == "chart.suggest" and state.get("chart_suggestion"):
+            step.status = "completed"
+        elif step.tool_name == "followup.load_context" and state.get("followup_context"):
+            step.status = "completed"
