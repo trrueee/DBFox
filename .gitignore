@@ -1,26 +1,67 @@
-# Local runtime state and credentials
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
 .databox_runtime/
-databox_local.db
-databox_local.db.bak_*
-databox_local.db-shm
-databox_local.db-wal
 engine/.secret_key
 engine/.local_token
 desktop/.env.local
 
-# Python / test caches
+# Local databases and runtime state
+databox_local.db
+databox_local.db.bak_*
+databox_local.db-shm
+databox_local.db-wal
+databox_demo.db
+databox_agent_kernel_checkpoints.sqlite
+demo_shop
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.coverage
+htmlcov/
+coverage.xml
+*.log
 
-# Frontend / Tauri build output
+# LangGraph / Agent runtime
+.langgraph/
+checkpoints/
+*.checkpoint
+*.checkpoint.sqlite
+*.checkpoint.sqlite-shm
+*.checkpoint.sqlite-wal
+
+# Frontend / Tauri
 desktop/node_modules/
 desktop/dist/
+desktop/.vite/
+desktop/coverage/
+desktop/playwright-report/
+desktop/test-results/
 desktop/src-tauri/target/
 desktop/src-tauri/binaries/
+desktop/src-tauri/gen/
+desktop/src-tauri/.tauri/
 
-# Eval local config (contains API keys — DO NOT COMMIT)
+# Eval local config and generated artifacts
 .agent_eval/config.local.json
 .agent_eval/outputs/
 .agent_eval/agent_only_events/
@@ -30,9 +71,33 @@ desktop/src-tauri/binaries/
 .agent_eval/backend_eval_stdout.log
 .agent_eval/backend_eval_stderr.log
 .agent_eval/_tmp_*.json
+.agent_eval/**/*.sqlite
+.agent_eval/**/*.sqlite3
+.agent_eval/**/*.db
 
-# IDE / Assistant / Tool states
+# Deprecated / archived
+弃用/
+
+# Stale dev artifacts
+diff.txt
+diff_tests.txt
+databox-mysql-ssl-test/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# LLM / coding assistant local state
 .claude/
 .impeccable/
 .gemini/
+.cursor/
+.windsurf/
+.aider*
+.codex/
+.agents/
+.superpowers/
 docs/skills/
