@@ -329,7 +329,7 @@ def critique_sql(state: KernelState) -> dict[str, Any]:
     if metrics and not any(func in lowered_sql for func in ("sum(", "count(", "avg(", "min(", "max(")):
         issues.append("QueryPlan expects metrics, but SQL has no obvious aggregate expression.")
         suggestions.append("Add the required aggregate expression for the planned metric.")
-    if dimensions and any(func in lowered_sql for func in ("sum(", "count(", "avg(", "min(", "max(")) ) and "group by" not in lowered_sql:
+    if dimensions and any(func in lowered_sql for func in ("sum(", "count(", "avg(", "min(", "max(")) and "group by" not in lowered_sql:
         issues.append("QueryPlan includes dimensions with aggregate metrics, but SQL has no GROUP BY.")
         suggestions.append("Group by the planned dimension columns.")
 
