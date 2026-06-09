@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from engine.agent.planner import _infer_intent
-from engine.agent.types import AgentRunRequest
+from engine.agent.types import AgentErrorOutput, AgentRunRequest
 from engine.agent_kernel.controller import decide_next_action
 from engine.agent.executor import _is_retryable_exception
 
@@ -42,3 +42,18 @@ def test_fallback_planner_does_not_force_fix_for_negated_request() -> None:
 def test_executor_marks_transient_database_errors_retryable() -> None:
     assert _is_retryable_exception(RuntimeError("database lock wait timeout")) is True
     assert _is_retryable_exception(ValueError("invalid input")) is False
+
+
+def test_agent_error_output_is_typed() -> None:
+    payload = AgentErrorOutput(
+        error_type="OperationalError",
+        tool_name="sql.execute_readonly",
+        step_name="execute_sql",
+        traceback="traceback text",
+        retryable=True,
+        retry_reason="transient_database_or_connection_error",
+    ).model_dump(mode="json")
+
+    assert payload["error_type"] == "OperationalError"
+    assert payload["retryable"] is True
+    assert payload["retry_reason"] == "transient_database_or_connection_error"
