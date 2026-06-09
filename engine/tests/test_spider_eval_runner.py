@@ -179,8 +179,10 @@ class TestSpiderE2E:
             gold_sql="SELECT COUNT(*) FROM students", db_path=db_path,
         )
 
-        ds_id = _ensure_spider_sqlite_datasource(db_session, example)
+        ds_id, tables = _ensure_spider_sqlite_datasource(db_session, example)
         assert ds_id.startswith("spider_tiny_school_")
+        assert "students" in tables
+        assert "courses" in tables
 
         ds = db_session.query(DataSource).filter(DataSource.id == ds_id).first()
         assert ds is not None
@@ -210,7 +212,7 @@ class TestSpiderE2E:
             api_base=os.environ.get("DATABOX_LLM_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
             model_name=os.environ.get("DATABOX_LLM_MODEL", "qwen-plus"),
             execute=True,
-            max_steps=25,
+            max_steps=20,
         )
         runner = SpiderEvalRunner(run_fn=run_fn, execute=True)
         results, summary = runner.run(fixture_root, limit=2)

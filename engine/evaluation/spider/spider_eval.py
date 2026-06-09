@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,8 @@ class SpiderCaseResult:
     gold_rows_count: int | None = None
     predicted_rows_count: int | None = None
     tool_sequence: list[str] | None = None
+    datasource_id: str | None = None
+    synced_table_names: list[str] | None = None
 
 
 @dataclass
@@ -40,6 +42,8 @@ class SpiderEvalSummary:
     execution_success_rate: float
     execution_accuracy: float
     avg_latency_ms: float | None
+    runner_mode: str = "unknown"
+    is_databox_score: bool = False
 
 
 def _extract_tool_sequence(events: list[dict[str, Any]]) -> list[str]:
@@ -63,7 +67,12 @@ def classify_failure(result: SpiderCaseResult) -> str | None:
     return None
 
 
-def summarize_spider_results(results: list[SpiderCaseResult]) -> SpiderEvalSummary:
+def summarize_spider_results(
+    results: list[SpiderCaseResult],
+    *,
+    runner_mode: str = "unknown",
+    is_databox_score: bool = False,
+) -> SpiderEvalSummary:
     total = len(results)
     generated = sum(1 for r in results if r.generated_sql)
     execution_success = sum(1 for r in results if r.execution_success)
@@ -79,6 +88,8 @@ def summarize_spider_results(results: list[SpiderCaseResult]) -> SpiderEvalSumma
         execution_success_rate=round(execution_success / max(total, 1), 4),
         execution_accuracy=round(execution_match / max(total, 1), 4),
         avg_latency_ms=round(total_latency / total, 2) if total else None,
+        runner_mode=runner_mode,
+        is_databox_score=is_databox_score,
     )
 
 
@@ -95,29 +106,33 @@ class SpiderEvalRunner:
         run_fn: Any = None,
         *,
         execute: bool = True,
+        runner_mode: str = "unknown",
     ) -> None:
         self._run_fn = run_fn
         self.execute = execute
+        self._runner_mode = runner_mode
 
     def run_example(self, example: SpiderExample) -> SpiderCaseResult:
         response = None
         events_payload: list[dict[str, Any]] = []
         latency_ms = 0
         error: str | None = None
+        datasource_id: str | None = None
+        synced_table_names: list[str] | None = None
 
         try:
             if self._run_fn is not None:
-                response, events_payload, latency_ms = self._run_fn(example)
+                result = self._run_fn(example)
+                if len(result) == 5:
+                    response, events_payload, latency_ms, datasource_id, synced_table_names = result
+                else:
+                    response, events_payload, latency_ms = result
             else:
                 return SpiderCaseResult(
-                    db_id=example.db_id,
-                    question=example.question,
-                    gold_sql=example.gold_sql,
-                    predicted_sql=None,
-                    generated_sql=False,
-                    execution_success=False,
-                    execution_match=False,
-                    latency_ms=0,
+                    db_id=example.db_id, question=example.question,
+                    gold_sql=example.gold_sql, predicted_sql=None,
+                    generated_sql=False, execution_success=False,
+                    execution_match=False, latency_ms=0,
                     error="No run_fn configured.",
                 )
         except Exception as exc:
@@ -125,40 +140,34 @@ class SpiderEvalRunner:
 
         if error:
             return SpiderCaseResult(
-                db_id=example.db_id,
-                question=example.question,
-                gold_sql=example.gold_sql,
-                predicted_sql=None,
-                generated_sql=False,
-                execution_success=False,
-                execution_match=False,
-                latency_ms=latency_ms,
+                db_id=example.db_id, question=example.question,
+                gold_sql=example.gold_sql, predicted_sql=None,
+                generated_sql=False, execution_success=False,
+                execution_match=False, latency_ms=latency_ms,
                 error=error,
                 tool_sequence=_extract_tool_sequence(events_payload),
+                datasource_id=datasource_id,
+                synced_table_names=synced_table_names,
             )
 
         predicted_sql = extract_final_sql(response, events_payload)
         if not predicted_sql:
             return SpiderCaseResult(
-                db_id=example.db_id,
-                question=example.question,
-                gold_sql=example.gold_sql,
-                predicted_sql=None,
-                generated_sql=False,
-                execution_success=False,
-                execution_match=False,
-                latency_ms=latency_ms,
+                db_id=example.db_id, question=example.question,
+                gold_sql=example.gold_sql, predicted_sql=None,
+                generated_sql=False, execution_success=False,
+                execution_match=False, latency_ms=latency_ms,
                 error="No predicted SQL.",
                 tool_sequence=_extract_tool_sequence(events_payload),
+                datasource_id=datasource_id,
+                synced_table_names=synced_table_names,
             )
 
         if self.execute:
             comparison = compare_sqlite_execution(example.db_path, example.gold_sql, predicted_sql)
             return SpiderCaseResult(
-                db_id=example.db_id,
-                question=example.question,
-                gold_sql=example.gold_sql,
-                predicted_sql=predicted_sql,
+                db_id=example.db_id, question=example.question,
+                gold_sql=example.gold_sql, predicted_sql=predicted_sql,
                 generated_sql=True,
                 execution_success=comparison.predicted_success,
                 execution_match=comparison.execution_match,
@@ -167,19 +176,19 @@ class SpiderEvalRunner:
                 gold_rows_count=comparison.gold_rows_count,
                 predicted_rows_count=comparison.predicted_rows_count,
                 tool_sequence=_extract_tool_sequence(events_payload),
+                datasource_id=datasource_id,
+                synced_table_names=synced_table_names,
             )
 
         return SpiderCaseResult(
-            db_id=example.db_id,
-            question=example.question,
-            gold_sql=example.gold_sql,
-            predicted_sql=predicted_sql,
-            generated_sql=True,
-            execution_success=False,
-            execution_match=False,
-            latency_ms=latency_ms,
+            db_id=example.db_id, question=example.question,
+            gold_sql=example.gold_sql, predicted_sql=predicted_sql,
+            generated_sql=True, execution_success=False,
+            execution_match=False, latency_ms=latency_ms,
             error=None,
             tool_sequence=_extract_tool_sequence(events_payload),
+            datasource_id=datasource_id,
+            synced_table_names=synced_table_names,
         )
 
     def run(
@@ -192,7 +201,8 @@ class SpiderEvalRunner:
     ) -> tuple[list[SpiderCaseResult], SpiderEvalSummary]:
         examples = load_spider_examples(spider_root, split=split, limit=limit, db_ids=db_ids)
         results = [self.run_example(ex) for ex in examples]
-        summary = summarize_spider_results(results)
+        is_databox = self._runner_mode == "databox"
+        summary = summarize_spider_results(results, runner_mode=self._runner_mode, is_databox_score=is_databox)
         return results, summary
 
 
@@ -212,13 +222,15 @@ def create_databox_sqlite_run_fn(
 
     *db_session* must be an active SQLAlchemy Session pointing to DataBox's
     own metadata database (the one holding data_sources, schema_tables, etc.).
+
+    Returns a 5-tuple: (response, events, latency_ms, datasource_id, synced_table_names).
     """
 
-    def _run(example: SpiderExample) -> tuple[Any, list[dict[str, Any]], int]:
+    def _run(example: SpiderExample) -> tuple[Any, list[dict[str, Any]], int, str, list[str]]:
         import time as _time
         start = _time.monotonic()
 
-        datasource_id = _ensure_spider_sqlite_datasource(db_session, example)
+        datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
 
         from engine.agent.runtime import DataBoxAgentRuntime
         from engine.agent.types import AgentRunRequest
@@ -247,13 +259,17 @@ def create_databox_sqlite_run_fn(
             events_payload.append({"step": {"error": str(exc)}})
 
         latency = int((_time.monotonic() - start) * 1000)
-        return response, events_payload, latency
+        return response, events_payload, latency, datasource_id, synced_tables
 
     return _run
 
 
-def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) -> str:
-    """Create or retrieve a DataSource row for a Spider SQLite database."""
+def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) -> tuple[str, list[str]]:
+    """Create or retrieve a DataSource row for a Spider SQLite database.
+
+    Returns (datasource_id, synced_table_names).  Raises RuntimeError if
+    schema sync fails or produces zero tables.
+    """
     import uuid
     from engine.models import DataSource
 
@@ -266,8 +282,9 @@ def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) ->
     )
     if existing is not None:
         if existing.last_sync_status != "success":
-            _sync_spider_datasource(db_session, str(existing.id))
-        return str(existing.id)
+            _sync_and_validate(db_session, str(existing.id))
+        tables = _get_synced_table_names(db_session, str(existing.id))
+        return str(existing.id), tables
 
     ds_id = f"spider_{example.db_id}_{uuid.uuid4().hex[:8]}"
     ds = DataSource(
@@ -285,31 +302,51 @@ def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) ->
     db_session.add(ds)
     db_session.commit()
 
-    _sync_spider_datasource(db_session, ds_id)
-    return ds_id
+    _sync_and_validate(db_session, ds_id)
+    tables = _get_synced_table_names(db_session, ds_id)
+    return ds_id, tables
 
 
-def _sync_spider_datasource(db_session: Any, datasource_id: str) -> None:
-    """Run schema sync for a Spider datasource."""
-    try:
-        from engine.schema_sync import sync_schema
-        sync_schema(db_session, datasource_id)
-    except Exception:
-        pass
+def _sync_and_validate(db_session: Any, datasource_id: str) -> None:
+    """Sync schema and raise if it fails."""
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, datasource_id)
+
+    tables = _get_synced_table_names(db_session, datasource_id)
+    if not tables:
+        raise RuntimeError(
+            f"Spider datasource {datasource_id} synced zero schema tables. "
+            f"Check that the SQLite database exists and has tables."
+        )
 
 
-def create_qwen_text_to_sql_run_fn(
+def _get_synced_table_names(db_session: Any, datasource_id: str) -> list[str]:
+    from engine.models import SchemaTable
+
+    rows = (
+        db_session.query(SchemaTable.table_name)
+        .filter(SchemaTable.data_source_id == datasource_id)
+        .all()
+    )
+    return sorted([r[0] for r in rows])
+
+
+# -- Qwen direct baseline ----------------------------------------------------
+
+
+def create_qwen_text_to_sql_baseline_run_fn(
     *,
     api_key: str,
     api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model_name: str = "qwen-plus",
 ) -> Any:
-    """Return a run_fn that calls Qwen (通义千问) directly for Text-to-SQL.
+    """Return a run_fn that calls Qwen directly for Text-to-SQL.
 
-    This bypasses DataBox runtime — it sends the question to Qwen with a
-    Text-to-SQL prompt and returns the generated SQL as if DataBox had
-    produced it.  Execution comparison still goes through Spider's SQLite
-    comparator.
+    This bypasses DataBox runtime — it sends the question directly to the
+    LLM and returns the generated SQL.  Execution comparison still goes
+    through Spider's SQLite comparator.
+    Only use this as a baseline, NOT as a DataBox score.
     """
     import httpx
 
@@ -346,7 +383,6 @@ def create_qwen_text_to_sql_run_fn(
             )
             resp.raise_for_status()
             raw = resp.json()["choices"][0]["message"]["content"].strip()
-            # Strip markdown fences
             for prefix in ("```sql", "```"):
                 if raw.startswith(prefix):
                     raw = raw[len(prefix):].strip()
@@ -379,6 +415,7 @@ def create_qwen_text_to_sql_run_fn(
 
 def _cli() -> None:
     import argparse
+    import os
 
     parser = argparse.ArgumentParser(description="DataBox Spider Eval Runner")
     parser.add_argument("--spider-root", required=True, help="Path to Spider dataset root")
@@ -390,31 +427,105 @@ def _cli() -> None:
     parser.add_argument("--api-base", default=None)
     parser.add_argument("--model-name", default=None)
     parser.add_argument("--output", default=None, help="Write JSON results to file")
+    parser.add_argument(
+        "--mode",
+        default="fake",
+        choices=["fake", "databox", "qwen-baseline"],
+        help="Runner mode (default: fake for testing)",
+    )
     args = parser.parse_args()
 
     db_ids = {args.db_id} if args.db_id else None
 
-    # Without a real runtime, run in fake mode.
-    runner = SpiderEvalRunner(execute=args.execute)
-    results, summary = runner.run(
-        args.spider_root,
-        split=args.split,
-        limit=args.limit,
-        db_ids=db_ids,
-    )
+    if args.mode == "databox":
+        _run_databox_cli(args, db_ids)
+    elif args.mode == "qwen-baseline":
+        _run_qwen_baseline_cli(args, db_ids)
+    else:
+        _run_fake_cli(args, db_ids)
 
+
+def _run_fake_cli(args: Any, db_ids: set[str] | None) -> None:
+    runner = SpiderEvalRunner(execute=args.execute, runner_mode="fake")
+    results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
+    _write_output(results, summary, args.output)
+
+
+def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
+    api_key = args.api_key or os.environ.get("DATABOX_LLM_API_KEY")
+    if not api_key:
+        raise RuntimeError("--api-key required for qwen-baseline mode")
+    run_fn = create_qwen_text_to_sql_baseline_run_fn(
+        api_key=api_key,
+        api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model_name=args.model_name or "qwen-plus",
+    )
+    runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="qwen-baseline")
+    results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
+    _write_output(results, summary, args.output)
+
+
+def _run_databox_cli(args: Any, db_ids: set[str] | None) -> None:
+    import os as _os
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from engine.db import Base
+    from engine import models  # noqa: F401  # register models
+
+    api_key = args.api_key or _os.environ.get("DATABOX_LLM_API_KEY")
+    if not api_key:
+        raise RuntimeError("--api-key or DATABOX_LLM_API_KEY required for databox mode")
+
+    # In-memory metadata DB (isolated from production databox_local.db)
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine)
+    db_session = SessionLocal()
+
+    try:
+        run_fn = create_databox_sqlite_run_fn(
+            db_session=db_session,
+            api_key=api_key,
+            api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            model_name=args.model_name or "qwen-plus",
+            execute=args.execute,
+        )
+        runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="databox")
+        results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
+        _write_output(results, summary, args.output)
+    finally:
+        db_session.close()
+
+
+def _write_output(
+    results: list[SpiderCaseResult],
+    summary: SpiderEvalSummary,
+    output_path: str | None,
+) -> None:
     output = {
-        "summary": summary.__dict__ if hasattr(summary, "__dict__") else asdict(summary),
+        "summary": asdict(summary),
         "cases": [asdict(r) for r in results],
     }
-    if args.output:
-        Path(args.output).write_text(json.dumps(output, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-        print(f"Wrote {len(results)} cases to {args.output}")
+    if output_path and output_path != "-":
+        Path(output_path).write_text(
+            json.dumps(output, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+        print(f"Wrote {len(results)} cases to {output_path}")
 
-    print(f"total={summary.total_cases} "
-          f"gen_sql={summary.generated_sql_rate:.2%} "
-          f"exec_success={summary.execution_success_rate:.2%} "
-          f"exec_acc={summary.execution_accuracy:.2%}")
+    print(
+        f"total={summary.total_cases} "
+        f"gen_sql={summary.generated_sql_rate:.2%} "
+        f"exec_success={summary.execution_success_rate:.2%} "
+        f"exec_acc={summary.execution_accuracy:.2%} "
+        f"mode={summary.runner_mode} "
+        f"is_databox={summary.is_databox_score}"
+    )
 
 
 if __name__ == "__main__":

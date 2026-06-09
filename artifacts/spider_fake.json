@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "total_cases": 3,
+    "generated_sql_cases": 0,
+    "execution_success_cases": 0,
+    "execution_match_cases": 0,
+    "generated_sql_rate": 0.0,
+    "execution_success_rate": 0.0,
+    "execution_accuracy": 0.0,
+    "avg_latency_ms": 0.0,
+    "runner_mode": "fake",
+    "is_databox_score": false
+  },
+  "cases": [
+    {
+      "db_id": "tiny_school",
+      "question": "How many students are there?",
+      "gold_sql": "SELECT COUNT(*) FROM students",
+      "predicted_sql": null,
+      "generated_sql": false,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 0,
+      "error": "No run_fn configured.",
+      "gold_rows_count": null,
+      "predicted_rows_count": null,
+      "tool_sequence": null,
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "What is the average score?",
+      "gold_sql": "SELECT AVG(score) FROM courses",
+      "predicted_sql": null,
+      "generated_sql": false,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 0,
+      "error": "No run_fn configured.",
+      "gold_rows_count": null,
+      "predicted_rows_count": null,
+      "tool_sequence": null,
+      "datasource_id": null,
+      "synced_table_names": null
+    },
+    {
+      "db_id": "tiny_school",
+      "question": "List all student names.",
+      "gold_sql": "SELECT name FROM students",
+      "predicted_sql": null,
+      "generated_sql": false,
+      "execution_success": false,
+      "execution_match": false,
+      "latency_ms": 0,
+      "error": "No run_fn configured.",
+      "gold_rows_count": null,
+      "predicted_rows_count": null,
+      "tool_sequence": null,
+      "datasource_id": null,
+      "synced_table_names": null
+    }
+  ]
+}
