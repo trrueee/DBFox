@@ -825,8 +825,12 @@ def _render_sql_from_query_plan(
     if order_by:
         sql_parts.append(f"ORDER BY {order_by}")
 
-    limit = _coerce_limit(raw_plan.get("limit") or query_plan.get("limit") or 100)
-    sql_parts.append(f"LIMIT {limit}")
+    limit_value = raw_plan.get("limit") or query_plan.get("limit")
+    # Aggregate-only (metrics, no dimensions): no LIMIT.
+    # LIMIT on COUNT(*)/AVG() is harmless but clutter.
+    if limit_value is not None and not (metrics and not dimensions):
+        limit = _coerce_limit(limit_value)
+        sql_parts.append(f"LIMIT {limit}")
     return " ".join(sql_parts)
 
 
@@ -843,7 +847,8 @@ def _question_with_plan(question: str, query_plan: dict[str, Any]) -> str:
     }
     return (
         f"{question}\n\n"
-        "Use this previously validated Query Plan as the source of truth for SQL generation. "
+        "You may use this Query Plan as guidance for SQL generation. "
+        "If the plan conflicts with the user's question, ALWAYS follow the user's question. "
         f"Query Plan: {plan_summary}"
     )
 
