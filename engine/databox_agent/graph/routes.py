@@ -16,14 +16,18 @@ def _last_tool_calls(state: DataBoxAgentState) -> list[Any]:
 
 
 def route_model_output(state: DataBoxAgentState) -> Literal["policy", "finalize"]:
-    """After model node: tool_calls → policy gate; otherwise → finalize."""
+    """After model node: tool_calls → policy gate; terminal status → finalize."""
+    if state.get("status") in ("completed", "failed", "waiting_approval"):
+        return "finalize"
     if _last_tool_calls(state):
         return "policy"
     return "finalize"
 
 
-def route_policy_output(state: DataBoxAgentState) -> Literal["tools", "approval", "model"]:
-    """After policy node: route to tools, approval, or back to model."""
+def route_policy_output(state: DataBoxAgentState) -> Literal["tools", "approval", "model", "finalize"]:
+    """After policy node: route to tools, approval, model, or finalize on failure."""
+    if state.get("status") in ("completed", "failed"):
+        return "finalize"
     if state.get("status") == "waiting_approval" or state.get("pending_approval"):
         return "approval"
     if state.get("allowed_tool_calls"):

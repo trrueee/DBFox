@@ -31,6 +31,7 @@ def _tool_name_from_step(step_name: str) -> str:
         "generate_sql_candidate": "sql.generate",
         "validate_sql": "sql.validate",
         "execute_sql": "sql.execute_readonly",
+        "skip_execution": "sql.skip_execution",
         "revise_sql": "sql.revise",
         "profile_result": "result.profile",
         "suggest_chart": "chart.suggest",

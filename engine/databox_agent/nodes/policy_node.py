@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.databox_agent.guardrails.policy_gate import PolicyGate
 from engine.databox_agent.graph.state import DataBoxAgentState
+from engine.databox_agent.tools.tool_aliases import to_internal
 
 logger = logging.getLogger("databox.databox_agent.nodes.policy_node")
 
@@ -20,7 +21,7 @@ def _step_name(tool_name: str) -> str:
         "sql.generate": "generate_sql_candidate",
         "sql.validate": "validate_sql",
         "sql.execute_readonly": "execute_sql",
-        "sql.skip_execution": "execute_sql",
+        "sql.skip_execution": "skip_execution",
         "sql.revise": "revise_sql",
         "result.profile": "profile_result",
         "chart.suggest": "suggest_chart",
@@ -39,17 +40,42 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
     tool_calls = getattr(last, "tool_calls", []) or []
 
     allowed = []
-    blocked_messages = []
+    blocked_messages: list[Any] = []
+    deferred_messages: list[Any] = []
 
     policy_gate = PolicyGate(registry)
 
+    # Enforce one-tool-per-turn: when the model issues multiple tool_calls
+    # in a single response, later tools may depend on state produced by
+    # earlier tools that hasn't been written back yet.  Only allow the
+    # first call; the model will receive the result and continue.
+    if len(tool_calls) > 1:
+        first = tool_calls[0]
+        others = tool_calls[1:]
+        for c in others:
+            deferred_messages.append(
+                ToolMessage(
+                    content=(
+                        f"Tool calls must be issued one at a time because later "
+                        f"tools depend on state produced by earlier tools. "
+                        f"Please wait for the result of '{c['name']}' before "
+                        f"calling '{c.get('name', 'next tool')}'."
+                    ),
+                    tool_call_id=c["id"],
+                    name=c["name"],
+                )
+            )
+        # Only process the first tool_call; the rest are deferred
+        tool_calls = [first]
+
     for call in tool_calls:
-        tool_name = call["name"]
+        alias_name = call["name"]
+        internal_name = to_internal(alias_name)
         args = call["args"] or {}
         call_id = call["id"]
 
-        decision = policy_gate.check(state, tool_name, args)
-        safe_tool_call = {"name": tool_name, "args": decision.safe_args, "id": call_id}
+        decision = policy_gate.check(state, internal_name, args)
+        safe_tool_call = {"name": internal_name, "args": decision.safe_args, "id": call_id}
 
         if decision.status == "allowed":
             allowed.append(safe_tool_call)
@@ -57,7 +83,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
         elif decision.status == "approval_required":
             run_id = state.get("run_id") or ""
             thread_id = state.get("thread_id") or state.get("run_id") or ""
-            requested_action = {"tool_name": tool_name, "args": decision.safe_args}
+            requested_action = {"tool_name": internal_name, "args": decision.safe_args}
             policy_decision = {
                 "reason": decision.reason,
                 "risk_level": decision.risk_level,
@@ -70,8 +96,8 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                     db,
                     run_id=run_id,
                     session_id=thread_id,
-                    step_name=_step_name(tool_name),
-                    tool_name=tool_name,
+                    step_name=_step_name(internal_name),
+                    tool_name=internal_name,
                     risk_level=decision.risk_level,
                     reason=decision.reason,
                     policy_decision=policy_decision,
@@ -84,8 +110,8 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                     "id": f"approval_mock_{uuid4().hex[:8]}",
                     "run_id": run_id,
                     "session_id": thread_id,
-                    "step_name": _step_name(tool_name),
-                    "tool_name": tool_name,
+                    "step_name": _step_name(internal_name),
+                    "tool_name": internal_name,
                     "status": "pending",
                     "risk_level": decision.risk_level,
                     "reason": decision.reason,
@@ -98,10 +124,11 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                 "status": "waiting_approval",
                 "pending_approval": pending_app,
                 "allowed_tool_calls": [safe_tool_call],
+                "messages": list(deferred_messages),
                 "trace_events": [
                     {
                         "type": "agent.approval.required",
-                        "tool_name": tool_name,
+                        "tool_name": internal_name,
                         "reason": decision.reason,
                         "approval_id": pending_app.get("id"),
                     }
@@ -113,7 +140,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                 ToolMessage(
                     content=f"Tool call blocked by policy: {decision.reason}",
                     tool_call_id=call_id,
-                    name=tool_name,
+                    name=alias_name,
                 )
             )
 
@@ -130,13 +157,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
         if consecutive_blocks > MAX_CONSECUTIVE_BLOCKS and same_tools_blocked:
             # Force finalize — model is stuck in a blocked loop
             return {
-                "messages": blocked_messages + [
-                    ToolMessage(
-                        content=f"Policy has blocked the same tool(s) {consecutive_blocks} times. "
-                                "Stop calling blocked tools and explain to the user why the request cannot be fulfilled.",
-                        tool_call_id="policy_anti_loop",
-                    )
-                ],
+                "messages": deferred_messages + blocked_messages,
                 "status": "failed",
                 "error": f"Agent exceeded blocked tool call limit for: {', '.join(sorted(current_blocked_names))}.",
                 "allowed_tool_calls": [],
@@ -152,7 +173,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
             }
 
         return {
-            "messages": blocked_messages,
+            "messages": deferred_messages + blocked_messages,
             "blocked_tool_calls": tool_calls,
             "allowed_tool_calls": [],
             "consecutive_blocks": consecutive_blocks,

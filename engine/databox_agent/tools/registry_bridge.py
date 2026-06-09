@@ -7,6 +7,7 @@ from langchain_core.tools import StructuredTool
 
 from engine.agent_kernel.tool_registry import ToolRegistry
 from engine.databox_agent.tools.tool_manifest import enrich_description
+from engine.databox_agent.tools.tool_aliases import to_alias
 
 logger = logging.getLogger("databox.databox_agent.tools.registry_bridge")
 
@@ -40,8 +41,9 @@ def build_langchain_tools(registry: ToolRegistry | None) -> list[StructuredTool]
     for spec in registry.list_specs():
         input_model = spec.input_model or EmptyToolInput
         description = enrich_description(spec.name, spec.description)
+        alias = to_alias(spec.name)
         tool = StructuredTool.from_function(
-            name=spec.name,
+            name=alias,
             description=description,
             args_schema=input_model,
             func=make_dummy_func(spec.name),
