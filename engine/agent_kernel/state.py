@@ -45,6 +45,12 @@ class KernelState(TypedDict, total=False):
     last_tool_name: str | None
     last_observation: dict[str, Any] | None
 
+    # Structured self-healing state.
+    last_failed_tool_call: dict[str, Any] | None
+    last_error_telemetry: dict[str, Any] | None
+    retry_counters: dict[str, int]
+    retry_policy: dict[str, Any] | None
+
     tool_results: Annotated[list[dict[str, Any]], add]
     artifacts: Annotated[list[dict[str, Any]], add]
     trace_events: Annotated[list[dict[str, Any]], add]
@@ -64,6 +70,7 @@ class KernelState(TypedDict, total=False):
     final_answer: dict[str, Any] | None
     error: str | None
     revision_attempted: bool
+    revision_count: int
 
     step_count: int
     max_steps: int
