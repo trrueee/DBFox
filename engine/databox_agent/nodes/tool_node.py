@@ -163,7 +163,9 @@ def _execute_tool(
                 latency_ms=latency_ms,
             )
 
-    ctx = ToolContext(db=db, request=req, state=dict(state))
+    ctx_state = dict(state)
+    ctx_state["_current_tool_name"] = tool_name
+    ctx = ToolContext(db=db, request=req, state=ctx_state)
     validated_args = ToolRuntimeGateway.validate_input(tool.spec.name, tool.spec.input_model, args)
     observation = tool.handler(ctx, validated_args)
     return ToolRuntimeGateway.validate_observation_output(tool.spec.name, tool.spec.output_model, observation)

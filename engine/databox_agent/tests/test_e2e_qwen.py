@@ -32,7 +32,7 @@ import pytest
 # Qwen API helpers
 # ---------------------------------------------------------------------------
 
-QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "sk-96c0a475965841fd9b6b95276e5b68ba")
+QWEN_API_KEY = os.environ.get("QWEN_API_KEY", "")
 QWEN_MODEL_NAME = os.environ.get("QWEN_MODEL_NAME", "qwen-plus")
 QWEN_API_BASE = os.environ.get(
     "QWEN_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -64,16 +64,16 @@ class TestRealModelToolCalling:
     """Verify the model sees alias names, calls tools, and trajectory is correct."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, db_session, demo_datasource):
+    def _setup(self, db_session, spider_concert_singer):
         self.db = db_session
-        self.ds = demo_datasource
+        self.ds = spider_concert_singer
 
     def _build_request(self, *, execute: bool = True, question: str | None = None):
         from engine.agent.types import AgentRunRequest
 
         return AgentRunRequest(
             datasource_id=self.ds.id,
-            question=question or "查询上个月销售额最高的产品类别",
+            question=question or "How many singers do we have?",
             api_key=QWEN_API_KEY,
             api_base=QWEN_API_BASE,
             model_name=QWEN_MODEL_NAME,
@@ -170,9 +170,9 @@ class TestExecuteFalse:
     """When execute=False, sql.execute_readonly must NEVER be called."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, db_session, demo_datasource):
+    def _setup(self, db_session, spider_concert_singer):
         self.db = db_session
-        self.ds = demo_datasource
+        self.ds = spider_concert_singer
 
     @_skip_if_no_api
     def test_execute_false_no_sql_execution(self):
@@ -181,7 +181,7 @@ class TestExecuteFalse:
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,
-            question="查询上个月销售额最高的产品类别，只生成SQL不执行",
+            question="How many concerts are there? Just generate and validate SQL, do NOT execute.",
             api_key=QWEN_API_KEY,
             api_base=QWEN_API_BASE,
             model_name=QWEN_MODEL_NAME,
@@ -242,9 +242,9 @@ class TestApprovalE2E:
     """Full interrupt → checkpoint → resume cycle with real model."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, db_session, demo_datasource):
+    def _setup(self, db_session, spider_concert_singer):
         self.db = db_session
-        self.ds = demo_datasource
+        self.ds = spider_concert_singer
 
     @_skip_if_no_api
     def test_approval_interrupt_resume_cycle(self):
@@ -257,7 +257,7 @@ class TestApprovalE2E:
         # requires_confirmation on a generated SQL.
         req = AgentRunRequest(
             datasource_id=self.ds.id,
-            question="删除所有订单数据",  # destructive → should trigger approval
+            question="DROP TABLE singer",  # destructive → should trigger approval
             api_key=QWEN_API_KEY,
             api_base=QWEN_API_BASE,
             model_name=QWEN_MODEL_NAME,
@@ -354,7 +354,7 @@ class TestApprovalE2E:
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,
-            question="查询订单数据",
+            question="Execute validated SQL on singer table",
             api_key=QWEN_API_KEY,
             api_base=QWEN_API_BASE,
             model_name=QWEN_MODEL_NAME,
@@ -454,9 +454,9 @@ class TestArtifactConsistency:
     """SSE artifacts must be present in final response artifacts."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, db_session, demo_datasource):
+    def _setup(self, db_session, spider_concert_singer):
         self.db = db_session
-        self.ds = demo_datasource
+        self.ds = spider_concert_singer
 
     @_skip_if_no_api
     def test_artifacts_in_response(self):
@@ -465,7 +465,7 @@ class TestArtifactConsistency:
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,
-            question="查询产品表的结构",
+            question="Show me the schema of the singer table",
             api_key=QWEN_API_KEY,
             api_base=QWEN_API_BASE,
             model_name=QWEN_MODEL_NAME,
@@ -480,7 +480,8 @@ class TestArtifactConsistency:
         sse_artifact_ids: set[str] = set()
         for evt in events:
             if evt.type == "agent.artifact.created" and evt.artifact:
-                sse_artifact_ids.add(evt.artifact.get("id", ""))
+                art_id = evt.artifact.id if hasattr(evt.artifact, 'id') else evt.artifact.get("id", "")
+                sse_artifact_ids.add(art_id)
 
         print(f"\n[ARTIFACT] SSE artifacts: {sse_artifact_ids}")
 
@@ -508,9 +509,9 @@ class TestBlockedLoop:
     """When model repeatedly calls blocked tools, agent must finalize with failed."""
 
     @pytest.fixture(autouse=True)
-    def _setup(self, db_session, demo_datasource):
+    def _setup(self, db_session, spider_concert_singer):
         self.db = db_session
-        self.ds = demo_datasource
+        self.ds = spider_concert_singer
 
     @_skip_if_no_api
     def test_blocked_loop_terminates(self):
