@@ -1,0 +1,27 @@
+[
+  {
+    "db_id": "tiny_school",
+    "question": "How many students are there?",
+    "query": "SELECT COUNT(*) FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is the average score?",
+    "query": "SELECT AVG(score) FROM courses"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "List all student names.",
+    "query": "SELECT name FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Show the highest score for each student.",
+    "query": "SELECT students.name, MAX(courses.score) FROM students JOIN courses ON students.id = courses.student_id GROUP BY students.id"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Who scored above 85?",
+    "query": "SELECT name FROM students JOIN courses ON students.id = courses.student_id WHERE score > 85"
+  }
+]

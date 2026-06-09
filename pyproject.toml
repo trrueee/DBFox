@@ -11,3 +11,8 @@ exclude = ["engine/tests/"]
 module = ["engine.tests.*", "engine.tests.conftest"]
 disallow_untyped_defs = false
 check_untyped_defs = false
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests that require a real DataBox runtime and external services",
+]
