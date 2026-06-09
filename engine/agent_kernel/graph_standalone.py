@@ -132,22 +132,24 @@ def _route_intent_node(state: KernelState) -> dict[str, Any]:
     return {"agent_graph_route": route, "trace_events": [{"type": "agent.route_intent", "payload": {"intent": _intent(state), "route": route, "reference": resolve_reference(state)}}]}
 
 
+INTENT_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
+    "new_data_question": "build_schema_context",
+    "revise_sql": "revise_sql",
+    "explain_sql": "explain_sql",
+    "approval_help": "approval_help",
+    "followup_on_result": lambda state: "load_followup_context" if state.get("follow_up_context") and not state.get("followup_context") else "profile_result",
+    "chart_request": "chart_request",
+    "clarification": "clarification",
+}
+
+
 def _route_intent(state: KernelState) -> str:
     intent = _intent(state)
-    if intent == "new_data_question":
-        return "build_schema_context"
-    if intent == "revise_sql":
-        return "revise_sql"
-    if intent == "explain_sql":
-        return "explain_sql"
-    if intent == "approval_help":
-        return "approval_help"
-    if intent == "followup_on_result":
-        return "load_followup_context" if state.get("follow_up_context") and not state.get("followup_context") else "profile_result"
-    if intent == "chart_request":
-        return "chart_request"
-    if intent == "clarification":
-        return "clarification"
+    route = INTENT_ROUTE_MAP.get(intent)
+    if isinstance(route, str):
+        return route
+    if callable(route):
+        return route(state)
     return "controller"
 
 
@@ -420,6 +422,22 @@ def _after_approval(state: KernelState) -> str:
     return "execute_tool" if state.get("pending_tool_call") else "answer"
 
 
+TOOL_FALLBACK_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
+    "schema.build_context": "build_query_plan",
+    "query_plan.build": "generate_sql",
+    "sql.generate": "sql_critic",
+    "sql.revise": "sql_critic",
+    "sql.validate": "validation_route",
+    "sql.execute_readonly": "execution_result_route",
+    "sql.skip_execution": "execution_result_route",
+    "result.profile": "chart_suggest",
+    "chart.suggest": lambda state: "followup_suggest" if _intent(state) == "new_data_question" else "synthesize_answer",
+    "followup.suggest": "synthesize_answer",
+    "followup.load_context": "profile_result",
+    "answer.synthesize": "answer",
+}
+
+
 def _after_observe(state: KernelState) -> str:
     telemetry = _error_telemetry(state)
     if telemetry.get("retryable"):
@@ -438,26 +456,13 @@ def _after_observe(state: KernelState) -> str:
                 return "synthesize_answer"
             return next_route
     tool_name = str(state.get("last_tool_name") or "")
-    if tool_name == "schema.build_context":
-        return "build_query_plan"
-    if tool_name == "query_plan.build":
-        return "generate_sql"
-    if tool_name in {"sql.generate", "sql.revise"}:
-        return "sql_critic"
-    if tool_name == "sql.validate":
-        return "validation_route"
-    if tool_name in {"sql.execute_readonly", "sql.skip_execution"}:
-        return "execution_result_route"
-    if tool_name == "result.profile":
-        return "chart_suggest"
-    if tool_name == "chart.suggest":
-        return "followup_suggest" if _intent(state) == "new_data_question" else "synthesize_answer"
-    if tool_name == "followup.suggest":
-        return "synthesize_answer"
-    if tool_name == "followup.load_context":
-        return "profile_result"
-    if tool_name == "answer.synthesize" or tool_name.startswith("workspace."):
+    if tool_name.startswith("workspace."):
         return "answer"
+    route = TOOL_FALLBACK_ROUTE_MAP.get(tool_name)
+    if isinstance(route, str):
+        return route
+    if callable(route):
+        return route(state)
     return "route_intent"
 
 

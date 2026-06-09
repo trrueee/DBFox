@@ -78,8 +78,29 @@ def _classify_via_llm(
     has_sql = bool(state.get("sql") or workspace_context.get("selected_sql") or workspace_context.get("active_sql"))
     has_result = bool(state.get("execution") or workspace_context.get("last_query_result_preview"))
     has_approval = bool(state.get("pending_approval") or workspace_context.get("pending_approval_id"))
+    has_workspace_context = bool(workspace_context)
+    execute = state.get("execute", True)
 
-    prompt = _build_intent_classifier_prompt(text, has_sql=has_sql, has_result=has_result, has_approval=has_approval)
+    # Lightweight reference hint — never leaks full SQL, rows, or artifact payloads.
+    reference_kind: str | None = None
+    if workspace_context.get("selected_sql") or workspace_context.get("active_sql"):
+        reference_kind = "sql"
+    elif state.get("sql"):
+        reference_kind = "sql"
+    elif state.get("execution"):
+        reference_kind = "result"
+    elif workspace_context.get("pending_approval_id") or state.get("pending_approval"):
+        reference_kind = "approval"
+
+    prompt = _build_intent_classifier_prompt(
+        text,
+        has_sql=has_sql,
+        has_result=has_result,
+        has_approval=has_approval,
+        has_workspace_context=has_workspace_context,
+        execute=execute,
+        reference_kind=reference_kind,
+    )
 
     response = httpx.post(
         f"{api_base}/chat/completions",
@@ -103,6 +124,13 @@ def _classify_via_llm(
     raw = str(payload["choices"][0]["message"]["content"])
 
     parsed = _parse_intent_json(raw, model_name=model_name)
+
+    # Clarification is the "safe" intent — it pauses and asks the user
+    # rather than generating potentially wrong SQL.  Trust it even at
+    # low confidence; falling back could reclassify it as
+    # new_data_question and start an unwanted pipeline.
+    if parsed.intent == "clarification":
+        return parsed.intent, "llm", {"llm_candidate": parsed.model_dump()}
 
     if parsed.confidence == "low":
         llm_trace = {
@@ -150,6 +178,9 @@ def _build_intent_classifier_prompt(
     has_sql: bool,
     has_result: bool,
     has_approval: bool,
+    has_workspace_context: bool,
+    execute: bool,
+    reference_kind: str | None,
 ) -> str:
     options = [
         "new_data_question   - a new data-analysis question",
@@ -168,6 +199,9 @@ def _build_intent_classifier_prompt(
                 "has_sql_in_context": has_sql,
                 "has_result_in_context": has_result,
                 "has_pending_approval": has_approval,
+                "has_workspace_context": has_workspace_context,
+                "execute_requested": execute,
+                "active_reference_kind": reference_kind,
             },
             "output_schema": {
                 "intent": "one of the intent values listed below",

@@ -447,19 +447,17 @@ class AgentKernelService:
                 )
             )
 
+        if approved and not has_graph_checkpoint:
+            raise DataBoxError(
+                "Agent kernel LangGraph checkpoint was unavailable for this run. Cannot resume approval.",
+                code="CHECKPOINT_MISSING",
+            )
+
         if not approved:
             state["status"] = "failed"
             state["error"] = "User rejected approval."
             state["pending_approval"] = None
             state["pending_tool_call"] = None
-
-        if approved and state.get("status") == "waiting_approval":
-            logger.warning(
-                "Agent kernel LangGraph checkpoint was unavailable for run %s; resuming from saved DB checkpoint.",
-                run_id,
-            )
-            state.update(self._approved_resume_state_from_saved_checkpoint(state, approval))
-            yield from stream_graph_updates(app.stream(dict(state), config=config, stream_mode="updates"))
 
         final_approval = agent_persistence.get_approval(self.db, approval_id) or approval
         success = state.get("status") == "completed" and not state.get("error")
@@ -678,25 +676,7 @@ class AgentKernelService:
             return None
         return AgentApprovalRecord.model_validate(pending)
 
-    def _approved_resume_state_from_saved_checkpoint(
-        self,
-        state: dict[str, Any],
-        approval: AgentApprovalRecord,
-    ) -> dict[str, Any]:
-        approval_payload = approval.model_dump(mode="json")
-        safety = self._approve_safety(dict(state), approval_payload)
-        return {
-            "status": "running",
-            "pending_approval": None,
-            "pending_tool_call": None,
-            "safety": safety,
-            "trace_events": [
-                {
-                    "type": "approval.approved_from_saved_checkpoint",
-                    "payload": approval_payload,
-                }
-            ],
-        }
+
 
     def _save_waiting_checkpoint(
         self,

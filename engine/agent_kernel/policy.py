@@ -41,6 +41,25 @@ class PolicyGate:
             can_execute = bool(safety.get("can_execute"))
             safe_sql = str(safety.get("safe_sql") or "").strip()
             original_sql = str(safety.get("original_sql") or state.get("sql") or "").strip()
+            
+            # Strict argument validation to prevent SQL override bypass:
+            args_sql = str(args.get("sql") or "").strip()
+            if args_sql:
+                normalized_args_sql = " ".join(args_sql.lower().split())
+                normalized_safe_sql = " ".join(safe_sql.lower().split())
+                normalized_orig_sql = " ".join(original_sql.lower().split())
+                is_match = False
+                if safe_sql and normalized_args_sql == normalized_safe_sql:
+                    is_match = True
+                elif original_sql and normalized_args_sql == normalized_orig_sql:
+                    is_match = True
+                
+                if not is_match:
+                    return PolicyDecision(
+                        status="blocked",
+                        reason="SQL parameter in arguments does not match the validated safe_sql or original_sql.",
+                        risk_level="danger",
+                    )
             blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
             hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
             if safety.get("requires_confirmation") and not hard_blockers and original_sql:

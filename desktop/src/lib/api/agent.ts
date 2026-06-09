@@ -28,47 +28,39 @@ export function createAgentRunDraft(question: string): AgentRunDraftState {
   };
 }
 
-export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentRuntimeEvent): AgentRunDraftState {
-  const next: AgentRunDraftState = {
-    ...draft,
-    runId: event.run_id || draft.runId,
-    events: [...draft.events, event],
-  };
-
-  if (event.type === "agent.run.started") {
+const EVENT_REDUCERS: Record<
+  string,
+  (next: AgentRunDraftState, event: AgentRuntimeEvent, draft: AgentRunDraftState) => AgentRunDraftState
+> = {
+  "agent.run.started": (next, event, draft) => {
     const question = typeof event.step?.question === "string" ? event.step.question : draft.question;
     return { ...next, question, status: "running", error: null };
-  }
-
-  if (event.type === "agent.artifact.created" && event.artifact) {
+  },
+  "agent.artifact.created": (next, event, draft) => {
+    if (!event.artifact) return next;
     return {
       ...next,
       artifacts: mergeArtifacts(draft.artifacts, [event.artifact]),
     };
-  }
-
-  if (event.type === "agent.answer.completed") {
+  },
+  "agent.answer.completed": (next, event, draft) => {
     return { ...next, answer: event.answer || draft.answer || null };
-  }
-
-  if (event.type === "agent.approval.required") {
+  },
+  "agent.approval.required": (next, event, draft) => {
     return { ...next, approval: mergeApproval(draft.approval, event.approval) };
-  }
-
-  if (event.type === "agent.checkpoint.saved") {
+  },
+  "agent.checkpoint.saved": (next, event, draft) => {
     return { ...next, checkpoint: event.checkpoint || draft.checkpoint || null };
-  }
-
-  if (event.type === "agent.approval.resolved") {
+  },
+  "agent.approval.resolved": (next, event, draft) => {
     const approval = mergeApproval(draft.approval, event.approval);
     return {
       ...next,
       approval,
       error: approval?.id === event.approval?.id && event.approval?.status === "rejected" ? "Approval rejected" : draft.error,
     };
-  }
-
-  if (event.type === "agent.run.waiting_approval") {
+  },
+  "agent.run.waiting_approval": (next, event, draft) => {
     return {
       ...next,
       status: "waiting_approval",
@@ -78,9 +70,8 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
       artifacts: mergeArtifacts(draft.artifacts, event.response?.artifacts || []),
       error: null,
     };
-  }
-
-  if (event.type === "agent.run.resumed") {
+  },
+  "agent.run.resumed": (next, event, draft) => {
     return {
       ...next,
       status: "running",
@@ -88,9 +79,9 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
       checkpoint: event.checkpoint || draft.checkpoint || null,
       error: null,
     };
-  }
-
-  if (event.type === "agent.run.completed" && event.response) {
+  },
+  "agent.run.completed": (next, event, draft) => {
+    if (!event.response) return next;
     return {
       ...next,
       status: "completed",
@@ -99,9 +90,8 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
       artifacts: mergeArtifacts(draft.artifacts, event.response.artifacts || []),
       error: null,
     };
-  }
-
-  if (event.type === "agent.run.failed") {
+  },
+  "agent.run.failed": (next, event, draft) => {
     return {
       ...next,
       status: "failed",
@@ -110,8 +100,20 @@ export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentR
       artifacts: mergeArtifacts(draft.artifacts, event.response?.artifacts || []),
       error: event.error || event.response?.error || "Agent stream failed.",
     };
-  }
+  },
+};
 
+export function reduceAgentRuntimeEvent(draft: AgentRunDraftState, event: AgentRuntimeEvent): AgentRunDraftState {
+  const next: AgentRunDraftState = {
+    ...draft,
+    runId: event.run_id || draft.runId,
+    events: [...draft.events, event],
+  };
+
+  const reducer = EVENT_REDUCERS[event.type];
+  if (reducer) {
+    return reducer(next, event, draft);
+  }
   return next;
 }
 
