@@ -39,6 +39,16 @@ else:
 if "DB_PATH" not in dir():
     DB_PATH = Path(DATABASE_URL.replace("sqlite:///", ""))
 
+# Connection pool safety defaults. They intentionally mirror the retryable error
+# semantics used by Agent tool execution: stale connections should be detected
+# before use, long-lived pooled connections should be recycled, and pool waits
+# should fail fast enough for the graph to route/retry instead of hanging.
+DB_POOL_SIZE = int(os.environ.get("DATABOX_DB_POOL_SIZE", "20"))
+DB_MAX_OVERFLOW = int(os.environ.get("DATABOX_DB_MAX_OVERFLOW", "20"))
+DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DATABOX_DB_POOL_RECYCLE_SECONDS", "1800"))
+DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DATABOX_DB_POOL_TIMEOUT_SECONDS", "30"))
+DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DATABOX_SQLITE_TIMEOUT_SECONDS", "30"))
+
 # Pre-configure SQLite for WAL mode (must run before engine creation, sqlite:// only)
 import sqlite3
 if DATABASE_URL.startswith("sqlite:///"):
@@ -47,7 +57,7 @@ if DATABASE_URL.startswith("sqlite:///"):
         _sqlite_db.parent.mkdir(parents=True, exist_ok=True)
     _conn = sqlite3.connect(str(_sqlite_db))
     _conn.execute("PRAGMA journal_mode=WAL")
-    _conn.execute("PRAGMA busy_timeout=30000")
+    _conn.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
     _conn.execute("PRAGMA synchronous=NORMAL")
     _conn.close()
 
@@ -55,11 +65,13 @@ engine: Engine = create_engine(
     DATABASE_URL,
     connect_args={
         "check_same_thread": False,
-        "timeout": 30,
+        "timeout": DB_SQLITE_TIMEOUT_SECONDS,
     },
-    pool_size=20,
-    max_overflow=20,
+    pool_size=DB_POOL_SIZE,
+    max_overflow=DB_MAX_OVERFLOW,
     pool_pre_ping=True,
+    pool_recycle=DB_POOL_RECYCLE_SECONDS,
+    pool_timeout=DB_POOL_TIMEOUT_SECONDS,
 )
 
 # ---------------------------------------------------------------------------
@@ -218,310 +230,43 @@ def init_db() -> None:
             ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
             script_location = Path(__file__).resolve().parent / "migrations"
 
-        # 3. 创建 Alembic 运行时配置并动态重写目标参数
+        if not ini_path.exists():
+            print(f"Alembic配置文件不存在: {ini_path}")
+            return
+
+        # 强制关闭所有连接，避免 Windows 下文件锁导致的迁移失败
+        try:
+            engine.dispose()
+        except Exception:
+            pass
+
         alembic_cfg = Config(str(ini_path))
         alembic_cfg.set_main_option("script_location", str(script_location))
         alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
 
-        # 4. 检查当前本地数据库的历史结构状态
-        has_legacy = False
-        has_alembic = False
+        # If DB does not exist, create and stamp to head after creating tables.
+        # For existing DB, ensure version table and upgrade.
         with engine.begin() as conn:
-            # 检查是否存在老版本手写迁移标志表 schema_migrations
-            res = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"))
-            has_legacy = res.fetchone() is not None
-
-            # 检查是否存在 Alembic 标准迁移表 alembic_version
-            res_alembic = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"))
-            has_alembic = res_alembic.fetchone() is not None
-
-        # ---------------------------------------------------------------------
-        # 情景一：检测到处于历史过渡期的老数据库结构，执行渐进式手写 SQL 升级到 v10
-        # ---------------------------------------------------------------------
-        if has_legacy and not has_alembic:
-            print("系统检测到极早期手写账本式的元数据库，启动 v1~v10 紧急平滑迁移...")
-
-            # 辅助闭包函数：查询 SQLite 表结构，安全判断某个字段是否存在，避免重复 Alter 报错
-            def has_column(conn: Connection, table: str, col: str) -> bool:
-                res = conn.execute(text(f"PRAGMA table_info({table})"))
-                return any(row[1] == col for row in res.fetchall())
-
-            # 定义 v1 至 v10 串行小步快跑的升级 SQL 命令集
-            def migration_v1(conn: Connection) -> None:
-                # 升级 1: 支持 SSH 安全连接通道参数
-                cols = {
-                    "ssh_enabled": "INTEGER NOT NULL DEFAULT 0",
-                    "ssh_host": "VARCHAR",
-                    "ssh_port": "INTEGER NOT NULL DEFAULT 22",
-                    "ssh_username": "VARCHAR",
-                    "ssh_password_ciphertext": "VARCHAR",
-                    "ssh_password_nonce": "VARCHAR",
-                    "ssh_pkey_path": "VARCHAR",
-                    "ssh_pkey_passphrase_ciphertext": "VARCHAR",
-                    "ssh_pkey_passphrase_nonce": "VARCHAR",
-                }
-                for col_name, col_type in cols.items():
-                    if not has_column(conn, "data_sources", col_name):
-                        conn.execute(text(f"ALTER TABLE data_sources ADD COLUMN {col_name} {col_type}"))
-
-            def migration_v2(conn: Connection) -> None:
-                # 升级 2: 多环境划分支持 (开发、测试、生产) 与只读保护标志
-                cols = {
-                    "is_read_only": "INTEGER NOT NULL DEFAULT 0",
-                    "env": "VARCHAR NOT NULL DEFAULT 'dev'",
-                }
-                for col_name, col_type in cols.items():
-                    if not has_column(conn, "data_sources", col_name):
-                        conn.execute(text(f"ALTER TABLE data_sources ADD COLUMN {col_name} {col_type}"))
-
-            def migration_v3(conn: Connection) -> None:
-                # 升级 3: LLM 请求大模型生成的 SQL 执行流水账中增加关联数据源
-                if not has_column(conn, "llm_logs", "data_source_id"):
-                    conn.execute(text("ALTER TABLE llm_logs ADD COLUMN data_source_id VARCHAR"))
-
-            def migration_v4(conn: Connection) -> None:
-                # 升级 4: 支持 MySQL SSL/TLS 双向安全加密网络通道
-                cols = {
-                    "ssl_enabled": "INTEGER NOT NULL DEFAULT 0",
-                    "ssl_ca_path": "VARCHAR",
-                    "ssl_cert_path": "VARCHAR",
-                    "ssl_key_path": "VARCHAR",
-                    "ssl_verify_identity": "INTEGER NOT NULL DEFAULT 1",
-                }
-                for col_name, col_type in cols.items():
-                    if not has_column(conn, "data_sources", col_name):
-                        conn.execute(text(f"ALTER TABLE data_sources ADD COLUMN {col_name} {col_type}"))
-
-            def migration_v5(conn: Connection) -> None:
-                # 升级 5: 增加大模型生成模板版本、温度、最大 Token 及结构合理性警告属性
-                cols = {
-                    "prompt_version": "VARCHAR",
-                    "prompt_template_hash": "VARCHAR",
-                    "model_temperature": "FLOAT",
-                    "max_tokens": "INTEGER",
-                    "schema_validation_warnings": "TEXT",
-                }
-                for col_name, col_type in cols.items():
-                    if not has_column(conn, "llm_logs", col_name):
-                        conn.execute(text(f"ALTER TABLE llm_logs ADD COLUMN {col_name} {col_type}"))
-
-            def migration_v6(conn: Connection) -> None:
-                # 升级 6: SQL 查询耗时明细监控统计（建立连接、安全卫士拦截、数据库执行、结果获取、序列化）
-                cols = {
-                    "connect_ms": "INTEGER",
-                    "guardrail_ms": "INTEGER",
-                    "execute_ms": "INTEGER",
-                    "fetch_ms": "INTEGER",
-                    "serialize_ms": "INTEGER",
-                }
-                for col_name, col_type in cols.items():
-                    if not has_column(conn, "query_history", col_name):
-                        conn.execute(text(f"ALTER TABLE query_history ADD COLUMN {col_name} {col_type}"))
-
-            def migration_v7(conn: Connection) -> None:
-                # 升级 7: 建立项目/工作区 (projects) 模型，支持多工作区物理隔离隔离
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS projects (
-                        id VARCHAR PRIMARY KEY,
-                        name VARCHAR NOT NULL,
-                        description TEXT,
-                        status VARCHAR NOT NULL DEFAULT 'active',
-                        created_at DATETIME NOT NULL,
-                        updated_at DATETIME NOT NULL
-                    )
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_projects_status
-                    ON projects (status)
-                """))
-                # 默认写入一个初始化的默认工作区，防止老数据因丢失外键而查询落空
-                conn.execute(text("""
-                    INSERT OR IGNORE INTO projects (
-                        id,
-                        name,
-                        description,
-                        status,
-                        created_at,
-                        updated_at
-                    )
-                    VALUES (
-                        'default-project',
-                        'Default Workspace',
-                        'Auto-created workspace for existing DataBox assets.',
-                        'active',
-                        datetime('now'),
-                        datetime('now')
-                    )
-                """))
-
-                if not has_column(conn, "data_sources", "project_id"):
-                    conn.execute(text("ALTER TABLE data_sources ADD COLUMN project_id VARCHAR"))
-                    conn.execute(text("""
-                        CREATE INDEX IF NOT EXISTS ix_data_sources_project_id
-                        ON data_sources (project_id)
-                    """))
-
-                # 将已有老旧数据源一律划归给默认工作区下
-                conn.execute(text("""
-                    UPDATE data_sources
-                    SET project_id = 'default-project'
-                    WHERE project_id IS NULL OR project_id = ''
-                """))
-
-            def migration_v8(conn: Connection) -> None:
-                # 升级 8: 建立本地开发虚拟数据库环境 (database_environments) 核心参数表
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS database_environments (
-                        id VARCHAR PRIMARY KEY,
-                        project_id VARCHAR NOT NULL,
-                        name VARCHAR NOT NULL,
-                        runtime VARCHAR NOT NULL DEFAULT 'docker',
-                        engine_type VARCHAR NOT NULL DEFAULT 'mysql',
-                        engine_version VARCHAR NOT NULL DEFAULT '8.0',
-                        image VARCHAR NOT NULL DEFAULT 'mysql:8.0',
-                        container_name VARCHAR NOT NULL,
-                        host VARCHAR NOT NULL DEFAULT '127.0.0.1',
-                        port INTEGER NOT NULL,
-                        database_name VARCHAR NOT NULL,
-                        username VARCHAR NOT NULL,
-                        password_ciphertext VARCHAR NOT NULL,
-                        password_nonce VARCHAR NOT NULL,
-                        datasource_id VARCHAR,
-                        status VARCHAR NOT NULL DEFAULT 'created',
-                        last_health_status VARCHAR,
-                        last_health_at DATETIME,
-                        last_error TEXT,
-                        created_at DATETIME NOT NULL,
-                        updated_at DATETIME NOT NULL
-                    )
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_database_environments_project
-                    ON database_environments (project_id)
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_database_environments_status
-                    ON database_environments (status)
-                """))
-                if not has_column(conn, "data_sources", "environment_id"):
-                    conn.execute(text("ALTER TABLE data_sources ADD COLUMN environment_id VARCHAR"))
-                    conn.execute(text("""
-                        CREATE INDEX IF NOT EXISTS ix_data_sources_environment_id
-                        ON data_sources (environment_id)
-                    """))
-
-            def migration_v9(conn: Connection) -> None:
-                # 升级 9: 建立物理备份与恢复还原日志清单表 (backup_records)
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS backup_records (
-                        id VARCHAR PRIMARY KEY,
-                        project_id VARCHAR NOT NULL,
-                        datasource_id VARCHAR NOT NULL,
-                        environment_id VARCHAR,
-                        label VARCHAR,
-                        backup_type VARCHAR NOT NULL DEFAULT 'mysqldump',
-                        status VARCHAR NOT NULL DEFAULT 'running',
-                        file_path TEXT,
-                        file_size_bytes INTEGER,
-                        checksum_sha256 VARCHAR,
-                        started_at DATETIME NOT NULL,
-                        completed_at DATETIME,
-                        duration_ms INTEGER,
-                        error_message TEXT,
-                        created_at DATETIME NOT NULL
-                    )
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_backup_records_project
-                    ON backup_records (project_id)
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_backup_records_datasource
-                    ON backup_records (datasource_id)
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_backup_records_created
-                    ON backup_records (created_at)
-                """))
-
-            def migration_v10(conn: Connection) -> None:
-                # 升级 10: 建立智能表结构图形化设计草稿清单表 (table_design_drafts)
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS table_design_drafts (
-                        id VARCHAR PRIMARY KEY,
-                        project_id VARCHAR NOT NULL,
-                        table_name VARCHAR NOT NULL,
-                        table_comment VARCHAR,
-                        columns_json TEXT NOT NULL,
-                        indexes_json TEXT NOT NULL,
-                        created_at DATETIME NOT NULL,
-                        updated_at DATETIME NOT NULL
-                    )
-                """))
-                conn.execute(text("""
-                    CREATE INDEX IF NOT EXISTS ix_table_design_drafts_project
-                    ON table_design_drafts (project_id)
-                """))
-
-            migrations = {
-                1: migration_v1,
-                2: migration_v2,
-                3: migration_v3,
-                4: migration_v4,
-                5: migration_v5,
-                6: migration_v6,
-                7: migration_v7,
-                8: migration_v8,
-                9: migration_v9,
-                10: migration_v10,
-            }
-
-            # 串行递增应用迁移
-            with engine.begin() as conn:
-                res = conn.execute(text("SELECT version FROM schema_migrations"))
-                applied_versions = {row[0] for row in res.fetchall()}
-
-                for version in sorted(migrations.keys()):
-                    if version not in applied_versions:
-                        print(f"正在手动执行老旧 SQLite 表结构迁移版本 v{version}...")
-                        migrations[version](conn)
-                        conn.execute(
-                            text("INSERT INTO schema_migrations (version, applied_at) VALUES (:v, datetime('now'))"),
-                            {"v": version}
-                        )
-                        print(f"老旧 SQLite 表结构迁移版本 v{version} 成功应用。")
-
-            # 5. 【平滑交接核心】使用 Alembic 的 `stamp` 命令，手动将当前的物理表结构状态与 Alembic 的第一个基线版本 '99b4fdab0781' 对齐打桩！
-            # 这样，Alembic 就会知道当前数据库已经是 v10 结构，无需重复建表，未来只需用 Alembic 继续升级新字段即可。
-            print("开始打桩！标记基线版本为 Alembic 基准版本 ID '99b4fdab0781'...")
-            command.stamp(alembic_cfg, "99b4fdab0781")
-
-            # 6. 删除以前老旧无用的临时记录表，完美完成新旧机制交接！
-            print("删除老旧的过渡状态 schema_migrations 临时表...")
-            with engine.begin() as conn:
-                conn.execute(text("DROP TABLE schema_migrations"))
-
-            print("恭喜：手写数据库表结构成功平滑地向 Alembic 版本系统完成交接！")
-
-        # ---------------------------------------------------------------------
-        # 情景二：正常状态，直接使用 Alembic 一键升级（upgrade head）至最新代码版本
-        # ---------------------------------------------------------------------
-        print("正在安全执行 Alembic 元数据库更新至最新表结构(Head)...")
-        command.upgrade(alembic_cfg, "head")
-        print("所有元数据库表结构及索引成功通过 Alembic 完成初始化与校准。")
-
-    except Exception as exc:
-        print(f"❌ 元数据库表结构版本迁移严重失败: {exc}")
-        # ---------------------------------------------------------------------
-        # 7. 物理容灾自动回滚机制 (Disaster Recovery Restore)
-        # ---------------------------------------------------------------------
-        if backup_path and backup_path.exists():
-            print(f"🔄 系统触发自动容灾机制：断开所有元数据库连接，并从升级前物理备份 '{backup_path.name}' 中还原数据库...")
+            inspector = None
             try:
-                engine.dispose()  # 断开当前物理引擎中所有的活跃连接池，解除文件占用锁
-                shutil.copy2(backup_path, DB_PATH)  # 物理覆盖还原
-                print("🔄 容灾成功：元数据库已恢复至升级前完好无损的快照状态。")
-            except Exception as restore_err:
-                print(f"🚨 致命危险：在恢复还原旧元数据时发生了更严重的错误: {restore_err}")
-        raise exc
+                from sqlalchemy import inspect
+                inspector = inspect(conn)
+                tables = inspector.get_table_names()
+            except Exception:
+                tables = []
+            if not tables:
+                Base.metadata.create_all(bind=conn)
+                command.stamp(alembic_cfg, "head")
+            else:
+                command.upgrade(alembic_cfg, "head")
 
+    except Exception as e:
+        print("数据库初始化失败:", e)
+        if backup_path is not None and backup_path.exists():
+            try:
+                engine.dispose()
+                import shutil
+                shutil.copy2(backup_path, DB_PATH)
+                print("已从备份恢复数据库")
+            except Exception as restore_err:
+                print("恢复备份失败:", restore_err)
