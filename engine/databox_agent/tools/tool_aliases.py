@@ -29,6 +29,14 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "chart_suggest": "chart.suggest",
     "followup_suggest": "followup.suggest",
     "answer_synthesize": "answer.synthesize",
+    # Workspace tools
+    "workspace_explain_sql": "workspace.explain_sql",
+    "workspace_fix_sql": "workspace.fix_sql",
+    "workspace_optimize_sql": "workspace.optimize_sql",
+    "workspace_rewrite_sql": "workspace.rewrite_sql",
+    "workspace_explain_result": "workspace.explain_result",
+    "workspace_continue_from_artifact": "workspace.continue_from_artifact",
+    "workspace_explain_schema": "workspace.explain_schema",
 }
 
 # Internal name → alias (reverse lookup, built once at import time)

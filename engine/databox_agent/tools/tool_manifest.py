@@ -45,7 +45,10 @@ TOOL_AFFORDANCE: dict[str, str] = {
     "sql.revise": (
         "Revise a SQL query that failed validation or execution. "
         "Use when sql.validate or sql.execute_readonly returns errors. "
-        "Outputs: revised SQL candidate. Must be re-validated with sql.validate."
+        "Outputs: revised SQL candidate (can_fix=True) OR stop signal (can_fix=False). "
+        "If can_fix=False, do NOT call sql.revise again — the SQL cannot be "
+        "automatically fixed. Instead, generate a new SQL with sql.generate "
+        "or explain the problem to the user and finalize."
     ),
     "result.profile": (
         "Profile query execution results to detect patterns, anomalies, and notable facts. "
