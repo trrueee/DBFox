@@ -7,6 +7,87 @@ from typing import Any, Hashable, cast
 from engine.agent_kernel.lifecycle import answer_node, context_node, reflect_node, resolve_reference, understand_node
 from engine.agent_kernel.state import KernelState, latest_user_message
 
+# -- leaf modules (no internal deps) ---------------------------------------
+from engine.agent_kernel.graph_shared import (  # noqa: F401  # re-exported
+    MAX_SQL_REVISIONS,
+    MAX_TRANSIENT_RETRIES,
+    RETRY_BACKOFF_BASE_MS,
+    RETRY_BACKOFF_MAX_MS,
+    GraphNode,
+    _answer,
+    _call,
+    _go,
+    _has_tool_call,
+    _intent,
+    _route_trace,
+)
+
+# -- retry helpers ---------------------------------------------------------
+from engine.agent_kernel.graph_retry import (  # noqa: F401  # re-exported
+    _can_retry_transient,
+    _error_telemetry,
+    _failed_tool_name,
+    _is_sql_or_db_semantic_error,
+    _reference_sql,
+    _revision_count,
+    _revision_reason,
+)
+
+# -- intent routing --------------------------------------------------------
+from engine.agent_kernel.graph_intent import (  # noqa: F401  # re-exported
+    INTENT_ROUTE_MAP,
+    _route_intent,
+    _route_intent_node,
+    _route_intent_routes,
+)
+
+# -- observation -----------------------------------------------------------
+from engine.agent_kernel.graph_observation import (  # noqa: F401  # re-exported
+    TOOL_FALLBACK_ROUTE_MAP,
+    _after_observe,
+    _after_sql_critic,
+    _observe_node,
+    _observe_routes,
+)
+
+# -- SQL workflow nodes + conditional edges --------------------------------
+from engine.agent_kernel.graph_sql_nodes import (  # noqa: F401  # re-exported
+    _after_approval,
+    _after_build_query_plan,
+    _after_build_schema_context,
+    _after_chart_suggest,
+    _after_controller,
+    _after_followup_suggest,
+    _after_generate_sql,
+    _after_load_followup_context,
+    _after_policy,
+    _after_profile_result,
+    _after_revise_sql,
+    _after_synthesize_answer,
+    _after_transient_retry,
+    _after_validate_sql,
+    _approval_help_node,
+    _build_query_plan_node,
+    _build_schema_context_node,
+    _chart_request_node,
+    _chart_suggest_node,
+    _clarification_node,
+    _execute_sql_node,
+    _execution_decision_node,
+    _execution_result_route_node,
+    _explain_sql_node,
+    _followup_suggest_node,
+    _generate_sql_node,
+    _load_followup_context_node,
+    _profile_result_node,
+    _revise_sql_node,
+    _skip_execution_node,
+    _synthesize_answer_node,
+    _transient_retry_node,
+    _validate_sql_node,
+    _validation_route_node,
+)
+
 LangGraphStateGraph: Any
 try:
     from langgraph.graph import END, START, StateGraph as _LangGraphStateGraph
@@ -18,15 +99,15 @@ except ImportError:  # pragma: no cover
     LangGraphStateGraph = None
 
 
-GraphNode = Callable[[KernelState], dict[str, Any]]
-MAX_SQL_REVISIONS = 3
-MAX_TRANSIENT_RETRIES = 3
-RETRY_BACKOFF_BASE_MS = 250
-RETRY_BACKOFF_MAX_MS = 2_000
-
-
 def langgraph_available() -> bool:
     return importlib.util.find_spec("langgraph") is not None
+
+
+def _noop_node(_state: KernelState) -> dict[str, Any]:
+    return {"status": "running"}
+
+
+# -- graph composition -------------------------------------------------------
 
 
 def build_agent_kernel_graph(
@@ -100,6 +181,7 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("followup_suggest", _after_followup_suggest, {"policy": "policy", "synthesize_answer": "synthesize_answer"})
     graph.add_conditional_edges("synthesize_answer", _after_synthesize_answer, {"policy": "policy", "answer": "answer"})
     graph.add_conditional_edges("load_followup_context", _after_load_followup_context, {"policy": "policy", "profile_result": "profile_result"})
+
     controller_routes: dict[Hashable, str] = {"policy": "policy", "route_intent": "route_intent", "answer": "answer", "end": END}
     if approval_interrupt_node is not None:
         controller_routes["approval_interrupt"] = "approval_interrupt"
@@ -118,486 +200,3 @@ def build_agent_kernel_graph(
     graph.add_conditional_edges("sql_critic", _after_sql_critic, {"revise_sql": "revise_sql", "validate_sql": "validate_sql", "synthesize_answer": "synthesize_answer", "answer": "answer"})
     graph.add_edge("answer", END)
     return graph.compile(checkpointer=checkpointer, cache=InMemoryCache())
-
-
-def _noop_node(_state: KernelState) -> dict[str, Any]:
-    return {"status": "running"}
-
-
-def _route_intent_node(state: KernelState) -> dict[str, Any]:
-    route = _route_intent(state)
-    return {"agent_graph_route": route, "trace_events": [{"type": "agent.route_intent", "payload": {"intent": _intent(state), "route": route, "reference": resolve_reference(state)}}]}
-
-
-INTENT_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
-    "new_data_question": "build_schema_context",
-    "revise_sql": "revise_sql",
-    "explain_sql": "explain_sql",
-    "approval_help": "approval_help",
-    "followup_on_result": lambda state: "load_followup_context" if state.get("follow_up_context") and not state.get("followup_context") else "profile_result",
-    "chart_request": "chart_request",
-    "clarification": "clarification",
-}
-
-
-def _route_intent(state: KernelState) -> str:
-    intent = _intent(state)
-    route = INTENT_ROUTE_MAP.get(intent)
-    if isinstance(route, str):
-        return route
-    if callable(route):
-        return route(state)
-    return "controller"
-
-
-def _route_intent_routes() -> dict[Hashable, str]:
-    return {"build_schema_context": "build_schema_context", "revise_sql": "revise_sql", "explain_sql": "explain_sql", "approval_help": "approval_help", "load_followup_context": "load_followup_context", "profile_result": "profile_result", "chart_request": "chart_request", "clarification": "clarification", "controller": "controller"}
-
-
-def _build_schema_context_node(state: KernelState) -> dict[str, Any]:
-    if state.get("schema_context"):
-        return _go("build_query_plan", "Schema context already exists.")
-    return _call("schema.build_context", {"question": latest_user_message(state)}, "Build schema context for data question.")
-
-
-def _build_query_plan_node(state: KernelState) -> dict[str, Any]:
-    if state.get("query_plan"):
-        return _go("generate_sql", "Query plan already exists.")
-    return _call("query_plan.build", {}, "Build query plan from schema context.")
-
-
-def _generate_sql_node(state: KernelState) -> dict[str, Any]:
-    if state.get("sql"):
-        return _go("sql_critic", "SQL candidate already exists.")
-    return _call("sql.generate", {}, "Generate SQL candidate.")
-
-
-def _revise_sql_node(state: KernelState) -> dict[str, Any]:
-    if _revision_count(state) >= MAX_SQL_REVISIONS:
-        return _answer("I could not produce a safe SQL after multiple revision attempts. Please clarify the metric, table, or filter you want to use.", "Max SQL revision attempts reached.")
-    sql = state.get("sql") or _reference_sql(state)
-    if not sql:
-        return _answer("I need an existing SQL statement before I can revise it.", "No SQL reference was available for revision.")
-    return _call("sql.revise", {"sql": sql, "user_instruction": latest_user_message(state), "error": _revision_reason(state)}, "Revise SQL from critic, validation, execution, or user instruction.")
-
-
-def _validate_sql_node(state: KernelState) -> dict[str, Any]:
-    if state.get("safety"):
-        return _go("validation_route", "SQL safety result already exists.")
-    return _call("sql.validate", {"sql": state.get("sql")}, "Validate SQL before execution.")
-
-
-def _validation_route_node(state: KernelState) -> Any:
-    from langgraph.types import Command
-    safety = state.get("safety") if isinstance(state.get("safety"), dict) else {}
-    if not safety:
-        return Command(update=_route_trace("validate_sql", "Missing validation result."), goto="validate_sql")
-    if safety.get("can_execute"):
-        return Command(update=_route_trace("execution_decision", "SQL passed TrustGate."), goto="execution_decision")
-    blocked = [str(reason) for reason in safety.get("blocked_reasons", [])]
-    hard_blockers = [reason for reason in blocked if reason != "requires_confirmation"]
-    if hard_blockers and _revision_count(state) < MAX_SQL_REVISIONS:
-        return Command(update=_route_trace("revise_sql", "TrustGate blocked SQL; revise."), goto="revise_sql")
-    if safety.get("requires_confirmation") and not hard_blockers:
-        return Command(update=_route_trace("execution_decision", "SQL requires approval before execution."), goto="execution_decision")
-    return Command(update=_route_trace("synthesize_answer", "Explain why SQL cannot be executed safely."), goto="synthesize_answer")
-
-
-def _execution_decision_node(state: KernelState) -> Any:
-    from langgraph.types import Command
-    if state.get("execute", True):
-        return Command(update=_route_trace("execute_sql", "Execution enabled."), goto="execute_sql")
-    return Command(update=_route_trace("skip_execution", "Execution disabled by request."), goto="skip_execution")
-
-
-def _execute_sql_node(_state: KernelState) -> dict[str, Any]:
-    return _call("sql.execute_readonly", {}, "Execute validated read-only SQL through PolicyGate.")
-
-
-def _skip_execution_node(_state: KernelState) -> dict[str, Any]:
-    return _call("sql.skip_execution", {}, "Record review-only execution skip.")
-
-
-def _execution_result_route_node(state: KernelState) -> Any:
-    from langgraph.types import Command
-    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
-    telemetry = _error_telemetry(state)
-    if telemetry and telemetry.get("retryable"):
-        return Command(update=_route_trace("transient_retry", "Execution failed with retryable telemetry."), goto="transient_retry")
-    if telemetry and _is_sql_or_db_semantic_error(state) and _revision_count(state) < MAX_SQL_REVISIONS:
-        return Command(update=_route_trace("revise_sql", "Execution failed with non-retryable SQL/DB error; revise SQL."), goto="revise_sql")
-    if not execution:
-        return Command(update=_route_trace("execution_decision", "Missing execution result."), goto="execution_decision")
-    if execution.get("success") is False and _revision_count(state) < MAX_SQL_REVISIONS:
-        return Command(update=_route_trace("revise_sql", "Execution failed; revise SQL."), goto="revise_sql")
-    if execution.get("success") is False:
-        return Command(update=_route_trace("synthesize_answer", "Explain execution failure after retry limit."), goto="synthesize_answer")
-    return Command(update=_route_trace("profile_result", "Execution succeeded."), goto="profile_result")
-
-
-def _transient_retry_node(state: KernelState) -> dict[str, Any]:
-    telemetry = _error_telemetry(state)
-    failed_tool_call = state.get("last_failed_tool_call") if isinstance(state.get("last_failed_tool_call"), dict) else {}
-    tool_name = str(failed_tool_call.get("tool_name") or telemetry.get("tool_name") or state.get("last_tool_name") or "")
-    if not tool_name or not failed_tool_call:
-        return _call("answer.synthesize", {}, "Cannot retry because failed tool context is missing.")
-
-    counters = dict(state.get("retry_counters") or {})
-    current_attempts = int(counters.get(tool_name, 0))
-    if current_attempts >= MAX_TRANSIENT_RETRIES:
-        return {
-            "status": "running",
-            "error": str(state.get("error") or telemetry.get("error_type") or "Retry limit reached."),
-            "pending_tool_call": None,
-            "agent_graph_route": "synthesize_answer",
-            "trace_events": [
-                {
-                    "type": "agent.retry.exhausted",
-                    "payload": {"tool_name": tool_name, "attempts": current_attempts, "telemetry": telemetry},
-                }
-            ],
-        }
-
-    next_attempt = current_attempts + 1
-    counters[tool_name] = next_attempt
-    backoff_ms = min(RETRY_BACKOFF_BASE_MS * (2 ** max(next_attempt - 1, 0)), RETRY_BACKOFF_MAX_MS)
-    retry_call = {"tool_name": tool_name, "args": dict(failed_tool_call.get("args") or {})}
-    return {
-        "status": "running",
-        "error": None,
-        "pending_tool_call": retry_call,
-        "retry_counters": counters,
-        "trace_events": [
-            {
-                "type": "agent.retry.scheduled",
-                "payload": {"tool_name": tool_name, "attempt": next_attempt, "backoff_ms": backoff_ms, "telemetry": telemetry},
-            }
-        ],
-    }
-
-
-def _profile_result_node(state: KernelState) -> dict[str, Any]:
-    if not state.get("execution") and not state.get("result_profile"):
-        return _call("answer.synthesize", {}, "Answer from available context because no execution result is loaded.")
-    if state.get("result_profile"):
-        return _go("chart_suggest", "Result profile already exists.")
-    return _call("result.profile", {}, "Profile execution result.")
-
-
-def _chart_suggest_node(state: KernelState) -> dict[str, Any]:
-    if state.get("chart_suggestion"):
-        return _go("followup_suggest", "Chart suggestion already exists.")
-    return _call("chart.suggest", {}, "Suggest chart when result context exists.")
-
-
-def _followup_suggest_node(state: KernelState) -> dict[str, Any]:
-    if state.get("suggestions"):
-        return _go("synthesize_answer", "Follow-up suggestions already exist.")
-    return _call("followup.suggest", {}, "Suggest useful follow-up questions.")
-
-
-def _synthesize_answer_node(state: KernelState) -> dict[str, Any]:
-    if state.get("answer"):
-        return _go("answer", "Answer already exists.")
-    return _call("answer.synthesize", {}, "Synthesize final answer from graph state and artifacts.")
-
-
-def _load_followup_context_node(state: KernelState) -> dict[str, Any]:
-    if state.get("followup_context"):
-        return _go("profile_result", "Follow-up context already loaded.")
-    return _call("followup.load_context", {}, "Load parent run context for follow-up.")
-
-
-def _chart_request_node(state: KernelState) -> Any:
-    from langgraph.types import Command
-
-    if not state.get("execution") and not state.get("result_profile"):
-        return Command(
-            update={
-                "status": "running",
-                "trace_events": [{
-                    "type": "agent.graph.route",
-                    "payload": {"route": "synthesize_answer", "reason": "Chart request has no result context."},
-                }],
-            },
-            goto="synthesize_answer",
-        )
-    return Command(
-        update={
-            "status": "running",
-            "trace_events": [{
-                "type": "agent.graph.route",
-                "payload": {"route": "chart_suggest", "reason": "Chart request uses existing result context."},
-            }],
-        },
-        goto="chart_suggest",
-    )
-
-
-def _explain_sql_node(state: KernelState) -> dict[str, Any]:
-    sql = state.get("sql") or _reference_sql(state)
-    if not sql:
-        return _answer("I could not find a current SQL statement to explain.", "No SQL reference was available.")
-    return _answer("This request is about the SQL already in context, so I am not starting a new data-question flow or executing the query.\n\n" f"```sql\n{sql}\n```", "Explain SQL branch answered directly from resolved SQL context.")
-
-
-def _approval_help_node(state: KernelState) -> dict[str, Any]:
-    approval = state.get("pending_approval") or {}
-    reference = resolve_reference(state)
-    approval_id = approval.get("id") if isinstance(approval, dict) else reference.get("id")
-    return _answer("This run is waiting for approval before the pending action can continue. I will not simulate approval or execute the pending action in chat. " f"Approval reference: {approval_id or 'current approval context'}.", "Approval help branch explained pending approval without execution.")
-
-
-def _clarification_node(_state: KernelState) -> dict[str, Any]:
-    return {"status": "waiting_user", "pending_decision": {"action": "ask_user", "user_message": "I need a bit more detail before I can continue."}, "trace_events": [{"type": "agent.ask_user", "payload": {"reason": "Clarification branch selected."}}]}
-
-
-def _observe_node(state: KernelState) -> dict[str, Any]:
-    """Normalize latest tool result into agent_observation for routing and diagnostics."""
-    observation = state.get("last_observation") if isinstance(state.get("last_observation"), dict) else {}
-    telemetry = _error_telemetry(state)
-    metadata = state.get("last_tool_metadata")
-    next_route = metadata.get("next_route") if isinstance(metadata, dict) else None
-    tool_name = state.get("last_tool_name")
-    status = observation.get("status")
-    error = observation.get("error")
-    payload = {
-        "tool_name": tool_name,
-        "status": status,
-        "success": status == "success",
-        "has_error": bool(error),
-        "retryable": bool(telemetry.get("retryable")),
-        "semantic_error": _is_sql_or_db_semantic_error(state),
-        "error_type": telemetry.get("error_type"),
-        "next_route": next_route,
-        "route_source": "tool_metadata" if next_route else "fallback_map",
-    }
-    return {"agent_observation": payload, "trace_events": [{"type": "agent.observe", "payload": payload}]}
-
-
-def _has_tool_call(state: KernelState) -> bool:
-    return bool(state.get("pending_tool_call"))
-
-
-def _after_build_schema_context(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "build_query_plan"
-
-
-def _after_build_query_plan(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "generate_sql"
-
-
-def _after_generate_sql(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "sql_critic"
-
-
-def _after_revise_sql(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "answer"
-
-
-def _after_validate_sql(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "validation_route"
-
-
-def _after_transient_retry(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "synthesize_answer"
-
-
-def _after_profile_result(state: KernelState) -> str:
-    if _has_tool_call(state):
-        return "policy"
-    return "chart_suggest" if state.get("result_profile") else "synthesize_answer"
-
-
-def _after_chart_suggest(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "followup_suggest"
-
-
-def _after_followup_suggest(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "synthesize_answer"
-
-
-def _after_synthesize_answer(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "answer"
-
-
-def _after_load_followup_context(state: KernelState) -> str:
-    return "policy" if _has_tool_call(state) else "profile_result"
-
-
-def _after_controller(state: KernelState) -> str:
-    decision = state.get("pending_decision") or {}
-    if decision.get("action") == "call_tool":
-        return "policy"
-    if decision.get("action") == "update_plan":
-        return "route_intent"
-    if decision.get("action") == "wait_approval":
-        return "approval_interrupt"
-    if decision.get("action") in {"final_answer", "ask_user", "pause"}:
-        return "answer"
-    return "end"
-
-
-def _after_policy(state: KernelState) -> str:
-    if state.get("status") == "waiting_approval":
-        return "approval_interrupt"
-    if state.get("pending_tool_call"):
-        return "execute_tool"
-    if state.get("error") and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
-        return "revise_sql"
-    if state.get("error"):
-        return "synthesize_answer"
-    if state.get("status") in {"completed", "failed", "paused", "waiting_user"}:
-        return "answer"
-    return "synthesize_answer"
-
-
-def _after_approval(state: KernelState) -> str:
-    return "execute_tool" if state.get("pending_tool_call") else "answer"
-
-
-TOOL_FALLBACK_ROUTE_MAP: dict[str, str | Callable[[KernelState], str]] = {
-    "schema.build_context": "build_query_plan",
-    "query_plan.build": "generate_sql",
-    "sql.generate": "sql_critic",
-    "sql.revise": "sql_critic",
-    "sql.validate": "validation_route",
-    "sql.execute_readonly": "execution_result_route",
-    "sql.skip_execution": "execution_result_route",
-    "result.profile": "chart_suggest",
-    "chart.suggest": lambda state: "followup_suggest" if _intent(state) == "new_data_question" else "synthesize_answer",
-    "followup.suggest": "synthesize_answer",
-    "followup.load_context": "profile_result",
-    "answer.synthesize": "answer",
-}
-
-
-def _after_observe(state: KernelState) -> str:
-    obs = state.get("agent_observation") if isinstance(state.get("agent_observation"), dict) else {}
-
-    # Error paths: read normalized observation fields first,
-    # fall back to raw state fields for backward compatibility.
-    retryable = obs.get("retryable") if "retryable" in obs else bool(_error_telemetry(state).get("retryable"))
-    semantic_error = obs.get("semantic_error") if "semantic_error" in obs else _is_sql_or_db_semantic_error(state)
-    has_error = obs.get("has_error") if "has_error" in obs else bool(state.get("error") or (state.get("last_error_telemetry") and True))
-
-    if retryable:
-        return "transient_retry" if _can_retry_transient(state) else "synthesize_answer"
-    if semantic_error and has_error and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
-        return "revise_sql"
-    if has_error and state.get("sql") and _revision_count(state) < MAX_SQL_REVISIONS:
-        return "revise_sql"
-    if has_error:
-        return "synthesize_answer"
-
-    # Happy path: tool metadata next_route first, then fallback map.
-    next_route = obs.get("next_route")
-    if isinstance(next_route, str) and next_route:
-        if next_route == "followup_suggest" and _intent(state) != "new_data_question":
-            return "synthesize_answer"
-        return next_route
-    # Fallback: last_tool_metadata (for backward compatibility).
-    metadata = state.get("last_tool_metadata")
-    if isinstance(metadata, dict):
-        next_route = metadata.get("next_route")
-        if isinstance(next_route, str) and next_route:
-            if next_route == "followup_suggest" and _intent(state) != "new_data_question":
-                return "synthesize_answer"
-            return next_route
-    tool_name = str(state.get("last_tool_name") or "")
-    if tool_name.startswith("workspace."):
-        return "answer"
-    route = TOOL_FALLBACK_ROUTE_MAP.get(tool_name)
-    if isinstance(route, str):
-        return route
-    if callable(route):
-        return route(state)
-    return "synthesize_answer"
-
-
-def _observe_routes() -> dict[Hashable, str]:
-    return {"build_query_plan": "build_query_plan", "generate_sql": "generate_sql", "sql_critic": "sql_critic", "validation_route": "validation_route", "execution_result_route": "execution_result_route", "transient_retry": "transient_retry", "profile_result": "profile_result", "chart_suggest": "chart_suggest", "followup_suggest": "followup_suggest", "synthesize_answer": "synthesize_answer", "revise_sql": "revise_sql", "answer": "answer"}
-
-
-def _after_sql_critic(state: KernelState) -> str:
-    reflection = state.get("agent_reflection") if isinstance(state.get("agent_reflection"), dict) else {}
-    critique = reflection.get("sql_critique") if isinstance(reflection.get("sql_critique"), dict) else state.get("agent_sql_critique")
-    if isinstance(critique, dict) and critique.get("needs_revision"):
-        return "revise_sql" if _revision_count(state) < MAX_SQL_REVISIONS else "synthesize_answer"
-    return "validate_sql"
-
-
-def _route_trace(route: str, reason: str) -> dict[str, Any]:
-    return {"status": "running", "trace_events": [{"type": "agent.graph.route", "payload": {"route": route, "reason": reason}}]}
-
-
-def _intent(state: KernelState) -> str:
-    payload = state.get("agent_intent") if isinstance(state.get("agent_intent"), dict) else {}
-    return str(payload.get("intent") or "new_data_question")
-
-
-def _call(tool_name: str, args: dict[str, Any], reason: str) -> dict[str, Any]:
-    return {"status": "running", "pending_tool_call": {"tool_name": tool_name, "args": args, "reason": reason}, "trace_events": [{"type": "agent.graph.tool", "payload": {"tool_name": tool_name, "reason": reason}}]}
-
-
-def _go(route: str, reason: str) -> dict[str, Any]:
-    return _route_trace(route, reason)
-
-
-def _answer(answer: str, reason: str) -> dict[str, Any]:
-    payload = {"answer": answer, "key_findings": [], "evidence": [], "caveats": [], "recommendations": [], "follow_up_questions": []}
-    return {"status": "completed", "agent_graph_route": "answer", "answer": payload, "final_answer": payload, "trace_events": [{"type": "agent.graph.answer", "payload": {"reason": reason}}]}
-
-
-def _error_telemetry(state: KernelState) -> dict[str, Any]:
-    telemetry = state.get("last_error_telemetry")
-    return telemetry if isinstance(telemetry, dict) else {}
-
-
-def _failed_tool_name(state: KernelState) -> str:
-    failed_tool_call = state.get("last_failed_tool_call") if isinstance(state.get("last_failed_tool_call"), dict) else {}
-    telemetry = _error_telemetry(state)
-    return str(failed_tool_call.get("tool_name") or telemetry.get("tool_name") or state.get("last_tool_name") or "")
-
-
-def _can_retry_transient(state: KernelState) -> bool:
-    tool_name = _failed_tool_name(state)
-    if not tool_name:
-        return False
-    counters = state.get("retry_counters") if isinstance(state.get("retry_counters"), dict) else {}
-    return int(counters.get(tool_name, 0)) < MAX_TRANSIENT_RETRIES
-
-
-def _is_sql_or_db_semantic_error(state: KernelState) -> bool:
-    telemetry = _error_telemetry(state)
-    tool_name = _failed_tool_name(state)
-    error_type = str(telemetry.get("error_type") or "").lower()
-    if tool_name in {"sql.execute_readonly", "sql.validate"}:
-        return True
-    semantic_tokens = ("sql", "database", "dbapi", "programmingerror", "operationalerror", "databaseerror", "syntax", "sqlite")
-    return any(token in error_type for token in semantic_tokens)
-
-
-def _reference_sql(state: KernelState) -> str | None:
-    reference = resolve_reference(state)
-    sql_preview = reference.get("sql_preview")
-    return sql_preview.strip() if isinstance(sql_preview, str) and sql_preview.strip() else None
-
-
-def _revision_reason(state: KernelState) -> str:
-    reflection = state.get("agent_reflection") if isinstance(state.get("agent_reflection"), dict) else {}
-    critique = reflection.get("sql_critique") if isinstance(reflection.get("sql_critique"), dict) else state.get("agent_sql_critique")
-    if isinstance(critique, dict) and critique.get("issues"):
-        return "; ".join(str(issue) for issue in critique.get("issues", []))
-    telemetry = _error_telemetry(state)
-    if telemetry:
-        return str(telemetry.get("error_type") or state.get("error") or "Tool execution failed.")
-    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
-    return str(execution.get("revise_suggestion") or state.get("error") or latest_user_message(state) or "Revise SQL.")
-
-
-def _revision_count(state: KernelState) -> int:
-    value = state.get("revision_count")
-    if isinstance(value, int):
-        return value
-    return 1 if state.get("revision_attempted") else 0
