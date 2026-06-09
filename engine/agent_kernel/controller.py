@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from engine.agent_kernel.schemas import AgentDecision, ToolCallDecision
+from engine.agent_kernel.schemas import AgentDecision, ApprovalDecisionContext, ToolCallDecision
 from engine.agent_kernel.state import KernelState, latest_user_message
 
 
@@ -16,7 +16,7 @@ CONTROLLER_SYSTEM_PROMPT = """
 You are the DataBox Agent Kernel emergency fallback controller.
 The LangGraph topology owns the Text-to-SQL control flow.
 Do not start schema discovery, query planning, SQL generation, validation, execution, profiling, charting, or follow-up generation from this controller.
-Only handle existing answers, approval explanations, workspace-local help, graph errors, and last-resort synthesis from existing artifacts.
+Only handle existing answers, approval state, workspace-local help, graph errors, and last-resort synthesis from existing artifacts.
 """
 
 
@@ -41,14 +41,16 @@ def _fallback_decision(state: KernelState) -> AgentDecision:
     if state.get("pending_approval") or _as_dict(state.get("workspace_context")).get("pending_approval_id"):
         approval = _approval_preview(state.get("pending_approval")) or _workspace_context_summary(state.get("workspace_context")) or {}
         return AgentDecision(
-            action="final_answer",
-            final_answer=(
-                "This run is waiting for approval before the pending action can continue. "
-                "I will not simulate approval or execute the pending action in chat. "
-                f"Approval context: {json.dumps(approval, ensure_ascii=False, default=str)}"
+            action="wait_approval",
+            approval_context=ApprovalDecisionContext(
+                approval_id=_string_or_none(approval.get("id") or approval.get("pending_approval_id")),
+                tool_name=_string_or_none(approval.get("tool_name")),
+                risk_level=_string_or_none(approval.get("risk_level")),
+                status=_string_or_none(approval.get("status") or approval.get("pending_approval_status")),
+                reason=_string_or_none(approval.get("reason") or approval.get("pending_approval_reason")),
             ),
             confidence="high",
-            reasoning_summary="Explain pending approval from existing state.",
+            reasoning_summary="Existing graph state is waiting for human approval.",
         )
 
     workspace_tool = _workspace_tool_from_state(state)
@@ -111,6 +113,7 @@ def _workspace_context_summary(value: Any) -> dict[str, Any] | None:
         "selected_artifact_id": context.get("selected_artifact_id"),
         "pending_approval_id": context.get("pending_approval_id"),
         "pending_approval_status": context.get("pending_approval_status"),
+        "pending_approval_reason": _preview_text(context.get("pending_approval_reason")),
         "has_selected_sql": bool(context.get("selected_sql")),
         "has_active_sql": bool(context.get("active_sql")),
         "has_last_query_result_preview": bool(context.get("last_query_result_preview")),
@@ -158,6 +161,13 @@ def _preview_text(value: Any, *, limit: int = TEXT_PREVIEW_LIMIT) -> str | None:
         text = json.dumps(value, ensure_ascii=False, default=str, sort_keys=True)
     text = text.strip()
     return text if len(text) <= limit else f"{text[:limit]}..."
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _call(tool_name: str, args: dict[str, Any], reason: str) -> AgentDecision:
