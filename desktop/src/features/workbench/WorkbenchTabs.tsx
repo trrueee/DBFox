@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { Plus, Table2, Terminal, X } from "lucide-react";
 import type { WorkbenchTab } from "./types";
 
@@ -5,7 +6,7 @@ interface WorkbenchTabsProps {
   tabs: WorkbenchTab[];
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
-  onCloseTab: (tabId: string, event?: React.MouseEvent) => void;
+  onCloseTab: (tabId: string, event?: MouseEvent) => void;
   onNewQuery: () => void;
   onCloseOtherTabs: () => void;
   onCloseTabsToRight: () => void;
