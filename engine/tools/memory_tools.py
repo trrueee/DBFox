@@ -1,7 +1,9 @@
-"""Agent-facing memory tools: search, write, delete, propose, summarize.
+"""Agent-facing memory tool handlers: search, write, delete, summarize.
 
 Registered into ToolRegistry so the agent can actively manage memory.
+Infrastructure lives in engine.memory — zero engine.agent.* imports.
 """
+
 from __future__ import annotations
 
 import logging
@@ -9,18 +11,14 @@ from typing import Any
 
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.tool_registry import ToolContext
-from engine.agent.memory.long_term_store import get_long_term_store
-from engine.agent.memory.memory_policy import is_safe_for_long_term, default_status
-from engine.agent.memory.memory_schema import MemoryRecord, MemoryType, MemorySource
-from engine.agent.memory.memory_namespace import MemoryNamespace
-from engine.agent.memory.session_memory import get_session_memory_service
+from engine.memory.long_term_store import get_long_term_store
+from engine.memory.memory_policy import is_safe_for_long_term, default_status
+from engine.memory.memory_schema import MemoryRecord
+from engine.memory.memory_namespace import MemoryNamespace
+from engine.memory.session_memory import get_session_memory_service
 
 logger = logging.getLogger("databox.memory.tools")
 
-
-# ---------------------------------------------------------------------------
-# memory.search
-# ---------------------------------------------------------------------------
 
 def memory_search(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Search long-term memory for relevant context."""
@@ -71,10 +69,6 @@ def memory_search(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
         latency_ms=0,
     )
 
-
-# ---------------------------------------------------------------------------
-# memory.write
-# ---------------------------------------------------------------------------
 
 def memory_write(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Write a memory explicitly requested by the user or confirmed by agent."""
@@ -132,10 +126,6 @@ def memory_write(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     )
 
 
-# ---------------------------------------------------------------------------
-# memory.delete
-# ---------------------------------------------------------------------------
-
 def memory_delete(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Delete or mark a memory as deleted."""
     memory_id = str(args.get("memory_id") or "")
@@ -153,10 +143,6 @@ def memory_delete(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
         latency_ms=0,
     )
 
-
-# ---------------------------------------------------------------------------
-# memory.summarize_session
-# ---------------------------------------------------------------------------
 
 def memory_summarize_session(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Summarize the current session context for future recall."""
@@ -195,13 +181,13 @@ def memory_summarize_session(ctx: ToolContext, args: dict[str, Any]) -> ToolObse
 # ---------------------------------------------------------------------------
 
 def _get_user_id(ctx: ToolContext) -> str | None:
-    return ctx.state.get("user_id") or ctx.state.get("thread_id")
+    return ctx.state_view.get("user_id") or ctx.state_view.get("thread_id")
 
 def _get_datasource_id(ctx: ToolContext) -> str | None:
-    return str(ctx.state.get("datasource_id") or "")
+    return str(ctx.state_view.get("datasource_id") or "")
 
 def _get_project_id(ctx: ToolContext) -> str | None:
-    return ctx.state.get("project_id")
+    return ctx.state_view.get("project_id")
 
 def _get_session_id(ctx: ToolContext) -> str:
-    return str(ctx.state.get("thread_id") or ctx.state.get("session_id") or "unknown")
+    return str(ctx.state_view.get("thread_id") or ctx.state_view.get("session_id") or "unknown")

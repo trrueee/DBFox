@@ -35,7 +35,6 @@ class ToolPolicy:
     requires_approval: bool = False
     requires_validated_sql: bool = False
     allowed_execution_modes: list[str] = field(default_factory=list)
-    max_retries: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +49,7 @@ class ToolExecutionSpec:
     timeout_seconds: int = 30
     idempotent: bool = True
     retryable: bool = False
+    max_retries: int = 0
     concurrency: ConcurrencyMode = "sequential"
 
 
@@ -201,3 +201,37 @@ class ToolRegistry:
 
     def list_specs(self) -> list[ToolSpec]:
         return [self._tools[name].spec for name in sorted(self._tools)]
+
+
+# ---------------------------------------------------------------------------
+# Tool group mapping — static, no agent runtime dependency
+# ---------------------------------------------------------------------------
+
+TOOL_GROUP_MAP: dict[str, str] = {
+    "workspace.": "workspace",
+    "environment.": "environment",
+    "schema.": "schema",
+    "semantic.": "semantic",
+    "query_plan.": "query_plan",
+    "sql.generate": "sql_generation",
+    "sql.validate": "sql_validation",
+    "sql.revise": "sql_repair",
+    "sql.execute_readonly": "execution",
+    "sql.skip_execution": "execution",
+    "result.": "result",
+    "chart.": "chart",
+    "followup.": "answer",
+    "answer.": "answer",
+    "memory.": "answer",
+}
+
+
+def tool_to_group(tool_name: str) -> str | None:
+    """Map a tool name to its planner group.  Returns None if unmapped."""
+    for prefix, group in TOOL_GROUP_MAP.items():
+        if tool_name == prefix.rstrip("."):
+            return group
+    for prefix, group in TOOL_GROUP_MAP.items():
+        if tool_name.startswith(prefix):
+            return group
+    return None

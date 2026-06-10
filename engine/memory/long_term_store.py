@@ -1,4 +1,4 @@
-"""LongTermMemory store â€” cross-session persistent memories.
+"""LongTermMemory store â€?cross-session persistent memories.
 
 Backed by an in-memory store (first phase) with the same API surface
 that a PostgresStore / SQLiteStore would provide in production.
@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from engine.agent.memory.memory_schema import (
+from engine.memory.memory_schema import (
     MemoryRecord,
     MemoryType,
     MemoryStatus,

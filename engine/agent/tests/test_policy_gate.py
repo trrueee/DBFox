@@ -10,7 +10,7 @@ from engine.agent_core.tool_registry import (
     ToolRegistry,
     ToolSpec,
 )
-from engine.agent.guardrails.policy_gate import PolicyGate, PolicyDecision
+from engine.policy.gate import PolicyGate, PolicyDecision
 
 
 def _make_tool(

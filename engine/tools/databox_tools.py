@@ -222,7 +222,7 @@ def register_databox_tools() -> ToolRegistry:
     ))
 
     # Memory tools
-    from engine.agent.memory.memory_tools import (
+    from engine.tools.memory_tools import (
         memory_search,
         memory_write,
         memory_delete,

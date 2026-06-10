@@ -5,45 +5,11 @@ from typing import Any
 from pydantic import BaseModel
 from langchain_core.tools import StructuredTool
 
-from engine.agent_core.tool_registry import ToolRegistry
+from engine.agent_core.tool_registry import ToolRegistry, tool_to_group
 from engine.agent.tools.tool_manifest import enrich_description
 from engine.agent.tools.tool_aliases import to_alias
 
 logger = logging.getLogger("databox.databox_agent.tools.registry_bridge")
-
-# Maps tool name prefix / exact name → planner tool group.
-# Used to filter tools by plan_directive.allowed_tool_groups.
-# Matching is prefix-based, with exact matches taking priority.
-TOOL_GROUP_MAP: dict[str, str] = {
-    "workspace.": "workspace",
-    "environment.": "environment",
-    "schema.": "schema",
-    "semantic.": "semantic",
-    "query_plan.": "query_plan",
-    "sql.generate": "sql_generation",
-    "sql.validate": "sql_validation",
-    "sql.revise": "sql_repair",
-    "sql.execute_readonly": "execution",
-    "sql.skip_execution": "execution",
-    "result.": "result",
-    "chart.": "chart",
-    "followup.": "answer",
-    "answer.": "answer",
-    "memory.": "answer",
-}
-
-
-def tool_to_group(tool_name: str) -> str | None:
-    """Map a tool name to its planner group.  Returns None if unmapped."""
-    # Check exact matches first
-    for prefix, group in TOOL_GROUP_MAP.items():
-        if tool_name == prefix.rstrip("."):
-            return group
-    # Then prefix matches
-    for prefix, group in TOOL_GROUP_MAP.items():
-        if tool_name.startswith(prefix):
-            return group
-    return None
 
 
 class EmptyToolInput(BaseModel):

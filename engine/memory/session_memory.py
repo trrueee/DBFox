@@ -1,4 +1,4 @@
-"""SessionMemory service â€” maintains per-session context across runs.
+"""SessionMemory service â€?maintains per-session context across runs.
 
 Tracks the last question, SQL, execution, and artifacts so follow-up
 requests ("export that", "revise the query", "chart the result") work
@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent.memory.memory_schema import SessionMemory
+from engine.memory.memory_schema import SessionMemory
 
 logger = logging.getLogger("databox.memory.session")
 

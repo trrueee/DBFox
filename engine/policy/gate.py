@@ -3,8 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 
-from engine.agent_core.tool_registry import ToolRegistry
-from engine.agent.tools.registry_bridge import tool_to_group
+from engine.agent_core.tool_registry import ToolRegistry, tool_to_group
 
 
 class PolicyDecision(BaseModel):
