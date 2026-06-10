@@ -1,25 +1,7 @@
 import { request } from "./client";
-import type {
-  DangerousOperationResult,
-  DeleteResponse,
-  TableDesignColumn,
-  TableDesignDraft,
-  TableDesignExecutionResult,
-  TableDesignIndex,
-} from "./types";
+import type { DangerousOperationResult } from "./types";
 
 export const tableDesignApi = {
-  executeTableDesignDDL: (datasourceId: string, ddl: string, confirm?: { token: string; text: string }) =>
-    request<DangerousOperationResult<TableDesignExecutionResult>>("/schema/design/execute-ddl", {
-      method: "POST",
-      body: JSON.stringify({
-        datasource_id: datasourceId,
-        ddl,
-        confirm_token: confirm?.token,
-        confirm_text: confirm?.text,
-      }),
-    }),
-
   generateTestData: (params: { datasource_id: string; table_name: string; row_count?: number; language?: string }, confirm?: { token: string; text: string }) =>
     request<DangerousOperationResult<{ success: boolean; tableName: string; insertedRows: number; latencyMs: number; message: string }>>("/schema/generate-test-data", {
       method: "POST",
@@ -29,26 +11,4 @@ export const tableDesignApi = {
         confirm_text: confirm?.text,
       }),
     }),
-
-  listTableDesignDrafts: (projectId: string) =>
-    request<TableDesignDraft[]>(`/schema/design/drafts?project_id=${projectId}`),
-
-  getTableDesignDraft: (draftId: string) =>
-    request<TableDesignDraft>(`/schema/design/drafts/${draftId}`),
-
-  saveTableDesignDraft: (req: {
-    project_id: string;
-    draft_id?: string;
-    table_name: string;
-    table_comment?: string;
-    columns: TableDesignColumn[];
-    indexes: TableDesignIndex[];
-  }) =>
-    request<TableDesignDraft>("/schema/design/drafts/save", {
-      method: "POST",
-      body: JSON.stringify(req),
-    }),
-
-  deleteTableDesignDraft: (draftId: string) =>
-    request<DeleteResponse>(`/schema/design/drafts/${draftId}`, { method: "DELETE" }),
 };
