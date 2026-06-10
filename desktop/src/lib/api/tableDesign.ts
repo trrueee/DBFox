@@ -2,7 +2,6 @@ import { request } from "./client";
 import type {
   DangerousOperationResult,
   DeleteResponse,
-  TableDesignAiResponse,
   TableDesignColumn,
   TableDesignDraft,
   TableDesignExecutionResult,
@@ -52,15 +51,4 @@ export const tableDesignApi = {
 
   deleteTableDesignDraft: (draftId: string) =>
     request<DeleteResponse>(`/schema/design/drafts/${draftId}`, { method: "DELETE" }),
-
-  generateTableDesignAi: (prompt: string, config?: { apiKey?: string; apiBase?: string; model?: string }) =>
-    request<TableDesignAiResponse>("/schema/design/ai-generate", {
-      method: "POST",
-      body: JSON.stringify({
-        prompt,
-        api_key: config?.apiKey,
-        api_base: config?.apiBase,
-        model_name: config?.model,
-      }),
-    }),
 };
