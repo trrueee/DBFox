@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEvent } from "react";
 import { Sparkles } from "lucide-react";
 import "./App.css";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
@@ -6,6 +6,7 @@ import { ConversationHistoryPanel } from "./features/conversation/ConversationHi
 import { deleteConversation, listConversations, saveConversation } from "./features/conversation/conversationRepository";
 import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
 import { DataSourceTree } from "./features/datasource/DataSourceTree";
+import { LlmSettingsWorkspace } from "./features/workspace/LlmSettingsWorkspace";
 import { MultiTableWorkspace } from "./features/workspace/MultiTableWorkspace";
 import { QueryResultWorkspace } from "./features/workspace/QueryResultWorkspace";
 import { SmartQueryHome } from "./features/workspace/SmartQueryHome";
@@ -123,6 +124,12 @@ export default function App() {
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "对话历史", type: "conversation-history" }]));
     setActiveTabId(tabId);
     setRecentTab("chat");
+  };
+
+  const openLlmSettingsTab = () => {
+    const tabId = "llm-settings";
+    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "模型配置", type: "llm-settings" }]));
+    setActiveTabId(tabId);
   };
 
   const openConversationResult = (conversation: Conversation) => {
@@ -268,6 +275,9 @@ export default function App() {
     if (activeTab.type === "conversation-history") {
       return <ConversationHistoryPanel conversations={conversations} activeConversationId={activeTab.conversationId} onOpenConversation={openConversationResult} onDeleteConversation={deleteConversationById} />;
     }
+    if (activeTab.type === "llm-settings") {
+      return <LlmSettingsWorkspace onToast={showToast} />;
+    }
     if (activeTab.type === "table") {
       const tableId = activeTab.tableId || "id_users";
       return <TableWorkspace tableId={tableId} currentSubTab={tableSubTabs[tableId] || "preview"} onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [tableId]: subTab }))} onOpenSqlConsole={openSqlConsole} onToast={showToast} />;
@@ -283,7 +293,7 @@ export default function App() {
 
   return (
     <div className="hifi-viewport-wrapper">
-      <div className="hifi-canvas-board" style={{ "--scale": scale } as React.CSSProperties}>
+      <div className="hifi-canvas-board" style={{ "--scale": scale } as CSSProperties}>
         <Header activeHeaderTab={activeHeaderTab} onHeaderTabChange={setActiveHeaderTab} />
         <main className="hifi-workspace">
           <DataSourceTree
@@ -308,6 +318,7 @@ export default function App() {
               }}
               onCloseTab={closeTab}
               onOpenSqlConsole={openSqlConsole}
+              onOpenLlmSettings={openLlmSettingsTab}
               onToggleRightDrawer={toggleRightDrawer}
             />
             {renderActiveTab()}
