@@ -102,7 +102,8 @@ export default function App() {
         title: "问数结果",
         type: "query-result",
         queryText,
-        chatMessages: [{ id: 1, sender: "ai", text: "你好！我是你的智能问数助理。针对您的查询，已为您生成以下的可视化分析图表与 SQL。" }],
+        chatMessages: [{ id: 1, sender: "ai", text: "问题已提交给 Agent。等待后端返回 artifacts 后，结果会在下方渲染。" }],
+        artifacts: [],
       },
     ]);
     setActiveTabId(tabId);
@@ -143,7 +144,7 @@ export default function App() {
 
   const sendFollowUp = (tabId: string, text: string) => {
     if (!text.trim()) return;
-    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), { id: Date.now(), sender: "user", text }, { id: Date.now() + 1, sender: "ai", text: "正在根据上下文查询与分析，请稍候..." }] } : tab));
+    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), { id: Date.now(), sender: "user", text }, { id: Date.now() + 1, sender: "ai", text: "已追加追问，等待 Agent 返回新的 artifacts。" }] } : tab));
   };
 
   const renderActiveTab = () => {
@@ -175,7 +176,7 @@ export default function App() {
     if (activeTab.type === "multi-table") {
       return <MultiTableWorkspace tables={activeTab.selectedTables || []} onOpenQueryResult={openQueryResultTab} onToast={showToast} />;
     }
-    return <QueryResultWorkspace tab={activeTab} onOpenSqlConsole={openSqlConsole} onSetSqlQuery={setSqlQuery} onSendFollowUp={sendFollowUp} />;
+    return <QueryResultWorkspace tab={activeTab} onOpenSqlConsole={openSqlConsole} onSetSqlQuery={setSqlQuery} onSendFollowUp={sendFollowUp} onToast={showToast} />;
   };
 
   return (
