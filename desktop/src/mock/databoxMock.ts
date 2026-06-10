@@ -1,6 +1,6 @@
 import type { AgentArtifact } from "../types/agentArtifact";
 
-export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result";
+export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history";
 
 export interface WorkspaceTab {
   id: string;
@@ -9,6 +9,7 @@ export interface WorkspaceTab {
   tableId?: string;
   selectedTables?: string[];
   queryText?: string;
+  conversationId?: string;
   chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
   artifacts?: AgentArtifact[];
 }
