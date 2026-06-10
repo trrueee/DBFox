@@ -1,6 +1,6 @@
 import type { AgentArtifact } from "../types/agentArtifact";
 
-export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-settings";
+export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history";
 
 export interface WorkspaceTab {
   id: string;
