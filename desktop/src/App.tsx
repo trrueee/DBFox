@@ -1,5 +1,5 @@
 import { useState, type MouseEvent } from "react";
-import { Database, FileText, Search, Sparkles, Terminal, Table2, GitMerge, X, Plus, Send, Trash2 } from "lucide-react";
+import { Database, FileText, Search, Sparkles, Terminal, Table2, GitMerge, X, Plus, Send, Trash2, Play } from "lucide-react";
 import "./App.css";
 
 type T = { id: string; title: string; type: "ask" | "table" | "sql" | "multi" | "result"; table?: string; tables?: string[]; query?: string };
