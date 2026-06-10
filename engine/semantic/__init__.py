@@ -1,10 +1,10 @@
-"""Agent Semantic Understanding Layer — maps user business language to database objects.
+"""Semantic Understanding Layer — maps user business language to database objects.
 
 Modules:
-  alias            — SemanticAliasResolver (legacy)
-  schema_linker    — SchemaLinker, SchemaLinkingResult (legacy)
-  semantic_context — SchemaContextBuilder (legacy, renders DDL-style context)
-  query_plan       — QueryPlan, QueryPlanBuilder (legacy)
+  alias            — SemanticAliasResolver
+  schema_linker    — SchemaLinker, SchemaLinkingResult
+  semantic_context — SchemaContextBuilder (renders DDL-style context)
+  query_plan       — QueryPlan, QueryPlanBuilder
   models           — SemanticResolution, ResolvedTerm, ResolvedMetric, etc.
   resolver         — SemanticResolver (LLM + verifier)
   verifier         — SemanticVerifier (deterministic catalog checks)
@@ -32,33 +32,31 @@ from engine.semantic.verifier import SemanticVerifier, VerificationIssue, Verifi
 from engine.semantic.resolver import SemanticResolver
 
 __all__ = [
-    # Legacy
     "AliasMatch",
-    "SemanticAliasResolver",
+    "Ambiguity",
+    "CandidateColumn",
+    "CandidateTable",
     "ColumnLink",
-    "SchemaLinker",
-    "SchemaLinkingResult",
-    "SchemaContextBuilder",
-    "TableLink",
+    "JoinPathCandidate",
     "QueryDimension",
     "QueryFilter",
     "QueryJoin",
     "QueryMetric",
     "QueryPlan",
     "QueryPlanBuilder",
-    # New agent semantic layer
-    "Ambiguity",
-    "CandidateColumn",
-    "CandidateTable",
-    "JoinPathCandidate",
     "ResolvedDimension",
     "ResolvedFilter",
     "ResolvedMetric",
     "ResolvedTerm",
+    "SchemaContextBuilder",
+    "SchemaLinker",
+    "SchemaLinkingResult",
+    "SemanticAliasResolver",
     "SemanticResolution",
-    "SemanticSource",
     "SemanticResolver",
+    "SemanticSource",
     "SemanticVerifier",
+    "TableLink",
     "VerificationIssue",
     "VerificationResult",
 ]

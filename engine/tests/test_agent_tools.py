@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from engine.agent import AgentRunRequest
+from engine.agent_core.types import AgentRunRequest
 from engine.agent_core.semantic_retry_policy import semantic_retry_prompt
 from engine.tools.sql_tools import (
     _prepare_generated_sql,

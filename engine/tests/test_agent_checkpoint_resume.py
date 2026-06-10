@@ -4,8 +4,9 @@ import json
 
 import pytest
 
-from engine.agent import AgentRunRequest, DataBoxAgentRuntime
-from engine.agent import persistence as agent_persistence
+from engine.agent import DataBoxAgentRuntime
+from engine.agent_core.types import AgentRunRequest
+from engine.agent_core import persistence as agent_persistence
 from engine.errors import DataBoxError
 from engine.models import AgentRun
 from engine.schema_sync import sync_schema

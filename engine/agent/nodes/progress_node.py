@@ -8,8 +8,9 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.progress.prompts import PROGRESS_JUDGE_SYSTEM_PROMPT
-from engine.agent.model.model_factory import get_chat_model
+from engine.llm import get_chat_model
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.context import graph_context
 
 logger = logging.getLogger("databox.databox_agent.nodes.progress_node")
 
@@ -31,12 +32,12 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
     When no LLM credentials are available, falls back to simple rule-based
     judgment (check step_count vs max_steps, check for error).
     """
-    configurable = config.get("configurable") or {}
-    model_name = configurable.get("model_name")
-    api_key = configurable.get("api_key")
-    api_base = configurable.get("api_base")
+    ctx = graph_context(config)
+    model_name = ctx.model_name
+    api_key = ctx.api_key
+    api_base = ctx.api_base
 
-    if not _has_llm_credentials(api_key):
+    if not ctx.has_llm_credentials:
         return _rule_fallback(state)
 
     # ---- Build the judgment context -----------------------------------------
@@ -184,12 +185,6 @@ def _compact_json(obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":"))
     except Exception:
         return str(obj)[:500]
-
-
-def _has_llm_credentials(api_key: str | None) -> bool:
-    """Check whether we have credentials to call an LLM."""
-    import os
-    return bool((api_key or os.environ.get("OPENAI_API_KEY", "")).strip())
 
 
 def _rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:

@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.guardrails.policy_gate import PolicyGate
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.context import graph_context
 from engine.agent.tools.tool_aliases import to_internal
 
 logger = logging.getLogger("databox.databox_agent.nodes.policy_node")
@@ -39,9 +40,9 @@ def _step_name(tool_name: str) -> str:
 
 
 def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
-    configurable = config.get("configurable") or {}
-    registry = configurable.get("registry")
-    db = configurable.get("db")
+    ctx = graph_context(config)
+    registry = ctx.registry
+    db = ctx.db
 
     last = state.get("messages")[-1]
     tool_calls = getattr(last, "tool_calls", []) or []
@@ -99,7 +100,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
             }
 
             if db is not None:
-                from engine.agent import persistence as ap
+                from engine.agent_core import persistence as ap
                 approval_rec = ap.create_approval(
                     db,
                     run_id=run_id,

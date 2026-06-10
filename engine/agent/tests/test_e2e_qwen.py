@@ -251,7 +251,7 @@ class TestApprovalE2E:
         """Verify the full approval lifecycle with real model + LangGraph interrupt."""
         from engine.agent.app.service import DataBoxAgentService
         from engine.agent_core.types import AgentRunRequest
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
 
         # Phase 1 — run with execute=True; may trigger approval via
         # requires_confirmation on a generated SQL.
@@ -346,7 +346,7 @@ class TestApprovalE2E:
         from engine.agent.graph.state import DataBoxAgentState
         from engine.agent.app.request_context import RequestContext
         from engine.agent_core.types import AgentRunRequest
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         from langgraph.types import Command
 
         run_id = str(uuid.uuid4())
