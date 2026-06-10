@@ -96,15 +96,16 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
       const sample = await api.executeSql(datasource.id, `SELECT * FROM \`${tableName}\` LIMIT 1;`);
       const nextColumns = sample.success ? sample.columns || [] : [];
       setColumns(nextColumns);
-      await runPreviewQuery({ tableName, columns: nextColumns, filter: "", page: 1, pageSize });
+      await runPreviewQuery({ tableName, columns: nextColumns, filter: "", page: 1, pageSize: 100 });
     } catch (error: unknown) {
       setError(getErrorMessage(error, "加载表格架构失败"));
       setLoading(false);
     }
-  }, [datasource.id, pageSize, runPreviewQuery]);
+  }, [datasource.id, runPreviewQuery]);
 
   useEffect(() => {
     setPage(1);
+    setPageSize(100);
     setFilterText("");
     setAppliedFilter("");
     setRows([]);
