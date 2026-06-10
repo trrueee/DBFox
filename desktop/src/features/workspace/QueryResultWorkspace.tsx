@@ -1,4 +1,4 @@
-import { demoAgentArtifacts, type WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/databoxMock";
 import { ArtifactRenderer } from "./artifacts/ArtifactRenderer";
 import { FollowUpInput } from "./queryResult/FollowUpInput";
 import { QueryMessages } from "./queryResult/QueryMessages";
@@ -9,9 +9,10 @@ interface QueryResultWorkspaceProps {
   onOpenSqlConsole: () => void;
   onSetSqlQuery: (sql: string) => void;
   onSendFollowUp: (tabId: string, text: string) => void;
+  onToast: (message: string) => void;
 }
 
-export function QueryResultWorkspace({ tab, onOpenSqlConsole, onSetSqlQuery, onSendFollowUp }: QueryResultWorkspaceProps) {
+export function QueryResultWorkspace({ tab, onOpenSqlConsole, onSetSqlQuery, onSendFollowUp, onToast }: QueryResultWorkspaceProps) {
   return (
     <div className="hifi-query-result-workspace hifi-tab-pane">
       <QueryResultHeader queryText={tab.queryText || ""} />
@@ -19,9 +20,10 @@ export function QueryResultWorkspace({ tab, onOpenSqlConsole, onSetSqlQuery, onS
       <div className="hifi-query-result-messages">
         <QueryMessages messages={tab.chatMessages || []} />
         <ArtifactRenderer
-          artifacts={tab.artifacts || demoAgentArtifacts}
+          artifacts={tab.artifacts ?? []}
           onOpenSqlConsole={onOpenSqlConsole}
           onSetSqlQuery={onSetSqlQuery}
+          onToast={onToast}
         />
       </div>
 
