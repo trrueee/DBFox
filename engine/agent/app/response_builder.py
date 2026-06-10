@@ -9,6 +9,12 @@ from engine.agent_core.types import (
     AgentCheckpointRecord,
     AgentRunRequest,
     AgentRunResponse,
+    AgentRunCanvas,
+    PlanCard,
+    ActivityStep,
+    EvidenceItem,
+    SafetyCheck,
+    RecoveryRecord,
     AgentStep,
     AnswerEvidence,
     FollowUpSuggestion,
@@ -262,6 +268,9 @@ def build_response(
         ))
         te_seq += 1
 
+    canvas = build_canvas(state, final_steps, answer, run_id, session_id,
+                          status or "completed", req.question)
+
     return AgentRunResponse(
         run_id=run_id,
         session_id=session_id,
@@ -289,4 +298,250 @@ def build_response(
         approval=approval,
         checkpoint=checkpoint,
         approval_context=None,
+        canvas=canvas,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Run Canvas builder (P5)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def build_canvas(
+    state: dict[str, Any],
+    steps: list[AgentStep],
+    answer: AgentAnswer | None,
+    run_id: str,
+    session_id: str,
+    status: str,
+    question: str = "",
+) -> AgentRunCanvas:
+    """Build the AgentRunCanvas from final graph state + steps.
+
+    Produces five cards that the frontend renders directly:
+    - Plan Card: what the agent intended to do
+    - Activity Timeline: chronological tool execution
+    - Evidence Card: data backing the answer
+    - Safety Card: validation and approval results
+    - Recovery Card: failure diagnosis and retry history
+    """
+    # ── Plan Card ──────────────────────────────────────────────────────────
+    plan_directive = state.get("plan_directive") or {}
+    skill_ids: list[str] = state.get("selected_skill_ids") or []
+
+    plan = PlanCard(
+        task_type=plan_directive.get("task_type", ""),
+        intent_summary=plan_directive.get("reasoning_summary", ""),
+        execution_mode=plan_directive.get("execution_mode", ""),
+        selected_skills=skill_ids,
+        allowed_tool_groups=plan_directive.get("allowed_tool_groups") or [],
+        forbidden_tool_groups=[],
+        success_criteria=plan_directive.get("success_criteria") or [],
+        risk_notes=plan_directive.get("risk_notes") or [],
+        grounding_level=plan_directive.get("grounding_level", ""),
+    )
+
+    # ── Activity Timeline ──────────────────────────────────────────────────
+    activity: list[ActivityStep] = []
+    raw_traces = state.get("trace_events") or []
+    step_outputs: dict[str, Any] = {}
+    for s in steps:
+        if s.output:
+            step_outputs[s.name] = s.output
+
+    for i, s in enumerate(steps):
+        title = _activity_title(s.name)
+        summary = _activity_summary(s.name, s.status, s.output)
+        activity.append(ActivityStep(
+            sequence=i + 1,
+            step_name=s.name,
+            tool_name=_step_to_tool(s.name),
+            title=title,
+            status=s.status,
+            latency_ms=s.latency_ms,
+            summary=summary,
+            error=s.error[:200] if s.error else None,
+        ))
+
+    # ── Evidence Card ──────────────────────────────────────────────────────
+    evidence: list[EvidenceItem] = []
+    if answer and answer.evidence:
+        for ev in answer.evidence:
+            evidence.append(EvidenceItem(
+                source="tool_result",
+                label=ev.label,
+                artifact_id=ev.artifact_id,
+                value_summary=str(ev.value) if ev.value else None,
+            ))
+    # Add schema context as evidence
+    schema_ctx = state.get("schema_context")
+    if isinstance(schema_ctx, dict):
+        tables = schema_ctx.get("selected_tables") or []
+        if tables:
+            evidence.append(EvidenceItem(
+                source="schema_catalog",
+                label=f"Schema context: {', '.join(str(t) for t in tables[:5])}",
+            ))
+    # Add execution result as evidence
+    execution = state.get("execution")
+    if isinstance(execution, dict) and execution.get("success"):
+        rows = execution.get("rowCount", 0)
+        if rows > 0:
+            evidence.append(EvidenceItem(
+                source="sql_execution",
+                label=f"Query returned {rows} rows",
+                value_summary=f"{rows} rows",
+            ))
+
+    # ── Safety Card ────────────────────────────────────────────────────────
+    safety_checks: list[SafetyCheck] = []
+    safety = state.get("safety")
+    if isinstance(safety, dict):
+        safety_checks.append(SafetyCheck(
+            check_name="TrustGate",
+            passed=bool(safety.get("can_execute")),
+            detail=f"can_execute={safety.get('can_execute')}, "
+                   f"requires_confirmation={safety.get('requires_confirmation')}",
+            blocked_reasons=safety.get("blocked_reasons") or [],
+            requires_approval=bool(safety.get("requires_confirmation")),
+        ))
+    # Policy blocked tools
+    blocked = state.get("blocked_tool_calls") or []
+    if blocked:
+        safety_checks.append(SafetyCheck(
+            check_name="PolicyGate",
+            passed=False,
+            detail=f"{len(blocked)} tool call(s) blocked by policy",
+        ))
+    # Approval state
+    approval_result = state.get("approval_result") or {}
+    if approval_result:
+        safety_checks.append(SafetyCheck(
+            check_name="Approval",
+            passed=approval_result.get("status") == "approved",
+            detail=f"Status: {approval_result.get('status', 'unknown')}",
+            approval_status=approval_result.get("status"),
+        ))
+
+    # ── Recovery Card ──────────────────────────────────────────────────────
+    recovery: list[RecoveryRecord] = []
+    progress = state.get("progress_decision") or {}
+    if progress.get("status") in ("replan", "blocked", "failed"):
+        recovery.append(RecoveryRecord(
+            attempt=int(state.get("replan_count") or 0) + 1,
+            failure_layer=progress.get("failure_layer", ""),
+            root_cause=progress.get("root_cause", "") or str(state.get("error") or ""),
+            recovery_strategy=progress.get("recovery_strategy", ""),
+            retry_budget=int(progress.get("retry_budget") or 0),
+            outcome="recovered" if progress.get("status") == "replan" else "finalized_with_caveat",
+        ))
+
+    # ── Assemble ───────────────────────────────────────────────────────────
+    total_ms = sum(s.latency_ms for s in steps)
+
+    return AgentRunCanvas(
+        run_id=run_id,
+        session_id=session_id,
+        status=status,
+        plan=plan,
+        activity=activity,
+        evidence=evidence,
+        safety=safety_checks,
+        recovery=recovery,
+        question=question,
+        answer_summary=(answer.answer[:200] if answer and answer.answer else ""),
+        total_latency_ms=total_ms,
+        step_count=len(steps),
+    )
+
+
+# ── Canvas helpers ─────────────────────────────────────────────────────────────
+
+
+def _activity_title(step_name: str) -> str:
+    titles: dict[str, str] = {
+        "build_schema_context": "Built schema context",
+        "build_query_plan": "Built query plan",
+        "generate_sql_candidate": "Generated SQL",
+        "validate_sql": "Validated SQL",
+        "execute_sql": "Executed query",
+        "skip_execution": "Skipped execution",
+        "revise_sql": "Revised SQL",
+        "profile_result": "Profiled results",
+        "suggest_chart": "Suggested chart",
+        "suggest_followups": "Suggested follow-ups",
+        "answer_synthesizer": "Synthesized answer",
+        "list_tables": "Listed tables",
+        "describe_table": "Described table",
+        "refresh_catalog": "Refreshed catalog",
+        "load_follow_up_context": "Loaded follow-up context",
+        "memory_search": "Searched memory",
+        "memory_write": "Wrote to memory",
+        "memory_delete": "Deleted memory",
+        "summarize_session": "Summarized session",
+    }
+    return titles.get(step_name, step_name.replace("_", " ").title())
+
+
+def _activity_summary(step_name: str, status: str, output: Any) -> str:
+    if status == "failed":
+        return "Failed"
+    if status == "skipped":
+        return "Skipped"
+    if output is None:
+        return "Completed"
+    if isinstance(output, dict):
+        # Extract compact summary per step type
+        if step_name == "build_schema_context":
+            tables = output.get("selected_tables") or []
+            return f"Selected {len(tables)} table(s)"
+        if step_name == "build_query_plan":
+            metrics = output.get("metrics") or []
+            return f"Plan: {len(metrics)} metric(s)"
+        if step_name == "generate_sql_candidate":
+            sql = output.get("sql") or ""
+            return f"SQL: {len(sql)} chars"
+        if step_name == "validate_sql":
+            return "Passed" if output.get("can_execute") else "Blocked"
+        if step_name == "execute_sql":
+            return f"{output.get('rowCount', 0)} rows"
+        if step_name == "profile_result":
+            facts = output.get("notable_facts") or []
+            return f"{len(facts)} notable fact(s)"
+        if step_name == "suggest_chart":
+            return f"Chart: {output.get('type', '?')}"
+        if step_name == "answer_synthesizer":
+            ans = output.get("answer", "")
+            return ans[:80] + ("..." if len(ans) > 80 else "")
+        if step_name == "list_tables":
+            tables = output.get("tables") or []
+            return f"{len(tables)} tables"
+        if step_name == "describe_table":
+            cols = output.get("columns") or []
+            return f"{len(cols)} columns"
+    return "Completed"
+
+
+def _step_to_tool(step_name: str) -> str:
+    mapping = {
+        "build_schema_context": "schema.build_context",
+        "build_query_plan": "query_plan.build",
+        "generate_sql_candidate": "sql.generate",
+        "validate_sql": "sql.validate",
+        "execute_sql": "sql.execute_readonly",
+        "skip_execution": "sql.skip_execution",
+        "revise_sql": "sql.revise",
+        "profile_result": "result.profile",
+        "suggest_chart": "chart.suggest",
+        "suggest_followups": "followup.suggest",
+        "answer_synthesizer": "answer.synthesize",
+        "list_tables": "schema.list_tables",
+        "describe_table": "schema.describe_table",
+        "refresh_catalog": "schema.refresh_catalog",
+        "load_follow_up_context": "followup.load_context",
+        "memory_search": "memory.search",
+        "memory_write": "memory.write",
+        "memory_delete": "memory.delete",
+        "summarize_session": "memory.summarize_session",
+    }
+    return mapping.get(step_name, step_name)

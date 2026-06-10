@@ -370,6 +370,7 @@ class AgentRunResponse(BaseModel):
     approval: AgentApprovalRecord | None = None
     checkpoint: AgentCheckpointRecord | None = None
     approval_context: dict[str, Any] | None = None
+    canvas: AgentRunCanvas | None = None
 
 
 class AgentRuntimeEvent(BaseModel):
@@ -386,4 +387,94 @@ class AgentRuntimeEvent(BaseModel):
     checkpoint: AgentCheckpointRecord | None = None
     error: str | None = None
     approval_context: dict[str, Any] | None = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agent Run Canvas — P5 frontend card data contracts
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class PlanCard(BaseModel):
+    """What the agent plans to do — intent, scope, success definition."""
+
+    task_type: str = ""  # data_lookup, schema_understanding, sql_repair...
+    intent_summary: str = ""  # one-line: "Query GMV for last month"
+    execution_mode: str = ""  # suggest_only, user_requested_read, agent_autonomous_read
+    selected_skills: list[str] = Field(default_factory=list)  # skill ids
+    allowed_tool_groups: list[str] = Field(default_factory=list)
+    forbidden_tool_groups: list[str] = Field(default_factory=list)
+    success_criteria: list[str] = Field(default_factory=list)
+    risk_notes: list[str] = Field(default_factory=list)
+    grounding_level: str = ""  # none → workspace → schema → semantic → data
+    plan_timestamp: str = ""
+
+
+class ActivityStep(BaseModel):
+    """Single entry in the Activity Timeline."""
+
+    sequence: int = 0
+    step_name: str = ""  # build_schema_context, generate_sql_candidate...
+    tool_name: str = ""  # schema.build_context, sql.generate...
+    title: str = ""  # human-readable: "Built schema context"
+    status: str = "pending"  # pending | running | success | failed | skipped | blocked
+    latency_ms: int = 0
+    summary: str = ""  # compact result summary for the timeline
+    error: str | None = None
+    input_summary: str | None = None  # e.g. "table: orders"
+    output_summary: str | None = None  # e.g. "3 tables selected"
+
+
+class EvidenceItem(BaseModel):
+    """A single piece of evidence backing the answer."""
+
+    source: str = ""  # "tool_result", "schema_catalog", "memory", "sql_execution"
+    label: str = ""  # human-readable: "orders table (3,421 rows)"
+    artifact_id: str | None = None
+    value_summary: str | None = None  # compact: "total_amount SUM = 1,234,567"
+    confidence: str = "high"  # high | medium | low
+
+
+class SafetyCheck(BaseModel):
+    """A single safety/validation check result."""
+
+    check_name: str = ""  # "TrustGate", "Guardrail", "Schema Validation"
+    passed: bool = True
+    detail: str = ""  # human-readable result
+    blocked_reasons: list[str] = Field(default_factory=list)
+    requires_approval: bool = False
+    approval_status: str | None = None  # pending | approved | rejected
+
+
+class RecoveryRecord(BaseModel):
+    """A failure recovery attempt — what went wrong and what was tried."""
+
+    attempt: int = 0
+    failure_layer: str = ""  # schema, semantic, sql_generation, execution...
+    root_cause: str = ""  # "column account_id not found in orders"
+    recovery_strategy: str = ""  # "describe orders table, rebuild query plan"
+    retry_budget: int = 0
+    outcome: str = ""  # "recovered" | "escalated_to_user" | "finalized_with_caveat"
+
+
+class AgentRunCanvas(BaseModel):
+    """Complete agent run visualization contract for the frontend.
+
+    Five cards that the UI renders directly — no raw trace interpretation needed.
+    """
+
+    run_id: str = ""
+    session_id: str = ""
+    status: str = ""  # running | completed | failed | waiting_approval | waiting_user
+
+    plan: PlanCard = Field(default_factory=PlanCard)
+    activity: list[ActivityStep] = Field(default_factory=list)
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+    safety: list[SafetyCheck] = Field(default_factory=list)
+    recovery: list[RecoveryRecord] = Field(default_factory=list)
+
+    # Convenience: summary for the canvas header
+    question: str = ""
+    answer_summary: str = ""
+    total_latency_ms: int = 0
+    step_count: int = 0
 

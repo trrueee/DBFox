@@ -18,6 +18,13 @@ from engine.environment.models import (
     ForeignKeySnapshot,
     TableSnapshot,
 )
+from engine.environment.database_map import (
+    DatabaseMap,
+    DatabaseMapBuilder,
+    TableProfile,
+    ColumnProfile,
+    Relationship,
+)
 from engine.environment.service import EnvironmentService
 from engine.environment.manager import (
     EnvironmentError,
@@ -34,6 +41,11 @@ __all__ = [
     "CatalogSnapshot",
     "ColumnSnapshot",
     "DataEnvironmentProfile",
+    "DatabaseMap",
+    "DatabaseMapBuilder",
+    "TableProfile",
+    "ColumnProfile",
+    "Relationship",
     "EnvironmentService",
     "ForeignKeySnapshot",
     "TableSnapshot",

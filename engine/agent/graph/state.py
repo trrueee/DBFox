@@ -30,7 +30,10 @@ class DataBoxAgentState(TypedDict, total=False):
     # ---- Run identity -----------------------------------------------------
     run_id: str
     thread_id: str
+    session_id: str
     datasource_id: str
+    user_id: str | None
+    project_id: str | None
     parent_run_id: str | None
 
     # ---- Runtime flags ----------------------------------------------------
@@ -47,6 +50,7 @@ class DataBoxAgentState(TypedDict, total=False):
 
     # ---- Environment / Semantic layers -------------------------------------
     environment_profile: dict[str, Any] | None
+    database_map: dict[str, Any] | None
     semantic_resolution: dict[str, Any] | None
 
     # ---- Request-level context --------------------------------------------
@@ -75,6 +79,9 @@ class DataBoxAgentState(TypedDict, total=False):
     last_observation: dict[str, Any] | None
     last_tool_name: str | None
     last_tool_metadata: dict[str, Any] | None
+
+    # ---- ContextPack (Agent v2 structured context) -------------------------
+    context_pack: dict[str, Any] | None
 
     # ---- Progress Judge output ---------------------------------------------
     progress_decision: dict[str, Any] | None

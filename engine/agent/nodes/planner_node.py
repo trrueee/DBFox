@@ -92,6 +92,21 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
             parts.append(f"Revised plan hint:\n```json\n{hint}\n```")
         context_parts.append("\n".join(parts))
 
+    # ---- Memory context (Agent v2) ------------------------------------------
+    memory_context_text = ""
+    try:
+        from engine.agent.memory_bridge import search_memory_for_planner
+        memory_context_text = search_memory_for_planner(
+            question=user_text,
+            datasource_id=str(state.get("datasource_id") or ""),
+            user_id=state.get("user_id") or state.get("thread_id"),
+            project_id=state.get("project_id"),
+        )
+        if memory_context_text:
+            context_parts.append(memory_context_text)
+    except Exception as exc:
+        logger.warning("Failed to search memory for planner: %s", exc)
+
     # ---- Skill catalog (Agent v2) -------------------------------------------
     try:
         registry = get_skill_registry()

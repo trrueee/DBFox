@@ -128,19 +128,19 @@ function AliasesEditor({ datasourceId }: { datasourceId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
         <Field label="Alias">
-          <input className="input-field input-field-sm" style={{ width: 120 }} value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="e.g. GMV" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 120 }} value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="e.g. GMV" />
         </Field>
         <Field label="Type">
-          <select className="input-field input-field-sm" style={{ width: 100 }} value={targetType} onChange={(e) => setTargetType(e.target.value)}>
+          <select className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 100 }} value={targetType} onChange={(e) => setTargetType(e.target.value)}>
             <option value="column">column</option>
             <option value="table">table</option>
           </select>
         </Field>
         <Field label="Target">
-          <input className="input-field input-field-sm" style={{ width: 180 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="e.g. orders.total_amount" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 180 }} value={target} onChange={(e) => setTarget(e.target.value)} placeholder="e.g. orders.total_amount" />
         </Field>
         <Field label="Desc">
-          <input className="input-field input-field-sm" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
         </Field>
         <button onClick={handleCreate} style={smallPrimaryBtn}><Plus size={13} /> Add</button>
       </div>
@@ -199,16 +199,16 @@ function MetricsEditor({ datasourceId }: { datasourceId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
         <Field label="Name">
-          <input className="input-field input-field-sm" style={{ width: 120 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. GMV" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 120 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. GMV" />
         </Field>
         <Field label="Expression">
-          <input className="input-field input-field-sm" style={{ width: 200 }} value={expression} onChange={(e) => setExpression(e.target.value)} placeholder="e.g. SUM(orders.total_amount)" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 200 }} value={expression} onChange={(e) => setExpression(e.target.value)} placeholder="e.g. SUM(orders.total_amount)" />
         </Field>
         <Field label="Source Columns">
-          <input className="input-field input-field-sm" style={{ width: 160 }} value={sourceColumns} onChange={(e) => setSourceColumns(e.target.value)} placeholder="orders.total_amount" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 160 }} value={sourceColumns} onChange={(e) => setSourceColumns(e.target.value)} placeholder="orders.total_amount" />
         </Field>
         <Field label="Desc">
-          <input className="input-field input-field-sm" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
         </Field>
         <button onClick={handleCreate} style={smallPrimaryBtn}><Plus size={13} /> Add</button>
       </div>
@@ -266,13 +266,13 @@ function DimensionsEditor({ datasourceId }: { datasourceId: string }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
         <Field label="Name">
-          <input className="input-field input-field-sm" style={{ width: 120 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 下单日期" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 120 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. 下单日期" />
         </Field>
         <Field label="Column Ref">
-          <input className="input-field input-field-sm" style={{ width: 180 }} value={columnRef} onChange={(e) => setColumnRef(e.target.value)} placeholder="e.g. orders.created_at" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 180 }} value={columnRef} onChange={(e) => setColumnRef(e.target.value)} placeholder="e.g. orders.created_at" />
         </Field>
         <Field label="Transform">
-          <select className="input-field input-field-sm" style={{ width: 100 }} value={transform} onChange={(e) => setTransform(e.target.value)}>
+          <select className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 100 }} value={transform} onChange={(e) => setTransform(e.target.value)}>
             <option value="">(none)</option>
             <option value="DATE">DATE</option>
             <option value="MONTH">MONTH</option>
@@ -280,7 +280,7 @@ function DimensionsEditor({ datasourceId }: { datasourceId: string }) {
           </select>
         </Field>
         <Field label="Desc">
-          <input className="input-field input-field-sm" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
+          <input className="h-7 rounded-sm border border-[hsl(var(--input))] bg-transparent px-2 py-1 text-xs text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" style={{ width: 100 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" />
         </Field>
         <button onClick={handleCreate} style={smallPrimaryBtn}><Plus size={13} /> Add</button>
       </div>
