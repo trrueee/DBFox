@@ -6,13 +6,14 @@ interface LayoutRegionProps {
   center: ReactNode;
   right: ReactNode;
   bottom: ReactNode;
+  rightCollapsed?: boolean;
 }
 
-export function LayoutRegion({ top, left, center, right, bottom }: LayoutRegionProps) {
+export function LayoutRegion({ top, left, center, right, bottom, rightCollapsed = false }: LayoutRegionProps) {
   return (
     <div className="wb">
       <div className="wb-top">{top}</div>
-      <div className="wb-body">
+      <div className={rightCollapsed ? "wb-body wb-body--right-collapsed" : "wb-body"}>
         <div className="wb-left">{left}</div>
         <div className="wb-center">{center}</div>
         <div className="wb-right">{right}</div>
