@@ -1,4 +1,4 @@
-import { Copy, Terminal } from "lucide-react";
+import { Copy, DatabaseZap, Terminal } from "lucide-react";
 import type { QueryResult, SchemaTable } from "../../lib/api";
 import { DataTable } from "../../components/DataTable";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
@@ -14,6 +14,7 @@ interface SchemaPreviewViewProps {
   onCopySql: () => void;
   onOpenSql: () => void;
   onRefresh: () => void;
+  onGenerateTestData: () => void;
 }
 
 export function SchemaPreviewView({
@@ -27,6 +28,7 @@ export function SchemaPreviewView({
   onCopySql,
   onOpenSql,
   onRefresh,
+  onGenerateTestData,
 }: SchemaPreviewViewProps) {
   return (
     <div className="schema-browser-body">
@@ -38,6 +40,10 @@ export function SchemaPreviewView({
         {error && <span className="font-black text-[var(--accent-red)]">{error}</span>}
         <div className="schema-preview-actions">
           <button className="schema-button" type="button" onClick={onRefresh} disabled={!table || loading}>刷新</button>
+          <button className="schema-button" type="button" onClick={onGenerateTestData} disabled={!table || loading} title="为当前表生成少量测试数据">
+            <DatabaseZap size={12} />
+            生成测试数据
+          </button>
           <button className="schema-button" type="button" onClick={onCopySql} disabled={!previewSql} title={previewSql || "请选择表"}>
             <Copy size={12} />
             {copied ? "已复制" : "复制 SQL"}
@@ -67,7 +73,7 @@ export function SchemaPreviewView({
           <div className="schema-empty">
             <div className="schema-empty-card">
               <div className="schema-empty-title">暂无预览数据</div>
-              <div className="schema-empty-copy">点击刷新读取前 100 行，或把预览 SQL 打开到工作台。</div>
+              <div className="schema-empty-copy">点击刷新读取前 100 行，或生成少量测试数据用于本地预览。</div>
             </div>
           </div>
         )}
