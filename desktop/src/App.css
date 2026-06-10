@@ -1,1941 +1,237 @@
-/* ═══════════════════════════════════════════════════════
-   DataBox High-Fidelity Mockup Design System CSS
-   ═══════════════════════════════════════════════════════ */
-
 :root {
-  --color-primary: #4F46E5;
-  --color-secondary: #7C3AED;
-  --color-info: #2563EB;
-  --color-success: #16A34A;
-  --color-warning: #F97316;
-  --color-danger: #DC2626;
-
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748B;
-
-  --color-border: #E2E8F0;
-  --color-bg: #F8FAFC;
-  --color-panel: #FFFFFF;
-
-  --color-primary-soft: #EEF2FF;
-  --color-info-soft: #EFF6FF;
-  --color-success-soft: #ECFDF5;
-  --color-warning-soft: #FFF7ED;
-  --color-danger-soft: #FEF2F2;
-
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --primary: #4f46e5;
+  --secondary: #7c3aed;
+  --info: #2563eb;
+  --success: #16a34a;
+  --warning: #f97316;
+  --danger: #dc2626;
+  --text: #0f172a;
+  --text-2: #475569;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --soft: #eef2ff;
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --radius: 12px;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
-/* Base resets for mock view */
-.hifi-viewport-wrapper {
+* { box-sizing: border-box; }
+button, input, textarea, select { font: inherit; }
+button { border: 0; }
+
+.databox-app {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #0F172A; /* Slate 900 background to frame the white prototype canvas */
-  overflow: hidden;
-}
-
-.hifi-canvas-board {
-  width: 1598px;
-  height: 1066px;
-  background: var(--color-bg);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border-radius: 16px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  position: relative;
-  box-sizing: border-box;
-  font-family: var(--font-family);
-  color: var(--color-text-primary);
+  color: var(--text);
+  background: var(--bg);
   user-select: none;
-  transform: scale(var(--scale));
-  transform-origin: center center;
+}
+
+.app-header {
+  height: 58px;
   flex-shrink: 0;
-}
-
-/* Card rules */
-.hifi-card {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
-}
-
-/* Header styling */
-.hifi-header {
-  height: 56px;
-  background: var(--color-panel);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 0 20px;
-  flex-shrink: 0;
-}
-
-.hifi-header-left {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.hifi-header-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  line-height: 1.2;
-}
-
-.hifi-header-subtitle {
-  font-size: 10px;
-  color: var(--color-text-muted);
-  font-weight: 500;
-  margin-top: 1px;
-}
-
-.hifi-header-tabs {
-  display: flex;
-  gap: 32px;
-  height: 100%;
-  align-items: center;
-}
-
-.hifi-header-tab {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  position: relative;
-  padding: 16px 0;
-  transition: color 0.2s;
-}
-
-.hifi-header-tab:hover {
-  color: var(--color-primary);
-}
-
-.hifi-header-tab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-header-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-  border-radius: 2px;
-}
-
-.hifi-header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.hifi-icon-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-
-.hifi-icon-btn:hover {
-  background: var(--color-bg);
-  color: var(--color-text-primary);
-}
-
-.hifi-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
-  color: #FFFFFF;
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
-}
-
-/* Grid Layout */
-.hifi-workspace {
-  flex: 1;
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  overflow: hidden;
-  height: calc(1066px - 56px);
-  box-sizing: border-box;
-  background: var(--color-bg);
-}
-
-/* Column General */
-.hifi-col {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Left Sidebar - Data Source */
-.hifi-sidebar-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.hifi-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.hifi-sidebar-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-db-select {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: #FFFFFF;
-  cursor: pointer;
-  margin-bottom: 10px;
-  transition: border-color 0.2s;
-}
-
-.hifi-db-select:hover {
-  border-color: #CBD5E1;
-}
-
-.hifi-db-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.hifi-db-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-db-version {
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-.hifi-search-box {
-  position: relative;
-  margin-bottom: 12px;
-}
-
-.hifi-search-input {
-  width: 100%;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  padding: 0 8px 0 28px;
-  font-size: 11px;
-  outline: none;
-  box-sizing: border-box;
-  background: #F8FAFC;
-  transition: border-color 0.2s, background 0.2s;
-}
-
-.hifi-search-input:focus {
-  border-color: var(--color-primary);
-  background: #FFFFFF;
-}
-
-.hifi-search-icon {
-  position: absolute;
-  left: 8px;
-  top: 7px;
-  color: var(--color-text-muted);
-}
-
-.hifi-tree-container {
-  flex: 1;
-  overflow-y: auto;
-  margin-right: -4px;
-  padding-right: 4px;
-}
-
-.hifi-tree-node {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 4px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  transition: background 0.2s, color 0.2s;
-}
-
-.hifi-tree-node:hover {
-  background: #F1F5F9;
-  color: var(--color-text-primary);
-}
-
-.hifi-tree-node.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 500;
-}
-
-.hifi-tree-indent {
-  width: 12px;
-  flex-shrink: 0;
-}
-
-.hifi-sidebar-footer {
-  border-top: 1px solid var(--color-border);
-  padding-top: 10px;
-  margin-top: 10px;
-  display: flex;
-  justify-content: space-around;
-  color: var(--color-text-muted);
-}
-
-/* Middle Column - Workspace Split */
-.hifi-middle-col {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* Middle Top - Smart Query Welcome */
-.hifi-query-home {
-  flex: 11;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.hifi-hero {
-  margin-bottom: 24px;
-  position: relative;
-  z-index: 1;
-}
-
-.hifi-hero-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
-}
-
-.hifi-gradient-text {
-  background: linear-gradient(90deg, #2563EB 0%, #7C3AED 100%);
-  -webkit-background-clip: text;
-  color: transparent;
-}
-
-.hifi-hero-subtitle {
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-.hifi-hero-pattern {
-  position: absolute;
-  right: 20px;
-  top: 10px;
-  width: 220px;
-  height: 140px;
-  background-image: radial-gradient(#C4B5FD 1.5px, transparent 1.5px);
-  background-size: 12px 12px;
-  opacity: 0.35;
-  pointer-events: none;
-}
-
-/* Ask Box Input styling */
-.hifi-ask-input-container {
-  position: relative;
-  margin-bottom: 24px;
-}
-
-.hifi-ask-input {
-  width: 100%;
-  height: 104px;
-  border-radius: 12px;
-  border: 2px solid var(--color-secondary);
-  background: #FFFFFF;
-  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12);
-  padding: 16px 50px 16px 18px;
-  font-size: 13px;
-  color: var(--color-text-primary);
-  outline: none;
-  resize: none;
-  box-sizing: border-box;
-  font-family: inherit;
-  line-height: 1.5;
-}
-
-.hifi-ask-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.hifi-ask-send-btn {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.hifi-ask-send-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(124, 58, 237, 0.4);
-}
-
-/* Recommended questions styling */
-.hifi-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.hifi-section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-text-btn {
-  font-size: 12px;
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hifi-text-btn:hover {
-  text-decoration: underline;
-}
-
-.hifi-recommend-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.hifi-recommend-card {
-  height: 112px;
-  padding: 14px;
-  border-radius: 12px;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-sizing: border-box;
-  cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-
-.hifi-recommend-card:hover {
-  border-color: #C7D2FE;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.06);
-  transform: translateY(-2px);
-}
-
-.hifi-recommend-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  display: flex;
+  grid-template-columns: 310px 1fr 210px;
   align-items: center;
-  justify-content: center;
+  background: rgba(255,255,255,.94);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+}
+.app-header > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.app-header b { font-size: 18px; letter-spacing: -.02em; }
+.app-header span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.app-header nav { height: 100%; justify-self: center; display: flex; align-items: stretch; gap: 32px; }
+.app-header nav button { position: relative; background: transparent; color: var(--text-2); cursor: pointer; font-size: 14px; font-weight: 650; }
+.app-header nav button:hover, .app-header nav button.active { color: var(--primary); }
+.app-header nav button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 99px 99px 0 0; background: linear-gradient(90deg,var(--primary),var(--secondary)); }
+.header-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.header-actions button { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); background: transparent; cursor: pointer; }
+.header-actions button:hover { background: #f1f5f9; color: var(--text); }
+.header-actions i { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: #fff; font-style: normal; font-weight: 800; background: linear-gradient(135deg,#3b82f6,#1d4ed8); box-shadow: 0 6px 14px rgba(37,99,235,.22); }
+
+.app-body { min-height: 0; flex: 1; display: flex; gap: 10px; padding: 10px; overflow: hidden; }
+.sidebar, .workspace, .drawer { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.sidebar { width: 260px; flex-shrink: 0; padding: 14px; display: flex; flex-direction: column; min-height: 0; }
+.side-title { display: flex; align-items: center; justify-content: space-between; }
+.side-title b { font-size: 13px; }
+.side-title button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; }
+.side-title button:hover { background: #f1f5f9; color: var(--text); }
+.source { margin-top: 12px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; gap: 9px; color: var(--info); background: #fff; cursor: pointer; }
+.source:hover { border-color: #bfdbfe; background: #eff6ff; }
+.source div { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.source b { font-size: 13px; color: var(--text); }
+.source span { font-size: 11px; color: var(--muted); }
+.tree-search { margin-top: 12px; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: #f8fafc; }
+.tree-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 12px; }
+.tree { min-height: 0; flex: 1; overflow: auto; margin-top: 12px; padding-right: 4px; }
+.node { height: 28px; border-radius: 7px; padding: 0 7px; display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; cursor: pointer; }
+.node:hover { background: #f1f5f9; color: var(--text); }
+.node.muted { opacity: .62; }
+.node.schema { margin-top: 6px; color: var(--text); font-weight: 800; }
+.node.module { margin-left: 12px; color: var(--muted); font-weight: 700; }
+.node.table { margin-left: 28px; font-family: "JetBrains Mono", "Fira Code", monospace; font-size: 11.5px; cursor: grab; }
+.node.table span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node.table.selected { background: var(--soft); color: var(--primary); font-weight: 800; }
+
+.workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tabbar { height: 42px; flex-shrink: 0; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); background: #f8fafc; }
+.tabs { min-width: 0; flex: 1; height: 100%; display: flex; align-items: center; gap: 6px; overflow-x: auto; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab, .new-tab, .drawer-actions button { height: 28px; border-radius: 8px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 7px; color: var(--text-2); background: #fff; cursor: pointer; white-space: nowrap; }
+.tab { max-width: 180px; padding: 0 9px; font-size: 12px; font-weight: 700; }
+.tab span { overflow: hidden; text-overflow: ellipsis; }
+.tab:hover, .new-tab:hover, .drawer-actions button:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.tab.active, .drawer-actions button.active { color: var(--primary); border-color: #c7d2fe; background: var(--soft); }
+.tab em { width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); font-style: normal; }
+.tab em:hover { color: var(--text); background: rgba(15,23,42,.08); }
+.new-tab { width: 28px; justify-content: center; flex-shrink: 0; }
+.drawer-actions { display: flex; align-items: center; gap: 6px; }
+.drawer-actions button { padding: 0 10px; font-size: 12px; font-weight: 700; }
+.pane { min-height: 0; flex: 1; overflow: hidden; background: #fff; }
+.ask-page, .table-page, .sql-page, .multi-page, .result-page { width: 100%; height: 100%; overflow: auto; }
+
+.ask-page { padding: 26px; }
+.hero { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; padding: 32px; background: linear-gradient(180deg,#fff,#f8fafc); }
+.hero::after { content: ""; position: absolute; right: 44px; top: 24px; width: 260px; height: 150px; opacity: .38; pointer-events: none; background-image: radial-gradient(#c4b5fd 1.5px, transparent 1.5px); background-size: 12px 12px; }
+.hero h1 { margin: 0; font-size: 30px; line-height: 1.2; letter-spacing: -.04em; }
+.hero h1 span { margin-left: 4px; color: transparent; background: linear-gradient(90deg,var(--info),var(--secondary)); -webkit-background-clip: text; background-clip: text; }
+.hero p { margin: 10px 0 22px; color: var(--muted); font-size: 14px; }
+.drop { min-height: 38px; margin-bottom: 12px; border: 1px dashed #c7d2fe; border-radius: 10px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; color: var(--primary); background: rgba(238,242,255,.66); }
+.drop b { font-size: 12px; }
+.drop > span { color: var(--muted); font-size: 12px; }
+.chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.chips button { height: 22px; border-radius: 99px; padding: 0 8px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--primary); border: 1px solid #c7d2fe; background: #fff; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.chips .clear { color: var(--danger); background: #fff1f2; border-color: #fecdd3; }
+.askbox { position: relative; }
+.askbox textarea { width: 100%; height: 116px; resize: none; outline: none; border-radius: 16px; border: 2px solid var(--secondary); box-shadow: 0 16px 32px rgba(79,70,229,.12); padding: 18px 64px 18px 18px; color: var(--text); background: #fff; font-size: 14px; line-height: 1.6; }
+.askbox button { position: absolute; right: 16px; bottom: 16px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; cursor: pointer; background: linear-gradient(135deg,var(--primary),var(--secondary)); box-shadow: 0 10px 18px rgba(124,58,237,.28); }
+.askbox button:hover { transform: translateY(-1px); }
+.hero small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.block { margin-top: 20px; }
+.block > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.block h2 { margin: 0; font-size: 15px; font-weight: 850; }
+.block > div:first-child button { color: var(--primary); background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; }
+.cards { margin-top: 12px; display: grid; gap: 12px; }
+.cards.four { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.cards.five { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.cards button { text-align: left; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fff; cursor: pointer; transition: .18s ease; }
+.cards button:hover, .samples button:hover, .multi-cards button:hover { transform: translateY(-1px); border-color: #c7d2fe; box-shadow: 0 12px 26px rgba(79,70,229,.08); }
+.cards.four button { height: 128px; display: flex; flex-direction: column; justify-content: space-between; }
+.cards button svg { color: var(--primary); }
+.cards button b { display: block; font-size: 13px; line-height: 1.45; }
+.cards button span { color: var(--muted); font-size: 11px; }
+.cards button em { align-self: flex-start; border-radius: 7px; padding: 3px 7px; color: var(--primary); background: var(--soft); font-style: normal; font-size: 11px; font-weight: 800; }
+
+.table-page { display: flex; flex-direction: column; overflow: hidden; }
+.table-page > header { flex-shrink: 0; position: relative; padding: 18px 20px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg,#fff,#f8fafc); }
+.table-page > header small { color: var(--muted); font-size: 11px; font-weight: 800; }
+.table-page > header h2 { margin: 4px 0 2px; font-family: "JetBrains Mono", monospace; font-size: 20px; }
+.table-page > header p { margin: 0; color: var(--text-2); font-size: 12px; }
+.table-page > header div { position: absolute; right: 18px; top: 22px; display: flex; gap: 8px; }
+.table-page > header button, .toolbar button, .sqlbar button, .sql-card button { height: 30px; border-radius: 8px; border: 1px solid var(--border); padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); background: #fff; cursor: pointer; font-size: 12px; font-weight: 800; }
+.table-page > header button:hover, .toolbar button:hover, .sqlbar button:hover, .sql-card button:hover { color: var(--primary); border-color: #c7d2fe; background: var(--soft); }
+.table-page > nav { height: 40px; flex-shrink: 0; display: flex; align-items: center; gap: 24px; padding: 0 20px; border-bottom: 1px solid var(--border); }
+.table-page > nav button { height: 100%; position: relative; color: var(--muted); background: transparent; cursor: pointer; font-size: 13px; font-weight: 800; }
+.table-page > nav button:hover, .table-page > nav button.active { color: var(--primary); }
+.table-page > nav button.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--primary); }
+.table-page > main { min-height: 0; flex: 1; overflow: hidden; }
+.data-panel { height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.data-panel.pad { padding: 16px; overflow: auto; }
+.toolbar { height: 40px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.toolbar span { display: flex; gap: 7px; }
+.table-scroll { min-height: 0; flex: 1; overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { position: sticky; top: 0; z-index: 1; background: #f8fafc; color: var(--text-2); border-bottom: 1px solid var(--border); padding: 8px 10px; text-align: left; font-weight: 800; white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+tr:hover td { background: #f8fafc; }
+.data-panel footer { height: 36px; flex-shrink: 0; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); background: #f8fafc; border-top: 1px solid var(--border); font-size: 12px; }
+.data-panel select { height: 24px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text-2); }
+.status { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 800; }
+.status i { width: 6px; height: 6px; border-radius: 50%; }
+.status.active { color: var(--success); background: #ecfdf5; }
+.status.active i { background: var(--success); }
+.status.inactive { color: var(--muted); background: #f1f5f9; }
+.status.inactive i { background: var(--muted); }
+.status.pending { color: var(--warning); background: #fff7ed; }
+.status.pending i { background: var(--warning); }
+.constraint { display: inline-flex; border-radius: 5px; padding: 2px 5px; color: var(--info); background: #eff6ff; font-style: normal; font-size: 10px; font-weight: 900; }
+.relations { position: relative; height: 100%; overflow: hidden; background: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 20px 20px; }
+.relations svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.relations path { fill: none; stroke: #94a3b8; stroke-width: 2; stroke-dasharray: 5 5; }
+.er { position: absolute; z-index: 1; width: 150px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 5px; background: #fff; box-shadow: var(--shadow); font-size: 11px; }
+.er.primary { border-color: #c7d2fe; background: var(--soft); }
+.er b { font-family: "JetBrains Mono", monospace; }
+.er span { color: var(--text-2); }
+.samples { padding: 16px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.samples button { text-align: left; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fff; cursor: pointer; }
+.samples pre, .sql-card pre { margin: 10px 0 0; overflow: auto; color: var(--info); font-family: "JetBrains Mono", monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
+.history { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.history p { margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 9px; background: #fff; }
+.history b { font-family: "JetBrains Mono", monospace; }
+.history span { color: var(--muted); }
+
+.sql-page { display: flex; flex-direction: column; overflow: hidden; }
+.sqlbar { height: 42px; flex-shrink: 0; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: #f8fafc; }
+.sqlbar span { color: var(--muted); font-size: 12px; font-weight: 800; }
+.sql-page > textarea { min-height: 0; flex: 1; border: 0; outline: 0; resize: none; padding: 18px; color: #dbeafe; background: #0f172a; font-family: "JetBrains Mono", monospace; font-size: 13px; line-height: 1.7; }
+.sql-page > section { height: 220px; flex-shrink: 0; border-top: 1px solid var(--border); background: #fff; overflow: auto; }
+.sql-page nav { height: 36px; display: flex; align-items: center; border-bottom: 1px solid var(--border); background: #f8fafc; }
+.sql-page nav button { height: 100%; padding: 0 14px; color: var(--muted); background: transparent; cursor: pointer; font-size: 12px; font-weight: 800; }
+.sql-page nav button.active { color: var(--primary); background: #fff; }
+.empty { padding: 48px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.multi-page { padding: 26px; }
+.multi-head { padding: 16px; border: 1px solid #bfdbfe; border-radius: 14px; display: flex; align-items: center; gap: 14px; color: #1e40af; background: #eff6ff; }
+.multi-head div { display: flex; flex-direction: column; gap: 4px; }
+.multi-head span { font-size: 12px; opacity: .85; }
+.multi-cards { margin-top: 18px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.multi-cards button { min-height: 150px; text-align: left; border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #fff; cursor: pointer; }
+.multi-cards svg { color: var(--primary); }
+.multi-cards span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+.result-page { padding: 26px; }
+.result-page header { margin-bottom: 14px; }
+.result-page header span { color: var(--muted); font-size: 12px; font-weight: 800; }
+.result-page h2 { margin: 6px 0 0; font-size: 20px; }
+.result-page article { margin-top: 14px; border: 1px solid var(--border); border-radius: 14px; padding: 16px; background: #fff; box-shadow: 0 4px 14px rgba(15,23,42,.035); }
+.result-page h3 { margin: 0 0 10px; font-size: 14px; }
+.result-page p { margin: 0; color: var(--text-2); line-height: 1.7; }
+.result-page svg { width: 100%; height: 220px; }
+.result-page .grid { fill: none; stroke: #e2e8f0; stroke-width: 1; }
+.result-page .area { fill: rgba(79,70,229,.12); }
+.result-page .line { fill: none; stroke: var(--primary); stroke-width: 3; }
+.sql-card > div { display: flex; align-items: center; justify-content: space-between; }
+
+.drawer { width: 280px; flex-shrink: 0; overflow: hidden; display: flex; flex-direction: column; }
+.drawer header { height: 42px; flex-shrink: 0; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: #f8fafc; }
+.drawer header b { font-size: 13px; }
+.drawer header button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; }
+.drawer main { padding: 14px; overflow: auto; }
+.drawer p { margin: 0; padding: 10px 0; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+.drawer p span { color: var(--muted); }
+.drawer p b { font-family: "JetBrains Mono", monospace; font-size: 12px; }
+.suggestions { display: flex; flex-direction: column; gap: 10px; }
+.suggestions button { width: 100%; text-align: left; border: 1px solid var(--border); border-radius: 10px; padding: 10px; color: var(--text); background: #fff; cursor: pointer; font-size: 12px; font-weight: 750; }
+.suggestions button:hover { border-color: #c7d2fe; background: var(--soft); color: var(--primary); }
+
+.menu { position: fixed; z-index: 50; min-width: 210px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 20px 48px rgba(15,23,42,.18); }
+.menu button { width: 100%; height: 32px; padding: 0 9px; display: flex; align-items: center; gap: 8px; border-radius: 7px; color: var(--text-2); background: transparent; cursor: pointer; font-size: 12px; text-align: left; }
+.menu button:hover { color: var(--primary); background: var(--soft); }
+.menu button.danger { color: var(--danger); }
+.menu button.danger:hover { background: #fef2f2; }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px; }
+.toast { position: fixed; right: 20px; bottom: 20px; z-index: 60; min-height: 38px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; color: #fff; background: rgba(15,23,42,.92); box-shadow: 0 16px 34px rgba(15,23,42,.24); font-size: 13px; font-weight: 750; }
+
+@media (max-width: 1100px) {
+  .app-header { grid-template-columns: 240px 1fr 140px; }
+  .app-header nav { gap: 16px; }
+  .sidebar { width: 230px; }
+  .drawer { display: none; }
+  .cards.four, .cards.five, .samples, .multi-cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
-
-.hifi-recommend-text {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.4;
-  white-space: pre-line;
-}
-
-.hifi-tag {
-  align-self: flex-start;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: 9px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-}
-
-/* Recent Visits Styling */
-.hifi-recent-tabs {
-  display: flex;
-  gap: 16px;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 10px;
-}
-
-.hifi-recent-tab {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding-bottom: 6px;
-  position: relative;
-}
-
-.hifi-recent-tab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-recent-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-recent-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-
-.hifi-recent-card {
-  padding: 10px;
-  border-radius: 8px;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  box-sizing: border-box;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.hifi-recent-card:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-}
-
-.hifi-recent-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hifi-recent-desc {
-  font-size: 9px;
-  color: var(--color-text-muted);
-  margin-top: 2px;
-}
-
-/* Middle Bottom - Workspace Panels */
-.hifi-bottom-panels {
-  flex: 9;
-  display: grid;
-  grid-template-columns: 35% 35% 30%;
-  gap: 10px;
-  overflow: hidden;
-}
-
-.hifi-bottom-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.hifi-panel-header {
-  height: 38px;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  background: #F8FAFC;
-  flex-shrink: 0;
-}
-
-.hifi-panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hifi-panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hifi-panel-tabs {
-  display: flex;
-  height: 100%;
-}
-
-.hifi-panel-tab {
-  height: 100%;
-  padding: 0 8px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  border-right: 1px solid var(--color-border);
-  cursor: pointer;
-  position: relative;
-  background: #F1F5F9;
-}
-
-.hifi-panel-tab.active {
-  background: #FFFFFF;
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-panel-tab-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  color: var(--color-text-muted);
-}
-
-.hifi-panel-tab-close:hover {
-  background: #E2E8F0;
-  color: var(--color-text-primary);
-}
-
-/* Panel Toolbar */
-.hifi-panel-toolbar {
-  height: 32px;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  background: #FFFFFF;
-  flex-shrink: 0;
-}
-
-.hifi-toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hifi-toolbar-btn {
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.hifi-toolbar-btn:hover {
-  background: #F8FAFC;
-  border-color: #CBD5E1;
-}
-
-.hifi-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Data Table Rules */
-.hifi-table-container {
-  flex: 1;
-  overflow: auto;
-  position: relative;
-}
-
-.hifi-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.hifi-table th {
-  background: #F8FAFC;
-  border-bottom: 1px solid var(--color-border);
-  padding: 6px 8px;
-  text-align: left;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  white-space: nowrap;
-}
-
-.hifi-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  white-space: nowrap;
-}
-
-.hifi-table tr:hover td {
-  background: #F8FAFC;
-}
-
-.hifi-status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.hifi-status-tag.active {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-.hifi-status-tag.inactive {
-  background: #F1F5F9;
-  color: var(--color-text-muted);
-}
-
-.hifi-status-tag.pending {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-
-.hifi-table-footer {
-  height: 32px;
-  border-top: 1px solid var(--color-border);
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--color-text-muted);
-  background: #F8FAFC;
-  flex-shrink: 0;
-}
-
-.hifi-pagination {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hifi-page-num {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  cursor: pointer;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-}
-
-.hifi-page-num.active {
-  background: var(--color-primary);
-  color: #FFFFFF;
-  border-color: var(--color-primary);
-}
-
-/* Schema Specifics */
-.hifi-breadcrumb {
-  padding: 6px 10px;
-  font-size: 11px;
-  color: var(--color-primary);
-  font-weight: 500;
-  background: #F8FAFC;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.hifi-subtabs {
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  background: #FFFFFF;
-  flex-shrink: 0;
-  padding: 0 10px;
-}
-
-.hifi-subtab {
-  padding: 6px 12px;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  position: relative;
-}
-
-.hifi-subtab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-subtab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-constraint-badge {
-  display: inline-flex;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: 8px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.hifi-constraint-badge.pk {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-
-.hifi-constraint-badge.index {
-  background: var(--color-info-soft);
-  color: var(--color-info);
-}
-
-.hifi-constraint-badge.unique {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-/* ER Diagram Specifics */
-.hifi-er-container {
-  flex: 1;
-  background: #F8FAFC;
-  position: relative;
-  overflow: hidden;
-}
-
-.hifi-er-zoom-controls {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.hifi-er-zoom-btn {
-  width: 24px;
-  height: 24px;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.hifi-er-zoom-btn:hover {
-  background: #F1F5F9;
-  color: var(--color-text-primary);
-}
-
-/* AI Assistant Sidebar (Column 3) */
-.hifi-assistant-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.hifi-assistant-header {
-  height: 44px;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  flex-shrink: 0;
-}
-
-.hifi-assistant-title {
-  font-size: 13px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hifi-ai-badge {
-  padding: 1px 4px;
-  background: #F3E8FF;
-  color: #7C3AED;
-  font-size: 9px;
-  font-weight: 700;
-  border-radius: 3px;
-}
-
-.hifi-context-bar {
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 10px;
-  flex-shrink: 0;
-}
-
-.hifi-context-chips {
-  display: flex;
-  gap: 4px;
-}
-
-.hifi-context-chip {
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 2px 6px;
-  color: var(--color-text-secondary);
-}
-
-.hifi-assistant-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.hifi-ai-bubble {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
-  align-self: flex-start;
-  max-width: 90%;
-  white-space: pre-line;
-}
-
-.hifi-ai-msg-container {
-  display: flex;
-  gap: 8px;
-  align-self: flex-start;
-  max-width: 90%;
-}
-
-.hifi-ai-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.hifi-ai-msg-bubble {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-line;
-}
-
-.hifi-user-bubble {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 11px;
-  line-height: 1.5;
-  align-self: flex-end;
-  max-width: 85%;
-  font-weight: 500;
-}
-
-.hifi-suggest-chip {
-  align-self: flex-end;
-  padding: 6px 12px;
-  border-radius: 10px;
-  background: #F1F5F9;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 85%;
-}
-
-.hifi-suggest-chip:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-/* AI Visual Card (Chart) */
-.hifi-ai-card {
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: #FFFFFF;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.hifi-ai-card-header {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-ai-card-body {
-  padding: 12px;
-}
-
-/* SQL Card Specifics */
-.hifi-sql-card {
-  background: #F8FAFC;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  padding: 10px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
-  color: var(--color-info);
-  line-height: 1.4;
-  white-space: pre;
-  overflow-x: auto;
-}
-
-.hifi-sql-card-action {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* Assistant input footer */
-.hifi-assistant-footer {
-  border-top: 1px solid var(--color-border);
-  padding: 10px;
-  background: #FFFFFF;
-  flex-shrink: 0;
-}
-
-.hifi-chat-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.hifi-chat-input {
-  width: 100%;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  padding: 0 38px 0 10px;
-  font-size: 11.5px;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.hifi-chat-input:focus {
-  border-color: var(--color-primary);
-}
-
-.hifi-chat-send-btn {
-  position: absolute;
-  right: 6px;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: #FFFFFF;
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-}
-
-.hifi-chat-send-btn:hover {
-  background: var(--color-primary-soft);
-}
-
-/* Design Guide Panel (Column 4) */
-.hifi-guide-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-  overflow-y: auto;
-}
-
-.hifi-guide-title {
-  font-size: 13px;
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 6px;
-}
-
-.hifi-guide-section {
-  margin-bottom: 16px;
-}
-
-.hifi-guide-subtitle {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 8px;
-}
-
-/* Color items */
-.hifi-color-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.hifi-color-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hifi-color-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.hifi-color-label {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-}
-
-.hifi-color-hex {
-  font-size: 10px;
-  color: var(--color-text-muted);
-  font-family: monospace;
-}
-
-/* Guide element styling */
-.hifi-guide-btn-primary {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: #FFFFFF;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  font-size: 11px;
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.hifi-guide-btn-secondary {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  border: 1px solid #C7D2FE;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.hifi-guide-btn-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-.hifi-guide-chip-prod {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.hifi-guide-chip-test {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.hifi-guide-chip-dev {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-info-soft);
-  color: var(--color-info);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-/* Status dots */
-.hifi-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.hifi-dot.active { background: var(--color-success); }
-.hifi-dot.inactive { background: var(--color-text-muted); }
-.hifi-dot.pending { background: var(--color-warning); }
-
-.hifi-status-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--color-text-secondary);
-}
-
-/* Input state demonstration */
-.hifi-guide-input {
-  width: 100%;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  padding: 0 8px;
-  font-size: 11px;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.hifi-guide-input:focus {
-  border-color: var(--color-secondary);
-}
-
-/* Guide Card Demo */
-.hifi-guide-card-demo {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 10px;
-  background: #FFFFFF;
-}
-
-.hifi-guide-card-title {
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.hifi-guide-card-body {
-  font-size: 9.5px;
-  color: var(--color-text-secondary);
-  line-height: 1.3;
-}
-
-/* Hover and active states */
-.hifi-hover-demo-btn {
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.hifi-hover-demo-btn.hover {
-  background: #4338CA;
-  color: #FFFFFF;
-}
-
-.hifi-hover-demo-btn.default {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border: 1px solid #C7D2FE;
-}
-
-.hifi-hover-row-demo {
-  padding: 6px 8px;
-  font-size: 10.5px;
-  border-radius: 4px;
-}
-
-.hifi-hover-row-demo.hover {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.hifi-hover-row-demo.default {
-  color: var(--color-text-secondary);
-}
-
-.hifi-focus-input-wrapper {
-  position: relative;
-}
-
-.hifi-focus-input-wrapper input {
-  border-color: var(--color-secondary);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
-}
-
-.hifi-focus-counter {
-  position: absolute;
-  right: 8px;
-  bottom: -14px;
-  font-size: 8px;
-  color: var(--color-text-muted);
-}
-
-/* ═══════════════════════════════════════════════════════
-   New Tabbed Workspace & Context Action Styles
-   ═══════════════════════════════════════════════════════ */
-
-.hifi-sidebar-col {
-  width: 240px;
-  flex-shrink: 0;
-}
-
-.hifi-main-workspace-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
-}
-
-.hifi-right-drawer {
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
-  height: 100%;
-}
-
-.hifi-right-drawer.closed {
-  width: 0px;
-  margin-left: -10px;
-  border: none;
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Tab bar container */
-.hifi-workspace-tab-bar {
-  height: 38px;
-  border-bottom: 1px solid var(--color-border);
-  background: #F8FAFC;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  flex-shrink: 0;
-}
-
-.hifi-workspace-tabs-scroll {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  flex: 1;
-  height: 100%;
-  padding-right: 10px;
-}
-
-.hifi-workspace-tabs-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.hifi-workspace-tab {
-  height: 26px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  border-radius: 6px;
-  cursor: pointer;
-  max-width: 140px;
-  transition: all 0.15s;
-  position: relative;
-  user-select: none;
-}
-
-.hifi-workspace-tab:hover {
-  background: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
-.hifi-workspace-tab.active {
-  background: var(--color-primary-soft);
-  border-color: #C7D2FE;
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.1s;
-}
-
-.hifi-tab-close:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--color-text-primary);
-}
-
-.hifi-tab-add-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.hifi-tab-add-btn:hover {
-  background: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
-.hifi-workspace-tab-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.hifi-right-drawer-toggle-btn {
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.hifi-right-drawer-toggle-btn:hover {
-  background: #F1F5F9;
-}
-
-.hifi-right-drawer-toggle-btn.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: #C7D2FE;
-}
-
-/* Tab panes */
-.hifi-tab-pane {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: auto;
-  background: #FFFFFF;
-}
-
-/* Table Workspace view */
-.hifi-table-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.hifi-workspace-subtabs {
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  background: #FFFFFF;
-  flex-shrink: 0;
-  padding: 0 16px;
-  height: 34px;
-  align-items: center;
-  gap: 16px;
-}
-
-.hifi-workspace-subtab {
-  padding: 8px 0;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  position: relative;
-  font-weight: 500;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.hifi-workspace-subtab:hover {
-  color: var(--color-primary);
-}
-
-.hifi-workspace-subtab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-workspace-subtab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-  border-radius: 2px;
-}
-
-.hifi-subtab-content {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Context Menu overlay */
-.hifi-context-menu {
-  position: fixed;
-  background: #FFFFFF;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  padding: 4px;
-  z-index: 9999;
-  min-width: 140px;
-  animation: fadeInMenu 0.12s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes fadeInMenu {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.hifi-context-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.hifi-context-menu-item:hover {
-  background: #F1F5F9;
-  color: var(--color-text-primary);
-}
-
-.hifi-context-menu-item.danger {
-  color: var(--color-danger);
-}
-
-.hifi-context-menu-item.danger:hover {
-  background: var(--color-danger-soft);
-}
-
-.hifi-context-menu-divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 4px 0;
-}
-
-/* Drag and Drop Zone */
-.hifi-drop-zone {
-  margin: 12px;
-  padding: 10px 14px;
-  border: 1.5px dashed #C7D2FE;
-  border-radius: 10px;
-  background: #F5F7FF;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  transition: all 0.2s;
-}
-
-.hifi-drop-zone:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-}
-
-.hifi-context-chip {
-  animation: scaleIn 0.2s ease-out;
-}
-
-@keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-/* Toast popup styling */
-.hifi-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 24px;
-  background: #0F172A;
-  color: #FFFFFF;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 500;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-@keyframes slideUp {
-  from { transform: translateY(12px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* SQL Workspace Editor */
-.hifi-sql-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: #FFFFFF;
-  overflow: hidden;
-}
-
-.hifi-sql-editor-container {
-  flex: 1;
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  min-height: 150px;
-  position: relative;
-}
-
-.hifi-sql-editor-lines {
-  width: 28px;
-  background: #F8FAFC;
-  border-right: 1px solid var(--color-border);
-  font-family: monospace;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-align: right;
-  padding: 10px 6px 10px 0;
-  user-select: none;
-  line-height: 1.6;
-}
-
-.hifi-sql-textarea-wrapper {
-  flex: 1;
-  position: relative;
-  height: 100%;
-}
-
-.hifi-sql-textarea {
-  width: 100%;
-  height: 100%;
-  border: none;
-  resize: none;
-  outline: none;
-  padding: 10px;
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  color: #0F172A;
-  background: #FFFFFF;
-}
-
-.hifi-sql-editor-actions {
-  position: absolute;
-  right: 12px;
-  top: 12px;
-  display: flex;
-  gap: 6px;
-  z-index: 5;
-}
-
-.hifi-sql-console-run-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--color-success);
-  color: #FFFFFF;
-  font-size: 10px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
-  transition: all 0.15s;
-}
-
-.hifi-sql-console-run-btn:hover {
-  background: #15803d;
-}
-
-/* SQL Console outputs pane */
-.hifi-sql-output-pane {
-  height: 240px;
-  background: #FFFFFF;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.hifi-sql-output-tabs {
-  height: 32px;
-  background: #F8FAFC;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  padding: 0 12px;
-  align-items: center;
-  gap: 16px;
-}
-
-.hifi-sql-output-tab {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  cursor: pointer;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.hifi-sql-output-tab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-sql-output-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-sql-output-content {
-  flex: 1;
-  overflow: auto;
-  padding: 10px;
-  font-size: 10.5px;
-}
-
-.hifi-sql-history-item {
-  padding: 6px;
-  border-bottom: 1px solid #F1F5F9;
-  font-family: monospace;
-}
-
-.hifi-sql-ai-explain-card {
-  padding: 12px;
-  background: var(--color-primary-soft);
-  border: 1px solid #C7D2FE;
-  border-radius: 8px;
-  color: #3730A3;
-  line-height: 1.5;
-}
-
-/* Multi-table joint Workspace styles */
-.hifi-multi-table-workspace {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* Query result full-width view */
-.hifi-query-result-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.hifi-query-result-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: #F8FAFC;
-}
-
-.hifi-query-result-messages {
-  flex: 1;
-  overflow: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.hifi-query-result-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--color-border);
-  background: #FFFFFF;
-}
-
-.hifi-sql-card-action {
-  margin-top: 6px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 6px;
-  display: flex;
-  justify-content: flex-end;
-}
-
