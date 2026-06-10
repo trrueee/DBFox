@@ -1,0 +1,38 @@
+.wb {
+  display: grid;
+  grid-template-rows: 30px minmax(0, 1fr) 28px;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: hsl(var(--background));
+}
+
+.wb-body {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) minmax(320px, 380px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wb-left,
+.wb-center,
+.wb-right {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wb-left {
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+}
+
+.wb-center {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid hsl(var(--border));
+}
+
+.wb-right {
+  background: hsl(var(--card));
+}
