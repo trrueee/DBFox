@@ -165,4 +165,13 @@ def observe_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str,
     if new_artifacts_dicts:
         state_updates["artifacts"] = new_artifacts_dicts
 
+    # ---- Rebuild ContextPack (Agent v2) ------------------------------------
+    try:
+        from engine.agent.context_pack import build_context_pack
+        merged_state = dict(state)
+        merged_state.update(state_updates)
+        state_updates["context_pack"] = build_context_pack(merged_state).model_dump(mode="json")
+    except Exception as exc:
+        logger.warning("Failed to build ContextPack: %s", exc)
+
     return state_updates

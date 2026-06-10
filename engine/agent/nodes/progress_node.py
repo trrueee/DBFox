@@ -134,6 +134,16 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
             if text:
                 context_parts.append(f"### Last Model Response\n{text[:600]}")
 
+    # ContextPack summary (Agent v2)
+    context_pack_raw = state.get("context_pack")
+    if context_pack_raw and isinstance(context_pack_raw, dict):
+        try:
+            from engine.agent.context_pack import ContextPack, render_for_judge
+            pack = ContextPack.model_validate(context_pack_raw)
+            context_parts.append(f"### Context Summary\n{render_for_judge(pack)}")
+        except Exception:
+            pass
+
     # Step count
     step_count = state.get("step_count", 0)
     max_steps = state.get("max_steps", 20)
@@ -155,6 +165,24 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
                 context_parts.append("\n\n".join(recovery_blocks))
         except Exception as exc:
             logger.warning("Failed to load skill recovery context for progress judge: %s", exc)
+
+    # ---- Past recovery experience (Agent v2 memory integration) ------------
+    has_failure = bool(error or (execution and not execution.get("success")))
+    if has_failure:
+        try:
+            from engine.agent.memory_bridge import search_memory_for_recovery
+            failure_text = str(error or execution.get("error", ""))
+            recovery_mem = search_memory_for_recovery(
+                error=failure_text,
+                failure_layer=(state.get("progress_decision") or {}).get("failure_layer"),
+                datasource_id=str(state.get("datasource_id") or ""),
+                user_id=state.get("user_id") or state.get("thread_id"),
+                project_id=state.get("project_id"),
+            )
+            if recovery_mem:
+                context_parts.append(recovery_mem)
+        except Exception as exc:
+            logger.warning("Failed to search memory for recovery: %s", exc)
 
     judge_prompt = "\n\n".join(context_parts)
 

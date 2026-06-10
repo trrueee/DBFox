@@ -42,11 +42,21 @@ class PolicyGate:
                 risk_level="danger",
             )
 
+        # ---- Special: escalate.tool_group is always allowed (control tool) ----
+        if tool_name == "escalate.tool_group":
+            return PolicyDecision(
+                status="allowed",
+                reason="Tool group escalation is a no-side-effect control operation.",
+                safe_args=args,
+                risk_level="safe",
+            )
+
         # ---- Hard boundary: check tool group against Planner's allowed_tool_groups ----
         allowed_groups = state.get("allowed_tool_groups") or []
         if allowed_groups:
-            group = tool_to_group(tool_name)
-            if group is None or group not in allowed_groups:
+            # Prefer spec.group from the tool definition over static mapping fallback
+            group = tool.spec.group or tool_to_group(tool_name)
+            if group not in allowed_groups:
                 return PolicyDecision(
                     status="blocked",
                     reason=f"Tool '{tool_name}' (group={group}) is not in allowed_tool_groups: {allowed_groups}.",

@@ -5,7 +5,7 @@ the engine source.  The framework is built on abstract *Sources* that discover
 definitions from different locations (builtin dirs, user config, remote APIs).
 """
 
-from engine.agent.extensions.discovery import (
+from engine.agent_core.extensions.discovery import (
     SkillSource,
     BuiltinSkillSource,
     UserSkillSource,
@@ -15,27 +15,23 @@ from engine.agent.extensions.discovery import (
     UserToolSource,
     DictToolSource,
 )
-from engine.agent.extensions.loader import (
-    load_skill_from_dict,
-    load_skills_from_source,
+from engine.agent_core.extensions.loader import (
     load_tool_spec_from_dict,
     load_tool_specs_from_source,
 )
 
 __all__ = [
-    # Skill sources
+    # Skill sources (used by agent-layer SkillRegistry)
     "SkillSource",
     "BuiltinSkillSource",
     "UserSkillSource",
     "DictSkillSource",
-    # Tool sources
+    # Tool sources (used by agent_core ToolRegistry)
     "ToolSource",
     "BuiltinToolSource",
     "UserToolSource",
     "DictToolSource",
-    # Loaders
-    "load_skill_from_dict",
-    "load_skills_from_source",
+    # Tool loaders (agent_core — no agent deps)
     "load_tool_spec_from_dict",
     "load_tool_specs_from_source",
 ]

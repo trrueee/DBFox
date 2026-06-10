@@ -10,6 +10,6 @@ input_schema:
   type: object
   description: This tool reads all required inputs from current agent state.
 binding:
-  produces_state_keys: [environment_profile]
+  produces_state_keys: [environment_profile, database_map]
 metadata:
   next_route: answer

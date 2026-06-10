@@ -16,13 +16,13 @@ from pathlib import Path
 from typing import Any
 
 from engine.agent.skills.schemas import SkillSpec
-from engine.agent.extensions.discovery import (
+from engine.agent_core.extensions.discovery import (
     SkillSource,
     BuiltinSkillSource,
     UserSkillSource,
     DictSkillSource,
 )
-from engine.agent.extensions.loader import load_skills_from_source
+from engine.agent.skills.loader import load_skills_from_source
 
 logger = logging.getLogger("databox.databox_agent.skills.registry")
 
@@ -119,7 +119,7 @@ class SkillRegistry:
 
     def register_dict(self, raw: dict[str, Any]) -> SkillSpec | None:
         """Validate and register a raw dict.  Returns the spec on success, None on failure."""
-        from engine.agent.extensions.loader import load_skill_from_dict
+        from engine.agent.skills.loader import load_skill_from_dict
         spec = load_skill_from_dict(raw)
         if spec is not None:
             self.register(spec)

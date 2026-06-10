@@ -187,7 +187,12 @@ def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs
 
 
 def _apply_environment_get_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"environment_profile": output}
+    result: dict[str, Any] = {"environment_profile": output}
+    # Agent v2: extract DatabaseMap to top-level state
+    db_map = output.get("database_map")
+    if db_map is not None:
+        result["database_map"] = db_map
+    return result
 
 
 def _apply_semantic_resolve(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:

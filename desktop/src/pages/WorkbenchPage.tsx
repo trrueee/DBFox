@@ -33,6 +33,7 @@ import { AgentWorkspace } from "../features/agent/AgentWorkspace";
 import { AgentCopilotPanel } from "../features/agent/AgentCopilotPanel";
 import { buildAgentWorkspaceContext } from "../features/agent/workspaceContext";
 import { SemanticSettingsPanel } from "../features/semantic/SemanticSettingsPanel";
+import { ApiConfigDialog, useApiConfig } from "../components/ApiConfigDialog";
 
 // Tab structure for the workspace
 export interface WorkbenchTab {
@@ -542,6 +543,7 @@ export const WorkbenchPage = ({
 
   // Global resizable AI Panel on the right (defaults to open, resizable, collapsible to 48px strip)
   const [aiPanelCollapsed, setAiPanelCollapsed] = useState(false);
+  const apiConfig = useApiConfig();
   const [aiPanelWidth] = useState(340);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiResponse, setAiResponse] = useState("");
@@ -1878,8 +1880,19 @@ export const WorkbenchPage = ({
             onInsertSql={handleApplySqlToEditor}
             onRunSql={(sql) => handleOpenQueryTab(sql, "Agent SQL")}
             onOpenQueryTab={handleOpenQueryTab}
+            onOpenApiConfig={() => apiConfig.setOpen(true)}
+            apiConfigured={apiConfig.isConfigured}
           />
         </aside>
+
+        <ApiConfigDialog
+          open={apiConfig.open}
+          onOpenChange={apiConfig.setOpen}
+          config={apiConfig.config}
+          onChange={apiConfig.updateConfig}
+          onSave={apiConfig.handleSave}
+          saved={apiConfig.saved}
+        />
       </main>
 
       {/* ── Bottom Status Bar ── */}
