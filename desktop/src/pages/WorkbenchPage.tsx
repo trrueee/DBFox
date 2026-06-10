@@ -9,7 +9,6 @@ import { ApiConfigDialog, useApiConfig } from "../components/ApiConfigDialog";
 import { DataSourcesPage } from "./DataSourcesPage";
 import type { DataSource, Project, SchemaTable } from "../lib/api";
 import { AgentCopilotPanel } from "../features/agent/AgentCopilotPanel";
-import { buildAgentWorkspaceContext } from "../features/agent/workspaceContext";
 import { SemanticSettingsPanel } from "../features/semantic/SemanticSettingsPanel";
 import { LayoutRegion } from "../features/workbench/LayoutRegion";
 import { ObjectExplorer } from "../features/workbench/ObjectExplorer";
@@ -45,7 +44,6 @@ const TABLE_TABS: { id: TableSubTab; label: string }[] = [
 ];
 
 export const WorkbenchPage = ({
-  projects,
   activeProject,
   datasources,
   activeDataSource,
@@ -73,25 +71,6 @@ export const WorkbenchPage = ({
     const next = datasources.find((datasource) => datasource.id === connectionId);
     if (next) setActiveDataSource(next);
   }, [activeDataSource?.id, datasources, setActiveDataSource, tabs.activeTab?.connectionId]);
-
-  const selectedSchemaTable = useMemo(() => {
-    if (tabs.activeTab?.type !== "table" || !tabs.activeTab.tableName) return null;
-    return schemaTables.find((table) => table.table_name === tabs.activeTab?.tableName) || tabs.activeTab.tableName;
-  }, [schemaTables, tabs.activeTab]);
-
-  const agentWorkspaceContext = useMemo(() => buildAgentWorkspaceContext({
-    currentProject: activeProject,
-    currentDatasource: activeDataSource,
-    activeSql: tabs.activeTab?.type === "query" ? tabs.activeTab.sqlDraft || "" : "",
-    selectedSql: tabs.activeTab?.type === "query" ? tabs.activeTab.sqlDraft || "" : "",
-    lastQueryResult: tabs.activeTab?.type === "query" ? tabs.activeTab.lastQueryResultPreview || null : null,
-    lastError: tabs.activeTab?.type === "query" ? tabs.activeTab.lastError || null : null,
-    selectedTable: selectedSchemaTable,
-    selectedColumns: [],
-    selectedArtifact: null,
-    recentAgentRun: null,
-    openSqlTabs: tabs.tabs,
-  }), [activeDataSource, activeProject, selectedSchemaTable, tabs.activeTab, tabs.tabs]);
 
   const openQueryTab = useCallback((sql = "", title?: string) => {
     tabs.openQueryTab(sql, title);
@@ -319,7 +298,6 @@ export const WorkbenchPage = ({
             onOpenQueryTab={openQueryTab}
             onOpenApiConfig={() => apiConfig.setOpen(true)}
             apiConfigured={apiConfig.isConfigured}
-            workspaceContext={agentWorkspaceContext}
           />
         )}
         bottom={(
