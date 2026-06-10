@@ -10,7 +10,6 @@ from engine.db import get_db
 from engine.errors import DataBoxError
 from engine.models import DataSource, TableDesignDraft
 from engine.schemas import (
-    SchemaAlterationRequest,
     TableDesignDDLRequest,
     TableDesignExecuteRequest,
     TableDesignDraftSaveRequest,
@@ -43,21 +42,6 @@ def _draft_to_dict(draft: TableDesignDraft) -> dict[str, Any]:
         "created_at": draft.created_at.isoformat() if draft.created_at else None,
         "updated_at": draft.updated_at.isoformat() if draft.updated_at else None,
     }
-
-
-@router.post("/schema/design/ai-modify")
-def api_generate_schema_alteration(req: SchemaAlterationRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    try:
-        from engine.sql.generator import generate_schema_alteration_ai
-        llm_config = {
-            "api_key": req.api_key,
-            "api_base": req.api_base,
-            "model": req.model
-        }
-        return generate_schema_alteration_ai(db, req.datasource_id, req.instruction, llm_config)
-    except Exception as exc:
-        logger.exception("AI Schema alteration DDL generation failed")
-        raise HTTPException(status_code=500, detail={"code": "AI_MODIFY_FAILED", "message": f"AI 批注式修改失败: {str(exc)}"})
 
 
 @router.post("/schema/design/create-table-ddl")
