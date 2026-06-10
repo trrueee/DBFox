@@ -1,7 +1,8 @@
-import { Eye, Network, PencilRuler, TableProperties } from "lucide-react";
+import { Eye, Network, TableProperties } from "lucide-react";
+import type { ReactNode } from "react";
 import type { SchemaTable } from "../../lib/api";
 
-export type SchemaBrowserTab = "fields" | "er" | "data" | "design";
+export type SchemaBrowserTab = "fields" | "er" | "data";
 
 interface SchemaBrowserHeaderProps {
   selectedTable: SchemaTable | null;
@@ -10,11 +11,10 @@ interface SchemaBrowserHeaderProps {
   onTabChange: (tab: SchemaBrowserTab) => void;
 }
 
-const tabs: Array<{ id: SchemaBrowserTab; label: string; icon?: React.ReactNode }> = [
+const tabs: Array<{ id: SchemaBrowserTab; label: string; icon?: ReactNode }> = [
   { id: "fields", label: "字段", icon: <TableProperties size={13} /> },
   { id: "er", label: "关系图", icon: <Network size={13} /> },
   { id: "data", label: "数据预览", icon: <Eye size={13} /> },
-  { id: "design", label: "设计草稿", icon: <PencilRuler size={13} /> },
 ];
 
 export function SchemaBrowserHeader({ selectedTable, viewTab, embedded, onTabChange }: SchemaBrowserHeaderProps) {
