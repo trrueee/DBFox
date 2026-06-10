@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from engine.agent_contracts.tool_registry import ToolRegistry
+from engine.agent.tools.registry_bridge import tool_to_group
 
 
 class PolicyDecision(BaseModel):
@@ -42,8 +43,27 @@ class PolicyGate:
                 risk_level="danger",
             )
 
-        # Enforce execution mode constraint for SQL execution
+        # ---- Hard boundary: check tool group against Planner's allowed_tool_groups ----
+        allowed_groups = state.get("allowed_tool_groups") or []
+        if allowed_groups:
+            group = tool_to_group(tool_name)
+            if group is None or group not in allowed_groups:
+                return PolicyDecision(
+                    status="blocked",
+                    reason=f"Tool '{tool_name}' (group={group}) is not in allowed_tool_groups: {allowed_groups}.",
+                    risk_level="danger",
+                )
+
+        # ---- Hard boundary: check Planner's should_execute_sql flag ----
+        plan = state.get("plan_directive") or {}
         if tool_name == "sql.execute_readonly":
+            if plan.get("should_execute_sql") is False:
+                return PolicyDecision(
+                    status="blocked",
+                    reason="Planner directive forbids SQL execution for this task.",
+                    risk_level="danger",
+                )
+
             # Backward-compat: derive from state["execute"] if execution_mode not explicitly set
             effective_mode = execution_mode
             if execution_mode == "user_requested_read" and not state.get("execute", True):
@@ -54,10 +74,6 @@ class PolicyGate:
                     reason=f"SQL execution is not allowed in {effective_mode} mode.",
                     risk_level="danger",
                 )
-            # agent_autonomous_read is stricter — may require approval
-            if effective_mode == "agent_autonomous_read":
-                # Allow but flag for potential approval downstream
-                pass
 
         if policy.requires_validated_sql:
             raw_safety = state.get("safety")
@@ -86,6 +102,23 @@ class PolicyGate:
 
             blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
             hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
+
+            # agent_autonomous_read: enforce stricter approval even when SQL is valid
+            if tool_name == "sql.execute_readonly":
+                effective_mode = execution_mode
+                if execution_mode == "user_requested_read" and not state.get("execute", True):
+                    effective_mode = "suggest_only"
+
+                if effective_mode == "agent_autonomous_read":
+                    env_profile = state.get("environment_profile") or {}
+                    env = env_profile.get("env", "unknown")
+                    if env == "prod" or policy.risk_level in ("warning", "danger"):
+                        return PolicyDecision(
+                            status="approval_required",
+                            reason=f"Agent-autonomous data read on {env} datasource requires human approval.",
+                            risk_level="warning",
+                            safe_args={"sql": safe_sql or original_sql},
+                        )
 
             if safety.get("requires_confirmation") and not hard_blockers and original_sql:
                 return PolicyDecision(
@@ -121,19 +154,6 @@ class PolicyGate:
             return PolicyDecision(
                 status="approval_required",
                 reason=f"Tool {tool_name} requires approval.",
-                risk_level=policy.risk_level,
-                safe_args=args,
-            )
-
-        # agent_autonomous_read on PROD/warning datasources may require approval
-        if (
-            tool_name == "sql.execute_readonly"
-            and execution_mode == "agent_autonomous_read"
-            and policy.risk_level in ("warning", "danger")
-        ):
-            return PolicyDecision(
-                status="approval_required",
-                reason="Agent-autonomous data read on a sensitive datasource requires approval.",
                 risk_level=policy.risk_level,
                 safe_args=args,
             )
