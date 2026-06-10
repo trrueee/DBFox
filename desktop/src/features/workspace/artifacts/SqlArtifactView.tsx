@@ -6,12 +6,23 @@ interface SqlArtifactViewProps {
   artifact: SqlArtifact;
   onOpenSqlConsole: () => void;
   onSetSqlQuery: (sql: string) => void;
+  onToast: (message: string) => void;
 }
 
-export function SqlArtifactView({ artifact, onOpenSqlConsole, onSetSqlQuery }: SqlArtifactViewProps) {
+export function SqlArtifactView({ artifact, onOpenSqlConsole, onSetSqlQuery, onToast }: SqlArtifactViewProps) {
   const openInSqlConsole = () => {
     onSetSqlQuery(artifact.sql);
     onOpenSqlConsole();
+  };
+
+  const handleCopy = async () => {
+    const ok = await copyText(artifact.sql);
+    onToast(ok ? "已复制 SQL" : "复制失败，请手动选择复制");
+  };
+
+  const handleDownload = () => {
+    const ok = downloadTextFile(`${artifact.id}.sql`, artifact.sql, "text/sql;charset=utf-8");
+    onToast(ok ? "已下载 SQL 文件" : "SQL 下载失败");
   };
 
   return (
@@ -24,11 +35,11 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onSetSqlQuery }: S
         {artifact.description && <p className="text-[10px] text-slate-500 px-3 pt-2">{artifact.description}</p>}
         <pre className="hifi-sql-card font-mono text-[10px] leading-relaxed p-3 text-slate-800">{artifact.sql}</pre>
         <div className="hifi-sql-card-action flex gap-2">
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={() => copyText(artifact.sql)}>
+          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleCopy}>
             <Copy size={10} />
             复制 SQL
           </button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={() => downloadTextFile(`${artifact.id}.sql`, artifact.sql, "text/sql;charset=utf-8")}>
+          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleDownload}>
             <Download size={10} />
             下载
           </button>
