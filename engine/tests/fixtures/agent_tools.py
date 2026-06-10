@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_core.registry import AgentToolContext, FunctionAgentTool, ToolHandler, ToolRegistry, ToolRiskLevel, ToolSpec
+from engine.agent_core.tool_registry import (
+    RegisteredTool, ToolContext, ToolExecutionSpec,
+    ToolHandler, ToolPolicy, ToolRegistry, ToolSpec, ToolStateBinding,
+)
 from engine.agent_core.state import AgentState
 from engine.tools.sql_tools import (
     answer_synthesizer_tool,
@@ -18,7 +21,7 @@ from engine.tools.sql_tools import (
     validate_sql_tool,
 )
 from engine.agent_core.types import ToolObservation
-from engine.tools.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
+from engine.tools.workspace_tools import WORKSPACE_TOOL_NAMES
 
 
 DEFAULT_AGENT_TOOL_NAMES = [
@@ -44,7 +47,7 @@ def build_default_tool_registry() -> ToolRegistry:
     return registry
 
 
-def _default_tools() -> list[FunctionAgentTool]:
+def _default_tools() -> list[RegisteredTool]:
     tools = [
         _tool("followup.load_context", "Load and normalize follow-up context.", _load_followup_context),
         _tool("schema.build_context", "Build semantic schema context for the request.", _build_schema_context),
@@ -65,7 +68,16 @@ def _default_tools() -> list[FunctionAgentTool]:
         _tool("followup.suggest", "Suggest evidence-aware follow-up questions.", _suggest_followups),
         _tool("answer.synthesize", "Synthesize the final evidence-grounded answer.", _answer_synthesizer),
     ]
-    tools.extend(build_workspace_tools())
+    # Workspace tools — registered as pass-through handlers for fixture use
+    for ws_name in WORKSPACE_TOOL_NAMES:
+        tools.append(_tool(
+            ws_name, f"Workspace tool: {ws_name}",
+            lambda _ctx, _args, n=ws_name: ToolObservation(
+                name=n, status="success", input=_args,
+                output={"intent": n.removeprefix("workspace."), "answer": "fixture answer"},
+                latency_ms=0,
+            ),
+        ))
     return tools
 
 
@@ -74,41 +86,41 @@ def _tool(
     description: str,
     handler: ToolHandler,
     *,
-    risk_level: ToolRiskLevel = "safe",
+    risk_level: str = "safe",
     requires_approval: bool = False,
     idempotent: bool = True,
-) -> FunctionAgentTool:
-    return FunctionAgentTool(
+) -> RegisteredTool:
+    return RegisteredTool(
         spec=ToolSpec(
             name=name,
             description=description,
-            risk_level=risk_level,
-            requires_approval=requires_approval,
-            idempotent=idempotent,
+            policy=ToolPolicy(risk_level=risk_level, requires_approval=requires_approval),
+            execution=ToolExecutionSpec(idempotent=idempotent),
         ),
         handler=handler,
     )
 
 
-def _state(ctx: AgentToolContext) -> AgentState:
-    if not isinstance(ctx.state, AgentState):
-        raise RuntimeError("Agent tool context is missing AgentState.")
-    return ctx.state
+def _state(ctx: ToolContext) -> Any:
+    """Return state_view as an attribute-accessible wrapper."""
+    from types import SimpleNamespace
+    d = dict(ctx.state_view)
+    return SimpleNamespace(**{k: v for k, v in d.items() if k.isidentifier()})
 
 
-def _load_followup_context(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _load_followup_context(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return load_followup_context_tool(ctx.request)
 
 
-def _build_schema_context(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _build_schema_context(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return build_schema_context_tool(ctx.db, ctx.request)
 
 
-def _build_query_plan(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _build_query_plan(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return build_query_plan_tool(ctx.db, ctx.request, _state(ctx).schema_metadata)
 
 
-def _generate_sql_candidate(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _generate_sql_candidate(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     return generate_sql_tool(
         ctx.db,
@@ -118,13 +130,13 @@ def _generate_sql_candidate(_input: dict[str, Any], ctx: AgentToolContext) -> To
     )
 
 
-def _validate_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _validate_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     sql = str(input.get("sql") or state.sql or "")
     return validate_sql_tool(ctx.db, ctx.request.datasource_id, sql)
 
 
-def _revise_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _revise_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     return revise_sql_tool(
         str(input.get("sql") or state.sql or ""),
@@ -135,23 +147,23 @@ def _revise_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation
     )
 
 
-def _execute_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _execute_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     sql = str(input.get("sql") or state.sql or "")
     safety = input.get("safety") if isinstance(input.get("safety"), dict) else state.safety
     return execute_sql_tool(ctx.db, ctx.request, sql, safety=safety)
 
 
-def _profile_result(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _profile_result(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     return profile_result_tool(ctx.request, state.query_plan, state.execution)
 
 
-def _suggest_chart(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _suggest_chart(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return suggest_chart_tool(_state(ctx).execution)
 
 
-def _suggest_followups(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _suggest_followups(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     return suggest_followups_tool(
         ctx.request,
@@ -163,7 +175,7 @@ def _suggest_followups(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObs
     )
 
 
-def _answer_synthesizer(_input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _answer_synthesizer(_input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     state = _state(ctx)
     return answer_synthesizer_tool(
         ctx.request,

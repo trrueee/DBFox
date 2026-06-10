@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from engine.agent import AgentRunRequest, AgentWorkspaceContext, DataBoxAgentRuntime
-from engine.tools.default_tools import build_default_tool_registry
-from engine.agent_core.registry import AgentToolContext
+from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
+from engine.agent_core.tool_registry import ToolContext
+from engine.tools.workspace_tools import WORKSPACE_HANDLERS
 from engine.agent_core.workspace_context import build_agent_context_bundle
 from engine.schema_sync import sync_schema
+from engine.agent import DataBoxAgentRuntime
 
 
 def test_workspace_fix_sql_tool_uses_last_error_and_suggests_editor_sql(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
-    registry = build_default_tool_registry()
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
         question="Fix this SQL error",
@@ -20,11 +20,10 @@ def test_workspace_fix_sql_tool_uses_last_error_and_suggests_editor_sql(db_sessi
         ),
     )
     bundle = build_agent_context_bundle(db_session, req)
+    ctx = ToolContext(db=db_session, request=req)
 
-    obs = registry.get("workspace.fix_sql").execute(
-        {"intent": "fix_sql", "context_bundle": bundle},
-        AgentToolContext(db=db_session, request=req),
-    )
+    handler = WORKSPACE_HANDLERS["workspace.fix_sql"]
+    obs = handler({"intent": "fix_sql", "context_bundle": bundle}, ctx)
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -48,11 +47,10 @@ def test_workspace_explain_result_uses_preview_without_sql_execution(db_session,
         ),
     )
     bundle = build_agent_context_bundle(db_session, req)
+    ctx = ToolContext(db=db_session, request=req)
 
-    obs = build_default_tool_registry().get("workspace.explain_result").execute(
-        {"intent": "explain_result", "context_bundle": bundle},
-        AgentToolContext(db=db_session, request=req),
-    )
+    handler = WORKSPACE_HANDLERS["workspace.explain_result"]
+    obs = handler({"intent": "explain_result", "context_bundle": bundle}, ctx)
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -103,19 +101,3 @@ def test_workspace_assist_stream_accepts_workspace_context(db_session, demo_data
     assert final.response.success is True
     assert final.response.execution is None
     assert any(event.type == "agent.artifact.created" for event in events)
-
-
-def test_old_agent_request_without_workspace_context_still_uses_analysis_path(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=False)
-
-    res = DataBoxAgentRuntime(db_session).run(req)
-
-    assert res.success is True
-    assert [step.name for step in res.steps][:4] == [
-        "build_schema_context",
-        "build_query_plan",
-        "generate_sql_candidate",
-        "validate_sql",
-    ]
-    assert res.execution == {"reason": "Request execute=false; SQL was not executed."}

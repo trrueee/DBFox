@@ -12,6 +12,7 @@ from engine.agent_core.types import ToolObservation
 from engine.tools.tool_runtime_gateway import ToolRuntimeGateway
 from engine.agent_core.tool_registry import ToolContext
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.context import graph_context
 from engine.agent.tools.tool_aliases import to_internal, to_alias
 from engine.environment.dialect_resolver import resolve_datasource_dialect
 
@@ -44,10 +45,10 @@ def _step_name(tool_name: str) -> str:
 
 
 def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
-    configurable = config.get("configurable") or {}
-    registry = configurable.get("registry")
-    db = configurable.get("db")
-    req = configurable.get("request")
+    ctx = graph_context(config)
+    registry = ctx.registry
+    db = ctx.db
+    req = ctx.request
 
     allowed_tool_calls = state.get("allowed_tool_calls") or []
 

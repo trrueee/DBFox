@@ -4,11 +4,12 @@ from typing import Any
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.model.model_factory import get_chat_model
+from engine.llm import get_chat_model
 from engine.agent.model.system_prompt import build_system_prompt
 from engine.agent.model.context_builder import build_context_message
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.context import graph_context
 
 
 def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -35,11 +36,11 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
             ],
         }
 
-    configurable = config.get("configurable") or {}
-    model_name = configurable.get("model_name")
-    api_key = configurable.get("api_key")
-    api_base = configurable.get("api_base")
-    registry = configurable.get("registry")
+    ctx = graph_context(config)
+    model_name = ctx.model_name
+    api_key = ctx.api_key
+    api_base = ctx.api_base
+    registry = ctx.registry
 
     allowed_groups = state.get("allowed_tool_groups")
     # None (not []) means "all tools" for backward compatibility.

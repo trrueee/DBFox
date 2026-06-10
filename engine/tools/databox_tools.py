@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from engine.agent_core.registry import AgentToolContext
 from engine.tools.sql_tools import (
     answer_synthesizer_tool,
     build_query_plan_tool,
@@ -21,13 +20,15 @@ from engine.tools.sql_tools import (
 )
 from engine.agent_core.types import AgentRunRequest, ToolObservation
 from engine.agent_core.workspace_context import build_agent_context_bundle
-from engine.tools.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
+from engine.tools.workspace_tools import WORKSPACE_HANDLERS, WORKSPACE_TOOL_NAMES
 from engine.agent_core.tool_registry import (
     RegisteredTool,
     ToolContext,
+    ToolExecutionSpec,
     ToolPolicy,
     ToolRegistry,
     ToolSpec,
+    ToolStateBinding,
 )
 
 
@@ -266,10 +267,21 @@ def register_databox_tools() -> ToolRegistry:
         metadata={"next_route": "answer"},
     ))
 
-    workspace_tools = {tool.spec.name: tool for tool in build_workspace_tools()}
+    _ws_descriptions = {
+        "workspace.explain_sql": "Explain the current SQL without executing it.",
+        "workspace.fix_sql": "Suggest a safe read-only fix for the current SQL error.",
+        "workspace.optimize_sql": "Suggest a safer or more efficient read-only SQL rewrite.",
+        "workspace.rewrite_sql": "Rewrite the current SQL for clarity without execution.",
+        "workspace.explain_result": "Explain the latest result preview without executing SQL.",
+        "workspace.explain_schema": "Explain selected or linked schema context.",
+        "workspace.continue_from_artifact": "Continue from a selected Agent artifact.",
+    }
     for tool_name in WORKSPACE_TOOL_NAMES:
-        workspace_tool = workspace_tools[tool_name]
-        registry.register(_tool(tool_name, workspace_tool.spec.description, _workspace_assist, input_model=QuestionToolInput, metadata={"next_route": "answer"}))
+        registry.register(_tool(
+            tool_name, _ws_descriptions.get(tool_name, tool_name),
+            _workspace_assist, input_model=QuestionToolInput,
+            metadata={"next_route": "answer"},
+        ))
 
     return registry
 
@@ -287,20 +299,20 @@ def _tool(
 ) -> RegisteredTool:
     if name in TOOL_SCHEMAS:
         schemas = TOOL_SCHEMAS[name]
-        input_schema = schemas["input"]
-        output_schema = schemas["output"]
+        explicit_input = schemas["input"]
+        explicit_output = schemas["output"]
     else:
-        input_schema = input_model.model_json_schema() if input_model is not None else {"type": "object"}
-        output_schema = output_model.model_json_schema() if output_model is not None else {"type": "object"}
+        explicit_input = None
+        explicit_output = None
 
     rt = RegisteredTool(
         spec=ToolSpec(
             name=name,
             description=description,
-            input_schema=input_schema,
-            output_schema=output_schema,
             input_model=input_model,
             output_model=output_model,
+            _input_schema=explicit_input,
+            _output_schema=explicit_output,
             policy=policy or ToolPolicy(),
             metadata=metadata or {},
         ),
@@ -615,25 +627,25 @@ def _schema_build_context(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
 
 
 def _query_plan_build(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    return build_query_plan_tool(ctx.db, _request(ctx, args), ctx.state.get("schema_context"))
+    return build_query_plan_tool(ctx.db, _request(ctx, args), ctx.state_view.get("schema_context"))
 
 
 def _sql_generate(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     return generate_sql_tool(
         ctx.db,
         _request(ctx, args),
-        schema_context=ctx.state.get("schema_context"),
-        query_plan=ctx.state.get("query_plan"),
+        schema_context=ctx.state_view.get("schema_context"),
+        query_plan=ctx.state_view.get("query_plan"),
     )
 
 
 def _sql_validate(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    sql = args.get("sql") or ctx.state.get("sql")
+    sql = args.get("sql") or ctx.state_view.get("sql")
     return validate_sql_tool(ctx.db, ctx.request.datasource_id, str(sql or ""))
 
 
 def _sql_execute_readonly(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    raw_safety = ctx.state.get("safety")
+    raw_safety = ctx.state_view.get("safety")
     safety: dict[str, Any] = raw_safety if isinstance(raw_safety, dict) else {}
     state_safe_sql = str(safety.get("safe_sql") or "").strip()
     
@@ -650,7 +662,7 @@ def _sql_execute_readonly(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
                 latency_ms=0,
             )
             
-    safe_sql = state_safe_sql or args_sql or ctx.state.get("sql")
+    safe_sql = state_safe_sql or args_sql or ctx.state_view.get("sql")
     return execute_sql_tool(ctx.db, _request(ctx, args), str(safe_sql or ""), safety=safety)
 
 
@@ -664,71 +676,77 @@ def _sql_revise(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
         or args.get("user_instruction")
         or args.get("reason")
         or args.get("error")
-        or ctx.state.get("error")
+        or ctx.state_view.get("error")
         or "Revise the SQL according to the latest user request."
     )
     sql = (
         args.get("sql")
         or args.get("safe_sql")
-        or ctx.state.get("sql")
-        or _pending_approval_sql(ctx.state)
+        or ctx.state_view.get("sql")
+        or _pending_approval_sql(dict(ctx.state_view))
     )
     return revise_sql_tool(
         sql=str(sql or ""),
         error=str(instruction),
-        safety=ctx.state.get("safety") if isinstance(ctx.state.get("safety"), dict) else None,
+        safety=ctx.state_view.get("safety") if isinstance(ctx.state_view.get("safety"), dict) else None,
         db=ctx.db,
         datasource_id=ctx.request.datasource_id,
     )
 
 
 def _result_profile(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    return profile_result_tool(_request(ctx, args), ctx.state.get("query_plan"), ctx.state.get("execution"))
+    return profile_result_tool(_request(ctx, args), ctx.state_view.get("query_plan"), ctx.state_view.get("execution"))
 
 
 def _chart_suggest(ctx: ToolContext, _args: dict[str, Any]) -> ToolObservation:
-    return suggest_chart_tool(ctx.state.get("execution"))
+    return suggest_chart_tool(ctx.state_view.get("execution"))
 
 
 def _followup_suggest(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     return suggest_followups_tool(
         _request(ctx, args),
-        ctx.state.get("sql"),
-        ctx.state.get("safety"),
-        ctx.state.get("execution"),
-        ctx.state.get("result_profile"),
-        ctx.state.get("chart_suggestion"),
+        ctx.state_view.get("sql"),
+        ctx.state_view.get("safety"),
+        ctx.state_view.get("execution"),
+        ctx.state_view.get("result_profile"),
+        ctx.state_view.get("chart_suggestion"),
     )
 
 
 def _answer_synthesize(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     return answer_synthesizer_tool(
         req=_request(ctx, args),
-        query_plan=ctx.state.get("query_plan"),
-        sql=ctx.state.get("sql"),
-        safety=ctx.state.get("safety"),
-        execution=ctx.state.get("execution"),
-        result_profile=ctx.state.get("result_profile"),
-        suggestions=ctx.state.get("suggestions"),
-        error=ctx.state.get("error"),
+        query_plan=ctx.state_view.get("query_plan"),
+        sql=ctx.state_view.get("sql"),
+        safety=ctx.state_view.get("safety"),
+        execution=ctx.state_view.get("execution"),
+        result_profile=ctx.state_view.get("result_profile"),
+        suggestions=ctx.state_view.get("suggestions"),
+        error=ctx.state_view.get("error"),
     )
 
 
 def _workspace_assist(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     # Prefer _current_tool_name from the new ReAct graph; fall back to
     # pending_tool_call for backward compatibility with agent_kernel.
-    tool_name = str(ctx.state.get("_current_tool_name") or "")
+    tool_name = str(ctx.state_view.get("_current_tool_name") or "")
     if not tool_name:
-        pending_call = ctx.state.get("pending_tool_call")
+        pending_call = ctx.state_view.get("pending_tool_call")
         if isinstance(pending_call, dict):
             tool_name = str(pending_call.get("tool_name") or "")
-    workspace_tool = {tool.spec.name: tool for tool in build_workspace_tools()}[tool_name]
+    handler = WORKSPACE_HANDLERS.get(tool_name)
+    if handler is None:
+        return ToolObservation(
+            name=tool_name, status="failed",
+            input=args, error=f"Unknown workspace tool: {tool_name}", latency_ms=0,
+        )
     req = _request(ctx, args)
     bundle = build_agent_context_bundle(ctx.db, req)
     intent = tool_name.removeprefix("workspace.")
-    observation = workspace_tool.execute(
+    # Workspace handlers use (input, ctx) arg order
+    observation = handler(
         {"intent": intent, "context_bundle": bundle},
-        AgentToolContext(db=ctx.db, request=req),
+        ctx,
     )
     if tool_name == "workspace.explain_sql" and observation.output:
         workspace = req.workspace_context

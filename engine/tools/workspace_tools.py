@@ -1,10 +1,15 @@
+"""DataBox workspace tool handlers.
+
+Each handler follows the ToolHandler signature:
+    (ToolContext, dict[str, Any]) -> ToolObservation
+"""
 from __future__ import annotations
 
 import re
 import time
 from typing import Any, Callable
 
-from engine.agent_core.registry import AgentToolContext, FunctionAgentTool, ToolSpec
+from engine.agent_core.tool_registry import ToolContext
 from engine.tools.sql_tools import _prepare_generated_sql, validate_sql_tool
 from engine.agent_core.types import ToolObservation
 from engine.sql.guardrail import guardrail_check
@@ -21,61 +26,47 @@ WORKSPACE_TOOL_NAMES = [
     "workspace.explain_schema",
 ]
 
-
-def build_workspace_tools() -> list[FunctionAgentTool]:
-    return [
-        _tool("workspace.explain_sql", "Explain the current SQL without executing it.", _explain_sql),
-        _tool("workspace.fix_sql", "Suggest a safe read-only fix for the current SQL error.", _fix_sql),
-        _tool("workspace.optimize_sql", "Suggest a safer or more efficient read-only SQL rewrite.", _optimize_sql),
-        _tool("workspace.rewrite_sql", "Rewrite the current SQL for clarity without execution.", _rewrite_sql),
-        _tool("workspace.explain_result", "Explain the latest result preview without executing SQL.", _explain_result),
-        _tool("workspace.continue_from_artifact", "Continue from a selected Agent artifact.", _continue_from_artifact),
-        _tool("workspace.explain_schema", "Explain selected or linked schema context.", _explain_schema),
-    ]
-
-
-def _tool(name: str, description: str, handler: Callable[[dict[str, Any], AgentToolContext], ToolObservation]) -> FunctionAgentTool:
-    return FunctionAgentTool(
-        spec=ToolSpec(
-            name=name,
-            description=description,
-            risk_level="safe",
-            requires_approval=False,
-            idempotent=True,
-        ),
-        handler=handler,
-    )
+# Handler map: tool_name → ToolHandler callable
+WORKSPACE_HANDLERS: dict[str, Callable[..., ToolObservation]] = {
+    "workspace.explain_sql": None,          # set below
+    "workspace.fix_sql": None,
+    "workspace.optimize_sql": None,
+    "workspace.rewrite_sql": None,
+    "workspace.explain_result": None,
+    "workspace.continue_from_artifact": None,
+    "workspace.explain_schema": None,
+}
 
 
-def _explain_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _explain_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.explain_sql", _tool_input(input, ctx), lambda: _sql_answer(ctx, "explain_sql"))
 
 
-def _fix_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _fix_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.fix_sql", _tool_input(input, ctx), lambda: _sql_answer(ctx, "fix_sql"))
 
 
-def _optimize_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _optimize_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.optimize_sql", _tool_input(input, ctx), lambda: _sql_answer(ctx, "optimize_sql"))
 
 
-def _rewrite_sql(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _rewrite_sql(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.rewrite_sql", _tool_input(input, ctx), lambda: _sql_answer(ctx, "rewrite_sql"))
 
 
-def _explain_result(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _explain_result(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.explain_result", _tool_input(input, ctx), lambda: _result_answer(input, ctx))
 
 
-def _continue_from_artifact(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _continue_from_artifact(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.continue_from_artifact", _tool_input(input, ctx), lambda: _artifact_answer(input, ctx))
 
 
-def _explain_schema(input: dict[str, Any], ctx: AgentToolContext) -> ToolObservation:
+def _explain_schema(input: dict[str, Any], ctx: ToolContext) -> ToolObservation:
     return _observe("workspace.explain_schema", _tool_input(input, ctx), lambda: _schema_answer(input, ctx))
 
 
-def _sql_answer(ctx: AgentToolContext, intent: str) -> dict[str, Any]:
+def _sql_answer(ctx: ToolContext, intent: str) -> dict[str, Any]:
     workspace = ctx.request.workspace_context
     sql = _active_sql(ctx)
     last_error = str(workspace.last_error or "").strip() if workspace else ""
@@ -122,7 +113,7 @@ def _sql_answer(ctx: AgentToolContext, intent: str) -> dict[str, Any]:
     )
 
 
-def _result_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, Any]:
+def _result_answer(input: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     bundle = _bundle(input)
     workspace = ctx.request.workspace_context
     workspace_bundle_value = bundle.get("workspace")
@@ -149,7 +140,7 @@ def _result_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, An
     )
 
 
-def _artifact_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, Any]:
+def _artifact_answer(input: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     bundle = _bundle(input)
     artifact_value = bundle.get("selected_artifact")
     artifact: dict[str, Any] | None = artifact_value if isinstance(artifact_value, dict) else None
@@ -189,7 +180,7 @@ def _artifact_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, 
     )
 
 
-def _schema_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, Any]:
+def _schema_answer(input: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     bundle = _bundle(input)
     tables_value = bundle.get("selected_table_schema")
     linking_value = bundle.get("schema_linking")
@@ -234,7 +225,7 @@ def _schema_answer(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, An
     )
 
 
-def _proposed_sql(ctx: AgentToolContext, sql: str, intent: str) -> str | None:
+def _proposed_sql(ctx: ToolContext, sql: str, intent: str) -> str | None:
     cleaned = _strip_editor_annotations(sql).strip().rstrip(";")
     if not cleaned:
         return None
@@ -256,7 +247,7 @@ def _proposed_sql(ctx: AgentToolContext, sql: str, intent: str) -> str | None:
     return cleaned
 
 
-def _validate_proposed_sql(ctx: AgentToolContext, sql: str) -> dict[str, Any]:
+def _validate_proposed_sql(ctx: ToolContext, sql: str) -> dict[str, Any]:
     guardrail = guardrail_check(sql)
     warnings = [str(item.get("message")) for item in guardrail.get("checks", []) if item.get("message")]
     if guardrail["result"] == "reject":
@@ -293,7 +284,7 @@ def _workspace_payload(
     }
 
 
-def _tool_input(input: dict[str, Any], ctx: AgentToolContext) -> dict[str, Any]:
+def _tool_input(input: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     return {
         "intent": input.get("intent"),
         "datasource_id": ctx.request.datasource_id,
@@ -324,7 +315,7 @@ def _observe(name: str, tool_input: dict[str, Any], body: WorkspaceBody) -> Tool
         )
 
 
-def _active_sql(ctx: AgentToolContext) -> str:
+def _active_sql(ctx: ToolContext) -> str:
     workspace = ctx.request.workspace_context
     if workspace is None:
         return ""
@@ -336,7 +327,7 @@ def _bundle(input: dict[str, Any]) -> dict[str, Any]:
     return bundle if isinstance(bundle, dict) else {}
 
 
-def _context_summary(ctx: AgentToolContext) -> str:
+def _context_summary(ctx: ToolContext) -> str:
     workspace = ctx.request.workspace_context
     if workspace is None:
         return "No workspace context was supplied."
@@ -423,3 +414,18 @@ def _strip_editor_annotations(sql: str) -> str:
 
 def _normalize_sql(sql: str) -> str:
     return re.sub(r"\s+", " ", sql).strip().rstrip(";")
+
+
+# ---------------------------------------------------------------------------
+# Handler map — populated at module load
+# ---------------------------------------------------------------------------
+
+WORKSPACE_HANDLERS.update({
+    "workspace.explain_sql": _explain_sql,
+    "workspace.fix_sql": _fix_sql,
+    "workspace.optimize_sql": _optimize_sql,
+    "workspace.rewrite_sql": _rewrite_sql,
+    "workspace.explain_result": _explain_result,
+    "workspace.continue_from_artifact": _continue_from_artifact,
+    "workspace.explain_schema": _explain_schema,
+})

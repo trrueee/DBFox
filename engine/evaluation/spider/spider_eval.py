@@ -257,7 +257,7 @@ def create_databox_sqlite_run_fn(
 
         datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
 
-        from engine.agent_core.runtime import DataBoxAgentRuntime
+        from engine.agent import DataBoxAgentRuntime
         from engine.agent_core.types import AgentRunRequest
 
         runtime = DataBoxAgentRuntime(db_session)

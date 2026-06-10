@@ -8,8 +8,9 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.planning.prompts import PLANNER_SYSTEM_PROMPT
-from engine.agent.model.model_factory import get_chat_model
+from engine.llm import get_chat_model
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.context import graph_context
 
 logger = logging.getLogger("databox.databox_agent.nodes.planner_node")
 
@@ -26,13 +27,13 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
     When no LLM credentials are available, falls back to a permissive plan
     that allows all safe tool groups (backward-compatible).
     """
-    configurable = config.get("configurable") or {}
-    model_name = configurable.get("model_name")
-    api_key = configurable.get("api_key")
-    api_base = configurable.get("api_base")
+    ctx = graph_context(config)
+    model_name = ctx.model_name
+    api_key = ctx.api_key
+    api_base = ctx.api_base
 
     # Check whether we can actually call an LLM
-    if not _has_llm_credentials(api_key):
+    if not ctx.has_llm_credentials:
         logger.warning("No LLM credentials available — Planner falling back to permissive plan.")
         return _permissive_fallback(replan_count=int(state.get("replan_count", 0)))
 
@@ -153,12 +154,6 @@ def _plan_result(directive: AgentPlanDirective, count: int, is_replan: bool = Fa
             "is_replan": is_replan,
         }],
     }
-
-
-def _has_llm_credentials(api_key: str | None) -> bool:
-    """Check whether we have credentials to call an LLM."""
-    import os
-    return bool((api_key or os.environ.get("OPENAI_API_KEY", "")).strip())
 
 
 def _permissive_fallback(replan_count: int = 0) -> dict[str, Any]:
