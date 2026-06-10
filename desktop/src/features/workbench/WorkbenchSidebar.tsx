@@ -1,3 +1,4 @@
+import type { DragEvent } from "react";
 import { ChevronDown, ChevronRight, Code2, Database, HardDrive, RefreshCw, Settings, Table2 } from "lucide-react";
 import type { DataSource, SchemaTable } from "../../lib/api";
 
@@ -25,7 +26,7 @@ interface WorkbenchSidebarProps {
   onToggleTablesFolder: () => void;
   onToggleGroup: (tag: string) => void;
   onTableContextMenu: (tableName: string, x: number, y: number) => void;
-  onDragTableSql: (event: React.DragEvent, tableName: string) => void;
+  onDragTableSql: (event: DragEvent, tableName: string) => void;
 }
 
 export function WorkbenchSidebar({
