@@ -3,7 +3,12 @@ import { Download } from "lucide-react";
 import type { ChartArtifact } from "../../../types/agentArtifact";
 import { downloadTextFile } from "./artifactActions";
 
-export function ChartArtifactView({ artifact }: { artifact: ChartArtifact }) {
+interface ChartArtifactViewProps {
+  artifact: ChartArtifact;
+  onToast: (message: string) => void;
+}
+
+export function ChartArtifactView({ artifact, onToast }: ChartArtifactViewProps) {
   const [viewType, setViewType] = useState<"line" | "bar">(artifact.chartType);
   const values = artifact.series.map((point) => point.value);
   const max = Math.max(...values, 1);
@@ -16,8 +21,17 @@ export function ChartArtifactView({ artifact }: { artifact: ChartArtifact }) {
     .join(" "), [artifact.series, max]);
 
   const exportSvg = () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 130"><polyline points="${points}" fill="none" stroke="#4F46E5" stroke-width="2.5" /></svg>`;
-    downloadTextFile(`${artifact.id}.svg`, svg, "image/svg+xml;charset=utf-8");
+    const chartBody = viewType === "line"
+      ? `<polyline points="${points}" fill="none" stroke="#4F46E5" stroke-width="2.5" />`
+      : artifact.series.map((point, index) => {
+        const width = 22;
+        const x = 25 + (index * 350) / Math.max(artifact.series.length - 1, 1);
+        const height = (point.value / max) * 80;
+        return `<rect x="${x}" y="${100 - height}" width="${width}" height="${height}" rx="4" fill="#4F46E5" opacity="0.82" />`;
+      }).join("");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 130">${chartBody}</svg>`;
+    const ok = downloadTextFile(`${artifact.id}-${viewType}.svg`, svg, "image/svg+xml;charset=utf-8");
+    onToast(ok ? "已下载图表 SVG" : "图表下载失败");
   };
 
   return (
