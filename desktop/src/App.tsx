@@ -1,8 +1,9 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Sparkles } from "lucide-react";
 import "./App.css";
-import { Header } from "./layouts/Header";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
+import { ConversationHistoryPanel } from "./features/conversation/ConversationHistoryPanel";
+import { deleteConversation, listConversations, saveConversation } from "./features/conversation/conversationRepository";
 import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
 import { DataSourceTree } from "./features/datasource/DataSourceTree";
 import { MultiTableWorkspace } from "./features/workspace/MultiTableWorkspace";
@@ -11,7 +12,9 @@ import { SmartQueryHome } from "./features/workspace/SmartQueryHome";
 import { SqlConsoleWorkspace } from "./features/workspace/SqlConsoleWorkspace";
 import { TableWorkspace } from "./features/workspace/TableWorkspace";
 import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
+import { Header } from "./layouts/Header";
 import { defaultSql, type ContextMenuState, type WorkspaceTab } from "./mock/databoxMock";
+import type { Conversation, ConversationMessage } from "./types/conversation";
 
 export default function App() {
   const [scale, setScale] = useState(1);
@@ -31,6 +34,7 @@ export default function App() {
   const [sqlConsoleTab, setSqlConsoleTab] = useState<"results" | "history" | "ai-explain">("results");
   const [recentTab, setRecentTab] = useState("tables");
   const [activeHeaderTab, setActiveHeaderTab] = useState("workbench");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
 
@@ -51,9 +55,31 @@ export default function App() {
     return () => window.removeEventListener("click", handleDocumentClick);
   }, []);
 
+  useEffect(() => {
+    void refreshConversations();
+  }, []);
+
   const showToast = (message: string) => {
     setToastMsg(message);
     setTimeout(() => setToastMsg(null), 2500);
+  };
+
+  const refreshConversations = async () => {
+    try {
+      const history = await listConversations();
+      setConversations(history);
+    } catch {
+      showToast("读取 SQLite 对话历史失败");
+    }
+  };
+
+  const persistConversation = async (conversation: Conversation) => {
+    try {
+      await saveConversation(conversation);
+      setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)].sort((a, b) => b.updatedAt - a.updatedAt));
+    } catch {
+      showToast("写入 SQLite 对话历史失败");
+    }
   };
 
   const openTableTab = (tableName: string, initialSubtab = "preview") => {
@@ -92,22 +118,60 @@ export default function App() {
     showToast(`已创建多表联合 Workspace (${tables.length} 张表)`);
   };
 
+  const openConversationHistoryTab = () => {
+    const tabId = "conversation-history";
+    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "对话历史", type: "conversation-history" }]));
+    setActiveTabId(tabId);
+    setRecentTab("chat");
+  };
+
+  const openConversationResult = (conversation: Conversation) => {
+    const tabId = `conversation-${conversation.id}`;
+    const tab: WorkspaceTab = {
+      id: tabId,
+      title: conversation.title,
+      type: "query-result",
+      queryText: conversation.title,
+      conversationId: conversation.id,
+      chatMessages: conversationMessagesToTabMessages(conversation.messages),
+      artifacts: conversation.artifacts,
+    };
+    setTabs((prev) => (prev.some((item) => item.id === tabId) ? prev.map((item) => (item.id === tabId ? tab : item)) : [...prev, tab]));
+    setActiveTabId(tabId);
+  };
+
   const openQueryResultTab = (queryText: string) => {
-    if (!queryText.trim()) return;
-    const tabId = `query-result-${Date.now()}`;
+    const text = queryText.trim();
+    if (!text) return;
+    const now = Date.now();
+    const conversation: Conversation = {
+      id: `conversation-${now}`,
+      title: text,
+      createdAt: now,
+      updatedAt: now,
+      contextTables,
+      messages: [
+        { id: `message-${now}`, role: "user", content: text, createdAt: now },
+        { id: `message-${now + 1}`, role: "assistant", content: "问题已提交给 Agent。等待后端返回 artifacts 后，结果会在下方渲染。", createdAt: now + 1 },
+      ],
+      artifacts: [],
+    };
+    const tabId = `query-result-${now}`;
     setTabs((prev) => [
       ...prev,
       {
         id: tabId,
         title: "问数结果",
         type: "query-result",
-        queryText,
-        chatMessages: [{ id: 1, sender: "ai", text: "问题已提交给 Agent。等待后端返回 artifacts 后，结果会在下方渲染。" }],
-        artifacts: [],
+        queryText: text,
+        conversationId: conversation.id,
+        chatMessages: conversationMessagesToTabMessages(conversation.messages),
+        artifacts: conversation.artifacts,
       },
     ]);
     setActiveTabId(tabId);
     setAskInputValue("");
+    void persistConversation(conversation);
   };
 
   const handleTableClick = (tableName: string, event: MouseEvent) => {
@@ -143,8 +207,40 @@ export default function App() {
   };
 
   const sendFollowUp = (tabId: string, text: string) => {
-    if (!text.trim()) return;
-    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), { id: Date.now(), sender: "user", text }, { id: Date.now() + 1, sender: "ai", text: "已追加追问，等待 Agent 返回新的 artifacts。" }] } : tab));
+    const content = text.trim();
+    if (!content) return;
+    const now = Date.now();
+    const userMessage: ConversationMessage = { id: `message-${now}`, role: "user", content, createdAt: now };
+    const assistantMessage: ConversationMessage = { id: `message-${now + 1}`, role: "assistant", content: "已追加追问，等待 Agent 返回新的 artifacts。", createdAt: now + 1 };
+    const targetTab = tabs.find((tab) => tab.id === tabId);
+
+    setTabs((prev) => prev.map((tab) => tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), { id: now, sender: "user", text: content }, { id: now + 1, sender: "ai", text: assistantMessage.content }] } : tab));
+
+    if (targetTab?.conversationId) {
+      const origin = conversations.find((item) => item.id === targetTab.conversationId);
+      const fallbackMessages = tabMessagesToConversationMessages(targetTab.chatMessages || []);
+      const updatedConversation: Conversation = {
+        id: targetTab.conversationId,
+        title: origin?.title || targetTab.queryText || "未命名问答",
+        createdAt: origin?.createdAt || now,
+        updatedAt: now,
+        contextTables: origin?.contextTables || contextTables,
+        messages: [...(origin?.messages || fallbackMessages), userMessage, assistantMessage],
+        artifacts: targetTab.artifacts || origin?.artifacts || [],
+      };
+      void persistConversation(updatedConversation);
+    }
+  };
+
+  const deleteConversationById = async (conversationId: string) => {
+    try {
+      await deleteConversation(conversationId);
+      setConversations((prev) => prev.filter((item) => item.id !== conversationId));
+      setTabs((prev) => prev.filter((tab) => tab.conversationId !== conversationId));
+      showToast("已删除对话历史");
+    } catch {
+      showToast("删除 SQLite 对话历史失败");
+    }
   };
 
   const renderActiveTab = () => {
@@ -153,18 +249,24 @@ export default function App() {
         <SmartQueryHome
           askInputValue={askInputValue}
           contextTables={contextTables}
+          conversations={conversations}
           recentTab={recentTab}
           onAskInputChange={setAskInputValue}
           onSubmitAsk={() => openQueryResultTab(askInputValue)}
           onRecommendClick={setAskInputValue}
           onRecentTabChange={setRecentTab}
           onOpenTable={openTableTab}
+          onOpenConversation={openConversationResult}
           onAddContextTable={addContextTable}
           onRemoveContextTable={(tableName) => setContextTables((prev) => prev.filter((table) => table !== tableName))}
           onClearContextTables={() => setContextTables([])}
+          onOpenConversationHistory={openConversationHistoryTab}
           onToast={showToast}
         />
       );
+    }
+    if (activeTab.type === "conversation-history") {
+      return <ConversationHistoryPanel conversations={conversations} activeConversationId={activeTab.conversationId} onOpenConversation={openConversationResult} onDeleteConversation={deleteConversationById} />;
     }
     if (activeTab.type === "table") {
       const tableId = activeTab.tableId || "id_users";
@@ -246,4 +348,21 @@ export default function App() {
       {toastMsg && <div className="hifi-toast"><Sparkles size={12} className="text-yellow-400" /><span>{toastMsg}</span></div>}
     </div>
   );
+}
+
+function conversationMessagesToTabMessages(messages: ConversationMessage[]) {
+  return messages.map((message, index) => ({
+    id: Number(message.id.replace(/\D/g, "")) || index + 1,
+    sender: message.role === "user" ? "user" as const : "ai" as const,
+    text: message.content,
+  }));
+}
+
+function tabMessagesToConversationMessages(messages: NonNullable<WorkspaceTab["chatMessages"]>): ConversationMessage[] {
+  return messages.map((message, index) => ({
+    id: `message-${message.id || index}`,
+    role: message.sender === "user" ? "user" : "assistant",
+    content: message.text,
+    createdAt: Number(message.id) || Date.now(),
+  }));
 }
