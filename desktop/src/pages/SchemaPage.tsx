@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import type { DataSource, ERDiagramData, QueryResult, SchemaColumn, SchemaTable } from "../lib/api";
-import { TableDesignDraft } from "../components/TableDesignDraft";
 import { SchemaBrowserHeader, type SchemaBrowserTab } from "../features/schema-browser/SchemaBrowserHeader";
 import { SchemaFieldsView } from "../features/schema-browser/SchemaFieldsView";
 import { SchemaErView } from "../features/schema-browser/SchemaErView";
@@ -10,7 +9,7 @@ import "../features/schema-browser/schema-browser.css";
 
 interface SchemaPageProps {
   datasource: DataSource;
-  initialViewTab?: "fields" | "er" | "data" | "design";
+  initialViewTab?: SchemaBrowserTab;
   selectedTableName?: string | null;
   onOpenSql?: (sql: string, title?: string) => void;
 }
@@ -181,12 +180,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
           onOpenSql={handleOpenPreviewSql}
           onRefresh={() => selectedTable && void fetchPreviewData(selectedTable.table_name)}
         />
-      )}
-
-      {viewTab === "design" && (
-        <div className="schema-browser-body">
-          <TableDesignDraft datasource={datasource} onExecuteSuccess={(name) => void fetchTables(name)} />
-        </div>
       )}
     </div>
   );
