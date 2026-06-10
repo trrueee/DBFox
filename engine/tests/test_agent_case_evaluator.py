@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from engine.agent.types import (
+from engine.agent_contracts.types import (
     AgentAnswer,
     AgentArtifact,
     AgentArtifactPresentation,
@@ -355,7 +355,7 @@ def test_evaluator_plan_similarity_jaccard(db_session, demo_datasource, monkeypa
 
     def mock_build(self, datasource_id, question, *args, **kwargs):
         # returns a QueryPlan object or dict
-        from engine.agent.types import QueryPlan
+        from engine.agent_contracts.types import QueryPlan
         return QueryPlan.model_validate({
             "analysis_goal": "lookup",
             "metrics": expected_plan_dict["metrics"],

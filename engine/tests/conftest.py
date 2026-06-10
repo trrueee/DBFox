@@ -123,7 +123,7 @@ def mock_agent_call_model(monkeypatch):
     if os.environ.get("DATABOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
         return
 
-    from engine.databox_agent.nodes import model_node
+    from engine.agent.nodes import model_node
     from langchain_core.messages import AIMessage
     import uuid
 

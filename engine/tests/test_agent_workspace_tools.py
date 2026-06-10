@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from engine.agent import AgentRunRequest, AgentWorkspaceContext, DataBoxAgentRuntime
-from engine.agent.default_tools import build_default_tool_registry
-from engine.agent.registry import AgentToolContext
-from engine.agent.workspace_context import build_agent_context_bundle
+from engine.agent_contracts.default_tools import build_default_tool_registry
+from engine.agent_contracts.registry import AgentToolContext
+from engine.agent_contracts.workspace_context import build_agent_context_bundle
 from engine.schema_sync import sync_schema
 
 

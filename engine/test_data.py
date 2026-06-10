@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
-from engine.executor import execute_query
+from engine.sql.executor import execute_query
 from engine.errors import DataBoxError
 
 logger = logging.getLogger("databox.test_data")

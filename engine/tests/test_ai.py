@@ -2,7 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from engine.ai import (
+from engine.sql.generator import (
     DEMO_TRANSLATIONS,
     build_schema_direct_prompt,
     generate_sql,
@@ -212,7 +212,7 @@ def test_generate_sql_online_guardrail_reject(db_session, demo_datasource) -> No
 
 
 def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None:
-    from engine.ai import validate_sql_schema
+    from engine.sql.generator import validate_sql_schema
     from engine.models import SchemaTable, SchemaColumn
 
     # 1. Add some schema info to metastore

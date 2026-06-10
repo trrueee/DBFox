@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from engine.agent.types import AgentRunResponse
+from engine.agent_contracts.types import AgentRunResponse
 from engine.models import AgentGoldenTask
 
 
@@ -216,7 +216,7 @@ class AgentCaseEvaluator:
             else:
                 # Value-set isomorphism check
                 try:
-                    from engine.executor import execute_query
+                    from engine.sql.executor import execute_query
                     from engine.evaluation.execution_comparator import ExecutionIsomorphismComparator
 
                     expected_res = execute_query(current_db, task.datasource_id, standard_sql)

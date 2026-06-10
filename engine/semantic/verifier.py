@@ -12,7 +12,7 @@ import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from engine.databox_agent.environment.service import EnvironmentService
+from engine.environment.service import EnvironmentService
 from engine.semantic.models import (
     CandidateColumn,
     CandidateTable,
