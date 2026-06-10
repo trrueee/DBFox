@@ -1,5 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, Code, Download, Filter, RefreshCw, Search, Sparkles } from "lucide-react";
-import { StatusTag } from "./StatusTag";
+import { executeSql, quoteIdentifier, resolveTableByName } from "../../engine/engineApi";
 
 interface TablePreviewPaneProps {
   tableId: string;
@@ -8,18 +9,53 @@ interface TablePreviewPaneProps {
 }
 
 export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePreviewPaneProps) {
-  const isComment = tableId === "comment_infos";
-  const isVideo = tableId === "video_infos";
+  const [columns, setColumns] = useState<string[]>([]);
+  const [rows, setRows] = useState<Array<Record<string, string | null>>>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [pageSize, setPageSize] = useState(20);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+
+  const previewSql = useMemo(() => `SELECT * FROM ${quoteIdentifier(tableId)} LIMIT ${pageSize};`, [tableId, pageSize]);
+
+  const loadPreview = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const resolved = await resolveTableByName(tableId);
+      if (!resolved) {
+        setColumns([]);
+        setRows([]);
+        setError("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
+        return;
+      }
+      const result = await executeSql(resolved.datasource.id, previewSql, `preview table ${tableId}`);
+      setColumns(result.columns);
+      setRows(result.rows);
+      setLatencyMs(result.latencyMs);
+      if (result.warnings?.length) onToast(result.warnings[0]);
+    } catch (err) {
+      setColumns([]);
+      setRows([]);
+      setError(err instanceof Error ? err.message : "读取表预览失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadPreview();
+  }, [previewSql]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="hifi-panel-toolbar">
         <div className="hifi-toolbar-left">
-          <button className="hifi-toolbar-btn" onClick={() => onToast("数据预览已刷新")}><RefreshCw size={10} /> 刷新</button>
-          <button className="hifi-toolbar-btn" onClick={() => onToast("打开过滤器")}><Filter size={10} /> 筛选</button>
-          <button className="hifi-toolbar-btn" onClick={() => onToast("打开排序规则")}><ArrowUpDown size={10} /> 排序</button>
-          <button className="hifi-toolbar-btn" onClick={() => onToast("已导出数据预览")}><Download size={10} /> 导出</button>
-          <button className="hifi-toolbar-btn" onClick={() => onToast("测试数据已生成并写入")}><Sparkles size={10} className="text-yellow-600" /> 生成测试数据</button>
+          <button className="hifi-toolbar-btn" onClick={() => void loadPreview()}><RefreshCw size={10} /> 刷新</button>
+          <button className="hifi-toolbar-btn" onClick={() => onToast("筛选器待接入：后续会转换为安全 SQL 条件")}><Filter size={10} /> 筛选</button>
+          <button className="hifi-toolbar-btn" onClick={() => onToast("排序待接入：后续会转换为安全 SQL 排序")}><ArrowUpDown size={10} /> 排序</button>
+          <button className="hifi-toolbar-btn" onClick={() => onToast("导出待接入：后续从当前结果集导出 CSV")}><Download size={10} /> 导出</button>
+          <button className="hifi-toolbar-btn" onClick={() => onToast("生成测试数据需要后端写入接口，当前只读预览不执行写入")}><Sparkles size={10} className="text-yellow-600" /> 生成测试数据</button>
         </div>
         <div className="hifi-toolbar-right">
           <Search size={12} className="text-gray-400 cursor-pointer" />
@@ -28,60 +64,43 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
       </div>
 
       <div className="hifi-table-container flex-1 overflow-auto">
-        <table className="hifi-table">
-          <thead>
-            {isComment ? (
-              <tr><th>id</th><th>note_id</th><th>user_id</th><th>content</th><th>status</th><th>created_at</th></tr>
-            ) : isVideo ? (
-              <tr><th>id</th><th>title</th><th>url</th><th>duration</th><th>play_count</th><th>status</th></tr>
-            ) : (
-              <tr><th>id</th><th>tenant_id</th><th>name</th><th>account</th><th>status</th><th>created_at</th></tr>
-            )}
-          </thead>
-          <tbody>{isComment ? <CommentRows /> : isVideo ? <VideoRows /> : <UserRows />}</tbody>
-        </table>
+        {loading && <div className="text-[11px] text-slate-400 text-center mt-10">正在通过 Local Engine 读取预览数据...</div>}
+        {error && <div className="text-[11px] text-red-500 bg-red-50 rounded-lg p-3 m-3">{error}</div>}
+        {!loading && !error && (
+          <table className="hifi-table">
+            <thead>
+              <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {columns.map((column) => (
+                    <td key={column} className="max-w-[240px] truncate" title={row[column] ?? ""}>{row[column] ?? "NULL"}</td>
+                  ))}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={Math.max(columns.length, 1)} className="text-center text-slate-400">暂无数据</td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="hifi-table-footer">
-        <span>共 12,345 条</span>
+        <span>{latencyMs === null ? "等待查询" : `返回 ${rows.length} 行 · ${latencyMs}ms`}</span>
         <div className="hifi-pagination">
           <span className="text-gray-400 cursor-pointer">&lt;</span>
           <span className="hifi-page-num active">1</span>
-          <span className="hifi-page-num">2</span>
-          <span className="hifi-page-num">3</span>
-          <span>...</span>
-          <span className="hifi-page-num">1235</span>
+          <span className="text-gray-400">预览模式</span>
           <span className="text-gray-400 cursor-pointer">&gt;</span>
         </div>
-        <select className="border border-gray-200 rounded px-1 text-[10px]" defaultValue="10">
+        <select className="border border-gray-200 rounded px-1 text-[10px]" value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
           <option value="10">10条/页</option>
           <option value="20">20条/页</option>
+          <option value="50">50条/页</option>
         </select>
       </div>
     </div>
   );
-}
-
-function UserRows() {
-  return <>
-    <tr><td>1</td><td>10001</td><td>张三</td><td>zhangsan</td><td><StatusTag value="active" /></td><td>2024-11-16 10:23:45</td></tr>
-    <tr><td>2</td><td>10001</td><td>李四</td><td>lisi</td><td><StatusTag value="active" /></td><td>2024-11-16 10:23:45</td></tr>
-    <tr><td>3</td><td>10002</td><td>王五</td><td>wangwu</td><td><StatusTag value="inactive" /></td><td>2024-11-16 10:23:45</td></tr>
-    <tr><td>4</td><td>10002</td><td>赵六</td><td>zhaoliu</td><td><StatusTag value="active" /></td><td>2024-11-16 10:23:45</td></tr>
-  </>;
-}
-
-function CommentRows() {
-  return <>
-    <tr><td>101</td><td>20001</td><td>1</td><td className="max-w-[200px] truncate" title="这个系统界面太漂亮了！">这个系统界面太漂亮了！</td><td><StatusTag value="active" /></td><td>2024-11-17 08:32:00</td></tr>
-    <tr><td>102</td><td>20002</td><td>2</td><td className="max-w-[200px] truncate" title="同意！设计细节直接拉满。">同意！设计细节直接拉满。</td><td><StatusTag value="active" /></td><td>2024-11-17 08:45:10</td></tr>
-    <tr><td>103</td><td>20001</td><td>3</td><td className="max-w-[200px] truncate" title="数据字典表在哪里配置？">数据字典表在哪里配置？</td><td><StatusTag value="pending" /></td><td>2024-11-17 09:12:05</td></tr>
-  </>;
-}
-
-function VideoRows() {
-  return <>
-    <tr><td>501</td><td>智能问数新手引导</td><td>/videos/guide.mp4</td><td>03:45</td><td>1,240</td><td><StatusTag value="active" /></td></tr>
-    <tr><td>502</td><td>ER图表关联教程</td><td>/videos/er_tutorial.mp4</td><td>07:20</td><td>890</td><td><StatusTag value="active" /></td></tr>
-  </>;
 }
