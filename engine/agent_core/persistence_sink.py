@@ -70,20 +70,20 @@ class SessionPersistenceSink(AgentPersistenceSink):
         self._db = db
 
     def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         ap.create_or_get_session(self._db, req, run_id)
         ap.start_run(self._db, req, run_id, session_id)
 
     def record_event(self, session_id: str, event: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         ap.record_runtime_event(self._db, session_id, event)
 
     def complete_run(self, response: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         ap.complete_run(self._db, response)
 
     def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         ap.fail_run(self._db, run_id, session_id, error, response)
 
 
@@ -115,7 +115,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
         import logging
         _log = logging.getLogger("databox.persistence")
         def _do(db: Session) -> None:
-            from engine.agent import persistence as ap
+            from engine.agent_core import persistence as ap
             ap.create_or_get_session(db, type("Req", (), {
                 "datasource_id": datasource_id, "question": question,
                 "session_id": session_id, "parent_run_id": None,
@@ -128,26 +128,26 @@ class SyncPersistenceSink(AgentPersistenceSink):
 
     def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
         def _do(db: Session) -> None:
-            from engine.agent import persistence as ap
+            from engine.agent_core import persistence as ap
             ap.create_or_get_session(db, req, run_id)
             ap.start_run(db, req, run_id, session_id)
         self._write(_do)
 
     def record_event(self, session_id: str, event: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         self._write(lambda db: ap.record_runtime_event(db, session_id, event))
 
     def record_artifact(self, session_id: str, run_id: str, artifact: Any, index: int) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         # record_artifact is idempotent; we call it once
         pass  # artifacts are written via _artifact_events; skip for now
 
     def complete_run(self, response: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         self._write(lambda db: ap.complete_run(db, response))
 
     def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
-        from engine.agent import persistence as ap
+        from engine.agent_core import persistence as ap
         self._write(lambda db: ap.fail_run(db, run_id, session_id, error, response))
 
 

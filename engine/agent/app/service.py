@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent import persistence as agent_persistence
+from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import (
     AgentApprovalRecord,
     AgentAnswer,

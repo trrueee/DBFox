@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from engine.agent_core.registry import AgentToolContext, ToolRegistry
+from engine.agent_core.tool_registry import ToolContext, ToolRegistry
 from engine.agent_core.state import AgentState
 from engine.agent_core.types import AgentErrorOutput, AgentStep, ToolObservation
 
@@ -30,7 +30,7 @@ class StepExecutor:
         self,
         step: AgentStepSpec,
         state: AgentState,
-        ctx: AgentToolContext,
+        ctx: ToolContext,
         input_override: dict[str, Any] | None = None,
     ) -> tuple[AgentStep, ToolObservation]:
         tool_input = input_override or {}

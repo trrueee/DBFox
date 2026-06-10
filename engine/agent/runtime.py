@@ -1,3 +1,13 @@
+"""DataBoxAgentRuntime — public Agent runtime facade.
+
+This is the primary entry point for agent execution.  It delegates to
+DataBoxAgentService (the LangGraph ReAct engine) while providing a
+stable API for API routes, tests, and evaluation.
+
+Dependency direction:
+    engine.agent.runtime → engine.agent.app.service → engine.agent_core
+"""
+
 from __future__ import annotations
 
 import warnings
@@ -5,7 +15,7 @@ from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
 
-from engine.agent import persistence as agent_persistence
+from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.executor import AgentStepSpec
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
 from engine.agent_core.context import has_follow_up_context
@@ -16,8 +26,7 @@ class DataBoxAgentRuntime:
     """Public Agent runtime facade backed by the DataBox ReAct agent.
 
     The legacy engine.agent_kernel runtime has been removed. All public callers
-    keep using this facade, but execution is always delegated to
-    engine.databox_agent.app.service.DataBoxAgentService.
+    use this facade, with execution delegated to DataBoxAgentService.
     """
 
     def __init__(self, db: Session):

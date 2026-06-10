@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from engine.agent import AgentContextArtifact, AgentFollowUpContext, AgentRunRequest, AgentWorkspaceContext
+from engine.agent_core.types import AgentContextArtifact, AgentFollowUpContext, AgentRunRequest, AgentWorkspaceContext
 from engine.agent_core.workspace_context import build_agent_context_bundle
 from engine.models import SemanticAlias, SemanticDimension, SemanticMetric
 from engine.schema_sync import sync_schema

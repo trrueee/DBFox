@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from engine.agent import AgentContextArtifact, AgentFollowUpContext, AgentRunRequest, DataBoxAgentRuntime
-from engine.agent_core.types import AgentRunResponse, AgentRuntimeEvent
+from engine.agent import DataBoxAgentRuntime
+from engine.agent_core.types import (
+    AgentContextArtifact, AgentFollowUpContext, AgentRunRequest,
+    AgentRunResponse, AgentRuntimeEvent,
+)
 from engine.schema_sync import sync_schema
 
 
@@ -486,7 +489,7 @@ def test_sse_event_format(db_session, demo_datasource) -> None:
 
 
 def test_stream_and_non_stream_final_response_consistency(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.schema_sync import sync_schema
 
     sync_schema(db_session, demo_datasource.id)
@@ -542,7 +545,7 @@ def test_stream_and_non_stream_final_response_consistency(db_session, demo_datas
 
 
 def test_persistence_creates_session_and_run(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.schema_sync import sync_schema
     from engine.models import AgentRun as AgentRunModel, AgentSession as AgentSessionModel
 
@@ -580,7 +583,7 @@ def test_persistence_creates_session_and_run(db_session, demo_datasource, monkey
 
 
 def test_persistence_saves_artifacts(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.schema_sync import sync_schema
     from engine.models import AgentArtifactRecord
 
@@ -626,7 +629,7 @@ def test_persistence_saves_artifacts(db_session, demo_datasource, monkeypatch) -
 
 
 def test_persistence_get_run_restores_response(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import get_run
     from engine.schema_sync import sync_schema
 
@@ -669,7 +672,7 @@ def test_persistence_get_run_restores_response(db_session, demo_datasource, monk
 
 
 def test_persistence_followup_server_side_reconstruction(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import build_followup_context_from_run
     from engine.schema_sync import sync_schema
 
@@ -717,7 +720,7 @@ def test_persistence_followup_server_side_reconstruction(db_session, demo_dataso
 
 
 def test_persistence_streaming_saves_events(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.models import AgentRuntimeEventRecord
     from engine.schema_sync import sync_schema
 
@@ -764,7 +767,7 @@ def test_persistence_streaming_saves_events(db_session, demo_datasource, monkeyp
 
 
 def test_persistence_failure_saves_error_artifact(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.models import AgentRun as AgentRunModel
     from engine.schema_sync import sync_schema
 
@@ -814,7 +817,7 @@ def test_persistence_failure_saves_error_artifact(db_session, demo_datasource, m
 
 
 def test_persistence_recent_run_recovery(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import get_recent_run
     from engine.schema_sync import sync_schema
 
@@ -849,7 +852,7 @@ def test_persistence_recent_run_recovery(db_session, demo_datasource, monkeypatc
 
 
 def test_list_run_artifacts_returns_ordered_artifacts(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import list_run_artifacts
     from engine.schema_sync import sync_schema
 
@@ -886,7 +889,7 @@ def test_list_run_artifacts_returns_ordered_artifacts(db_session, demo_datasourc
 
 
 def test_list_run_events_returns_ordered_runtime_events(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import list_run_events
     from engine.schema_sync import sync_schema
 
@@ -928,7 +931,7 @@ def test_list_run_events_returns_ordered_runtime_events(db_session, demo_datasou
 
 
 def test_list_run_trace_returns_redacted_trace_events(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import list_run_trace_events
     from engine.schema_sync import sync_schema
 
@@ -986,7 +989,7 @@ def test_list_run_trace_returns_redacted_trace_events(db_session, demo_datasourc
 
 
 def test_replay_does_not_execute_sql(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import get_run, list_run_artifacts
     from engine.schema_sync import sync_schema
 
@@ -1034,7 +1037,7 @@ def test_replay_does_not_execute_sql(db_session, demo_datasource, monkeypatch) -
 
 
 def test_restored_run_can_start_followup(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import get_run
     from engine.schema_sync import sync_schema
 
@@ -1084,7 +1087,7 @@ def test_missing_run_artifacts_returns_empty(db_session) -> None:
 
 
 def test_session_runs_sorted_and_include_status(db_session, demo_datasource, monkeypatch) -> None:
-    from engine.agent import AgentRunRequest, DataBoxAgentRuntime
+    from engine.agent import DataBoxAgentRuntime; from engine.agent_core.types import AgentRunRequest
     from engine.agent_core.persistence import list_session_runs
     from engine.schema_sync import sync_schema
 

@@ -17,15 +17,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from engine.agent import (
+from engine.agent import DataBoxAgentRuntime
+from engine.agent_core import persistence as agent_persistence
+from engine.agent_core.types import (
     AgentApprovalDecisionRequest,
     AgentResumeRequest,
     AgentRunRequest,
     AgentRunResponse,
     AgentRuntimeEvent,
-    DataBoxAgentRuntime,
 )
-from engine.agent import persistence as agent_persistence
 from engine.agent_core.events import EventEmitter
 from engine.db import get_db
 from engine.errors import DataBoxError

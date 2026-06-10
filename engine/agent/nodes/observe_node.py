@@ -7,7 +7,8 @@ from langchain_core.runnables import RunnableConfig
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent.graph.state import DataBoxAgentState
-from engine.agent import persistence as ap
+from engine.agent.graph.context import graph_context
+from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
@@ -111,8 +112,8 @@ def emit_artifacts_from_observation(
 
 
 def observe_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
-    configurable = config.get("configurable") or {}
-    db = configurable.get("db")
+    ctx = graph_context(config)
+    db = ctx.db
     run_id = state.get("run_id") or ""
     thread_id = state.get("thread_id") or state.get("run_id") or ""
 
