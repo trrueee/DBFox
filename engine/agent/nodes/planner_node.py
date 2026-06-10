@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.planning.schemas import AgentPlanDirective
@@ -37,7 +37,10 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
         return _permissive_fallback(replan_count=int(state.get("replan_count", 0)))
 
     replan_count = int(state.get("replan_count", 0))
-    is_replan = replan_count > 0
+    # Detect actual replan from progress_decision status, not from counter
+    progress = state.get("progress_decision") or {}
+    is_replan = progress.get("status") == "replan"
+    next_replan_count = replan_count + 1 if is_replan else replan_count
 
     # ---- Build the planner prompt -------------------------------------------
     messages = state.get("messages", [])
@@ -104,7 +107,7 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
             risk_notes=["Planner LLM call failed — using permissive fallback."],
             reasoning_summary=f"Planner error: {exc}",
         )
-        return _plan_result(fallback, replan_count)
+        return _plan_result(fallback, replan_count, is_replan=False)
 
     # ---- Handle clarification -----------------------------------------------
     if directive.needs_clarification:
@@ -114,26 +117,32 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
             "allowed_tool_groups": [],
             "status": "waiting_user",
             "error": None,
-            "messages": [HumanMessage(
+            "messages": [AIMessage(
                 content=directive.clarification_question
                 or "Could you clarify what you'd like to do?"
             )],
+            "answer": {"answer": directive.clarification_question or "Could you clarify what you'd like to do?",
+                        "key_findings": [], "evidence": [], "caveats": [],
+                        "recommendations": [], "follow_up_questions": []},
+            "final_answer": {"answer": directive.clarification_question or "Could you clarify what you'd like to do?",
+                              "key_findings": [], "evidence": [], "caveats": [],
+                              "recommendations": [], "follow_up_questions": []},
             "trace_events": [{
                 "type": "agent.planner.clarification",
                 "question": directive.clarification_question,
             }],
         }
 
-    return _plan_result(directive, replan_count)
+    return _plan_result(directive, next_replan_count, is_replan)
 
 
-def _plan_result(directive: AgentPlanDirective, replan_count: int) -> dict[str, Any]:
+def _plan_result(directive: AgentPlanDirective, count: int, is_replan: bool = False) -> dict[str, Any]:
     """Build the state update dict from a plan directive."""
     return {
         "plan_directive": directive.model_dump(mode="json"),
         "execution_mode": directive.execution_mode,
         "allowed_tool_groups": directive.allowed_tool_groups,
-        "replan_count": replan_count + 1 if replan_count > 0 else replan_count,
+        "replan_count": count,
         "trace_events": [{
             "type": "agent.planner.completed",
             "task_type": directive.task_type,
@@ -141,7 +150,7 @@ def _plan_result(directive: AgentPlanDirective, replan_count: int) -> dict[str, 
             "allowed_tool_groups": directive.allowed_tool_groups,
             "should_call_tools": directive.should_call_tools,
             "should_execute_sql": directive.should_execute_sql,
-            "is_replan": replan_count > 0,
+            "is_replan": is_replan,
         }],
     }
 

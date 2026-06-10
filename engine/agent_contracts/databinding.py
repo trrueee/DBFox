@@ -186,6 +186,34 @@ def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs
     }
 
 
+def _apply_environment_get_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"environment_profile": output}
+
+
+def _apply_semantic_resolve(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"semantic_resolution": output}
+
+
+def _apply_schema_list_tables(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {}
+
+
+def _apply_schema_describe_table(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {}
+
+
+def _apply_schema_refresh_catalog(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {}
+
+
+def _apply_memory_search(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {}
+
+
+def _apply_memory_write(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {}
+
+
 TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
     "followup.load_context": _apply_followup_load_context,
     "schema.build_context": _apply_schema_build_context,
@@ -199,6 +227,13 @@ TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
     "chart.suggest": _apply_chart_suggest,
     "followup.suggest": _apply_followup_suggest,
     "answer.synthesize": _apply_answer_synthesize,
+    "environment.get_profile": _apply_environment_get_profile,
+    "semantic.resolve": _apply_semantic_resolve,
+    "schema.list_tables": _apply_schema_list_tables,
+    "schema.describe_table": _apply_schema_describe_table,
+    "schema.refresh_catalog": _apply_schema_refresh_catalog,
+    "memory.search": _apply_memory_search,
+    "memory.write": _apply_memory_write,
 }
 
 _ARTIFACT_TOOLS: frozenset[str] = frozenset({
