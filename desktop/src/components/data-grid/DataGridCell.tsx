@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { compactJsonPreview, tryParseJson } from "./json";
 
 interface DataGridCellProps {
@@ -5,7 +6,7 @@ interface DataGridCellProps {
   selected: boolean;
   numeric: boolean;
   onSelect: () => void;
-  onContextMenu: (event: React.MouseEvent<HTMLTableCellElement>) => void;
+  onContextMenu: (event: MouseEvent<HTMLTableCellElement>) => void;
   onInspect: (value: string, isJson: boolean) => void;
   onPreviewChange: (preview: { value: string; isJson: boolean; rect: DOMRect } | null) => void;
 }
@@ -25,7 +26,7 @@ export function DataGridCell({ value, selected, numeric, onSelect, onContextMenu
   const isJson = parsedJson !== null;
   const valueText = stringifyValue(value);
 
-  const handleMouseEnter = (event: React.MouseEvent<HTMLTableCellElement>) => {
+  const handleMouseEnter = (event: MouseEvent<HTMLTableCellElement>) => {
     if (isJson || valueText.length > 40) {
       onPreviewChange({ value: valueText, isJson, rect: event.currentTarget.getBoundingClientRect() });
     }
