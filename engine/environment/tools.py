@@ -25,15 +25,31 @@ _svc = EnvironmentService()
 # ---------------------------------------------------------------------------
 
 def environment_get_profile(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    """Return a DataEnvironmentProfile with env/dialect/catalog_status/table_count/warnings."""
+    """Return a DataEnvironmentProfile with env/dialect/catalog_status/table_count/warnings.
+
+    Agent v2: also builds a DatabaseMap summary (table groups, relationships,
+    usage stats, risk profile) and attaches it to the output.
+    """
     datasource_id = _datasource_id(ctx)
     try:
         profile = _svc.get_profile(ctx.db, datasource_id)
+        output = profile.model_dump(mode="json")
+
+        # Agent v2: attach DatabaseMap summary
+        try:
+            from engine.environment.database_map import build_database_map, render_map_for_prompt
+            db_map = build_database_map(datasource_id, db_session=ctx.db)
+            if db_map is not None:
+                output["database_map"] = db_map.model_dump(mode="json")
+                output["database_map_summary"] = render_map_for_prompt(db_map)
+        except Exception as exc:
+            logger.warning("Failed to build DatabaseMap: %s", exc)
+
         return ToolObservation(
             name="get_profile",
             status="success",
             input=args,
-            output=profile.model_dump(mode="json"),
+            output=output,
             latency_ms=0,
         )
     except Exception as exc:

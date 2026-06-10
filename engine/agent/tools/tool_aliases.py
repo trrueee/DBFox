@@ -41,6 +41,8 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "schema_list_tables": "schema.list_tables",
     "schema_describe_table": "schema.describe_table",
     "schema_refresh_catalog": "schema.refresh_catalog",
+    # Escalate
+    "escalate_tool_group": "escalate.tool_group",
     # Memory tools
     "memory_search": "memory.search",
     "memory_write": "memory.write",

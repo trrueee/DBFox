@@ -8,7 +8,21 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
     """Format the factual DataBox business state variables into a SystemMessage context block.
 
     This ensures the LLM stays grounded in actual tool output and execution history.
+
+    When a ContextPack is available in state (Agent v2), uses its structured
+    model view.  Falls back to ad-hoc state assembly for backward compatibility.
     """
+    # Agent v2: use ContextPack when available
+    context_pack_raw = state.get("context_pack")
+    if context_pack_raw and isinstance(context_pack_raw, dict):
+        try:
+            from engine.agent.context_pack import ContextPack, render_for_model
+            pack = ContextPack.model_validate(context_pack_raw)
+            content = render_for_model(pack)
+            return SystemMessage(content=content)
+        except Exception:
+            pass  # Fall through to legacy path
+
     parts = ["### DataBox Current State Context"]
 
     # 1. Follow-up Context

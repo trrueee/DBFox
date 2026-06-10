@@ -1,12 +1,12 @@
-"""Skill/Tool loading utilities — validate raw dicts into typed specs.
+"""Tool loading utilities — validate raw dicts into ToolSpec.
 
 The loader is the validation layer between discovery (raw dicts) and the
-registry (validated SkillSpec / ToolSpec-like dicts).  Invalid entries are
-logged and skipped — they never crash the loader.
+registry (validated ToolSpec).  Invalid entries are logged and skipped —
+they never crash the loader.
 
-Tool loading is a two-step process:
-1. Validate the raw dict (name, description, handler reference are required).
-2. Resolve the handler reference via HandlerRegistry to produce a RegisteredTool.
+Skill loading lives in engine.agent.skills.loader (agent layer) because
+it depends on SkillSpec.  Tool loading lives here in agent_core because
+ToolSpec and friends are agent_core types.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from engine.agent.skills.schemas import SkillSpec
 from engine.agent_core.tool_registry import (
     ToolSpec,
     ToolPolicy,
@@ -23,32 +22,6 @@ from engine.agent_core.tool_registry import (
 )
 
 logger = logging.getLogger("databox.databox_agent.extensions.loader")
-
-
-# ── Skill loading ──────────────────────────────────────────────────────────────
-
-
-def load_skill_from_dict(raw: dict[str, Any]) -> SkillSpec | None:
-    """Validate a raw dict into a SkillSpec.  Returns None on failure."""
-    try:
-        return SkillSpec.model_validate(raw)
-    except Exception as exc:
-        skill_id = raw.get("id", "?")
-        logger.error("Failed to validate skill '%s': %s", skill_id, exc)
-        return None
-
-
-def load_skills_from_source(source) -> list[SkillSpec]:
-    """Discover raw dicts from a source and validate them into SkillSpecs.
-
-    Invalid entries are logged and skipped — the caller gets only valid skills.
-    """
-    loaded: list[SkillSpec] = []
-    for raw in source.discover():
-        spec = load_skill_from_dict(raw)
-        if spec is not None:
-            loaded.append(spec)
-    return loaded
 
 
 # ── Tool loading ───────────────────────────────────────────────────────────────

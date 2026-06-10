@@ -174,7 +174,7 @@ class TestProgressRoute:
 
     def test_replan_routes_to_planner(self):
         state: DataBoxAgentState = {
-            "progress_decision": {"status": "replan"},
+            "progress_decision": {"status": "replan", "retry_budget": 1},
             "replan_count": 0,
         }
         assert route_progress_output(state) == "planner"

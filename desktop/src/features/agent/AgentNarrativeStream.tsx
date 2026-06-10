@@ -158,9 +158,8 @@ function ArtifactBlock({
       {artifactView}
       {onOpenArtifact && artifact.presentation.mode !== "hidden" ? (
         <button
-          className="btn-secondary"
+          className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 text-[0.64rem] font-medium text-[hsl(var(--muted-foreground))] bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-sm cursor-pointer hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
           onClick={() => onOpenArtifact(artifact.id)}
-          style={{ marginTop: 5, fontSize: "0.62rem", padding: "2px 7px" }}
         >
           Inspect evidence
         </button>
@@ -173,7 +172,7 @@ function AnswerBlock({ answer, onOpenArtifact }: { answer: AgentAnswer; onOpenAr
   const evidenceItems = answer.evidence.filter((item) => item.artifact_id);
 
   return (
-    <section style={{ padding: 8, background: "var(--bg-secondary)" }}>
+    <section className="p-2 bg-[hsl(var(--secondary))] rounded">
       <strong>Answer</strong>
       <div style={{ marginTop: 5, lineHeight: 1.55 }}>{answer.answer}</div>
       {answer.key_findings.length ? (
@@ -182,7 +181,7 @@ function AnswerBlock({ answer, onOpenArtifact }: { answer: AgentAnswer; onOpenAr
         </ul>
       ) : null}
       {answer.caveats.length ? (
-        <div style={{ marginTop: 6, color: "var(--text-muted)" }}>Caveats: {answer.caveats.join(" | ")}</div>
+        <div className="mt-1.5 text-[hsl(var(--muted-foreground))] text-xs">Caveats: {answer.caveats.join(" | ")}</div>
       ) : null}
       {evidenceItems.length ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 7 }}>
@@ -191,7 +190,7 @@ function AnswerBlock({ answer, onOpenArtifact }: { answer: AgentAnswer; onOpenAr
             return onOpenArtifact ? (
               <button
                 key={`${item.artifact_id}-${item.label}`}
-                className="status-badge status-badge-neutral"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.64rem] font-semibold bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]"
                 onClick={() => onOpenArtifact(item.artifact_id)}
                 title={`Open ${item.artifact_id} in inspector`}
                 style={{ border: "none", cursor: "pointer" }}
@@ -201,7 +200,7 @@ function AnswerBlock({ answer, onOpenArtifact }: { answer: AgentAnswer; onOpenAr
             ) : (
               <span
                 key={`${item.artifact_id}-${item.label}`}
-                className="status-badge status-badge-neutral"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.64rem] font-semibold bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]"
                 title={item.artifact_id}
               >
                 {label}

@@ -205,18 +205,18 @@ class ToolRegistry:
 
     def add_builtin_source(self, path: Any = None) -> "ToolRegistry":
         """Register the builtin tool spec directory (priority 0)."""
-        from engine.agent.extensions.discovery import BuiltinToolSource
+        from engine.agent_core.extensions.discovery import BuiltinToolSource
         return self.add_source(BuiltinToolSource(path))
 
     def add_user_source(self, path: str | Any, *, priority: int = 10) -> "ToolRegistry":
         """Register a user/project tool spec directory."""
-        from engine.agent.extensions.discovery import UserToolSource
+        from engine.agent_core.extensions.discovery import UserToolSource
         return self.add_source(UserToolSource(path, priority=priority))
 
     def add_dict_source(self, tools: list[dict[str, Any]] | None = None,
                         *, priority: int = 100) -> Any:
         """Register a programmatic source and return it for further mutation."""
-        from engine.agent.extensions.discovery import DictToolSource
+        from engine.agent_core.extensions.discovery import DictToolSource
         src = DictToolSource(tools, priority=priority)
         self.add_source(src)
         return src
@@ -236,7 +236,7 @@ class ToolRegistry:
             # Convenience: if no sources were registered, auto-add builtins.
             self.add_builtin_source()
 
-        from engine.agent.extensions.loader import load_tool_spec_from_dict
+        from engine.agent_core.extensions.loader import load_tool_spec_from_dict
         from engine.agent_core.handler_registry import get_handler_registry
 
         handlers = get_handler_registry()
