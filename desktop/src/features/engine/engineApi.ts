@@ -86,6 +86,8 @@ export async function resolveTableByName(tableName: string) {
   return table ? { datasource, table } : null;
 }
 
-export function quoteIdentifier(identifier: string) {
+export function quoteIdentifier(identifier: string, dbType = "mysql") {
+  if (dbType === "postgresql") return `"${identifier.replaceAll('"', '""')}"`;
+  if (dbType === "sqlite") return `"${identifier.replaceAll('"', '""')}"`;
   return `\`${identifier.replaceAll("`", "``")}\``;
 }
