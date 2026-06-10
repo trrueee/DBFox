@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from engine.agent.default_tools import DEFAULT_AGENT_TOOL_NAMES, build_default_tool_registry
-from engine.agent.registry import FunctionAgentTool, ToolRegistry, ToolSpec
-from engine.agent.types import ToolObservation
+from engine.agent_contracts.default_tools import DEFAULT_AGENT_TOOL_NAMES, build_default_tool_registry
+from engine.agent_contracts.registry import FunctionAgentTool, ToolRegistry, ToolSpec
+from engine.agent_contracts.types import ToolObservation
 
 
 def _dummy_tool(name: str = "demo.safe") -> FunctionAgentTool:

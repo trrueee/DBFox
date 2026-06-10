@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from engine.agent.semantic_contract import build_query_contract
-from engine.agent.sql_semantic_verifier import verify_sql_against_contract
+from engine.agent_contracts.semantic_contract import build_query_contract
+from engine.agent_contracts.sql_semantic_verifier import verify_sql_against_contract
 
 
 def _codes(sql: str, question: str) -> set[str]:

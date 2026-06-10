@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.errors import DataBoxError
-from engine.executor import execute_query
-from engine.guardrail import guardrail_check
+from engine.sql.executor import execute_query
+from engine.sql.guardrail import guardrail_check
 from engine.models import DataSource, QueryHistory
 from engine.policy.engine import PolicyEngine
 from engine.query_registry import QUERY_REGISTRY
@@ -78,7 +78,7 @@ def api_execute_sql(req: SQLExecuteRequest, db: Session = Depends(get_db)) -> di
 @router.post("/query/explain")
 def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
-        from engine.executor import explain_sql
+        from engine.sql.executor import explain_sql
 
         return explain_sql(db, req.datasource_id, req.sql)
     except DataBoxError as exc:

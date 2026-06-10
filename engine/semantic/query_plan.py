@@ -244,7 +244,7 @@ class QueryPlanBuilder:
 
         semantic_context = self._build_semantic_context_text(datasource_id)
 
-        from engine.ai import prepare_chat_payload
+        from engine.sql.generator import prepare_chat_payload
         payload = prepare_chat_payload(
             model_name=model_name,
             messages=[

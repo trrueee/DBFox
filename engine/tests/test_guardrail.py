@@ -1,6 +1,6 @@
 """Guardrail test suite — 对应第一版.md Section 18.1"""
 import pytest
-from engine.guardrail import guardrail_check, GuardrailResult
+from engine.sql.guardrail import guardrail_check, GuardrailResult
 
 
 def _check(result: GuardrailResult, expected_result: str) -> None:

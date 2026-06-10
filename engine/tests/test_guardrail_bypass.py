@@ -1,6 +1,6 @@
 """Regression tests for Guardrail bypass cases found in the architecture review."""
 
-from engine.guardrail import guardrail_check
+from engine.sql.guardrail import guardrail_check
 
 
 def _rules(sql: str) -> set[str]:

@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from engine.executor import _serialize_value, _process_rows, MAX_ROWS, execute_query, explain_sql
+from engine.sql.executor import _serialize_value, _process_rows, MAX_ROWS, execute_query, explain_sql
 from engine.schema_sync import sync_schema
 
 
@@ -84,7 +84,7 @@ class TestProcessRows:
 class TestMySQLPool:
     def test_queue_pool_checkout_does_not_require_sqlalchemy_dialect(self, monkeypatch) -> None:
         from engine import executor
-        from engine.executor import _ping_mysql_connection, get_mysql_pool
+        from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
 
         class FakeConnection:
             pinged = False
@@ -121,7 +121,7 @@ class TestExecutorSQLite:
     """Integration test: execute real queries against the demo SQLite database."""
 
     def test_select_all_users(self) -> None:
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5")
         assert len(rows) >= 1
@@ -131,7 +131,7 @@ class TestExecutorSQLite:
         assert isinstance(rows[0]["username"], str)
 
     def test_aggregation_query(self) -> None:
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users")
         assert len(rows) == 1
@@ -139,7 +139,7 @@ class TestExecutorSQLite:
         assert int(rows[0]["cnt"]) > 0
 
     def test_join_query(self) -> None:
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT u.username, o.total_amount FROM users u "
@@ -150,7 +150,7 @@ class TestExecutorSQLite:
         assert "total_amount" in columns
 
     def test_row_limit_enforced(self) -> None:
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users")
         assert len(rows) <= MAX_ROWS
@@ -158,7 +158,7 @@ class TestExecutorSQLite:
     def test_non_select_rejected(self) -> None:
         """SQLite executes DDL without issue, but guardrail should be tested separately."""
         # This test verifies SQLite execution works; guardrail handles DDL blocking.
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT name FROM sqlite_master WHERE type='table' LIMIT 5"
@@ -167,7 +167,7 @@ class TestExecutorSQLite:
         assert "name" in columns
 
     def test_sqlite_timeout(self) -> None:
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
 
         with pytest.raises(TimeoutError):
             _execute_on_sqlite(
@@ -179,7 +179,7 @@ class TestExecutorSQLite:
 
     def test_sqlite_query_can_be_cancelled(self) -> None:
         from engine.errors import SQLQueryCancelledError
-        from engine.executor import _execute_on_sqlite
+        from engine.sql.executor import _execute_on_sqlite
         from engine.query_registry import QUERY_REGISTRY
 
         execution_id = "test-sqlite-cancel"
@@ -247,9 +247,9 @@ class TestPerformanceAndExplain:
         assert any(check["rule"] == "schema_validation" for check in exc_info.value.checks)
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session, demo_datasource) -> None:
-        from engine.ai import validate_sql_schema
+        from engine.sql.generator import validate_sql_schema
         from engine.errors import GuardrailValidationError
-        from engine.trust_gate import TrustGate
+        from engine.sql.trust_gate import TrustGate
 
         decision = TrustGate(db_session, validate_sql_schema).execution_decision(
             demo_datasource.id,
