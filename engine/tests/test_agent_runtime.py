@@ -23,7 +23,7 @@ def _patch_schema_direct_sql_generate(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "engine.agent.tools.generate_sql_from_schema_context",
+        "engine.tools.sql_tools.generate_sql_from_schema_context",
         fake_generate_sql_from_schema_context,
     )
 
@@ -55,7 +55,7 @@ def test_agent_runtime_delegates_run_iter_to_kernel_service(db_session, monkeypa
                 response=response,
             )
 
-    monkeypatch.setattr("engine.databox_agent.app.service.DataBoxAgentService", FakeKernelService)
+    monkeypatch.setattr("engine.agent.app.service.DataBoxAgentService", FakeKernelService)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(
         AgentRunRequest(datasource_id="ds-test", question="list users", session_id="session-test")
@@ -171,8 +171,8 @@ def test_agent_runtime_run_iter_streams_artifacts_after_producing_steps(db_sessi
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=True)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(req))
@@ -225,8 +225,8 @@ def test_agent_runtime_reuses_validation_safety_decision_for_execution(db_sessio
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=True)
 
     res = DataBoxAgentRuntime(db_session).run(req)
@@ -297,7 +297,7 @@ def test_agent_runtime_blocks_guardrail_failure_without_execution(db_session, de
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="删除所有用户", execute=True, api_key="sk-test")
 
     res = DataBoxAgentRuntime(db_session).run(req)
@@ -332,7 +332,7 @@ def test_agent_runtime_run_iter_trustgate_failure_streams_error_artifact(db_sess
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="delete users", execute=True)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(req))
@@ -370,8 +370,8 @@ def test_agent_runtime_execution_failure_returns_revise_suggestion(db_session, d
     def fail_execute(*_args, **_kwargs):
         raise RuntimeError("database is busy")
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
-    monkeypatch.setattr("engine.agent.tools.execute_query", fail_execute)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools.execute_query", fail_execute)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询用户", execute=True)
 
     res = DataBoxAgentRuntime(db_session).run(req)
@@ -415,9 +415,9 @@ def test_agent_runtime_stops_on_schema_hallucination_without_execution(db_sessio
     def fail_execute(*_args, **_kwargs):
         raise AssertionError("hallucinated SQL must not execute")
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
-    monkeypatch.setattr("engine.agent.tools.execute_query", fail_execute)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools.execute_query", fail_execute)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=True)
 
     res = DataBoxAgentRuntime(db_session).run(req)
@@ -475,8 +475,8 @@ def test_stream_and_non_stream_final_response_consistency(db_session, demo_datas
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -530,8 +530,8 @@ def test_persistence_creates_session_and_run(db_session, demo_datasource, monkey
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -568,8 +568,8 @@ def test_persistence_saves_artifacts(db_session, demo_datasource, monkeypatch) -
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -614,8 +614,8 @@ def test_persistence_get_run_restores_response(db_session, demo_datasource, monk
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -657,8 +657,8 @@ def test_persistence_followup_server_side_reconstruction(db_session, demo_dataso
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     first_req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -705,8 +705,8 @@ def test_persistence_streaming_saves_events(db_session, demo_datasource, monkeyp
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -752,7 +752,7 @@ def test_persistence_failure_saves_error_artifact(db_session, demo_datasource, m
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -802,8 +802,8 @@ def test_persistence_recent_run_recovery(db_session, demo_datasource, monkeypatc
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -837,8 +837,8 @@ def test_list_run_artifacts_returns_ordered_artifacts(db_session, demo_datasourc
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -874,8 +874,8 @@ def test_list_run_events_returns_ordered_runtime_events(db_session, demo_datasou
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -916,8 +916,8 @@ def test_list_run_trace_returns_redacted_trace_events(db_session, demo_datasourc
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -981,8 +981,8 @@ def test_replay_does_not_execute_sql(db_session, demo_datasource, monkeypatch) -
         execute_called = True
         raise RuntimeError("must not execute during replay")
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -994,7 +994,7 @@ def test_replay_does_not_execute_sql(db_session, demo_datasource, monkeypatch) -
     res = DataBoxAgentRuntime(db_session).run(req)
     run_id = res.run_id
 
-    monkeypatch.setattr("engine.agent.tools.execute_query", fail_execute)
+    monkeypatch.setattr("engine.tools.sql_tools.execute_query", fail_execute)
 
     restored = get_run(db_session, run_id)
     assert restored is not None
@@ -1022,8 +1022,8 @@ def test_restored_run_can_start_followup(db_session, demo_datasource, monkeypatc
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     first_req = AgentRunRequest(
         datasource_id=demo_datasource.id,
@@ -1072,8 +1072,8 @@ def test_session_runs_sorted_and_include_status(db_session, demo_datasource, mon
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql)
 
     session_id = "sorted-session-runs"
     for i in range(3):

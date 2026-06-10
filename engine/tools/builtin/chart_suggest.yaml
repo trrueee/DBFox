@@ -1,0 +1,14 @@
+name: chart.suggest
+group: chart
+kind: code
+description: >
+  Suggest a chart type and axis encoding based on execution result columns.
+  Use AFTER result.profile when visualization would help.
+handler: chart_suggest
+input_schema:
+  type: object
+  description: This tool reads all required inputs from current agent state.
+binding:
+  produces_state_keys: [chart_suggestion]
+metadata:
+  next_route: followup_suggest

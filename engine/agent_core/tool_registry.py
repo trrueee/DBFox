@@ -8,6 +8,7 @@ Dependency rule: agent_core has zero agent / semantic / environment dependencies
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Mapping
 
@@ -15,6 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent_core.types import AgentRunRequest, ToolObservation
+
+logger = logging.getLogger("databox.databox_agent.tool_registry")
 
 
 # ---------------------------------------------------------------------------
@@ -173,19 +176,127 @@ class RegisteredTool:
 class ToolRegistry:
     """Central registry of all agent tools.
 
+    Tools can come from multiple sources:
+    - Builtin: engine/tools/builtin/*.yaml      (priority 0)
+    - User global: ~/.databox/tools/*.yaml      (priority 10)
+    - Project: .databox/tools/*.yaml             (priority 20)
+    - Programmatic: registry.register(tool)       (highest priority)
+
     get() returns None for unknown tools (safe for guard code).
     require() raises KeyError for unknown tools (fail-fast for execution code).
     """
 
     def __init__(self) -> None:
         self._tools: dict[str, RegisteredTool] = {}
+        self._sources: list[Any] = []  # ToolSource instances
+        self._loaded: bool = False
+
+    # ── Source management ───────────────────────────────────────────────────
+
+    def add_source(self, source: Any) -> "ToolRegistry":
+        """Register a discovery source.  Call before load_all().
+
+        Sources are loaded in priority order (low to high).  When two sources
+        define the same tool name, the higher-priority one wins.
+        """
+        self._sources.append(source)
+        self._sources.sort(key=lambda s: s.priority)
+        return self
+
+    def add_builtin_source(self, path: Any = None) -> "ToolRegistry":
+        """Register the builtin tool spec directory (priority 0)."""
+        from engine.agent.extensions.discovery import BuiltinToolSource
+        return self.add_source(BuiltinToolSource(path))
+
+    def add_user_source(self, path: str | Any, *, priority: int = 10) -> "ToolRegistry":
+        """Register a user/project tool spec directory."""
+        from engine.agent.extensions.discovery import UserToolSource
+        return self.add_source(UserToolSource(path, priority=priority))
+
+    def add_dict_source(self, tools: list[dict[str, Any]] | None = None,
+                        *, priority: int = 100) -> Any:
+        """Register a programmatic source and return it for further mutation."""
+        from engine.agent.extensions.discovery import DictToolSource
+        src = DictToolSource(tools, priority=priority)
+        self.add_source(src)
+        return src
+
+    # ── Load ────────────────────────────────────────────────────────────────
+
+    def load_all(self) -> list[RegisteredTool]:
+        """Load tools from all registered sources + resolve handlers.
+
+        Idempotent — subsequent calls return the cached result.
+        Reset with clear() if you need to reload after adding sources.
+        """
+        if self._loaded:
+            return list(self._tools.values())
+
+        if not self._sources:
+            # Convenience: if no sources were registered, auto-add builtins.
+            self.add_builtin_source()
+
+        from engine.agent.extensions.loader import load_tool_spec_from_dict
+        from engine.agent_core.handler_registry import get_handler_registry
+
+        handlers = get_handler_registry()
+        total = 0
+
+        for source in sorted(self._sources, key=lambda s: s.priority):
+            for raw in source.discover():
+                spec = load_tool_spec_from_dict(raw)
+                if spec is None:
+                    continue
+
+                handler_name = raw.get("handler", "")
+                base_tool_name = raw.get("base_tool")
+
+                try:
+                    handler_fn = handlers.resolve(handler_name)
+                except KeyError:
+                    logger.error(
+                        "Tool '%s' references unknown handler '%s' — skipping.",
+                        spec.name, handler_name,
+                    )
+                    continue
+
+                base_tool = handlers.resolve_base_tool(handler_name)
+                if base_tool_name:
+                    resolved_bt = handlers.resolve_base_tool(base_tool_name)
+                    if resolved_bt is not None:
+                        base_tool = resolved_bt
+
+                rt = RegisteredTool(spec=spec, handler=handler_fn, base_tool=base_tool)
+
+                if spec.name in self._tools:
+                    logger.info(
+                        "Tool '%s' overridden by source %s (priority %d)",
+                        spec.name, source, source.priority,
+                    )
+                self._tools[spec.name] = rt
+                total += 1
+
+        self._loaded = True
+        logger.info("ToolRegistry: loaded %d tools from %d sources.",
+                     len(self._tools), len(self._sources))
+        return list(self._tools.values())
+
+    # ── Manual registration ─────────────────────────────────────────────────
 
     def register(self, tool: RegisteredTool) -> "ToolRegistry":
+        """Manually register a tool.  Overrides any source-loaded tool
+        with the same name regardless of priority."""
         name = tool.spec.name
         if name in self._tools:
-            raise ValueError(f"Agent tool `{name}` is already registered.")
+            logger.info("Tool '%s' overridden by manual register().", name)
         self._tools[name] = tool
         return self
+
+    def force_register(self, tool: RegisteredTool) -> "ToolRegistry":
+        """Alias for register() — always succeeds."""
+        return self.register(tool)
+
+    # ── Query ───────────────────────────────────────────────────────────────
 
     def get(self, name: str) -> RegisteredTool | None:
         return self._tools.get(name)
@@ -201,6 +312,20 @@ class ToolRegistry:
 
     def list_specs(self) -> list[ToolSpec]:
         return [self._tools[name].spec for name in sorted(self._tools)]
+
+    def clear(self) -> None:
+        """Clear all loaded tools and reset loaded flag."""
+        self._tools.clear()
+        self._loaded = False
+
+    def __len__(self) -> int:
+        return len(self._tools)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._tools
+
+    def __repr__(self) -> str:
+        return f"<ToolRegistry tools={len(self._tools)} sources={len(self._sources)} loaded={self._loaded}>"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,23 @@
+name: memory.write
+group: answer
+kind: code
+description: >
+  Write a new memory entry. Use when the user explicitly asks to remember
+  something (e.g., "记住销售额是 orders.total_amount").
+handler: memory_write
+input_schema:
+  type: object
+  description: Write a new memory entry.
+  properties:
+    type:
+      type: string
+      description: Memory type.
+    text:
+      type: string
+      description: Human-readable memory text.
+    content:
+      type: object
+      description: Structured content for this memory type.
+  required: [type, text]
+metadata:
+  next_route: answer

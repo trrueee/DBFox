@@ -1,0 +1,52 @@
+id: schema_exploration
+name: Schema Exploration
+description: >
+  Explore and understand table structures in the datasource. Used when the user
+  asks about available tables, table schemas, column definitions, keys, or
+  foreign key relationships. This skill produces grounded schema_context without
+  generating or executing SQL.
+
+use_when:
+  - user asks "what tables are available"
+  - user asks about table structure or columns
+  - user asks for schema of a named table
+  - user asks about primary keys or foreign keys
+  - table or column context is unknown
+
+allowed_tool_groups:
+  - environment
+  - schema
+  - answer
+
+forbidden_tool_groups:
+  - sql_generation
+  - sql_validation
+  - sql_repair
+  - execution
+  - chart
+
+steps:
+  - environment.get_profile
+  - schema.list_tables
+  - schema.describe_table
+  - schema.build_context
+  - answer.synthesize
+
+success_criteria:
+  - relevant tables are listed with column details
+  - keys and foreign keys are documented when available
+  - answer is grounded in actual catalog data
+  - no SQL is generated or executed
+
+recovery:
+  empty_catalog:
+    - condition: "schema.list_tables returns zero tables"
+      action: "schema.refresh_catalog then retry schema.list_tables"
+  unknown_table:
+    - condition: "schema.describe_table fails because table not found"
+      action: "schema.list_tables to find the correct table name, then retry"
+
+writeback:
+  - memory_type: schema_alias
+    trigger: on_user_confirmed
+    content_hint: "business name → actual table name mapping if the user used an alias"

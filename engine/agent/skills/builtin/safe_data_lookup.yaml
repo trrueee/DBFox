@@ -1,0 +1,87 @@
+id: safe_data_lookup
+name: Safe Data Lookup
+description: >
+  Execute a complete, safe data query from end to end. Used when the user
+  explicitly requests data, statistics, or query execution. This is the primary
+  production path: environment check → schema → semantic → query plan → SQL
+  generation → validation → execution → result profiling → answer.
+
+use_when:
+  - user explicitly asks to query, run, or check data
+  - user asks for statistics, counts, aggregations from the database
+  - user asks "show me the data for..."
+  - task type is data_lookup with user_requested_read or agent_autonomous_read
+
+allowed_tool_groups:
+  - environment
+  - schema
+  - semantic
+  - query_plan
+  - sql_generation
+  - sql_validation
+  - sql_repair
+  - execution
+  - result
+  - answer
+
+forbidden_tool_groups:
+  - chart
+
+steps:
+  - environment.get_profile
+  - memory.search
+  - schema.build_context
+  - semantic.resolve
+  - query_plan.build
+  - sql.generate
+  - sql.validate
+  - sql.execute_readonly
+  - result.profile
+  - answer.synthesize
+
+success_criteria:
+  - SQL is generated and validated through TrustGate
+  - SQL executes successfully (or blocked for valid safety reasons)
+  - results are profiled and notable facts are identified
+  - answer is synthesized with evidence from execution results
+  - user's data question is answered
+
+recovery:
+  unknown_table:
+    - condition: "schema.build_context finds no matching tables"
+      action: "schema.list_tables then schema.refresh_catalog if catalog is empty, then retry"
+  unknown_column:
+    - condition: "generated SQL references a column that doesn't exist"
+      action: "schema.describe_table for the affected table, rebuild query_plan with correct columns"
+  sql_validation_failed_once:
+    - condition: "first SQL validation failure"
+      action: "sql.revise to fix the issue, retry_budget=2"
+  sql_validation_failed_twice:
+    - condition: "second SQL validation failure on same query"
+      action: "go back to semantic.resolve + query_plan.build, do NOT revise again blindly"
+  ambiguous_join:
+    - condition: "join path is unclear between required tables"
+      action: "relationship_discovery skill or ask user to clarify join condition"
+  empty_result:
+    - condition: "query executes but returns zero rows"
+      action: "diagnose: is this a normal empty result or too-restrictive filters? If the latter, loosen filters and retry"
+  execution_error:
+    - condition: "database returns an execution error"
+      action: "if transient (timeout, connection), retry once; if persistent, report to user"
+  guardrail_blocked:
+    - condition: "TrustGate blocks the SQL as unsafe"
+      action: "explain why the SQL is unsafe and suggest user rephrase the question"
+  prod_approval:
+    - condition: "execution against PROD datasource requires user approval"
+      action: "enter approval flow, do not treat as failure"
+
+writeback:
+  - memory_type: trajectory
+    trigger: on_success
+    content_hint: "question pattern, tables used, join paths, SQL shape, successful tools, result columns"
+  - memory_type: join_path
+    trigger: on_success
+    content_hint: "any new join paths discovered during this query"
+  - memory_type: semantic_definition
+    trigger: on_user_confirmed
+    content_hint: "business terms resolved during this query"

@@ -1,0 +1,17 @@
+name: workspace.continue_from_artifact
+group: workspace
+kind: code
+description: >
+  Continue analysis from a previously generated artifact. Uses the selected
+  artifact as context.
+handler: workspace_assist
+input_schema:
+  type: object
+  description: Optional question override.
+  properties:
+    question:
+      type: string
+binding:
+  produces_state_keys: [answer, final_answer, status]
+metadata:
+  next_route: answer

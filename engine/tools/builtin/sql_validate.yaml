@@ -1,0 +1,20 @@
+name: sql.validate
+group: sql_validation
+kind: code
+description: >
+  Validate a SQL candidate through TrustGate and guardrail checks. MUST be
+  called before sql.execute_readonly. Outputs safety dict with can_execute,
+  safe_sql, blocked_reasons, requires_confirmation.
+handler: sql_validate
+input_schema:
+  type: object
+  description: SQL to validate. If sql is omitted, current state.sql is used.
+  properties:
+    sql:
+      type: string
+      description: SQL to validate.
+binding:
+  consumes_state_keys: [sql_candidate]
+  produces_state_keys: [safety, sql]
+metadata:
+  next_route: validation_route

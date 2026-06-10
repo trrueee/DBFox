@@ -78,6 +78,26 @@ Choose which tool groups the ReAct model may use:
 - Never allow destructive operations.
 - Set risk_notes when the task touches PROD data, large tables, or financial/healthcare metrics.
 
+## Skill Selection (Agent v2)
+
+Skills are curated execution patterns that guide the ReAct model with proven
+tool sequences, safety boundaries, and recovery playbooks. Select ZERO or
+MORE skills from the available skill catalog that match the user's intent.
+
+When you select a skill:
+- The skill's allowed_tool_groups constrain what tools the model may use.
+- The skill's steps provide a recommended tool sequence.
+- The skill's success_criteria feed the Progress Judge.
+- The skill's recovery rules guide failure handling.
+
+You may select MULTIPLE skills when the user's question spans domains
+(e.g. schema exploration before safe data lookup).
+
+Set selected_skill_ids=[] (empty) when:
+- The task is chat, product_help, or database_concept (no DataBox tools needed).
+- The task is purely workspace explanation (workspace tools handle it).
+- The task is so simple that a skill would be overkill.
+
 ## Output
 
 Return a structured AgentPlanDirective with your decisions.

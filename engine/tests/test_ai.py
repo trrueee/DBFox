@@ -52,7 +52,7 @@ def test_generate_sql_from_schema_context_returns_schema_direct_metadata(monkeyp
         captured.update(kwargs)
         return MockResponse()
 
-    monkeypatch.setattr("engine.ai.httpx.post", fake_post)
+    monkeypatch.setattr("engine.sql.generator.httpx.post", fake_post)
 
     result = generate_sql_from_schema_context(
         question="How many students are there?",
@@ -164,7 +164,7 @@ def test_generate_sql_online_success(db_session, demo_datasource) -> None:
         "choices": [{"message": {"content": "```sql\nSELECT * FROM users LIMIT 10\n```"}}]
     }
 
-    with patch("engine.ai.httpx.post", return_value=mock_resp):
+    with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
         result = generate_sql(db_session, demo_datasource.id, "list all users",
                               llm_config={"api_key": "sk-test", "api_base": "https://test/v1",
                                           "model": "gpt-test"})
@@ -180,7 +180,7 @@ def test_generate_sql_online_no_code_fence(db_session, demo_datasource) -> None:
         "choices": [{"message": {"content": "SELECT id, name FROM products LIMIT 20"}}]
     }
 
-    with patch("engine.ai.httpx.post", return_value=mock_resp):
+    with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
         result = generate_sql(db_session, demo_datasource.id, "list products",
                               llm_config={"api_key": "sk-test"})
     assert "SELECT" in result["sql"]
@@ -192,7 +192,7 @@ def test_generate_sql_online_http_error(db_session, demo_datasource) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 500
 
-    with patch("engine.ai.httpx.post", return_value=mock_resp):
+    with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
         with pytest.raises(AIServiceError, match="LLM API returned an error"):
             generate_sql(db_session, demo_datasource.id, "test question",
                          llm_config={"api_key": "sk-test"})
@@ -205,7 +205,7 @@ def test_generate_sql_online_guardrail_reject(db_session, demo_datasource) -> No
         "choices": [{"message": {"content": "```sql\nDROP TABLE users;\n```"}}]
     }
 
-    with patch("engine.ai.httpx.post", return_value=mock_resp):
+    with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
         result = generate_sql(db_session, demo_datasource.id, "delete all users",
                               llm_config={"api_key": "sk-test"})
     assert result["guardrail"]["result"] == "reject"

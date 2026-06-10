@@ -1,0 +1,19 @@
+name: memory.delete
+group: answer
+kind: code
+description: >
+  Delete a memory entry. Use when the user asks to forget or correct something.
+handler: memory_delete
+input_schema:
+  type: object
+  description: Delete a memory entry.
+  properties:
+    memory_id:
+      type: string
+      description: The ID of the memory to delete.
+    reason:
+      type: string
+      description: Why this memory is being deleted.
+  required: [memory_id]
+metadata:
+  next_route: answer
