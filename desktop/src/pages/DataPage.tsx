@@ -197,7 +197,7 @@ export const DataPage = ({
         }}
       >
         <div 
-          className="lab-card animate-fade-in"
+          className="bg-card border border-border rounded-lg animate-fade-in"
           style={{
             maxWidth: 620,
             width: "100%",
@@ -360,7 +360,7 @@ export const DataPage = ({
             <div style={{ position: "relative" }}>
               <Search size={11} style={{ position: "absolute", left: 8, top: 7, color: "var(--text-muted)" }} />
               <input
-                className="input-field input-field-sm"
+                className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder="搜索表格数据..."
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
@@ -369,7 +369,7 @@ export const DataPage = ({
             </div>
             <button 
               type="submit" 
-              className="btn-primary" 
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" 
               style={{ height: 24, padding: "0 8px", fontSize: "0.72rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}
             >
               <Filter size={11} />
@@ -378,7 +378,7 @@ export const DataPage = ({
             {appliedFilter && (
               <button 
                 type="button" 
-                className="btn-secondary" 
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" 
                 onClick={handleClearFilter}
                 style={{ height: 24, padding: "0 8px", fontSize: "0.72rem" }}
               >
@@ -390,7 +390,7 @@ export const DataPage = ({
           <div style={{ width: "1px", height: 16, background: "var(--border-light)" }} />
 
           <button 
-            className="btn-secondary" 
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" 
             onClick={fetchTableData}
             disabled={loading}
             style={{ height: 24, width: 24, padding: 0, display: "grid", placeItems: "center" }}
@@ -446,7 +446,7 @@ export const DataPage = ({
               {error}
             </div>
             <button 
-              className="btn-primary" 
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" 
               style={{ marginTop: 16, padding: "6px 16px", fontSize: "0.82rem" }}
               onClick={loadInitialSchemaAndData}
             >
@@ -455,9 +455,9 @@ export const DataPage = ({
           </div>
         ) : loading && rows.length === 0 ? (
           <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div className="skeleton" style={{ height: 40, borderRadius: 6 }} />
+            <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 40, borderRadius: 6 }} />
             {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-              <div key={i} className="skeleton" style={{ height: 34, borderRadius: 4 }} />
+              <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 34, borderRadius: 4 }} />
             ))}
           </div>
         ) : rows.length === 0 ? (
@@ -469,7 +469,7 @@ export const DataPage = ({
               {appliedFilter ? "没有与搜索过滤匹配的记录，请尝试更改搜索词。" : "该表目前没有任何行数据，您可以通过 SQL 工作台或 Schema 测试工具写入。"}
             </p>
             {appliedFilter && (
-              <button className="btn-secondary" style={{ fontSize: "0.82rem" }} onClick={handleClearFilter}>
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" style={{ fontSize: "0.82rem" }} onClick={handleClearFilter}>
                 清除搜索词
               </button>
             )}

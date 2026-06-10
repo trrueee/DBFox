@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Eye, HardDrive, Key, Link2, Terminal, X, Settings, Wand2, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Copy, Eye, HardDrive, Key, Link2, Terminal, X, Settings, Loader2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { api } from "../lib/api";
 import type { DataSource, ERDiagramData, QueryResult, SchemaColumn, SchemaTable } from "../lib/api";
 import { DataTable } from "../components/DataTable";
@@ -89,7 +89,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
   };
 
   // AI ER Diagram alteration states
-  const [showAiAlterPanel, setShowAiAlterPanel] = useState(false);
   const [aiAlterPrompt, setAiAlterPrompt] = useState("");
   const [aiAlterApiKey, setAiAlterApiKey] = useState("");
   const [aiAlterApiBase, setAiAlterApiBase] = useState("");
@@ -300,18 +299,18 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
               </h3>
             </div>
 
-            <div className="pill-tabs">
-              <button className={`pill-tab ${viewTab === "fields" ? "active" : ""}`} onClick={() => setViewTab("fields")}>
+            <div className="inline-flex bg-secondary rounded-sm p-0.5 gap-px">
+              <button className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${viewTab === "fields" ? "active" : ""}`} onClick={() => setViewTab("fields")}>
                 字段
               </button>
-              <button className={`pill-tab ${viewTab === "er" ? "active" : ""}`} onClick={() => setViewTab("er")}>
+              <button className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${viewTab === "er" ? "active" : ""}`} onClick={() => setViewTab("er")}>
                 关系图
               </button>
-              <button className={`pill-tab ${viewTab === "data" ? "active" : ""}`} onClick={() => setViewTab("data")}>
+              <button className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${viewTab === "data" ? "active" : ""}`} onClick={() => setViewTab("data")}>
                 <Eye size={13} />
                 数据预览
               </button>
-              <button className={`pill-tab ${viewTab === "design" ? "active" : ""}`} onClick={() => setViewTab("design")}>
+              <button className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${viewTab === "design" ? "active" : ""}`} onClick={() => setViewTab("design")}>
                 设计草稿
               </button>
             </div>
@@ -319,7 +318,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
         )}
 
         {/* Content Area */}
-        <div className="lab-card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div className="bg-card border border-border rounded-lg" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {/* Fields Tab */}
           {viewTab === "fields" && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -346,7 +345,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                 {columnsLoading ? (
                   <div style={{ padding: 24 }}>
                     {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="skeleton" style={{ height: 36, marginBottom: 4, borderRadius: 4 }} />
+                      <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 36, marginBottom: 4, borderRadius: 4 }} />
                     ))}
                   </div>
                 ) : columns.length === 0 ? (
@@ -355,7 +354,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     <div className="empty-state-desc">从左侧选择一个表查看字段详情</div>
                   </div>
                 ) : (
-                  <table className="data-table">
+                  <table className="w-full border-collapse text-xs font-mono tabular-nums">
                     <thead>
                       <tr>
                         <th>字段名</th>
@@ -413,19 +412,19 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                   <div className="er-toolbar">
                     <div className="er-toolbar-group">
                       <button
-                        className={`pill-tab ${erViewMode === "focus" ? "active" : ""}`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${erViewMode === "focus" ? "active" : ""}`}
                         onClick={() => setErViewMode("focus")}
                       >
                         当前表关系
                       </button>
                       <button
-                        className={`pill-tab ${erViewMode === "module" ? "active" : ""}`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${erViewMode === "module" ? "active" : ""}`}
                         onClick={() => setErViewMode("module")}
                       >
                         业务模块
                       </button>
                       <button
-                        className={`pill-tab ${erViewMode === "full" ? "active" : ""}`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${erViewMode === "full" ? "active" : ""}`}
                         onClick={() => setErViewMode("full")}
                       >
                         全库关系
@@ -438,13 +437,13 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>深度</span>
                         <div className="er-toolbar-group">
                           <button
-                            className={`pill-tab ${erDepth === 1 ? "active" : ""}`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${erDepth === 1 ? "active" : ""}`}
                             onClick={() => setErDepth(1)}
                           >
                             1 跳
                           </button>
                           <button
-                            className={`pill-tab ${erDepth === 2 ? "active" : ""}`}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-muted-foreground bg-transparent border-none rounded-sm cursor-pointer hover:text-foreground hover:bg-black/5 transition-colors ${erDepth === 2 ? "active" : ""}`}
                             onClick={() => setErDepth(2)}
                           >
                             2 跳
@@ -514,178 +513,6 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                         />
                       </ErrorBoundary>
 
-                      {/* AI Floating Toggle Button */}
-                      <button
-                        onClick={() => setShowAiAlterPanel(!showAiAlterPanel)}
-                        className="hover-lift"
-                        style={{
-                          position: "absolute",
-                          bottom: 16,
-                          right: 16,
-                          background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)",
-                          color: "#FFFFFF",
-                          border: "none",
-                          borderRadius: 30,
-                          padding: "10px 20px",
-                          fontSize: "0.85rem",
-                          fontWeight: 600,
-                          boxShadow: "0 8px 16px rgba(45, 59, 140, 0.25)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                          cursor: "pointer",
-                          zIndex: 9,
-                        }}
-                      >
-                        <Wand2 size={15} />
-                        {showAiAlterPanel ? "关闭 AI 批注修改" : "🪄 AI 智能改图"}
-                      </button>
-
-                      {/* Glassmorphic Control panel */}
-                      {showAiAlterPanel && (
-                        <div
-                          className="animate-fade-in"
-                          style={{
-                            position: "absolute",
-                            bottom: 70,
-                            right: 16,
-                            width: 320,
-                            background: "rgba(255, 255, 255, 0.82)",
-                            backdropFilter: "blur(14px)",
-                            borderRadius: 12,
-                            border: "1px solid rgba(255, 255, 255, 0.5)",
-                            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.12)",
-                            padding: 16,
-                            zIndex: 9,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 12,
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: "0.86rem", fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 6 }}>
-                              <Wand2 size={14} style={{ color: "var(--accent-indigo)" }} />
-                              AI 批注式架构修改
-                            </span>
-                            <button
-                              onClick={() => setShowAiAlterLlmConfig(!showAiAlterLlmConfig)}
-                              className="btn-ghost"
-                              style={{ padding: 4 }}
-                            >
-                              <Settings size={13} />
-                            </button>
-                          </div>
-
-                          {showAiAlterLlmConfig && (
-                            <div
-                              style={{
-                                padding: 10,
-                                borderRadius: 6,
-                                background: "rgba(0, 0, 0, 0.03)",
-                                border: "1px solid var(--border-light)",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 8,
-                              }}
-                            >
-                              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                                <div>
-                                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>API Key</label>
-                                  <input
-                                    type="password"
-                                    className="input-field input-field-sm"
-                                    placeholder="留空使用本地启发式引擎"
-                                    value={aiAlterApiKey}
-                                    onChange={(e) => setAiAlterApiKey(e.target.value)}
-                                  />
-                                </div>
-                                <div>
-                                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>API Base</label>
-                                  <input
-                                    className="input-field input-field-sm"
-                                    placeholder="https://api.openai.com/v1"
-                                    value={aiAlterApiBase}
-                                    onChange={(e) => setAiAlterApiBase(e.target.value)}
-                                  />
-                                </div>
-                                <div>
-                                  <label style={{ fontSize: "0.68rem", color: "var(--text-muted)", display: "block", marginBottom: 2 }}>Model</label>
-                                  <input
-                                    className="input-field input-field-sm"
-                                    placeholder="gpt-4o-mini"
-                                    value={aiAlterModelName}
-                                    onChange={(e) => setAiAlterModelName(e.target.value)}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          <textarea
-                            className="input-field"
-                            placeholder="例如：给 users 表和 products 表增加 deleted_at 软删除字段..."
-                            rows={3}
-                            value={aiAlterPrompt}
-                            onChange={(e) => setAiAlterPrompt(e.target.value)}
-                            style={{ fontSize: "0.82rem", resize: "none" }}
-                          />
-
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                            <button
-                              onClick={() => setAiAlterPrompt("所有表加上 deleted_at 字段")}
-                              className="btn-ghost"
-                              style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: 4, background: "rgba(0,0,0,0.03)" }}
-                            >
-                              + 软删除
-                            </button>
-                            <button
-                              onClick={() => setAiAlterPrompt("为 orders 表增加 status 状态与索引")}
-                              className="btn-ghost"
-                              style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: 4, background: "rgba(0,0,0,0.03)" }}
-                            >
-                              + 状态与索引
-                            </button>
-                            <button
-                              onClick={() => setAiAlterPrompt("为 users 表增加 uuid 唯一码字段")}
-                              className="btn-ghost"
-                              style={{ fontSize: "0.72rem", padding: "2px 8px", borderRadius: 4, background: "rgba(0,0,0,0.03)" }}
-                            >
-                              + UUID字段
-                            </button>
-                          </div>
-
-                          {aiAlterError && (
-                            <div style={{ fontSize: "0.76rem", color: "var(--accent-amber)", display: "flex", gap: 4, alignItems: "flex-start" }}>
-                              <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                              <span>{aiAlterError}</span>
-                            </div>
-                          )}
-
-                          <button
-                            onClick={handleAiAlterSubmit}
-                            disabled={aiAlterGenerating || !aiAlterPrompt.trim()}
-                            className="btn-primary hover-lift"
-                            style={{
-                              background: aiAlterGenerating ? undefined : "linear-gradient(135deg, #2D3B8C, #4A5BC0)",
-                              fontSize: "0.8rem",
-                              padding: "8px 12px",
-                              width: "100%",
-                            }}
-                          >
-                            {aiAlterGenerating ? (
-                              <>
-                                <Loader2 size={13} className="animate-spin" />
-                                智能计算架构 Diffs...
-                              </>
-                            ) : (
-                              <>
-                                <Wand2 size={13} />
-                                生成架构 DDL 变更
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      )}
 
                       {/* DDL Preview & Execution Drawer Overlay */}
                       {aiAlterResultDdl && (
@@ -712,7 +539,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                             </h4>
                             <button
                               onClick={() => setAiAlterResultDdl(null)}
-                              className="btn-ghost"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                               style={{ padding: 4 }}
                               disabled={applyingAlter}
                             >
@@ -787,7 +614,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                           <div style={{ display: "flex", gap: 10 }}>
                             <button
                               onClick={() => setAiAlterResultDdl(null)}
-                              className="btn-ghost"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                               style={{ flex: 1 }}
                               disabled={applyingAlter}
                             >
@@ -796,7 +623,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                             <button
                               onClick={handleApplyAlter}
                               disabled={applyingAlter || applySuccess}
-                              className="btn-primary"
+                              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                               style={{
                                 flex: 2,
                                 background: "linear-gradient(135deg, #0D7377, #14B8A6)",
@@ -966,12 +793,12 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     <span>耗时: <strong style={{ color: "var(--text-primary)" }}>{previewData.latencyMs}ms</strong></span>
                   </>
                 )}
-                {previewLoading && <span className="status-badge status-badge-info">加载中...</span>}
-                {previewError && <span className="status-badge status-badge-error">{previewError}</span>}
+                {previewLoading && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-primary/10 text-primary">加载中...</span>}
+                {previewError && <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-destructive/15 text-destructive">{previewError}</span>}
 
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
                   <button
-                    className="btn-secondary hover-lift"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors hover-lift"
                     style={{
                       padding: "3px 10px",
                       fontSize: "0.76rem",
@@ -988,7 +815,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     {previewSqlCopied ? "已复制" : "复制 SQL"}
                   </button>
                   <button
-                    className="btn-secondary hover-lift"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors hover-lift"
                     style={{
                       padding: "3px 10px",
                       fontSize: "0.76rem",
@@ -1004,7 +831,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     打开到工作台
                   </button>
                   <button
-                    className="btn-secondary hover-lift"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors hover-lift"
                     style={{
                       padding: "3px 10px",
                       fontSize: "0.76rem",
@@ -1026,7 +853,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                 {previewLoading ? (
                   <div style={{ padding: 32 }}>
                     {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="skeleton" style={{ height: 32, marginBottom: 4, borderRadius: 4 }} />
+                      <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 32, marginBottom: 4, borderRadius: 4 }} />
                     ))}
                   </div>
                 ) : previewData && previewData.rows.length > 0 ? (
@@ -1040,7 +867,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                   <div className="empty-state">
                     <div className="empty-state-desc">该表暂无数据</div>
                     <button
-                      className="btn-primary hover-lift"
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors hover-lift"
                       style={{ marginTop: 12, padding: "6px 16px", fontSize: "0.82rem" }}
                       onClick={() => setShowTestDataModal(true)}
                     >
@@ -1105,7 +932,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
               }}
             >
               <div
-                className="lab-card animate-scale-up"
+                className="bg-card border border-border rounded-lg animate-scale-up"
                 style={{
                   width: 440,
                   padding: 24,
@@ -1123,7 +950,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     <span>✨ AI 智能关联造测试数据</span>
                   </h3>
                   <button
-                    className="btn-ghost"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                     style={{ padding: 4 }}
                     onClick={() => setShowTestDataModal(false)}
                     disabled={generatingTestData}
@@ -1143,7 +970,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                       {[10, 50, 100].map((rows) => (
                         <button
                           key={rows}
-                          className={testDataRowCount === rows ? "btn-primary" : "btn-secondary"}
+                          className={testDataRowCount === rows ? "inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" : "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"}
                           style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem" }}
                           onClick={() => setTestDataRowCount(rows)}
                           disabled={generatingTestData}
@@ -1158,7 +985,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     <label className="field-label" style={{ marginBottom: 6, display: "block" }}>语言与数据风格</label>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button
-                        className={testDataLanguage === "zh" ? "btn-primary" : "btn-secondary"}
+                        className={testDataLanguage === "zh" ? "inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" : "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"}
                         style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem", borderColor: testDataLanguage === "zh" ? "var(--accent-indigo)" : undefined }}
                         onClick={() => setTestDataLanguage("zh")}
                         disabled={generatingTestData}
@@ -1166,7 +993,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                         🇨🇳 中文 (姓名、手机、地址)
                       </button>
                       <button
-                        className={testDataLanguage === "en" ? "btn-primary" : "btn-secondary"}
+                        className={testDataLanguage === "en" ? "inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" : "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"}
                         style={{ flex: 1, padding: "6px 0", fontSize: "0.82rem", borderColor: testDataLanguage === "en" ? "var(--accent-indigo)" : undefined }}
                         onClick={() => setTestDataLanguage("en")}
                         disabled={generatingTestData}
@@ -1227,7 +1054,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
 
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
                   <button
-                    className="btn-secondary"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                     style={{ padding: "6px 16px", fontSize: "0.82rem" }}
                     onClick={() => setShowTestDataModal(false)}
                     disabled={generatingTestData}
@@ -1235,7 +1062,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
                     取消
                   </button>
                   <button
-                    className="btn-primary"
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                     style={{ padding: "6px 20px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: 6 }}
                     onClick={handleGenerateTestData}
                     disabled={generatingTestData}

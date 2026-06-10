@@ -165,13 +165,13 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
   if (loading) {
     return (
       <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: 16, height: "100%", overflow: "hidden" }}>
-        <div className="skeleton" style={{ height: 40, borderRadius: 8 }} />
+        <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 40, borderRadius: 8 }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
-          {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton" style={{ height: 100, borderRadius: 10 }} />)}
+          {[1, 2, 3, 4].map((i) => <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 100, borderRadius: 10 }} />)}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr", gap: 16 }}>
-          <div className="skeleton" style={{ height: 300, borderRadius: 12 }} />
-          <div className="skeleton" style={{ height: 300, borderRadius: 12 }} />
+          <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 300, borderRadius: 12 }} />
+          <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 300, borderRadius: 12 }} />
         </div>
       </div>
     );
@@ -197,7 +197,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
             实时监控 AI 模型时延、SQL 执行安全阻断率及 Token 效率
           </p>
         </div>
-        <button className="btn-secondary" onClick={loadDashboardData}>
+        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={loadDashboardData}>
           <RefreshCw size={14} style={{ marginRight: 6 }} />
           刷新看板
         </button>
@@ -206,7 +206,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
       {/* KPI Cards Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 14 }}>
         {/* KPI 1 */}
-        <div className="lab-card hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div className="bg-card border border-border rounded-lg hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ width: 44, height: 44, borderRadius: 10, background: "rgba(74, 91, 192, 0.08)", display: "grid", placeItems: "center", flexShrink: 0 }}>
             <Activity size={20} style={{ color: "var(--accent-indigo)" }} />
           </div>
@@ -219,7 +219,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
         </div>
 
         {/* KPI 2 */}
-        <div className="lab-card hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div className="bg-card border border-border rounded-lg hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ width: 44, height: 44, borderRadius: 10, background: "rgba(13, 115, 119, 0.08)", display: "grid", placeItems: "center", flexShrink: 0 }}>
             <Clock size={20} style={{ color: "#0D7377" }} />
           </div>
@@ -232,7 +232,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
         </div>
 
         {/* KPI 3 */}
-        <div className="lab-card hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div className="bg-card border border-border rounded-lg hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ width: 44, height: 44, borderRadius: 10, background: "rgba(46, 125, 50, 0.08)", display: "grid", placeItems: "center", flexShrink: 0 }}>
             <ShieldCheck size={20} style={{ color: "var(--accent-green)" }} />
           </div>
@@ -245,7 +245,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
         </div>
 
         {/* KPI 4 */}
-        <div className="lab-card hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div className="bg-card border border-border rounded-lg hover-lift" style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ width: 44, height: 44, borderRadius: 10, background: "rgba(180, 83, 9, 0.08)", display: "grid", placeItems: "center", flexShrink: 0 }}>
             <Award size={20} style={{ color: "var(--accent-amber)" }} />
           </div>
@@ -261,7 +261,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
       {/* Charts Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1.2fr", gap: 16 }}>
         {/* Line Chart */}
-        <div className="lab-card" style={{ padding: 20, display: "flex", flexDirection: "column", height: 320 }}>
+        <div className="bg-card border border-border rounded-lg" style={{ padding: 20, display: "flex", flexDirection: "column", height: 320 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h3 style={{ fontSize: "0.92rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
               <TrendingUp size={15} style={{ color: "var(--accent-indigo)" }} />
@@ -280,7 +280,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
         </div>
 
         {/* Pie Chart */}
-        <div className="lab-card" style={{ padding: 20, display: "flex", flexDirection: "column", height: 320 }}>
+        <div className="bg-card border border-border rounded-lg" style={{ padding: 20, display: "flex", flexDirection: "column", height: 320 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h3 style={{ fontSize: "0.92rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
               <Cpu size={15} style={{ color: "#0D7377" }} />
@@ -300,7 +300,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
       </div>
 
       {/* SQL Observability & Audit Log List */}
-      <div className="lab-card" style={{ padding: 20, flex: 1 }}>
+      <div className="bg-card border border-border rounded-lg" style={{ padding: 20, flex: 1 }}>
         <h3 style={{ fontSize: "0.92rem", fontWeight: 600, marginBottom: 16 }}>AI 生成安全审计日志 (LLM SQL Logs)</h3>
         {history.length === 0 ? (
           <div style={{ padding: 36, textAlign: "center", color: "var(--text-muted)", fontSize: "0.8rem" }}>
@@ -308,7 +308,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table className="data-table">
+            <table className="w-full border-collapse text-xs font-mono tabular-nums">
               <thead>
                 <tr>
                   <th>时间</th>
@@ -382,7 +382,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
           onClick={() => setSelectedLog(null)}
         >
           <div
-            className="lab-card animate-slide-down"
+            className="bg-card border border-border rounded-lg animate-slide-down"
             style={{
               background: "var(--bg-surface)",
               border: "1px solid var(--border-medium)",
@@ -408,7 +408,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="status-badge status-badge-success" style={{ fontWeight: 700 }}>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-success/15 text-success" style={{ fontWeight: 700 }}>
                   🛡️ 安全审计详情 (Audit Details)
                 </span>
                 <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
@@ -478,7 +478,7 @@ export function DashboardPage({ datasource }: DashboardPageProps) {
 
             {/* Footer */}
             <div style={{ display: "flex", justifyContent: "flex-end", padding: "12px 20px", borderTop: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
-              <button className="btn-primary" style={{ padding: "5px 16px", fontSize: "0.8rem" }} onClick={() => setSelectedLog(null)}>
+              <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" style={{ padding: "5px 16px", fontSize: "0.8rem" }} onClick={() => setSelectedLog(null)}>
                 关闭
               </button>
             </div>

@@ -382,19 +382,19 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="btn-secondary btn-sm" onClick={handleNewDraft} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
+            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={handleNewDraft} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
               <Plus size={13} />
               新建
             </button>
-            <button className="btn-secondary btn-sm" onClick={() => { void fetchDrafts(); setIsDraftsModalOpen(true); }} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
+            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={() => { void fetchDrafts(); setIsDraftsModalOpen(true); }} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
               <FolderOpen size={13} />
               加载草稿
             </button>
-            <button className="btn-secondary btn-sm" onClick={() => void handleSaveDraft()} disabled={isSaving} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
+            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={() => void handleSaveDraft()} disabled={isSaving} style={{ padding: "6px 10px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4 }}>
               {isSaving ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={13} />}
               {currentDraftId ? "更新草稿" : "保存草稿"}
             </button>
-            <button className="btn-primary btn-sm" onClick={() => void generateDDL()} disabled={generating} style={{ padding: "6px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4, border: "none" }}>
+            <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors btn-sm" onClick={() => void generateDDL()} disabled={generating} style={{ padding: "6px 12px", fontSize: "0.78rem", display: "flex", alignItems: "center", gap: 4, border: "none" }}>
               <Wand2 size={13} />
               {generating ? "生成中..." : "生成 DDL"}
             </button>
@@ -448,7 +448,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 <input
                   type="password"
                   placeholder="sk-..."
-                  className="input-field input-field-sm"
+                  className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={aiApiKey}
                   onChange={(e) => setAiApiKey(e.target.value)}
                   style={{ fontSize: "0.74rem" }}
@@ -459,7 +459,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 <input
                   type="text"
                   placeholder="https://api.openai.com/v1"
-                  className="input-field input-field-sm"
+                  className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={aiApiBase}
                   onChange={(e) => setAiApiBase(e.target.value)}
                   style={{ fontSize: "0.74rem" }}
@@ -470,7 +470,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 <input
                   type="text"
                   placeholder="gpt-4o-mini"
-                  className="input-field input-field-sm"
+                  className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={aiModelName}
                   onChange={(e) => setAiModelName(e.target.value)}
                   style={{ fontSize: "0.74rem" }}
@@ -483,7 +483,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
             <input
               type="text"
               placeholder="输入你的建表设想，例如：‘设计一张用户表，包含用户名、邮箱、加密密码，最后登录时间和状态，并加唯一索引’"
-              className="input-field"
+              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void handleAiGenerate(); }}
@@ -491,7 +491,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
               disabled={aiGenerating}
             />
             <button
-              className="btn-primary"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
               onClick={() => void handleAiGenerate()}
               disabled={aiGenerating || !aiPrompt.trim()}
               style={{
@@ -523,29 +523,29 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
           </div>
         </div>
 
-        <div className="lab-card" style={{ padding: 14, marginBottom: 14 }}>
+        <div className="bg-card border border-border rounded-lg" style={{ padding: 14, marginBottom: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 12 }}>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>表名</span>
-              <input className="input-field input-field-sm" value={tableName} onChange={(event) => setTableName(event.target.value)} />
+              <input className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" value={tableName} onChange={(event) => setTableName(event.target.value)} />
             </label>
             <label style={{ display: "grid", gap: 6 }}>
               <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>表注释</span>
-              <input className="input-field input-field-sm" value={tableComment} onChange={(event) => setTableComment(event.target.value)} />
+              <input className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" value={tableComment} onChange={(event) => setTableComment(event.target.value)} />
             </label>
           </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <h5 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>字段</h5>
-          <button className="btn-secondary btn-sm" onClick={addColumn}>
+          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={addColumn}>
             <Plus size={13} />
             添加字段
           </button>
         </div>
 
         <div style={{ overflowX: "auto", marginBottom: 18 }}>
-          <table className="data-table">
+          <table className="w-full border-collapse text-xs font-mono tabular-nums">
             <thead>
               <tr>
                 <th>字段名</th>
@@ -561,7 +561,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 <tr key={column.id}>
                   <td>
                     <input
-                      className="input-field input-field-sm"
+                      className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       value={column.name}
                       placeholder="column_name"
                       onChange={(event) => updateColumn(column.id, { name: event.target.value })}
@@ -570,7 +570,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                   </td>
                   <td>
                     <input
-                      className="input-field input-field-sm text-mono"
+                      className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-mono"
                       value={column.type}
                       placeholder="VARCHAR(255)"
                       onChange={(event) => updateColumn(column.id, { type: event.target.value })}
@@ -579,7 +579,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                   </td>
                   <td>
                     <input
-                      className="input-field input-field-sm"
+                      className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       value={column.default_value}
                       placeholder="可空"
                       onChange={(event) => updateColumn(column.id, { default_value: event.target.value })}
@@ -588,7 +588,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                   </td>
                   <td>
                     <input
-                      className="input-field input-field-sm"
+                      className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       value={column.comment}
                       placeholder="字段说明"
                       onChange={(event) => updateColumn(column.id, { comment: event.target.value })}
@@ -625,7 +625,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                     </div>
                   </td>
                   <td>
-                    <button className="btn-secondary btn-sm" onClick={() => removeColumn(column.id)} disabled={columns.length <= 1}>
+                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={() => removeColumn(column.id)} disabled={columns.length <= 1}>
                       <Trash2 size={13} />
                     </button>
                   </td>
@@ -637,7 +637,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <h5 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700 }}>索引</h5>
-          <button className="btn-secondary btn-sm" onClick={addIndex}>
+          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={addIndex}>
             <Plus size={13} />
             添加索引
           </button>
@@ -650,15 +650,15 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {indexes.map((index) => (
-              <div key={index.id} className="lab-card" style={{ padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 10, alignItems: "center" }}>
+              <div key={index.id} className="bg-card border border-border rounded-lg" style={{ padding: 12, display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 10, alignItems: "center" }}>
                 <input
-                  className="input-field input-field-sm"
+                  className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={index.name}
                   placeholder="索引名，可留空自动生成"
                   onChange={(event) => updateIndex(index.id, { name: event.target.value })}
                 />
                 <input
-                  className="input-field input-field-sm"
+                  className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={index.columnsText}
                   placeholder="字段名，多个用逗号分隔"
                   onChange={(event) => updateIndex(index.id, { columnsText: event.target.value })}
@@ -671,7 +671,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                   />
                   唯一
                 </label>
-                <button className="btn-secondary btn-sm" onClick={() => removeIndex(index.id)}>
+                <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={() => removeIndex(index.id)}>
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -683,28 +683,28 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
       <div style={{ overflow: "auto", padding: 18, background: "var(--bg-secondary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700 }}>DDL 预览</h4>
-          <button className="btn-secondary btn-sm" onClick={copyDDL} disabled={!result?.ddl}>
+          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors btn-sm" onClick={copyDDL} disabled={!result?.ddl}>
             <Copy size={13} />
             复制
           </button>
         </div>
 
         {error && (
-          <div className="status-badge status-badge-error" style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, whiteSpace: "normal" }}>
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-secondary text-secondary-foreground inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-destructive/15 text-destructive" style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, whiteSpace: "normal" }}>
             <AlertTriangle size={14} />
             {error}
           </div>
         )}
 
         {result?.warnings.map((warning) => (
-          <div key={warning} className="status-badge status-badge-warning" style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, whiteSpace: "normal" }}>
+          <div key={warning} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-secondary text-secondary-foreground inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-warning/15 text-warning" style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 8, whiteSpace: "normal" }}>
             <AlertTriangle size={14} />
             {warning}
           </div>
         ))}
 
         <textarea
-          className="input-field text-mono"
+          className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-mono"
           readOnly
           value={result?.ddl ?? "点击「生成 DDL」后，这里会出现 CREATE TABLE 草稿。"}
           style={{
@@ -724,7 +724,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
         {result?.ddl && (
           <div style={{ marginTop: 16 }}>
             <button
-              className="btn-primary"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
               style={{
                 width: "100%",
                 padding: "10px 14px",
@@ -780,7 +780,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
           }}
         >
           <div
-            className="lab-card lab-card-elevated"
+            className="bg-card border border-border rounded-lg"
             style={{
               width: "100%",
               maxWidth: 580,
@@ -884,7 +884,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
               {/* Warnings / Double Confirm for PROD */}
               {datasource.env === "prod" && (
                 <div
-                  className="status-badge status-badge-error"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-secondary text-secondary-foreground inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-destructive/15 text-destructive"
                   style={{
                     padding: 12,
                     display: "flex",
@@ -934,7 +934,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
 
               {/* Error messages if any */}
               {executionError && (
-                <div className="status-badge status-badge-error" style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "normal" }}>
+                <div className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-secondary text-secondary-foreground inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm bg-destructive/15 text-destructive" style={{ display: "flex", gap: 6, alignItems: "center", whiteSpace: "normal" }}>
                   <AlertTriangle size={14} />
                   {executionError}
                 </div>
@@ -947,7 +947,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                     请输入表名 <code style={{ color: "var(--accent-red)", fontWeight: 600 }}>{tableName}</code> 以确认执行:
                   </label>
                   <input
-                    className="input-field input-field-sm"
+                    className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     style={{ border: "1px solid var(--border-light)" }}
                     placeholder={tableName}
                     value={confirmTableNameInput}
@@ -970,7 +970,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
               }}
             >
               <button
-                className="btn-secondary"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                 onClick={() => {
                   setIsConfirmOpen(false);
                   setExecutionError(null);
@@ -981,7 +981,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 取消
               </button>
               <button
-                className="btn-primary"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                 style={{
                   background: datasource.env === "prod" ? "var(--accent-red)" : "var(--accent-indigo)",
                   color: "white",
@@ -1091,7 +1091,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
               ) : draftsList.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", gap: 8 }}>
                   <div style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>暂无已保存的设计草稿</div>
-                  <button className="btn-primary btn-sm" onClick={() => setIsDraftsModalOpen(false)} style={{ fontSize: "0.78rem" }}>
+                  <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors btn-sm" onClick={() => setIsDraftsModalOpen(false)} style={{ fontSize: "0.78rem" }}>
                     开始全新设计
                   </button>
                 </div>
@@ -1171,7 +1171,7 @@ export function TableDesignDraft({ datasource, onExecuteSuccess }: TableDesignDr
                 justifyContent: "flex-end",
               }}
             >
-              <button className="btn-secondary" onClick={() => setIsDraftsModalOpen(false)}>
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setIsDraftsModalOpen(false)}>
                 关闭
               </button>
             </div>

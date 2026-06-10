@@ -35,7 +35,7 @@ export function RecommendationArtifactView({ artifact, onAsk, workspaceContext }
                   <span>{question}</span>
                   {onAsk ? (
                     <button
-                      className="btn-secondary"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                       type="button"
                       aria-label={`Ask follow-up: ${question}`}
                       onClick={() => onAsk(question, workspaceContext)}

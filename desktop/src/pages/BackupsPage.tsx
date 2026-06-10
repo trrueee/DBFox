@@ -192,18 +192,18 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
             </p>
           )}
         </div>
-        <button className="btn-secondary" onClick={() => void refreshBackups()} disabled={loading || !activeProject}>
+        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => void refreshBackups()} disabled={loading || !activeProject}>
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
 
-      <div className="lab-card" style={{ padding: 20 }}>
+      <div className="bg-card border border-border rounded-lg" style={{ padding: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 0.8fr) minmax(0, 1fr) auto", gap: 12, alignItems: "end" }}>
           <div>
             <label className="field-label">Datasource</label>
             <select
-              className="input-field"
+              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={selectedDatasourceId}
               onChange={(event) => setSelectedDatasourceId(event.target.value)}
               style={{ background: "var(--bg-primary)", color: "var(--text-primary)" }}
@@ -219,13 +219,13 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
           <div>
             <label className="field-label">Backup label</label>
             <input
-              className="input-field"
+              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={label}
               onChange={(event) => setLabel(event.target.value)}
               placeholder="Before migration, release snapshot, etc."
             />
           </div>
-          <button className="btn-primary" onClick={handleCreateBackup} disabled={creating || !selectedDatasourceId}>
+          <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleCreateBackup} disabled={creating || !selectedDatasourceId}>
             {creating ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
             {creating ? "Backing up..." : "Create backup"}
           </button>
@@ -243,11 +243,11 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {loading ? (
           <>
-            <div className="skeleton" style={{ height: 96, borderRadius: 12 }} />
-            <div className="skeleton" style={{ height: 96, borderRadius: 12 }} />
+            <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 96, borderRadius: 12 }} />
+            <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 96, borderRadius: 12 }} />
           </>
         ) : backups.length === 0 ? (
-          <div className="lab-card" style={{ padding: 48, textAlign: "center" }}>
+          <div className="bg-card border border-border rounded-lg" style={{ padding: 48, textAlign: "center" }}>
             <FileArchive size={38} style={{ color: "var(--text-muted)", opacity: 0.35, marginBottom: 12 }} />
             <div className="empty-state-title">No backups yet</div>
             <div className="empty-state-desc" style={{ marginTop: 4 }}>
@@ -258,7 +258,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
           backups.map((backup) => {
             const currentPrecheck = precheck?.backupId === backup.id ? precheck : null;
             return (
-              <div key={backup.id} className="lab-card hover-lift" style={{ padding: 18 }}>
+              <div key={backup.id} className="bg-card border border-border rounded-lg hover-lift" style={{ padding: 18 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 16, alignItems: "center" }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -299,19 +299,19 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
                     )}
                   </div>
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                    <button className="btn-ghost" onClick={() => void handlePrecheck(backup)}>
+                    <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => void handlePrecheck(backup)}>
                       {currentPrecheck?.ok ? <CheckCircle2 size={14} /> : <ShieldCheck size={14} />}
                       Restore precheck
                     </button>
                     {backup.status === "success" && (
-                      <button className="btn-secondary" style={{ borderColor: "var(--accent-indigo)", color: "var(--accent-indigo)" }} onClick={() => void handleOpenRestoreModal(backup)}>
+                      <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" style={{ borderColor: "var(--accent-indigo)", color: "var(--accent-indigo)" }} onClick={() => void handleOpenRestoreModal(backup)}>
                         <Play size={14} />
                         Restore database
                       </button>
                     )}
                     {backup.datasource_id && (
                       <button
-                        className="btn-ghost"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                         onClick={() => {
                           const datasource = datasources.find((item) => item.id === backup.datasource_id);
                           if (datasource) setSelectedDatasourceId(datasource.id);
@@ -355,7 +355,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
             }}
           >
             <div
-              className="lab-card lab-card-elevated"
+              className="bg-card border border-border rounded-lg"
               style={{
                 width: "100%",
                 maxWidth: 580,
@@ -419,7 +419,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
                     <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", maxWidth: 400, margin: "0 auto 20px" }}>
                       已成功将备份文件导入到目标数据库 <strong>{dbName}</strong>，并且后台已自动触发 Schema Sync 以刷新表结构元数据。
                     </p>
-                    <button className="btn-primary" style={{ margin: "0 auto" }} onClick={() => setRestoringBackup(null)}>
+                    <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" style={{ margin: "0 auto" }} onClick={() => setRestoringBackup(null)}>
                       我知道了
                     </button>
                   </div>
@@ -515,7 +515,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
                             请输入目标数据库名（<strong>{dbName}</strong>）以确认：
                           </label>
                           <input
-                            className="input-field"
+                            className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             value={restoreConfirmDbName}
                             onChange={(e) => setRestoreConfirmDbName(e.target.value)}
                             placeholder={dbName}
@@ -532,11 +532,11 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
 
                     {/* Actions */}
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
-                      <button className="btn-secondary" onClick={() => setRestoringBackup(null)} disabled={restoring}>
+                      <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setRestoringBackup(null)} disabled={restoring}>
                         取消
                       </button>
                       <button
-                        className="btn-primary"
+                        className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                         onClick={() => void handleExecuteRestore()}
                         disabled={
                           restoring ||

@@ -106,10 +106,10 @@ export function ApprovalCard({
       <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
         {isPending ? (
           <>
-            <button className="btn-primary" disabled={disabled || busy} onClick={() => void resolve("approved")}>
+            <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" disabled={disabled || busy} onClick={() => void resolve("approved")}>
               {busy ? "Resuming..." : "Approve execute"}
             </button>
-            <button className="btn-secondary" disabled={disabled || busy} onClick={() => void resolve("rejected")}>
+            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" disabled={disabled || busy} onClick={() => void resolve("rejected")}>
               Reject
             </button>
           </>
@@ -118,11 +118,11 @@ export function ApprovalCard({
             {resolvedApprovalMessage(currentApproval.status)}
           </span>
         )}
-        <button className="btn-ghost" type="button" onClick={() => setExpanded((value) => !value)}>
+        <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" type="button" onClick={() => setExpanded((value) => !value)}>
           {expanded ? "Hide SQL" : "View SQL"}
         </button>
         {sql && onOpenSql ? (
-          <button className="btn-ghost" type="button" onClick={() => onOpenSql(sql)}>
+          <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" type="button" onClick={() => onOpenSql(sql)}>
             Open SQL
           </button>
         ) : null}

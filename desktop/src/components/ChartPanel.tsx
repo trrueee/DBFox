@@ -135,7 +135,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
 
   if (rows.length === 0) {
     return (
-      <div className="lab-card" style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+      <div className="bg-card border border-border rounded-lg" style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
         没有可用于图表展示的数据
       </div>
     );
@@ -145,7 +145,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Controls */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <div className="pill-tabs">
+        <div className="inline-flex bg-secondary rounded-sm p-0.5 gap-px">
           {([["bar", BarChart3], ["line", LineChart], ["pie", PieChart]] as const).map(([type, Icon]) => (
             <button
               key={type}
@@ -161,7 +161,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>标签:</label>
           <select
-            className="input-field input-field-sm"
+            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveLabel}
             onChange={(e) => setLabelCol(e.target.value)}
             style={{ width: "auto" }}
@@ -173,7 +173,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>数值:</label>
           <select
-            className="input-field input-field-sm"
+            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveValue}
             onChange={(e) => setValueCol(e.target.value)}
             style={{ width: "auto" }}
@@ -186,7 +186,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
       </div>
 
       {option && (
-        <div className="lab-card" style={{ padding: 8, background: "var(--bg-surface)" }}>
+        <div className="bg-card border border-border rounded-lg" style={{ padding: 8, background: "var(--bg-surface)" }}>
           <ReactECharts
             option={option}
             style={{ height: 300, width: "100%" }}

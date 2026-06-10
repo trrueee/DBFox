@@ -49,7 +49,7 @@ export function ArtifactInspector({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
         <strong>Artifact Inspector</strong>
         <button
-          className="btn-secondary"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
           onClick={() => exportArtifact(active)}
           style={{ fontSize: "0.62rem", padding: "2px 7px" }}
         >
@@ -74,7 +74,7 @@ export function ArtifactInspector({
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
             {onApplySql ? (
               <button
-                className="btn-primary"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                 onClick={() => onApplySql(actionableSql)}
                 style={{ fontSize: "0.62rem", padding: "2px 7px" }}
               >
@@ -83,7 +83,7 @@ export function ArtifactInspector({
             ) : null}
             {onOpenSql ? (
               <button
-                className="btn-secondary"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                 onClick={() => onOpenSql(actionableSql)}
                 style={{ fontSize: "0.62rem", padding: "2px 7px" }}
               >
@@ -93,14 +93,14 @@ export function ArtifactInspector({
             {onAsk ? (
               <>
                 <button
-                  className="btn-secondary"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                   onClick={() => onAsk("Explain this SQL", sqlActionContext)}
                   style={{ fontSize: "0.62rem", padding: "2px 7px" }}
                 >
                   Explain SQL
                 </button>
                 <button
-                  className="btn-secondary"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                   onClick={() => onAsk("Revise this SQL", sqlActionContext)}
                   style={{ fontSize: "0.62rem", padding: "2px 7px" }}
                 >
@@ -109,7 +109,7 @@ export function ArtifactInspector({
               </>
             ) : null}
             <button
-              className="btn-secondary"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
               onClick={() => void navigator.clipboard?.writeText(actionableSql)}
               style={{ fontSize: "0.62rem", padding: "2px 7px" }}
             >

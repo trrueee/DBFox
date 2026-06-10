@@ -315,7 +315,7 @@ export const DataSourcesPage = ({
             </p>
           )}
         </div>
-        <button className="btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+        <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={() => setShowAddForm((v) => !v)}>
           {showAddForm ? <X size={15} /> : <Plus size={15} />}
           {showAddForm ? "收起" : "添加连接"}
         </button>
@@ -323,7 +323,7 @@ export const DataSourcesPage = ({
 
       {/* Add Form */}
       {showAddForm && (
-        <div className="lab-card animate-slide-down" style={{ padding: 24 }}>
+        <div className="bg-card border border-border rounded-lg animate-slide-down" style={{ padding: 24 }}>
           <h3 className="text-display" style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 20 }}>
             新增数据源
           </h3>
@@ -372,7 +372,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">连接名称</label>
                 <input
-                  className="input-field"
+                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={form.name}
                   onChange={(e) => updateForm("name", e.target.value)}
                   placeholder="例：本地 SQLite 数据库"
@@ -381,7 +381,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">SQLite 数据库文件绝对路径</label>
                 <input
-                  className="input-field"
+                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={form.database_name}
                   onChange={(e) => updateForm("database_name", e.target.value)}
                   placeholder="C:\Users\username\databases\mydb.sqlite"
@@ -397,7 +397,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">连接名称</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.name}
                     onChange={(e) => updateForm("name", e.target.value)}
                     placeholder={form.db_type === "postgresql" ? "例：测试 PG 数据库" : "例：生产只读库"}
@@ -406,7 +406,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">主机地址</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.host}
                     onChange={(e) => updateForm("host", e.target.value)}
                     placeholder="db.example.com"
@@ -418,7 +418,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">端口</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     type="number"
                     value={form.port}
                     onChange={(e) => updateForm("port", Number(e.target.value) || (form.db_type === "postgresql" ? 5432 : 3306))}
@@ -427,7 +427,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">数据库名</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.database_name}
                     onChange={(e) => updateForm("database_name", e.target.value)}
                   />
@@ -435,7 +435,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">用户名</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.username}
                     onChange={(e) => updateForm("username", e.target.value)}
                   />
@@ -445,7 +445,7 @@ export const DataSourcesPage = ({
               <div style={{ marginTop: 16 }}>
                 <label className="field-label">密码</label>
                 <input
-                  className="input-field"
+                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   type="password"
                   value={form.password}
                   onChange={(e) => updateForm("password", e.target.value)}
@@ -459,7 +459,7 @@ export const DataSourcesPage = ({
             <div>
               <label className="field-label">环境标签</label>
               <select
-                className="input-field"
+                className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 value={form.env}
                 onChange={(e) => updateForm("env", e.target.value)}
                 style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
@@ -506,7 +506,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 主机地址</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.ssh_host}
                     onChange={(e) => updateForm("ssh_host", e.target.value)}
                     placeholder="ssh.example.com"
@@ -515,7 +515,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 端口</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     type="number"
                     value={form.ssh_port}
                     onChange={(e) => updateForm("ssh_port", Number(e.target.value) || 22)}
@@ -524,7 +524,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 用户名</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.ssh_username}
                     onChange={(e) => updateForm("ssh_username", e.target.value)}
                     placeholder="username"
@@ -536,7 +536,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 密码 (密码认证)</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     type="password"
                     value={form.ssh_password}
                     onChange={(e) => updateForm("ssh_password", e.target.value)}
@@ -546,7 +546,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 私钥绝对路径 (密钥认证)</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.ssh_pkey_path}
                     onChange={(e) => updateForm("ssh_pkey_path", e.target.value)}
                     placeholder="例：C:\Users\username\.ssh\id_rsa"
@@ -558,7 +558,7 @@ export const DataSourcesPage = ({
                 <div className="animate-slide-down">
                   <label className="field-label">私钥密码 (Passphrase)</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     type="password"
                     value={form.ssh_pkey_passphrase}
                     onChange={(e) => updateForm("ssh_pkey_passphrase", e.target.value)}
@@ -592,7 +592,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">CA 证书路径</label>
                 <input
-                  className="input-field"
+                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   value={form.ssl_ca_path}
                   onChange={(e) => updateForm("ssl_ca_path", e.target.value)}
                   placeholder="例如：C:\\certs\\mysql-ca.pem"
@@ -606,7 +606,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">客户端证书路径（可选）</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.ssl_cert_path}
                     onChange={(e) => updateForm("ssl_cert_path", e.target.value)}
                     placeholder="例如：C:\\certs\\client-cert.pem"
@@ -615,7 +615,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">客户端私钥路径（可选）</label>
                   <input
-                    className="input-field"
+                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.ssl_key_path}
                     onChange={(e) => updateForm("ssl_key_path", e.target.value)}
                     placeholder="例如：C:\\certs\\client-key.pem"
@@ -645,7 +645,7 @@ export const DataSourcesPage = ({
           {/* Test Result */}
           {testResult.status !== "idle" && (
             <div
-              className="lab-card-accent animate-slide-down"
+              className="bg-card border border-border rounded-lg border-l-2 border-l-primary animate-slide-down"
               style={{
                 marginTop: 16,
                 padding: 14,
@@ -695,10 +695,10 @@ export const DataSourcesPage = ({
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-            <button className="btn-secondary" onClick={handleTestConnection} disabled={submitting}>
+            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={handleTestConnection} disabled={submitting}>
               测试连接
             </button>
-            <button className="btn-primary" onClick={handleCreateDataSource} disabled={submitting}>
+            <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleCreateDataSource} disabled={submitting}>
               {submitting ? "保存中..." : "保存并同步 Schema"}
             </button>
           </div>
@@ -717,12 +717,12 @@ export const DataSourcesPage = ({
         {loading ? (
           <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {[1, 2, 3].map((i) => (
-              <div key={i} className="skeleton" style={{ height: 80, borderRadius: 10 }} />
+              <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 80, borderRadius: 10 }} />
             ))}
           </div>
         ) : demoStarting ? (
           <div 
-            className="lab-card animate-fade-in" 
+            className="bg-card border border-border rounded-lg animate-fade-in" 
             style={{ 
               padding: "48px 32px", 
               textAlign: "center", 
@@ -829,7 +829,7 @@ export const DataSourcesPage = ({
           </div>
         ) : demoError ? (
           <div 
-            className="lab-card animate-fade-in" 
+            className="bg-card border border-border rounded-lg animate-fade-in" 
             style={{ 
               padding: "48px 32px", 
               textAlign: "center", 
@@ -855,17 +855,17 @@ export const DataSourcesPage = ({
               </p>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
-              <button className="btn-secondary" onClick={() => setDemoError("")}>
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setDemoError("")}>
                 返回列表
               </button>
-              <button className="btn-primary" onClick={handleStartDemoDb} style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }}>
+              <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleStartDemoDb} style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }}>
                 重新尝试启动
               </button>
             </div>
           </div>
         ) : dataSources.length === 0 ? (
           <div 
-            className="lab-card animate-fade-in" 
+            className="bg-card border border-border rounded-lg animate-fade-in" 
             style={{ 
               padding: "56px 40px", 
               textAlign: "center", 
@@ -905,11 +905,11 @@ export const DataSourcesPage = ({
 
             <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
               <button 
-                className="btn-secondary" 
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" 
                 onClick={() => {
                   setShowAddForm(true);
                   setTimeout(() => {
-                    document.querySelector(".lab-card")?.scrollIntoView({ behavior: "smooth" });
+                    document.querySelector(".bg-card border border-border rounded-lg")?.scrollIntoView({ behavior: "smooth" });
                   }, 100);
                 }}
                 style={{ padding: "12px 24px", fontSize: "0.92rem", borderRadius: 10 }}
@@ -917,7 +917,7 @@ export const DataSourcesPage = ({
                 连接已有 MySQL
               </button>
               <button 
-                className="btn-primary" 
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" 
                 onClick={handleStartDemoDb}
                 style={{ 
                   padding: "12px 24px", 
@@ -947,7 +947,7 @@ export const DataSourcesPage = ({
               return (
                 <div
                   key={ds.id}
-                  className="lab-card hover-lift"
+                  className="bg-card border border-border rounded-lg hover-lift"
                   style={{
                     padding: "16px 20px",
                     borderColor: isActive ? "var(--accent-indigo)" : undefined,
@@ -1042,7 +1042,7 @@ export const DataSourcesPage = ({
 
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
                       <button
-                        className="btn-ghost"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                         onClick={(e) => handleHealthCheck(ds.id, e)}
                         disabled={healthCheckingId === ds.id}
                         style={{ color: healthSt === "error" ? "var(--accent-red)" : "var(--accent-green)" }}
@@ -1051,7 +1051,7 @@ export const DataSourcesPage = ({
                         {healthCheckingId === ds.id ? "检查中" : "健康"}
                       </button>
                       <button
-                        className="btn-ghost"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                         onClick={(e) => handleSyncSchema(ds.id, e)}
                         disabled={syncingId === ds.id}
                         style={{ color: "var(--accent-indigo)" }}
@@ -1060,7 +1060,7 @@ export const DataSourcesPage = ({
                         {syncingId === ds.id ? "同步中" : "同步"}
                       </button>
                       <button
-                        className="btn-ghost"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                         onClick={(e) => handleDeleteDataSource(ds.id, e)}
                         style={{ color: "var(--accent-red)" }}
                       >

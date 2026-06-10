@@ -24,7 +24,7 @@ export function TraceDrawer({ steps, traceEvents = [] }: TraceDrawerProps) {
   return (
     <section style={{ padding: 8, background: "var(--bg-secondary)" }}>
       <button
-        className="btn-ghost"
+        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
         onClick={() => setOpen((value) => !value)}
         style={{ width: "100%", justifyContent: "space-between", fontSize: "0.66rem" }}
       >

@@ -235,7 +235,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
               style={{ position: "relative", height: "100%" }}
             >
               <button
-                className="menu-bar-item"
+                className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleMenu(menu.id);
@@ -302,7 +302,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({ menus }) => {
                         key={i}
                         data-menu-item
                         disabled={item.disabled}
-                        className="menu-dropdown-item"
+                        className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-foreground hover:bg-accent hover:text-primary cursor-pointer border-none bg-transparent"
                         onClick={() => {
                           if (item.action) {
                             const action = item.action;

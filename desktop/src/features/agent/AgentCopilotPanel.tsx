@@ -114,25 +114,50 @@ export function AgentCopilotPanel({
             onRejectApproval={(runId, approvalId) => chat.rejectApproval(runId, approvalId)}
           />
         ) : !chat.isRunning ? (
-          <div className="flex flex-col items-center justify-center flex-1 px-4 py-8 text-center">
-            <div className="mb-2.5">
-              <Sparkles size={28} className="text-[hsl(var(--primary))] opacity-60" />
+          <div className="flex flex-col gap-4 px-4 py-5 flex-1 overflow-y-auto">
+            {(datasource || activeTableName) && (
+              <div className="copilot-context-card">
+                <div className="copilot-section-title">Current Context</div>
+                {datasource && (
+                  <div className="copilot-context-row">
+                    <span className="copilot-context-label">Datasource</span>
+                    <span className="copilot-context-value">{datasource.database_name || datasource.name}</span>
+                  </div>
+                )}
+                {datasource?.env && (
+                  <div className="copilot-context-row">
+                    <span className="copilot-context-label">Environment</span>
+                    <span className={`copilot-context-value ${isProd ? "!text-[hsl(var(--destructive))]" : ""}`}>{datasource.env.toUpperCase()}</span>
+                  </div>
+                )}
+                {activeTableName && (
+                  <div className="copilot-context-row">
+                    <span className="copilot-context-label">Active Table</span>
+                    <span className="copilot-context-value">{activeTableName}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <div className="copilot-section-title">Capabilities</div>
+              <div className="flex flex-wrap gap-1.5">
+                {["schema", "semantic", "sql", "safety", "result"].map((cap) => (
+                  <span key={cap} className="badge-neutral text-[0.62rem]">{cap}</span>
+                ))}
+              </div>
             </div>
-            <div className="text-[0.9rem] font-semibold text-[hsl(var(--foreground))] mb-1.5">
-              DataBox Copilot
-            </div>
-            <div className="text-[0.72rem] text-[hsl(var(--muted-foreground))] mb-4 max-w-[260px] leading-relaxed">
-              {activeTableName ? `当前表：${activeTableName}` : "我可以帮你生成 SQL、解释结果、修复错误"}
-            </div>
-            <div className="flex flex-wrap gap-1.5 justify-center">
-              {emptySuggestions.map((s) => (
-                <Button key={s} variant="outline" size="sm"
-                  onClick={() => chat.send(s)}
-                  className="text-[0.68rem] h-7"
-                >
-                  {s}
-                </Button>
-              ))}
+
+            <div>
+              <div className="copilot-section-title">Try asking</div>
+              <div className="flex flex-col gap-1.5">
+                {emptySuggestions.map((s) => (
+                  <button key={s} className="copilot-suggestion-btn" onClick={() => chat.send(s)}>
+                    <span className="text-[hsl(var(--primary))] text-xs font-bold">→</span>
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ) : null}

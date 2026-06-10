@@ -57,7 +57,7 @@ export function AgentStepTimeline({ steps, runtimeEvents = [] }: AgentStepTimeli
               {stepDisplayName(step.name)}
               <span style={{ display: "none" }}>{step.name}</span>
             </span>
-            <span className={`status-badge ${statusClass(step.status)}`} style={{ fontSize: "0.58rem" }}>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm ${statusClass(step.status)}`} style={{ fontSize: "0.58rem" }}>
               {step.status}
             </span>
             {step.error ? (
@@ -124,10 +124,10 @@ function stepStatus(value: unknown): AgentStep["status"] {
 }
 
 function statusClass(status: TimelineStatus) {
-  if (status === "failed") return "status-badge-error";
-  if (status === "running") return "status-badge-info";
-  if (status === "skipped") return "status-badge-neutral";
-  return "status-badge-success";
+  if (status === "failed") return "bg-destructive/15 text-destructive";
+  if (status === "running") return "bg-primary/10 text-primary";
+  if (status === "skipped") return "bg-secondary text-secondary-foreground";
+  return "bg-success/15 text-success";
 }
 
 function statusColor(status: TimelineStatus) {

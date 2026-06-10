@@ -34,7 +34,7 @@ export function SqlSuggestionArtifactView({
         />
         {onApplySql ? (
           <button
-            className="btn-primary"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
             onClick={() => onApplySql(sql)}
             style={{ marginTop: 4, fontSize: "0.62rem", padding: "2px 7px" }}
           >

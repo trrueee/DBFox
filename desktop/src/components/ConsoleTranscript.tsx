@@ -107,9 +107,9 @@ function riskLabel(risk?: TrustGateResult["riskLevel"]) {
 }
 
 function riskClass(risk?: TrustGateResult["riskLevel"]) {
-  if (risk === "danger") return "status-badge-error";
-  if (risk === "warning") return "status-badge-warning";
-  return "status-badge-success";
+  if (risk === "danger") return "bg-destructive/15 text-destructive";
+  if (risk === "warning") return "bg-warning/15 text-warning";
+  return "bg-success/15 text-success";
 }
 
 export const ConsoleTranscript: React.FC<ConsoleTranscriptProps> = ({

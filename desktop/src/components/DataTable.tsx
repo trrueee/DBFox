@@ -445,7 +445,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
             </span>
 
             <button
-              className="btn-ghost"
+              className="inline-flex items-center gap-1 px-2 py-1 text-[0.72rem] font-medium text-[hsl(var(--muted-foreground))] bg-transparent border border-[hsl(var(--border))] rounded cursor-pointer hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
               onClick={() => setIsCompact(!isCompact)}
               style={{
                 padding: "3px 10px",
@@ -461,7 +461,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
             </button>
 
             <button
-              className="btn-ghost"
+              className="inline-flex items-center gap-1 px-2 py-1 text-[0.72rem] font-medium text-[hsl(var(--muted-foreground))] bg-transparent border border-[hsl(var(--border))] rounded cursor-pointer hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
               onClick={() => {
                 clearAllFilters();
                 showAllColumns();
@@ -498,7 +498,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           <span>共 {rows.length} 行数据</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              className="btn-ghost"
+              className="inline-flex items-center gap-1 px-2 py-1 text-[0.72rem] font-medium text-[hsl(var(--muted-foreground))] bg-transparent border border-[hsl(var(--border))] rounded cursor-pointer hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
               onClick={() => setIsCompact(!isCompact)}
               style={{
                 padding: "2px 8px",
@@ -652,7 +652,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                           </span>
                         )}
                         <button
-                          className="btn-ghost"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[0.72rem] font-medium text-[hsl(var(--muted-foreground))] bg-transparent border border-[hsl(var(--border))] rounded cursor-pointer hover:bg-[hsl(var(--accent))] hover:text-[hsl(var(--foreground))] transition-colors"
                           onClick={(event) => {
                             event.stopPropagation();
                             setOpenColumnMenu((current) => (current === col ? null : col));
@@ -873,7 +873,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                 >
                   <span className="row-number-text">{ri + 1}</span>
                   <button
-                    className="btn-ghost row-menu-trigger"
+                    className="hidden group-hover:inline-flex items-center p-0.5 text-[hsl(var(--muted-foreground))] cursor-pointer bg-transparent border-none"
                     style={{ padding: 1, color: "var(--text-muted)" }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -946,7 +946,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span
-                            className="status-badge"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[0.66rem] font-semibold rounded-sm bg-primary/10 text-primary border border-primary/20"
                             style={{
                               background: "rgba(74, 91, 192, 0.12)",
                               color: "var(--accent-indigo)",
@@ -1141,7 +1141,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
           onClick={() => setActiveInspect(null)}
         >
           <div
-            className="lab-card"
+            className="bg-card border border-border rounded-lg"
             style={{
               background: "var(--bg-surface)",
               border: "1px solid var(--border-medium)",
@@ -1169,7 +1169,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {activeInspect.isJson ? (
                   <span
-                    className="status-badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[0.66rem] font-semibold rounded-sm bg-primary/10 text-primary border border-primary/20"
                     style={{
                       background: "rgba(74, 91, 192, 0.12)",
                       color: "var(--accent-indigo)",
@@ -1181,7 +1181,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                   </span>
                 ) : (
                   <span
-                    className="status-badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[0.66rem] font-semibold rounded-sm bg-primary/10 text-primary border border-primary/20"
                     style={{
                       background: "rgba(100, 116, 139, 0.12)",
                       color: "var(--text-secondary)",
@@ -1295,7 +1295,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
               }}
             >
               <button
-                className="btn-secondary"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[0.78rem] font-medium border border-[hsl(var(--border))] bg-transparent rounded cursor-pointer hover:bg-[hsl(var(--accent))] text-[hsl(var(--foreground))] transition-colors"
                 style={{
                   padding: "5px 12px",
                   fontSize: "0.8rem",
@@ -1316,7 +1316,7 @@ export function DataTable({ columns, rows, numericColumns, maxHeight, tableName,
                 )}
               </button>
               <button
-                className="btn-primary"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-[0.78rem] font-semibold bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] rounded cursor-pointer border-none hover:brightness-110 transition-colors"
                 style={{ padding: "5px 16px", fontSize: "0.8rem" }}
                 onClick={() => setActiveInspect(null)}
               >

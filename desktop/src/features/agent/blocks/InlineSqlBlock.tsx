@@ -10,7 +10,7 @@ export function InlineSqlBlock({ artifact, onOpenSql }: { artifact: AgentArtifac
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <strong>{artifact.title}</strong>
         {onOpenSql ? (
-          <button className="btn-ghost" onClick={() => onOpenSql(sql)} style={{ fontSize: "0.64rem" }}>
+          <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => onOpenSql(sql)} style={{ fontSize: "0.64rem" }}>
             Open
           </button>
         ) : null}

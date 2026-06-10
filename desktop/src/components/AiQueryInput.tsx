@@ -33,7 +33,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
 
   return (
     <div
-      className="lab-card"
+      className="bg-card border border-border rounded-lg"
       style={{
         padding: 20,
         borderColor: focused ? "var(--accent-indigo)" : undefined,
@@ -66,7 +66,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <textarea
-          className="input-field"
+          className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="例如：查询上个月销售额最高的 10 个商品..."
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -83,7 +83,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
           <button
-            className="btn-primary"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
             onClick={onSubmit}
             disabled={loading || !value.trim()}
             style={{
@@ -96,7 +96,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
             {loading ? "生成中..." : "生成 SQL"}
           </button>
           <button
-            className="btn-ghost"
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
             onClick={onToggleConfig}
             style={{ fontSize: "0.72rem" }}
           >
@@ -112,7 +112,7 @@ export function AiQueryInput({ value, onChange, onSubmit, loading, onToggleConfi
           {activeSuggestions.map((s) => (
             <button
               key={s}
-              className="btn-ghost"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
               onClick={() => onChange(s)}
               style={{
                 fontSize: "0.76rem",
