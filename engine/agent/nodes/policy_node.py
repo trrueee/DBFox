@@ -6,7 +6,7 @@ from uuid import uuid4
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.guardrails.policy_gate import PolicyGate
+from engine.policy.gate import PolicyGate
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.tools.tool_aliases import to_internal

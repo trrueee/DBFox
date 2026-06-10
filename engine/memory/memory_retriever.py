@@ -4,10 +4,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from engine.agent.memory.long_term_store import get_long_term_store
-from engine.agent.memory.session_memory import get_session_memory_service
-from engine.agent.memory.memory_namespace import MemoryNamespace
-from engine.agent.memory.memory_schema import MemoryRecord
+from engine.memory.long_term_store import get_long_term_store
+from engine.memory.session_memory import get_session_memory_service
+from engine.memory.memory_namespace import MemoryNamespace
+from engine.memory.memory_schema import MemoryRecord
 
 logger = logging.getLogger("databox.memory.retriever")
 
@@ -146,7 +146,7 @@ def _build_memory_context_text(
 def _extract_keywords(question: str) -> list[str]:
     """Extract simple keywords from a question for memory matching."""
     # Simple approach: split into words, filter short ones
-    words = question.replace("?", " ").replace("ï¼Œ", " ").replace(",", " ").split()
+    words = question.replace("?", " ").replace("ï¼?, " ").replace(",", " ").split()
     return [w.strip().lower() for w in words if len(w.strip()) > 1][:8]
 
 

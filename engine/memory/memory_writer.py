@@ -4,13 +4,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from engine.agent.memory.long_term_store import get_long_term_store
-from engine.agent.memory.memory_policy import (
+from engine.memory.long_term_store import get_long_term_store
+from engine.memory.memory_policy import (
     is_safe_for_long_term,
     default_status,
 )
-from engine.agent.memory.memory_schema import MemoryRecord
-from engine.agent.memory.memory_namespace import MemoryNamespace
+from engine.memory.memory_schema import MemoryRecord
+from engine.memory.memory_namespace import MemoryNamespace
 
 logger = logging.getLogger("databox.memory.writer")
 

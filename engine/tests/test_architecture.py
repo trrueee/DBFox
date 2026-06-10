@@ -77,35 +77,17 @@ def test_sql_does_not_import_agent() -> None:
 
 
 def test_tools_do_not_import_agent_runtime() -> None:
-    """tools MUST NOT import agent orchestration (app, graph, nodes).
+    """tools MUST NOT import anything from engine.agent (runtime).
 
-    Allowed: agent.tools.* (bridge utilities), agent.memory.* (memory tools),
-             agent.guardrails.* (safety).
-    Forbidden: agent.app, agent.graph, agent.nodes, agent.planning, agent.progress.
+    engine.agent_core is the only allowed agent-adjacent import.
+    engine.agent.* is forbidden — tools depend on domain services:
+      engine.memory, engine.policy, engine.environment, engine.semantic, engine.sql, engine.llm.
     """
     imports = _imports_in_package(ENGINE_DIR / "tools")
-    _allowed_prefixes = (
-        "engine.agent_core",
-        "engine.agent.tools.",
-        "engine.agent.memory.",
-        "engine.agent.guardrails.",
-        "engine.agent.model.",         # system_prompt, context_builder
-        "engine.agent.checkpoints.",
-        "engine.agent.events.",
-    )
-    _forbidden_prefixes = (
-        "engine.agent.app",
-        "engine.agent.graph",
-        "engine.agent.nodes",
-        "engine.agent.planning",
-        "engine.agent.progress",
-    )
     violations = [i for i in imports
                   if i.startswith("engine.agent")
-                  and not i.startswith("engine.agent_core")
-                  and not any(i.startswith(p) for p in _allowed_prefixes)
-                  and any(i.startswith(p) for p in _forbidden_prefixes)]
-    assert not violations, f"tools import agent orchestration: {violations}"
+                  and not i.startswith("engine.agent_core")]
+    assert not violations, f"tools import engine.agent (runtime): {violations}"
 
 
 def test_no_old_registry_imports() -> None:
@@ -146,7 +128,7 @@ def test_engine_agent_init_exports_runtime_only() -> None:
     unexpected = {u for u in unexpected
                   if u not in ("annotations", "app", "graph", "nodes", "planning",
                                "progress", "guardrails", "model", "tools", "runtime",
-                               "checkpoints", "environment", "events", "memory")}
+                               "checkpoints", "environment", "events", "memory", "tests")}
     assert not unexpected, (
         f"engine.agent exports unexpected names: {unexpected}. "
         f"Public types belong in engine.agent_core."
