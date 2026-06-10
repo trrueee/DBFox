@@ -1,8 +1,8 @@
-from engine.agent_contracts.runtime import DataBoxAgentRuntime
-from engine.agent_contracts.executor import AgentStepSpec, StepExecutor
-from engine.agent_contracts.registry import AgentToolContext, FunctionAgentTool, ToolRegistry, ToolSpec
-from engine.agent_contracts.state import AgentState
-from engine.agent_contracts.types import (
+from engine.agent_core.runtime import DataBoxAgentRuntime
+from engine.agent_core.executor import AgentStepSpec, StepExecutor
+from engine.agent_core.registry import AgentToolContext, FunctionAgentTool, ToolRegistry, ToolSpec
+from engine.agent_core.state import AgentState
+from engine.agent_core.types import (
     AgentError,
     AgentAnswer,
     AgentArtifact,

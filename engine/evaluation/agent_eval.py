@@ -8,8 +8,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent_contracts.runtime import DataBoxAgentRuntime
-from engine.agent_contracts.types import AgentRunRequest, AgentWorkspaceContext
+from engine.agent_core.runtime import DataBoxAgentRuntime
+from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
 from engine.evaluation.agent_case_evaluator import AgentCaseEvaluator
 from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
 from engine.schemas.agent_eval import AgentEvalRunRequest, AgentEvalRunResponse, AgentEvalCaseResultResponse

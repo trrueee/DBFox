@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.types import AgentArtifact, AgentRunRequest
+from engine.agent_core.types import AgentArtifact, AgentRunRequest
 
 
 MAX_CONTEXT_CHARS = 2400

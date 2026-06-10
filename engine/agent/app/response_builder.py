@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.types import (
+from engine.agent_core.types import (
     AgentAnswer,
     AgentApprovalRecord,
     AgentArtifact,
@@ -13,7 +13,7 @@ from engine.agent_contracts.types import (
     FollowUpSuggestion,
     ResultProfile,
 )
-from engine.agent_contracts.artifacts import AgentArtifactIdentity
+from engine.agent_core.artifacts import AgentArtifactIdentity
 
 
 def build_response(

@@ -7,10 +7,10 @@ from typing import Any
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent_contracts.sandbox.base import ExecutionContext
-from engine.agent_contracts.types import ToolObservation
-from engine.agent_contracts.tool_runtime_gateway import ToolRuntimeGateway
-from engine.agent_contracts.tool_registry import ToolContext
+from engine.tools.sandbox.base import ExecutionContext
+from engine.agent_core.types import ToolObservation
+from engine.tools.tool_runtime_gateway import ToolRuntimeGateway
+from engine.agent_core.tool_registry import ToolContext
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.tools.tool_aliases import to_internal, to_alias
 from engine.environment.dialect_resolver import resolve_datasource_dialect

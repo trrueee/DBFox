@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 from sqlalchemy.orm import Session
 
-from engine.agent_contracts.types import AgentRunRequest, AgentRunResponse
-from engine.agent_contracts.tool_registry import ToolRegistry
+from engine.agent_core.types import AgentRunRequest, AgentRunResponse
+from engine.agent_core.tool_registry import ToolRegistry
 from engine.agent.app.runtime_config import RuntimeConfig
 
 
@@ -17,7 +17,7 @@ class RequestContext:
         request: AgentRunRequest,
         registry: ToolRegistry | None = None,
     ):
-        from engine.agent_contracts.databox_tools import register_databox_tools
+        from engine.tools.databox_tools import register_databox_tools
 
         self.db = db
         self.request = request

@@ -4,8 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from engine.agent_contracts.registry import AgentToolContext
-from engine.agent_contracts.tools import (
+from engine.agent_core.registry import AgentToolContext
+from engine.tools.sql_tools import (
     answer_synthesizer_tool,
     build_query_plan_tool,
     build_schema_context_tool,
@@ -19,10 +19,10 @@ from engine.agent_contracts.tools import (
     suggest_followups_tool,
     validate_sql_tool,
 )
-from engine.agent_contracts.types import AgentRunRequest, ToolObservation
-from engine.agent_contracts.workspace_context import build_agent_context_bundle
-from engine.agent_contracts.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
-from engine.agent_contracts.tool_registry import (
+from engine.agent_core.types import AgentRunRequest, ToolObservation
+from engine.agent_core.workspace_context import build_agent_context_bundle
+from engine.tools.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
+from engine.agent_core.tool_registry import (
     RegisteredTool,
     ToolContext,
     ToolPolicy,
@@ -112,7 +112,7 @@ class MemoryDeleteInput(BaseModel):
 
 
 def register_databox_tools() -> ToolRegistry:
-    from engine.agent_contracts.sandbox.tools import (
+    from engine.tools.sandbox.tools import (
         FollowupLoadContextTool,
         SchemaBuildContextTool,
         QueryPlanBuildTool,

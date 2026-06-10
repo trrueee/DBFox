@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from engine.agent_contracts.types import ToolObservation
-from engine.agent_contracts.tool_registry import ToolContext
+from engine.agent_core.types import ToolObservation
+from engine.agent_core.tool_registry import ToolContext
 from engine.environment.service import EnvironmentService
 
 logger = logging.getLogger("databox.environment.tools")
@@ -114,14 +114,8 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
         for c in table_snapshot.columns
     ]
 
-    # Sample rows still come from live introspection (not catalog)
-    from engine.environment.schema_introspector import introspect_datasource
-    inventory = introspect_datasource(ctx.db, datasource_id)
-    sample_rows = next(
-        (t.sample_rows for t in inventory.tables if t.table_name == table_name),
-        [],
-    )
-
+    # Sample rows are NOT returned here — they are live data reads and
+    # should only be fetched via a dedicated preview tool with safety checks.
     return ToolObservation(
         name="describe_table",
         status="success",
@@ -129,7 +123,7 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
         output={
             "table_name": table_name,
             "columns": col_list,
-            "sample_rows": sample_rows,
+            "sample_rows": [],
             "row_count_estimate": table_snapshot.row_count_estimate,
         },
         latency_ms=0,

@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from engine.agent_contracts.types import AgentRunResponse
+from engine.agent_core.types import AgentRunResponse
 from engine.models import AgentGoldenTask
 
 

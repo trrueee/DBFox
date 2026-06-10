@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from engine.agent_contracts.types import ToolObservation
+from engine.agent_core.types import ToolObservation
 
 
 class ToolContractError(ValueError):

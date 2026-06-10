@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from engine.agent_contracts.types import ToolObservation
+from engine.agent_core.types import ToolObservation
 
 # ---------------------------------------------------------------------------
 # Per-tool state-applier functions — one handler per tool name.

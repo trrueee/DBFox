@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.registry import AgentToolContext, FunctionAgentTool, ToolHandler, ToolRegistry, ToolRiskLevel, ToolSpec
-from engine.agent_contracts.state import AgentState
-from engine.agent_contracts.tools import (
+from engine.agent_core.registry import AgentToolContext, FunctionAgentTool, ToolHandler, ToolRegistry, ToolRiskLevel, ToolSpec
+from engine.agent_core.state import AgentState
+from engine.tools.sql_tools import (
     answer_synthesizer_tool,
     build_query_plan_tool,
     build_schema_context_tool,
@@ -17,8 +17,8 @@ from engine.agent_contracts.tools import (
     suggest_followups_tool,
     validate_sql_tool,
 )
-from engine.agent_contracts.types import ToolObservation
-from engine.agent_contracts.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
+from engine.agent_core.types import ToolObservation
+from engine.tools.workspace_tools import WORKSPACE_TOOL_NAMES, build_workspace_tools
 
 
 DEFAULT_AGENT_TOOL_NAMES = [

@@ -6,7 +6,7 @@ from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.db import get_db
 from engine.errors import DataSourceConnectionError
 from engine.models import DEFAULT_PROJECT_ID, DataSource, QueryHistory, SchemaTable
-from engine.agent_contracts.types import AgentRunResponse, AgentRuntimeEvent
+from engine.agent_core.types import AgentRunResponse, AgentRuntimeEvent
 import pytest
 
 

@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from engine.errors import DataBoxError
-from engine.agent_contracts.types import (
+from engine.agent_core.types import (
     AgentArtifact,
     AgentAnswer,
     AgentArtifactPresentation,

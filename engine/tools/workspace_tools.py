@@ -4,9 +4,9 @@ import re
 import time
 from typing import Any, Callable
 
-from engine.agent_contracts.registry import AgentToolContext, FunctionAgentTool, ToolSpec
-from engine.agent_contracts.tools import _prepare_generated_sql, validate_sql_tool
-from engine.agent_contracts.types import ToolObservation
+from engine.agent_core.registry import AgentToolContext, FunctionAgentTool, ToolSpec
+from engine.tools.sql_tools import _prepare_generated_sql, validate_sql_tool
+from engine.agent_core.types import ToolObservation
 from engine.sql.guardrail import guardrail_check
 
 

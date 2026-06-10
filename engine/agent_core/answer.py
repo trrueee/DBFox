@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.recommendations import recommendation_texts
-from engine.agent_contracts.types import AgentAnswer, AnswerEvidence, FollowUpSuggestion, ResultProfile
+from engine.agent_core.recommendations import recommendation_texts
+from engine.agent_core.types import AgentAnswer, AnswerEvidence, FollowUpSuggestion, ResultProfile
 
 
 def synthesize_agent_answer(

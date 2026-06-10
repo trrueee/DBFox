@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.tool_registry import ToolRegistry
+from engine.agent_core.tool_registry import ToolRegistry
 
 # Enriched descriptions that give the LLM strong affordance hints.
 # These are DataBox-specific guidance beyond the raw tool spec description.

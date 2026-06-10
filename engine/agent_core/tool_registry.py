@@ -6,7 +6,7 @@ from typing import Any, Callable, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from engine.agent_contracts.types import AgentRunRequest, ToolObservation
+from engine.agent_core.types import AgentRunRequest, ToolObservation
 
 
 RiskLevel = Literal["safe", "warning", "danger"]

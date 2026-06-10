@@ -69,7 +69,7 @@ class TestRealModelToolCalling:
         self.ds = spider_concert_singer
 
     def _build_request(self, *, execute: bool = True, question: str | None = None):
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
 
         return AgentRunRequest(
             datasource_id=self.ds.id,
@@ -84,7 +84,7 @@ class TestRealModelToolCalling:
     def test_model_sees_alias_tool_names(self):
         """Model should receive underscore-aliased tool names, not dotted names."""
         from engine.agent.tools.registry_bridge import build_langchain_tools
-        from engine.agent_contracts.databox_tools import register_databox_tools
+        from engine.tools.databox_tools import register_databox_tools
 
         registry = register_databox_tools()
         tools = build_langchain_tools(registry)
@@ -177,7 +177,7 @@ class TestExecuteFalse:
     @_skip_if_no_api
     def test_execute_false_no_sql_execution(self):
         from engine.agent.app.service import DataBoxAgentService
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,
@@ -250,7 +250,7 @@ class TestApprovalE2E:
     def test_approval_interrupt_resume_cycle(self):
         """Verify the full approval lifecycle with real model + LangGraph interrupt."""
         from engine.agent.app.service import DataBoxAgentService
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
         from engine.agent import persistence as ap
 
         # Phase 1 — run with execute=True; may trigger approval via
@@ -345,7 +345,7 @@ class TestApprovalE2E:
         from engine.agent.graph.react_graph import build_databox_react_graph
         from engine.agent.graph.state import DataBoxAgentState
         from engine.agent.app.request_context import RequestContext
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
         from engine.agent import persistence as ap
         from langgraph.types import Command
 
@@ -461,7 +461,7 @@ class TestArtifactConsistency:
     @_skip_if_no_api
     def test_artifacts_in_response(self):
         from engine.agent.app.service import DataBoxAgentService
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,
@@ -518,7 +518,7 @@ class TestBlockedLoop:
         """Model that keeps calling sql.execute_readonly without validation
         should eventually be force-finalized."""
         from engine.agent.app.service import DataBoxAgentService
-        from engine.agent_contracts.types import AgentRunRequest
+        from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
             datasource_id=self.ds.id,

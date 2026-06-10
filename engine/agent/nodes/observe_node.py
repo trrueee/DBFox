@@ -4,13 +4,14 @@ import logging
 from typing import Any
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent_contracts.types import ToolObservation
-from engine.agent_contracts.databinding import apply_tool_result_to_state
+from engine.agent_core.types import ToolObservation
+from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent import persistence as ap
-from engine.agent_contracts.artifacts import (
+from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
+    build_semantic_resolution_artifact,
     build_sql_suggestion_artifact,
     build_profile_artifact,
     build_query_plan_artifact,
@@ -18,7 +19,7 @@ from engine.agent_contracts.artifacts import (
     build_sql_artifact,
     build_table_artifact,
 )
-from engine.agent_contracts.types import ResultProfile
+from engine.agent_core.types import ResultProfile
 
 logger = logging.getLogger("databox.databox_agent.nodes.observe_node")
 
@@ -55,6 +56,9 @@ def emit_artifacts_from_observation(
 
     if step_name == "build_query_plan" and state.get("query_plan"):
         artifacts.append(build_query_plan_artifact(state["query_plan"], identity=identity))
+
+    if step_name == "semantic.resolve" and state.get("semantic_resolution"):
+        artifacts.append(build_semantic_resolution_artifact(state["semantic_resolution"], identity=identity))
 
     if step_name == "validate_sql" and state.get("sql") and state.get("safety"):
         artifacts.append(build_sql_artifact(state["sql"], safety=state["safety"], identity=identity))

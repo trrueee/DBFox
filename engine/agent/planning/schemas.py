@@ -37,6 +37,7 @@ AgentExecutionMode = Literal[
 
 AgentToolGroup = Literal[
     "workspace",
+    "environment",
     "schema",
     "semantic",
     "query_plan",

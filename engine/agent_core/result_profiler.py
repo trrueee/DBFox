@@ -4,7 +4,7 @@ from collections import Counter
 from datetime import datetime
 from typing import Any
 
-from engine.agent_contracts.types import ColumnProfile, ResultProfile
+from engine.agent_core.types import ColumnProfile, ResultProfile
 
 
 def profile_result(

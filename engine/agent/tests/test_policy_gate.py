@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch
 
-from engine.agent_contracts.tool_registry import (
+from engine.agent_core.tool_registry import (
     RegisteredTool,
     ToolContext,
     ToolPolicy,

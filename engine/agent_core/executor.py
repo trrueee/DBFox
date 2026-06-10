@@ -7,9 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from engine.agent_contracts.registry import AgentToolContext, ToolRegistry
-from engine.agent_contracts.state import AgentState
-from engine.agent_contracts.types import AgentErrorOutput, AgentStep, ToolObservation
+from engine.agent_core.registry import AgentToolContext, ToolRegistry
+from engine.agent_core.state import AgentState
+from engine.agent_core.types import AgentErrorOutput, AgentStep, ToolObservation
 
 logger = logging.getLogger("databox.agent.executor")
 
