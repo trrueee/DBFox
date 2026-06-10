@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { FileText, GitMerge, RefreshCw, Search, Send, Sparkles, TrendingUp, User, X } from "lucide-react";
 
 interface SmartQueryHomeProps {
@@ -66,26 +67,12 @@ export function SmartQueryHome({
       </div>
 
       <div className="hifi-ask-input-container">
-        <textarea
-          className="hifi-ask-input"
-          value={askInputValue}
-          onChange={(event) => onAskInputChange(event.target.value)}
-          placeholder="用自然语言提问，例如：帮我查一下“市场运营部”上个月发布了多少资产？"
-        />
-        <button className="hifi-ask-send-btn animate-pulse" onClick={onSubmitAsk}>
-          <Send size={14} />
-        </button>
+        <textarea className="hifi-ask-input" value={askInputValue} onChange={(event) => onAskInputChange(event.target.value)} placeholder="用自然语言提问，例如：帮我查一下“市场运营部”上个月发布了多少资产？" />
+        <button className="hifi-ask-send-btn animate-pulse" onClick={onSubmitAsk}><Send size={14} /></button>
       </div>
 
       <div className="hifi-recommend-section">
-        <div className="hifi-section-header">
-          <span className="hifi-section-title">推荐提问</span>
-          <button className="hifi-text-btn" onClick={() => onToast("已随机刷新推荐提问")}>
-            <RefreshCw size={11} />
-            换一换
-          </button>
-        </div>
-
+        <div className="hifi-section-header"><span className="hifi-section-title">推荐提问</span><button className="hifi-text-btn" onClick={() => onToast("已随机刷新推荐提问")}><RefreshCw size={11} />换一换</button></div>
         <div className="hifi-recommend-grid">
           <RecommendCard icon={<TrendingUp size={13} />} text="分析近 7 天评论数据趋势" tag="数据分析" onClick={onRecommendClick} />
           <RecommendCard icon={<User size={13} />} text="查询活跃用户 Top 10" tag="用户分析" onClick={onRecommendClick} />
@@ -97,15 +84,10 @@ export function SmartQueryHome({
       <div className="hifi-recent-section">
         <div className="hifi-section-header">
           <div className="hifi-recent-tabs">
-            {["tables", "queries", "chat"].map((tab) => (
-              <span key={tab} className={`hifi-recent-tab ${recentTab === tab ? "active" : ""}`} onClick={() => onRecentTabChange(tab)}>
-                {tab === "tables" ? "最近表" : tab === "queries" ? "最近查询" : "最近问答"}
-              </span>
-            ))}
+            {["tables", "queries", "chat"].map((tab) => <span key={tab} className={`hifi-recent-tab ${recentTab === tab ? "active" : ""}`} onClick={() => onRecentTabChange(tab)}>{tab === "tables" ? "最近表" : tab === "queries" ? "最近查询" : "最近问答"}</span>)}
           </div>
           <button className="hifi-text-btn" onClick={() => onToast("打开历史访问中心")}>查看更多 &gt;</button>
         </div>
-
         <div className="hifi-recent-grid">
           <RecentTable tableName="id_users" desc="小红书数据" onOpenTable={onOpenTable} />
           <RecentTable tableName="comment_infos" desc="互动模块" onOpenTable={onOpenTable} />
@@ -118,21 +100,10 @@ export function SmartQueryHome({
   );
 }
 
-function RecommendCard({ icon, text, tag, onClick }: { icon: React.ReactNode; text: string; tag: string; onClick: (text: string) => void }) {
-  return (
-    <div className="hifi-recommend-card" onClick={() => onClick(text)}>
-      <div className="hifi-recommend-icon">{icon}</div>
-      <span className="hifi-recommend-text">{text}</span>
-      <span className="hifi-tag">{tag}</span>
-    </div>
-  );
+function RecommendCard({ icon, text, tag, onClick }: { icon: ReactNode; text: string; tag: string; onClick: (text: string) => void }) {
+  return <div className="hifi-recommend-card" onClick={() => onClick(text)}><div className="hifi-recommend-icon">{icon}</div><span className="hifi-recommend-text">{text}</span><span className="hifi-tag">{tag}</span></div>;
 }
 
 function RecentTable({ tableName, desc, onOpenTable }: { tableName: string; desc: string; onOpenTable: (tableName: string) => void }) {
-  return (
-    <div className="hifi-recent-card" onClick={() => onOpenTable(tableName)}>
-      <span className="hifi-recent-name">{tableName}</span>
-      <p className="hifi-recent-desc">{desc}</p>
-    </div>
-  );
+  return <div className="hifi-recent-card" onClick={() => onOpenTable(tableName)}><span className="hifi-recent-name">{tableName}</span><p className="hifi-recent-desc">{desc}</p></div>;
 }
