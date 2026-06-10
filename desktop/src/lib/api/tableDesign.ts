@@ -10,18 +10,6 @@ import type {
 } from "./types";
 
 export const tableDesignApi = {
-  generateSchemaAlteration: (params: {
-    datasource_id: string;
-    instruction: string;
-    api_key?: string;
-    api_base?: string;
-    model?: string;
-  }) =>
-    request<{ ddl: string; model: string; mode: string }>("/schema/design/ai-modify", {
-      method: "POST",
-      body: JSON.stringify(params),
-    }),
-
   executeTableDesignDDL: (datasourceId: string, ddl: string, confirm?: { token: string; text: string }) =>
     request<DangerousOperationResult<TableDesignExecutionResult>>("/schema/design/execute-ddl", {
       method: "POST",
