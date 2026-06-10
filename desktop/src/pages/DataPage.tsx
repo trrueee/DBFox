@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "../lib/api";
 import type { DataSource, SchemaTable } from "../lib/api";
@@ -59,6 +59,7 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
   const [filterText, setFilterText] = useState("");
   const [appliedFilter, setAppliedFilter] = useState("");
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const skipNextControlRefreshRef = useRef(false);
 
   const activeTableMeta = useMemo(() => {
     return schemaTables.find((table) => table.table_name === selectedTableName) || null;
@@ -95,6 +96,7 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
     try {
       const sample = await api.executeSql(datasource.id, `SELECT * FROM \`${tableName}\` LIMIT 1;`);
       const nextColumns = sample.success ? sample.columns || [] : [];
+      skipNextControlRefreshRef.current = true;
       setColumns(nextColumns);
       await runPreviewQuery({ tableName, columns: nextColumns, filter: "", page: 1, pageSize: 100 });
     } catch (error: unknown) {
@@ -104,6 +106,7 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
   }, [datasource.id, runPreviewQuery]);
 
   useEffect(() => {
+    skipNextControlRefreshRef.current = true;
     setPage(1);
     setPageSize(100);
     setFilterText("");
@@ -114,7 +117,12 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
   }, [datasource.id, loadInitialSchemaAndData, selectedTableName]);
 
   useEffect(() => {
-    if (selectedTableName) void fetchTableData();
+    if (!selectedTableName) return;
+    if (skipNextControlRefreshRef.current) {
+      skipNextControlRefreshRef.current = false;
+      return;
+    }
+    void fetchTableData();
   }, [appliedFilter, fetchTableData, page, pageSize, selectedTableName]);
 
   useEffect(() => {
