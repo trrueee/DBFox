@@ -65,6 +65,11 @@ class DataBoxAgentService:
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         """Stream AgentRuntimeEvents by running the ReAct graph."""
+        if req.parent_run_id and not req.follow_up_context:
+            req.follow_up_context = agent_persistence.build_followup_context_from_run(
+                self.db, req.parent_run_id
+            )
+
         ctx = RequestContext(self.db, req, self.registry)
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
@@ -300,10 +305,10 @@ class DataBoxAgentService:
             allowed_tool_calls=[],
             blocked_tool_calls=[],
             last_tool_results=[],
-            artifacts=[],
-            trace_events=[],
-            runtime_events=[],
-            plan_events=[],
+            artifacts=[{"__clear__": True}],
+            trace_events=[{"__clear__": True}],
+            runtime_events=[{"__clear__": True}],
+            plan_events=[{"__clear__": True}],
             suggestions=[],
             error=None,
             pending_approval=pending_approval,
@@ -344,6 +349,10 @@ class DataBoxAgentService:
     def _session_id(self, req: AgentRunRequest) -> str:
         if req.session_id:
             return str(req.session_id)
+        if req.parent_run_id:
+            parent = self.db.query(AgentRun).filter(AgentRun.id == req.parent_run_id).first()
+            if parent is not None:
+                return str(parent.session_id)
         if req.follow_up_context and req.follow_up_context.session_id:
             return str(req.follow_up_context.session_id)
         return str(uuid.uuid4())
@@ -402,12 +411,36 @@ class DataBoxAgentService:
         trace_type = trace.get("type", "")
         tool_name = trace.get("tool_name", "")
 
+        tool_to_step_name = {
+            "schema_build_context": "build_schema_context",
+            "schema.build_context": "build_schema_context",
+            "sql_generate": "generate_sql_candidate",
+            "sql.generate": "generate_sql_candidate",
+            "sql_validate": "validate_sql",
+            "sql.validate": "validate_sql",
+            "sql_execute_readonly": "execute_sql",
+            "sql.execute_readonly": "execute_sql",
+            "sql_skip_execution": "execute_sql",
+            "sql.skip_execution": "execute_sql",
+            "result_profile": "profile_result",
+            "result.profile": "profile_result",
+            "chart_suggest": "suggest_chart",
+            "chart.suggest": "suggest_chart",
+            "followup_suggest": "suggest_followups",
+            "followup.suggest": "suggest_followups",
+            "followup_load_context": "load_follow_up_context",
+            "followup.load_context": "load_follow_up_context",
+            "answer_synthesize": "answer_synthesizer",
+            "answer.synthesize": "answer_synthesizer",
+        }
+        mapped_name = tool_to_step_name.get(tool_name, tool_name)
+
         if trace_type == "agent.tool.started":
-            yield emit("agent.step.started", step={"name": tool_name})
+            yield emit("agent.step.started", step={"name": mapped_name})
         elif trace_type == "agent.tool.completed":
-            yield emit("agent.step.completed", step={"name": tool_name, "status": trace.get("status")})
+            yield emit("agent.step.completed", step={"name": mapped_name, "status": trace.get("status")})
         elif trace_type == "agent.approval.required":
-            yield emit("agent.approval.required", step={"name": tool_name})
+            yield emit("agent.approval.required", step={"name": mapped_name})
 
     def _approval_events(
         self,

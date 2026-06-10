@@ -1,0 +1,12 @@
+name: memory.summarize_session
+group: answer
+kind: code
+description: >
+  Summarize the current session for future recall. Use at the end of an analysis
+  session.
+handler: memory_summarize_session
+input_schema:
+  type: object
+  description: This tool reads all required inputs from current agent state.
+metadata:
+  next_route: answer

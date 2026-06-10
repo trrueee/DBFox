@@ -1,0 +1,16 @@
+name: followup.suggest
+group: answer
+kind: code
+description: >
+  Suggest evidence-aware follow-up questions based on the current analysis.
+handler: followup_suggest
+input_schema:
+  type: object
+  description: Optional question override.
+  properties:
+    question:
+      type: string
+binding:
+  produces_state_keys: [suggestions]
+metadata:
+  next_route: synthesize_answer

@@ -1,0 +1,17 @@
+name: result.profile
+group: result
+kind: code
+description: >
+  Profile query execution results to detect patterns, anomalies, and notable
+  facts. Use AFTER successful sql.execute_readonly.
+handler: result_profile
+input_schema:
+  type: object
+  description: Optional question override.
+  properties:
+    question:
+      type: string
+binding:
+  produces_state_keys: [result_profile]
+metadata:
+  next_route: chart_suggest

@@ -1,0 +1,14 @@
+name: sql.skip_execution
+group: execution
+kind: code
+description: >
+  Record that SQL execution was intentionally skipped (review-only mode).
+  Use when execute=false in the request.
+handler: sql_skip_execution
+input_schema:
+  type: object
+  description: This tool reads all required inputs from current agent state.
+binding:
+  produces_state_keys: [execution]
+metadata:
+  next_route: execution_result_route

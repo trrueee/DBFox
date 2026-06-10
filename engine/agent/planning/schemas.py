@@ -97,6 +97,15 @@ class AgentPlanDirective(BaseModel):
         default_factory=list,
         description="Safety / risk notes for PolicyGate and the Progress Judge.",
     )
+    selected_skill_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Skill ids selected for this task. The Planner chooses zero or more "
+            "skills that match the user's intent. When set, the selected skill(s) "
+            "constrain tool groups, provide step guidance, and define success "
+            "criteria for the Progress Judge."
+        ),
+    )
     reasoning_summary: str = Field(
         default="",
         description="Internal reasoning for debugging. Never shown to the user.",

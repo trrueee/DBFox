@@ -64,20 +64,23 @@ def route_approval_output(state: DataBoxAgentState) -> Literal["tools", "model",
 
 
 def route_progress_output(state: DataBoxAgentState) -> Literal["model", "planner", "finalize"]:
-    """After progress judge: complete/clarify/blocked/failed → finalize;
-    continue → model; replan → planner (with anti-loop limit)."""
+    """After progress judge: complete/clarify → finalize; continue → model;
+    replan → planner (with anti-loop limit + retry_budget check)."""
     decision = state.get("progress_decision") or {}
     status = decision.get("status", "failed")
+    retry_budget = int(decision.get("retry_budget", 0))
+    replan_count = int(state.get("replan_count", 0))
 
     if status == "complete":
+        return "finalize"
+    if status == "clarify":
         return "finalize"
     if status == "continue":
         return "model"
     if status == "replan":
-        replan_count = int(state.get("replan_count", 0))
-        if replan_count < 2:
+        # Anti-loop: max 2 replans total, AND retry_budget must be > 0
+        if replan_count < 2 and retry_budget > 0:
             return "planner"
-        # Replan limit exceeded — force finalize
         return "finalize"
-    # clarify / blocked / failed → finalize
+    # blocked / failed → finalize
     return "finalize"

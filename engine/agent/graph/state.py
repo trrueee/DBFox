@@ -9,6 +9,8 @@ from langgraph.graph.message import add_messages
 
 
 def _add_list(left: list[Any], right: list[Any]) -> list[Any]:
+    if right and isinstance(right[0], dict) and right[0].get("__clear__"):
+        return right[1:]
     return left + right
 
 
@@ -41,6 +43,7 @@ class DataBoxAgentState(TypedDict, total=False):
     plan_directive: dict[str, Any] | None
     execution_mode: str
     allowed_tool_groups: list[str]
+    selected_skill_ids: list[str]
 
     # ---- Environment / Semantic layers -------------------------------------
     environment_profile: dict[str, Any] | None

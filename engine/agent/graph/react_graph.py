@@ -4,14 +4,6 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from engine.agent.graph.state import DataBoxAgentState
-from engine.agent.nodes.planner_node import create_plan
-from engine.agent.nodes.model_node import call_model
-from engine.agent.nodes.policy_node import apply_policy
-from engine.agent.nodes.tool_node import execute_allowed_tools
-from engine.agent.nodes.observe_node import observe_tools
-from engine.agent.nodes.progress_node import judge_progress
-from engine.agent.nodes.finalize_node import finalize_answer
-from engine.agent.nodes.approval_node import approval_interrupt
 from engine.agent.graph.routes import (
     route_planner_output,
     route_model_output,
@@ -33,6 +25,15 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     PolicyGate enforces hard safety boundaries.
     The Progress Judge determines completion / continuation / replanning.
     """
+    from engine.agent.nodes.planner_node import create_plan
+    from engine.agent.nodes.model_node import call_model
+    from engine.agent.nodes.policy_node import apply_policy
+    from engine.agent.nodes.tool_node import execute_allowed_tools
+    from engine.agent.nodes.observe_node import observe_tools
+    from engine.agent.nodes.progress_node import judge_progress
+    from engine.agent.nodes.finalize_node import finalize_answer
+    from engine.agent.nodes.approval_node import approval_interrupt
+
     graph = StateGraph(DataBoxAgentState)
 
     # ---- Nodes -----------------------------------------------------------

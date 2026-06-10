@@ -16,8 +16,8 @@ def _prepare_waiting_run(db_session, demo_datasource, monkeypatch):
     sync_schema(db_session, demo_datasource.id)
     demo_datasource.env = "prod"
     db_session.commit()
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
         "sql": "SELECT id, username FROM users LIMIT 3",
         "model": "test",
         "mode": "offline",

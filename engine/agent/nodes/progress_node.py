@@ -8,6 +8,8 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.progress.prompts import PROGRESS_JUDGE_SYSTEM_PROMPT
+from engine.agent.skills.registry import get_skill_registry
+from engine.agent.skills.renderer import render_recovery_for_progress
 from engine.llm import get_chat_model
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
@@ -39,6 +41,11 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
 
     if not ctx.has_llm_credentials:
         return _rule_fallback(state)
+
+    # ---- Fast path: escalate.tool_group was called --------------------------
+    escalate_result = _check_escalate(state)
+    if escalate_result:
+        return escalate_result
 
     # ---- Build the judgment context -----------------------------------------
     context_parts = ["## Progress Judgment Request"]
@@ -132,6 +139,23 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
     max_steps = state.get("max_steps", 20)
     context_parts.append(f"### Progress\nstep_count={step_count}, max_steps={max_steps}")
 
+    # ---- Active skill recovery context (Agent v2) --------------------------
+    skill_ids: list[str] = state.get("selected_skill_ids", []) or []
+    if skill_ids:
+        try:
+            reg = get_skill_registry()
+            recovery_blocks: list[str] = []
+            for sid in skill_ids:
+                skill = reg.get(sid)
+                if skill:
+                    block = render_recovery_for_progress(skill)
+                    if block:
+                        recovery_blocks.append(block)
+            if recovery_blocks:
+                context_parts.append("\n\n".join(recovery_blocks))
+        except Exception as exc:
+            logger.warning("Failed to load skill recovery context for progress judge: %s", exc)
+
     judge_prompt = "\n\n".join(context_parts)
 
     # ---- Call LLM with structured output ------------------------------------
@@ -168,14 +192,24 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
             )
 
     # ---- Build result -------------------------------------------------------
+    trace: dict[str, Any] = {
+        "type": "agent.progress.judged",
+        "status": decision.status,
+        "should_replan": decision.should_replan,
+        "should_finalize": decision.should_finalize,
+        "should_retry": decision.should_retry,
+        "retry_budget": decision.retry_budget,
+    }
+    if decision.failure_layer:
+        trace["failure_layer"] = decision.failure_layer
+    if decision.root_cause:
+        trace["root_cause"] = decision.root_cause
+    if decision.recovery_strategy:
+        trace["recovery_strategy"] = decision.recovery_strategy
+
     return {
         "progress_decision": decision.model_dump(mode="json"),
-        "trace_events": [{
-            "type": "agent.progress.judged",
-            "status": decision.status,
-            "should_replan": decision.should_replan,
-            "should_finalize": decision.should_finalize,
-        }],
+        "trace_events": [trace],
     }
 
 
@@ -185,6 +219,88 @@ def _compact_json(obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":"))
     except Exception:
         return str(obj)[:500]
+
+
+def _guess_failure_layer(error: str) -> str:
+    """Heuristic to map error text to a failure layer for rule-based fallback."""
+    el = error.lower()
+    if any(k in el for k in ("column", "table", "schema", "unknown", "not found")):
+        return "schema"
+    if any(k in el for k in ("guardrail", "trust gate", "validation", "safety")):
+        return "sql_validation"
+    if any(k in el for k in ("timeout", "connection", "execute", "database")):
+        return "execution"
+    if any(k in el for k in ("policy", "blocked")):
+        return "policy"
+    return "unknown"
+
+
+def _check_escalate(state: DataBoxAgentState) -> dict[str, Any] | None:
+    """Fast-path: detect escalate.tool_group and expand allowed_tool_groups.
+
+    When the model calls escalate.tool_group, we immediately expand the
+    tool scope and return continue — no LLM judge needed.  This avoids
+    wasting a full ReAct loop on escalation.
+
+    Returns None if no escalation was detected (normal flow continues).
+    """
+    last_results = state.get("last_tool_results") or []
+    if not last_results:
+        return None
+
+    for result in last_results:
+        if not isinstance(result, dict):
+            continue
+        if result.get("name") != "escalate.tool_group":
+            continue
+
+        output = result.get("output") or {}
+        if not output.get("escalated"):
+            # Escalate was called but the group was already available.
+            # Still return continue — the model should proceed with what it has.
+            return {
+                "progress_decision": ProgressDecision(
+                    status="continue",
+                    reason_summary="Escalate called but group already available — continuing.",
+                ).model_dump(mode="json"),
+                "trace_events": [{
+                    "type": "agent.progress.judged",
+                    "status": "continue",
+                    "reason": "escalate_noop",
+                }],
+            }
+
+        escalated_groups: list[str] = output.get("escalated_tool_groups", [])
+        current_groups: list[str] = list(state.get("allowed_tool_groups") or [])
+
+        # Merge — preserve order, add new groups at end
+        new_groups = list(dict.fromkeys(current_groups + escalated_groups))
+
+        logger.info(
+            "Escalate: expanding allowed_tool_groups from %s to %s",
+            current_groups, new_groups,
+        )
+
+        return {
+            "allowed_tool_groups": new_groups,
+            "progress_decision": ProgressDecision(
+                status="continue",
+                reason_summary=(
+                    f"Escalated: added tool group '{output.get('group')}' — "
+                    f"{output.get('reason', 'no reason given')}"
+                ),
+                next_instruction=f"Tool group '{output.get('group')}' is now available. Use it.",
+            ).model_dump(mode="json"),
+            "trace_events": [{
+                "type": "agent.progress.escalate",
+                "status": "continue",
+                "escalated_group": output.get("group"),
+                "reason": output.get("reason"),
+                "new_allowed_tool_groups": new_groups,
+            }],
+        }
+
+    return None
 
 
 def _rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
@@ -199,7 +315,12 @@ def _rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
     answer = state.get("answer") or state.get("final_answer")
 
     if error and status == "failed":
-        decision = ProgressDecision(status="failed", reason_summary="Agent reported failure.")
+        decision = ProgressDecision(
+            status="failed", reason_summary="Agent reported failure.",
+            failure_layer=_guess_failure_layer(error),
+            root_cause=error,
+            should_finalize=True,
+        )
     elif status == "completed":
         decision = ProgressDecision(status="complete", reason_summary="Agent marked complete.")
     elif status == "waiting_user":
@@ -207,7 +328,10 @@ def _rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
     elif answer and answer.get("answer"):
         decision = ProgressDecision(status="complete", reason_summary="Agent produced an answer.")
     elif step_count >= max_steps:
-        decision = ProgressDecision(status="complete", reason_summary="Max steps reached — finalizing.")
+        decision = ProgressDecision(
+            status="complete", reason_summary="Max steps reached — finalizing.",
+            completion_reason="max_steps_reached",
+        )
     else:
         decision = ProgressDecision(status="continue", reason_summary="Continuing ReAct loop.")
 

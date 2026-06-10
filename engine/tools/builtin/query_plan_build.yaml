@@ -1,0 +1,15 @@
+name: query_plan.build
+group: query_plan
+kind: code
+description: >
+  Build a structured query plan (metrics, dimensions, filters, time_range,
+  candidate_tables). Use AFTER schema.build_context when the question involves
+  aggregations, groupings, filters, joins, or time-series analysis.
+handler: query_plan_build
+input_schema:
+  type: object
+  description: This tool reads all required inputs from current agent state.
+binding:
+  produces_state_keys: [query_plan]
+metadata:
+  next_route: generate_sql

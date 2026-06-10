@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+from engine.agent.skills.registry import get_skill_registry
+from engine.agent.skills.renderer import render_skill_for_model
+
+logger = logging.getLogger("databox.databox_agent.model.system_prompt")
 
 SYSTEM_PROMPT = """You are DataBox, an autonomous data analysis agent.
 
 You solve user tasks by repeatedly:
-1. Understanding the user's goal.
+1. Understanding the user’s goal.
 2. Calling the most appropriate tools.
 3. Observing tool results.
 4. Reflecting on whether more work is needed.
@@ -40,9 +46,47 @@ Your final answer must be based only on:
 - tool observations,
 - validated SQL,
 - execution results,
-- artifacts in state."""
+- artifacts in state.
+
+## Tool Escalation
+
+You always have access to `escalate.tool_group`. Use it when:
+- You need a tool from a group that isn't currently available to you.
+- Example: you're in a schema exploration task but realize you need
+  semantic.resolve to map a business term — call escalate.tool_group
+  with group="semantic" and a brief reason.
+- After escalation, the requested tools become available on your next
+  call — no need to wait or replan.
+
+Do NOT overuse escalation.  If you can complete the task with the tools
+you already have, do so.  Escalate only when genuinely blocked."""
 
 
 def build_system_prompt(state: dict[str, Any]) -> str:
-    """Return the system prompt for the DataBox Agent."""
-    return SYSTEM_PROMPT
+    """Return the system prompt for the DataBox Agent.
+
+    When skills are selected, augments the prompt with skill-specific
+    step guidance, success criteria, and recovery playbook.
+    """
+    base = SYSTEM_PROMPT
+
+    skill_ids: list[str] = state.get("selected_skill_ids", []) or []
+    if not skill_ids:
+        return base
+
+    try:
+        registry = get_skill_registry()
+        skill_blocks: list[str] = []
+        for sid in skill_ids:
+            skill = registry.get(sid)
+            if skill is None:
+                logger.warning("Selected skill ‘%s’ not found in registry — skipping.", sid)
+                continue
+            skill_blocks.append(render_skill_for_model(skill))
+
+        if skill_blocks:
+            return base + "\n\n" + "\n\n".join(skill_blocks)
+    except Exception as exc:
+        logger.warning("Failed to render skill guidance for model: %s", exc)
+
+    return base

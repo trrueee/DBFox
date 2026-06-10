@@ -113,6 +113,16 @@ class MemoryDeleteInput(BaseModel):
 
 
 def register_databox_tools() -> ToolRegistry:
+    """Create and populate the ToolRegistry for DataBox Agent.
+
+    Two-phase registration:
+    1. Handlers are registered into HandlerRegistry (bridges YAML → code).
+    2. ToolRegistry.load_all() loads YAML specs from builtin/user/project dirs
+       and resolves handlers automatically.
+
+    Any tool spec whose handler is missing from HandlerRegistry is skipped
+    with a warning — no crashes.
+    """
     from engine.tools.sandbox.tools import (
         FollowupLoadContextTool,
         SchemaBuildContextTool,
@@ -127,212 +137,81 @@ def register_databox_tools() -> ToolRegistry:
         FollowupSuggestTool,
         AnswerSynthesizeTool,
     )
+    from engine.agent_core.handler_registry import get_handler_registry
 
-    registry = ToolRegistry()
+    handlers = get_handler_registry()
 
-    _B = ToolStateBinding  # shorthand
+    # -- Escalate handler (always-available, never group-filtered) ------------
+    handlers.force_register("escalate_tool_group", _escalate_tool_group)
 
-    # -- Follow-up / Schema / Query Plan ---------------------------------------
-    registry.register(_tool(
-        "followup.load_context", "Load and normalize follow-up context.",
-        _load_followup_context, input_model=EmptyToolInput,
-        base_tool=FollowupLoadContextTool(), group="answer",
-        binding=_B(produces_state_keys=["followup_context"]),
-        metadata={"next_route": "profile_result"},
-    ))
-    registry.register(_tool(
-        "schema.build_context", "Build relevant schema context for a data question.",
-        _schema_build_context, input_model=QuestionToolInput,
-        base_tool=SchemaBuildContextTool(), group="schema",
-        binding=_B(produces_state_keys=["schema_context"]),
-        metadata={"next_route": "generate_sql"},
-    ))
-    registry.register(_tool(
-        "query_plan.build", "Build a structured query plan from schema context.",
-        _query_plan_build, input_model=EmptyToolInput,
-        base_tool=QueryPlanBuildTool(), group="query_plan",
-        binding=_B(produces_state_keys=["query_plan"]),
-        metadata={"next_route": "generate_sql"},
-    ))
+    # -- Register handlers into HandlerRegistry --------------------------------
+    # These are referenced by name from YAML tool specs.
 
-    # -- SQL generation / validation / execution / repair ----------------------
-    registry.register(_tool(
-        "sql.generate", "Generate a SQL candidate without executing it.",
-        _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput,
-        base_tool=SqlGenerateTool(), group="sql_generation", kind="llm",
-        binding=_B(consumes_state_keys=["schema_context", "query_plan"],
-                   produces_state_keys=["sql_candidate", "sql"]),
-        metadata={"next_route": "sql_critic"},
-    ))
-    registry.register(_tool(
-        "sql.validate", "Validate SQL with TrustGate and guardrail checks.",
-        _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput,
-        base_tool=SqlValidateTool(), group="sql_validation",
-        binding=_B(consumes_state_keys=["sql_candidate"],
-                   produces_state_keys=["safety", "sql"]),
-        metadata={"next_route": "validation_route"},
-    ))
-    registry.register(_tool(
-        "sql.execute_readonly", "Execute previously validated read-only SQL.",
-        _sql_execute_readonly, input_model=SqlExecutionInput,
-        output_model=SqlExecutionOutput,
-        policy=ToolPolicy(risk_level="warning", side_effect="read",
-                          requires_validated_sql=True),
-        base_tool=SqlExecuteReadonlyTool(), group="execution",
-        binding=_B(produces_state_keys=["execution"]),
-        metadata={"next_route": "execution_result_route"},
-    ))
-    registry.register(_tool(
-        "sql.skip_execution", "Record that SQL execution was skipped.",
-        _sql_skip_execution, input_model=EmptyToolInput,
-        output_model=SqlExecutionOutput,
-        base_tool=SqlSkipExecutionTool(), group="execution",
-        binding=_B(produces_state_keys=["execution"]),
-        metadata={"next_route": "execution_result_route"},
-    ))
-    registry.register(_tool(
-        "sql.revise", "Revise SQL after validation or execution error.",
-        _sql_revise, input_model=SqlRevisionInput,
-        base_tool=SqlReviseTool(), group="sql_repair", kind="llm",
-        binding=_B(consumes_state_keys=["revision_count", "sql", "pending_approval"],
-                   produces_state_keys=["revision_count", "sql", "safety",
-                                        "execution", "result_profile",
-                                        "chart_suggestion", "suggestions"]),
-        metadata={"next_route": "sql_critic"},
-    ))
+    handlers.force_register("followup_load_context", _load_followup_context,
+                      base_tool=FollowupLoadContextTool())
+    handlers.force_register("schema_build_context", _schema_build_context,
+                      base_tool=SchemaBuildContextTool())
+    handlers.force_register("query_plan_build", _query_plan_build,
+                      base_tool=QueryPlanBuildTool())
+    handlers.force_register("sql_generate", _sql_generate,
+                      base_tool=SqlGenerateTool())
+    handlers.force_register("sql_validate", _sql_validate,
+                      base_tool=SqlValidateTool())
+    handlers.force_register("sql_execute_readonly", _sql_execute_readonly,
+                      base_tool=SqlExecuteReadonlyTool())
+    handlers.force_register("sql_skip_execution", _sql_skip_execution,
+                      base_tool=SqlSkipExecutionTool())
+    handlers.force_register("sql_revise", _sql_revise,
+                      base_tool=SqlReviseTool())
+    handlers.force_register("result_profile", _result_profile,
+                      base_tool=ResultProfileTool())
+    handlers.force_register("chart_suggest", _chart_suggest,
+                      base_tool=ChartSuggestTool())
+    handlers.force_register("followup_suggest", _followup_suggest,
+                      base_tool=FollowupSuggestTool())
+    handlers.force_register("answer_synthesize", _answer_synthesize,
+                      base_tool=AnswerSynthesizeTool())
 
-    # -- Result / Chart / Follow-up / Answer -----------------------------------
-    registry.register(_tool(
-        "result.profile", "Profile query results and notable facts.",
-        _result_profile, input_model=EmptyToolInput,
-        base_tool=ResultProfileTool(), group="result",
-        binding=_B(produces_state_keys=["result_profile"]),
-        metadata={"next_route": "chart_suggest"},
-    ))
-    registry.register(_tool(
-        "chart.suggest", "Suggest a chart from query results.",
-        _chart_suggest, input_model=EmptyToolInput,
-        base_tool=ChartSuggestTool(), group="chart",
-        binding=_B(produces_state_keys=["chart_suggestion"]),
-        metadata={"next_route": "followup_suggest"},
-    ))
-    registry.register(_tool(
-        "followup.suggest", "Suggest evidence-aware follow-up questions.",
-        _followup_suggest, input_model=EmptyToolInput,
-        base_tool=FollowupSuggestTool(), group="answer",
-        binding=_B(produces_state_keys=["suggestions"]),
-        metadata={"next_route": "synthesize_answer"},
-    ))
-    registry.register(_tool(
-        "answer.synthesize", "Synthesize the final evidence-grounded answer.",
-        _answer_synthesize, input_model=EmptyToolInput,
-        base_tool=AnswerSynthesizeTool(), group="answer",
-        binding=_B(produces_state_keys=["answer", "final_answer", "status"]),
-        metadata={"next_route": "answer"},
-    ))
-
-    # -- Environment tools -----------------------------------------------------
+    # Environment handlers
     from engine.environment.tools import (
         environment_get_profile, schema_list_tables,
         schema_describe_table, schema_refresh_catalog,
     )
-    registry.register(_tool(
-        "environment.get_profile",
-        "Get the datasource environment profile: env tier, dialect, "
-        "catalog status, table count, and warnings.",
-        environment_get_profile, input_model=EmptyToolInput,
-        group="environment",
-        binding=_B(produces_state_keys=["environment_profile"]),
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "schema.list_tables",
-        "List ALL tables in the current live datasource.",
-        schema_list_tables, input_model=EmptyToolInput,
-        group="schema",
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "schema.describe_table",
-        "Describe a NAMED table from the live datasource: columns, types, "
-        "keys, foreign keys, sample rows.",
-        schema_describe_table, input_model=DescribeTableInput,
-        group="schema",
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "schema.refresh_catalog",
-        "Re-introspect the live datasource and sync its schema to the DataBox catalog.",
-        schema_refresh_catalog, input_model=RefreshCatalogInput,
-        group="schema",
-        metadata={"next_route": "answer"},
-    ))
+    handlers.force_register("environment_get_profile", environment_get_profile)
+    handlers.force_register("schema_list_tables", schema_list_tables)
+    handlers.force_register("schema_describe_table", schema_describe_table)
+    handlers.force_register("schema_refresh_catalog", schema_refresh_catalog)
 
-    # -- Semantic --------------------------------------------------------------
+    # Semantic handler
     from engine.semantic.tools import semantic_resolve
-    registry.register(_tool(
-        "semantic.resolve",
-        "Resolve business semantics for the current user question. "
-        "Maps business terms, metrics, dimensions, filters, and join paths "
-        "to actual database objects using LLM + catalog verification.",
-        semantic_resolve, input_model=EmptyToolInput,
-        group="semantic", kind="llm",
-        binding=_B(produces_state_keys=["semantic_resolution"]),
-        metadata={"next_route": "answer"},
-    ))
+    handlers.force_register("semantic_resolve", semantic_resolve)
 
-    # -- Memory ----------------------------------------------------------------
+    # Memory handlers
     from engine.tools.memory_tools import (
         memory_search, memory_write, memory_delete, memory_summarize_session,
     )
-    registry.register(_tool(
-        "memory.search",
-        "Search long-term memory: user preferences, metric definitions, "
-        "schema aliases, join paths, past successful queries, failure lessons.",
-        memory_search, input_model=MemorySearchInput,
-        group="answer",
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "memory.write",
-        "Write a new memory entry. Use when user explicitly asks to remember something.",
-        memory_write, input_model=MemoryWriteInput,
-        group="answer",
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "memory.delete",
-        "Delete or forget a memory.",
-        memory_delete, input_model=MemoryDeleteInput,
-        group="answer",
-        metadata={"next_route": "answer"},
-    ))
-    registry.register(_tool(
-        "memory.summarize_session",
-        "Summarize the current session for future recall.",
-        memory_summarize_session, input_model=EmptyToolInput,
-        group="answer",
-        metadata={"next_route": "answer"},
-    ))
+    handlers.force_register("memory_search", memory_search)
+    handlers.force_register("memory_write", memory_write)
+    handlers.force_register("memory_delete", memory_delete)
+    handlers.force_register("memory_summarize_session", memory_summarize_session)
 
-    # -- Workspace -------------------------------------------------------------
-    _ws_descriptions = {
-        "workspace.explain_sql": "Explain the current SQL without executing it.",
-        "workspace.fix_sql": "Suggest a safe read-only fix for the current SQL error.",
-        "workspace.optimize_sql": "Suggest a safer or more efficient read-only SQL rewrite.",
-        "workspace.rewrite_sql": "Rewrite the current SQL for clarity without execution.",
-        "workspace.explain_result": "Explain the latest result preview without executing SQL.",
-        "workspace.explain_schema": "Explain selected or linked schema context.",
-        "workspace.continue_from_artifact": "Continue from a selected Agent artifact.",
-    }
-    for tool_name in WORKSPACE_TOOL_NAMES:
-        registry.register(_tool(
-            tool_name, _ws_descriptions.get(tool_name, tool_name),
-            _workspace_assist, input_model=QuestionToolInput,
-            group="workspace",
-            binding=_B(produces_state_keys=["answer", "final_answer", "status"]),
-            metadata={"next_route": "answer"},
-        ))
+    # Workspace handler (single handler for all workspace tools)
+    handlers.force_register("workspace_assist", _workspace_assist)
+
+    # -- Build ToolRegistry from YAML specs + handlers ------------------------
+    registry = ToolRegistry()
+    registry.add_builtin_source()
+    # Auto-discover user/project tools
+    try:
+        from pathlib import Path
+        registry.add_user_source(Path.home() / ".databox" / "tools", priority=10)
+        cwd = Path.cwd()
+        project_dir = cwd / ".databox" / "tools"
+        if project_dir.is_dir():
+            registry.add_user_source(project_dir, priority=20)
+    except Exception:
+        pass
+    registry.load_all()
 
     return registry
 
@@ -835,6 +714,58 @@ def _pending_approval_sql(state: dict[str, Any]) -> str | None:
         return None
 
     return _string_arg(args.get("safe_sql")) or _string_arg(args.get("sql"))
+
+
+def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Escalate: request additional tool group access.
+
+    This is always available regardless of the current allowed_tool_groups.
+    The Progress Judge reads this result and expands the active tool scope
+    without going through a full replan cycle.
+    """
+    group = str(args.get("group", "")).strip()
+    reason = str(args.get("reason", "")).strip()
+
+    valid_groups = {
+        "workspace", "environment", "schema", "semantic", "query_plan",
+        "sql_generation", "sql_validation", "sql_repair", "execution",
+        "result", "chart", "answer",
+    }
+
+    if group not in valid_groups:
+        return ToolObservation(
+            name="escalate.tool_group",
+            status="failed",
+            input=args,
+            error=f"Unknown tool group '{group}'. Valid groups: {', '.join(sorted(valid_groups))}",
+            latency_ms=0,
+        )
+
+    # Read current groups from state so we only add what's missing
+    current_groups: list[str] = list(ctx.state_view.get("allowed_tool_groups") or [])
+    if group in current_groups:
+        return ToolObservation(
+            name="escalate.tool_group",
+            status="success",
+            input=args,
+            output={"escalated": False, "group": group,
+                    "reason": reason, "message": f"Group '{group}' is already available."},
+            latency_ms=0,
+        )
+
+    new_groups = current_groups + [group]
+    return ToolObservation(
+        name="escalate.tool_group",
+        status="success",
+        input=args,
+        output={
+            "escalated": True,
+            "group": group,
+            "reason": reason,
+            "escalated_tool_groups": new_groups,
+        },
+        latency_ms=0,
+    )
 
 
 def _string_arg(value: Any) -> str | None:

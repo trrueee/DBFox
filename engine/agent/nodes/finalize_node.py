@@ -40,14 +40,33 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
             error = "Agent completed without producing an answer."
 
     # Build answer payload for AgentRunResponse compatibility
-    answer_payload: dict[str, Any] = {
-        "answer": answer_text,
-        "key_findings": [],
-        "evidence": [],
-        "caveats": [],
-        "recommendations": [],
-        "follow_up_questions": [],
-    }
+    existing_answer = state.get("answer")
+    if isinstance(existing_answer, dict):
+        answer_payload = {
+            "answer": answer_text or existing_answer.get("answer") or "",
+            "key_findings": existing_answer.get("key_findings") or [],
+            "evidence": existing_answer.get("evidence") or [],
+            "caveats": existing_answer.get("caveats") or [],
+            "recommendations": existing_answer.get("recommendations") or [],
+            "follow_up_questions": existing_answer.get("follow_up_questions") or [],
+        }
+    else:
+        answer_payload = {
+            "answer": answer_text,
+            "key_findings": [],
+            "evidence": [],
+            "caveats": [],
+            "recommendations": [],
+            "follow_up_questions": [],
+        }
+
+    # Clean up any raw tool node prefix from answer if present
+    if isinstance(answer_payload.get("answer"), str):
+        ans_str = answer_payload["answer"]
+        if ans_str.startswith("[") and "]" in ans_str:
+            parts = ans_str.split("]", 1)
+            if len(parts) > 1:
+                answer_payload["answer"] = parts[1].strip()
 
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
@@ -66,3 +85,4 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         "trace_events": [trace_event],
         "agent_graph_route": "end",
     }
+

@@ -1,0 +1,19 @@
+name: schema.build_context
+group: schema
+kind: code
+description: >
+  Build relevant schema context for a data question. Use this FIRST when table
+  or column context is uncertain. Outputs schema_context, selected_tables,
+  candidate_columns. Does NOT generate SQL.
+handler: schema_build_context
+input_schema:
+  type: object
+  description: Optional question override.
+  properties:
+    question:
+      type: string
+  additionalProperties: false
+binding:
+  produces_state_keys: [schema_context]
+metadata:
+  next_route: generate_sql
