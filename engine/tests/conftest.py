@@ -218,7 +218,7 @@ def mock_agent_call_model(monkeypatch):
                         next_tool = "sql_skip_execution"
             elif "result_profile" not in called_tools:
                 execution = state.get("execution")
-                if execution and not execution.get("success"):
+                if execution and "success" in execution and not execution.get("success"):
                     if "sql_revise" not in called_tools:
                         next_tool = "sql_revise"
                 else:
@@ -247,7 +247,7 @@ def mock_agent_call_model(monkeypatch):
                 status = "failed"
                 error = "SQL validation failed."
             execution = state.get("execution")
-            if execution and not execution.get("success"):
+            if execution and "success" in execution and not execution.get("success"):
                 status = "failed"
                 error = execution.get("error") or "Query execution failed."
 

@@ -1,0 +1,17 @@
+name: workspace.fix_sql
+group: workspace
+kind: code
+description: >
+  Fix errors in the user's existing editor SQL. Use when the user reports an
+  error. Does NOT execute SQL.
+handler: workspace_assist
+input_schema:
+  type: object
+  description: Optional question override.
+  properties:
+    question:
+      type: string
+binding:
+  produces_state_keys: [answer, final_answer, status]
+metadata:
+  next_route: answer

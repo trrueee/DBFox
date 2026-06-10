@@ -221,7 +221,7 @@ class TestSpiderE2E:
                 },
             }
 
-        monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+        monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
         run_fn = create_databox_sqlite_run_fn(
             db_session=db_session,
             api_key="sk-test",

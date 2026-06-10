@@ -8,6 +8,8 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.planning.prompts import PLANNER_SYSTEM_PROMPT
+from engine.agent.skills.registry import get_skill_registry
+from engine.agent.skills.renderer import render_skill_list_for_planner
 from engine.llm import get_chat_model
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
@@ -69,12 +71,38 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
         prev_progress = state.get("progress_decision") or {}
         hint = prev_progress.get("revised_plan_hint")
         reason = prev_progress.get("reason_summary", "Unknown reason")
-        context_parts.append(
-            f"## REPLAN REQUIRED\n"
-            f"Previous plan was insufficient. Reason: {reason}\n"
-        )
+        failure_layer = prev_progress.get("failure_layer")
+        root_cause = prev_progress.get("root_cause")
+        recovery = prev_progress.get("recovery_strategy")
+        next_groups = prev_progress.get("next_tool_groups", [])
+
+        parts = [
+            "## REPLAN REQUIRED",
+            f"Previous plan was insufficient. Reason: {reason}",
+        ]
+        if failure_layer:
+            parts.append(f"Failure layer: {failure_layer}")
+        if root_cause:
+            parts.append(f"Root cause: {root_cause}")
+        if recovery:
+            parts.append(f"Recovery strategy: {recovery}")
+        if next_groups:
+            parts.append(f"Suggested tool groups for new plan: {', '.join(next_groups)}")
         if hint:
-            context_parts.append(f"Revised plan hint:\n```json\n{hint}\n```")
+            parts.append(f"Revised plan hint:\n```json\n{hint}\n```")
+        context_parts.append("\n".join(parts))
+
+    # ---- Skill catalog (Agent v2) -------------------------------------------
+    try:
+        registry = get_skill_registry()
+        skill_summaries = registry.summarize_for_planner()
+        if skill_summaries:
+            context_parts.append(
+                "## Available Skills\n"
+                + render_skill_list_for_planner(registry.list_all())
+            )
+    except Exception as exc:
+        logger.warning("Failed to load skill catalog for planner: %s", exc)
 
     planner_prompt = "\n\n".join(context_parts)
 
@@ -100,7 +128,7 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
             execution_mode="suggest_only",
             allowed_tool_groups=["workspace", "schema", "semantic", "query_plan",
                                  "sql_generation", "sql_validation", "sql_repair",
-                                 "result", "chart", "answer"],
+                                 "execution", "result", "chart", "answer"],
             should_call_tools=True,
             should_execute_sql=False,
             needs_clarification=False,
@@ -143,12 +171,14 @@ def _plan_result(directive: AgentPlanDirective, count: int, is_replan: bool = Fa
         "plan_directive": directive.model_dump(mode="json"),
         "execution_mode": directive.execution_mode,
         "allowed_tool_groups": directive.allowed_tool_groups,
+        "selected_skill_ids": directive.selected_skill_ids,
         "replan_count": count,
         "trace_events": [{
             "type": "agent.planner.completed",
             "task_type": directive.task_type,
             "execution_mode": directive.execution_mode,
             "allowed_tool_groups": directive.allowed_tool_groups,
+            "selected_skill_ids": directive.selected_skill_ids,
             "should_call_tools": directive.should_call_tools,
             "should_execute_sql": directive.should_execute_sql,
             "is_replan": is_replan,
@@ -169,7 +199,7 @@ def _permissive_fallback(replan_count: int = 0) -> dict[str, Any]:
         allowed_tool_groups=[
             "workspace", "schema", "semantic", "query_plan",
             "sql_generation", "sql_validation", "sql_repair",
-            "result", "chart", "answer",
+            "execution", "result", "chart", "answer",
         ],
         should_call_tools=True,
         should_execute_sql=False,

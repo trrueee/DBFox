@@ -1,0 +1,51 @@
+id: result_analysis
+name: Result Analysis
+description: >
+  Analyze query execution results for patterns, anomalies, and insights. Used
+  after data has been queried — profiles the result set, detects notable facts,
+  identifies anomalies, and suggests follow-up questions. Does NOT generate or
+  execute new SQL unless the user explicitly asks.
+
+use_when:
+  - user asks "what does this result mean"
+  - user asks about patterns or trends in results
+  - user asks "are there any anomalies"
+  - after successful data_lookup when user wants deeper analysis
+
+allowed_tool_groups:
+  - result
+  - chart
+  - answer
+
+forbidden_tool_groups:
+  - sql_generation
+  - sql_validation
+  - sql_repair
+  - execution
+
+steps:
+  - result.profile
+  - chart.suggest
+  - answer.synthesize
+
+success_criteria:
+  - result profile includes row_count, column_profiles, notable_facts, anomalies
+  - chart suggestion is provided when visualization would help
+  - analysis is grounded in actual query results
+  - follow-up questions are evidence-aware
+
+recovery:
+  no_execution_data:
+    - condition: "no execution result available to profile"
+      action: "explain that data must be queried first, suggest safe_data_lookup"
+  empty_result:
+    - condition: "result set is empty"
+      action: "explain that empty results mean no matching data, check if filters were too restrictive"
+  profile_error:
+    - condition: "result.profile fails"
+      action: "report the error and suggest re-running the query"
+
+writeback:
+  - memory_type: trajectory
+    trigger: on_success
+    content_hint: "analysis pattern, notable facts, anomalies found"

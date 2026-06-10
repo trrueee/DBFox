@@ -52,7 +52,7 @@ def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, d
             },
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", api_key="sk-test")
 
     obs = generate_sql_tool(db_session, req)
@@ -95,12 +95,12 @@ def test_generate_sql_tool_default_path_does_not_call_prepare_guardrail_renderer
             "metadata": {"generation_source": "schema_direct_llm"},
         }
 
-    monkeypatch.setattr("engine.agent.tools._prepare_generated_sql", fail_prepare)
-    monkeypatch.setattr("engine.agent.tools.guardrail_check", fail_guardrail)
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", fail_renderer)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
-    monkeypatch.setattr("engine.agent.tools.semantic_retry_prompt", fail_retry_prompt)
-    monkeypatch.setattr("engine.ai.generate_sql", fail_legacy)
+    monkeypatch.setattr("engine.tools.sql_tools._prepare_generated_sql", fail_prepare)
+    monkeypatch.setattr("engine.tools.sql_tools.guardrail_check", fail_guardrail)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", fail_renderer)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
+    monkeypatch.setattr("engine.tools.sql_tools.semantic_retry_prompt", fail_retry_prompt)
+    monkeypatch.setattr("engine.sql.generator.generate_sql", fail_legacy)
 
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "TABLE users(id)"})
@@ -138,10 +138,10 @@ def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_genera
             },
         }
 
-    monkeypatch.setattr("engine.agent.tools._render_sql_from_query_plan", fail_renderer)
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+    monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", fail_renderer)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
     monkeypatch.setattr(
-        "engine.agent.tools.QueryPlanBuilder.build",
+        "engine.tools.sql_tools.QueryPlanBuilder.build",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("QueryPlanBuilder should not run in sql.generate")),
     )
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
@@ -214,7 +214,7 @@ def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo
             "schemaValidationWarnings": [],
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", lambda **_kwargs: fake_generate_sql())
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", lambda **_kwargs: fake_generate_sql())
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
         question="Which airlines have at least 10 flights?",
@@ -258,7 +258,7 @@ def test_generate_sql_tool_retries_once_with_contract_violations(db_session, dem
             "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False, "used_demo_fallback": False},
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
     req = AgentRunRequest(
         datasource_id=demo_datasource.id,
         question="Which airlines have at least 10 flights?",
@@ -729,7 +729,7 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
             "metadata": {"generation_source": "schema_direct_llm"},
         }
 
-    monkeypatch.setattr("engine.agent.tools.generate_sql_from_schema_context", fake_schema_direct)
+    monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test", semantic_mode="shadow")
 
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})

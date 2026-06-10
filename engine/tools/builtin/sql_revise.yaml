@@ -1,0 +1,29 @@
+name: sql.revise
+group: sql_repair
+kind: llm
+description: >
+  Revise a SQL query that failed validation or execution. Use when sql.validate
+  or sql.execute_readonly returns errors. If can_fix=False, do NOT call again —
+  generate new SQL with sql.generate or explain the problem to the user.
+handler: sql_revise
+input_schema:
+  type: object
+  description: Revise a SQL query that failed validation or execution.
+  properties:
+    sql:
+      type: string
+    safe_sql:
+      type: string
+    instruction:
+      type: string
+    user_instruction:
+      type: string
+    reason:
+      type: string
+    error:
+      type: string
+binding:
+  consumes_state_keys: [revision_count, sql, pending_approval]
+  produces_state_keys: [revision_count, sql, safety, execution, result_profile, chart_suggestion, suggestions]
+metadata:
+  next_route: sql_critic
