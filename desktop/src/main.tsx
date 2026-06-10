@@ -4,13 +4,16 @@ import './index.css'
 import App from './App.tsx'
 import { ToastProvider } from './components/Toast'
 import { ThemeProvider } from './hooks/useTheme'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
+      <TooltipProvider>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </TooltipProvider>
     </ThemeProvider>
   </StrictMode>,
 )

@@ -91,7 +91,7 @@ export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse;
   const columns = execution.columns || [];
   const rows = execution.rows || [];
   const chart = result.chart_suggestion;
-  const statusClass = result.success ? "status-badge-success" : "status-badge-error";
+  const badgeVariant = result.success ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive";
   const safetyMessages = Array.isArray(safety.messages) ? safety.messages.map(compactValue) : [];
   const rewriteNotes = Array.isArray(safety.rewrite_notes) ? safety.rewrite_notes.map(compactValue) : [];
   const generationMetadata = safety.generation_metadata as { rewrite?: Record<string, unknown> } | undefined;
@@ -101,7 +101,7 @@ export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: "0.68rem", lineHeight: 1.45 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-        <span className={`status-badge ${statusClass}`}>{result.success ? "Agent success" : "Agent stopped"}</span>
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm ${badgeVariant}`}>{result.success ? "Agent success" : "Agent stopped"}</span>
         {result.error && <span style={{ color: "var(--accent-red)", textAlign: "right" }}>{result.error}</span>}
       </div>
 
@@ -123,7 +123,7 @@ export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse;
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
           <strong>Candidate SQL</strong>
           {result.sql && (
-            <button className="btn-ghost" onClick={() => onOpenSql(result.sql || "")} style={{ fontSize: "0.64rem" }}>
+            <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => onOpenSql(result.sql || "")} style={{ fontSize: "0.64rem" }}>
               Open
             </button>
           )}
@@ -166,7 +166,7 @@ export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse;
             {execution.rowCount ?? rows.length} rows · {execution.latencyMs ?? 0}ms
           </div>
           <div style={{ overflow: "auto", maxHeight: 180, marginTop: 5, background: "#fff" }}>
-            <table className="data-table">
+            <table className="w-full border-collapse text-xs font-mono tabular-nums">
               <thead>
                 <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
               </thead>
@@ -205,7 +205,7 @@ export function AgentRunPanel({ result, onOpenSql }: { result: AgentRunResponse;
           {result.steps.map((step) => (
             <div key={`${step.name}-${step.latency_ms}`} style={{ display: "grid", gridTemplateColumns: "1fr 58px 48px", gap: 4 }}>
               <span>{step.name}</span>
-              <span className={`status-badge ${step.status === "failed" ? "status-badge-error" : step.status === "skipped" ? "status-badge-neutral" : "status-badge-success"}`}>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-sm ${step.status === "failed" ? "bg-destructive/15 text-destructive" : step.status === "skipped" ? "bg-secondary text-secondary-foreground" : "bg-success/15 text-success"}`}>
                 {step.status}
               </span>
               <span style={{ textAlign: "right", color: "var(--text-muted)" }}>{step.latency_ms}ms</span>
@@ -455,7 +455,7 @@ function SessionHistoryPanel({
               key={run.run_id}
               onClick={() => onReplay(run.run_id)}
               disabled={isLoading}
-              className="btn-ghost"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr auto",
@@ -1297,8 +1297,8 @@ export const WorkbenchPage = ({
             <div style={{ flex: 1, overflowY: "auto", padding: "2px 4px 6px", display: "flex", flexDirection: "column", gap: 0 }}>
               {loadingTree ? (
                 <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div className="skeleton" style={{ height: 18, borderRadius: 4 }} />
-                  <div className="skeleton" style={{ height: 18, borderRadius: 4 }} />
+                  <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 18, borderRadius: 4 }} />
+                  <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 18, borderRadius: 4 }} />
                 </div>
               ) : datasources.length === 0 ? (
                 <div style={{ padding: "20px 10px", fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center" }}>
@@ -1397,7 +1397,7 @@ export const WorkbenchPage = ({
                                     <div style={{ position: "relative", flex: 1 }}>
                                       <Search size={9} style={{ position: "absolute", left: 5, top: 6, color: "var(--text-muted)" }} />
                                       <input
-                                        className="input-field input-field-sm"
+                                        className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                         placeholder="过滤数据表..."
                                         value={treeSearch}
                                         onChange={(e) => setTreeSearch(e.target.value)}
@@ -1405,7 +1405,7 @@ export const WorkbenchPage = ({
                                       />
                                     </div>
                                     <button
-                                      className="btn-ghost"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                                       onClick={() => void onRefreshSchemaTables(ds.id)}
                                       disabled={loadingObjects}
                                       style={{ padding: "1px 3px", border: "1px solid var(--border-light)", borderRadius: 3 }}
@@ -1600,7 +1600,7 @@ export const WorkbenchPage = ({
                         e.stopPropagation();
                         handleCloseTab(tab.id);
                       }}
-                      className="btn-ghost"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                       style={{ padding: 1, borderRadius: "50%", color: "var(--text-muted)" }}
                     >
                       <X size={9} />
@@ -1610,7 +1610,7 @@ export const WorkbenchPage = ({
               })}
 
               <button
-                className="btn-ghost"
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                 onClick={() => handleOpenQueryTab()}
                 style={{ padding: "2px 5px", display: "flex", alignItems: "center" }}
                 title="新建 SQL 查询 (Ctrl+T)"
@@ -1623,14 +1623,14 @@ export const WorkbenchPage = ({
             {tabs.length > 1 && (
               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, paddingBottom: 2 }}>
                 <button
-                  className="btn-ghost"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                   onClick={handleCloseOtherTabs}
                   style={{ fontSize: "0.66rem", padding: "1px 4px" }}
                 >
                   关闭其他
                 </button>
                 <button
-                  className="btn-ghost"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                   onClick={handleCloseTabsToRight}
                   style={{ fontSize: "0.66rem", padding: "1px 4px" }}
                 >
@@ -1694,7 +1694,7 @@ export const WorkbenchPage = ({
                       style={{ display: "flex", flexDirection: "column", gap: 8 }}
                     >
                       <textarea
-                        className="input-field"
+                        className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         placeholder="例如：分析最近 30 天订单趋势，按日期展示订单数和销售额"
                         value={aiPrompt}
                         onChange={(event) => setAiPrompt(event.target.value)}
@@ -1710,7 +1710,7 @@ export const WorkbenchPage = ({
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <button
                           type="submit"
-                          className="btn-primary"
+                          className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors"
                           disabled={!activeDataSource || aiLoading || !aiPrompt.trim()}
                           style={{ justifyContent: "center", fontSize: "0.78rem", padding: "5px 12px" }}
                         >
@@ -1719,7 +1719,7 @@ export const WorkbenchPage = ({
                         </button>
                         <button
                           type="button"
-                          className="btn-secondary"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors"
                           onClick={() => handleOpenQueryTab()}
                           style={{ justifyContent: "center", fontSize: "0.78rem", padding: "5px 12px" }}
                         >
@@ -1728,7 +1728,7 @@ export const WorkbenchPage = ({
                         </button>
                         <button
                           type="button"
-                          className="btn-ghost"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
                           onClick={() => setShowCommandPalette(true)}
                           style={{ marginLeft: "auto", fontSize: "0.74rem" }}
                         >
@@ -1749,7 +1749,7 @@ export const WorkbenchPage = ({
               <div ref={contentRef} style={{ height: "100%", width: "100%" }}>
                 {activeTab?.type === "query" && activeDataSource && (
                   <ErrorBoundary title="SQL 终端加载异常">
-                    <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
+                    <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: "100%" }} />}>
                       <QueryPage
                         key={activeTab.id}
                         datasource={activeDataSource}
@@ -1763,37 +1763,30 @@ export const WorkbenchPage = ({
 
                 {activeTab?.type === "table" && activeTab.tableName && activeDataSource && (
                   <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflow: "hidden" }}>
-                    {/* Secondary mini tab strip within Table Tab */}
-                    <div style={{ display: "flex", alignItems: "center", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-light)", padding: "4px 16px 0", gap: 6, flexShrink: 0 }}>
-                      {([
-                        { id: "data", label: "数据预览" },
-                        { id: "schema", label: "结构字段" },
-                        { id: "er", label: "ER关系图" },
-                        { id: "design", label: "AI 变更草稿" }
-                      ] satisfies Array<{ id: NonNullable<WorkbenchTab["activeSubTab"]>; label: string }>).map(sub => {
-                        const isSubActive = (activeTab.activeSubTab || "data") === sub.id;
-                        return (
-                          <button
-                            key={sub.id}
-                            onClick={() => handleSwitchSubTab(activeTab.id, sub.id)}
-                            style={{
-                              padding: "4px 10px 6px",
-                              border: "none",
-                              background: "transparent",
-                              borderBottom: isSubActive ? "2px solid var(--accent-indigo)" : "2px solid transparent",
-                              color: isSubActive ? "var(--accent-indigo)" : "var(--text-secondary)",
-                              fontWeight: isSubActive ? 700 : 500,
-                              fontSize: "0.74rem",
-                              cursor: "pointer",
-                              transition: "all 0.15s"
-                            }}
-                          >
-                            {sub.label}
-                          </button>
-                        );
-                      })}
-                      <div style={{ marginLeft: "auto", fontSize: "0.76rem", color: "var(--text-muted)", paddingBottom: 4 }}>
-                        聚焦表: <strong style={{ color: "var(--text-secondary)" }}>{activeTab.tableName}</strong>
+                    {/* Context Bar */}
+                    <div className="ctx-bar">
+                      <span className="ctx-bar-title">{activeTab.tableName}</span>
+                      <span className="ctx-bar-meta">
+                        {(() => {
+                          const t = schemaTables.find(s => s.table_name === activeTab.tableName);
+                          if (t) return `${t.columns?.length || 0} columns`;
+                          return null;
+                        })()}
+                      </span>
+                      <div className="flex items-center gap-0.5 ml-auto">
+                        {(["data", "schema", "er"] as const).map(id => {
+                          const labels: Record<string, string> = { data: "Data", schema: "Schema", er: "ER Diagram" };
+                          const isActive = (activeTab.activeSubTab || "data") === id;
+                          return (
+                            <button
+                              key={id}
+                              onClick={() => handleSwitchSubTab(activeTab.id, id)}
+                              className={`ctx-bar-tab ${isActive ? "ctx-bar-tab-active" : "ctx-bar-tab-inactive"}`}
+                            >
+                              {labels[id]}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1801,7 +1794,7 @@ export const WorkbenchPage = ({
                     <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
                       {(activeTab.activeSubTab || "data") === "data" && (
                         <ErrorBoundary title="DataTable Preview Error">
-                          <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
+                          <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: "100%" }} />}>
                             <DataPage
                               datasource={activeDataSource}
                               selectedTableName={activeTab.tableName}
@@ -1814,7 +1807,7 @@ export const WorkbenchPage = ({
 
                       {(activeTab.activeSubTab || "data") === "schema" && (
                         <ErrorBoundary title="Column Definition Schema Error">
-                          <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
+                          <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: "100%" }} />}>
                             <SchemaPage
                               datasource={activeDataSource}
                               initialViewTab="fields"
@@ -1827,7 +1820,7 @@ export const WorkbenchPage = ({
 
                       {(activeTab.activeSubTab || "data") === "er" && (
                         <ErrorBoundary title="ER Graph Diagram Error">
-                          <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
+                          <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: "100%" }} />}>
                             <SchemaPage
                               datasource={activeDataSource}
                               initialViewTab="er"
@@ -1840,7 +1833,7 @@ export const WorkbenchPage = ({
 
                       {(activeTab.activeSubTab || "data") === "design" && (
                         <ErrorBoundary title="AI Table DDL Design Draft Error">
-                          <Suspense fallback={<div className="skeleton" style={{ height: "100%" }} />}>
+                          <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: "100%" }} />}>
                             <SchemaPage
                               datasource={activeDataSource}
                               initialViewTab="design"
@@ -2121,7 +2114,7 @@ export const WorkbenchPage = ({
           <div style={{ background: "var(--bg-surface)", width: "80%", height: "85%", borderRadius: 12, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
               <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)" }}>连接管理器（数据源设置）</span>
-              <button onClick={() => setShowSettingsModal(false)} className="btn-ghost" style={{ padding: 4 }}><X size={16} /></button>
+              <button onClick={() => setShowSettingsModal(false)} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ padding: 4 }}><X size={16} /></button>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
               <DataSourcesPage
@@ -2144,7 +2137,7 @@ export const WorkbenchPage = ({
           <div style={{ background: "var(--bg-surface)", width: "80%", height: "85%", borderRadius: 12, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
               <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)" }}>环境配置</span>
-              <button onClick={() => setShowEnvironmentsModal(false)} className="btn-ghost" style={{ padding: 4 }}><X size={16} /></button>
+              <button onClick={() => setShowEnvironmentsModal(false)} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ padding: 4 }}><X size={16} /></button>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
               <EnvironmentsPage
@@ -2166,7 +2159,7 @@ export const WorkbenchPage = ({
           <div style={{ background: "var(--bg-surface)", width: "80%", height: "85%", borderRadius: 12, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
               <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)" }}>备份与恢复管理器</span>
-              <button onClick={() => setShowBackupsModal(false)} className="btn-ghost" style={{ padding: 4 }}><X size={16} /></button>
+              <button onClick={() => setShowBackupsModal(false)} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ padding: 4 }}><X size={16} /></button>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
               <BackupsPage
@@ -2185,10 +2178,10 @@ export const WorkbenchPage = ({
           <div style={{ background: "var(--bg-surface)", width: "80%", height: "85%", borderRadius: 12, border: "1px solid var(--border-light)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderBottom: "1px solid var(--border-light)", background: "var(--bg-secondary)" }}>
               <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)" }}>性能监控面板</span>
-              <button onClick={() => setShowDashboardModal(false)} className="btn-ghost" style={{ padding: 4 }}><X size={16} /></button>
+              <button onClick={() => setShowDashboardModal(false)} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ padding: 4 }}><X size={16} /></button>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-              <Suspense fallback={<div className="skeleton" style={{ height: 240, borderRadius: 8 }} />}>
+              <Suspense fallback={<div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 240, borderRadius: 8 }} />}>
                 <DashboardPage datasource={activeDataSource} />
               </Suspense>
             </div>

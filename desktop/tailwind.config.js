@@ -40,9 +40,9 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"DM Mono"', '"JetBrains Mono"', "monospace"],
-        body: ['"IBM Plex Sans"', "system-ui", "sans-serif"],
-        mono: ['"JetBrains Mono"', '"Fira Code"', "monospace"],
+        sans: ['"Fira Sans"', "system-ui", "sans-serif"],
+        mono: ['"Fira Code"', '"JetBrains Mono"', "monospace"],
+        display: ['"Fira Sans"', "system-ui", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -21,7 +21,7 @@ export const QueryActionPlanPreview: React.FC<QueryActionPlanPreviewProps> = ({ 
   const hasWarnings = plan.issues.some((i) => i.level === "warning");
 
   return (
-    <div className="query-action-plan-preview lab-card" style={{
+    <div className="query-action-plan-preview bg-card border border-border rounded-lg" style={{
       margin: "12px 0",
       padding: 16,
       background: "rgba(30, 30, 34, 0.65)",

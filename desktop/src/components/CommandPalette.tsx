@@ -138,7 +138,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
     >
       <div
         ref={cardRef}
-        className="lab-card"
+        className="bg-card border border-border rounded-lg"
         style={{
           background: "var(--bg-surface)",
           width: "min(540px, 94vw)",
@@ -167,7 +167,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
           <input
             ref={inputRef}
             type="text"
-            className="input-field"
+            className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             placeholder="输入指令或进行模糊检索... (Esc 退出)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

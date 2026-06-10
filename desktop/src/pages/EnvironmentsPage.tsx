@@ -185,7 +185,7 @@ export const EnvironmentsPage = ({
             </p>
           )}
         </div>
-        <button className="btn-secondary" onClick={() => void refreshEnvironments()} disabled={loading || !activeProject}>
+        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => void refreshEnvironments()} disabled={loading || !activeProject}>
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
@@ -193,7 +193,7 @@ export const EnvironmentsPage = ({
 
       {/* Docker daemon status banner */}
       {dockerAvailable === false && (
-        <div className="lab-card animate-fade-in" style={{
+        <div className="bg-card border border-border rounded-lg animate-fade-in" style={{
           borderLeft: "4px solid var(--accent-red)",
           background: "rgba(239, 68, 68, 0.05)",
           padding: "16px 20px",
@@ -225,14 +225,14 @@ export const EnvironmentsPage = ({
               请确保 Docker Desktop 已启动，且 `docker` 命令行已加入系统环境变量 PATH。未能连接到 Docker 服务将导致本地环境创建与销毁功能不可用。
             </p>
           </div>
-          <button className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.8rem" }} onClick={checkDocker} disabled={checkingDocker}>
+          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" style={{ padding: "6px 12px", fontSize: "0.8rem" }} onClick={checkDocker} disabled={checkingDocker}>
             {checkingDocker ? "Checking..." : "Re-Check"}
           </button>
         </div>
       )}
 
       {dockerAvailable === true && (
-        <div className="lab-card animate-fade-in" style={{
+        <div className="bg-card border border-border rounded-lg animate-fade-in" style={{
           borderLeft: "4px solid var(--accent-green)",
           background: "rgba(34, 197, 94, 0.05)",
           padding: "12px 18px",
@@ -249,19 +249,19 @@ export const EnvironmentsPage = ({
         </div>
       )}
 
-      <div className="lab-card" style={{ padding: 20 }}>
+      <div className="bg-card border border-border rounded-lg" style={{ padding: 20 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 12, alignItems: "end" }}>
           <div>
             <label className="field-label">Local environment name</label>
             <input
-              className="input-field"
+              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Local MySQL Dev"
               disabled={dockerAvailable === false}
             />
           </div>
-          <button className="btn-primary" onClick={handleCreate} disabled={creating || !activeProject || dockerAvailable === false}>
+          <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleCreate} disabled={creating || !activeProject || dockerAvailable === false}>
             {creating ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
             {creating ? "Creating..." : "Create Docker MySQL"}
           </button>
@@ -279,11 +279,11 @@ export const EnvironmentsPage = ({
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {loading ? (
           <>
-            <div className="skeleton" style={{ height: 92, borderRadius: 12 }} />
-            <div className="skeleton" style={{ height: 92, borderRadius: 12 }} />
+            <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 92, borderRadius: 12 }} />
+            <div className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 92, borderRadius: 12 }} />
           </>
         ) : environments.length === 0 ? (
-          <div className="lab-card" style={{ padding: 48, textAlign: "center" }}>
+          <div className="bg-card border border-border rounded-lg" style={{ padding: 48, textAlign: "center" }}>
             <Database size={38} style={{ color: "var(--text-muted)", opacity: 0.35, marginBottom: 12 }} />
             <div className="empty-state-title">No local environments yet</div>
             <div className="empty-state-desc" style={{ marginTop: 4 }}>
@@ -292,7 +292,7 @@ export const EnvironmentsPage = ({
           </div>
         ) : (
           environments.map((environment) => (
-            <div key={environment.id} className="lab-card hover-lift" style={{ padding: 18 }}>
+            <div key={environment.id} className="bg-card border border-border rounded-lg hover-lift" style={{ padding: 18 }}>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 16, alignItems: "center" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
@@ -318,29 +318,29 @@ export const EnvironmentsPage = ({
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  <button className="btn-ghost" onClick={() => void handleHealth(environment)} disabled={busyId === environment.id}>
+                  <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => void handleHealth(environment)} disabled={busyId === environment.id}>
                     <Activity size={14} />
                     Health
                   </button>
-                  <button className="btn-ghost" onClick={() => void handleLogs(environment)} disabled={busyId === environment.id}>
+                  <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => void handleLogs(environment)} disabled={busyId === environment.id}>
                     <FileText size={14} />
                     Logs
                   </button>
-                  <button className="btn-ghost" style={{ color: "var(--accent-indigo)" }} onClick={() => setConfirmRebuildEnv(environment)} disabled={busyId === environment.id}>
+                  <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ color: "var(--accent-indigo)" }} onClick={() => setConfirmRebuildEnv(environment)} disabled={busyId === environment.id}>
                     <RefreshCw size={14} />
                     Rebuild
                   </button>
-                  <button className="btn-ghost" style={{ color: "var(--accent-red)" }} onClick={() => setConfirmDestroyEnv(environment)} disabled={busyId === environment.id}>
+                  <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" style={{ color: "var(--accent-red)" }} onClick={() => setConfirmDestroyEnv(environment)} disabled={busyId === environment.id}>
                     <Trash2 size={14} />
                     Destroy
                   </button>
                   {environment.status === "running" ? (
-                    <button className="btn-secondary" onClick={() => void handleStop(environment)} disabled={busyId === environment.id}>
+                    <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => void handleStop(environment)} disabled={busyId === environment.id}>
                       <Square size={14} />
                       Stop
                     </button>
                   ) : (
-                    <button className="btn-primary" onClick={() => void handleStart(environment)} disabled={busyId === environment.id}>
+                    <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={() => void handleStart(environment)} disabled={busyId === environment.id}>
                       <Play size={14} />
                       Start
                     </button>
@@ -353,10 +353,10 @@ export const EnvironmentsPage = ({
       </div>
 
       {logs && (
-        <div className="lab-card" style={{ padding: 18 }}>
+        <div className="bg-card border border-border rounded-lg" style={{ padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <h3 style={{ fontSize: "0.95rem", fontWeight: 700 }}>Container logs</h3>
-            <button className="btn-ghost" onClick={() => setLogs(null)}>Close</button>
+            <button className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors" onClick={() => setLogs(null)}>Close</button>
           </div>
           <pre style={{ maxHeight: 280, overflow: "auto", margin: 0, padding: 14, borderRadius: 10, background: "var(--bg-primary)", color: "var(--text-secondary)", fontSize: "0.75rem", whiteSpace: "pre-wrap" }}>
             {logs.text}
@@ -408,10 +408,10 @@ export const EnvironmentsPage = ({
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button className="btn-secondary" onClick={() => setConfirmDestroyEnv(null)} disabled={destroying}>
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setConfirmDestroyEnv(null)} disabled={destroying}>
                 取消
               </button>
-              <button className="btn-primary" style={{ background: "var(--accent-red)", color: "#fff" }} onClick={handleDestroy} disabled={destroying}>
+              <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" style={{ background: "var(--accent-red)", color: "#fff" }} onClick={handleDestroy} disabled={destroying}>
                 {destroying ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 {destroying ? "正在销毁..." : "确认销毁"}
               </button>
@@ -465,10 +465,10 @@ export const EnvironmentsPage = ({
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button className="btn-secondary" onClick={() => setConfirmRebuildEnv(null)} disabled={rebuilding}>
+              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setConfirmRebuildEnv(null)} disabled={rebuilding}>
                 取消
               </button>
-              <button className="btn-primary" onClick={handleRebuild} disabled={rebuilding}>
+              <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleRebuild} disabled={rebuilding}>
                 {rebuilding ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 {rebuilding ? "正在重建..." : "确认重建"}
               </button>

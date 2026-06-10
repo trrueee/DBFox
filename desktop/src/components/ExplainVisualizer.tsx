@@ -37,7 +37,7 @@ export const ExplainVisualizer: FC<ExplainVisualizerProps> = ({ columns, rows })
           return (
             <div
               key={idx}
-              className="lab-card hover-lift animate-slide-down"
+              className="bg-card border border-border rounded-lg hover-lift animate-slide-down"
               style={{
                 padding: "12px 16px",
                 borderLeft: isScan
@@ -144,7 +144,7 @@ export const ExplainVisualizer: FC<ExplainVisualizerProps> = ({ columns, rows })
         return (
           <div
             key={idx}
-            className="lab-card hover-lift animate-slide-down"
+            className="bg-card border border-border rounded-lg hover-lift animate-slide-down"
             style={{
               padding: "16px 20px",
               borderLeft: cardBorder,

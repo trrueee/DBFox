@@ -27,7 +27,7 @@ export function InlineTableBlock({ artifact }: { artifact: AgentArtifact }) {
       </div>
       <SafetyStateBadge state={artifact.payload.safety_state} />
       <div style={{ overflow: "auto", maxHeight: 180, marginTop: 6, background: "#fff" }}>
-        <table className="data-table">
+        <table className="w-full border-collapse text-xs font-mono tabular-nums">
           <thead>
             <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
           </thead>

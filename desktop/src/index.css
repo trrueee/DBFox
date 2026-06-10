@@ -1,124 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   Precision Terminal — Light + Dark Themes
-   shadcn/ui with dual-mode instrument aesthetic
+   DataBox Design System
+   Palette: Invoice & Billing Tool (navy professional)
+   Typography: Dashboard Data (Fira Code + Fira Sans)
    ═══════════════════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
-    /* ── Light: warm white / cream, teal accents ── */
-    --background: 40 20% 98%;
-    --foreground: 220 15% 12%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 15% 12%;
+    --background: 210 30% 98%;          /* #F8FAFC */
+    --foreground: 222 47% 11%;          /* #0F172A */
+    --card: 0 0% 100%;                  /* #FFFFFF */
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 12%;
-    --primary: 173 64% 35%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 212 54% 23%;             /* #1E3A5F navy */
     --primary-foreground: 0 0% 100%;
-    --secondary: 40 15% 94%;
-    --secondary-foreground: 220 10% 30%;
-    --muted: 40 10% 92%;
-    --muted-foreground: 220 8% 45%;
-    --accent: 173 50% 94%;
-    --accent-foreground: 173 60% 25%;
-    --destructive: 350 89% 50%;
+    --secondary: 210 20% 96%;           /* #F1F3F5 */
+    --secondary-foreground: 215 25% 27%;
+    --muted: 210 20% 95%;
+    --muted-foreground: 215 16% 47%;    /* #64748B */
+    --accent: 210 20% 94%;
+    --accent-foreground: 215 25% 27%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --success: 160 84% 32%;
+    --success: 161 94% 25%;             /* #059669 */
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 45%;
+    --warning: 32 95% 44%;
     --warning-foreground: 0 0% 100%;
-    --border: 40 10% 88%;
-    --input: 40 10% 88%;
-    --ring: 173 64% 35%;
-    --radius: 2px;
-    --chart-1: 173 64% 35%;
-    --chart-2: 220 70% 55%;
-    --chart-3: 38 92% 45%;
-    --chart-4: 280 65% 55%;
-    --chart-5: 350 89% 50%;
-    --sidebar-background: 40 15% 96%;
-    --sidebar-foreground: 220 10% 30%;
-    --sidebar-primary: 173 64% 35%;
+    --border: 220 13% 91%;              /* #E4E7EB */
+    --input: 220 13% 91%;
+    --ring: 212 54% 23%;
+    --radius: 4px;
+    --sidebar-background: 210 20% 96%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 212 54% 23%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 40 10% 90%;
-    --sidebar-accent-foreground: 220 10% 30%;
-    --sidebar-border: 40 10% 88%;
-    --sidebar-ring: 173 64% 35%;
-    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    --sidebar-accent: 210 20% 93%;
+    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 212 54% 23%;
+    font-family: "Fira Sans", system-ui, sans-serif;
   }
 
   .dark {
-    /* ── Dark: obsidian, mint glow ── */
-    --background: 222 27% 5%;
-    --foreground: 210 10% 85%;
-    --card: 222 25% 8%;
-    --card-foreground: 210 10% 85%;
-    --popover: 222 25% 8%;
-    --popover-foreground: 210 10% 85%;
-    --primary: 173 64% 50%;
-    --primary-foreground: 222 27% 5%;
-    --secondary: 220 15% 14%;
-    --secondary-foreground: 210 10% 70%;
-    --muted: 220 15% 12%;
-    --muted-foreground: 215 8% 55%;
-    --accent: 220 15% 16%;
-    --accent-foreground: 210 10% 80%;
-    --destructive: 350 89% 60%;
+    --background: 222 30% 8%;
+    --foreground: 210 20% 92%;
+    --card: 222 25% 12%;
+    --card-foreground: 210 20% 92%;
+    --primary: 210 80% 65%;
+    --primary-foreground: 222 30% 8%;
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 210 15% 80%;
+    --muted: 220 18% 13%;
+    --muted-foreground: 215 14% 58%;
+    --accent: 220 20% 16%;
+    --accent-foreground: 210 15% 80%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
-    --success: 160 84% 39%;
+    --success: 161 70% 38%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 222 27% 5%;
-    --border: 220 15% 16%;
-    --input: 220 15% 14%;
-    --ring: 173 64% 40%;
-    --chart-1: 173 64% 50%;
-    --chart-2: 220 70% 60%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 350 89% 60%;
-    --sidebar-background: 222 25% 7%;
-    --sidebar-foreground: 210 10% 70%;
-    --sidebar-primary: 173 64% 50%;
-    --sidebar-primary-foreground: 222 27% 5%;
-    --sidebar-accent: 220 15% 14%;
-    --sidebar-accent-foreground: 210 10% 80%;
-    --sidebar-border: 220 15% 14%;
-    --sidebar-ring: 173 64% 40%;
+    --warning: 32 90% 50%;
+    --warning-foreground: 222 30% 8%;
+    --border: 220 18% 18%;
+    --input: 220 18% 15%;
+    --ring: 210 80% 65%;
   }
 }
 
 @layer base {
   * { @apply border-border; }
-  body {
-    @apply bg-background text-foreground transition-colors duration-200;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    overflow: hidden;
-    height: 100vh;
-    width: 100vw;
-  }
+  body { @apply bg-background text-foreground; overflow: hidden; height: 100vh; width: 100vw; }
   #root { height: 100vh; width: 100vw; }
-
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 }
 
-@layer utilities {
-  .bg-grid {
-    background-size: 24px 24px;
-    background-image:
-      linear-gradient(hsl(var(--primary) / 0.06) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--primary) / 0.06) 1px, transparent 1px);
-  }
-  .data-mono {
-    font-family: "JetBrains Mono", "Fira Code", monospace;
+/* ═══════════════════════════════════════════════════════
+   Typography
+   ═══════════════════════════════════════════════════════ */
+
+@layer base {
+  .font-mono, code, pre { font-family: "Fira Code", "JetBrains Mono", monospace; }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Professional Data Table
+   ═══════════════════════════════════════════════════════ */
+
+@layer components {
+  .databox-table {
+    @apply w-full border-collapse;
+    font-family: "Fira Code", "JetBrains Mono", monospace;
     font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+  }
+  .databox-table thead { @apply sticky top-0 z-10; }
+  .databox-table th {
+    @apply bg-[hsl(var(--secondary))] border-b-2 border-[hsl(var(--border))]
+           px-3 py-1.5 text-left font-semibold text-[0.72rem]
+           text-[hsl(var(--muted-foreground))] whitespace-nowrap select-none;
+  }
+  .databox-table td {
+    @apply px-3 py-1 border-b border-[hsl(var(--border)/0.7)]
+           text-[hsl(var(--foreground))];
+  }
+  .databox-table tbody tr:hover td { @apply bg-[hsl(var(--primary)/0.04)]; }
+  .databox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic text-[0.7rem]; }
+  .databox-table .cell-number { @apply text-right; }
+
+  /* ── Status badges ── */
+  .badge-safe    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]; }
+  .badge-warn    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--warning)/0.12)] text-[hsl(var(--warning))]; }
+  .badge-danger  { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--destructive)/0.12)] text-[hsl(var(--destructive))]; }
+  .badge-neutral { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]; }
+  .badge-primary { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]; }
+
+  /* ── Context Bar ── */
+  .ctx-bar {
+    @apply flex items-center gap-3 px-4 py-2 bg-[hsl(var(--card))]
+           border-b border-[hsl(var(--border))] flex-shrink-0 flex-wrap select-none;
+  }
+  .ctx-bar-title {
+    @apply font-bold text-[hsl(var(--foreground))] text-[0.9rem] tracking-tight;
+    font-family: "Fira Sans", system-ui, sans-serif;
+  }
+  .ctx-bar-meta {
+    @apply text-[0.72rem] text-[hsl(var(--muted-foreground))] font-medium;
+  }
+  .ctx-bar-tab {
+    @apply px-3 py-1 text-[0.72rem] font-semibold rounded-sm cursor-pointer
+           border-none transition-colors;
+  }
+  .ctx-bar-tab-active {
+    @apply bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))];
+  }
+  .ctx-bar-tab-inactive {
+    @apply bg-transparent text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))];
+  }
+
+  /* ── Copilot intelligence panel ── */
+  .copilot-section-title {
+    @apply text-[0.62rem] font-bold text-[hsl(var(--muted-foreground))]
+           uppercase tracking-widest mb-2 select-none;
+  }
+  .copilot-context-card {
+    @apply rounded-md border border-[hsl(var(--border))]
+           bg-[hsl(var(--secondary))] p-3.5;
+  }
+  .copilot-context-row {
+    @apply flex justify-between items-center py-1.5 text-[0.76rem]
+           border-b border-[hsl(var(--border)/0.4)] last:border-0;
+  }
+  .copilot-context-label {
+    @apply text-[hsl(var(--muted-foreground))] text-[0.7rem] font-medium;
+  }
+  .copilot-context-value {
+    @apply text-[hsl(var(--foreground))] font-semibold text-right;
+    font-family: "Fira Code", "JetBrains Mono", monospace;
+  }
+  .copilot-suggestion-btn {
+    @apply flex items-center gap-2.5 w-full px-3 py-2 text-left
+           text-[0.78rem] text-[hsl(var(--foreground))]
+           bg-[hsl(var(--card))] border border-[hsl(var(--border))]
+           rounded-md cursor-pointer font-medium
+           hover:border-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.03)]
+           transition-colors;
+  }
+
+  /* ── DataTable menu items (used in embedded style) ── */
+  .data-table-menu-item {
+    @apply flex items-center gap-2 w-full px-2 py-1.5 text-[0.74rem] text-left
+           text-[hsl(var(--foreground))] border-none bg-transparent
+           rounded cursor-pointer hover:bg-[hsl(var(--primary)/0.08)] hover:text-[hsl(var(--primary))]
+           transition-colors;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════ */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up 0.2s ease-out both; }
