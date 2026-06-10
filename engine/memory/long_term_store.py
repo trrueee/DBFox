@@ -1,4 +1,4 @@
-"""LongTermMemory store �?cross-session persistent memories.
+﻿"""LongTermMemory store — cross-session persistent memories.
 
 Backed by an in-memory store (first phase) with the same API surface
 that a PostgresStore / SQLiteStore would provide in production.

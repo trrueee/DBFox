@@ -1,4 +1,3 @@
-from engine.agent_core.executor import AgentStepSpec, StepExecutor
 from engine.agent_core.tool_registry import (
     RegisteredTool,
     ToolContext,
@@ -63,7 +62,6 @@ __all__ = [
     "AgentResumeRequest",
     "AgentStep",
     "AgentState",
-    "AgentStepSpec",
     "AgentTraceEvent",
     "AgentVisibleEvent",
     "AgentWorkspaceContext",
@@ -75,7 +73,6 @@ __all__ = [
     "ResultProfile",
     "ReviseResult",
     "SQLCandidate",
-    "StepExecutor",
     "ToolContext",
     "ToolExecutionSpec",
     "ToolHandler",

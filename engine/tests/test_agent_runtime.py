@@ -67,34 +67,6 @@ def test_agent_runtime_delegates_run_iter_to_kernel_service(db_session, monkeypa
     assert events[-1].response.run_id == "kernel-run"
 
 
-def test_agent_runtime_default_plan_uses_fixed_registered_tools(db_session, demo_datasource) -> None:
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list users", execute=False)
-
-    plan = DataBoxAgentRuntime(db_session).build_default_plan(req)
-
-    assert [step.name for step in plan] == [
-        "build_schema_context",
-        "generate_sql_candidate",
-        "validate_sql",
-        "execute_sql",
-        "profile_result",
-        "suggest_chart",
-        "suggest_followups",
-        "answer_synthesizer",
-    ]
-    assert [step.tool_name for step in plan] == [
-        "schema.build_context",
-        "sql.generate",
-        "sql.validate",
-        "sql.execute_readonly",
-        "result.profile",
-        "chart.suggest",
-        "followup.suggest",
-        "answer.synthesize",
-    ]
-    assert not any(step.tool_name.startswith("@") for step in plan)
-
-
 def test_agent_runtime_execute_false_generates_full_review_response(db_session, demo_datasource) -> None:
     sync_schema(db_session, demo_datasource.id)
     req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", execute=False)
