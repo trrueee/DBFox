@@ -49,6 +49,36 @@ export interface EngineSqlResult {
   executionId?: string;
 }
 
+export interface LlmProviderPreset {
+  provider: string;
+  label: string;
+  base_url: string;
+  models: string[];
+}
+
+export interface LlmConfig {
+  id: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+  has_api_key: boolean;
+  api_key_preview: string;
+  updated_at?: string | null;
+}
+
+export interface SaveLlmConfigPayload {
+  provider: string;
+  model: string;
+  base_url?: string;
+  api_key?: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+}
+
 export async function listDatasources() {
   return engineRequest<EngineDataSource[]>("/datasources");
 }
@@ -84,6 +114,28 @@ export async function resolveTableByName(tableName: string) {
   const tables = await listTables(datasource.id);
   const table = tables.find((item) => item.table_name === tableName) ?? null;
   return table ? { datasource, table } : null;
+}
+
+export async function listLlmProviders() {
+  return engineRequest<LlmProviderPreset[]>("/llm/providers");
+}
+
+export async function getLlmConfig() {
+  return engineRequest<LlmConfig>("/llm/config");
+}
+
+export async function saveLlmConfig(payload: SaveLlmConfigPayload) {
+  return engineRequest<LlmConfig>("/llm/config", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resolveLlmConfig(provider: string, model: string, baseUrl?: string) {
+  return engineRequest<{ provider: string; base_url: string }>("/llm/resolve", {
+    method: "POST",
+    body: JSON.stringify({ provider, model, base_url: baseUrl }),
+  });
 }
 
 export function quoteIdentifier(identifier: string, dbType = "mysql") {
