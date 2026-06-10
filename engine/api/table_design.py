@@ -13,7 +13,6 @@ from engine.schemas import (
     TableDesignDDLRequest,
     TableDesignExecuteRequest,
     TableDesignDraftSaveRequest,
-    TableDesignAIRequest,
     TestDataGenerateRequest,
 )
 from engine.table_design import generate_create_table_ddl
@@ -65,13 +64,11 @@ def api_execute_table_design_ddl(req: TableDesignExecuteRequest, db: Session = D
     if not datasource:
         raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "数据源不存在"})
 
-    # 🔒 Policy Engine Enforcement for DDL Execution
     try:
         PolicyEngine.enforce_ddl_policy(datasource)
     except DataBoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
-    # 🔒 Two-Phase confirmation check for dangerous DDL operations
     from engine.policy import confirmation_bypass_enabled, sha256_hash, confirmation_manager
     if not confirmation_bypass_enabled():
         expected_details = {"ddl_hash": sha256_hash(req.ddl)}
@@ -89,16 +86,16 @@ def api_execute_table_design_ddl(req: TableDesignExecuteRequest, db: Session = D
                 "impact_summary": f"⚠️ 警告：您即将在数据源 '{datasource.name}' 上执行以下结构变更 DDL：\n\n{req.ddl}\n\n该操作无法撤销！请输入数据源名称以确认执行。",
                 "expected_confirm_text": datasource.name
             }
-        else:
-            is_valid, err_msg = confirmation_manager.validate_and_consume(
-                req.confirm_token,
-                req.confirm_text or "",
-                expected_action="execute_ddl",
-                expected_datasource_id=req.datasource_id,
-                expected_details=expected_details
-            )
-            if not is_valid:
-                raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
+
+        is_valid, err_msg = confirmation_manager.validate_and_consume(
+            req.confirm_token,
+            req.confirm_text or "",
+            expected_action="execute_ddl",
+            expected_datasource_id=req.datasource_id,
+            expected_details=expected_details
+        )
+        if not is_valid:
+            raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
 
     try:
         from engine.table_design import execute_table_design_ddl
@@ -186,39 +183,17 @@ def api_delete_table_design_draft(draft_id: str, db: Session = Depends(get_db)) 
         )
 
 
-@router.post("/schema/design/ai-generate")
-def api_generate_table_design_ai(req: TableDesignAIRequest) -> dict[str, Any]:
-    try:
-        from engine.sql.generator import generate_table_design_ai
-        llm_config = {}
-        if req.api_key:
-            llm_config = {
-                "api_key": req.api_key,
-                "api_base": req.api_base or "https://api.openai.com/v1",
-                "model": req.model_name or "gpt-4o-mini"
-            }
-        return generate_table_design_ai(req.prompt, llm_config)
-    except Exception as exc:
-        logger.exception("AI table design generation failed")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "AI_DESIGN_FAILED", "message": f"AI 辅助设计生成失败: {str(exc)}"}
-        )
-
-
 @router.post("/schema/generate-test-data")
 def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
     if not datasource:
         raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "数据源不存在"})
 
-    # 🔒 Policy Engine Enforcement for Test Data Generation
     try:
         PolicyEngine.enforce_test_data_policy(datasource)
     except DataBoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
-    # 🔒 Two-Phase confirmation check for test data generation
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
         expected_details = {"table_name": req.table_name, "row_count": req.row_count}
@@ -236,16 +211,16 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
                 "impact_summary": f"⚠️ 警告：您即将在数据源 '{datasource.name}' 的表 '{req.table_name}' 上批量生成 {req.row_count} 条智能测试数据。\n\n这会向该表插入大量模拟行！请输入数据源名称以确认执行。",
                 "expected_confirm_text": datasource.name
             }
-        else:
-            is_valid, err_msg = confirmation_manager.validate_and_consume(
-                req.confirm_token,
-                req.confirm_text or "",
-                expected_action="generate_test_data",
-                expected_datasource_id=req.datasource_id,
-                expected_details=expected_details
-            )
-            if not is_valid:
-                raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
+
+        is_valid, err_msg = confirmation_manager.validate_and_consume(
+            req.confirm_token,
+            req.confirm_text or "",
+            expected_action="generate_test_data",
+            expected_datasource_id=req.datasource_id,
+            expected_details=expected_details
+        )
+        if not is_valid:
+            raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
 
     try:
         from engine.test_data import generate_smart_test_data
@@ -259,8 +234,8 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
     except DataBoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
-        logger.exception("AI test data generation failed")
+        logger.exception("Test data generation failed")
         raise HTTPException(
             status_code=500,
-            detail={"code": "TEST_DATA_FAILED", "message": f"智能测试数据生成失败: {str(exc)}"}
+            detail={"code": "TEST_DATA_FAILED", "message": f"测试数据生成失败: {str(exc)}"}
         )
