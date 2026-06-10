@@ -110,18 +110,6 @@ export interface BackupRecord {
   created_at?: string;
 }
 
-export interface TableDesignDraft {
-  id: string;
-  project_id: string;
-  table_name: string;
-  table_comment?: string;
-  columns: TableDesignColumn[];
-  indexes: TableDesignIndex[];
-  created_at?: string;
-  updated_at?: string;
-}
-
-
 export interface SchemaTable {
   id: string;
   table_name: string;
@@ -144,27 +132,6 @@ export interface SchemaColumn {
   is_foreign_key: boolean;
   foreign_table_id?: string;
   foreign_column_id?: string;
-}
-
-export interface TableDesignColumn {
-  name: string;
-  type: string;
-  nullable: boolean;
-  default_value?: string | null;
-  primary_key: boolean;
-  auto_increment: boolean;
-  comment?: string | null;
-}
-
-export interface TableDesignIndex {
-  name?: string | null;
-  columns: string[];
-  unique: boolean;
-}
-
-export interface DeleteResponse {
-  success: boolean;
-  message: string;
 }
 
 export interface DataSourceTestResult {
@@ -223,28 +190,6 @@ export interface LlmStats {
   guardrail_block_rate: number;
   chart_data: Array<{ date: string; value: number }>;
   model_dist: Array<{ name: string; value: number }>;
-}
-
-export interface TableDesignDDLRequest {
-  table_name: string;
-  table_comment?: string | null;
-  engine?: string;
-  charset?: string;
-  collation?: string;
-  columns: TableDesignColumn[];
-  indexes?: TableDesignIndex[];
-}
-
-export interface TableDesignDDLResponse {
-  ddl: string;
-  warnings: string[];
-  summary: {
-    tableName: string;
-    columns: number;
-    indexes: number;
-    primaryKey: string[];
-    dialect: string;
-  };
 }
 
 export interface GuardrailCheckResult {
@@ -518,332 +463,48 @@ export interface AgentVisibleEvent {
 }
 
 export interface AgentTraceEvent {
-  event_id?: string | null;
-  sequence?: number | null;
-  created_at_ms?: number | null;
-  type: "agent.trace.step_started" | "agent.trace.step_completed";
-  step_id: string;
-  name: string;
-  status?: "success" | "failed" | "skipped" | null;
-  input?: Record<string, unknown> | null;
-  output?: Record<string, unknown> | null;
-  error?: string | null;
-  latency_ms?: number | null;
-}
-
-export interface AgentRunResponse {
-  run_id: string;
-  session_id: string;
-  parent_run_id?: string | null;
-  success: boolean;
-  status?: string | null;
-  question: string;
-  context_summary?: string | null;
-  referenced_artifact_ids?: string[];
-  query_plan?: AgentQueryPlan | null;
-  sql?: string | null;
-  safety?: Record<string, unknown> | null;
-  execution?: {
-    success?: boolean;
-    columns?: string[];
-    rows?: Array<Record<string, unknown>>;
-    rowCount?: number;
-    latencyMs?: number;
-    warnings?: string[];
-    reason?: string;
-    revise_suggestion?: string;
-  } | null;
-  explanation?: string | null;
-  chart_suggestion?: AgentChartSuggestion | null;
-  result_profile?: ResultProfile | null;
-  answer?: AgentAnswer | null;
-  suggestions?: FollowUpSuggestion[];
-  artifacts?: AgentArtifact[];
-  message_blocks?: AgentMessageBlock[];
-  events?: AgentVisibleEvent[];
-  trace_events?: AgentTraceEvent[];
-  steps: AgentStep[];
-  error?: string | null;
-  approval?: AgentApproval | null;
-  checkpoint?: AgentCheckpoint | null;
-}
-
-export interface AgentRunConfig {
-  apiKey?: string;
-  apiBase?: string;
-  model?: string;
-  optimizeRag?: boolean;
-  execute?: boolean;
-  sessionId?: string;
-  parentRunId?: string;
-  followUpContext?: AgentFollowUpContext;
-  workspaceContext?: AgentWorkspaceContext;
-}
-
-export type AgentRuntimeEventType =
-  | "agent.run.started"
-  | "agent.step.started"
-  | "agent.step.completed"
-  | "agent.artifact.created"
-  | "agent.answer.completed"
-  | "agent.run.completed"
-  | "agent.run.failed"
-  | "agent.approval.required"
-  | "agent.approval.resolved"
-  | "agent.checkpoint.saved"
-  | "agent.run.waiting_approval"
-  | "agent.run.resumed";
-
-export interface AgentRuntimeEvent {
-  event_id: string;
-  run_id: string;
-  sequence: number;
-  created_at_ms: number;
-  type: AgentRuntimeEventType;
-  step?: (Partial<AgentStep> & Record<string, unknown>) | null;
-  artifact?: AgentArtifact | null;
-  answer?: AgentAnswer | null;
-  response?: AgentRunResponse | null;
-  approval?: AgentApproval | null;
-  checkpoint?: AgentCheckpoint | null;
-  error?: string | null;
-}
-
-export interface AgentRunDraftState {
-  runId?: string;
-  status: "idle" | "running" | "waiting_approval" | "failed" | "completed";
-  question: string;
-  events: AgentRuntimeEvent[];
-  artifacts: AgentArtifact[];
-  answer?: AgentAnswer | null;
-  response?: AgentRunResponse | null;
-  approval?: AgentApproval | null;
-  checkpoint?: AgentCheckpoint | null;
-  error?: string | null;
-}
-
-export interface AgentKernelThreadState {
-  thread_id: string;
-  values?: Record<string, unknown> | null;
-  next?: string[];
-  interrupts?: Array<{ id?: string | null; value?: unknown }>;
-  config?: Record<string, unknown> | null;
-}
-
-export interface AgentSessionRunSummary {
-  run_id: string;
-  session_id: string;
-  parent_run_id?: string | null;
-  question: string;
-  status: string;
-  error?: string | null;
-  artifact_count: number;
-  created_at?: string | null;
-  completed_at?: string | null;
-}
-
-export interface AgentArtifactRecord extends AgentArtifact {
-  run_id: string;
-  sequence: number;
-  created_at?: string | null;
-}
-
-export interface AgentRuntimeEventRecord {
   id: string;
   run_id: string;
+  event_type: string;
+  node_name?: string | null;
   sequence: number;
-  type: string;
-  event: AgentRuntimeEvent;
-  created_at_ms: number;
-}
-
-export interface AgentTraceEventRecord extends AgentTraceEvent {
-  id?: string;
-  run_id?: string;
-  sequence?: number | null;
-}
-
-export interface TableDesignExecutionResult {
-  success: true;
-  latencyMs: number;
-  syncResult: SchemaSyncResult | null;
-  message: string;
-}
-
-export interface QueryResult {
-  success: boolean;
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  rowCount: number;
-  latencyMs: number;
-  guardrail: GuardrailCheckResult;
-  historyId: string;
-  executionId?: string;
-  truncated?: boolean;
-  responseBytes?: number;
-  maxResponseBytes?: number;
-  warnings?: string[];
-  connectMs?: number;
-  guardrailMs?: number;
-  executeMs?: number;
-  fetchMs?: number;
-  serializeMs?: number;
-  totalMs?: number;
-}
-
-export interface QueryHistory {
-  id: string;
-  question: string;
-  submitted_sql: string;
-  generated_sql: string;
-  safe_sql: string;
-  executed_sql: string;
-  guardrail_result: "pass" | "warn" | "reject";
-  guardrail_checks?: string;
-  execution_status: "success" | "failed" | "timeout" | "cancelled";
-  execution_time_ms: number;
-  rows_returned: number;
-  columns_returned: number;
-  error_message: string;
+  payload?: Record<string, unknown>;
   created_at: string;
 }
 
-export interface ERDiagramData {
-  nodes: Array<{
-    id: string;
-    label: string;
-    comment: string;
-    module_tag: string;
-    fields: Array<{
-      name: string;
-      type: string;
-      is_pk: boolean;
-      is_fk: boolean;
-      comment: string;
-    }>;
-  }>;
-  edges: Array<{
-    id: string;
-    source: string;
-    sourceHandle: string;
-    target: string;
-    targetHandle: string;
-    label: string;
-    edge_type: "real" | "inferred";
-  }>;
+export interface QueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  latencyMs: number;
+  totalMs?: number;
+  success?: boolean;
 }
 
-export interface TableDesignAiResponse {
-  table_name: string;
-  table_comment: string;
-  columns: Array<{
+export interface ERNode {
+  id: string;
+  label: string;
+  fields: Array<{
     name: string;
     type: string;
-    nullable: boolean;
-    primary_key: boolean;
-    auto_increment: boolean;
-    default_value: string | null;
-    comment: string;
+    isPrimaryKey: boolean;
+    isForeignKey: boolean;
   }>;
-  indexes: Array<{
-    name: string;
-    columns: string[];
-    unique: boolean;
-  }>;
+  comment: string;
+  row_count_estimate: number;
+  module_tag: string;
 }
 
-// Semantic Layer types
-
-export interface SemanticAlias {
+export interface EREdge {
   id: string;
-  data_source_id: string;
-  alias: string;
-  target_type: string;
+  source: string;
   target: string;
-  description?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
+  sourceHandle?: string;
+  targetHandle?: string;
+  edge_type?: "real" | "inferred";
 }
 
-export interface SemanticAliasCreateParams {
-  data_source_id: string;
-  alias: string;
-  target_type: string;
-  target: string;
-  description?: string | null;
-}
-
-export interface SemanticAliasUpdateParams {
-  alias?: string | null;
-  target_type?: string | null;
-  target?: string | null;
-  description?: string | null;
-}
-
-export interface SemanticMetric {
-  id: string;
-  data_source_id: string;
-  name: string;
-  expression: string;
-  source_columns_json?: string | null;
-  description?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface SemanticMetricCreateParams {
-  data_source_id: string;
-  name: string;
-  expression: string;
-  source_columns_json?: string | null;
-  description?: string | null;
-}
-
-export interface SemanticMetricUpdateParams {
-  name?: string | null;
-  expression?: string | null;
-  source_columns_json?: string | null;
-  description?: string | null;
-}
-
-export interface SemanticDimension {
-  id: string;
-  data_source_id: string;
-  name: string;
-  column_ref: string;
-  transform?: string | null;
-  description?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface SemanticDimensionCreateParams {
-  data_source_id: string;
-  name: string;
-  column_ref: string;
-  transform?: string | null;
-  description?: string | null;
-}
-
-export interface SemanticDimensionUpdateParams {
-  name?: string | null;
-  column_ref?: string | null;
-  transform?: string | null;
-  description?: string | null;
-}
-
-export interface WorkspaceTableScope {
-  id: string;
-  project_id: string;
-  data_source_id: string;
-  table_id: string;
-  enabled: boolean;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface WorkspaceTableScopeUpdateParams {
-  project_id: string;
-  datasource_id: string;
-  enabled_table_ids: string[];
+export interface ERDiagramData {
+  nodes: ERNode[];
+  edges: EREdge[];
 }
