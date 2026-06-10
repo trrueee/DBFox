@@ -2,8 +2,23 @@ import { Copy, Download } from "lucide-react";
 import type { TableArtifact } from "../../../types/agentArtifact";
 import { copyText, downloadTextFile, toCsv } from "./artifactActions";
 
-export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
+interface TableArtifactViewProps {
+  artifact: TableArtifact;
+  onToast: (message: string) => void;
+}
+
+export function TableArtifactView({ artifact, onToast }: TableArtifactViewProps) {
   const csv = toCsv(artifact.columns, artifact.rows);
+
+  const handleCopy = async () => {
+    const ok = await copyText(csv);
+    onToast(ok ? "已复制 CSV" : "复制失败，请手动选择复制");
+  };
+
+  const handleExport = () => {
+    const ok = downloadTextFile(`${artifact.id}.csv`, csv, "text/csv;charset=utf-8");
+    onToast(ok ? "已导出 CSV" : "CSV 导出失败");
+  };
 
   return (
     <div className="hifi-ai-card">
@@ -24,11 +39,11 @@ export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
           </tbody>
         </table>
         <div className="flex gap-2 justify-end mt-3">
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={() => copyText(csv)}>
+          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleCopy}>
             <Copy size={10} />
             复制 CSV
           </button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={() => downloadTextFile(`${artifact.id}.csv`, csv, "text/csv;charset=utf-8")}>
+          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleExport}>
             <Download size={10} />
             导出 CSV
           </button>
