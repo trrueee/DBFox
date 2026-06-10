@@ -41,9 +41,10 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
     api_base = configurable.get("api_base")
     registry = configurable.get("registry")
 
-    allowed_groups = state.get("allowed_tool_groups") or []
-    # None (not []) means "all tools" for backward compatibility
-    tools = build_langchain_tools(registry, allowed_groups=allowed_groups if allowed_groups else None)
+    allowed_groups = state.get("allowed_tool_groups")
+    # None (not []) means "all tools" for backward compatibility.
+    # An empty list means "no tools" (pure chat / product_help / database_concept).
+    tools = build_langchain_tools(registry, allowed_groups=allowed_groups)
 
     model = get_chat_model(
         model_name=model_name,

@@ -33,7 +33,7 @@ TOOL_GROUP_MAP: dict[str, str] = {
 }
 
 
-def _tool_to_group(tool_name: str) -> str | None:
+def tool_to_group(tool_name: str) -> str | None:
     """Map a tool name to its planner group.  Returns None if unmapped."""
     # Check exact matches first
     for prefix, group in TOOL_GROUP_MAP.items():
@@ -82,7 +82,7 @@ def build_langchain_tools(
     for spec in registry.list_specs():
         # Filter by allowed tool groups when specified
         if allowed_groups is not None:
-            group = _tool_to_group(spec.name)
+            group = tool_to_group(spec.name)
             if group is None or group not in allowed_groups:
                 continue
 
