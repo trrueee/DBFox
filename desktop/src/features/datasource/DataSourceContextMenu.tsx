@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Sparkles, Terminal, Trash2, X } from "lucide-react";
 import type { ContextMenuState } from "../../mock/databoxMock";
 
@@ -81,7 +82,7 @@ export function DataSourceContextMenu({
   );
 }
 
-function Item({ icon, label, danger, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
+function Item({ icon, label, danger, onClick }: { icon: ReactNode; label: string; danger?: boolean; onClick: () => void }) {
   return (
     <div className={`hifi-context-menu-item ${danger ? "danger" : ""}`} onClick={onClick}>
       {icon}
