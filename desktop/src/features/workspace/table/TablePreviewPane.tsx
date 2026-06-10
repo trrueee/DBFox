@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpDown, Code, Download, Filter, RefreshCw, Search, Sparkles } from "lucide-react";
 import { executeSql, quoteIdentifier, resolveTableByName } from "../../engine/engineApi";
 
@@ -16,8 +16,6 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   const [pageSize, setPageSize] = useState(20);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
-  const previewSql = useMemo(() => `SELECT * FROM ${quoteIdentifier(tableId)} LIMIT ${pageSize};`, [tableId, pageSize]);
-
   const loadPreview = async () => {
     setLoading(true);
     setError("");
@@ -29,6 +27,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
         setError("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
         return;
       }
+      const previewSql = `SELECT * FROM ${quoteIdentifier(tableId, resolved.datasource.db_type)} LIMIT ${pageSize};`;
       const result = await executeSql(resolved.datasource.id, previewSql, `preview table ${tableId}`);
       setColumns(result.columns);
       setRows(result.rows);
@@ -45,7 +44,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
 
   useEffect(() => {
     void loadPreview();
-  }, [previewSql]);
+  }, [tableId, pageSize]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
