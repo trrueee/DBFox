@@ -19,6 +19,14 @@ interface DataPageProps {
 
 type ColumnTypeMap = Record<string, { dataType: string; isPrimaryKey: boolean; isForeignKey: boolean }>;
 
+interface PreviewRequest {
+  tableName: string;
+  columns: string[];
+  filter: string;
+  page: number;
+  pageSize: number;
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -27,19 +35,7 @@ function escapeSqlLike(value: string) {
   return value.replace(/'/g, "''");
 }
 
-function buildPreviewSql({
-  tableName,
-  columns,
-  filter,
-  page,
-  pageSize,
-}: {
-  tableName: string;
-  columns: string[];
-  filter: string;
-  page: number;
-  pageSize: number;
-}) {
+function buildPreviewSql({ tableName, columns, filter, page, pageSize }: PreviewRequest) {
   const offset = (page - 1) * pageSize;
   let whereClause = "";
 
@@ -68,18 +64,11 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
     return schemaTables.find((table) => table.table_name === selectedTableName) || null;
   }, [schemaTables, selectedTableName]);
 
-  const fetchTableData = useCallback(async (nextColumns = columns) => {
-    if (!selectedTableName) return;
+  const runPreviewQuery = useCallback(async (request: PreviewRequest) => {
     setLoading(true);
     setError(null);
     try {
-      const sql = buildPreviewSql({
-        tableName: selectedTableName,
-        columns: nextColumns,
-        filter: appliedFilter,
-        page,
-        pageSize,
-      });
+      const sql = buildPreviewSql(request);
       const result = await api.executeSql(datasource.id, sql);
       if (!result.success) {
         setError("查询未成功返回结果");
@@ -93,22 +82,26 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
     } finally {
       setLoading(false);
     }
-  }, [appliedFilter, columns, datasource.id, page, pageSize, selectedTableName]);
+  }, [datasource.id]);
 
-  const loadInitialSchemaAndData = useCallback(async () => {
+  const fetchTableData = useCallback(async () => {
     if (!selectedTableName) return;
+    await runPreviewQuery({ tableName: selectedTableName, columns, filter: appliedFilter, page, pageSize });
+  }, [appliedFilter, columns, page, pageSize, runPreviewQuery, selectedTableName]);
+
+  const loadInitialSchemaAndData = useCallback(async (tableName: string) => {
     setLoading(true);
     setError(null);
     try {
-      const sample = await api.executeSql(datasource.id, `SELECT * FROM \`${selectedTableName}\` LIMIT 1;`);
+      const sample = await api.executeSql(datasource.id, `SELECT * FROM \`${tableName}\` LIMIT 1;`);
       const nextColumns = sample.success ? sample.columns || [] : [];
       setColumns(nextColumns);
-      await fetchTableData(nextColumns);
+      await runPreviewQuery({ tableName, columns: nextColumns, filter: "", page: 1, pageSize });
     } catch (error: unknown) {
       setError(getErrorMessage(error, "加载表格架构失败"));
       setLoading(false);
     }
-  }, [datasource.id, fetchTableData, selectedTableName]);
+  }, [datasource.id, pageSize, runPreviewQuery]);
 
   useEffect(() => {
     setPage(1);
@@ -116,7 +109,7 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
     setAppliedFilter("");
     setRows([]);
     setColumns([]);
-    if (selectedTableName) void loadInitialSchemaAndData();
+    if (selectedTableName) void loadInitialSchemaAndData(selectedTableName);
   }, [datasource.id, loadInitialSchemaAndData, selectedTableName]);
 
   useEffect(() => {
@@ -197,7 +190,7 @@ export const DataPage = ({ datasource, selectedTableName, schemaTables, onSelect
 
       <main className="table-data-content">
         {error ? (
-          <TableDataErrorState error={error} onRetry={() => void loadInitialSchemaAndData()} />
+          <TableDataErrorState error={error} onRetry={() => void loadInitialSchemaAndData(selectedTableName)} />
         ) : loading && rows.length === 0 ? (
           <TableDataLoadingState />
         ) : rows.length === 0 ? (
