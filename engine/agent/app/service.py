@@ -25,7 +25,6 @@ from engine.errors import DataBoxError
 from engine.models import AgentRun
 from engine.agent_core.checkpointer import build_agent_kernel_checkpointer
 from engine.tools.databox_tools import register_databox_tools
-from engine.tools.artifact_emitter import ArtifactEmitter
 from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.events import EventEmitter
 
@@ -46,7 +45,6 @@ class DataBoxAgentService:
     def __init__(self, db: Session):
         self.db = db
         self.registry = register_databox_tools()
-        self.artifact_emitter = ArtifactEmitter()
         self._checkpointer = build_agent_kernel_checkpointer()
         _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
         _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")

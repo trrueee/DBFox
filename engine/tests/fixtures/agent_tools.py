@@ -6,7 +6,6 @@ from engine.agent_core.tool_registry import (
     RegisteredTool, ToolContext, ToolExecutionSpec,
     ToolHandler, ToolPolicy, ToolRegistry, ToolSpec, ToolStateBinding,
 )
-from engine.agent_core.state import AgentState
 from engine.tools.sql_tools import (
     answer_synthesizer_tool,
     build_query_plan_tool,
