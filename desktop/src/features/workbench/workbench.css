@@ -31,8 +31,212 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
 }
 
 .wb-right {
   background: hsl(var(--card));
+}
+
+.object-explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: hsl(var(--foreground));
+}
+
+.object-explorer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+
+.object-explorer__eyebrow,
+.object-explorer__section-title,
+.workbench-home__eyebrow {
+  font-size: 0.64rem;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.object-explorer__title {
+  margin-top: 4px;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.object-explorer__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.object-explorer__section,
+.object-explorer__connection,
+.object-explorer__database,
+.table-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.object-explorer__section-title {
+  padding: 8px 6px 4px;
+}
+
+.object-explorer__database {
+  margin: 2px 0 8px 18px;
+  padding-left: 8px;
+  border-left: 1px solid hsl(var(--border));
+}
+
+.object-explorer__filter {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 4px 5px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+}
+
+.object-explorer__filter input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 0.74rem;
+}
+
+.object-explorer__filter button,
+.icon-button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+}
+
+.object-explorer__empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  min-height: 140px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.object-explorer__empty--small {
+  min-height: 44px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 8px;
+}
+
+.tree-row,
+.table-group__header,
+.table-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-row:hover,
+.table-group__header:hover,
+.table-row:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.tree-row--active {
+  background: hsl(var(--primary) / 0.08);
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
+
+.tree-row--muted {
+  cursor: default;
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.tree-row__label,
+.table-row span,
+.table-group__header span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-group__header {
+  font-weight: 800;
+  color: hsl(var(--foreground));
+}
+
+.table-group__header b {
+  font-size: 0.66rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.table-row {
+  padding-left: 25px;
+  font-family: "Fira Code", monospace;
+}
+
+.env-pill,
+.readonly-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.env-pill--prod {
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+}
+
+.env-pill--test {
+  background: hsl(var(--warning) / 0.14);
+  color: hsl(var(--warning));
+}
+
+.env-pill--dev,
+.env-pill:not(.env-pill--prod):not(.env-pill--test) {
+  background: hsl(var(--success) / 0.12);
+  color: hsl(var(--success));
+}
+
+.readonly-pill {
+  background: hsl(var(--secondary));
+  color: hsl(var(--muted-foreground));
 }
