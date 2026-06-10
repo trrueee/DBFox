@@ -5,6 +5,7 @@ import { SchemaBrowserHeader, type SchemaBrowserTab } from "../features/schema-b
 import { SchemaFieldsView } from "../features/schema-browser/SchemaFieldsView";
 import { SchemaErView } from "../features/schema-browser/SchemaErView";
 import { SchemaPreviewView } from "../features/schema-browser/SchemaPreviewView";
+import { TestDataGeneratorDialog } from "../features/schema-browser/TestDataGeneratorDialog";
 import "../features/schema-browser/schema-browser.css";
 
 interface SchemaPageProps {
@@ -37,6 +38,7 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
   const [erViewMode, setErViewMode] = useState<"focus" | "module" | "full">("focus");
   const [erDepth, setErDepth] = useState<1 | 2>(1);
   const [erShowInferred, setErShowInferred] = useState(true);
+  const [testDataDialogOpen, setTestDataDialogOpen] = useState(false);
 
   const safeErData = useMemo<ERDiagramData>(() => ({
     nodes: Array.isArray(erData?.nodes) ? erData.nodes : [],
@@ -179,8 +181,17 @@ export const SchemaPage = ({ datasource, initialViewTab, selectedTableName, onOp
           onCopySql={() => void handleCopyPreviewSql()}
           onOpenSql={handleOpenPreviewSql}
           onRefresh={() => selectedTable && void fetchPreviewData(selectedTable.table_name)}
+          onGenerateTestData={() => setTestDataDialogOpen(true)}
         />
       )}
+
+      <TestDataGeneratorDialog
+        datasource={datasource}
+        table={selectedTable}
+        open={testDataDialogOpen}
+        onClose={() => setTestDataDialogOpen(false)}
+        onGenerated={() => selectedTable && void fetchPreviewData(selectedTable.table_name)}
+      />
     </div>
   );
 };
