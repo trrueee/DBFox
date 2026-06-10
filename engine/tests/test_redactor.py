@@ -23,7 +23,7 @@ def test_data_redactor_pii_and_credentials() -> None:
 
 
 def test_executor_redacts_sensitive_queries(db_session, demo_datasource) -> None:
-    from engine.executor import execute_query
+    from engine.sql.executor import execute_query
     from engine.models import QueryHistory
 
     demo_datasource.host = "demo"

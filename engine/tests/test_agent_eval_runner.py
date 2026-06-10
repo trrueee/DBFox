@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from engine.agent.types import AgentRunResponse, AgentRuntimeEvent
+from engine.agent_contracts.types import AgentRunResponse, AgentRuntimeEvent
 from engine.evaluation.agent_eval import AgentEvalRunner
 from engine.models import AgentGoldenTask, AgentEvalRun, AgentEvalCaseResult
 from engine.schemas.agent_eval import AgentEvalRunRequest

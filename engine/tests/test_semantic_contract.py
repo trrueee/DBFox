@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from engine.agent.semantic_contract import build_query_contract
+from engine.agent_contracts.semantic_contract import build_query_contract
 
 
 def test_builds_count_threshold_contract_without_projecting_count() -> None:

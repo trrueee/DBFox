@@ -255,7 +255,7 @@ def generate_create_table_ddl(design: Mapping[str, Any]) -> dict[str, Any]:
 def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str, Any]:
     from engine.models import DataSource, QueryHistory
     from engine.datasource import get_mysql_connection_params, is_demo_db
-    from engine.executor import _ping_mysql_connection, get_mysql_pool
+    from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
     from engine.schema_sync import sync_schema
     from engine.demo_db_init import init_demo_database
     import sqlite3

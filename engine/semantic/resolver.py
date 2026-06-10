@@ -11,8 +11,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.databox_agent.environment.service import EnvironmentService
-from engine.databox_agent.model.model_factory import get_chat_model
+from engine.environment.service import EnvironmentService
+from engine.agent.model.model_factory import get_chat_model
 from engine.semantic.models import SemanticResolution
 from engine.semantic.prompts import SEMANTIC_RESOLVER_PROMPT
 from engine.semantic.verifier import SemanticVerifier

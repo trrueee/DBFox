@@ -11,7 +11,7 @@ e-commerce demo database schema.
 import re
 
 import pytest
-from engine.ai import search_demo_sql
+from engine.sql.generator import search_demo_sql
 
 
 # ---------------------------------------------------------------------------

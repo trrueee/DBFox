@@ -1,7 +1,7 @@
-from engine.ai import validate_sql_schema
+from engine.sql.generator import validate_sql_schema
 from engine.schema_sync import sync_schema
-from engine.sql_dry_run import DryRunResult
-from engine.trust_gate import TrustGate
+from engine.sql.dry_run import DryRunResult
+from engine.sql.trust_gate import TrustGate
 
 
 def test_trust_gate_safe_select(db_session, demo_datasource) -> None:

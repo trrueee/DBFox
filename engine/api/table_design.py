@@ -48,7 +48,7 @@ def _draft_to_dict(draft: TableDesignDraft) -> dict[str, Any]:
 @router.post("/schema/design/ai-modify")
 def api_generate_schema_alteration(req: SchemaAlterationRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
-        from engine.ai import generate_schema_alteration_ai
+        from engine.sql.generator import generate_schema_alteration_ai
         llm_config = {
             "api_key": req.api_key,
             "api_base": req.api_base,
@@ -205,7 +205,7 @@ def api_delete_table_design_draft(draft_id: str, db: Session = Depends(get_db)) 
 @router.post("/schema/design/ai-generate")
 def api_generate_table_design_ai(req: TableDesignAIRequest) -> dict[str, Any]:
     try:
-        from engine.ai import generate_table_design_ai
+        from engine.sql.generator import generate_table_design_ai
         llm_config = {}
         if req.api_key:
             llm_config = {
