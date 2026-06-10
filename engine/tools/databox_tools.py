@@ -130,143 +130,192 @@ def register_databox_tools() -> ToolRegistry:
 
     registry = ToolRegistry()
 
-    registry.register(_tool("followup.load_context", "Load and normalize follow-up context.", _load_followup_context, input_model=EmptyToolInput, base_tool=FollowupLoadContextTool(), metadata={"next_route": "profile_result"}))
-    registry.register(_tool("schema.build_context", "Build relevant schema context for a data question.", _schema_build_context, input_model=QuestionToolInput, base_tool=SchemaBuildContextTool(), metadata={"next_route": "generate_sql"}))
-    registry.register(_tool("query_plan.build", "Build a structured query plan from schema context.", _query_plan_build, input_model=EmptyToolInput, base_tool=QueryPlanBuildTool(), metadata={"next_route": "generate_sql"}))
-    registry.register(_tool("sql.generate", "Generate a SQL candidate without executing it.", _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput, base_tool=SqlGenerateTool(), metadata={"next_route": "sql_critic"}))
-    registry.register(_tool("sql.validate", "Validate SQL with TrustGate and guardrail checks.", _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput, base_tool=SqlValidateTool(), metadata={"next_route": "validation_route"}))
-    registry.register(
-        _tool(
-            "sql.execute_readonly",
-            "Execute previously validated read-only SQL.",
-            _sql_execute_readonly,
-            input_model=SqlExecutionInput,
-            output_model=SqlExecutionOutput,
-            policy=ToolPolicy(
-                risk_level="warning",
-                side_effect="read",
-                requires_validated_sql=True,
-            ),
-            base_tool=SqlExecuteReadonlyTool(),
-            metadata={"next_route": "execution_result_route"},
-        )
-    )
-    registry.register(_tool("sql.skip_execution", "Record that SQL execution was skipped.", _sql_skip_execution, input_model=EmptyToolInput, output_model=SqlExecutionOutput, base_tool=SqlSkipExecutionTool(), metadata={"next_route": "execution_result_route"}))
-    registry.register(_tool("sql.revise", "Revise SQL after validation or execution error.", _sql_revise, input_model=SqlRevisionInput, base_tool=SqlReviseTool(), metadata={"next_route": "sql_critic"}))
-    registry.register(_tool("result.profile", "Profile query results and notable facts.", _result_profile, input_model=EmptyToolInput, base_tool=ResultProfileTool(), metadata={"next_route": "chart_suggest"}))
-    registry.register(_tool("chart.suggest", "Suggest a chart from query results.", _chart_suggest, input_model=EmptyToolInput, base_tool=ChartSuggestTool(), metadata={"next_route": "followup_suggest"}))
-    registry.register(_tool("followup.suggest", "Suggest evidence-aware follow-up questions.", _followup_suggest, input_model=EmptyToolInput, base_tool=FollowupSuggestTool(), metadata={"next_route": "synthesize_answer"}))
-    registry.register(_tool("answer.synthesize", "Synthesize the final evidence-grounded answer.", _answer_synthesize, input_model=EmptyToolInput, base_tool=AnswerSynthesizeTool(), metadata={"next_route": "answer"}))
+    _B = ToolStateBinding  # shorthand
 
-    # Environment tools (no base_tool — handler-only)
+    # -- Follow-up / Schema / Query Plan ---------------------------------------
+    registry.register(_tool(
+        "followup.load_context", "Load and normalize follow-up context.",
+        _load_followup_context, input_model=EmptyToolInput,
+        base_tool=FollowupLoadContextTool(), group="answer",
+        binding=_B(produces_state_keys=["followup_context"]),
+        metadata={"next_route": "profile_result"},
+    ))
+    registry.register(_tool(
+        "schema.build_context", "Build relevant schema context for a data question.",
+        _schema_build_context, input_model=QuestionToolInput,
+        base_tool=SchemaBuildContextTool(), group="schema",
+        binding=_B(produces_state_keys=["schema_context"]),
+        metadata={"next_route": "generate_sql"},
+    ))
+    registry.register(_tool(
+        "query_plan.build", "Build a structured query plan from schema context.",
+        _query_plan_build, input_model=EmptyToolInput,
+        base_tool=QueryPlanBuildTool(), group="query_plan",
+        binding=_B(produces_state_keys=["query_plan"]),
+        metadata={"next_route": "generate_sql"},
+    ))
+
+    # -- SQL generation / validation / execution / repair ----------------------
+    registry.register(_tool(
+        "sql.generate", "Generate a SQL candidate without executing it.",
+        _sql_generate, input_model=EmptyToolInput, output_model=SqlCandidateOutput,
+        base_tool=SqlGenerateTool(), group="sql_generation", kind="llm",
+        binding=_B(consumes_state_keys=["schema_context", "query_plan"],
+                   produces_state_keys=["sql_candidate", "sql"]),
+        metadata={"next_route": "sql_critic"},
+    ))
+    registry.register(_tool(
+        "sql.validate", "Validate SQL with TrustGate and guardrail checks.",
+        _sql_validate, input_model=SqlToolInput, output_model=SqlSafetyOutput,
+        base_tool=SqlValidateTool(), group="sql_validation",
+        binding=_B(consumes_state_keys=["sql_candidate"],
+                   produces_state_keys=["safety", "sql"]),
+        metadata={"next_route": "validation_route"},
+    ))
+    registry.register(_tool(
+        "sql.execute_readonly", "Execute previously validated read-only SQL.",
+        _sql_execute_readonly, input_model=SqlExecutionInput,
+        output_model=SqlExecutionOutput,
+        policy=ToolPolicy(risk_level="warning", side_effect="read",
+                          requires_validated_sql=True),
+        base_tool=SqlExecuteReadonlyTool(), group="execution",
+        binding=_B(produces_state_keys=["execution"]),
+        metadata={"next_route": "execution_result_route"},
+    ))
+    registry.register(_tool(
+        "sql.skip_execution", "Record that SQL execution was skipped.",
+        _sql_skip_execution, input_model=EmptyToolInput,
+        output_model=SqlExecutionOutput,
+        base_tool=SqlSkipExecutionTool(), group="execution",
+        binding=_B(produces_state_keys=["execution"]),
+        metadata={"next_route": "execution_result_route"},
+    ))
+    registry.register(_tool(
+        "sql.revise", "Revise SQL after validation or execution error.",
+        _sql_revise, input_model=SqlRevisionInput,
+        base_tool=SqlReviseTool(), group="sql_repair", kind="llm",
+        binding=_B(consumes_state_keys=["revision_count", "sql", "pending_approval"],
+                   produces_state_keys=["revision_count", "sql", "safety",
+                                        "execution", "result_profile",
+                                        "chart_suggestion", "suggestions"]),
+        metadata={"next_route": "sql_critic"},
+    ))
+
+    # -- Result / Chart / Follow-up / Answer -----------------------------------
+    registry.register(_tool(
+        "result.profile", "Profile query results and notable facts.",
+        _result_profile, input_model=EmptyToolInput,
+        base_tool=ResultProfileTool(), group="result",
+        binding=_B(produces_state_keys=["result_profile"]),
+        metadata={"next_route": "chart_suggest"},
+    ))
+    registry.register(_tool(
+        "chart.suggest", "Suggest a chart from query results.",
+        _chart_suggest, input_model=EmptyToolInput,
+        base_tool=ChartSuggestTool(), group="chart",
+        binding=_B(produces_state_keys=["chart_suggestion"]),
+        metadata={"next_route": "followup_suggest"},
+    ))
+    registry.register(_tool(
+        "followup.suggest", "Suggest evidence-aware follow-up questions.",
+        _followup_suggest, input_model=EmptyToolInput,
+        base_tool=FollowupSuggestTool(), group="answer",
+        binding=_B(produces_state_keys=["suggestions"]),
+        metadata={"next_route": "synthesize_answer"},
+    ))
+    registry.register(_tool(
+        "answer.synthesize", "Synthesize the final evidence-grounded answer.",
+        _answer_synthesize, input_model=EmptyToolInput,
+        base_tool=AnswerSynthesizeTool(), group="answer",
+        binding=_B(produces_state_keys=["answer", "final_answer", "status"]),
+        metadata={"next_route": "answer"},
+    ))
+
+    # -- Environment tools -----------------------------------------------------
     from engine.environment.tools import (
-        environment_get_profile,
-        schema_list_tables,
-        schema_describe_table,
-        schema_refresh_catalog,
+        environment_get_profile, schema_list_tables,
+        schema_describe_table, schema_refresh_catalog,
     )
     registry.register(_tool(
         "environment.get_profile",
-        "Get the datasource environment profile: env tier (dev/staging/prod), dialect, "
-        "catalog status (fresh/stale/empty), table count, and warnings. "
-        "Use this to understand the datasource environment before planning queries. "
-        "No input required — reads from current datasource context. "
-        "Outputs: datasource_id, env, dialect, catalog_status, table_count, selected_tables, warnings.",
-        environment_get_profile,
-        input_model=EmptyToolInput,
+        "Get the datasource environment profile: env tier, dialect, "
+        "catalog status, table count, and warnings.",
+        environment_get_profile, input_model=EmptyToolInput,
+        group="environment",
+        binding=_B(produces_state_keys=["environment_profile"]),
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "schema.list_tables",
-        "List ALL tables in the current live datasource. "
-        "Outputs: table names, column counts, row estimates, table types.",
-        schema_list_tables,
-        input_model=EmptyToolInput,
+        "List ALL tables in the current live datasource.",
+        schema_list_tables, input_model=EmptyToolInput,
+        group="schema",
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "schema.describe_table",
-        "Describe a NAMED table from the live datasource: columns, types, keys, foreign keys, sample rows. "
-        "Use when user asks for schema/columns/fields/structure of a specific table. "
-        "Input: table_name (exact table name). Outputs: column list, keys, sample rows.",
-        schema_describe_table,
-        input_model=DescribeTableInput,
+        "Describe a NAMED table from the live datasource: columns, types, "
+        "keys, foreign keys, sample rows.",
+        schema_describe_table, input_model=DescribeTableInput,
+        group="schema",
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "schema.refresh_catalog",
-        "Re-introspect the live datasource and sync its schema to the DataBox catalog. "
-        "Use when schema.build_context or schema.list_tables returns zero results. "
-        "Input: reason (optional). Outputs: tables_created, columns_created, synced=true/false.",
-        schema_refresh_catalog,
-        input_model=RefreshCatalogInput,
+        "Re-introspect the live datasource and sync its schema to the DataBox catalog.",
+        schema_refresh_catalog, input_model=RefreshCatalogInput,
+        group="schema",
         metadata={"next_route": "answer"},
     ))
 
-    # Semantic tools
+    # -- Semantic --------------------------------------------------------------
     from engine.semantic.tools import semantic_resolve
     registry.register(_tool(
         "semantic.resolve",
         "Resolve business semantics for the current user question. "
         "Maps business terms, metrics, dimensions, filters, and join paths "
-        "to actual database objects using LLM understanding + catalog verification. "
-        "Use BEFORE sql.generate when the question contains business terms like "
-        "'GMV', 'DAU', '转化率', or when you need to understand which tables and "
-        "columns are relevant. Input: none required (reads question from state). "
-        "Outputs: SemanticResolution with resolved_terms, resolved_metrics, "
-        "resolved_dimensions, candidate_tables, join_paths, ambiguity, "
-        "semantic_context_text.",
-        semantic_resolve,
-        input_model=EmptyToolInput,
+        "to actual database objects using LLM + catalog verification.",
+        semantic_resolve, input_model=EmptyToolInput,
+        group="semantic", kind="llm",
+        binding=_B(produces_state_keys=["semantic_resolution"]),
         metadata={"next_route": "answer"},
     ))
 
-    # Memory tools
+    # -- Memory ----------------------------------------------------------------
     from engine.tools.memory_tools import (
-        memory_search,
-        memory_write,
-        memory_delete,
-        memory_summarize_session,
+        memory_search, memory_write, memory_delete, memory_summarize_session,
     )
     registry.register(_tool(
         "memory.search",
-        "Search long-term memory: user preferences, metric definitions, schema aliases, "
-        "join paths, past successful queries, failure lessons. "
-        "Use BEFORE planning a query to leverage past knowledge. "
-        "Input: query (required), scope (optional), memory_types (optional). "
-        "Outputs: list of matching memory records with type, text, confidence.",
-        memory_search,
-        input_model=MemorySearchInput,
+        "Search long-term memory: user preferences, metric definitions, "
+        "schema aliases, join paths, past successful queries, failure lessons.",
+        memory_search, input_model=MemorySearchInput,
+        group="answer",
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "memory.write",
-        "Write a new memory entry. Use when user explicitly asks to remember something. "
-        "Input: type (memory type), text (human-readable), content (structured, optional). "
-        "Outputs: memory_id, type, status. "
-        "Types: 'user_preference', 'schema_alias', 'metric_definition', 'join_path', 'project_rule'.",
-        memory_write,
-        input_model=MemoryWriteInput,
+        "Write a new memory entry. Use when user explicitly asks to remember something.",
+        memory_write, input_model=MemoryWriteInput,
+        group="answer",
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "memory.delete",
-        "Delete or forget a memory. Use when user asks to forget or correct something. "
-        "Input: memory_id (required), reason (optional). Outputs: deleted=true/false.",
-        memory_delete,
-        input_model=MemoryDeleteInput,
+        "Delete or forget a memory.",
+        memory_delete, input_model=MemoryDeleteInput,
+        group="answer",
         metadata={"next_route": "answer"},
     ))
     registry.register(_tool(
         "memory.summarize_session",
-        "Summarize the current session for future recall. "
-        "Use at the end of an analysis session to preserve key findings and context. "
-        "No input required. Outputs: session summary text, run/artifact counts.",
-        memory_summarize_session,
-        input_model=EmptyToolInput,
+        "Summarize the current session for future recall.",
+        memory_summarize_session, input_model=EmptyToolInput,
+        group="answer",
         metadata={"next_route": "answer"},
     ))
 
+    # -- Workspace -------------------------------------------------------------
     _ws_descriptions = {
         "workspace.explain_sql": "Explain the current SQL without executing it.",
         "workspace.fix_sql": "Suggest a safe read-only fix for the current SQL error.",
@@ -280,6 +329,8 @@ def register_databox_tools() -> ToolRegistry:
         registry.register(_tool(
             tool_name, _ws_descriptions.get(tool_name, tool_name),
             _workspace_assist, input_model=QuestionToolInput,
+            group="workspace",
+            binding=_B(produces_state_keys=["answer", "final_answer", "status"]),
             metadata={"next_route": "answer"},
         ))
 
@@ -296,6 +347,10 @@ def _tool(
     policy: ToolPolicy | None = None,
     base_tool: Any = None,
     metadata: dict[str, Any] | None = None,
+    group: str = "",
+    kind: str = "code",
+    binding: ToolStateBinding | None = None,
+    execution: ToolExecutionSpec | None = None,
 ) -> RegisteredTool:
     if name in TOOL_SCHEMAS:
         schemas = TOOL_SCHEMAS[name]
@@ -308,12 +363,16 @@ def _tool(
     rt = RegisteredTool(
         spec=ToolSpec(
             name=name,
+            group=group,
+            kind=kind,
             description=description,
             input_model=input_model,
             output_model=output_model,
             _input_schema=explicit_input,
             _output_schema=explicit_output,
             policy=policy or ToolPolicy(),
+            binding=binding or ToolStateBinding(),
+            execution=execution or ToolExecutionSpec(),
             metadata=metadata or {},
         ),
         handler=handler,

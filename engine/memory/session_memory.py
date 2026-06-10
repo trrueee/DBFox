@@ -1,4 +1,4 @@
-"""SessionMemory service �?maintains per-session context across runs.
+﻿"""SessionMemory service — maintains per-session context across runs.
 
 Tracks the last question, SQL, execution, and artifacts so follow-up
 requests ("export that", "revise the query", "chart the result") work

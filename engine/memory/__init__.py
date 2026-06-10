@@ -27,13 +27,13 @@ from engine.memory.memory_namespace import MemoryNamespace
 from engine.memory.memory_policy import is_safe_for_long_term, default_status
 from engine.memory.memory_retriever import MemoryRetriever
 from engine.memory.memory_writer import MemoryWriter
-from engine.memory.memory_compactor import MemoryCompactor
+from engine.memory.memory_compactor import compact_messages, compact_schema_context, compact_execution_result, MemoryCompactionConfig
 
 __all__ = [
     "FailureLearningContent",
     "JoinPathContent",
     "LongTermMemoryStore",
-    "MemoryCompactor",
+    "MemoryCompactionConfig",
     "MemoryNamespace",
     "MemoryRecord",
     "MemoryRetriever",
@@ -47,6 +47,9 @@ __all__ = [
     "SessionMemoryService",
     "SuccessfulTrajectoryContent",
     "UserPreferenceContent",
+    "compact_execution_result",
+    "compact_messages",
+    "compact_schema_context",
     "default_status",
     "get_long_term_store",
     "get_session_memory_service",

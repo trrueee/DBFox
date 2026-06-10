@@ -10,15 +10,12 @@ Dependency direction:
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
 
 from engine.agent_core import persistence as agent_persistence
-from engine.agent_core.executor import AgentStepSpec
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
-from engine.agent_core.context import has_follow_up_context
 from engine.errors import DataBoxError
 
 
@@ -73,36 +70,6 @@ class DataBoxAgentRuntime:
             approved=approval.status == "approved",
         ):
             yield self._facade_event(event)
-
-    def build_default_plan(self, request: AgentRunRequest) -> list[AgentStepSpec]:
-        """Deprecated fixed-plan metadata for old UI/tests.
-
-        Runtime execution is now driven by the LangGraph ReAct loop, not this
-        fixed plan. Remove this once the frontend no longer asks for it.
-        """
-        warnings.warn(
-            "DataBoxAgentRuntime.build_default_plan() is deprecated; "
-            "the ReAct agent no longer executes a fixed plan.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        steps: list[AgentStepSpec] = []
-        if has_follow_up_context(request) or request.parent_run_id:
-            steps.append(AgentStepSpec(name="load_follow_up_context", tool_name="followup.load_context"))
-        steps.extend(
-            [
-                AgentStepSpec(name="build_schema_context", tool_name="schema.build_context"),
-                AgentStepSpec(name="build_query_plan", tool_name="query_plan.build", required=False),
-                AgentStepSpec(name="generate_sql_candidate", tool_name="sql.generate"),
-                AgentStepSpec(name="validate_sql", tool_name="sql.validate"),
-                AgentStepSpec(name="execute_sql", tool_name="sql.execute_readonly", required=request.execute),
-                AgentStepSpec(name="profile_result", tool_name="result.profile", required=False),
-                AgentStepSpec(name="suggest_chart", tool_name="chart.suggest", required=False),
-                AgentStepSpec(name="suggest_followups", tool_name="followup.suggest", required=False),
-                AgentStepSpec(name="answer_synthesizer", tool_name="answer.synthesize"),
-            ]
-        )
-        return steps
 
     def _facade_event(self, event: AgentRuntimeEvent) -> AgentRuntimeEvent:
         if event.response is None:

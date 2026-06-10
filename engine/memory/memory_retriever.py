@@ -1,4 +1,4 @@
-"""Retrieve relevant long-term and session memories for the current run."""
+﻿"""Retrieve relevant long-term and session memories for the current run."""
 from __future__ import annotations
 
 import logging
@@ -146,7 +146,7 @@ def _build_memory_context_text(
 def _extract_keywords(question: str) -> list[str]:
     """Extract simple keywords from a question for memory matching."""
     # Simple approach: split into words, filter short ones
-    words = question.replace("?", " ").replace("�?, " ").replace(",", " ").split()
+    words = question.replace("?", " ").replace("，", " ").replace(",", " ").split()
     return [w.strip().lower() for w in words if len(w.strip()) > 1][:8]
 
 
