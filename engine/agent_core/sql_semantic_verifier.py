@@ -7,7 +7,7 @@ from typing import Any, Literal
 import sqlglot
 from sqlglot import exp
 
-from engine.agent_contracts.semantic_contract import QueryContract
+from engine.agent_core.semantic_contract import QueryContract
 
 
 @dataclass

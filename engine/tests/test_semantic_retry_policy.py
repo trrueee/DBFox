@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from engine.agent_contracts.semantic_contract import QueryContract
-from engine.agent_contracts.semantic_retry_policy import accept_semantic_retry, should_retry_semantic
-from engine.agent_contracts.sql_semantic_verifier import SemanticViolation
+from engine.agent_core.semantic_contract import QueryContract
+from engine.agent_core.semantic_retry_policy import accept_semantic_retry, should_retry_semantic
+from engine.agent_core.sql_semantic_verifier import SemanticViolation
 
 
 def test_semantic_retry_policy_requires_api_key_and_high_confidence_contract() -> None:

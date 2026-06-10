@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-from engine.agent_contracts.events import build_trace_events
-from engine.agent_contracts.trace_redactor import MAX_TRACE_EVENT_BYTES
-from engine.agent_contracts.types import AgentStep
+from engine.agent_core.events import build_trace_events
+from engine.agent_core.trace_redactor import MAX_TRACE_EVENT_BYTES
+from engine.agent_core.types import AgentStep
 
 
 def test_trace_events_are_redacted_and_limited() -> None:

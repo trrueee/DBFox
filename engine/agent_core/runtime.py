@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from sqlalchemy.orm import Session
 
 from engine.agent import persistence as agent_persistence
-from engine.agent_contracts.executor import AgentStepSpec
-from engine.agent_contracts.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
-from engine.agent_contracts.context import has_follow_up_context
+from engine.agent_core.executor import AgentStepSpec
+from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
+from engine.agent_core.context import has_follow_up_context
 from engine.errors import DataBoxError
 
 

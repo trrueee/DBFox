@@ -26,7 +26,7 @@ from engine.agent import (
     DataBoxAgentRuntime,
 )
 from engine.agent import persistence as agent_persistence
-from engine.agent_contracts.events import EventEmitter
+from engine.agent_core.events import EventEmitter
 from engine.db import get_db
 from engine.errors import DataBoxError
 

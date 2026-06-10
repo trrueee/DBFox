@@ -10,20 +10,20 @@ from sqlalchemy.orm import Session, selectinload
 from sqlglot import exp
 
 from engine.sql.generator import generate_sql_from_schema_context, validate_sql_schema
-from engine.agent_contracts.answer import synthesize_agent_answer
-from engine.agent_contracts.context import analysis_question, context_summary, referenced_artifact_ids, schema_linking_question
-from engine.agent_contracts.prompts import RESULT_EXPLANATION_SECTIONS
-from engine.agent_contracts.recommendations import suggest_followups
-from engine.agent_contracts.result_profiler import profile_result
-from engine.agent_contracts.semantic_contract import QueryContract, build_query_contract
-from engine.agent_contracts.semantic_retry_policy import (
+from engine.agent_core.answer import synthesize_agent_answer
+from engine.agent_core.context import analysis_question, context_summary, referenced_artifact_ids, schema_linking_question
+from engine.agent_core.prompts import RESULT_EXPLANATION_SECTIONS
+from engine.agent_core.recommendations import suggest_followups
+from engine.agent_core.result_profiler import profile_result
+from engine.agent_core.semantic_contract import QueryContract, build_query_contract
+from engine.agent_core.semantic_retry_policy import (
     accept_semantic_retry,
     semantic_retry_prompt,
     semantic_violation_payload,
     should_retry_semantic,
 )
-from engine.agent_contracts.sql_semantic_verifier import verify_sql_against_contract
-from engine.agent_contracts.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCandidate, ToolObservation
+from engine.agent_core.sql_semantic_verifier import verify_sql_against_contract
+from engine.agent_core.types import AgentRunRequest, QueryPlan, ReviseResult, SQLCandidate, ToolObservation
 from engine.errors import DataBoxError
 from engine.sql.executor import execute_query
 from engine.sql.guardrail import GuardrailResult, guardrail_check
@@ -489,7 +489,7 @@ def answer_synthesizer_tool(
     }
 
     def body() -> dict[str, Any]:
-        from engine.agent_contracts.types import FollowUpSuggestion, ResultProfile
+        from engine.agent_core.types import FollowUpSuggestion, ResultProfile
 
         profile = ResultProfile.model_validate(result_profile) if result_profile else None
         parsed_suggestions = [
@@ -527,7 +527,7 @@ def suggest_followups_tool(
     }
 
     def body() -> dict[str, Any]:
-        from engine.agent_contracts.types import ResultProfile
+        from engine.agent_core.types import ResultProfile
 
         profile = ResultProfile.model_validate(result_profile) if result_profile else None
         suggestions = suggest_followups(

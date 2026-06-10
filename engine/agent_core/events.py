@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from engine.agent_contracts.types import (
+from engine.agent_core.types import (
     AgentAnswer,
     AgentApprovalRecord,
     AgentArtifact,
@@ -14,7 +14,7 @@ from engine.agent_contracts.types import (
     AgentStep,
     AgentTraceEvent,
 )
-from engine.agent_contracts.trace_redactor import AgentTraceRedactor
+from engine.agent_core.trace_redactor import AgentTraceRedactor
 
 
 RuntimeEventRecorder = Callable[[AgentRuntimeEvent], None]

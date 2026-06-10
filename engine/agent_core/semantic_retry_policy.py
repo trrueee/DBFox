@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from engine.agent_contracts.semantic_contract import QueryContract
-from engine.agent_contracts.sql_semantic_verifier import SemanticViolation
+from engine.agent_core.semantic_contract import QueryContract
+from engine.agent_core.sql_semantic_verifier import SemanticViolation
 from engine.sql.compiler import SQLProjectionConstraintVerifier
 
 

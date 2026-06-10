@@ -5,8 +5,8 @@ from typing import Any, cast
 
 from sqlalchemy.orm import Session, selectinload
 
-from engine.agent_contracts.context import schema_linking_question
-from engine.agent_contracts.types import AgentContextArtifact, AgentRunRequest, AgentWorkspaceContext
+from engine.agent_core.context import schema_linking_question
+from engine.agent_core.types import AgentContextArtifact, AgentRunRequest, AgentWorkspaceContext
 from engine.models import (
     AgentArtifactRecord,
     AgentRun,

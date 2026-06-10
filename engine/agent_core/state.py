@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from engine.agent_contracts.types import AgentArtifact, AgentStep, ToolObservation
+from engine.agent_core.types import AgentArtifact, AgentStep, ToolObservation
 
 
 class AgentState(BaseModel):

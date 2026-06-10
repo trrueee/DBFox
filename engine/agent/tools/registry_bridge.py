@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 from langchain_core.tools import StructuredTool
 
-from engine.agent_contracts.tool_registry import ToolRegistry
+from engine.agent_core.tool_registry import ToolRegistry
 from engine.agent.tools.tool_manifest import enrich_description
 from engine.agent.tools.tool_aliases import to_alias
 
@@ -16,7 +16,7 @@ logger = logging.getLogger("databox.databox_agent.tools.registry_bridge")
 # Matching is prefix-based, with exact matches taking priority.
 TOOL_GROUP_MAP: dict[str, str] = {
     "workspace.": "workspace",
-    "environment.": "schema",
+    "environment.": "environment",
     "schema.": "schema",
     "semantic.": "semantic",
     "query_plan.": "query_plan",

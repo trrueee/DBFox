@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.artifacts import (
+from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_agent_plan_artifact,
     build_chart_artifact,
@@ -13,8 +13,8 @@ from engine.agent_contracts.artifacts import (
     build_sql_artifact,
     build_table_artifact,
 )
-from engine.agent_contracts.state import AgentState
-from engine.agent_contracts.types import AgentArtifact, ResultProfile, ToolObservation
+from engine.agent_core.state import AgentState
+from engine.agent_core.types import AgentArtifact, ResultProfile, ToolObservation
 
 
 class ArtifactEmitter:

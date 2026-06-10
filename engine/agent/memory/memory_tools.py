@@ -7,8 +7,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from engine.agent_contracts.types import ToolObservation
-from engine.agent_contracts.tool_registry import ToolContext
+from engine.agent_core.types import ToolObservation
+from engine.agent_core.tool_registry import ToolContext
 from engine.agent.memory.long_term_store import get_long_term_store
 from engine.agent.memory.memory_policy import is_safe_for_long_term, default_status
 from engine.agent.memory.memory_schema import MemoryRecord, MemoryType, MemorySource

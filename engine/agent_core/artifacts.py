@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation, ResultProfile
+from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation, ResultProfile
 
 
 class AgentArtifactIdentity:
@@ -77,6 +77,41 @@ def build_query_plan_artifact(
         collapsed=True,
         identity=identity,
         produced_by_step="build_query_plan",
+    )
+
+
+def build_semantic_resolution_artifact(
+    resolution: dict[str, Any],
+    *,
+    identity: AgentArtifactIdentity | None = None,
+) -> AgentArtifact:
+    summary_parts = [resolution.get("user_goal", "")]
+    terms = resolution.get("resolved_terms") or []
+    if terms:
+        summary_parts.append(f"{len(terms)} term(s) resolved")
+    metrics = resolution.get("resolved_metrics") or []
+    if metrics:
+        summary_parts.append(f"{len(metrics)} metric(s)")
+    return _artifact(
+        "semantic_resolution",
+        "insight",
+        "Semantic Resolution",
+        {
+            "user_goal": resolution.get("user_goal"),
+            "task_shape": resolution.get("task_shape"),
+            "resolved_terms": terms,
+            "resolved_metrics": metrics,
+            "resolved_dimensions": resolution.get("resolved_dimensions"),
+            "join_paths": resolution.get("join_paths"),
+            "confidence": resolution.get("confidence"),
+            "semantic_context_text": resolution.get("semantic_context_text"),
+        },
+        mode="inline",
+        priority=85,
+        collapsed=True,
+        identity=identity,
+        artifact_id=identity.stable_id("semantic_resolution") if identity else None,
+        produced_by_step="semantic.resolve",
     )
 
 

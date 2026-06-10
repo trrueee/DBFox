@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.agent import persistence as agent_persistence
-from engine.agent_contracts.types import (
+from engine.agent_core.types import (
     AgentApprovalRecord,
     AgentAnswer,
     AgentArtifact,
@@ -23,11 +23,11 @@ from engine.agent_contracts.types import (
 )
 from engine.errors import DataBoxError
 from engine.models import AgentRun
-from engine.agent_contracts.checkpointer import build_agent_kernel_checkpointer
-from engine.agent_contracts.databox_tools import register_databox_tools
-from engine.agent_contracts.artifact_emitter import ArtifactEmitter
-from engine.agent_contracts.artifacts import AgentArtifactIdentity
-from engine.agent_contracts.events import EventEmitter
+from engine.agent_core.checkpointer import build_agent_kernel_checkpointer
+from engine.tools.databox_tools import register_databox_tools
+from engine.tools.artifact_emitter import ArtifactEmitter
+from engine.agent_core.artifacts import AgentArtifactIdentity
+from engine.agent_core.events import EventEmitter
 
 from engine.agent.graph.react_graph import build_databox_react_graph
 from engine.agent.graph.state import DataBoxAgentState
@@ -51,7 +51,7 @@ class DataBoxAgentService:
         _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
         _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
         self._persist_events = _mode != "disabled" and _events_flag.lower() != "false"
-        from engine.agent_contracts.persistence_sink import create_persistence_sink
+        from engine.agent_core.persistence_sink import create_persistence_sink
         self.persistence_sink = create_persistence_sink(db)
 
     # ---- Public API ----------------------------------------------------------
@@ -324,7 +324,7 @@ class DataBoxAgentService:
         )
 
     def _new_agent_state(self, run_id: str, session_id: str, req: AgentRunRequest) -> Any:
-        from engine.agent_contracts.state import AgentState
+        from engine.agent_core.state import AgentState
         return AgentState(
             run_id=run_id,
             session_id=session_id,

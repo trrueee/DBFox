@@ -5,8 +5,8 @@ import uuid
 import pytest
 
 from engine.agent import AgentRunRequest
-from engine.agent_contracts.semantic_retry_policy import semantic_retry_prompt
-from engine.agent_contracts.tools import (
+from engine.agent_core.semantic_retry_policy import semantic_retry_prompt
+from engine.tools.sql_tools import (
     _prepare_generated_sql,
     _render_sql_from_query_plan,
     build_query_plan_tool,
@@ -15,8 +15,8 @@ from engine.agent_contracts.tools import (
     suggest_chart_tool,
     validate_sql_tool,
 )
-from engine.agent_contracts.semantic_contract import build_query_contract
-from engine.agent_contracts.sql_semantic_verifier import SemanticViolation
+from engine.agent_core.semantic_contract import build_query_contract
+from engine.agent_core.sql_semantic_verifier import SemanticViolation
 from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 
@@ -745,7 +745,7 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
 # Projection-only retry validation
 # ============================================================
 
-from engine.agent_contracts.semantic_contract import QueryContract, DistinctContract
+from engine.agent_core.semantic_contract import QueryContract, DistinctContract
 from engine.sql.compiler import SQLProjectionConstraintVerifier
 
 

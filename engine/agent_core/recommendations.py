@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_contracts.types import FollowUpSuggestion, ResultProfile
+from engine.agent_core.types import FollowUpSuggestion, ResultProfile
 
 
 def suggest_followups(

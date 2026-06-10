@@ -6,8 +6,8 @@ from typing import Any, Callable, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from engine.agent_contracts.tool_runtime_gateway import ToolRuntimeGateway
-from engine.agent_contracts.types import AgentRunRequest, ToolObservation
+from engine.tools.tool_runtime_gateway import ToolRuntimeGateway
+from engine.agent_core.types import AgentRunRequest, ToolObservation
 
 
 ToolRiskLevel = Literal["safe", "warning", "danger"]
