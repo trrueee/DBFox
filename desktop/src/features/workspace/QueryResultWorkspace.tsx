@@ -1,9 +1,8 @@
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import { demoAgentArtifacts, type WorkspaceTab } from "../../mock/databoxMock";
+import { ArtifactRenderer } from "./artifacts/ArtifactRenderer";
 import { FollowUpInput } from "./queryResult/FollowUpInput";
-import { GeneratedSqlCard } from "./queryResult/GeneratedSqlCard";
 import { QueryMessages } from "./queryResult/QueryMessages";
 import { QueryResultHeader } from "./queryResult/QueryResultHeader";
-import { TrendChartCard } from "./queryResult/TrendChartCard";
 
 interface QueryResultWorkspaceProps {
   tab: WorkspaceTab;
@@ -19,8 +18,11 @@ export function QueryResultWorkspace({ tab, onOpenSqlConsole, onSetSqlQuery, onS
 
       <div className="hifi-query-result-messages">
         <QueryMessages messages={tab.chatMessages || []} />
-        <TrendChartCard />
-        <GeneratedSqlCard onOpenSqlConsole={onOpenSqlConsole} onSetSqlQuery={onSetSqlQuery} />
+        <ArtifactRenderer
+          artifacts={tab.artifacts || demoAgentArtifacts}
+          onOpenSqlConsole={onOpenSqlConsole}
+          onSetSqlQuery={onSetSqlQuery}
+        />
       </div>
 
       <FollowUpInput tabId={tab.id} onSendFollowUp={onSendFollowUp} />
