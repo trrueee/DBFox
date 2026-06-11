@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAgentRunDraft,
   agentApi,
+  cancelAgentRun,
   reduceAgentRuntimeEvent,
   rejectAgentApproval,
   streamResumeAgentRun,
@@ -204,6 +205,19 @@ describe("agent approval api", () => {
 
     expect(result.run_id).toBe("run_1");
     expect(onEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels agent runs through the authenticated api client", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "cancelled", run_id: "run 1" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await cancelAgentRun("run 1");
+
+    expect(result.status).toBe("cancelled");
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/agent/runs/run%201/cancel");
+    expect(options?.method).toBe("POST");
+    expect((options?.headers as Record<string, string>)["X-Local-Token"]).toBeDefined();
   });
 });
 
