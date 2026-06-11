@@ -26,14 +26,18 @@ def semantic_resolve(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
             resolved_dimensions, candidate_tables, join_paths, ambiguity,
             and semantic_context_text.
     """
-    datasource_id = str(ctx.state.get("datasource_id") or "")
+    datasource_id = str(
+        ctx.state_view.get("datasource_id")
+        or getattr(ctx.request, "datasource_id", "")
+        or ""
+    )
     question = str(
         args.get("question")
-        or ctx.state.get("question")
-        or ctx.request.question
+        or ctx.state_view.get("question")
+        or (ctx.request.question if ctx.request else "")
     )
 
-    workspace = ctx.state.get("workspace_context")
+    workspace = ctx.state_view.get("workspace_context")
 
     # Get model config from request
     api_key = getattr(ctx.request, "api_key", None) if ctx.request else None
