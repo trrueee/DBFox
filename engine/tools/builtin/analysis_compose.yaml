@@ -17,9 +17,61 @@ input_schema:
     question:
       type: string
       description: Question to use for this final analysis composition.
+output_schema:
+  type: object
+  description: Final analysis delivery contract. The frontend decides rendering from artifacts; the agent only chooses the artifact-level display plan.
+  properties:
+    answer:
+      type: string
+      description: Direct natural-language conclusion.
+    key_findings:
+      type: array
+      description: Evidence-backed findings with numbers.
+      items:
+        type: string
+    evidence:
+      type: array
+      description: References to SQL, table, chart, profile, or safety artifacts.
+      items:
+        type: object
+    caveats:
+      type: array
+      description: Important assumptions, data-quality notes, or limitations.
+      items:
+        type: string
+    recommendations:
+      type: array
+      description: Recommended next actions or analysis directions.
+      items:
+        type: string
+    follow_up_questions:
+      type: array
+      description: Suggested follow-up questions the user can ask next.
+      items:
+        type: string
+    display_plan:
+      type: array
+      description: Optional component-level rendering intent. Do not include React, HTML, CSS, or code.
+      items:
+        type: object
+        properties:
+          component:
+            type: string
+            description: One of metric, chart, table, markdown, recommendation, sql, trace.
+          reason:
+            type: string
+            description: Why this component helps answer the task.
+          priority:
+            type: integer
+            description: Lower priority appears earlier.
+        additionalProperties: true
+  required: [answer]
+  additionalProperties: true
 binding:
   consumes_state_keys: [query_plan, sql, safety, execution, result_profile, chart_suggestion, suggestions, artifacts]
   produces_state_keys: [answer, final_answer, analysis_report]
   artifact_types: [insight, recommendation]
 metadata:
   next_route: finalize
+  preferred_after: [sql.execute_readonly, result.profile, chart.suggest, followup.suggest]
+  final_tool: true
