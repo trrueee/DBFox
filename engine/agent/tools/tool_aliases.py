@@ -29,6 +29,7 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "chart_suggest": "chart.suggest",
     "followup_suggest": "followup.suggest",
     "answer_synthesize": "answer.synthesize",
+    "analysis_compose": "analysis.compose",
     # Workspace tools
     "workspace_explain_sql": "workspace.explain_sql",
     "workspace_fix_sql": "workspace.fix_sql",
