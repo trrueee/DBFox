@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DataBoxAgentState
+
+logger = logging.getLogger("databox.databox_agent.nodes.finalize_node")
 
 
 def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -80,7 +83,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
     # ---- Auto-write trajectory to memory (Agent v2) -----------------------
     _auto_write_trajectory(state, status, answer_text)
 
-    return {
+    result: dict[str, Any] = {
         "status": status,
         "answer": answer_payload,
         "final_answer": answer_payload,
@@ -88,6 +91,62 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         "trace_events": [trace_event],
         "agent_graph_route": "end",
     }
+
+    if status == "failed" and error:
+        error_artifact = _build_and_persist_error_artifact(state, config, str(error))
+        if error_artifact is not None:
+            result["artifacts"] = [error_artifact]
+
+    return result
+
+
+def _build_and_persist_error_artifact(
+    state: DataBoxAgentState,
+    config: RunnableConfig,
+    error: str,
+) -> dict[str, Any] | None:
+    """Emit the terminal `agent_error` artifact for failed runs.
+
+    Gives the frontend a structured error card with recovery guidance and the
+    safety state at the moment of failure. Best-effort persistence to DB.
+    """
+    existing = state.get("artifacts") or []
+    for item in existing:
+        sem_id = item.get("semantic_id") if isinstance(item, dict) else getattr(item, "semantic_id", None)
+        if sem_id == "agent_error":
+            return None
+
+    try:
+        from engine.agent_core.artifacts import AgentArtifactIdentity, build_error_artifact
+
+        run_id = str(state.get("run_id") or "")
+        artifact = build_error_artifact(
+            error,
+            safety=state.get("safety"),
+            execution=state.get("execution"),
+            identity=AgentArtifactIdentity(run_id),
+        )
+    except Exception as exc:
+        logger.warning("Failed to build error artifact: %s", exc)
+        return None
+
+    try:
+        from engine.agent.graph.context import graph_context
+        from engine.agent_core import persistence as ap
+        from engine.models import AgentArtifactRecord
+
+        db = graph_context(config).db
+        if db is not None:
+            run_id = str(state.get("run_id") or "")
+            thread_id = str(state.get("thread_id") or run_id)
+            existing_count = db.query(AgentArtifactRecord).filter(
+                AgentArtifactRecord.run_id == run_id
+            ).count()
+            ap.record_artifact(db, thread_id, run_id, artifact, sequence=existing_count + 1)
+    except Exception as exc:
+        logger.warning("Failed to save error artifact to DB: %s", exc)
+
+    return artifact.model_dump(mode="json")
 
 
 def _auto_write_trajectory(

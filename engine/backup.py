@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.datasource import get_mysql_connection_params, is_demo_db
+from engine.datasource import get_mysql_connection_params
 from engine.errors import DataBoxError
 from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID
 from engine.runtime_paths import private_runtime_dir
@@ -232,11 +232,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
-    if is_demo_db(str(ds.host), str(ds.database_name)):
-        raise BackupError(
-            "Built-in mock demo datasource cannot be backed up. Start a local Docker MySQL environment first.",
-            code="BACKUP_UNSUPPORTED_DATASOURCE",
-        )
+
 
     backup_id = str(uuid.uuid4())
     started = datetime.now(UTC)

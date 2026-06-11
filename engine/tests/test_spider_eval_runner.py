@@ -217,8 +217,7 @@ class TestSpiderE2E:
                     "dialect": dialect,
                     "used_query_plan": False,
                     "used_renderer": False,
-                    "used_demo_fallback": False,
-                },
+                    },
             }
 
         monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
@@ -240,7 +239,7 @@ class TestSpiderE2E:
         for result in results:
             assert result.generation_metadata["generation_source"] == "schema_direct_llm"
             assert result.generation_metadata["used_renderer"] is False
-            assert result.generation_metadata["used_demo_fallback"] is False
+
             assert result.generation_metadata["used_guardrail_in_generate"] is False
 
     @pytest.mark.e2e

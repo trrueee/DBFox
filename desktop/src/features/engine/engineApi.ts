@@ -44,7 +44,9 @@ export interface EngineSqlResult {
   rowCount: number;
   latencyMs: number;
   warnings?: string[];
+  notices?: string[];
   truncated?: boolean;
+  cellTruncated?: boolean;
   historyId?: string;
   executionId?: string;
 }

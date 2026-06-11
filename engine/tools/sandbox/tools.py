@@ -16,8 +16,12 @@ class EmptyToolInput(BaseModel):
 class QuestionToolInput(BaseModel):
     question: Optional[str] = None
 
+class FollowupLoadContextInput(BaseModel):
+    question: Optional[str] = None
+    follow_up_context: Optional[dict[str, Any]] = None
+
 class FollowupLoadContextOutput(BaseModel):
-    context_summary: str
+    context_summary: Optional[str] = None
     analysis_question: str
     schema_linking_question: str
     referenced_artifact_ids: List[str] = Field(default_factory=list)
@@ -25,6 +29,7 @@ class FollowupLoadContextOutput(BaseModel):
 class SchemaBuildContextInput(BaseModel):
     question: Optional[str] = None
     optimize_rag: bool = True
+    follow_up_context: Optional[dict[str, Any]] = None
 
 class SchemaBuildContextOutput(BaseModel):
     schema_context: str
@@ -56,6 +61,7 @@ class SqlGenerateInput(BaseModel):
     question: Optional[str] = None
     schema_context: Optional[dict[str, Any]] = None
     query_plan: Optional[dict[str, Any]] = None
+    follow_up_context: Optional[dict[str, Any]] = None
 
 class SqlCandidateOutput(BaseModel):
     sql: Optional[str] = None
@@ -177,8 +183,12 @@ class AnswerSynthesizeOutput(BaseModel):
 
 
 # Helper function to construct a dummy request for the legacy tools
-def _dummy_request(context: ExecutionContext, question: Optional[str]) -> AgentRunRequest:
-    return AgentRunRequest(
+def _dummy_request(
+    context: ExecutionContext,
+    question: Optional[str],
+    follow_up_context: Optional[dict[str, Any]] = None,
+) -> AgentRunRequest:
+    req = AgentRunRequest(
         datasource_id=context.datasource_id,
         question=question or "",
         session_id=context.thread_id,
@@ -186,19 +196,26 @@ def _dummy_request(context: ExecutionContext, question: Optional[str]) -> AgentR
         api_base=context.api_base,
         model_name=context.model_name,
     )
+    if follow_up_context:
+        try:
+            from engine.agent_core.types import AgentFollowUpContext
+            req.follow_up_context = AgentFollowUpContext.model_validate(follow_up_context)
+        except Exception:
+            pass
+    return req
 
 
 # --- BaseTool Subclasses ---
 
-class FollowupLoadContextTool(BaseTool[EmptyToolInput, FollowupLoadContextOutput]):
+class FollowupLoadContextTool(BaseTool[FollowupLoadContextInput, FollowupLoadContextOutput]):
     name = "followup.load_context"
     description = "Load and normalize follow-up context."
-    input_schema = EmptyToolInput
+    input_schema = FollowupLoadContextInput
     output_schema = FollowupLoadContextOutput
 
-    def _run(self, tool_input: EmptyToolInput, context: ExecutionContext) -> FollowupLoadContextOutput:
+    def _run(self, tool_input: FollowupLoadContextInput, context: ExecutionContext) -> FollowupLoadContextOutput:
         from engine.tools.sql_tools import load_followup_context_tool
-        req = _dummy_request(context, "")
+        req = _dummy_request(context, tool_input.question, tool_input.follow_up_context)
         obs = load_followup_context_tool(req)
         return FollowupLoadContextOutput.model_validate(obs.output or {})
 
@@ -211,7 +228,7 @@ class SchemaBuildContextTool(BaseTool[SchemaBuildContextInput, SchemaBuildContex
 
     def _run(self, tool_input: SchemaBuildContextInput, context: ExecutionContext) -> SchemaBuildContextOutput:
         from engine.tools.sql_tools import build_schema_context_tool
-        req = _dummy_request(context, tool_input.question)
+        req = _dummy_request(context, tool_input.question, tool_input.follow_up_context)
         req.optimize_rag = tool_input.optimize_rag
         obs = build_schema_context_tool(context.db_session, req)
         return SchemaBuildContextOutput.model_validate(obs.output or {})
@@ -238,7 +255,7 @@ class SqlGenerateTool(BaseTool[SqlGenerateInput, SqlCandidateOutput]):
 
     def _run(self, tool_input: SqlGenerateInput, context: ExecutionContext) -> SqlCandidateOutput:
         from engine.tools.sql_tools import generate_sql_tool
-        req = _dummy_request(context, tool_input.question)
+        req = _dummy_request(context, tool_input.question, tool_input.follow_up_context)
         obs = generate_sql_tool(
             context.db_session,
             req,

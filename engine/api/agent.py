@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -37,6 +38,18 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
+def _check_llm_credentials(req: AgentRunRequest) -> None:
+    if os.environ.get("DATABOX_TESTING") == "1":
+        # Test environment runs the agent against mocked LLM nodes.
+        return
+    key = (req.api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+    if not key:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "NO_LLM_KEY", "message": "Agent requires a configured LLM API key."},
+        )
+
 
 def _format_sse_event(event: AgentRuntimeEvent) -> str:
     return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
@@ -98,6 +111,7 @@ def api_get_run_checkpoints(run_id: str, db: Session = Depends(get_db)) -> list[
 
 @router.post("/agent/run", response_model=AgentRunResponse)
 def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentRunResponse:
+    _check_llm_credentials(req)
     try:
         return DataBoxAgentRuntime(db).run(req)
     except DataBoxError as exc:
@@ -179,6 +193,7 @@ def api_resolve_agent_approval(
 def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     def stream_events() -> Any:  # noqa
         try:
+            _check_llm_credentials(req)
             for event in DataBoxAgentRuntime(db).run_iter(req):
                 yield _format_sse_event(event)
         except DataBoxError as exc:

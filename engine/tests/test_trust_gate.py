@@ -105,7 +105,7 @@ def test_trust_gate_execution_decision_blocks_when_dry_run_unavailable(
     def fail_dry_run(*_args, **_kwargs):
         raise RuntimeError("dry run connection unavailable")
 
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fail_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fail_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,
@@ -143,8 +143,8 @@ def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.trust_gate.guardrail_check", fake_guardrail)
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fake_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,
@@ -181,8 +181,8 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
             return DryRunResult(False, "syntax_error", "original SQL should not be dry-run")
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.trust_gate.guardrail_check", fake_guardrail)
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fake_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,
@@ -219,8 +219,8 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
             return DryRunResult(False, "schema_error", "no such column: missing_column")
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.trust_gate.guardrail_check", fake_guardrail)
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fake_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,
@@ -255,8 +255,8 @@ def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.trust_gate.guardrail_check", fake_guardrail)
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fake_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,
@@ -291,8 +291,8 @@ def test_trust_gate_execution_decision_skips_dry_run_when_safe_sql_is_empty(
         dry_run_sql.append(sql)
         return DryRunResult(True)
 
-    monkeypatch.setattr("engine.trust_gate.guardrail_check", fake_guardrail)
-    monkeypatch.setattr("engine.trust_gate.dry_run_query", fake_dry_run)
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
         demo_datasource.id,

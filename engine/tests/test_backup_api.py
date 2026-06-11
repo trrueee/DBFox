@@ -90,31 +90,6 @@ def test_create_list_and_precheck_backup(client, db_session, monkeypatch) -> Non
     assert precheck["errors"] == []
 
 
-def test_backup_rejects_builtin_mock_demo_datasource(client, db_session) -> None:
-    cipher, nonce = encrypt_password("demo")
-    ds = DataSource(
-        id="mock-demo-ds",
-        project_id=DEFAULT_PROJECT_ID,
-        name="mock_demo",
-        host="demo",
-        port=3306,
-        database_name="demo_shop",
-        username="demo",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
-        status="active",
-    )
-    db_session.add(ds)
-    db_session.commit()
-
-    resp = client.post(
-        "/api/v1/backups",
-        json={"datasource_id": ds.id},
-        headers=_headers(),
-    )
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "BACKUP_UNSUPPORTED_DATASOURCE"
-
 
 def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_runtime")

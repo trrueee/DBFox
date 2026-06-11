@@ -1,30 +1,57 @@
-import { useState } from "react";
-import { Play, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
+import { ImageCell, isImageUrl } from "../../components/ImageCell";
 import { executeSql, getDefaultDatasource, type EngineSqlResult } from "../engine/engineApi";
 
 interface SqlConsoleWorkspaceProps {
   sqlQuery: string;
-  sqlResultsRun: boolean;
-  sqlConsoleTab: "results" | "history" | "ai-explain";
   onSqlQueryChange: (value: string) => void;
-  onRunSql: () => void;
-  onSqlConsoleTabChange: (tab: "results" | "history" | "ai-explain") => void;
   onToast: (message: string) => void;
 }
 
-export function SqlConsoleWorkspace({
-  sqlQuery,
-  sqlResultsRun,
-  sqlConsoleTab,
-  onSqlQueryChange,
-  onRunSql,
-  onSqlConsoleTabChange,
-  onToast,
-}: SqlConsoleWorkspaceProps) {
-  const [result, setResult] = useState<EngineSqlResult | null>(null);
+type ConsoleEntry =
+  | { id: number; kind: "info"; text: string; time: string }
+  | { id: number; kind: "sql"; sql: string; time: string }
+  | { id: number; kind: "result"; result: EngineSqlResult; time: string }
+  | { id: number; kind: "error"; message: string; time: string };
+
+// Distributive omit: Omit over a discriminated union collapses variants,
+// so map each variant separately.
+type ConsoleEntryDraft = ConsoleEntry extends infer T
+  ? T extends ConsoleEntry
+    ? Omit<T, "id" | "time">
+    : never
+  : never;
+
+let entrySeq = 0;
+const nextEntryId = () => ++entrySeq;
+
+export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: SqlConsoleWorkspaceProps) {
+  const [entries, setEntries] = useState<ConsoleEntry[]>([
+    { id: nextEntryId(), kind: "info", text: "SQL Console 已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。", time: formatTime() },
+  ]);
   const [running, setRunning] = useState(false);
-  const [logLines, setLogLines] = useState<string[]>(["[INFO] SQL Console 已就绪，等待选择数据源。"]);
-  const [error, setError] = useState("");
+  const [dbLabel, setDbLabel] = useState("local engine");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    getDefaultDatasource()
+      .then((datasource) => {
+        if (datasource) setDbLabel(`${datasource.database_name} · ${datasource.db_type}`);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [entries, running]);
+
+  const appendEntries = (items: ConsoleEntryDraft[]) => {
+    const time = formatTime();
+    setEntries((prev) => [...prev, ...items.map((item) => ({ ...item, id: nextEntryId(), time }) as ConsoleEntry)]);
+  };
 
   const runSql = async () => {
     const sql = sqlQuery.trim();
@@ -32,91 +59,158 @@ export function SqlConsoleWorkspace({
       onToast("SQL 不能为空");
       return;
     }
+    if (running) return;
     setRunning(true);
-    setError("");
-    setLogLines((prev) => [`[INFO] ${formatTime()} - 开始执行 SQL`, ...prev]);
+    appendEntries([{ kind: "sql", sql }]);
+    onSqlQueryChange("");
     try {
       const datasource = await getDefaultDatasource();
       if (!datasource) {
         throw new Error("暂无可用数据源，请先创建并同步数据源。");
       }
-      const nextResult = await executeSql(datasource.id, sql, "SQL Console");
-      setResult(nextResult);
-      setLogLines((prev) => [`[INFO] ${formatTime()} - 执行成功，返回 ${nextResult.rowCount} 行，耗时 ${nextResult.latencyMs}ms`, ...prev]);
-      if (nextResult.warnings?.length) onToast(nextResult.warnings[0]);
-      onRunSql();
-      onSqlConsoleTabChange("results");
+      setDbLabel(`${datasource.database_name} · ${datasource.db_type}`);
+      const result = await executeSql(datasource.id, sql, "SQL Console");
+      const extras: ConsoleEntryDraft[] = [{ kind: "result", result }];
+      for (const warning of result.warnings ?? []) {
+        extras.push({ kind: "info", text: `[WARN] ${warning}` });
+      }
+      for (const notice of result.notices ?? []) {
+        extras.push({ kind: "info", text: `[INFO] ${notice}` });
+      }
+      appendEntries(extras);
     } catch (err) {
       const message = err instanceof Error ? err.message : "SQL 执行失败";
-      setError(message);
-      setResult(null);
-      setLogLines((prev) => [`[ERROR] ${formatTime()} - ${message}`, ...prev]);
-      onSqlConsoleTabChange("history");
-      onToast(message);
+      appendEntries([{ kind: "error", message }]);
+      onSqlQueryChange(sql);
     } finally {
       setRunning(false);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
     }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "F9" || (event.key === "Enter" && (event.ctrlKey || event.metaKey))) {
+      event.preventDefault();
+      void runSql();
+    }
+  };
+
+  const clearConsole = () => {
+    setEntries([{ id: nextEntryId(), kind: "info", text: "控制台已清屏。", time: formatTime() }]);
   };
 
   return (
     <div className="hifi-sql-workspace hifi-tab-pane flex flex-col h-full">
       <div className="hifi-panel-toolbar flex-shrink-0">
         <div className="hifi-toolbar-left">
-          <span className="font-semibold text-[11px] text-slate-700">SQL Console / Local Engine</span>
+          <span className="font-semibold text-[11px] text-slate-700">SQL Console / {dbLabel}</span>
         </div>
         <div className="hifi-toolbar-right">
           <button className="hifi-guide-btn-primary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={runSql} disabled={running}>
             <Play size={10} />
             <span>{running ? "运行中..." : "运行 (F9)"}</span>
           </button>
-          <button className="hifi-toolbar-btn" style={{ height: "24px" }} onClick={() => onToast("代码格式化待接入 SQL Formatter")}>格式化</button>
+          <button className="hifi-toolbar-btn" style={{ height: "24px" }} onClick={clearConsole}>清屏</button>
         </div>
       </div>
 
-      <textarea
-        value={sqlQuery}
-        onChange={(event) => onSqlQueryChange(event.target.value)}
-        className="flex-1 bg-slate-950 text-blue-100 font-mono text-[12px] p-4 outline-none resize-none leading-relaxed"
-        spellCheck={false}
-      />
+      <div className="sql-console" onClick={(event) => { if (event.target === event.currentTarget) inputRef.current?.focus(); }}>
+        <div className="sql-console-scroll" ref={scrollRef}>
+          {entries.map((entry) => renderEntry(entry))}
 
-      <div className="hifi-sql-output-pane">
-        <div className="hifi-sql-output-tabs">
-          <div className={`hifi-sql-output-tab ${sqlConsoleTab === "results" ? "active" : ""}`} onClick={() => onSqlConsoleTabChange("results")}>查询结果 {result ? `(${result.rowCount}行)` : sqlResultsRun ? "(已运行)" : ""}</div>
-          <div className={`hifi-sql-output-tab ${sqlConsoleTab === "history" ? "active" : ""}`} onClick={() => onSqlConsoleTabChange("history")}>消息日志</div>
-          <div className={`hifi-sql-output-tab ${sqlConsoleTab === "ai-explain" ? "active" : ""}`} onClick={() => onSqlConsoleTabChange("ai-explain")}>AI 解释 SQL</div>
-        </div>
+          {running && <div className="sql-console-running">执行中...</div>}
 
-        <div className="hifi-sql-output-content">
-          {sqlConsoleTab === "results" && (result ? <SqlResults result={result} /> : <div className="text-slate-400 italic text-[11px] text-center mt-10">点击“运行”执行上方的查询语句并查看输出结果。</div>)}
-          {sqlConsoleTab === "history" && <SqlHistory logLines={logLines} error={error} />}
-          {sqlConsoleTab === "ai-explain" && <SqlExplain />}
+          <div className="sql-console-prompt">
+            <span className="sql-console-prompt-label">sql&gt;</span>
+            <textarea
+              ref={inputRef}
+              className="sql-console-input"
+              value={sqlQuery}
+              onChange={(event) => onSqlQueryChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={Math.min(12, Math.max(1, sqlQuery.split("\n").length))}
+              placeholder="输入 SQL，Ctrl+Enter 执行"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoComplete="off"
+            />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function SqlResults({ result }: { result: EngineSqlResult }) {
+function renderEntry(entry: ConsoleEntry) {
+  switch (entry.kind) {
+    case "info":
+      return (
+        <div key={entry.id} className={`sql-console-info ${entry.text.startsWith("[WARN]") ? "warn" : ""}`}>
+          {entry.text}
+        </div>
+      );
+    case "sql":
+      return (
+        <div key={entry.id} className="sql-console-stmt">
+          <span className="sql-console-prompt-label">sql&gt;</span>
+          <pre className="sql-console-sql">{entry.sql}</pre>
+        </div>
+      );
+    case "error":
+      return (
+        <div key={entry.id} className="sql-console-error">
+          <strong>ERROR</strong> {entry.message}
+        </div>
+      );
+    case "result":
+      return <ResultBlock key={entry.id} result={entry.result} time={entry.time} />;
+  }
+}
+
+function ResultBlock({ result, time }: { result: EngineSqlResult; time: string }) {
   return (
-    <table className="hifi-table">
-      <thead><tr>{result.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
-      <tbody>
-        {result.rows.map((row, rowIndex) => (
-          <tr key={rowIndex}>{result.columns.map((column) => <td key={column} className="max-w-[240px] truncate" title={row[column] ?? ""}>{row[column] ?? "NULL"}</td>)}</tr>
-        ))}
-        {result.rows.length === 0 && <tr><td colSpan={Math.max(result.columns.length, 1)} className="text-center text-slate-400">执行成功，无结果集。</td></tr>}
-      </tbody>
-    </table>
+    <div className="sql-console-result">
+      <div className="sql-console-result-meta">
+        {result.rowCount} 行 · {result.latencyMs}ms · {time}
+        {result.truncated ? " · 结果已截断" : ""}
+      </div>
+      {result.columns.length > 0 ? (
+        <div className="sql-console-table-wrap">
+          <table className="sql-console-table">
+            <thead>
+              <tr>{result.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+            </thead>
+            <tbody>
+              {result.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {result.columns.map((column) => {
+                    const value = row[column];
+                    if (isImageUrl(value)) {
+                      return (
+                        <td key={column}>
+                          <ImageCell url={value} />
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={column} title={value ?? ""}>
+                        {value ?? <span className="sql-console-null">NULL</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {result.rows.length === 0 && (
+                <tr><td colSpan={Math.max(result.columns.length, 1)} className="sql-console-empty">执行成功，无结果集。</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="sql-console-info">执行成功。</div>
+      )}
+    </div>
   );
-}
-
-function SqlHistory({ logLines, error }: { logLines: string[]; error: string }) {
-  return <div className="flex flex-col gap-1.5 font-mono text-[10px]">{error && <div className="text-red-600">[ERROR] {error}</div>}{logLines.map((line, index) => <div key={`${line}-${index}`} className={line.includes("ERROR") ? "text-red-600" : "text-slate-700"}>{line}</div>)}</div>;
-}
-
-function SqlExplain() {
-  return <div className="hifi-sql-ai-explain-card flex gap-2"><Sparkles size={14} className="text-indigo-500 flex-shrink-0 mt-0.5" /><div><strong className="block text-slate-800 mb-1">SQL 逻辑解释:</strong><span className="text-[10px] text-slate-600">AI 解释待接入 Agent。当前 SQL 执行已走本地 Engine 的安全校验和执行接口。</span></div></div>;
 }
 
 function formatTime() {

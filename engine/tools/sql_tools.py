@@ -27,7 +27,6 @@ from engine.agent_core.types import AgentRunRequest, QueryPlan, ReviseResult, SQ
 from engine.errors import DataBoxError
 from engine.sql.executor import execute_query
 from engine.sql.guardrail import GuardrailResult, guardrail_check
-from engine.datasource import is_demo_db
 from engine.models import DataSource, SchemaTable
 from engine.semantic import QueryPlanBuilder, SchemaContextBuilder, SchemaLinker
 from engine.sql.trust_gate import TrustGate
@@ -222,7 +221,6 @@ def generate_sql_tool(
                 "used_renderer": False,
                 "used_query_plan": False,
                 "used_query_plan_as_prompt": False,
-                "used_demo_fallback": False,
                 "used_guardrail_in_generate": False,
                 "used_semantic_retry": semantic_retry_accepted,
                 "agent_query_plan": query_plan,
@@ -1063,13 +1061,6 @@ def _first_schema_tables(db: Session, datasource_id: str) -> list[str]:
 def _datasource_dialect(db: Session, datasource_id: str) -> str:
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     return str(datasource.db_type or "mysql") if datasource else "mysql"
-
-
-def _is_demo_datasource(db: Session, datasource_id: str) -> bool:
-    datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
-    if datasource is None:
-        return False
-    return is_demo_db(str(datasource.host or ""), str(datasource.database_name or ""))
 
 
 def _sqlglot_dialect(dialect: str) -> str:

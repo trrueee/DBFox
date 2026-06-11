@@ -7,75 +7,10 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from engine.crypto import decrypt_password
-from engine.datasource import MOCK_TABLES_INFO, build_mysql_ssl_params, is_demo_db
+from engine.datasource import build_mysql_ssl_params
 from engine.models import DataSource, SchemaColumn, SchemaTable
 
 SchemaSnapshot = tuple[list[SchemaTable], list[SchemaColumn], int]
-
-
-def _build_demo_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSnapshot:
-    tables_to_insert: list[SchemaTable] = []
-    columns_to_insert: list[SchemaColumn] = []
-    table_name_to_id: dict[str, str] = {}
-    column_name_to_id: dict[tuple[str, str], str] = {}
-
-    for t_info in MOCK_TABLES_INFO:
-        table_id = str(uuid.uuid4())
-        table_name = str(t_info["table_name"])
-        table_name_to_id[table_name] = table_id
-        tables_to_insert.append(
-            SchemaTable(
-                id=table_id,
-                data_source_id=datasource_id,
-                table_schema=ds.database_name,
-                table_name=table_name,
-                table_comment=t_info["table_comment"],
-                table_type=t_info["table_type"],
-                row_count_estimate=t_info["row_count_estimate"],
-                engine_name=t_info["engine_name"],
-            )
-        )
-
-        columns_list = cast(list[dict[str, object]], t_info["columns"])
-        for col in columns_list:
-            column_name_to_id[(table_name, str(col["column_name"]))] = str(uuid.uuid4())
-
-    for t_info in MOCK_TABLES_INFO:
-        table_name = str(t_info["table_name"])
-        table_id = table_name_to_id[table_name]
-        demo_columns = cast(list[dict[str, object]], t_info["columns"])
-
-        for i, col in enumerate(demo_columns):
-            column_name = str(col["column_name"])
-            column_id = column_name_to_id[(table_name, column_name)]
-            foreign_table_id = None
-            foreign_column_id = None
-
-            if col.get("is_foreign_key"):
-                foreign_table_name = str(col["foreign_table"])
-                foreign_column_name = str(col["foreign_column"])
-                foreign_table_id = table_name_to_id.get(foreign_table_name)
-                foreign_column_id = column_name_to_id.get((foreign_table_name, foreign_column_name))
-
-            columns_to_insert.append(
-                SchemaColumn(
-                    id=column_id,
-                    table_id=table_id,
-                    column_name=column_name,
-                    data_type=col["data_type"],
-                    column_type=col["column_type"],
-                    is_nullable=col["is_nullable"],
-                    column_default=None,
-                    column_comment=col["column_comment"],
-                    is_primary_key=col["is_primary_key"],
-                    is_foreign_key=bool(col.get("is_foreign_key", 0)),
-                    foreign_table_id=foreign_table_id,
-                    foreign_column_id=foreign_column_id,
-                    ordinal_position=i + 1,
-                )
-            )
-
-    return tables_to_insert, columns_to_insert, len(tables_to_insert)
 
 
 def _build_real_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSnapshot:
@@ -512,9 +447,7 @@ def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
         raise ValueError("Data source not found")
 
     try:
-        if is_demo_db(str(ds.host), str(ds.database_name)):
-            tables_to_insert, columns_to_insert, tables_synced = _build_demo_schema_snapshot(ds, datasource_id)
-        elif ds.db_type == "sqlite":
+        if ds.db_type == "sqlite":
             tables_to_insert, columns_to_insert, tables_synced = _build_sqlite_schema_snapshot(ds, datasource_id)
         elif ds.db_type == "postgresql":
             tables_to_insert, columns_to_insert, tables_synced = _build_postgresql_schema_snapshot(ds, datasource_id)
@@ -552,37 +485,8 @@ def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
         raise ValueError(f"Schema sync failed: {str(e)}")
 
 
-MODULE_PREFIX_RULES: list[tuple[str, str]] = [
-    ("account_", "账号模块"),
-    ("ai_", "AI 智能模块"),
-    ("agent_", "任务模块"),
-    ("auto_", "任务模块"),
-    ("billing_", "计费模块"),
-    ("content_", "内容模块"),
-    ("id_", "身份组织模块"),
-    ("login_", "认证会话模块"),
-    ("media_", "媒体素材模块"),
-    ("monitoring_", "监控模块"),
-    ("nurture_", "客户培育模块"),
-    ("notification_", "通知模块"),
-    ("platform_", "平台账号模块"),
-    ("publish_", "发布模块"),
-    ("rbac_", "权限模块"),
-    ("sales_", "销售模块"),
-    ("token_", "Token 账户模块"),
-    ("user_", "用户模块"),
-    ("video_", "视频模块"),
-    ("xhs_", "小红书模块"),
-    ("audit_", "审计模块"),
-    ("scheduler_", "调度模块"),
-]
-
-
-def _guess_module_tag(table_name: str) -> str:
-    for prefix, tag in MODULE_PREFIX_RULES:
-        if table_name.startswith(prefix):
-            return tag
-    return "通用模块"
+def _guess_module_tag(table_name: str) -> str | None:
+    return None
 
 
 def _resolve_inferred_target(col_name: str, table_names: set[str]) -> str | None:

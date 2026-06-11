@@ -1,5 +1,4 @@
 from engine.schemas.project import ProjectCreateRequest
-from engine.schemas.environment import EnvironmentCreateRequest, DemoStartRequest
 from engine.schemas.backup import BackupCreateRequest
 from engine.schemas.table_design import (
     TableDesignColumnRequest,
@@ -25,8 +24,6 @@ from engine.schemas.semantic import (
 
 __all__ = [
     "ProjectCreateRequest",
-    "EnvironmentCreateRequest",
-    "DemoStartRequest",
     "BackupCreateRequest",
     "TableDesignColumnRequest",
     "TableDesignIndexRequest",

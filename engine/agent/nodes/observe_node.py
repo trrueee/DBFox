@@ -43,6 +43,42 @@ def _tool_name_from_step(step_name: str) -> str:
     return mapping.get(step_name, step_name)
 
 
+def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> dict[str, Any] | None:
+    """Best-effort query plan when no query_plan.build step ran.
+
+    Prefers the plan embedded in the SQL generator's metadata, falling back to
+    a minimal plan assembled from the question and schema context.
+    """
+    candidate = state.get("sql_candidate") or {}
+    meta = candidate.get("metadata") if isinstance(candidate, dict) and isinstance(candidate.get("metadata"), dict) else {}
+
+    for key in ("query_plan", "agent_query_plan"):
+        plan = meta.get(key)
+        if isinstance(plan, dict) and plan:
+            return plan
+
+    question = ""
+    if isinstance(observation.input, dict):
+        question = str(observation.input.get("question") or "")
+
+    schema_ctx = state.get("schema_context") or {}
+    candidate_tables = schema_ctx.get("selected_tables") if isinstance(schema_ctx, dict) else None
+    if not isinstance(candidate_tables, list):
+        candidate_tables = meta.get("selected_tables") if isinstance(meta.get("selected_tables"), list) else []
+
+    if not question and not candidate_tables:
+        return None
+
+    return {
+        "analysis_goal": question,
+        "candidate_tables": [str(t) for t in candidate_tables],
+        "metrics": [],
+        "dimensions": [],
+        "filters": [],
+        "derived_from": "sql_generate",
+    }
+
+
 def emit_artifacts_from_observation(
     step_name: str,
     observation: ToolObservation,
@@ -57,6 +93,14 @@ def emit_artifacts_from_observation(
 
     if step_name == "build_query_plan" and state.get("query_plan"):
         artifacts.append(build_query_plan_artifact(state["query_plan"], identity=identity))
+
+    if step_name == "generate_sql_candidate" and not state.get("query_plan"):
+        # The model skipped the explicit query_plan.build step (the generator can
+        # work directly from schema context). Still surface a query_plan artifact
+        # so the UI/persistence layer always has the plan-level view of the run.
+        plan = _derive_query_plan(state, observation)
+        if plan:
+            artifacts.append(build_query_plan_artifact(plan, identity=identity))
 
     if step_name == "semantic.resolve" and state.get("semantic_resolution"):
         artifacts.append(build_semantic_resolution_artifact(state["semantic_resolution"], identity=identity))

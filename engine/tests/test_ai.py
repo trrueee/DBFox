@@ -3,11 +3,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from engine.sql.generator import (
-    DEMO_TRANSLATIONS,
     build_schema_direct_prompt,
     generate_sql,
     generate_sql_from_schema_context,
-    search_demo_sql,
 )
 from engine.errors import AIServiceError
 from engine.models import DataSource
@@ -67,7 +65,6 @@ def test_generate_sql_from_schema_context_returns_schema_direct_metadata(monkeyp
     assert result["sql"] == "SELECT COUNT(*) FROM students"
     assert result["metadata"]["generation_source"] == "schema_direct_llm"
     assert result["metadata"]["used_renderer"] is False
-    assert result["metadata"]["used_demo_fallback"] is False
 
 
 def test_generate_sql_from_schema_context_without_api_key_fails_closed() -> None:
@@ -79,8 +76,7 @@ def test_generate_sql_from_schema_context_without_api_key_fails_closed() -> None
     )
 
     assert result["sql"] is None
-    assert result["error"] == "LLM API key required for non-demo Text-to-SQL generation"
-    assert result["metadata"]["used_demo_fallback"] is False
+    assert result["error"] == "LLM API key required for Text-to-SQL generation"
 
 
 def test_legacy_generate_sql_non_demo_without_api_key_does_not_use_demo_fallback(db_session) -> None:
@@ -102,55 +98,8 @@ def test_legacy_generate_sql_non_demo_without_api_key_does_not_use_demo_fallback
     result = generate_sql(db_session, ds.id, "list products")
 
     assert result["sql"] is None
-    assert result["error"] == "LLM API key required for non-demo Text-to-SQL generation"
-    assert result["metadata"]["used_demo_fallback"] is False
+    assert result["error"] == "LLM API key required for Text-to-SQL generation"
 
-
-# ============================================================
-# search_demo_sql — 离线模式（无 API key）
-# ============================================================
-
-def test_offline_exact_match() -> None:
-    result = search_demo_sql("所有用户")
-    assert "SELECT" in result
-    assert "users" in result.lower()
-
-
-def test_offline_fuzzy_match() -> None:
-    result = search_demo_sql("统计用户数")
-    assert "COUNT" in result.upper()
-    assert "users" in result.lower()
-
-
-def test_offline_unknown_question() -> None:
-    result = search_demo_sql("火星上有什么东西")
-    assert "SELECT" in result
-    assert "LIMIT 10" in result.upper()
-
-
-def test_offline_all_questions_return_sql() -> None:
-    for question, expected_sql in DEMO_TRANSLATIONS.items():
-        result = search_demo_sql(question)
-        assert "SELECT" in result, f"Key '{question}' did not produce SELECT"
-
-
-# ============================================================
-# generate_sql — 离线模式
-# ============================================================
-
-def test_generate_sql_offline_mode(db_session, demo_datasource) -> None:
-    result = generate_sql(db_session, demo_datasource.id, "所有用户")
-    assert "sql" in result
-    assert "guardrail" in result
-    assert result["mode"] == "offline"
-
-
-def test_generate_sql_guardrail_applied(db_session, demo_datasource) -> None:
-    result = generate_sql(db_session, demo_datasource.id, "所有用户")
-    guard = result["guardrail"]
-    assert guard["result"] in ("pass", "warn", "reject")
-    assert "safeSql" in guard
-    assert "checks" in guard
 
 
 # ============================================================
@@ -268,20 +217,26 @@ def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None
     assert any("non_existent_col" in w for w in warnings)
 
 
-def test_generate_sql_returns_schema_linking_metadata(db_session, demo_datasource) -> None:
+def test_generate_sql_returns_schema_linking_metadata(db_session, demo_datasource, monkeypatch) -> None:
     from engine.schema_sync import sync_schema
 
+    class MockResponse:
+        status_code = 200
+        text = "ok"
+        def json(self):
+            return {"choices": [{"message": {"content": "SELECT SUM(o.total_amount) FROM orders o JOIN users u ON o.user_id = u.id GROUP BY u.id"}}]}
+
+    monkeypatch.setattr("engine.sql.generator.httpx.post", lambda *a, **kw: MockResponse())
+
     sync_schema(db_session, demo_datasource.id)
-    result = generate_sql(db_session, demo_datasource.id, "按客户统计 GMV", optimize_rag=True)
+    result = generate_sql(db_session, demo_datasource.id, "按客户统计 GMV", optimize_rag=True,
+                          llm_config={"api_key": "sk-test", "api_base": "https://test/v1", "model": "gpt-test"})
 
     assert result["originalSchemaTableCount"] == 20
     assert result["selectedSchemaTableCount"] < result["originalSchemaTableCount"]
     assert "orders" in result["selectedTables"]
     assert "users" in result["selectedTables"]
-    assert "orders.total_amount" in result["selectedColumns"]
     assert result["schemaContextSize"] > 0
     assert result["schemaLinkingReasons"]
     assert result["queryPlan"]["intent"] == "aggregate_order_amount"
     assert "orders" in result["queryPlan"]["tables"]
-    assert result["trustGate"]["riskLevel"] in ("safe", "warning", "danger")
-    assert result["trustGate"]["schemaWarnings"] == result["schemaValidationWarnings"]

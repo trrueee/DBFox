@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Search, Terminal } from "lucide-react";
-import gsap from "gsap";
+import { Search, CornerDownLeft } from "lucide-react";
 
 export interface CommandItem {
   id: string;
@@ -23,47 +22,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
-  // Enter/exit animation
   useEffect(() => {
     if (open) {
       setMounted(true);
-      tlRef.current?.kill();
-      const tl = gsap.timeline();
-      tl.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "power1.out" })
-        .fromTo(
-          cardRef.current,
-          { opacity: 0, y: -16, scale: 0.96 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.35, ease: "back.out(1.4)" },
-          "-=0.05",
-        );
-      tlRef.current = tl;
-    } else if (!open && mounted) {
-      tlRef.current?.kill();
-      const tl = gsap.timeline({
-        onComplete: () => setMounted(false),
-      });
-      tl.to(cardRef.current, { opacity: 0, y: -8, scale: 0.97, duration: 0.18, ease: "power2.in" })
-        .to(backdropRef.current, { opacity: 0, duration: 0.12, ease: "power1.in" }, "-=0.08");
-      tlRef.current = tl;
-    }
-  }, [open, mounted]);
-
-  // Reset states when opened
-  useEffect(() => {
-    if (open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearch("");
       setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } else if (mounted) {
+      const timer = setTimeout(() => setMounted(false), 200);
+      return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [open]);
 
-  // Fuzzy filter commands
   const filteredCommands = useMemo(() => {
     if (!search.trim()) return commands;
     const query = search.toLowerCase();
@@ -74,208 +45,190 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
     );
   }, [search, commands]);
 
-  // Adjust selectedIndex boundary on filter changes
+  // Group by category
+  const grouped = useMemo(() => {
+    const map = new Map<string, CommandItem[]>();
+    for (const cmd of filteredCommands) {
+      const list = map.get(cmd.category) || [];
+      list.push(cmd);
+      map.set(cmd.category, list);
+    }
+    return Array.from(map.entries());
+  }, [filteredCommands]);
+
+  // Flattened index for keyboard nav
+  let flatIndex = 0;
+  const flatIndexMap = new Map<number, { cat: string; idx: number }>();
+  for (const [cat, items] of grouped) {
+    for (let i = 0; i < items.length; i++) {
+      flatIndexMap.set(flatIndex, { cat, idx: i });
+      flatIndex++;
+    }
+  }
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedIndex(0);
   }, [filteredCommands]);
 
-  // Keyboard navigation inside list
   useEffect(() => {
+    if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!open) return;
-
-      if (e.key === "Escape") {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key === "ArrowDown") { e.preventDefault(); setSelectedIndex((p) => (p + 1) % Math.max(1, flatIndexMap.size)); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setSelectedIndex((p) => (p - 1 + flatIndexMap.size) % Math.max(1, flatIndexMap.size)); return; }
+      if (e.key === "Enter") {
         e.preventDefault();
-        onClose();
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(1, filteredCommands.length));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filteredCommands.length) % Math.max(1, filteredCommands.length));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (filteredCommands[selectedIndex]) {
-          filteredCommands[selectedIndex].action();
-          onClose();
+        const target = flatIndexMap.get(selectedIndex);
+        if (target) {
+          const item = grouped.find(([c]) => c === target.cat)?.[1][target.idx];
+          if (item) { item.action(); onClose(); }
         }
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, filteredCommands, selectedIndex, onClose]);
+  }, [open, selectedIndex, flatIndexMap, grouped, onClose]);
 
-  // Scroll active item into view
   useEffect(() => {
     if (!listRef.current) return;
-    const activeEl = listRef.current.children[selectedIndex] as HTMLElement | null;
-    if (activeEl) {
-      activeEl.scrollIntoView({ block: "nearest" });
-    }
+    const el = listRef.current.querySelector(`[data-cmd-index="${selectedIndex}"]`) as HTMLElement | null;
+    el?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
   if (!mounted) return null;
 
   return (
     <div
-      ref={backdropRef}
       style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(15, 23, 42, 0.4)",
-        backdropFilter: "blur(4px)",
+        position: "fixed", inset: 0,
+        background: "rgba(15, 23, 42, 0.18)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
         zIndex: 2000,
-        display: "flex",
-        justifyContent: "center",
-        paddingTop: "12vh",
+        display: "flex", justifyContent: "center",
+        paddingTop: "14vh",
       }}
       onClick={onClose}
     >
       <div
-        ref={cardRef}
-        className="bg-card border border-border rounded-lg"
         style={{
-          background: "var(--bg-surface)",
-          width: "min(540px, 94vw)",
-          maxHeight: "360px",
-          borderRadius: 10,
-          border: "1px solid var(--border-medium)",
-          boxShadow: "var(--shadow-xl)",
-          display: "flex",
-          flexDirection: "column",
+          width: "min(620px, 94vw)",
+          maxHeight: "440px",
+          background: "var(--bg-surface, #ffffff)",
+          borderRadius: 14,
+          border: "1px solid var(--border-medium, #e6eaf2)",
+          boxShadow: "0 20px 60px rgba(16, 24, 40, 0.12), 0 0 0 1px rgba(16, 24, 40, 0.04)",
+          display: "flex", flexDirection: "column",
           overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Search Input Area */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "10px 14px",
-            borderBottom: "1px solid var(--border-light)",
-            gap: 10,
-            background: "var(--bg-secondary)",
-          }}
-        >
-          <Search size={15} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+        {/* Search */}
+        <div style={{
+          display: "flex", alignItems: "center",
+          padding: "12px 16px",
+          borderBottom: "1px solid var(--border-subtle, #edf1f7)",
+          gap: 10,
+          background: "var(--bg-primary, #fafbfc)",
+        }}>
+          <Search size={15} style={{ color: "var(--text-muted, #98a2b3)", flexShrink: 0 }} />
           <input
             ref={inputRef}
             type="text"
-            className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="输入指令或进行模糊检索... (Esc 退出)"
+            placeholder="输入指令或进行模糊检索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={{
-              flex: 1,
-              border: "none",
-              background: "transparent",
-              outline: "none",
-              fontSize: "0.85rem",
-              padding: 0,
-              color: "var(--text-primary)",
-              boxShadow: "none",
+              flex: 1, border: "none", background: "transparent", outline: "none",
+              fontSize: "0.82rem", color: "var(--text-primary, #1f2a44)",
+              fontFamily: "inherit",
             }}
           />
+          <kbd style={{
+            fontSize: "0.62rem", fontFamily: "var(--font-mono, 'Fira Code')",
+            color: "var(--text-muted, #98a2b3)",
+            background: "var(--bg-subtle, #f3f6fb)",
+            border: "1px solid var(--border-subtle, #edf1f7)",
+            borderRadius: 4, padding: "1px 6px",
+            display: "flex", alignItems: "center", gap: 3,
+          }}>
+            Esc
+          </kbd>
         </div>
 
-        {/* Action Commands List */}
-        <div
-          ref={listRef}
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "6px 8px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 1,
-          }}
-        >
-          {filteredCommands.length === 0 ? (
-            <div style={{ padding: "20px", fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center" }}>
-              没有找到匹配的快捷指令
+        {/* Results */}
+        <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
+          {grouped.length === 0 ? (
+            <div style={{ padding: "32px 20px", textAlign: "center", fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              没有找到匹配的指令
             </div>
           ) : (
-            filteredCommands.map((cmd, idx) => {
-              const isSelected = selectedIndex === idx;
-              return (
-                <button
-                  key={cmd.id}
-                  onClick={() => {
-                    cmd.action();
-                    onClose();
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    width: "100%",
-                    border: "none",
-                    background: isSelected ? "var(--bg-active)" : "transparent",
-                    borderRadius: 6,
-                    padding: "7px 12px",
-                    cursor: "pointer",
-                    textAlign: "left",
-                    gap: 10,
-                    transition: "background 0.1s",
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: isSelected ? "var(--accent-indigo)" : "var(--text-muted)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {cmd.icon || <Terminal size={13} />}
-                  </span>
-
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                    <span
+            grouped.map(([category, items]) => (
+              <div key={category} style={{ marginBottom: 4 }}>
+                <div style={{
+                  padding: "4px 12px 2px",
+                  fontSize: "0.62rem", fontWeight: 600,
+                  color: "var(--text-muted, #98a2b3)",
+                  textTransform: "uppercase", letterSpacing: "0.04em",
+                }}>
+                  {category}
+                </div>
+                {items.map((cmd) => {
+                  const currentFlat = [...flatIndexMap.entries()].find(([, v]) => v.cat === category && v.idx === items.indexOf(cmd))?.[0] ?? -1;
+                  const active = currentFlat === selectedIndex;
+                  return (
+                    <button
+                      key={cmd.id}
+                      data-cmd-index={currentFlat}
+                      onClick={() => { cmd.action(); onClose(); }}
                       style={{
-                        fontSize: "0.78rem",
-                        fontWeight: isSelected ? 600 : 500,
-                        color: isSelected ? "var(--accent-indigo)" : "var(--text-primary)",
+                        display: "flex", alignItems: "center", width: "100%",
+                        border: "none",
+                        background: active ? "var(--bg-active, #e8edff)" : "transparent",
+                        borderRadius: 8, padding: "9px 12px",
+                        cursor: "pointer", textAlign: "left", gap: 10,
+                        transition: "background 0.08s",
                       }}
                     >
-                      {cmd.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "0.68rem",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {cmd.category}
-                    </span>
-                  </div>
-
-                  {cmd.shortcut && (
-                    <kbd
-                      style={{
-                        background: isSelected ? "var(--bg-surface)" : "var(--bg-secondary)",
-                        border: "1px solid var(--border-medium)",
-                        borderRadius: 3,
-                        padding: "1px 5px",
-                        fontSize: "0.65rem",
-                        fontFamily: "var(--font-mono)",
-                        color: "var(--text-secondary)",
-                        userSelect: "none",
-                      }}
-                    >
-                      {cmd.shortcut}
-                    </kbd>
-                  )}
-                </button>
-              );
-            })
+                      <span style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+                        background: active ? "rgba(91, 92, 240, 0.1)" : "var(--bg-subtle, #f3f6fb)",
+                        color: active ? "var(--accent-indigo, #5b5cf0)" : "var(--text-muted, #98a2b3)",
+                      }}>
+                        {cmd.icon || <CornerDownLeft size={13} />}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.8rem", fontWeight: active ? 600 : 500, color: active ? "var(--accent-indigo)" : "var(--text-primary)" }}>
+                          {cmd.name}
+                        </div>
+                      </div>
+                      {cmd.shortcut && (
+                        <kbd style={{
+                          fontSize: "0.62rem", fontFamily: "var(--font-mono, 'Fira Code')",
+                          color: "var(--text-muted)", background: "var(--bg-subtle)",
+                          border: "1px solid var(--border-subtle)", borderRadius: 4,
+                          padding: "1px 6px", flexShrink: 0,
+                        }}>
+                          {cmd.shortcut}
+                        </kbd>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
           )}
+        </div>
+
+        {/* Footer hint */}
+        <div style={{
+          padding: "6px 16px", borderTop: "1px solid var(--border-subtle, #edf1f7)",
+          fontSize: "0.62rem", color: "var(--text-muted)",
+          display: "flex", gap: 16,
+          background: "var(--bg-primary, #fafbfc)",
+        }}>
+          <span>↑↓ 导航</span><span>↵ 打开</span><span>Esc 关闭</span>
         </div>
       </div>
     </div>
