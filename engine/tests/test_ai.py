@@ -106,7 +106,7 @@ def test_legacy_generate_sql_non_demo_without_api_key_does_not_use_demo_fallback
 # generate_sql — 在线模式（mock httpx）
 # ============================================================
 
-def test_generate_sql_online_success(db_session, demo_datasource) -> None:
+def test_generate_sql_online_success(db_session, test_datasource) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
@@ -114,7 +114,7 @@ def test_generate_sql_online_success(db_session, demo_datasource) -> None:
     }
 
     with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
-        result = generate_sql(db_session, demo_datasource.id, "list all users",
+        result = generate_sql(db_session, test_datasource.id, "list all users",
                               llm_config={"api_key": "sk-test", "api_base": "https://test/v1",
                                           "model": "gpt-test"})
     assert result["sql"] == "SELECT * FROM users LIMIT 10"
@@ -122,7 +122,7 @@ def test_generate_sql_online_success(db_session, demo_datasource) -> None:
     assert result["guardrail"]["result"] in ("pass", "warn", "reject")
 
 
-def test_generate_sql_online_no_code_fence(db_session, demo_datasource) -> None:
+def test_generate_sql_online_no_code_fence(db_session, test_datasource) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
@@ -130,24 +130,24 @@ def test_generate_sql_online_no_code_fence(db_session, demo_datasource) -> None:
     }
 
     with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
-        result = generate_sql(db_session, demo_datasource.id, "list products",
+        result = generate_sql(db_session, test_datasource.id, "list products",
                               llm_config={"api_key": "sk-test"})
     assert "SELECT" in result["sql"]
     assert "products" in result["sql"]
     assert result["mode"] == "online"
 
 
-def test_generate_sql_online_http_error(db_session, demo_datasource) -> None:
+def test_generate_sql_online_http_error(db_session, test_datasource) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 500
 
     with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
         with pytest.raises(AIServiceError, match="LLM API returned an error"):
-            generate_sql(db_session, demo_datasource.id, "test question",
+            generate_sql(db_session, test_datasource.id, "test question",
                          llm_config={"api_key": "sk-test"})
 
 
-def test_generate_sql_online_guardrail_reject(db_session, demo_datasource) -> None:
+def test_generate_sql_online_guardrail_reject(db_session, test_datasource) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
@@ -155,19 +155,19 @@ def test_generate_sql_online_guardrail_reject(db_session, demo_datasource) -> No
     }
 
     with patch("engine.sql.generator.httpx.post", return_value=mock_resp):
-        result = generate_sql(db_session, demo_datasource.id, "delete all users",
+        result = generate_sql(db_session, test_datasource.id, "delete all users",
                               llm_config={"api_key": "sk-test"})
     assert result["guardrail"]["result"] == "reject"
 
 
-def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None:
+def test_validate_sql_schema_hallucinations(db_session, test_datasource) -> None:
     from engine.sql.generator import validate_sql_schema
     from engine.models import SchemaTable, SchemaColumn
 
     # 1. Add some schema info to metastore
     users_tbl = SchemaTable(
         id="tbl-users",
-        data_source_id=demo_datasource.id,
+        data_source_id=test_datasource.id,
         table_schema="demo_shop",
         table_name="users",
         table_comment="User details"
@@ -181,7 +181,7 @@ def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None
     
     orders_tbl = SchemaTable(
         id="tbl-orders",
-        data_source_id=demo_datasource.id,
+        data_source_id=test_datasource.id,
         table_schema="demo_shop",
         table_name="orders",
         table_comment="Order details"
@@ -195,29 +195,29 @@ def test_validate_sql_schema_hallucinations(db_session, demo_datasource) -> None
     db_session.commit()
 
     # 2. Test valid queries
-    warnings = validate_sql_schema("SELECT username, email FROM users", db_session, demo_datasource.id)
+    warnings = validate_sql_schema("SELECT username, email FROM users", db_session, test_datasource.id)
     assert len(warnings) == 0
 
-    warnings = validate_sql_schema("SELECT u.username, o.amount FROM users u JOIN orders o ON u.id = o.user_id", db_session, demo_datasource.id)
+    warnings = validate_sql_schema("SELECT u.username, o.amount FROM users u JOIN orders o ON u.id = o.user_id", db_session, test_datasource.id)
     assert len(warnings) == 0
 
     # 3. Test hallucinated table
-    warnings = validate_sql_schema("SELECT name FROM non_existent_table", db_session, demo_datasource.id)
+    warnings = validate_sql_schema("SELECT name FROM non_existent_table", db_session, test_datasource.id)
     assert len(warnings) > 0
     assert any("non_existent_table" in w for w in warnings)
 
     # 4. Test hallucinated column (no table prefix)
-    warnings = validate_sql_schema("SELECT age FROM users", db_session, demo_datasource.id)
+    warnings = validate_sql_schema("SELECT age FROM users", db_session, test_datasource.id)
     assert len(warnings) > 0
     assert any("age" in w for w in warnings)
 
     # 5. Test hallucinated column with alias prefix
-    warnings = validate_sql_schema("SELECT u.username, o.non_existent_col FROM users u JOIN orders o ON u.id = o.user_id", db_session, demo_datasource.id)
+    warnings = validate_sql_schema("SELECT u.username, o.non_existent_col FROM users u JOIN orders o ON u.id = o.user_id", db_session, test_datasource.id)
     assert len(warnings) > 0
     assert any("non_existent_col" in w for w in warnings)
 
 
-def test_generate_sql_returns_schema_linking_metadata(db_session, demo_datasource, monkeypatch) -> None:
+def test_generate_sql_returns_schema_linking_metadata(db_session, test_datasource, monkeypatch) -> None:
     from engine.schema_sync import sync_schema
 
     class MockResponse:
@@ -228,8 +228,8 @@ def test_generate_sql_returns_schema_linking_metadata(db_session, demo_datasourc
 
     monkeypatch.setattr("engine.sql.generator.httpx.post", lambda *a, **kw: MockResponse())
 
-    sync_schema(db_session, demo_datasource.id)
-    result = generate_sql(db_session, demo_datasource.id, "按客户统计 GMV", optimize_rag=True,
+    sync_schema(db_session, test_datasource.id)
+    result = generate_sql(db_session, test_datasource.id, "按客户统计 GMV", optimize_rag=True,
                           llm_config={"api_key": "sk-test", "api_base": "https://test/v1", "model": "gpt-test"})
 
     assert result["originalSchemaTableCount"] == 20

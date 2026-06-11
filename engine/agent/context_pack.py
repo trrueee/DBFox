@@ -8,7 +8,7 @@ Structure:
     ContextPack
     ├─ workspace     — current datasource / table / SQL / result / error
     ├─ environment    — env tier / dialect / catalog / warnings
-    ├─ schema         — selected tables / columns / DDL
+    ├─ schema_context — selected tables / columns / DDL
     ├─ semantic       — business terms / metrics / dimensions / join paths
     ├─ query_plan     — structured query plan artifact
     ├─ sql            — current SQL candidate
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 
 # ── Section models ─────────────────────────────────────────────────────────────
@@ -34,7 +34,12 @@ class WorkspaceSection(BaseModel):
     datasource_id: str = ""
     active_sql: str | None = None
     active_table: str | None = None
+    selected_tables: list[str] = Field(default_factory=list)
+    selected_columns: list[str] = Field(default_factory=list)
+    selected_artifact_id: str | None = None
+    open_tab_titles: list[str] = Field(default_factory=list)
     has_result: bool = False
+    result_preview_rows: int = 0
     error_summary: str | None = None
 
 
@@ -108,6 +113,28 @@ class SkillSection(BaseModel):
     skill_summary: str = ""
 
 
+class IntentSection(BaseModel):
+    original_question: str = ""
+    is_follow_up: bool = False
+    parent_run_id: str | None = None
+    task_type: str = ""
+    execution_mode: str = ""
+    success_criteria: list[str] = Field(default_factory=list)
+
+
+class RecentActivitySection(BaseModel):
+    artifact_summaries: list[str] = Field(default_factory=list)
+    follow_up_summary: str | None = None
+    recent_sql_snippets: list[str] = Field(default_factory=list)
+
+
+class ConstraintsSection(BaseModel):
+    execute_allowed: bool = True
+    max_steps: int = 20
+    requires_approval: bool = False
+    policy_blocked_tools: int = 0
+
+
 # ── ContextPack ────────────────────────────────────────────────────────────────
 
 
@@ -120,7 +147,10 @@ class ContextPack(BaseModel):
 
     workspace: WorkspaceSection = Field(default_factory=WorkspaceSection)
     environment: EnvironmentSection = Field(default_factory=EnvironmentSection)
-    schema: SchemaSection = Field(default_factory=SchemaSection)
+    schema_context: SchemaSection = Field(
+        default_factory=SchemaSection,
+        validation_alias=AliasChoices("schema_context", "schema"),
+    )
     semantic: SemanticSection = Field(default_factory=SemanticSection)
     sql: SqlSection = Field(default_factory=SqlSection)
     safety: SafetySection = Field(default_factory=SafetySection)
@@ -129,12 +159,16 @@ class ContextPack(BaseModel):
     memory: MemorySection = Field(default_factory=MemorySection)
     run_state: RunStateSection = Field(default_factory=RunStateSection)
     skill: SkillSection = Field(default_factory=SkillSection)
+    intent: IntentSection = Field(default_factory=IntentSection)
+    recent_activity: RecentActivitySection = Field(default_factory=RecentActivitySection)
+    constraints: ConstraintsSection = Field(default_factory=ConstraintsSection)
+    ui_summary: str = ""
 
     @property
     def has_data(self) -> bool:
         """True if the pack contains any non-trivial context beyond defaults."""
         return bool(
-            self.schema.selected_tables
+            self.schema_context.selected_tables
             or self.sql.sql
             or self.execution.success
             or self.result.notable_facts
@@ -162,13 +196,39 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
     """
     # -- Workspace -----------------------------------------------------------
     ws_raw = state.get("workspace_context") or {}
-    workspace = WorkspaceSection(
-        datasource_id=str(state.get("datasource_id") or ""),
-        active_sql=_str_or_none(ws_raw.get("selected_sql") or ws_raw.get("active_sql")),
-        active_table=ws_raw.get("active_table"),
-        has_result=bool(ws_raw.get("has_result")),
-        error_summary=_str_or_none(state.get("error")),
-    )
+    if isinstance(ws_raw, dict):
+        ws_tables = _normalize_str_list(
+            ws_raw.get("selected_table_names") or ws_raw.get("selected_tables") or []
+        )
+        ws_columns = _normalize_str_list(ws_raw.get("selected_column_refs") or [])
+        open_tabs = ws_raw.get("open_sql_tabs") or []
+        tab_titles = [
+            str(t.get("title") or t.get("id") or "")
+            for t in open_tabs[:6]
+            if isinstance(t, dict) and (t.get("title") or t.get("id"))
+        ]
+        preview = ws_raw.get("last_query_result_preview") or {}
+        preview_rows = int(preview.get("row_count") or preview.get("rows") or 0) if isinstance(preview, dict) else 0
+        active_table = ws_raw.get("active_table")
+        if not active_table and ws_tables:
+            active_table = ws_tables[0]
+        workspace = WorkspaceSection(
+            datasource_id=str(state.get("datasource_id") or ws_raw.get("datasource_id") or ""),
+            active_sql=_str_or_none(ws_raw.get("selected_sql") or ws_raw.get("active_sql")),
+            active_table=_str_or_none(active_table),
+            selected_tables=ws_tables[:10],
+            selected_columns=ws_columns[:20],
+            selected_artifact_id=_str_or_none(ws_raw.get("selected_artifact_id")),
+            open_tab_titles=tab_titles,
+            has_result=bool(ws_raw.get("has_result") or preview_rows > 0),
+            result_preview_rows=preview_rows,
+            error_summary=_str_or_none(ws_raw.get("last_error") or state.get("error")),
+        )
+    else:
+        workspace = WorkspaceSection(
+            datasource_id=str(state.get("datasource_id") or ""),
+            error_summary=_str_or_none(state.get("error")),
+        )
 
     # -- Environment ---------------------------------------------------------
     env_raw = state.get("environment_profile") or {}
@@ -192,8 +252,14 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         raw_tables = schema_raw.get("selected_tables") or []
         for t in raw_tables:
             selected_tables.append(str(t))
+    candidate_columns: list[str] = []
+    if isinstance(schema_raw, dict):
+        raw_cols = schema_raw.get("candidate_columns") or schema_raw.get("selected_columns") or []
+        candidate_columns = _normalize_str_list(raw_cols)[:30]
+
     schema = SchemaSection(
         selected_tables=selected_tables,
+        candidate_columns=candidate_columns,
         ddl_snippet=_str_or_none(schema_raw.get("schema_context") if isinstance(schema_raw, dict) else None),
         ddl_size=int(schema_raw.get("schema_context_size") or 0) if isinstance(schema_raw, dict) else 0,
     )
@@ -270,10 +336,58 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         skill_summary=plan.get("reasoning_summary", ""),
     )
 
-    return ContextPack(
+    # -- Intent --------------------------------------------------------------
+    user_question = _first_user_message(state)
+    follow_up = state.get("follow_up_context") or {}
+    intent = IntentSection(
+        original_question=user_question,
+        is_follow_up=bool(state.get("parent_run_id") or follow_up),
+        parent_run_id=_str_or_none(state.get("parent_run_id")),
+        task_type=str(plan.get("task_type") or ""),
+        execution_mode=str(state.get("execution_mode") or plan.get("execution_mode") or ""),
+        success_criteria=_normalize_str_list(plan.get("success_criteria") or [])[:5],
+    )
+
+    # -- Recent activity -----------------------------------------------------
+    artifact_summaries: list[str] = []
+    for art in (state.get("artifacts") or [])[-8:]:
+        if isinstance(art, dict):
+            art_type = str(art.get("type") or "artifact")
+            title = str(art.get("title") or art.get("semantic_id") or art_type)
+            artifact_summaries.append(f"{art_type}:{title}")
+    ws_ctx = ws_raw if isinstance(ws_raw, dict) else {}
+    recent_sql: list[str] = []
+    if workspace.active_sql:
+        recent_sql.append(workspace.active_sql[:200])
+    for tab_title, tab_sql in zip(workspace.open_tab_titles, _open_tab_sql(ws_ctx)):
+        if tab_sql:
+            recent_sql.append(f"{tab_title}: {tab_sql[:120]}")
+
+    follow_up_summary = None
+    if isinstance(follow_up, dict) and follow_up.get("previous_question"):
+        follow_up_summary = (
+            f"Follow-up to: {follow_up.get('previous_question', '')[:120]}"
+        )
+
+    recent_activity = RecentActivitySection(
+        artifact_summaries=artifact_summaries,
+        follow_up_summary=follow_up_summary,
+        recent_sql_snippets=recent_sql[:4],
+    )
+
+    # -- Constraints ---------------------------------------------------------
+    blocked = state.get("blocked_tool_calls") or []
+    constraints = ConstraintsSection(
+        execute_allowed=bool(state.get("execute", True)),
+        max_steps=int(state.get("max_steps") or 20),
+        requires_approval=bool((state.get("safety") or {}).get("requires_confirmation")),
+        policy_blocked_tools=len(blocked) if isinstance(blocked, list) else 0,
+    )
+
+    pack = ContextPack(
         workspace=workspace,
         environment=environment,
-        schema=schema,
+        schema_context=schema,
         semantic=semantic,
         sql=sql,
         safety=safety,
@@ -282,7 +396,12 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         memory=memory,
         run_state=run_state,
         skill=skill,
+        intent=intent,
+        recent_activity=recent_activity,
+        constraints=constraints,
     )
+    pack.ui_summary = render_ui_summary(pack)
+    return pack
 
 
 # ── Renderers (node-specific views) ────────────────────────────────────────────
@@ -302,8 +421,12 @@ def render_for_planner(pack: ContextPack) -> str:
     if pack.memory.planner_hints:
         parts.append(pack.memory.planner_hints)
 
-    if pack.schema.selected_tables:
-        parts.append(f"Active tables: {', '.join(pack.schema.selected_tables[:10])}")
+    if pack.workspace.selected_tables:
+        parts.append(f"Workspace tables: {', '.join(pack.workspace.selected_tables[:6])}")
+    if pack.schema_context.selected_tables:
+        parts.append(f"Active tables: {', '.join(pack.schema_context.selected_tables[:10])}")
+    if pack.intent.original_question:
+        parts.append(f"Goal: {pack.intent.original_question[:160]}")
 
     if pack.skill.selected_skill_ids:
         parts.append(f"Active skills: {', '.join(pack.skill.selected_skill_ids)}")
@@ -318,6 +441,22 @@ def render_for_model(pack: ContextPack) -> str:
     """Model view: full context with all factual state for ReAct reasoning."""
     parts = ["### DataBox Current State"]
 
+    if pack.intent.original_question:
+        parts.append(f"- **User Goal**: {pack.intent.original_question[:500]}")
+    if pack.intent.is_follow_up and pack.recent_activity.follow_up_summary:
+        parts.append(f"- **Follow-up**: {pack.recent_activity.follow_up_summary}")
+
+    # Workspace anchors
+    if pack.workspace.selected_tables or pack.workspace.active_table:
+        tables = pack.workspace.selected_tables or ([pack.workspace.active_table] if pack.workspace.active_table else [])
+        parts.append(f"- **Workspace Tables**: {', '.join(t for t in tables if t)}")
+    if pack.workspace.selected_columns:
+        parts.append(f"- **Selected Columns**: {', '.join(pack.workspace.selected_columns[:12])}")
+    if pack.workspace.active_sql:
+        parts.append(f"- **Editor SQL**:\n```sql\n{pack.workspace.active_sql[:1500]}\n```")
+    if pack.workspace.open_tab_titles:
+        parts.append(f"- **Open Tabs**: {', '.join(pack.workspace.open_tab_titles[:6])}")
+
     # Environment
     parts.append(
         f"- **Environment**: {pack.environment.env_tier}, "
@@ -329,10 +468,12 @@ def render_for_model(pack: ContextPack) -> str:
         parts.append(f"  Warnings: {'; '.join(pack.environment.warnings)}")
 
     # Schema
-    if pack.schema.selected_tables:
-        parts.append(f"- **Schema Tables**: {', '.join(pack.schema.selected_tables)}")
-    if pack.schema.ddl_snippet:
-        parts.append(f"- **DDL**:\n```sql\n{pack.schema.ddl_snippet[:3000]}\n```")
+    if pack.schema_context.selected_tables:
+        parts.append(f"- **Schema Tables**: {', '.join(pack.schema_context.selected_tables)}")
+    if pack.schema_context.candidate_columns:
+        parts.append(f"- **Candidate Columns**: {', '.join(pack.schema_context.candidate_columns[:15])}")
+    if pack.schema_context.ddl_snippet:
+        parts.append(f"- **DDL**:\n```sql\n{pack.schema_context.ddl_snippet[:3000]}\n```")
 
     # Semantic
     if pack.semantic.context_text:
@@ -371,6 +512,16 @@ def render_for_model(pack: ContextPack) -> str:
     # Error
     if pack.run_state.error:
         parts.append(f"- **Error**: {pack.run_state.error}")
+
+    # Recent run artifacts
+    if pack.recent_activity.artifact_summaries:
+        parts.append(
+            f"- **Run Artifacts**: {', '.join(pack.recent_activity.artifact_summaries[-5:])}"
+        )
+
+    # Constraints
+    if pack.constraints.requires_approval:
+        parts.append("- **Constraints**: execution requires user approval")
 
     # Skill guidance
     if pack.skill.skill_summary:
@@ -439,6 +590,94 @@ def _normalize_str_list(items: list[Any]) -> list[str]:
             result.append(str(item.get("text") or item))
         else:
             result.append(str(item))
+    return result
+
+
+def build_streaming_context_summary(state: dict[str, Any]) -> str:
+    """Compact live summary for SSE context updates during a run."""
+    parts: list[str] = []
+
+    pack_raw = state.get("context_pack")
+    if isinstance(pack_raw, dict):
+        ui = pack_raw.get("ui_summary")
+        if isinstance(ui, str) and ui.strip():
+            parts.append(ui.strip())
+        elif pack_raw:
+            try:
+                pack = ContextPack.model_validate(pack_raw)
+                summary = render_ui_summary(pack)
+                if summary:
+                    parts.append(summary)
+            except Exception:
+                pass
+
+    visible = state.get("visible_plan") or {}
+    if isinstance(visible, dict):
+        focus = visible.get("current_focus")
+        if isinstance(focus, str) and focus.strip():
+            if not parts or focus.strip() not in parts[0]:
+                parts.append(f"Focus: {focus.strip()}")
+
+    if state.get("repair_mode"):
+        parts.append("Repair mode")
+
+    repair_trace = state.get("repair_trace") or []
+    if isinstance(repair_trace, list) and repair_trace:
+        last = repair_trace[-1]
+        if isinstance(last, dict) and last.get("user_visible_update"):
+            note = str(last["user_visible_update"])
+            if note not in " ".join(parts):
+                parts.append(note)
+
+    return " | ".join(parts)
+
+
+def render_ui_summary(pack: ContextPack) -> str:
+    """Short user-facing summary of context used — not the full ContextPack."""
+    bits: list[str] = []
+    table_count = len(pack.workspace.selected_tables) or (1 if pack.workspace.active_table else 0)
+    schema_count = len(pack.schema_context.selected_tables)
+    if table_count:
+        bits.append(f"{table_count} workspace table{'s' if table_count != 1 else ''}")
+    if schema_count:
+        bits.append(f"{schema_count} schema table{'s' if schema_count != 1 else ''}")
+    if pack.workspace.selected_columns:
+        bits.append(f"{len(pack.workspace.selected_columns)} columns")
+    if pack.workspace.active_sql:
+        bits.append("SQL editor")
+    if pack.sql.sql:
+        bits.append("agent SQL")
+    if pack.recent_activity.artifact_summaries:
+        bits.append(f"{len(pack.recent_activity.artifact_summaries)} artifacts")
+    if not bits:
+        return "Minimal workspace context"
+    return "Using " + ", ".join(bits)
+
+
+def _first_user_message(state: dict[str, Any]) -> str:
+    messages = state.get("messages") or []
+    if not messages:
+        return ""
+    first = messages[0]
+    content = getattr(first, "content", first if isinstance(first, dict) else "")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [p.get("text", "") for p in content if isinstance(p, dict)]
+        return " ".join(parts).strip()
+    return str(content or "").strip()
+
+
+def _open_tab_sql(ws_raw: Any) -> list[str]:
+    if not isinstance(ws_raw, dict):
+        return []
+    tabs = ws_raw.get("open_sql_tabs") or []
+    result: list[str] = []
+    for tab in tabs[:6]:
+        if isinstance(tab, dict) and tab.get("sql"):
+            result.append(str(tab["sql"]))
+        else:
+            result.append("")
     return result
 
 

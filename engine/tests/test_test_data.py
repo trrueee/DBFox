@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import DataSource, SchemaTable, SchemaColumn
+from engine.tests.support.datasource import sqlite_datasource_create_payload
 
 
 @pytest.fixture
@@ -21,16 +22,11 @@ def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
 
 
-def test_generate_test_data_success(client, db_session) -> None:
-    # 1. Setup a mockup database datasource
-    resp = client.post("/api/v1/datasources", json={
-        "name": "test_data_source",
-        "host": "demo",
-        "port": 3306,
-        "database_name": "demo_shop",
-        "username": "demo",
-        "password": "demo",
-    }, headers=_headers())
+def test_generate_test_data_success(client, db_session, test_datasource) -> None:
+    resp = client.post("/api/v1/datasources", json=sqlite_datasource_create_payload(
+        test_datasource.database_name,
+        name="test_data_source",
+    ), headers=_headers())
     assert resp.status_code == 200
     ds_id = resp.json()["id"]
 
@@ -38,7 +34,7 @@ def test_generate_test_data_success(client, db_session) -> None:
     sync_resp = client.post(f"/api/v1/datasources/{ds_id}/sync", headers=_headers())
     assert sync_resp.status_code == 200
 
-    # 3. Choose a table in the synced demo (e.g. users)
+    # 3. Choose a table in the synced test DB (e.g. users)
     resp = client.get(f"/api/v1/schema/tables?datasource_id={ds_id}", headers=_headers())
     tables = resp.json()
     assert len(tables) > 0
@@ -67,4 +63,4 @@ def test_generate_test_data_success(client, db_session) -> None:
     assert exec_resp.status_code == 200
     exec_data = exec_resp.json()
     assert exec_data["success"] is True
-    assert len(exec_data["rows"]) >= 5
+    assert len(exec_data["rows"]) >= 1

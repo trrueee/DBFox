@@ -36,6 +36,26 @@ const EVENT_REDUCERS: Record<
     const question = typeof event.step?.question === "string" ? event.step.question : draft.question;
     return { ...next, question, status: "running", error: null };
   },
+  "agent.context.update": (next, event) => {
+    const summary = typeof event.step?.summary === "string" ? event.step.summary : null;
+    const rawLens = event.step?.task_lens;
+    const taskLens = rawLens && typeof rawLens === "object" && !Array.isArray(rawLens)
+      ? {
+          goal: typeof rawLens.goal === "string" ? rawLens.goal : undefined,
+          current_focus: typeof rawLens.current_focus === "string" ? rawLens.current_focus : undefined,
+          next_likely: typeof rawLens.next_likely === "string" ? rawLens.next_likely : undefined,
+          missing_evidence: Array.isArray(rawLens.missing_evidence)
+            ? rawLens.missing_evidence.filter((v): v is string => typeof v === "string")
+            : undefined,
+        }
+      : next.taskLens;
+    if (!summary && !taskLens) return next;
+    return {
+      ...next,
+      ...(summary ? { contextSummary: summary } : {}),
+      ...(taskLens ? { taskLens } : {}),
+    };
+  },
   "agent.artifact.created": (next, event, draft) => {
     if (!event.artifact) return next;
     return {

@@ -120,55 +120,55 @@ class TestMySQLPool:
 class TestExecutorSQLite:
     """Integration test: execute real queries against the demo SQLite database."""
 
-    def test_select_all_users(self, demo_datasource) -> None:
+    def test_select_all_users(self, test_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5", sqlite_path=demo_datasource.database_name)
+        rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5", sqlite_path=test_datasource.database_name)
         assert len(rows) >= 1
         assert "username" in columns
         assert "email" in columns
         assert truncated is False
         assert isinstance(rows[0]["username"], str)
 
-    def test_aggregation_query(self, demo_datasource) -> None:
+    def test_aggregation_query(self, test_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users", sqlite_path=demo_datasource.database_name)
+        rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users", sqlite_path=test_datasource.database_name)
         assert len(rows) == 1
         assert columns == ["cnt"]
         assert int(rows[0]["cnt"]) > 0
 
-    def test_join_query(self, demo_datasource) -> None:
+    def test_join_query(self, test_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT u.username, o.total_amount FROM users u "
             "JOIN orders o ON u.id = o.user_id LIMIT 5",
-            sqlite_path=demo_datasource.database_name,
+            sqlite_path=test_datasource.database_name,
         )
         assert len(rows) >= 1
         assert "username" in columns
         assert "total_amount" in columns
 
-    def test_row_limit_enforced(self, demo_datasource) -> None:
+    def test_row_limit_enforced(self, test_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users", sqlite_path=demo_datasource.database_name)
+        rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users", sqlite_path=test_datasource.database_name)
         assert len(rows) <= MAX_ROWS
 
-    def test_non_select_rejected(self, demo_datasource) -> None:
+    def test_non_select_rejected(self, test_datasource) -> None:
         """SQLite executes DDL without issue, but guardrail should be tested separately."""
         # This test verifies SQLite execution works; guardrail handles DDL blocking.
         from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT name FROM sqlite_master WHERE type='table' LIMIT 5",
-            sqlite_path=demo_datasource.database_name,
+            sqlite_path=test_datasource.database_name,
         )
         assert len(columns) == 1
         assert "name" in columns
 
-    def test_sqlite_timeout(self, demo_datasource) -> None:
+    def test_sqlite_timeout(self, test_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
         with pytest.raises(TimeoutError):
@@ -177,10 +177,10 @@ class TestExecutorSQLite:
                 "SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 100000000"
                 ") SELECT sum(x) FROM cnt",
                 timeout_ms=0,
-                sqlite_path=demo_datasource.database_name,
+                sqlite_path=test_datasource.database_name,
             )
 
-    def test_sqlite_query_can_be_cancelled(self, demo_datasource) -> None:
+    def test_sqlite_query_can_be_cancelled(self, test_datasource) -> None:
         from engine.errors import SQLQueryCancelledError
         from engine.sql.executor import _execute_on_sqlite
         from engine.query_registry import QUERY_REGISTRY
@@ -193,7 +193,7 @@ class TestExecutorSQLite:
         )
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_execute_on_sqlite, long_sql, 30000, execution_id, demo_datasource.database_name)
+            future = pool.submit(_execute_on_sqlite, long_sql, 30000, execution_id, test_datasource.database_name)
 
             deadline = time.time() + 3
             while time.time() < deadline and not QUERY_REGISTRY.is_running(execution_id):
@@ -208,12 +208,12 @@ class TestExecutorSQLite:
 
 
 class TestPerformanceAndExplain:
-    def test_execute_query_latency_metrics(self, db_session, demo_datasource) -> None:
-        sync_schema(db_session, demo_datasource.id)
-        res = execute_query(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 3")
+    def test_execute_query_latency_metrics(self, db_session, test_datasource) -> None:
+        sync_schema(db_session, test_datasource.id)
+        res = execute_query(db_session, test_datasource.id, "SELECT id, username FROM users LIMIT 3")
         assert res["success"] is True
         assert res["safetyDecision"]["can_execute"] is True
-        assert res["safetyDecision"]["datasource_id"] == demo_datasource.id
+        assert res["safetyDecision"]["datasource_id"] == test_datasource.id
         assert "connectMs" in res
         assert "guardrailMs" in res
         assert "executeMs" in res
@@ -232,37 +232,37 @@ class TestPerformanceAndExplain:
         assert history.fetch_ms is not None
         assert history.serialize_ms is not None
 
-    def test_execute_query_blocks_schema_hallucination(self, db_session, demo_datasource) -> None:
+    def test_execute_query_blocks_schema_hallucination(self, db_session, test_datasource) -> None:
         from engine.errors import GuardrailValidationError
 
-        sync_schema(db_session, demo_datasource.id)
+        sync_schema(db_session, test_datasource.id)
 
         with pytest.raises(GuardrailValidationError) as exc_info:
-            execute_query(db_session, demo_datasource.id, "SELECT imaginary_column FROM users LIMIT 3")
+            execute_query(db_session, test_datasource.id, "SELECT imaginary_column FROM users LIMIT 3")
 
         assert any(check["rule"] == "schema_validation" for check in exc_info.value.checks)
 
-    def test_execute_query_rejects_mismatched_safety_decision(self, db_session, demo_datasource) -> None:
+    def test_execute_query_rejects_mismatched_safety_decision(self, db_session, test_datasource) -> None:
         from engine.sql.generator import validate_sql_schema
         from engine.errors import GuardrailValidationError
         from engine.sql.trust_gate import TrustGate
 
         decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-            demo_datasource.id,
+            test_datasource.id,
             "SELECT id FROM users LIMIT 3",
         )
 
         with pytest.raises(GuardrailValidationError) as exc_info:
             execute_query(
                 db_session,
-                demo_datasource.id,
+                test_datasource.id,
                 "SELECT username FROM users LIMIT 3",
                 safety_decision=decision,
             )
 
         assert any(check["rule"] == "safety_decision_sql_mismatch" for check in exc_info.value.checks)
 
-    def test_execute_query_bypass_requires_testing_env(self, db_session, demo_datasource, monkeypatch) -> None:
+    def test_execute_query_bypass_requires_testing_env(self, db_session, test_datasource, monkeypatch) -> None:
         from engine.errors import GuardrailValidationError
 
         monkeypatch.delenv("DATABOX_TESTING", raising=False)
@@ -270,17 +270,17 @@ class TestPerformanceAndExplain:
         with pytest.raises(GuardrailValidationError) as exc_info:
             execute_query(
                 db_session,
-                demo_datasource.id,
+                test_datasource.id,
                 "SELECT id FROM users LIMIT 3",
                 bypass_guardrail=True,
             )
 
         assert any(check["rule"] == "trust_gate_bypass_disabled" for check in exc_info.value.checks)
 
-    def test_explain_sql_sqlite(self, db_session, demo_datasource) -> None:
-        sync_schema(db_session, demo_datasource.id)
+    def test_explain_sql_sqlite(self, db_session, test_datasource) -> None:
+        sync_schema(db_session, test_datasource.id)
 
-        res = explain_sql(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 3")
+        res = explain_sql(db_session, test_datasource.id, "SELECT id, username FROM users LIMIT 3")
         assert res["success"] is True
         assert res["safetyDecision"]["decision_id"]
         assert res["safetyDecision"]["can_execute"] is True
@@ -294,9 +294,9 @@ class TestPerformanceAndExplain:
         assert "rows" in record
         assert "Extra" in record
 
-    def test_explain_sql_non_select_rejected(self, db_session, demo_datasource) -> None:
+    def test_explain_sql_non_select_rejected(self, db_session, test_datasource) -> None:
         from engine.errors import GuardrailValidationError
 
         with pytest.raises(GuardrailValidationError) as exc_info:
-            explain_sql(db_session, demo_datasource.id, "DELETE FROM users")
+            explain_sql(db_session, test_datasource.id, "DELETE FROM users")
         assert any(check["rule"] in {"select_only", "blocked_command_type"} for check in exc_info.value.checks)

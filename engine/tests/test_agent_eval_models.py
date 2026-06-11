@@ -9,9 +9,9 @@ from engine.db import Base
 from engine.models import AgentGoldenTask, AgentEvalRun, AgentEvalCaseResult
 
 
-def test_create_agent_golden_task(db_session, demo_datasource):
+def test_create_agent_golden_task(db_session, test_datasource):
     task = AgentGoldenTask(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         name="explain_current_sql",
         question="解释一下当前 SQL",
         workspace_context_json=json.dumps({"active_sql": "SELECT 1"}),
@@ -28,16 +28,16 @@ def test_create_agent_golden_task(db_session, demo_datasource):
     db_session.commit()
     db_session.refresh(task)
     assert task.id is not None
-    assert task.datasource_id == demo_datasource.id
+    assert task.datasource_id == test_datasource.id
     assert task.name == "explain_current_sql"
     assert task.source == "internal"
     assert json.loads(str(task.expected_tools_json)) == ["workspace.explain_sql"]
     assert json.loads(str(task.forbidden_tools_json)) == ["sql.execute_readonly", "@limit"]
 
 
-def test_golden_task_defaults(db_session, demo_datasource):
+def test_golden_task_defaults(db_session, test_datasource):
     task = AgentGoldenTask(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         name="minimal",
         question="what?",
     )
@@ -51,9 +51,9 @@ def test_golden_task_defaults(db_session, demo_datasource):
     assert task.source == "internal"
 
 
-def test_agent_eval_run_lifecycle(db_session, demo_datasource):
+def test_agent_eval_run_lifecycle(db_session, test_datasource):
     run = AgentEvalRun(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         status="running",
         total_cases=3,
         passed_cases=0,
@@ -84,9 +84,9 @@ def test_agent_eval_run_lifecycle(db_session, demo_datasource):
     assert run.avg_latency_ms == 1234.5
 
 
-def test_agent_eval_case_result(db_session, demo_datasource):
+def test_agent_eval_case_result(db_session, test_datasource):
     task = AgentGoldenTask(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         name="test_task",
         question="test?",
     )
@@ -94,7 +94,7 @@ def test_agent_eval_case_result(db_session, demo_datasource):
     db_session.commit()
 
     run = AgentEvalRun(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         total_cases=1,
         created_at=datetime.now(UTC),
     )
@@ -126,9 +126,9 @@ def test_agent_eval_case_result(db_session, demo_datasource):
     assert json.loads(str(case.actual_tools_json)) == ["workspace.explain_sql"]
 
 
-def test_case_result_cascade_delete(db_session, demo_datasource):
+def test_case_result_cascade_delete(db_session, test_datasource):
     task = AgentGoldenTask(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         name="cascade_test",
         question="q",
     )
@@ -136,7 +136,7 @@ def test_case_result_cascade_delete(db_session, demo_datasource):
     db_session.commit()
 
     run = AgentEvalRun(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         total_cases=1,
         created_at=datetime.now(UTC),
     )

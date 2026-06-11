@@ -14,12 +14,13 @@ interface DebugDrawerProps {
   runtimeEvents?: AgentRuntimeEvent[];
 }
 
-type DebugTab = "state" | "trace" | "tools" | "policy" | "events" | "raw";
+type DebugTab = "state" | "trace" | "tools" | "policy" | "repair" | "events" | "raw";
 
 const TABS: { key: DebugTab; label: string }[] = [
   { key: "state", label: "State" }, { key: "trace", label: "Trace" },
   { key: "tools", label: "Tool calls" }, { key: "policy", label: "Policy" },
-  { key: "events", label: "Events" }, { key: "raw", label: "Raw response" },
+  { key: "repair", label: "Repair" }, { key: "events", label: "Events" },
+  { key: "raw", label: "Raw response" },
 ];
 
 export function DebugDrawer({ open, onClose, workspaceContext, response, steps, traceEvents, runtimeEvents }: DebugDrawerProps) {
@@ -55,6 +56,7 @@ export function DebugDrawer({ open, onClose, workspaceContext, response, steps, 
         {tab === "tools" && <ToolsSection steps={steps || []} />}
         {tab === "policy" && <JsonSection title="Policy Decision"
           data={response?.approval?.policy_decision || steps?.find(s => s.name === "validate_sql")} />}
+        {tab === "repair" && <RepairSection events={runtimeEvents || []} response={response} />}
         {tab === "events" && <EventsSection events={runtimeEvents || []} />}
         {tab === "raw" && <JsonSection title="AgentRunResponse" data={response} />}
       </div>
@@ -107,6 +109,59 @@ function ToolsSection({ steps }: { steps: AgentStep[] }) {
           </details>
         ))}
       </div>
+    </div>
+  );
+}
+
+function RepairSection({
+  events, response,
+}: {
+  events: AgentRuntimeEvent[];
+  response?: AgentRunResponse | null;
+}) {
+  const progressRepairs = events.filter(
+    (e) => e.type === "agent.progress.update" && e.step?.name === "sql_repair",
+  );
+  const contextRepairs = events.filter(
+    (e) => e.type === "agent.context.update" && e.step?.repair_mode === true,
+  );
+  const traceRepairs = (response?.trace_events || []).filter((e) => {
+    const type = typeof e.type === "string" ? e.type : "";
+    return type.includes("repair");
+  });
+
+  if (!progressRepairs.length && !contextRepairs.length && !traceRepairs.length) {
+    return (
+      <div className="text-[0.64rem] text-[hsl(var(--muted-foreground))] p-2.5 text-center">
+        No repair activity
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-2 flex flex-col gap-2">
+      <div className="text-[0.64rem] font-semibold text-[hsl(var(--muted-foreground))]">
+        Repair attempts ({progressRepairs.length})
+      </div>
+      {progressRepairs.map((event, i) => (
+        <div key={`progress-${i}`} className="text-[0.64rem] py-0.5 px-1 border-b border-[hsl(var(--border))]">
+          <div className="font-medium">{String(event.step?.summary || "SQL repair")}</div>
+          {event.step?.detail ? (
+            <div className="text-[hsl(var(--muted-foreground))] font-mono text-[0.6rem]">
+              {String(event.step.detail)}
+            </div>
+          ) : null}
+          {event.step?.attempt !== undefined ? (
+            <div className="text-[hsl(var(--muted-foreground))]">Attempt {String(event.step.attempt)}</div>
+          ) : null}
+        </div>
+      ))}
+      {traceRepairs.length > 0 && (
+        <JsonSection title="Repair trace" data={traceRepairs} />
+      )}
+      {response?.context_summary ? (
+        <JsonSection title="Context summary" data={response.context_summary} />
+      ) : null}
     </div>
   );
 }

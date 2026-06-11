@@ -4,6 +4,56 @@ from typing import Any
 from langchain_core.messages import SystemMessage
 
 
+def build_progress_guidance_message(state: dict[str, Any]) -> SystemMessage | None:
+    """Inject Progress Judge supervisor output into the next model turn."""
+    progress = state.get("progress_decision") or {}
+    status = progress.get("status")
+    if status not in ("continue", "replan"):
+        return None
+
+    parts = ["### Progress Supervisor Guidance"]
+    hint = progress.get("next_action_hint") or progress.get("next_instruction")
+    if hint:
+        parts.append(f"- **Next action**: {hint}")
+
+    missing = progress.get("missing_evidence") or []
+    if missing:
+        parts.append(f"- **Missing evidence**: {', '.join(str(m) for m in missing[:5])}")
+
+    recovery = progress.get("recovery_strategy")
+    if recovery:
+        parts.append(f"- **Recovery strategy**: {recovery}")
+
+    if progress.get("failure_layer"):
+        parts.append(f"- **Failure layer**: {progress['failure_layer']}")
+    if progress.get("root_cause"):
+        parts.append(f"- **Root cause**: {progress['root_cause']}")
+
+    if state.get("repair_mode"):
+        parts.append(
+            "- **Mode**: SQL repair active — use schema tools and sql.revise before asking the user."
+        )
+
+    repair_trace = state.get("repair_trace") or []
+    if repair_trace:
+        parts.append("### SQL Repair History")
+        for entry in repair_trace[-3:]:
+            if isinstance(entry, dict):
+                parts.append(
+                    f"- Attempt {entry.get('attempt', '?')}: "
+                    f"{entry.get('error_class', 'error')} — "
+                    f"{entry.get('user_visible_update') or entry.get('recovery_strategy', '')}"
+                )
+
+    reason = progress.get("reason_summary")
+    if reason:
+        parts.append(f"- **Assessment**: {reason}")
+
+    if len(parts) == 1:
+        return None
+    return SystemMessage(content="\n".join(parts))
+
+
 def build_context_message(state: dict[str, Any]) -> SystemMessage:
     """Format the factual DataBox business state variables into a SystemMessage context block.
 

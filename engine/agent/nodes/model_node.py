@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.llm import get_chat_model
 from engine.agent.model.system_prompt import build_system_prompt
-from engine.agent.model.context_builder import build_context_message
+from engine.agent.model.context_builder import build_context_message, build_progress_guidance_message
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
@@ -76,8 +76,11 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
     messages = [
         SystemMessage(content=build_system_prompt(state)),
         build_context_message(state),
-        *state.get("messages", []),
     ]
+    progress_msg = build_progress_guidance_message(state)
+    if progress_msg is not None:
+        messages.append(progress_msg)
+    messages.extend(state.get("messages", []))
 
     ai_msg = model_with_tools.invoke(messages)
 

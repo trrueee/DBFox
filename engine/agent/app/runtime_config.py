@@ -8,6 +8,8 @@ class AgentRuntimeEventType:
     RUN_STARTED = "agent.run.started"
     STEP_STARTED = "agent.step.started"
     STEP_COMPLETED = "agent.step.completed"
+    PROGRESS_UPDATE = "agent.progress.update"
+    CONTEXT_UPDATE = "agent.context.update"
     ARTIFACT_CREATED = "agent.artifact.created"
     ANSWER_COMPLETED = "agent.answer.completed"
     RUN_COMPLETED = "agent.run.completed"

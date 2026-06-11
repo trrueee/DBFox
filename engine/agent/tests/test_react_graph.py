@@ -25,6 +25,7 @@ class TestGraphCompilation:
         assert "tools" in nodes
         assert "observe" in nodes
         assert "progress" in nodes
+        assert "repair" in nodes
         assert "approval" in nodes
         assert "finalize" in nodes
 
@@ -171,6 +172,16 @@ class TestProgressRoute:
             "progress_decision": {"status": "continue"},
         }
         assert route_progress_output(state) == "model"
+
+    def test_continue_with_recovery_routes_to_repair(self):
+        state: DataBoxAgentState = {
+            "progress_decision": {
+                "status": "continue",
+                "recovery_strategy": "lookup_schema_then_revise_sql",
+            },
+            "repair_mode": True,
+        }
+        assert route_progress_output(state) == "repair"
 
     def test_replan_routes_to_planner(self):
         state: DataBoxAgentState = {
