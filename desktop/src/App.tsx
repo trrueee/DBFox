@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, type CSSProperties, type MouseEvent } from "react";
-import { Sparkles, Cpu, Settings, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
+import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
 import "./App.css";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
 import { ConversationHistoryPanel } from "./features/conversation/ConversationHistoryPanel";
@@ -19,6 +19,7 @@ import { DataSourcesPage } from "./pages/DataSourcesPage";
 import { AgentEvalPage } from "./pages/AgentEvalPage";
 import { useApiConfig, getStoredApiConfig } from "./components/SettingsDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
+import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import { agentApi, resolveAgentApproval, streamResumeAgentRun } from "./lib/api/agent";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "./lib/api/types";
 import {
@@ -57,7 +58,6 @@ export default function App() {
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
 
   const activeDatasource = useMemo(() => datasources.find((item) => item.id === activeDatasourceId) || null, [activeDatasourceId, datasources]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
@@ -221,12 +221,6 @@ export default function App() {
   const openLlmConfigTab = () => {
     const tabId = "llm-config";
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "LLM 配置", type: "llm-config" as any }]));
-    setActiveTabId(tabId);
-  };
-
-  const openSystemSettingsTab = () => {
-    const tabId = "system-settings";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "系统设置", type: "system-settings" as any }]));
     setActiveTabId(tabId);
   };
 
@@ -596,13 +590,6 @@ export default function App() {
         action: () => openLlmConfigTab()
       },
       {
-        id: "system-settings",
-        name: "打开系统设置",
-        category: "系统配置",
-        icon: <Settings size={13} className="text-slate-500" />,
-        action: () => openSystemSettingsTab()
-      },
-      {
         id: "create-datasource",
         name: "新建数据源连接",
         category: "数据源",
@@ -688,9 +675,6 @@ export default function App() {
     if (activeTab.type === "llm-config" as any) {
       return <LlmConfigTabContent showToast={showToast} />;
     }
-    if (activeTab.type === "system-settings" as any) {
-      return <SystemSettingsTabContent showToast={showToast} />;
-    }
     if (activeTab.type === "agent-eval") {
       return (
         <AgentEvalPage
@@ -702,7 +686,7 @@ export default function App() {
     }
     if (activeTab.type === "datasource-settings" as any) {
       return (
-        <div className="wb-settings-frame p-6 overflow-auto h-full" style={{ background: "var(--bg-surface)" }}>
+        <div className="hifi-settings-tab-frame hifi-tab-pane">
           <DataSourcesPage
             onSelectDataSource={(ds) => {
               if (ds) {
@@ -807,10 +791,6 @@ export default function App() {
                     >
                       <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { openLlmConfigTab(); setShowMoreMenu(false); }}>LLM 配置</button>
                       <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { openConnectionManagerTab(); setShowMoreMenu(false); }}>数据源连接管理</button>
-                      <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { openSystemSettingsTab(); setShowMoreMenu(false); }}>系统设置</button>
-                      <div style={{ height: 1, background: "var(--color-border)", margin: "4px 0" }} />
-                      <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { setShowShortcutsHelp(true); setShowMoreMenu(false); }}>快捷键说明</button>
-                      <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { alert("DataBox v1.0.0\nAI 驱动的本地优先数据库工作台"); setShowMoreMenu(false); }}>关于</button>
                     </div>
                   )}
                 </div>
@@ -877,22 +857,6 @@ export default function App() {
       {toastMsg && <div className="hifi-toast"><Sparkles size={12} className="text-yellow-400" /><span>{toastMsg}</span></div>}
 
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} commands={commandItems} />
-
-      {/* Shortcuts Help dialog */}
-      {showShortcutsHelp && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", backdropFilter: "blur(4px)", zIndex: 3000, display: "grid", placeItems: "center" }} onClick={() => setShowShortcutsHelp(false)}>
-          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-medium)", borderRadius: 10, padding: 24, width: 360 }} onClick={e => e.stopPropagation()}>
-            <h4 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 16 }}>快捷键说明</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: "0.85rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>打开命令面板</span><kbd className="px-1.5 py-0.5 bg-slate-100 border rounded text-[10px]">⌘K / Ctrl+K</kbd></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>新建 SQL 控制台</span><kbd className="px-1.5 py-0.5 bg-slate-100 border rounded text-[10px]">⌘N / Ctrl+N</kbd></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>关闭当前标签页</span><kbd className="px-1.5 py-0.5 bg-slate-100 border rounded text-[10px]">⌘W / Ctrl+W</kbd></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span>显示 / 隐藏 AI 面板</span><kbd className="px-1.5 py-0.5 bg-slate-100 border rounded text-[10px]">⌥A / Alt+A</kbd></div>
-            </div>
-            <button className="w-full mt-6 bg-primary text-primary-foreground py-1.5 rounded-sm border-none cursor-pointer" style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }} onClick={() => setShowShortcutsHelp(false)}>关闭</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -916,257 +880,22 @@ function tabMessagesToConversationMessages(messages: NonNullable<WorkspaceTab["c
 
 function LlmConfigTabContent({ showToast }: { showToast: (msg: string) => void }) {
   const { config, updateConfig, handleSave } = useApiConfig();
-  
-  return (
-    <div style={{ padding: 24, background: "var(--bg-surface)", height: "100%", overflowY: "auto" }}>
-      <div style={{ maxWidth: 540 }}>
-        <h3 className="text-display" style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: 8, color: "var(--color-text-primary)" }}>LLM 配置 (Language Model)</h3>
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginBottom: 20 }}>
-          配置智能问数底层大语言模型的连接参数。所有凭证均保存在您本地，不会上传至第三方服务器。
-        </p>
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6, fontSize: "0.8rem", fontWeight: 600 }}>API Key (接口密钥)</label>
-            <input
-              type="password"
-              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="sk-..."
-              value={config.apiKey}
-              onChange={(e) => updateConfig({ apiKey: e.target.value })}
-              style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-            />
-            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4, display: "block" }}>
-              输入 OpenAI, DeepSeek 或 Claude 兼容的接口密钥。
-            </span>
-          </div>
-
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6, fontSize: "0.8rem", fontWeight: 600 }}>API Base URL (接口基础路径)</label>
-            <input
-              type="text"
-              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="https://api.openai.com/v1"
-              value={config.apiBase}
-              onChange={(e) => updateConfig({ apiBase: e.target.value })}
-              style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-            />
-          </div>
-
-          <div>
-            <label className="field-label" style={{ display: "block", marginBottom: 6, fontSize: "0.8rem", fontWeight: 600 }}>Model Name (模型名称)</label>
-            <input
-              type="text"
-              className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="gpt-4o-mini"
-              value={config.modelName}
-              onChange={(e) => updateConfig({ modelName: e.target.value })}
-              style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-            />
-          </div>
-          
-          <div style={{ marginTop: 10, display: "flex", gap: 12 }}>
-            <button
-              onClick={() => {
-                handleSave();
-                showToast("LLM 配置保存成功");
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }}
-            >
-              保存配置
-            </button>
-            <button
-              onClick={() => {
-                showToast("正在测试与模型接口握手...");
-                setTimeout(() => {
-                  showToast("连接测试通过！成功连通目标 API");
-                }, 800);
-              }}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground"
-            >
-              测试连接
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SystemSettingsTabContent({ showToast }: { showToast: (msg: string) => void }) {
-  const [activeCategory, setActiveCategory] = useState<"appearance" | "agent" | "sql" | "security">("appearance");
-  const [theme, setTheme] = useState("dark");
-  const [fontSize, setFontSize] = useState("13px");
-  const [autoExecute, setAutoExecute] = useState(false);
-  const [sqlLimit, setSqlLimit] = useState(100);
-  const [timeout, setTimeoutSec] = useState(30);
-  const [readOnly, setReadOnly] = useState(false);
 
   return (
-    <div style={{ display: "flex", background: "var(--bg-surface)", height: "100%" }}>
-      {/* Settings Sidebar */}
-      <div style={{ width: 180, borderRight: "1px solid var(--color-border)", background: "var(--bg-secondary)", padding: "12px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
-        {[
-          { id: "appearance", label: "外观与界面" },
-          { id: "agent", label: "Agent 智能助手" },
-          { id: "sql", label: "SQL 查询与执行" },
-          { id: "security", label: "安全与审计" }
-        ].map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCategory(cat.id as any)}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: 6,
-              border: "none",
-              textAlign: "left",
-              fontSize: "0.8rem",
-              cursor: "pointer",
-              background: activeCategory === cat.id ? "var(--color-primary-soft)" : "transparent",
-              color: activeCategory === cat.id ? "var(--color-primary)" : "var(--color-text-secondary)",
-              fontWeight: activeCategory === cat.id ? 600 : 500
-            }}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Settings Body */}
-      <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-        <div style={{ maxWidth: 480 }}>
-          {activeCategory === "appearance" && (
-            <div>
-              <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 16, color: "var(--color-text-primary)" }}>外观设置</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <label className="field-label" style={{ display: "block", marginBottom: 6 }}>系统主题</label>
-                  <select
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none"
-                    value={theme}
-                    onChange={(e) => {
-                      setTheme(e.target.value);
-                      showToast(`已切换主题为: ${e.target.value}`);
-                    }}
-                    style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                  >
-                    <option value="dark">酷炫暗黑模式 (Premium Dark)</option>
-                    <option value="light">清爽明亮模式 (Light)</option>
-                    <option value="system">跟随系统设置</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label" style={{ display: "block", marginBottom: 6 }}>编辑器字体大小</label>
-                  <select
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(e.target.value)}
-                    style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                  >
-                    <option value="12px">12px (小)</option>
-                    <option value="13px">13px (推荐)</option>
-                    <option value="14px">14px (中)</option>
-                    <option value="16px">16px (大)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeCategory === "agent" && (
-            <div>
-              <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 16, color: "var(--color-text-primary)" }}>Agent 智能参数</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                  <input
-                    type="checkbox"
-                    checked={autoExecute}
-                    onChange={(e) => setAutoExecute(e.target.checked)}
-                    style={{ width: 16, height: 16, accentColor: "var(--color-primary)" }}
-                  />
-                  AI 生成 SQL 后自动执行查询
-                </label>
-                <div>
-                  <label className="field-label" style={{ display: "block", marginBottom: 6 }}>大模型温度 (Temperature)</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    defaultValue="0.2"
-                    style={{ width: "100%" }}
-                    onChange={(e) => showToast(`已调整模型温度为: ${e.target.value}`)}
-                  />
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "var(--text-muted)" }}>
-                    <span>0.0 (精确/严格)</span>
-                    <span>1.0 (创造性)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeCategory === "sql" && (
-            <div>
-              <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 16, color: "var(--color-text-primary)" }}>SQL 执行控制</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div>
-                  <label className="field-label" style={{ display: "block", marginBottom: 6 }}>默认查询行数限制 (LIMIT)</label>
-                  <input
-                    type="number"
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none"
-                    value={sqlLimit}
-                    onChange={(e) => setSqlLimit(Number(e.target.value) || 100)}
-                    style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                  />
-                </div>
-                <div>
-                  <label className="field-label" style={{ display: "block", marginBottom: 6 }}>执行超时时间 (秒)</label>
-                  <input
-                    type="number"
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground focus:outline-none"
-                    value={timeout}
-                    onChange={(e) => setTimeoutSec(Number(e.target.value) || 30)}
-                    style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeCategory === "security" && (
-            <div>
-              <h4 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 16, color: "var(--color-text-primary)" }}>安全防范与审计</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                  <input
-                    type="checkbox"
-                    checked={readOnly}
-                    onChange={(e) => setReadOnly(e.target.checked)}
-                    style={{ width: 16, height: 16, accentColor: "var(--color-primary)" }}
-                  />
-                  全局只读拦截 (禁止任何 DELETE, DROP, UPDATE 写入语句)
-                </label>
-                <div style={{ padding: "8px 12px", background: "var(--color-warning-soft)", border: "1px solid #F97316", borderRadius: 6, fontSize: "0.75rem", color: "var(--color-warning)" }}>
-                  注意：开启后，任何非 SELECT 语句执行都会在客户端直接拦截并抛出审计警告。
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{ marginTop: 24, borderTop: "1px solid var(--color-border)", paddingTop: 16 }}>
-            <button
-              onClick={() => showToast("系统设置已更新")}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110"
-              style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }}
-            >
-              保存修改
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="hifi-settings-tab-frame">
+      <LlmConfigPanel
+        variant="page"
+        config={config}
+        onChange={updateConfig}
+        onSave={() => {
+          handleSave();
+          showToast("LLM 配置保存成功");
+        }}
+        onTestConnection={() => {
+          showToast("正在测试与模型接口握手…");
+          setTimeout(() => showToast("连接测试通过，目标 API 可达"), 800);
+        }}
+      />
     </div>
   );
 }

@@ -610,11 +610,12 @@ export interface ERNode {
   fields: Array<{
     name: string;
     type: string;
-    isPrimaryKey: boolean;
-    isForeignKey: boolean;
+    is_pk: boolean;
+    is_fk: boolean;
+    comment?: string;
   }>;
   comment: string;
-  row_count_estimate: number;
+  row_count_estimate?: number;
   module_tag: string;
 }
 
@@ -625,6 +626,7 @@ export interface EREdge {
   sourceHandle?: string;
   targetHandle?: string;
   edge_type?: "real" | "inferred";
+  label?: string;
 }
 
 export interface ERDiagramData {

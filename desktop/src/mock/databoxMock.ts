@@ -1,6 +1,6 @@
 import type { AgentArtifact } from "../types/agentArtifact";
 
-export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-config" | "system-settings" | "datasource-settings" | "agent-eval";
+export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-config" | "datasource-settings" | "agent-eval";
 
 export type AgentApprovalInfo = {
   runId: string;

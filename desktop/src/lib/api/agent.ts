@@ -38,14 +38,14 @@ const EVENT_REDUCERS: Record<
   },
   "agent.context.update": (next, event) => {
     const summary = typeof event.step?.summary === "string" ? event.step.summary : null;
-    const rawLens = event.step?.task_lens;
-    const taskLens = rawLens && typeof rawLens === "object" && !Array.isArray(rawLens)
+    const rawLens = event.step?.task_lens as Record<string, unknown> | undefined;
+    const taskLens = rawLens && typeof rawLens === "object"
       ? {
           goal: typeof rawLens.goal === "string" ? rawLens.goal : undefined,
           current_focus: typeof rawLens.current_focus === "string" ? rawLens.current_focus : undefined,
           next_likely: typeof rawLens.next_likely === "string" ? rawLens.next_likely : undefined,
           missing_evidence: Array.isArray(rawLens.missing_evidence)
-            ? rawLens.missing_evidence.filter((v): v is string => typeof v === "string")
+            ? rawLens.missing_evidence.filter((v: unknown): v is string => typeof v === "string")
             : undefined,
         }
       : next.taskLens;
