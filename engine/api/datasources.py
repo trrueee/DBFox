@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
-from engine.datasource import build_mysql_ssl_params, is_demo_db, test_connection
+from engine.datasource import build_mysql_ssl_params, test_connection
 from engine.errors import DataBoxError
 from engine.models import (
     DEFAULT_PROJECT_ID,
@@ -18,7 +18,7 @@ from engine.models import (
     SchemaTable,
 )
 from engine.schemas import DataSourceTestRequest, DataSourceCreateRequest
-from engine.schema_sync import _guess_module_tag, build_er_diagram_data, sync_schema
+from engine.schema_sync import build_er_diagram_data, sync_schema
 
 logger = logging.getLogger("databox.api.datasources")
 router = APIRouter()
@@ -88,7 +88,7 @@ def _datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
     db_type = str(ds.db_type or "mysql")
     password = ""
 
-    if db_type != "sqlite" and not is_demo_db(host, database_name):
+    if db_type != "sqlite":
         password = decrypt_password(str(ds.password_ciphertext), str(ds.password_nonce))
 
     return {
@@ -379,7 +379,7 @@ def api_list_tables(datasource_id: str = Query(...), db: Session = Depends(get_d
             "table_type": table.table_type,
             "row_count_estimate": table.row_count_estimate,
             "columns_count": len(table.columns),
-            "module_tag": _guess_module_tag(str(table.table_name)),
+            "module_tag": table.table_schema or None,
         }
         for table in tables
     ]

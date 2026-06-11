@@ -13,7 +13,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary";
 import { PromptDialog } from "../components/PromptDialog";
 import { CommandPalette, type CommandItem } from "../components/CommandPalette";
 import { useToast } from "../components/Toast";
-import { ApiConfigDialog, useApiConfig } from "../components/ApiConfigDialog";
+import { SettingsDialog, useApiConfig } from "../components/SettingsDialog";
 import { api } from "../lib/api";
 import type { DataSource, Project, SchemaTable } from "../lib/api";
 import { AgentCopilotPanel } from "../features/agent/AgentCopilotPanel";
@@ -26,7 +26,6 @@ import { WorkbenchStatusBar } from "../features/workbench/WorkbenchStatusBar";
 import { WorkbenchModal } from "../features/workbench/WorkbenchModal";
 import { WorkbenchContextMenu } from "../features/workbench/WorkbenchContextMenu";
 import type { QueryTabStatePatch, WorkbenchActionType, WorkbenchSubTab, WorkbenchTab } from "../features/workbench/types";
-import { EnvironmentsPage } from "./EnvironmentsPage";
 import { BackupsPage } from "./BackupsPage";
 import { DataSourcesPage } from "./DataSourcesPage";
 
@@ -157,7 +156,6 @@ export const WorkbenchPage = ({
   const [aiPanelCollapsed, setAiPanelCollapsed] = useState(true);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showBackupsModal, setShowBackupsModal] = useState(false);
-  const [showEnvironmentsModal, setShowEnvironmentsModal] = useState(false);
   const [showDashboardModal, setShowDashboardModal] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showSemanticSettings, setShowSemanticSettings] = useState(false);
@@ -502,7 +500,6 @@ export const WorkbenchPage = ({
         items: [
           { label: "显示 / 隐藏 AI 面板", shortcut: "Alt+A", action: () => setAiPanelCollapsed((prev) => !prev) },
           { label: "性能监控面板", action: () => setShowDashboardModal(true) },
-          { label: "Docker 环境管理", action: () => setShowEnvironmentsModal(true) },
         ],
       },
       {
@@ -551,7 +548,6 @@ export const WorkbenchPage = ({
         items: [
           { label: "快捷键参考", action: () => setShowCommandPalette(true) },
           { label: "性能监控面板", action: () => setShowDashboardModal(true) },
-          { label: "Docker 环境管理", action: () => setShowEnvironmentsModal(true) },
           { separator: true, label: "" },
           { label: "关于 DataBox", action: () => alert("DataBox v1.0.0\nAI 驱动的本地数据库工作台") },
         ],
@@ -759,19 +755,6 @@ export const WorkbenchPage = ({
         </WorkbenchModal>
       )}
 
-      {showEnvironmentsModal && (
-        <WorkbenchModal title="环境配置" onClose={() => setShowEnvironmentsModal(false)}>
-          <EnvironmentsPage
-            activeProject={activeProject}
-            onRefreshDatasources={onRefreshDatasources}
-            onSelectDataSource={(datasource) => {
-              setActiveDataSource(datasource);
-              setShowEnvironmentsModal(false);
-            }}
-          />
-        </WorkbenchModal>
-      )}
-
       {showBackupsModal && (
         <WorkbenchModal title="备份与恢复管理器" onClose={() => setShowBackupsModal(false)}>
           <BackupsPage activeProject={activeProject} datasources={datasources} activeDataSource={activeDataSource} />
@@ -801,7 +784,7 @@ export const WorkbenchPage = ({
         <SemanticSettingsPanel datasource={activeDataSource} projectId={activeProject.id} onClose={() => setShowSemanticSettings(false)} />
       )}
 
-      <ApiConfigDialog
+      <SettingsDialog
         open={apiConfig.open}
         onOpenChange={apiConfig.setOpen}
         config={apiConfig.config}

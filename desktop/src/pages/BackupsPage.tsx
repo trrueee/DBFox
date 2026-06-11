@@ -231,7 +231,7 @@ export const BackupsPage = ({ activeProject, datasources, activeDataSource }: Ba
           </button>
         </div>
         <p style={{ marginTop: 10, color: "var(--text-muted)", fontSize: "0.78rem" }}>
-          Uses local `mysqldump`; passwords are not placed on the command line. Built-in mock demo datasources are not dumpable.
+          Uses local `mysqldump`; passwords are not placed on the command line.
         </p>
         {error && (
           <div style={{ marginTop: 12 }}>

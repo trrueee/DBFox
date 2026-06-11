@@ -245,12 +245,66 @@ export function DataTable({
       )}
 
       {preview && (
-        <div className="data-grid-preview" style={{ left: Math.min(preview.rect.left, window.innerWidth - 560), top: preview.rect.bottom + 8 }}>
-          {preview.isJson && tryParseJson(preview.value) ? (
-            <JsonTree data={tryParseJson(preview.value)!} />
-          ) : (
-            <pre className="data-grid-inspector-pre">{preview.value}</pre>
-          )}
+        <div
+          className="data-grid-preview animate-fade-in shadow-xl"
+          style={{
+            left: Math.min(preview.rect.left, window.innerWidth - 540),
+            top: preview.rect.bottom + 8,
+            maxWidth: 500,
+            maxHeight: 280,
+            overflow: "auto",
+            padding: 0,
+            border: "1px solid var(--border-medium)",
+            borderRadius: 8,
+            background: "var(--bg-surface)",
+            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+            zIndex: 4500,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-light)", fontSize: 10, color: "var(--text-secondary)" }}>
+            <span style={{ fontWeight: 700, textTransform: "uppercase", color: "var(--accent-indigo)" }}>
+              {preview.isJson ? "JSON 结构" : "TEXT 内容"}
+            </span>
+            <span>字符数: {preview.value.length}</span>
+          </div>
+          
+          {/* Body */}
+          <div style={{ padding: 10, fontSize: "0.72rem", fontFamily: "var(--font-mono)", lineHeight: 1.5 }}>
+            {preview.isJson && tryParseJson(preview.value) ? (
+              <JsonTree data={tryParseJson(preview.value)!} />
+            ) : (
+              <div>
+                {/* Parse Key Value structures */}
+                {preview.value.includes("=") && (preview.value.includes("&") || preview.value.includes(";")) ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {preview.value.split(/[&;]/).map((pair, idx) => {
+                      const eqIdx = pair.indexOf("=");
+                      if (eqIdx === -1) return <div key={idx} style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>{pair}</div>;
+                      const k = pair.substring(0, eqIdx).trim();
+                      const v = pair.substring(eqIdx + 1).trim();
+                      return (
+                        <div key={idx} style={{ display: "flex", borderBottom: "1px dashed var(--border-light)", paddingBottom: 2 }}>
+                          <span style={{ fontWeight: 600, color: "var(--text-secondary)", width: 120, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }} title={k}>{k}</span>
+                          <span style={{ color: "var(--text-primary)", wordBreak: "break-all" }}>{v}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : preview.value.includes(",") && preview.value.split(",").length > 2 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {preview.value.split(",").map((item, idx) => (
+                      <span key={idx} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 4, padding: "2px 6px", fontSize: "0.65rem", color: "var(--text-primary)" }}>{item.trim()}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <pre className="data-grid-inspector-pre" style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{preview.value}</pre>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

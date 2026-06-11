@@ -1,6 +1,17 @@
 import type { AgentArtifact } from "../types/agentArtifact";
 
-export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history";
+export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-config" | "system-settings" | "datasource-settings" | "agent-eval";
+
+export type AgentApprovalInfo = {
+  runId: string;
+  approvalId: string;
+  stepName: string;
+  riskLevel: string;
+  reason?: string;
+  sql?: string;
+};
+
+export type AgentTabStatus = "running" | "waiting_approval" | "completed" | "failed";
 
 export interface WorkspaceTab {
   id: string;
@@ -12,6 +23,10 @@ export interface WorkspaceTab {
   conversationId?: string;
   chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
   artifacts?: AgentArtifact[];
+  agentRunId?: string;
+  agentSessionId?: string;
+  agentStatus?: AgentTabStatus;
+  agentApproval?: AgentApprovalInfo | null;
 }
 
 export interface ContextMenuState {

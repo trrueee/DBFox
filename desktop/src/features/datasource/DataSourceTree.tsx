@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { ChevronDown, ChevronRight, Database, FileText, RefreshCw, Search } from "lucide-react";
-import { listDatasources, listTables, type EngineDataSource, type EngineSchemaTable } from "../engine/engineApi";
+import type { EngineDataSource, EngineSchemaTable } from "../engine/engineApi";
 
 interface DataSourceTreeProps {
   treeSearch: string;
@@ -10,6 +10,13 @@ interface DataSourceTreeProps {
   onTableDoubleClick: (tableName: string) => void;
   onNodeContextMenu: (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => void;
   onRefresh: () => void;
+  onNewConnection: () => void;
+  datasources: EngineDataSource[];
+  activeDatasourceId: string;
+  setActiveDatasourceId: (id: string) => void;
+  tables: EngineSchemaTable[];
+  loading: boolean;
+  error: string;
 }
 
 export function DataSourceTree({
@@ -20,75 +27,46 @@ export function DataSourceTree({
   onTableDoubleClick,
   onNodeContextMenu,
   onRefresh,
+  onNewConnection,
+  datasources,
+  activeDatasourceId,
+  setActiveDatasourceId,
+  tables,
+  loading,
+  error,
 }: DataSourceTreeProps) {
-  const [datasources, setDatasources] = useState<EngineDataSource[]>([]);
-  const [activeDatasourceId, setActiveDatasourceId] = useState("");
-  const [tables, setTables] = useState<EngineSchemaTable[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
 
-  const loadDatasources = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const nextDatasources = await listDatasources();
-      setDatasources(nextDatasources);
-      const nextActive = activeDatasourceId && nextDatasources.some((item) => item.id === activeDatasourceId)
-        ? activeDatasourceId
-        : nextDatasources[0]?.id || "";
-      setActiveDatasourceId(nextActive);
-      if (nextActive) {
-        const nextTables = await listTables(nextActive);
-        setTables(nextTables);
-      } else {
-        setTables([]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "读取本地 Engine 数据源失败");
-      setDatasources([]);
-      setTables([]);
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    onRefresh();
   };
 
-  useEffect(() => {
-    void loadDatasources();
-  }, []);
-
-  useEffect(() => {
-    if (!activeDatasourceId) return;
-    void listTables(activeDatasourceId).then(setTables).catch((err) => setError(err instanceof Error ? err.message : "读取表结构失败"));
-  }, [activeDatasourceId]);
-
-  const groupedTables = useMemo(() => {
+  const groupedTables = typeof tables === "object" && Array.isArray(tables) ? tables.reduce<Record<string, EngineSchemaTable[]>>((acc, table) => {
     const keyword = treeSearch.trim().toLowerCase();
-    const filtered = tables.filter((table) => {
-      if (!keyword) return true;
-      return table.table_name.toLowerCase().includes(keyword) || (table.table_comment || "").toLowerCase().includes(keyword);
-    });
-
-    return filtered.reduce<Record<string, EngineSchemaTable[]>>((acc, table) => {
+    const matches = !keyword || table.table_name.toLowerCase().includes(keyword) || (table.table_comment || "").toLowerCase().includes(keyword);
+    if (matches) {
       const groupName = table.module_tag || "未分组表";
       if (!acc[groupName]) acc[groupName] = [];
       acc[groupName].push(table);
-      return acc;
-    }, {});
-  }, [tables, treeSearch]);
-
-  const handleRefresh = () => {
-    void loadDatasources();
-    onRefresh();
-  };
+    }
+    return acc;
+  }, {}) : {};
 
   return (
     <section className="hifi-col hifi-sidebar-col">
       <div className="hifi-sidebar-panel">
-        <div className="hifi-sidebar-header">
-          <span className="hifi-sidebar-title">数据源</span>
-          <RefreshCw size={12} className={`text-gray-400 cursor-pointer ${loading ? "animate-spin" : ""}`} onClick={handleRefresh} />
+        <div className="hifi-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)" }}>数据源</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={onNewConnection}
+              title="新建连接"
+              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}
+            >
+              +
+            </button>
+            <RefreshCw size={12} className={`text-gray-400 cursor-pointer ${loading ? "animate-spin" : ""}`} onClick={handleRefresh} title="刷新" />
+          </div>
         </div>
 
         {activeDatasource ? (

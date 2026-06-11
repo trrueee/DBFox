@@ -42,6 +42,15 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
     api_base = ctx.api_base
     registry = ctx.registry
 
+    if not ctx.has_llm_credentials:
+        from langchain_core.messages import AIMessage
+        return {
+            "messages": [AIMessage(content="Agent requires a configured LLM API key.")],
+            "status": "failed",
+            "error": "No LLM credentials.",
+            "trace_events": [{"type": "agent.model.blocked", "reason": "no_llm_credentials"}],
+        }
+
     allowed_groups = state.get("allowed_tool_groups")
     # None (not []) means "all tools" for backward compatibility.
     # An empty list means "no tools" (pure chat / product_help / database_concept).

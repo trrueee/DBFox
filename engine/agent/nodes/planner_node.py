@@ -26,18 +26,17 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
     This is a SEMANTIC classifier, not a keyword router. It infers intent
     from meaning, context, and user goal.
 
-    When no LLM credentials are available, falls back to a permissive plan
-    that allows all safe tool groups (backward-compatible).
+    When no LLM credentials are available, the agent cannot run; this is
+    enforced at the API layer. If this node is reached without credentials
+    (defense-in-depth), raise immediately.
     """
     ctx = graph_context(config)
     model_name = ctx.model_name
     api_key = ctx.api_key
     api_base = ctx.api_base
 
-    # Check whether we can actually call an LLM
     if not ctx.has_llm_credentials:
-        logger.warning("No LLM credentials available — Planner falling back to permissive plan.")
-        return _permissive_fallback(replan_count=int(state.get("replan_count", 0)))
+        raise RuntimeError("Agent cannot start: no LLM API key configured.")
 
     replan_count = int(state.get("replan_count", 0))
     # Detect actual replan from progress_decision status, not from counter
@@ -136,22 +135,7 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
         ])
     except Exception as exc:
         logger.error("Planner LLM call failed: %s", exc)
-        # Fallback: allow all safe tool groups so the agent can still work
-        fallback = AgentPlanDirective(
-            task_type="ambiguous",
-            grounding_level="none",
-            execution_mode="suggest_only",
-            allowed_tool_groups=["workspace", "schema", "semantic", "query_plan",
-                                 "sql_generation", "sql_validation", "sql_repair",
-                                 "execution", "result", "chart", "answer"],
-            should_call_tools=True,
-            should_execute_sql=False,
-            needs_clarification=False,
-            success_criteria=["User question is answered with grounded evidence."],
-            risk_notes=["Planner LLM call failed — using permissive fallback."],
-            reasoning_summary=f"Planner error: {exc}",
-        )
-        return _plan_result(fallback, replan_count, is_replan=False)
+        raise
 
     # ---- Handle clarification -----------------------------------------------
     if directive.needs_clarification:
@@ -201,7 +185,7 @@ def _plan_result(directive: AgentPlanDirective, count: int, is_replan: bool = Fa
     }
 
 
-def _permissive_fallback(replan_count: int = 0) -> dict[str, Any]:
+def _permissive_fallback(replan_count: int = 0, execute: bool = False) -> dict[str, Any]:
     """Return a permissive plan when the Planner LLM is unavailable.
 
     This preserves backward compatibility: the ReAct model still has access
@@ -217,7 +201,7 @@ def _permissive_fallback(replan_count: int = 0) -> dict[str, Any]:
             "execution", "result", "chart", "answer",
         ],
         should_call_tools=True,
-        should_execute_sql=False,
+        should_execute_sql=execute,
         needs_clarification=False,
         success_criteria=["User question is answered with grounded evidence."],
         risk_notes=["Planner LLM unavailable — using permissive tool scope."],

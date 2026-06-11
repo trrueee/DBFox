@@ -254,10 +254,9 @@ def generate_create_table_ddl(design: Mapping[str, Any]) -> dict[str, Any]:
 
 def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str, Any]:
     from engine.models import DataSource, QueryHistory
-    from engine.datasource import get_mysql_connection_params, is_demo_db
+    from engine.datasource import get_mysql_connection_params
     from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
     from engine.schema_sync import sync_schema
-    from engine.demo_db_init import init_demo_database
     import sqlite3
     import time
     import uuid
@@ -279,10 +278,8 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
     error_message = None
 
     try:
-        if is_demo_db(str(ds.host), str(ds.database_name)):
-            # SQLite
-            demo_path = init_demo_database()
-            conn = sqlite3.connect(demo_path)
+        if ds.db_type == "sqlite":
+            conn = sqlite3.connect(str(ds.database_name))
             try:
                 cursor = conn.cursor()
                 cursor.execute(clean_ddl)

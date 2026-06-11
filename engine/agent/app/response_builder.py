@@ -107,6 +107,8 @@ def build_response(
         "sql.execute_readonly": "execute_sql",
         "sql_skip_execution": "execute_sql",
         "sql.skip_execution": "execute_sql",
+        "sql_revise": "revise_sql",
+        "sql.revise": "revise_sql",
         "result_profile": "profile_result",
         "result.profile": "profile_result",
         "chart_suggest": "suggest_chart",
@@ -143,6 +145,8 @@ def build_response(
                 step_details[step_name]["latency_ms"] = te.get("latency_ms") or 0
                 if te.get("error"):
                     step_details[step_name]["error"] = te.get("error")
+                if te.get("input"):
+                    step_details[step_name]["input"] = te.get("input")
                 if te.get("output"):
                     step_details[step_name]["output"] = te.get("output")
 
@@ -429,9 +433,9 @@ def build_canvas(
     if progress.get("status") in ("replan", "blocked", "failed"):
         recovery.append(RecoveryRecord(
             attempt=int(state.get("replan_count") or 0) + 1,
-            failure_layer=progress.get("failure_layer", ""),
-            root_cause=progress.get("root_cause", "") or str(state.get("error") or ""),
-            recovery_strategy=progress.get("recovery_strategy", ""),
+            failure_layer=progress.get("failure_layer") or "",
+            root_cause=progress.get("root_cause") or str(state.get("error") or ""),
+            recovery_strategy=progress.get("recovery_strategy") or "",
             retry_budget=int(progress.get("retry_budget") or 0),
             outcome="recovered" if progress.get("status") == "replan" else "finalized_with_caveat",
         ))

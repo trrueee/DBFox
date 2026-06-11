@@ -2,7 +2,7 @@
 import uuid
 import pytest
 import engine.schema_sync as schema_sync_module
-from engine.schema_sync import _guess_module_tag, sync_schema, build_er_diagram_data
+from engine.schema_sync import sync_schema, build_er_diagram_data
 from engine.models import DataSource, SchemaTable, SchemaColumn
 
 
@@ -15,13 +15,6 @@ def test_sync_tables(db_session, demo_datasource) -> None:
     assert len(tables) == 20
 
 
-def test_guess_module_tag_for_product_workbench_prefixes() -> None:
-    assert _guess_module_tag("account_cookie_versions") == "账号模块"
-    assert _guess_module_tag("token_accounts") == "Token 账户模块"
-    assert _guess_module_tag("sales_messages") == "销售模块"
-    assert _guess_module_tag("video_watch_records") == "视频模块"
-    assert _guess_module_tag("xhs_notes") == "小红书模块"
-    assert _guess_module_tag("unknown_table") == "通用模块"
 
 
 def test_sync_columns(db_session, demo_datasource) -> None:
@@ -78,7 +71,7 @@ def test_table_comment(db_session, demo_datasource) -> None:
         SchemaTable.data_source_id == demo_datasource.id,
         SchemaTable.table_name == "users",
     ).first()
-    assert users_table.table_comment == "用户信息表"
+    assert users_table.table_comment is None  # SQLite tables have no comments by default
 
 
 def test_column_comment(db_session, demo_datasource) -> None:
@@ -91,7 +84,7 @@ def test_column_comment(db_session, demo_datasource) -> None:
         SchemaColumn.table_id == users_table.id,
         SchemaColumn.column_name == "username",
     ).first()
-    assert username_col.column_comment == "用户名"
+    assert username_col.column_comment is None  # SQLite columns have no comments by default
 
 
 def test_sync_idempotent(db_session, demo_datasource) -> None:
@@ -132,7 +125,10 @@ def test_sync_failure_preserves_existing_schema(db_session, demo_datasource, mon
         SchemaTable.data_source_id == demo_datasource.id
     ).count()
 
-    monkeypatch.setattr(schema_sync_module, "MOCK_TABLES_INFO", [{"table_name": "broken"}])
+    def _failing_snapshot(ds, ds_id):
+        raise ValueError("Simulated schema sync failure")
+
+    monkeypatch.setattr(schema_sync_module, "_build_sqlite_schema_snapshot", _failing_snapshot)
 
     with pytest.raises(ValueError, match="Schema sync failed"):
         sync_schema(db_session, demo_datasource.id)

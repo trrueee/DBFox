@@ -70,28 +70,6 @@ export interface Project {
   updated_at: string;
 }
 
-export interface DatabaseEnvironment {
-  id: string;
-  project_id: string;
-  name: string;
-  runtime: string;
-  engine_type: string;
-  engine_version: string;
-  image: string;
-  container_name: string;
-  host: string;
-  port: number;
-  database_name: string;
-  username: string;
-  datasource_id?: string;
-  status: string;
-  last_health_status?: string;
-  last_health_at?: string;
-  last_error?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface BackupRecord {
   id: string;
   project_id: string;
@@ -470,6 +448,140 @@ export interface AgentTraceEvent {
   sequence: number;
   payload?: Record<string, unknown>;
   created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Agent run — request config, response, runtime events (mirrors
+// engine/agent_core/types.py AgentRunRequest/AgentRunResponse/AgentRuntimeEvent)
+// ---------------------------------------------------------------------------
+
+export interface AgentRunConfig {
+  sessionId?: string | null;
+  parentRunId?: string | null;
+  followUpContext?: AgentFollowUpContext | null;
+  apiKey?: string;
+  apiBase?: string;
+  model?: string;
+  workspaceContext?: AgentWorkspaceContext | null;
+  optimizeRag?: boolean;
+  execute?: boolean;
+}
+
+export interface AgentRunResponse {
+  run_id: string;
+  session_id: string;
+  parent_run_id?: string | null;
+  success: boolean;
+  status?: string | null;
+  question: string;
+  context_summary?: string | null;
+  referenced_artifact_ids?: string[];
+  query_plan?: Record<string, unknown> | null;
+  sql?: string | null;
+  safety?: Record<string, unknown> | null;
+  execution?: Record<string, unknown> | null;
+  explanation?: string | null;
+  chart_suggestion?: Record<string, unknown> | null;
+  result_profile?: ResultProfile | null;
+  answer?: AgentAnswer | null;
+  suggestions?: FollowUpSuggestion[];
+  artifacts: AgentArtifact[];
+  message_blocks?: AgentMessageBlock[];
+  events?: AgentVisibleEvent[];
+  trace_events?: Array<Record<string, unknown>>;
+  steps?: AgentStep[];
+  error?: string | null;
+  approval?: AgentApproval | null;
+  checkpoint?: AgentCheckpoint | null;
+  approval_context?: Record<string, unknown> | null;
+  canvas?: Record<string, unknown> | null;
+}
+
+export type AgentRuntimeEventType =
+  | "agent.run.started"
+  | "agent.step.started"
+  | "agent.step.completed"
+  | "agent.artifact.created"
+  | "agent.answer.completed"
+  | "agent.approval.required"
+  | "agent.approval.resolved"
+  | "agent.checkpoint.saved"
+  | "agent.run.waiting_approval"
+  | "agent.run.resumed"
+  | "agent.run.completed"
+  | "agent.run.failed";
+
+export interface AgentRuntimeEvent {
+  event_id: string;
+  run_id: string;
+  sequence: number;
+  created_at_ms: number;
+  type: AgentRuntimeEventType | string;
+  step?: Record<string, unknown> | null;
+  artifact?: AgentArtifact | null;
+  answer?: AgentAnswer | null;
+  response?: AgentRunResponse | null;
+  approval?: AgentApproval | null;
+  checkpoint?: AgentCheckpoint | null;
+  error?: string | null;
+  approval_context?: Record<string, unknown> | null;
+  code?: string | null;
+}
+
+export interface AgentRunDraftState {
+  runId?: string;
+  status: "running" | "waiting_approval" | "completed" | "failed";
+  question: string;
+  events: AgentRuntimeEvent[];
+  artifacts: AgentArtifact[];
+  answer: AgentAnswer | null;
+  response: AgentRunResponse | null;
+  approval: AgentApproval | null;
+  checkpoint: AgentCheckpoint | null;
+  error: string | null;
+}
+
+export interface AgentSessionRunSummary {
+  id: string;
+  session_id: string;
+  parent_run_id?: string | null;
+  question?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AgentArtifactRecord {
+  id: string;
+  run_id?: string;
+  type?: string;
+  title?: string;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentRuntimeEventRecord {
+  id?: string;
+  run_id?: string;
+  sequence?: number;
+  type?: string;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentTraceEventRecord {
+  id?: string;
+  run_id?: string;
+  event_type?: string;
+  sequence?: number;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentKernelThreadState {
+  thread_id?: string;
+  checkpoints?: AgentCheckpoint[];
+  [key: string]: unknown;
 }
 
 export interface QueryResult {

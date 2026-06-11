@@ -33,6 +33,7 @@ def _waiting_run(db_session, demo_datasource, monkeypatch):
             question="list users",
             execute=True,
             session_id="approval-session",
+            api_key="test-key",
         )
     ))
     final = events[-1]
@@ -124,7 +125,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
         "schemaValidationWarnings": [],
     })
     guardrail_response = DataBoxAgentRuntime(db_session).run(
-        AgentRunRequest(datasource_id=demo_datasource.id, question="delete users", execute=True)
+        AgentRunRequest(datasource_id=demo_datasource.id, question="delete users", execute=True, api_key="test-key")
     )
     assert guardrail_response.success is False
     assert guardrail_response.status == "failed"
@@ -138,7 +139,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
         "schemaValidationWarnings": [],
     })
     schema_response = DataBoxAgentRuntime(db_session).run(
-        AgentRunRequest(datasource_id=demo_datasource.id, question="bad column", execute=True)
+        AgentRunRequest(datasource_id=demo_datasource.id, question="bad column", execute=True, api_key="test-key")
     )
     assert schema_response.success is False
     assert schema_response.status == "failed"

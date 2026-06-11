@@ -70,6 +70,12 @@ class DataBoxAgentService:
                 self.db, req.parent_run_id
             )
 
+        if req.follow_up_context:
+            if not req.parent_run_id:
+                req.parent_run_id = req.follow_up_context.parent_run_id
+            if not req.session_id:
+                req.session_id = req.follow_up_context.session_id
+
         ctx = RequestContext(self.db, req, self.registry)
         run_id = str(uuid.uuid4())
         session_id = self._session_id(req)
@@ -90,9 +96,12 @@ class DataBoxAgentService:
         # Build initial state
         initial_state = self._initial_state(req, run_id, session_id)
 
-        # Build and run graph
+        # Build and run graph. The LangGraph checkpoint thread is keyed by
+        # run_id (not session_id): each run starts from a fresh thread, and
+        # conversation continuity is provided via follow_up_context. Keying by
+        # session would leak prior runs' messages into new runs.
         app = build_databox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(session_id)
+        config = ctx.graph_config(run_id)
 
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
@@ -110,6 +119,13 @@ class DataBoxAgentService:
                 if node_str == "observe":
                     yield from self._observe_events(
                         emit, update, agent_state, artifact_identity, emitted_artifact_ids
+                    )
+
+                # Emit the plan draft artifact when the planner produces a directive
+                if node_str == "planner":
+                    yield from self._planner_events(
+                        emit, update, agent_state, artifact_identity, emitted_artifact_ids,
+                        run_id, session_id,
                     )
 
                 # Emit trace events (including approval-related traffic
@@ -176,8 +192,10 @@ class DataBoxAgentService:
         if existing_approval.run_id != run_id:
             raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
 
-        # Resolve the approval in DB
-        if existing_approval.status == "pending":
+        # Resolve the approval in DB. If it was already resolved (e.g. via the
+        # approvals API) we skip both resolution and the approval.resolved event.
+        resolved_here = existing_approval.status == "pending"
+        if resolved_here:
             approval = agent_persistence.resolve_approval(
                 self.db,
                 run_id=run_id,
@@ -201,19 +219,21 @@ class DataBoxAgentService:
         def emit(event_type: AgentRuntimeEventType, **kwargs: Any) -> AgentRuntimeEvent:
             return emitter.emit(event_type, **kwargs)
 
-        # Emit approval resolved
-        yield emit(
-            "agent.approval.resolved",
-            step={"name": approval.step_name, "status": approval.status},
-            approval=approval,
-        )
+        # Emit approval resolved (only when this call performed the resolution)
+        if resolved_here:
+            yield emit(
+                "agent.approval.resolved",
+                step={"name": approval.step_name, "status": approval.status},
+                approval=approval,
+            )
 
         if approved:
             agent_persistence.mark_run_resumed(self.db, run_id=run_id)
             yield emit("agent.run.resumed", step={"name": approval.step_name}, approval=approval)
 
         app = build_databox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(session_id)
+        # Same thread key as run_iter — the interrupted checkpoint lives under run_id.
+        config = ctx.graph_config(run_id)
         artifact_identity = AgentArtifactIdentity(run_id)
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
@@ -384,6 +404,43 @@ class DataBoxAgentService:
                 emitted_ids.add(artifact.id)
                 yield emit("agent.artifact.created", artifact=artifact)
 
+    def _planner_events(
+        self,
+        emit: Any,
+        update: dict[str, Any],
+        agent_state: Any,
+        artifact_identity: AgentArtifactIdentity,
+        emitted_ids: set[str],
+        run_id: str,
+        session_id: str,
+    ) -> Iterator[AgentRuntimeEvent]:
+        """Surface the planner directive as the `agent_plan_draft` artifact."""
+        directive = update.get("plan_directive")
+        if not isinstance(directive, dict) or not directive:
+            return
+
+        from engine.agent_core.artifacts import build_agent_plan_artifact
+
+        artifact = build_agent_plan_artifact(directive, identity=artifact_identity)
+        if artifact.id in emitted_ids:
+            return
+        emitted_ids.add(artifact.id)
+        if hasattr(agent_state, "artifacts"):
+            agent_state.artifacts.append(artifact)
+
+        try:
+            from engine.models import AgentArtifactRecord
+            existing_count = self.db.query(AgentArtifactRecord).filter(
+                AgentArtifactRecord.run_id == run_id
+            ).count()
+            agent_persistence.record_artifact(
+                self.db, session_id, run_id, artifact, sequence=existing_count + 1
+            )
+        except Exception as exc:
+            logger.warning("Failed to save plan artifact for run %s: %s", run_id, exc)
+
+        yield emit("agent.artifact.created", artifact=artifact)
+
     def _artifacts_from_state(
         self, final_state: dict[str, Any], agent_state: Any
     ) -> list[AgentArtifact]:
@@ -422,6 +479,8 @@ class DataBoxAgentService:
             "sql.execute_readonly": "execute_sql",
             "sql_skip_execution": "execute_sql",
             "sql.skip_execution": "execute_sql",
+            "sql_revise": "revise_sql",
+            "sql.revise": "revise_sql",
             "result_profile": "profile_result",
             "result.profile": "profile_result",
             "chart_suggest": "suggest_chart",
@@ -454,16 +513,34 @@ class DataBoxAgentService:
         pending = full_state.get("pending_approval") or {}
         approval = AgentApprovalRecord.model_validate(pending) if isinstance(pending, dict) else None
 
+        # Build response first (without checkpoint) to get the steps mapped from trace_events
+        response = build_response(
+            req=req,
+            run_id=run_id,
+            session_id=session_id,
+            state=full_state,
+            steps=agent_state.steps,
+            artifacts=self._artifacts_from_state(full_state, agent_state),
+            success=False,
+            error=None,
+            status="waiting_approval",
+            approval=approval,
+            checkpoint=None,
+        )
+
+        current_step = response.steps[-1].name if (response.steps and len(response.steps) > 0) else "approval_interrupt"
+        next_step = approval.step_name if approval else str(pending.get("tool_name", ""))
+
         checkpoint = agent_persistence.save_checkpoint(
             self.db,
             run_id=run_id,
             session_id=session_id,
             status="waiting_approval",
-            current_step_name="approval_interrupt",
-            next_step_name=str(pending.get("tool_name", "")),
+            current_step_name=current_step,
+            next_step_name=next_step,
             plan=full_state.get("plan"),
             state=dict(full_state),
-            completed_steps=[s.model_dump(mode="json") for s in agent_state.steps],
+            completed_steps=[s.model_dump(mode="json") for s in response.steps],
             pending_steps=[
                 {
                     "name": pending.get("tool_name", ""),
@@ -472,6 +549,8 @@ class DataBoxAgentService:
                 }
             ],
         )
+
+        response.checkpoint = checkpoint
 
         if approval:
             yield emit("agent.approval.required", step={"name": approval.step_name}, approval=approval)
@@ -489,6 +568,8 @@ class DataBoxAgentService:
         except Exception:
             logger.warning("Failed to persist waiting approval state for run %s", run_id)
             self._rollback_quietly()
+
+        yield emit("agent.run.waiting_approval", response=response)
 
     def _final_events(
         self,

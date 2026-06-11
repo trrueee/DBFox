@@ -7,8 +7,7 @@ from typing import Any, Literal
 import pymysql
 from sqlalchemy.orm import Session
 
-from engine.datasource import get_mysql_connection_params, get_postgres_connection_params, is_demo_db
-from engine.demo_db_init import init_demo_database
+from engine.datasource import get_mysql_connection_params, get_postgres_connection_params
 from engine.models import DataSource
 
 
@@ -29,7 +28,7 @@ def dry_run_query(db: Session, datasource_id: str, sql: str) -> DryRunResult:
 
     db_type = str(datasource.db_type or "mysql").lower()
     try:
-        if db_type == "sqlite" or is_demo_db(str(datasource.host or ""), str(datasource.database_name or "")):
+        if db_type == "sqlite":
             return _dry_run_sqlite(str(datasource.database_name or ""), sql)
         if "postgres" in db_type:
             return _dry_run_postgres(datasource, sql)
@@ -39,7 +38,7 @@ def dry_run_query(db: Session, datasource_id: str, sql: str) -> DryRunResult:
 
 
 def _dry_run_sqlite(database_name: str, sql: str) -> DryRunResult:
-    path = database_name if database_name and not is_demo_db("", database_name) else init_demo_database()
+    path = database_name
     conn = sqlite3.connect(path)
     try:
         conn.execute(f"EXPLAIN QUERY PLAN {sql}")
