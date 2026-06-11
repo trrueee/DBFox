@@ -361,9 +361,8 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, ChartSuggestOutput]):
     output_schema = ChartSuggestOutput
 
     def _run(self, tool_input: ChartSuggestInput, context: ExecutionContext) -> ChartSuggestOutput:
-        from engine.tools.sql_tools import suggest_chart_tool
-        obs = suggest_chart_tool(tool_input.execution)
-        return ChartSuggestOutput.model_validate(obs.output or {})
+        from engine.agent_core.chart_builder import suggest_plotly_chart
+        return ChartSuggestOutput.model_validate(suggest_plotly_chart(tool_input.execution))
 
 
 class FollowupSuggestTool(BaseTool[FollowupSuggestInput, FollowupSuggestOutput]):
@@ -393,16 +392,24 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AnswerSynthesizeOutpu
     output_schema = AnswerSynthesizeOutput
 
     def _run(self, tool_input: AnswerSynthesizeInput, context: ExecutionContext) -> AnswerSynthesizeOutput:
-        from engine.tools.sql_tools import answer_synthesizer_tool
-        req = _dummy_request(context, tool_input.question)
-        obs = answer_synthesizer_tool(
-            req=req,
+        from engine.agent_core.types import FollowUpSuggestion, ResultProfile
+        from engine.agent_core.answer import synthesize_agent_answer
+
+        profile = ResultProfile.model_validate(tool_input.result_profile) if tool_input.result_profile else None
+        parsed_suggestions = [
+            FollowUpSuggestion.model_validate(item)
+            for item in (tool_input.suggestions or [])
+            if isinstance(item, dict)
+        ]
+        answer = synthesize_agent_answer(
+            question=tool_input.question or "",
             query_plan=tool_input.query_plan,
             sql=tool_input.sql,
             safety=tool_input.safety,
             execution=tool_input.execution,
-            result_profile=tool_input.result_profile,
-            suggestions=tool_input.suggestions,
+            result_profile=profile,
+            suggestions=parsed_suggestions,
             error=tool_input.error,
+            chart_suggestion=tool_input.chart_suggestion,
         )
-        return AnswerSynthesizeOutput.model_validate(obs.output or {})
+        return AnswerSynthesizeOutput.model_validate(answer.model_dump(mode="json"))
