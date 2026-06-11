@@ -1,0 +1,47 @@
+# Agent Analysis Workbench
+
+This branch starts the DataBox shift from a plain chat-style SQL assistant to a structured, reviewable data-analysis workbench.
+
+## Product goal
+
+Complex questions should not end as a single text answer. A successful Agent run should produce a reviewable analysis packet:
+
+1. **Analysis summary** — whether the run produced SQL, result data, chart suggestions, insights, and safety checks.
+2. **Evidence artifacts** — SQL, result table, chart, and markdown insight cards.
+3. **Trace artifacts** — query-planning and safety decisions rendered as inspectable stages.
+4. **Failure visibility** — when complex tasks fail, users should see which stage is weak: schema selection, metric parsing, filter parsing, SQL safety, or execution.
+
+## Frontend changes in this branch
+
+- Adds `metric` and `trace` view artifact types.
+- Adds `MetricArtifactView` for compact delivery-quality cards.
+- Adds `TraceArtifactView` for query-plan and safety-chain inspection.
+- Enhances `agentBridge.ts` so backend artifacts such as `query_plan` and `safety` are no longer discarded; they are transformed into user-facing trace cards.
+- Derives an `分析交付概览` card from the artifact set so every run can quickly show whether it is a complete data-analysis answer or only a partial response.
+
+## Next backend work
+
+The backend should continue emitting artifact payloads with stable schemas:
+
+```ts
+query_plan: {
+  analysis_goal: string;
+  candidate_tables: string[];
+  metrics: Array<{ name?: string; expression?: string }>;
+  dimensions: Array<{ name?: string; column?: string }>;
+  filters: Array<{ column?: string; operator?: string; value?: string }>;
+  assumptions: string[];
+  risk_notes: string[];
+}
+
+safety: {
+  risk_level: "safe" | "warning" | "danger";
+  checks: Array<{ rule: string; level: "pass" | "warn" | "reject"; message: string }>;
+}
+```
+
+For richer chart delivery, the Agent should also emit chart artifacts with `{ type, x, y, reason }` and a companion table artifact with typed row data.
+
+## Why this matters
+
+DataBox's differentiator should be **trustworthy, visual, evidence-backed analysis**, not just text-to-SQL. These artifact views make the workbench closer to a data-analysis IDE: users can read the conclusion, inspect the SQL, verify the result table, view the chart, and debug the agent chain when it goes wrong.
