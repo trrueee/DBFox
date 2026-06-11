@@ -13,9 +13,9 @@ def is_port_open(port):
 
 def install_python_dependencies():
     """Ensure all core backend libraries are installed in the environment"""
-    print(">>> 正在核对并安装 Python 后端依赖库 (FastAPI, SQLGlot, Cryptography, SQLAlchemy)...")
-    reqs = ["fastapi", "uvicorn", "sqlalchemy", "sqlglot", "cryptography", "pymysql", "httpx", "pytest"]
-    subprocess.check_call([sys.executable, "-m", "pip", "install", *reqs])
+    print(">>> 正在核对并安装 Python 后端依赖库...")
+    reqs_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", reqs_file])
     print(">>> Python 后端依赖库配置完毕。")
 
 def install_node_dependencies():
