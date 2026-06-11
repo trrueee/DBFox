@@ -12,7 +12,7 @@ def create_openai_client(
     api_base: str,
     temperature: float = 0.0,
     max_tokens: int | None = None,
-    timeout: float = 30.0,
+    timeout: float = 120.0,
 ) -> ChatOpenAI:
     """Build a ChatOpenAI client with reasoning-model awareness."""
     model_lower = model_name.lower()

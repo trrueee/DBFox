@@ -448,7 +448,7 @@ export default function App() {
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
     const abortController = new AbortController();
-    const timeoutId = window.setTimeout(() => abortController.abort(), 90_000);
+    const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
     try {
       const response = await agentApi.streamAgentQuery(
         activeDatasourceId,
@@ -495,9 +495,13 @@ export default function App() {
         return;
       }
       const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
+      const abortController = new AbortController();
+      const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
       const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
+        signal: abortController.signal,
         onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox),
       });
+      window.clearTimeout(timeoutId);
       finishAgentRun(tabId, progressId, response, artifactsBox.list);
     } catch (err) {
       const message = err instanceof Error ? err.message : "审批处理失败";
