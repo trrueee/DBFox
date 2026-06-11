@@ -116,10 +116,23 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
 
 function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ChartArtifact | null {
   const payload = artifact.payload || {};
-  const rawChartType = firstString(payload, ["type", "chartType", "chart_type"]);
-  const chartType = rawChartType === "line" ? "line" : "bar";
-  const x = firstString(payload, ["x", "x_field", "dimension"]);
-  const y = firstString(payload, ["y", "y_field", "metric"]);
+  const chartType = normalizeChartType(firstString(payload, ["type", "chartType", "chart_type"]));
+  const x = firstString(payload, ["x", "x_field", "dimension", "label"]);
+  const y = firstString(payload, ["y", "y_field", "metric", "value"]);
+
+  const directSeries = readSeries(payload.series);
+  if (directSeries.length > 0) {
+    return {
+      id: artifact.id,
+      type: "chart",
+      title: artifact.title || "数据图表",
+      description: typeof payload.reason === "string" ? payload.reason : undefined,
+      chartType,
+      unit: typeof payload.unit === "string" ? payload.unit : undefined,
+      series: directSeries,
+    };
+  }
+
   if (!x || !y) return null;
 
   // The chart artifact is often only a suggestion {type, x, y}; series data lives
@@ -134,7 +147,7 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
     const value = Number(record[y]);
     if (!Number.isFinite(value)) continue;
     series.push({ label: formatCell(record[x]), value });
-    if (series.length >= 60) break;
+    if (series.length >= 120) break;
   }
   if (series.length === 0) return null;
 
@@ -147,6 +160,30 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
     unit: typeof payload.unit === "string" ? payload.unit : undefined,
     series,
   };
+}
+
+function normalizeChartType(value: string): ChartArtifact["chartType"] {
+  const normalized = value.toLowerCase();
+  if (normalized === "line" || normalized === "bar" || normalized === "scatter" || normalized === "pie" || normalized === "area") {
+    return normalized;
+  }
+  return "bar";
+}
+
+function readSeries(value: unknown): Array<{ label: string; value: number }> {
+  if (!Array.isArray(value)) return [];
+  const series: Array<{ label: string; value: number }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const label = firstString(record, ["label", "name", "x", "dimension"]);
+    const rawValue = record.value ?? record.y ?? record.metric;
+    const numericValue = Number(rawValue);
+    if (!label || !Number.isFinite(numericValue)) continue;
+    series.push({ label, value: numericValue });
+    if (series.length >= 120) break;
+  }
+  return series;
 }
 
 function mapQueryPlanTraceArtifact(artifact: ApiAgentArtifact): TraceArtifact | null {
