@@ -41,7 +41,11 @@ class GraphRuntimeContext:
         if os.environ.get("DATABOX_TESTING") == "1":
             return True
         return bool(
-            (self.api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+            (self.api_key
+             or os.environ.get("OPENAI_API_KEY")
+             or os.environ.get("QWEN_API_KEY")
+             or os.environ.get("DATABOX_LLM_API_KEY")
+             or "").strip()
         )
 
     def to_configurable(self) -> dict[str, Any]:

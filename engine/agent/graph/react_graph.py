@@ -31,6 +31,7 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     from engine.agent.nodes.tool_node import execute_allowed_tools
     from engine.agent.nodes.observe_node import observe_tools
     from engine.agent.nodes.progress_node import judge_progress
+    from engine.agent.nodes.prepare_repair_node import prepare_repair
     from engine.agent.nodes.finalize_node import finalize_answer
     from engine.agent.nodes.approval_node import approval_interrupt
 
@@ -43,6 +44,7 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     graph.add_node("tools", execute_allowed_tools)
     graph.add_node("observe", observe_tools)
     graph.add_node("progress", judge_progress)
+    graph.add_node("repair", prepare_repair)
     graph.add_node("approval", approval_interrupt)
     graph.add_node("finalize", finalize_answer)
 
@@ -97,9 +99,12 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
         {
             "model": "model",
             "planner": "planner",
+            "repair": "repair",
             "finalize": "finalize",
         },
     )
+
+    graph.add_edge("repair", "model")
 
     graph.add_edge("finalize", END)
 

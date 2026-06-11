@@ -402,11 +402,11 @@ class TestQueryPlanBuilderSemantic:
 # ---------------------------------------------------------------------------
 
 class TestSemanticAPI:
-    def test_create_alias(self, client, db_session, demo_datasource):
+    def test_create_alias(self, client, db_session, test_datasource):
         resp = client.post(
             "/api/v1/semantic/aliases",
             json={
-                "data_source_id": demo_datasource.id,
+                "data_source_id": test_datasource.id,
                 "alias": "GMV",
                 "target_type": "column",
                 "target": "orders.total_amount",
@@ -418,41 +418,41 @@ class TestSemanticAPI:
         assert data["alias"] == "GMV"
         assert data["target"] == "orders.total_amount"
 
-    def test_list_aliases(self, client, db_session, demo_datasource):
+    def test_list_aliases(self, client, db_session, test_datasource):
         # create two
         client.post("/api/v1/semantic/aliases", json={
-            "data_source_id": demo_datasource.id, "alias": "A1", "target_type": "column", "target": "t.c1",
+            "data_source_id": test_datasource.id, "alias": "A1", "target_type": "column", "target": "t.c1",
         })
         client.post("/api/v1/semantic/aliases", json={
-            "data_source_id": demo_datasource.id, "alias": "A2", "target_type": "table", "target": "t",
+            "data_source_id": test_datasource.id, "alias": "A2", "target_type": "table", "target": "t",
         })
-        resp = client.get(f"/api/v1/semantic/aliases?datasource_id={demo_datasource.id}")
+        resp = client.get(f"/api/v1/semantic/aliases?datasource_id={test_datasource.id}")
         assert resp.status_code == 200
         items = resp.json()
         assert len(items) == 2
 
-    def test_duplicate_alias_rejected(self, client, db_session, demo_datasource):
+    def test_duplicate_alias_rejected(self, client, db_session, test_datasource):
         resp1 = client.post("/api/v1/semantic/aliases", json={
-            "data_source_id": demo_datasource.id, "alias": "dup", "target_type": "column", "target": "t.c",
+            "data_source_id": test_datasource.id, "alias": "dup", "target_type": "column", "target": "t.c",
         })
         assert resp1.status_code == 200
         resp2 = client.post("/api/v1/semantic/aliases", json={
-            "data_source_id": demo_datasource.id, "alias": "dup", "target_type": "column", "target": "t.c",
+            "data_source_id": test_datasource.id, "alias": "dup", "target_type": "column", "target": "t.c",
         })
         assert resp2.status_code == 409
 
-    def test_delete_alias(self, client, db_session, demo_datasource):
+    def test_delete_alias(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/aliases", json={
-            "data_source_id": demo_datasource.id, "alias": "to_delete", "target_type": "table", "target": "t",
+            "data_source_id": test_datasource.id, "alias": "to_delete", "target_type": "table", "target": "t",
         })
         alias_id = resp.json()["id"]
         del_resp = client.delete(f"/api/v1/semantic/aliases/{alias_id}")
         assert del_resp.status_code == 200
         assert del_resp.json()["success"] is True
 
-    def test_create_metric(self, client, db_session, demo_datasource):
+    def test_create_metric(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/metrics", json={
-            "data_source_id": demo_datasource.id,
+            "data_source_id": test_datasource.id,
             "name": "GMV",
             "expression": "SUM(orders.total_amount)",
         })
@@ -460,9 +460,9 @@ class TestSemanticAPI:
         data = resp.json()
         assert data["name"] == "GMV"
 
-    def test_create_dimension(self, client, db_session, demo_datasource):
+    def test_create_dimension(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/dimensions", json={
-            "data_source_id": demo_datasource.id,
+            "data_source_id": test_datasource.id,
             "name": "下单日期",
             "column_ref": "orders.created_at",
             "transform": "DATE",
@@ -471,50 +471,50 @@ class TestSemanticAPI:
         data = resp.json()
         assert data["name"] == "下单日期"
 
-    def test_duplicate_metric_rejected(self, client, db_session, demo_datasource):
+    def test_duplicate_metric_rejected(self, client, db_session, test_datasource):
         client.post("/api/v1/semantic/metrics", json={
-            "data_source_id": demo_datasource.id, "name": "dup_metric", "expression": "COUNT(*)",
+            "data_source_id": test_datasource.id, "name": "dup_metric", "expression": "COUNT(*)",
         })
         resp2 = client.post("/api/v1/semantic/metrics", json={
-            "data_source_id": demo_datasource.id, "name": "dup_metric", "expression": "SUM(x)",
+            "data_source_id": test_datasource.id, "name": "dup_metric", "expression": "SUM(x)",
         })
         assert resp2.status_code == 409
 
-    def test_duplicate_dimension_rejected(self, client, db_session, demo_datasource):
+    def test_duplicate_dimension_rejected(self, client, db_session, test_datasource):
         client.post("/api/v1/semantic/dimensions", json={
-            "data_source_id": demo_datasource.id, "name": "dup_dim", "column_ref": "t.c",
+            "data_source_id": test_datasource.id, "name": "dup_dim", "column_ref": "t.c",
         })
         resp2 = client.post("/api/v1/semantic/dimensions", json={
-            "data_source_id": demo_datasource.id, "name": "dup_dim", "column_ref": "t.c2",
+            "data_source_id": test_datasource.id, "name": "dup_dim", "column_ref": "t.c2",
         })
         assert resp2.status_code == 409
 
-    def test_update_metric(self, client, db_session, demo_datasource):
+    def test_update_metric(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/metrics", json={
-            "data_source_id": demo_datasource.id, "name": "test_update", "expression": "COUNT(*)",
+            "data_source_id": test_datasource.id, "name": "test_update", "expression": "COUNT(*)",
         })
         mid = resp.json()["id"]
         upd = client.put(f"/api/v1/semantic/metrics/{mid}", json={"expression": "SUM(x)"})
         assert upd.status_code == 200
         assert upd.json()["expression"] == "SUM(x)"
 
-    def test_update_dimension(self, client, db_session, demo_datasource):
+    def test_update_dimension(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/dimensions", json={
-            "data_source_id": demo_datasource.id, "name": "test_dim", "column_ref": "t.c",
+            "data_source_id": test_datasource.id, "name": "test_dim", "column_ref": "t.c",
         })
         did = resp.json()["id"]
         upd = client.put(f"/api/v1/semantic/dimensions/{did}", json={"transform": "MONTH"})
         assert upd.status_code == 200
         assert upd.json()["transform"] == "MONTH"
 
-    def test_table_scope_save_and_read(self, client, db_session, demo_datasource):
+    def test_table_scope_save_and_read(self, client, db_session, test_datasource):
         from engine.models import Project
         proj = Project(id=str(uuid.uuid4()), name="scope_api_test", description="")
         db_session.add(proj)
         db_session.commit()
 
         from engine.semantic.schema_linker import SchemaLinker
-        ds_id = demo_datasource.id
+        ds_id = test_datasource.id
         linker = SchemaLinker(db_session)
         all_tables = (
             db_session.query(SchemaTable)
@@ -539,7 +539,7 @@ class TestSemanticAPI:
         scopes = get_resp.json()
         assert len(scopes) == len(enabled_ids)
 
-    def test_table_scope_rejects_invalid_table(self, client, db_session, demo_datasource):
+    def test_table_scope_rejects_invalid_table(self, client, db_session, test_datasource):
         from engine.models import Project
         proj = Project(id=str(uuid.uuid4()), name="invalid_test", description="")
         db_session.add(proj)
@@ -547,7 +547,7 @@ class TestSemanticAPI:
 
         resp = client.post("/api/v1/semantic/table-scope", json={
             "project_id": proj.id,
-            "datasource_id": demo_datasource.id,
+            "datasource_id": test_datasource.id,
             "enabled_table_ids": ["nonexistent-table-id"],
         })
         assert resp.status_code == 400

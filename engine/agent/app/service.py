@@ -106,6 +106,7 @@ class DataBoxAgentService:
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
         accumulated_state: dict[str, Any] = dict(initial_state)
+        last_context_summary = ""
 
         for chunk in app.stream(initial_state, config=config, stream_mode="updates"):
             for node_name, update in chunk.items():
@@ -120,6 +121,13 @@ class DataBoxAgentService:
                     yield from self._observe_events(
                         emit, update, agent_state, artifact_identity, emitted_artifact_ids
                     )
+
+                if node_str in ("observe", "progress", "planner", "repair"):
+                    event, last_context_summary = self._context_update_event(
+                        emit, accumulated_state, last_context_summary,
+                    )
+                    if event is not None:
+                        yield event
 
                 # Emit the plan draft artifact when the planner produces a directive
                 if node_str == "planner":
@@ -344,6 +352,8 @@ class DataBoxAgentService:
             final_answer=None,
             revision_attempted=False,
             revision_count=0,
+            repair_mode=False,
+            repair_stats=None,
         )
 
     def _new_agent_state(self, run_id: str, session_id: str, req: AgentRunRequest) -> Any:
@@ -359,7 +369,7 @@ class DataBoxAgentService:
     def _merge_state(self, target: dict[str, Any], update: dict[str, Any]) -> None:
         for key, value in update.items():
             if key in ("messages", "artifacts", "trace_events", "runtime_events", "plan_events",
-                        "tool_results", "last_tool_results"):
+                        "tool_results", "last_tool_results", "repair_trace"):
                 # append-only lists
                 if isinstance(value, list):
                     target.setdefault(key, []).extend(value)
@@ -403,6 +413,18 @@ class DataBoxAgentService:
             if artifact.id not in emitted_ids:
                 emitted_ids.add(artifact.id)
                 yield emit("agent.artifact.created", artifact=artifact)
+                step_name = _artifact_timeline_step(artifact.type)
+                if step_name:
+                    yield emit(
+                        "agent.step.completed",
+                        step={
+                            "name": step_name,
+                            "status": "success",
+                            "artifact_id": artifact.id,
+                            "artifact_type": artifact.type,
+                            "summary": artifact.title,
+                        },
+                    )
 
     def _planner_events(
         self,
@@ -447,10 +469,11 @@ class DataBoxAgentService:
         """Build artifacts list from final_state + agent_state merged."""
         seen: set[str] = set()
         result: list[AgentArtifact] = []
-        # Prioritize final_state artifacts (from graph) then agent_state artifacts
+        # agent_state reflects SSE emission order (planner + observe); graph state
+        # artifacts may arrive in a different append order.
         for source in [
+            getattr(agent_state, "artifacts", []) or [],
             final_state.get("artifacts") or [],
-            getattr(agent_state, 'artifacts', []) or [],
         ]:
             for item in source:
                 try:
@@ -498,6 +521,44 @@ class DataBoxAgentService:
             yield emit("agent.step.started", step={"name": mapped_name})
         elif trace_type == "agent.tool.completed":
             yield emit("agent.step.completed", step={"name": mapped_name, "status": trace.get("status")})
+        elif trace_type == "agent.repair.prepared":
+            summary = trace.get("recovery_strategy") or "Preparing SQL repair"
+            yield emit(
+                "agent.progress.update",
+                step={
+                    "name": "sql_repair",
+                    "status": "running",
+                    "summary": summary,
+                    "detail": trace.get("error_class"),
+                    "attempt": trace.get("attempt"),
+                },
+            )
+        elif trace_type == "agent.repair.attempted":
+            summary = trace.get("user_visible_update") or trace.get("recovery_strategy")
+            if summary:
+                yield emit(
+                    "agent.progress.update",
+                    step={
+                        "name": "sql_repair",
+                        "status": "running",
+                        "summary": summary,
+                        "detail": trace.get("error_class"),
+                        "attempt": trace.get("attempt"),
+                    },
+                )
+        elif trace_type == "agent.progress.judged":
+            summary = trace.get("user_visible_update") or trace.get("recovery_strategy") or trace.get("reason_summary")
+            if summary:
+                yield emit(
+                    "agent.progress.update",
+                    step={
+                        "name": trace.get("failure_layer") or "progress",
+                        "status": trace.get("status") or "running",
+                        "summary": summary,
+                        "detail": trace.get("root_cause"),
+                        "fastpath": trace.get("fastpath", False),
+                    },
+                )
         elif trace_type == "agent.approval.required":
             yield emit("agent.approval.required", step={"name": mapped_name})
 
@@ -647,3 +708,47 @@ class DataBoxAgentService:
             self.db.rollback()
         except Exception:
             pass
+
+
+    def _context_update_event(
+        self,
+        emit: Any,
+        state: dict[str, Any],
+        last_summary: str,
+    ) -> tuple[AgentRuntimeEvent | None, str]:
+        from engine.agent.context_pack import build_streaming_context_summary
+
+        summary = build_streaming_context_summary(state)
+        if not summary or summary == last_summary:
+            return None, last_summary
+        step_payload: dict[str, Any] = {
+            "summary": summary,
+            "repair_mode": bool(state.get("repair_mode")),
+        }
+        visible = state.get("visible_plan") or {}
+        if isinstance(visible, dict):
+            task_lens = {
+                "goal": str(visible.get("goal") or ""),
+                "current_focus": str(visible.get("current_focus") or ""),
+                "next_likely": str(visible.get("next_likely") or ""),
+                "missing_evidence": list(visible.get("missing_evidence") or []),
+            }
+            if any(task_lens.values()) or task_lens["missing_evidence"]:
+                step_payload["task_lens"] = task_lens
+
+        return emit("agent.context.update", step=step_payload), summary
+
+
+def _artifact_timeline_step(artifact_type: str) -> str | None:
+    """Map artifact types to timeline step names for artifact linking."""
+    mapping = {
+        "query_plan": "build_query_plan",
+        "sql": "validate_sql",
+        "safety": "validate_sql",
+        "table": "execute_sql",
+        "insight": "profile_result",
+        "chart": "suggest_chart",
+        "sql_suggestion": "revise_sql",
+        "agent_plan": "planner",
+    }
+    return mapping.get(artifact_type)

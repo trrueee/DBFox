@@ -21,9 +21,9 @@ from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.schema_sync import sync_schema
 
 
-def test_build_query_plan_tool_for_chinese_question(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="统计每天订单量")
+def test_build_query_plan_tool_for_chinese_question(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="统计每天订单量")
 
     obs = build_query_plan_tool(db_session, req, {"schema_context": "", "selected_tables": ["orders"]})
 
@@ -33,8 +33,8 @@ def test_build_query_plan_tool_for_chinese_question(db_session, demo_datasource)
     assert "orders" in obs.output["candidate_tables"]
 
 
-def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, demo_datasource, monkeypatch) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, test_datasource, monkeypatch) -> None:
+    sync_schema(db_session, test_datasource.id)
 
     def fake_generate_sql_from_schema_context(**_kwargs):
         return {
@@ -52,7 +52,7 @@ def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, d
         }
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="查询所有用户", api_key="sk-test")
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="查询所有用户", api_key="sk-test")
 
     obs = generate_sql_tool(db_session, req)
 
@@ -65,9 +65,9 @@ def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, d
 
 
 def test_generate_sql_tool_default_path_does_not_call_prepare_guardrail_renderer_legacy_or_retry_prompt(
-    db_session, demo_datasource, monkeypatch
+    db_session, test_datasource, monkeypatch
 ) -> None:
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
 
     def fail_prepare(*_args, **_kwargs):
         raise AssertionError("_prepare_generated_sql must not run in sql.generate")
@@ -101,7 +101,7 @@ def test_generate_sql_tool_default_path_does_not_call_prepare_guardrail_renderer
     monkeypatch.setattr("engine.tools.sql_tools.semantic_retry_prompt", fail_retry_prompt)
     monkeypatch.setattr("engine.sql.generator.generate_sql", fail_legacy)
 
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="count users", api_key="sk-test")
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context": "TABLE users(id)"})
 
     assert obs.status == "success"
@@ -112,9 +112,9 @@ def test_generate_sql_tool_default_path_does_not_call_prepare_guardrail_renderer
 
 
 def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_generate_sql(
-    db_session, demo_datasource, monkeypatch
+    db_session, test_datasource, monkeypatch
 ) -> None:
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
     calls: list[dict[str, object]] = []
 
     def fail_renderer(*_args, **_kwargs):
@@ -142,7 +142,7 @@ def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_genera
         "engine.tools.sql_tools.QueryPlanBuilder.build",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("QueryPlanBuilder should not run in sql.generate")),
     )
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="count users", api_key="sk-test")
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="count users", api_key="sk-test")
     metric = {"name": "total_users", "expression": "COUNT(*)"}
     query_plan = {
         "analysis_goal": "count users",
@@ -200,8 +200,8 @@ def test_generate_sql_tool_non_demo_without_api_key_fails_closed(db_session) -> 
 
 
 
-def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_generate_sql_tool_records_semantic_contract_violations(db_session, test_datasource, monkeypatch) -> None:
+    sync_schema(db_session, test_datasource.id)
 
     def fake_generate_sql(*_args, **_kwargs):
         return {
@@ -214,7 +214,7 @@ def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", lambda **_kwargs: fake_generate_sql())
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Which airlines have at least 10 flights?",
         api_key="test",
         semantic_mode="retry",
@@ -232,8 +232,8 @@ def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo
     assert "HAVING" not in obs.output["sql"].upper()
 
 
-def test_generate_sql_tool_retries_once_with_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_generate_sql_tool_retries_once_with_contract_violations(db_session, test_datasource, monkeypatch) -> None:
+    sync_schema(db_session, test_datasource.id)
     prompts: list[str] = []
 
     def fake_generate_sql_from_schema_context(**kwargs):
@@ -258,7 +258,7 @@ def test_generate_sql_tool_retries_once_with_contract_violations(db_session, dem
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Which airlines have at least 10 flights?",
         api_key="test",
         semantic_mode="retry",
@@ -301,8 +301,8 @@ def test_semantic_retry_prompt_includes_code_specific_guidance() -> None:
     assert "Use SELECT DISTINCT" in prompt
 
 
-def test_render_sql_from_query_plan_omits_empty_raw_plan_order_by(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_render_sql_from_query_plan_omits_empty_raw_plan_order_by(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     metric = {"name": "total_users", "expression": "COUNT(*)"}
     query_plan = {
         "analysis_goal": "count users",
@@ -319,7 +319,7 @@ def test_render_sql_from_query_plan_omits_empty_raw_plan_order_by(db_session, de
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
 
     assert sql is not None
     assert "ORDER BY" not in sql.upper()
@@ -337,10 +337,10 @@ def test_render_sql_from_query_plan_omits_empty_raw_plan_order_by(db_session, de
         "SELECT id FROM users ORDER BY () LIMIT 100",
     ],
 )
-def test_prepare_generated_sql_removes_invalid_order_by(db_session, demo_datasource, raw_sql: str) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_prepare_generated_sql_removes_invalid_order_by(db_session, test_datasource, raw_sql: str) -> None:
+    sync_schema(db_session, test_datasource.id)
 
-    prepared, notes, _metadata = _prepare_generated_sql(db_session, demo_datasource.id, raw_sql)
+    prepared, notes, _metadata = _prepare_generated_sql(db_session, test_datasource.id, raw_sql)
 
     assert "ORDER BY []" not in prepared.upper()
     assert "ORDER BY ARRAY" not in prepared.upper()
@@ -360,21 +360,21 @@ def test_prepare_generated_sql_removes_invalid_order_by(db_session, demo_datasou
 )
 def test_prepare_generated_sql_preserves_valid_order_by(
     db_session,
-    demo_datasource,
+    test_datasource,
     raw_sql: str,
     expected_order_by: str,
 ) -> None:
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
 
-    prepared, notes, _metadata = _prepare_generated_sql(db_session, demo_datasource.id, raw_sql)
+    prepared, notes, _metadata = _prepare_generated_sql(db_session, test_datasource.id, raw_sql)
 
     assert expected_order_by in prepared
     assert "invalid_order_by_removed" not in notes
 
 
-def test_generate_sql_tool_demo_without_api_key_fails_closed(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="list products", api_key=None)
+def test_generate_sql_tool_demo_without_api_key_fails_closed(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="list products", api_key=None)
 
     obs = generate_sql_tool(db_session, req)
 
@@ -387,12 +387,12 @@ def test_generate_sql_tool_demo_without_api_key_fails_closed(db_session, demo_da
 
 
 
-def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     table = SchemaTable(
         id=str(uuid.uuid4()),
-        data_source_id=demo_datasource.id,
-        table_schema=demo_datasource.database_name,
+        data_source_id=test_datasource.id,
+        table_schema=test_datasource.database_name,
         table_name="wide_table",
         table_comment="wide table",
         table_type="BASE TABLE",
@@ -416,7 +416,7 @@ def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session
     )
     db_session.commit()
 
-    obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT * FROM wide_table")
+    obs = validate_sql_tool(db_session, test_datasource.id, "SELECT * FROM wide_table")
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -432,10 +432,10 @@ def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session
 
 
 @pytest.mark.parametrize("sql", ["DELETE FROM users", "UPDATE users SET role = 'admin'", "DROP TABLE users"])
-def test_validate_sql_tool_blocks_write_operations(db_session, demo_datasource, sql: str) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_validate_sql_tool_blocks_write_operations(db_session, test_datasource, sql: str) -> None:
+    sync_schema(db_session, test_datasource.id)
 
-    obs = validate_sql_tool(db_session, demo_datasource.id, sql)
+    obs = validate_sql_tool(db_session, test_datasource.id, sql)
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -443,10 +443,10 @@ def test_validate_sql_tool_blocks_write_operations(db_session, demo_datasource, 
     assert obs.output["guardrail"]["result"] == "reject"
 
 
-def test_validate_sql_tool_rewrites_select_star_and_produces_safe_sql(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_validate_sql_tool_rewrites_select_star_and_produces_safe_sql(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
 
-    obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT * FROM users")
+    obs = validate_sql_tool(db_session, test_datasource.id, "SELECT * FROM users")
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -458,10 +458,10 @@ def test_validate_sql_tool_rewrites_select_star_and_produces_safe_sql(db_session
     assert obs.output["guardrail"]["result"] in {"pass", "warn"}
 
 
-def test_validate_sql_tool_blocks_schema_hallucination(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_validate_sql_tool_blocks_schema_hallucination(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
 
-    obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT imaginary_column FROM users LIMIT 10")
+    obs = validate_sql_tool(db_session, test_datasource.id, "SELECT imaginary_column FROM users LIMIT 10")
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -469,12 +469,12 @@ def test_validate_sql_tool_blocks_schema_hallucination(db_session, demo_datasour
     assert obs.output["schema_warnings"]
 
 
-def test_validate_sql_tool_requires_confirmation_for_prod(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    demo_datasource.env = "prod"
+def test_validate_sql_tool_requires_confirmation_for_prod(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+    test_datasource.env = "prod"
     db_session.commit()
 
-    obs = validate_sql_tool(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 10")
+    obs = validate_sql_tool(db_session, test_datasource.id, "SELECT id, username FROM users LIMIT 10")
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -483,16 +483,16 @@ def test_validate_sql_tool_requires_confirmation_for_prod(db_session, demo_datas
     assert any("Production datasource" in message for message in obs.output["messages"])
 
 
-def test_revise_sql_tool_returns_structured_fix_fields(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    safety = validate_sql_tool(db_session, demo_datasource.id, "SELECT * FROM users").output
+def test_revise_sql_tool_returns_structured_fix_fields(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+    safety = validate_sql_tool(db_session, test_datasource.id, "SELECT * FROM users").output
 
     obs = revise_sql_tool(
         "SELECT * FROM users",
         "SELECT * is blocked",
         safety,
         db=db_session,
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
     )
 
     assert obs.status == "success"
@@ -523,8 +523,8 @@ def test_suggest_chart_category_numeric_returns_bar() -> None:
     }
 
 
-def test_render_structured_order_by_list_and_dict(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_render_structured_order_by_list_and_dict(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     metric = {"name": "total_users", "expression": "COUNT(*)"}
     query_plan = {
         "analysis_goal": "list users",
@@ -541,19 +541,19 @@ def test_render_structured_order_by_list_and_dict(db_session, demo_datasource) -
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "ORDER BY" in sql.upper()
     assert "DESC" in sql.upper()
     query_plan["raw_plan"]["order_by"] = [{"column": "id", "direction": "DESC"}, {"column": "username", "direction": "ASC"}]
-    sql2 = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql2 = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql2 is not None
     assert "ORDER BY" in sql2.upper()
     assert "username ASC" in sql2 or "USERNAME ASC" in sql2.upper()
 
 
-def test_order_by_illegal_direction_omits_order_by(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_order_by_illegal_direction_omits_order_by(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -569,14 +569,14 @@ def test_order_by_illegal_direction_omits_order_by(db_session, demo_datasource) 
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "ORDER BY" not in sql.upper()
 
 
-def test_render_stringified_python_repr_order_by(db_session, demo_datasource) -> None:
+def test_render_stringified_python_repr_order_by(db_session, test_datasource) -> None:
     """Stringified Python repr like \"[{'column': 'id', 'direction': 'DESC'}]\" must be parsed and rendered."""
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -592,14 +592,14 @@ def test_render_stringified_python_repr_order_by(db_session, demo_datasource) ->
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "ORDER BY id DESC" in sql or "ORDER BY ID DESC" in sql.upper()
 
 
-def test_render_json_string_order_by(db_session, demo_datasource) -> None:
+def test_render_json_string_order_by(db_session, test_datasource) -> None:
     """JSON string like '[{\"column\":\"id\",\"direction\":\"DESC\"}]' must be parsed and rendered."""
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -615,14 +615,14 @@ def test_render_json_string_order_by(db_session, demo_datasource) -> None:
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "ORDER BY id DESC" in sql or "ORDER BY ID DESC" in sql.upper()
 
 
-def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, demo_datasource) -> None:
+def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, test_datasource) -> None:
     """Stringified repr with illegal direction (DOWN) should silently omit ORDER BY."""
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "list users",
         "candidate_tables": ["users"],
@@ -638,14 +638,14 @@ def test_render_stringified_repr_illegal_direction_omits_order_by(db_session, de
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "ORDER BY" not in sql.upper()
 
 
-def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasource) -> None:
+def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, test_datasource) -> None:
     """Experimental renderer: ordered by age from oldest to youngest → ORDER BY Age DESC."""
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "retrieve_singer_details_ordered_by_age",
         "candidate_tables": ["users"],
@@ -666,7 +666,7 @@ def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasour
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     sql_upper = sql.upper()
     assert "ORDER BY" in sql_upper
@@ -687,14 +687,14 @@ def test_smoke2_ordered_by_age_desc_must_have_order_by(db_session, demo_datasour
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is not None
     assert "IS NULL" in sql
     assert "'None'" not in sql and "\"None\"" not in sql
 
 
-def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     query_plan = {
         "analysis_goal": "users who do not have a pet",
         "candidate_tables": ["users", "has_pet"],
@@ -709,13 +709,13 @@ def test_plan_requires_llm_for_antijoin_and_inner_join(db_session, demo_datasour
         },
     }
 
-    sql = _render_sql_from_query_plan(db_session, demo_datasource.id, query_plan)
+    sql = _render_sql_from_query_plan(db_session, test_datasource.id, query_plan)
     assert sql is None
 
 
-def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, demo_datasource, monkeypatch) -> None:
+def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, test_datasource, monkeypatch) -> None:
     """Semantic verifier reports anti-join shape issues without hard-rewriting SQL."""
-    sync_schema(db_session, demo_datasource.id)
+    sync_schema(db_session, test_datasource.id)
 
     def fake_schema_direct(**_kwargs):
         return {
@@ -728,7 +728,7 @@ def test_antijoin_sql_records_semantic_violation_without_rewriting(db_session, d
         }
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_schema_direct)
-    req = AgentRunRequest(datasource_id=demo_datasource.id, question="users who do not have pets", api_key="test", semantic_mode="shadow")
+    req = AgentRunRequest(datasource_id=test_datasource.id, question="users who do not have pets", api_key="test", semantic_mode="shadow")
 
     obs = generate_sql_tool(db_session, req, schema_context={"schema_context_size": 1}, query_plan={})
     assert obs.status == "success"

@@ -3,6 +3,7 @@ import { Sparkles } from "lucide-react";
 import { AgentHeader } from "./AgentHeader";
 import { MessageList } from "./MessageList";
 import { AgentComposer } from "./AgentComposer";
+import { AgentRunTimeline } from "./AgentRunTimeline";
 import { DebugDrawer } from "./DebugDrawer";
 import { useAgentChat } from "./useAgentChat";
 import { Button } from "../../components/ui/button";
@@ -96,6 +97,18 @@ export function AgentCopilotPanel({
 
       {/* Messages */}
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+        {chat.isRunning && chat.draft && (
+          <div className="px-3 pt-2 shrink-0">
+            <AgentRunTimeline
+              steps={chat.draft.response?.steps || chat.finalResponse?.steps || []}
+              runtimeEvents={chat.draft.events}
+              artifacts={chat.draft.artifacts}
+              contextSummary={chat.draft.contextSummary}
+              taskLens={chat.draft.taskLens}
+              onOpenSql={onInsertSql}
+            />
+          </div>
+        )}
         {chat.messages.length > 0 ? (
           <MessageList
             messages={chat.messages} isRunning={chat.isRunning}
@@ -173,7 +186,7 @@ export function AgentCopilotPanel({
       <DebugDrawer open={debugOpen} onClose={() => setDebugOpen(false)}
         workspaceContext={workspaceContext} response={chat.finalResponse}
         steps={debugSteps} traceEvents={debugTrace}
-        runtimeEvents={chat.finalResponse?.events || ([] as AgentRuntimeEvent[])} />
+        runtimeEvents={chat.draft?.events || chat.finalResponse?.events || ([] as AgentRuntimeEvent[])} />
     </aside>
   );
 }

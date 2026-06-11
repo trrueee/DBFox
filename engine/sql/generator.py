@@ -314,8 +314,8 @@ def generate_sql_from_schema_context(
     """Generate SQL from an already-linked schema context.
 
     This is the default AgentKernel Text-to-SQL path. It intentionally does
-    not query schema metadata, call SchemaLinker/QueryPlanBuilder, use the
-    deterministic renderer, or use demo SQL fallbacks.
+    not query schema metadata, call SchemaLinker/QueryPlanBuilder, or use the
+    deterministic renderer.
     """
     start_time = time.time()
     llm_config = llm_config or {}
@@ -460,7 +460,7 @@ def generate_sql(
     db: Session, datasource_id: str, question: str, llm_config: dict[str, Any] | None = None, optimize_rag: bool = False
 ) -> dict[str, Any]:
     """
-    LEGACY/demo compatibility only.
+    LEGACY compatibility only.
 
     AgentKernel's default Text-to-SQL path must use
     generate_sql_from_schema_context() after schema.build_context has already

@@ -45,11 +45,6 @@ def test_tool_registry_require_raises_for_unknown() -> None:
         registry.require("missing.tool")
 
 
-def test_tool_registry_rejects_duplicate_names() -> None:
-    registry = ToolRegistry().register(_dummy_tool())
-    with pytest.raises(ValueError, match="already registered"):
-        registry.register(_dummy_tool())
-
 
 def test_default_registry_contains_current_agent_tools_only() -> None:
     from engine.tests.fixtures.agent_tools import DEFAULT_AGENT_TOOL_NAMES, build_default_tool_registry

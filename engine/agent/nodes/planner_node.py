@@ -137,6 +137,9 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
         logger.error("Planner LLM call failed: %s", exc)
         raise
 
+    # ---- Clarification policy (explore first, ask only when necessary) ------
+    directive = _apply_clarification_policy(directive, state)
+
     # ---- Handle clarification -----------------------------------------------
     if directive.needs_clarification:
         return {
@@ -162,6 +165,43 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
         }
 
     return _plan_result(directive, next_replan_count, is_replan)
+
+
+def _apply_clarification_policy(
+    directive: AgentPlanDirective,
+    state: DataBoxAgentState,
+) -> AgentPlanDirective:
+    from engine.agent.progress.clarification_policy import is_clarification_allowed
+
+    if not directive.needs_clarification:
+        return directive
+
+    allowed, reason = is_clarification_allowed(directive, state)
+    if allowed:
+        return directive
+
+    logger.info("Suppressed planner clarification (%s) — proceeding with schema exploration.", reason)
+    groups = list(directive.allowed_tool_groups or [])
+    for g in ("schema", "semantic", "sql_generation", "sql_validation", "sql_repair"):
+        if g not in groups:
+            groups.append(g)
+
+    task_type = directive.task_type
+    if task_type == "ambiguous":
+        task_type = "data_lookup"
+
+    return directive.model_copy(update={
+        "needs_clarification": False,
+        "clarification_question": None,
+        "task_type": task_type,
+        "grounding_level": "schema",
+        "allowed_tool_groups": groups,
+        "should_call_tools": True,
+        "reasoning_summary": (
+            (directive.reasoning_summary or "")
+            + " [Clarification suppressed — agent will self-explore schema first.]"
+        ).strip(),
+    })
 
 
 def _plan_result(directive: AgentPlanDirective, count: int, is_replan: bool = False) -> dict[str, Any]:

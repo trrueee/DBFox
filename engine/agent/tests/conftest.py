@@ -1,7 +1,7 @@
 """Pytest fixtures for databox_agent tests."""
 from engine.tests.conftest import (
     db_session,
-    demo_datasource,
+    test_datasource,
     spider_concert_singer,
     spider_pets_1,
     spider_singer,
@@ -10,7 +10,7 @@ from engine.tests.conftest import (
 
 __all__ = [
     "db_session",
-    "demo_datasource",
+    "test_datasource",
     "spider_concert_singer",
     "spider_pets_1",
     "spider_singer",

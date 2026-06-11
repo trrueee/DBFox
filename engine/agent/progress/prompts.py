@@ -67,6 +67,29 @@ For each failure, provide:
 5. If the model has already generated a good answer with evidence, return complete even if optional tools were skipped.
 6. If the user's question is ambiguous and the model guessed without asking, return clarify.
 
+## Coding-Agent Supervisor Output (REQUIRED for continue / replan)
+
+When status is **continue** or **replan**, you MUST also populate:
+
+- **next_action_hint**: What the ReAct model should do next (concrete, actionable).
+- **missing_evidence**: List of evidence gaps still blocking a complete answer.
+- **user_visible_update**: Short user-readable status for the timeline (no chain-of-thought).
+  Example: "Query returned order totals; next I'll check refund rate trends."
+- **recovery_strategy**: When recovering from failure, the repair approach.
+
+## Clarification Policy
+
+Do NOT return **clarify** for these — return **continue** or **replan** instead:
+- Unknown table or column names → schema search + rebuild SQL.
+- SQL syntax or execution errors → sql.revise or schema rebuild.
+- Empty query results → diagnose filters, loosen if too strict, retry.
+- Missing join paths → semantic.resolve or schema.describe_table.
+
+ONLY return **clarify** when:
+- Business metric definition cannot be inferred (e.g. "active users" with multiple valid definitions).
+- User referenced "this table/query" but workspace has no active anchor.
+- High-risk action needs explicit user choice.
+
 ## Output
 
 Return a structured ProgressDecision with ALL relevant fields populated.

@@ -274,11 +274,11 @@ def test_execution_isomorphism_comparator():
     ) is False
 
 
-def test_evaluator_golden_sql_isomorphism(db_session, demo_datasource, monkeypatch):
+def test_evaluator_golden_sql_isomorphism(db_session, test_datasource, monkeypatch):
     from engine.models import GoldenSQL
     # Add a golden sql record
     golden = GoldenSQL(
-        data_source_id=demo_datasource.id,
+        data_source_id=test_datasource.id,
         question="Get all users",
         golden_sql="SELECT id, username FROM users LIMIT 10"
     )
@@ -287,7 +287,7 @@ def test_evaluator_golden_sql_isomorphism(db_session, demo_datasource, monkeypat
 
     # Create dummy users table metadata in db
     from engine.models import SchemaTable, SchemaColumn
-    tbl = SchemaTable(data_source_id=demo_datasource.id, table_schema="demo_shop", table_name="users")
+    tbl = SchemaTable(data_source_id=test_datasource.id, table_schema="main", table_name="users")
     db_session.add(tbl)
     db_session.commit()
     col1 = SchemaColumn(table_id=tbl.id, column_name="id", column_type="INTEGER")
@@ -316,10 +316,10 @@ def test_evaluator_golden_sql_isomorphism(db_session, demo_datasource, monkeypat
     def mock_execute_query(db, datasource_id, sql, *args, **kwargs):
         return results_map.get(sql, {"success": False, "error": "mock error"})
 
-    monkeypatch.setattr("engine.executor.execute_query", mock_execute_query)
+    monkeypatch.setattr("engine.sql.executor.execute_query", mock_execute_query)
 
     evaluator = AgentCaseEvaluator(db=db_session)
-    task = _make_task(datasource_id=demo_datasource.id, question="Get all users")
+    task = _make_task(datasource_id=test_datasource.id, question="Get all users")
     
     # Test 1: Isomorphic actual SQL
     resp1 = _make_response(sql="SELECT id, username FROM users")
@@ -335,12 +335,12 @@ def test_evaluator_golden_sql_isomorphism(db_session, demo_datasource, monkeypat
 
 
 
-def test_evaluator_plan_similarity_jaccard(db_session, demo_datasource, monkeypatch):
+def test_evaluator_plan_similarity_jaccard(db_session, test_datasource, monkeypatch):
     # Test fallback query plan Jaccard similarity when execution is skipped
     from engine.models import GoldenSQL
     # Add a golden sql record so evaluator uses GoldenSQL path
     golden = GoldenSQL(
-        data_source_id=demo_datasource.id,
+        data_source_id=test_datasource.id,
         question="Get active users",
         golden_sql="SELECT id FROM users WHERE status = 'active'"
     )
@@ -368,7 +368,7 @@ def test_evaluator_plan_similarity_jaccard(db_session, demo_datasource, monkeypa
     monkeypatch.setattr("engine.semantic.QueryPlanBuilder.build", mock_build)
 
     evaluator = AgentCaseEvaluator(db=db_session)
-    task = _make_task(datasource_id=demo_datasource.id, question="Get active users")
+    task = _make_task(datasource_id=test_datasource.id, question="Get active users")
 
     # Test 1: Identical query plan, skipped execution
     resp1 = _make_response(

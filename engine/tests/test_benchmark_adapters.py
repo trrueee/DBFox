@@ -99,7 +99,7 @@ def test_adapter_empty_payload():
     assert cases == []
 
 
-def test_import_benchmark_cases_to_db(db_session, demo_datasource):
+def test_import_benchmark_cases_to_db(db_session, test_datasource):
     cases = [
         BenchmarkCase(
             source="spider",
@@ -120,7 +120,7 @@ def test_import_benchmark_cases_to_db(db_session, demo_datasource):
     ]
     tasks = import_benchmark_cases(
         db_session,
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         project_id=None,
         source="spider",
         cases=cases,
@@ -129,7 +129,7 @@ def test_import_benchmark_cases_to_db(db_session, demo_datasource):
     t1 = tasks[0]
     assert t1.source == "spider"
     assert t1.source_case_id == "s1"
-    assert t1.datasource_id == demo_datasource.id
+    assert t1.datasource_id == test_datasource.id
     assert "spider" in json.loads(str(t1.tags_json))
     assert "easy" in json.loads(str(t1.tags_json))
 
@@ -149,13 +149,13 @@ def test_import_benchmark_cases_to_db(db_session, demo_datasource):
     ]
 
 
-def test_imported_tasks_persist(db_session, demo_datasource):
+def test_imported_tasks_persist(db_session, test_datasource):
     cases = [BenchmarkCase(
         source="custom",
         source_case_id="c1",
         question="Test persist",
     )]
-    tasks = import_benchmark_cases(db_session, demo_datasource.id, None, "custom", cases)
+    tasks = import_benchmark_cases(db_session, test_datasource.id, None, "custom", cases)
     db_session.commit()
 
     from engine.models import AgentGoldenTask

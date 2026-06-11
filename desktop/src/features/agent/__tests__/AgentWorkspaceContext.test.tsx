@@ -288,12 +288,13 @@ describe("AgentWorkspace workspace context", () => {
       />,
     );
 
+    expect(screen.getByText("Agent run")).toBeTruthy();
     expect(screen.getByText("Step timeline")).toBeTruthy();
     expect(screen.getByText("build_schema_context")).toBeTruthy();
     expect(screen.getByText("validate_sql")).toBeTruthy();
-    expect(screen.getByText("failed")).toBeTruthy();
+    expect(screen.getAllByText("failed").length).toBeGreaterThan(0);
     expect(screen.getByText("execute_sql")).toBeTruthy();
-    expect(screen.getByText("skipped")).toBeTruthy();
+    expect(screen.getAllByText("skipped").length).toBeGreaterThan(0);
   });
 
   it("shows agent plan artifacts as a read-only checklist", () => {
@@ -388,6 +389,88 @@ describe("AgentWorkspace workspace context", () => {
     expect(screen.getAllByText("No recommendations yet.").length).toBeGreaterThan(0);
   });
 
+  it("shows live context summary from draft stream", () => {
+    const draft: AgentRunDraftState = {
+      status: "running",
+      question: "sales drop",
+      contextSummary: "Using 2 schema tables | Focus: Checking refunds",
+      events: [],
+      artifacts: [],
+      answer: null,
+      response: null,
+      approval: null,
+      checkpoint: null,
+      error: null,
+    };
+
+    render(<AgentWorkspace draft={draft} workspaceContext={workspaceContext} />);
+    expect(screen.getByText("Using 2 schema tables | Focus: Checking refunds")).toBeTruthy();
+  });
+
+  it("opens chart artifact in inspector from timeline", () => {
+    const chartArtifact: AgentArtifact = {
+      id: "artifact-chart",
+      semantic_id: "chart-1",
+      type: "chart",
+      title: "Revenue trend",
+      payload: { type: "line", x: "month", y: "revenue", reason: "Shows monthly trend" },
+      refs: {},
+      depends_on: [],
+      presentation: { mode: "both" },
+    };
+    const draft: AgentRunDraftState = {
+      status: "running",
+      question: "chart",
+      events: [
+        runtimeEvent("agent.artifact.created", 1, { artifact: chartArtifact }),
+      ],
+      artifacts: [chartArtifact],
+      answer: null,
+      response: null,
+      approval: null,
+      checkpoint: null,
+      error: null,
+    };
+
+    render(<AgentWorkspace draft={draft} workspaceContext={workspaceContext} />);
+    expect(screen.getByText("Chart: line (month × revenue)")).toBeTruthy();
+  });
+
+  it("opens SQL editor when clicking a linked timeline artifact", () => {
+    const onOpenSql = vi.fn();
+    const draft: AgentRunDraftState = {
+      status: "running",
+      question: "list users",
+      events: [
+        runtimeEvent("agent.artifact.created", 1, {
+          artifact: sqlArtifact,
+          step: { name: "validate_sql", status: "success", artifact_id: sqlArtifact.id },
+        }),
+        runtimeEvent("agent.step.completed", 2, {
+          step: {
+            name: "validate_sql",
+            status: "success",
+            artifact_id: sqlArtifact.id,
+            summary: sqlArtifact.title,
+          },
+        }),
+      ],
+      artifacts: [sqlArtifact],
+      answer: null,
+      response: null,
+      approval: null,
+      checkpoint: null,
+      error: null,
+    };
+
+    render(
+      <AgentWorkspace draft={draft} workspaceContext={workspaceContext} onOpenSql={onOpenSql} />,
+    );
+
+    fireEvent.click(screen.getByTitle("Open SQL in editor — Validated SQL"));
+    expect(onOpenSql).toHaveBeenCalledWith("SELECT id FROM users LIMIT 5");
+  });
+
   it("shows running steps from streamed draft events", () => {
     const draft: AgentRunDraftState = {
       status: "running",
@@ -407,9 +490,10 @@ describe("AgentWorkspace workspace context", () => {
 
     render(<AgentWorkspace draft={draft} workspaceContext={workspaceContext} />);
 
+    expect(screen.getByText("Agent run")).toBeTruthy();
     expect(screen.getByText("build_schema_context")).toBeTruthy();
     expect(screen.getByText("validate_sql")).toBeTruthy();
-    expect(screen.getByText("running")).toBeTruthy();
+    expect(screen.getAllByText("running").length).toBeGreaterThan(0);
   });
 
   it("does not crash when context is absent", () => {

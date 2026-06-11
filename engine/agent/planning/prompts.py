@@ -74,7 +74,13 @@ Choose which tool groups the ReAct model may use:
 - Schema questions about a NAMED table: use schema tools. Do NOT use workspace.explain_schema.
 - SQL generation: include sql_generation + sql_validation groups. Do NOT include execution unless execution_mode allows it.
 - Data lookup with business terms: include schema + semantic + query_plan + sql_generation + sql_validation + execution + result. The semantic group helps resolve business jargon.
-- If the user's request is ambiguous (could mean multiple things with different queries), set needs_clarification=true.
+- Do NOT set needs_clarification=true just because table/column names are unknown — use schema tools first.
+- Do NOT ask "should I query X?" — explore schema and proceed unless there is business metric ambiguity.
+- ONLY set needs_clarification=true when:
+  (a) no datasource AND workspace cannot anchor the question,
+  (b) user says "this table/query" but workspace has no active table/SQL,
+  (c) business metric definition significantly affects results and cannot be inferred,
+  (d) high-risk operation needs explicit user confirmation.
 - Never allow destructive operations.
 - Set risk_notes when the task touches PROD data, large tables, or financial/healthcare metrics.
 

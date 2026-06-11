@@ -501,6 +501,8 @@ export type AgentRuntimeEventType =
   | "agent.run.started"
   | "agent.step.started"
   | "agent.step.completed"
+  | "agent.progress.update"
+  | "agent.context.update"
   | "agent.artifact.created"
   | "agent.answer.completed"
   | "agent.approval.required"
@@ -528,6 +530,13 @@ export interface AgentRuntimeEvent {
   code?: string | null;
 }
 
+export interface AgentTaskLens {
+  goal?: string;
+  current_focus?: string;
+  next_likely?: string;
+  missing_evidence?: string[];
+}
+
 export interface AgentRunDraftState {
   runId?: string;
   status: "running" | "waiting_approval" | "completed" | "failed";
@@ -539,6 +548,8 @@ export interface AgentRunDraftState {
   approval: AgentApproval | null;
   checkpoint: AgentCheckpoint | null;
   error: string | null;
+  contextSummary?: string | null;
+  taskLens?: AgentTaskLens | null;
 }
 
 export interface AgentSessionRunSummary {

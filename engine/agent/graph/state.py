@@ -107,6 +107,9 @@ class DataBoxAgentState(TypedDict, total=False):
     # ---- Revision tracking -------------------------------------------------
     revision_attempted: bool
     revision_count: int
+    repair_mode: bool
+    repair_stats: dict[str, Any] | None
+    repair_trace: Annotated[list[dict[str, Any]], _add_list]
 
     # ---- Follow-up --------------------------------------------------------
     followup_context: dict[str, Any] | None

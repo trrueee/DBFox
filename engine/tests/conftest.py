@@ -3,6 +3,14 @@ import os
 os.environ["DATABOX_BYPASS_CONFIRMATION"] = "1"
 os.environ["DATABOX_TESTING"] = "1"
 
+# ---- LLM provider defaults for testing --------------------------------------
+# When a QWEN_API_KEY is set, auto-configure the OpenAI-compatible endpoint.
+_qwen_key = os.environ.get("QWEN_API_KEY", "").strip()
+if _qwen_key:
+    os.environ.setdefault("OPENAI_API_KEY", _qwen_key)
+    os.environ.setdefault("OPENAI_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    os.environ.setdefault("OPENAI_MODEL_NAME", "qwen-plus")
+
 import uuid
 from pathlib import Path
 import pytest
@@ -310,18 +318,18 @@ def _init_test_db(db_path: str) -> str:
 
 
 @pytest.fixture
-def demo_datasource(db_session, tmp_path):
-    """Create a test datasource row backed by a minimal SQLite database."""
-    db_file = tmp_path / "test_demo.db"
+def test_datasource(db_session, tmp_path):
+    """Isolated SQLite datasource for integration tests (tmp file, not production DB)."""
+    db_file = tmp_path / "test_engine.db"
     db_path = _init_test_db(str(db_file))
 
     ds = DataSource(
         id=str(uuid.uuid4()),
-        name="test_demo",
+        name="test_sqlite",
         host="localhost",
         port=0,
         database_name=db_path,
-        username="demo",
+        username="test",
         password_ciphertext="test",
         password_nonce="test",
         db_type="sqlite",

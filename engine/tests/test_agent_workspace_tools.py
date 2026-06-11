@@ -8,13 +8,13 @@ from engine.schema_sync import sync_schema
 from engine.agent import DataBoxAgentRuntime
 
 
-def test_workspace_fix_sql_tool_uses_last_error_and_suggests_editor_sql(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_workspace_fix_sql_tool_uses_last_error_and_suggests_editor_sql(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Fix this SQL error",
         workspace_context=AgentWorkspaceContext(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             active_sql="SELECT id, username FROM users LIMIT 10",
             last_error="no such column: usernme",
         ),
@@ -33,12 +33,12 @@ def test_workspace_fix_sql_tool_uses_last_error_and_suggests_editor_sql(db_sessi
     assert obs.output["suggestions"][0]["proposed_sql"].upper().startswith("SELECT")
 
 
-def test_workspace_explain_result_uses_preview_without_sql_execution(db_session, demo_datasource) -> None:
+def test_workspace_explain_result_uses_preview_without_sql_execution(db_session, test_datasource) -> None:
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Explain the last result",
         workspace_context=AgentWorkspaceContext(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             last_query_result_preview={
                 "columns": ["status", "count"],
                 "rows": [{"status": "active", "count": 2}],
@@ -58,14 +58,14 @@ def test_workspace_explain_result_uses_preview_without_sql_execution(db_session,
     assert obs.output["suggestions"] == []
 
 
-def test_workspace_assist_runtime_records_artifacts_but_does_not_execute(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_workspace_assist_runtime_records_artifacts_but_does_not_execute(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Explain this SQL",
         execute=True,
         workspace_context=AgentWorkspaceContext(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             active_sql="SELECT id, username FROM users LIMIT 10",
         ),
     )
@@ -82,13 +82,13 @@ def test_workspace_assist_runtime_records_artifacts_but_does_not_execute(db_sess
     assert "sql_suggestion" in semantic_ids
 
 
-def test_workspace_assist_stream_accepts_workspace_context(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_workspace_assist_stream_accepts_workspace_context(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     req = AgentRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="Optimize this SQL",
         workspace_context=AgentWorkspaceContext(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             active_sql="SELECT id, username FROM users",
         ),
     )

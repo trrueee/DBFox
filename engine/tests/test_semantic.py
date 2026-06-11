@@ -11,11 +11,11 @@ def test_alias_resolver_maps_business_terms() -> None:
     assert "users" in targets
 
 
-def test_schema_linker_selects_alias_tables_and_columns(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_schema_linker_selects_alias_tables_and_columns(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
 
     result = SchemaLinker(db_session).link(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="按客户统计 GMV 和订单金额",
     )
 
@@ -31,10 +31,10 @@ def test_schema_linker_selects_alias_tables_and_columns(db_session, demo_datasou
     assert any("alias_column_match" in " ".join(item["reasons"]) for item in reasons)
 
 
-def test_schema_context_builder_keeps_create_table_shape_and_keys(db_session, demo_datasource) -> None:
-    sync_schema(db_session, demo_datasource.id)
+def test_schema_context_builder_keeps_create_table_shape_and_keys(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
     result = SchemaLinker(db_session).link(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         question="按客户统计 GMV",
     )
 
