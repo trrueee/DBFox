@@ -4,6 +4,7 @@ import { ImageCell, isImageUrl } from "../../components/ImageCell";
 import { isNumericLike, toChartNumber } from "../../lib/chart-utils";
 import { executeSql, getDefaultDatasource, type EngineSqlResult } from "../engine/engineApi";
 import { parseAnnotatedSql, summarizeAnnotations, type AnnotatedSqlPlan, type SqlChartDirective } from "./sqlAnnotations";
+import "./sqlConsoleAnnotations.css";
 
 interface SqlConsoleWorkspaceProps {
   sqlQuery: string;
