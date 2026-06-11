@@ -413,13 +413,13 @@ export default function App() {
     opts?: { sessionId?: string; parentRunId?: string },
   ) => {
     if (!activeDatasourceId) {
-      appendTabMessages(tabId, [{ id: nextMsgId(), sender: "ai", text: "未找到活动数据源，请先在左侧数据源树中选择一个数据源后重试。" }]);
+      appendTabMessages(tabId, [{ id: nextMsgId(), sender: "ai", text: "请先在左侧选择并连接一个数据源，然后重试。" }]);
       patchTab(tabId, { agentStatus: "failed" });
       return;
     }
     const llm = getStoredApiConfig();
     const progressId = nextMsgId();
-    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: "正在理解问题…" }]);
+    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: "思考中…" }]);
     patchTab(tabId, { agentStatus: "running", agentApproval: null });
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
@@ -440,7 +440,7 @@ export default function App() {
       );
       finishAgentRun(tabId, progressId, response, artifactsBox.list);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Agent 执行失败";
+      const message = err instanceof Error ? err.message.replace(/agent\s*runtime\s*failed:?/i, "服务请求出错:") : "AI 分析失败";
       updateTabMessage(tabId, progressId, `执行失败：${message}`);
       patchTab(tabId, { agentStatus: "failed", agentApproval: null });
       persistTabConversation(tabId);
@@ -454,7 +454,7 @@ export default function App() {
 
     patchTab(tabId, { agentApproval: null, agentStatus: approve ? "running" : "failed" });
     const progressId = nextMsgId();
-    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: approve ? "已批准，继续执行…" : "已拒绝本次执行。" }]);
+    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: approve ? "已确认，正在生成回答…" : "已拒绝执行操作。" }]);
 
     try {
       await resolveAgentApproval(
@@ -516,7 +516,7 @@ export default function App() {
     if (!content) return;
     const targetTab = tabsRef.current.find((tab) => tab.id === tabId);
     if (targetTab?.agentStatus === "running") {
-      showToast("Agent 正在执行中，请等待当前回答完成");
+      showToast("AI 正在生成回答，请稍候");
       return;
     }
     if (targetTab?.agentStatus === "waiting_approval") {

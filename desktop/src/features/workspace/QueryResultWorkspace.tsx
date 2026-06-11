@@ -75,7 +75,7 @@ export function QueryResultWorkspace({
       {isRunning && (
         <div className="hifi-agent-running-bar">
           <Loader2 size={12} className="hifi-agent-running-spinner" />
-          <span>Agent 正在执行，结果会实时更新…</span>
+          <span>AI 正在分析并生成回答，请稍候…</span>
         </div>
       )}
 
