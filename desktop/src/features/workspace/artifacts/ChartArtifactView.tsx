@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Plotly from "plotly.js-dist-min";
-import { AreaChart, BarChart3, Download, LineChart, PieChart, ScatterChart } from "lucide-react";
+import { Activity, BarChart3, Download, LineChart, PieChart } from "lucide-react";
 import type { ChartArtifact } from "../../../types/agentArtifact";
 
 type PlotlyChartType = ChartArtifact["chartType"];
@@ -20,8 +20,8 @@ const PLOTLY_CONFIG = {
 const CHART_TYPE_META: Array<{ type: PlotlyChartType; label: string; icon: typeof LineChart }> = [
   { type: "line", label: "折线", icon: LineChart },
   { type: "bar", label: "柱状", icon: BarChart3 },
-  { type: "area", label: "面积", icon: AreaChart },
-  { type: "scatter", label: "散点", icon: ScatterChart },
+  { type: "area", label: "面积", icon: LineChart },
+  { type: "scatter", label: "散点", icon: Activity },
   { type: "pie", label: "占比", icon: PieChart },
 ];
 
