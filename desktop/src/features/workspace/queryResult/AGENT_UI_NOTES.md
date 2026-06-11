@@ -1,1 +1,0 @@
-Agent interaction UI notes.
