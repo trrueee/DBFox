@@ -240,7 +240,7 @@ export async function streamResumeAgentRun(
   options?: { signal?: AbortSignal; onEvent?: (event: AgentRuntimeEvent) => void; note?: string | null },
 ): Promise<AgentRunResponse> {
   return streamAgentEndpoint(
-    `/agent/runs/${runId}/resume/stream`,
+    `/agent/runs/${encodeURIComponent(runId)}/resume/stream`,
     {
       run_id: runId,
       approval_id: approvalId,
@@ -361,6 +361,11 @@ export const rejectAgentApproval = (
     body: JSON.stringify({ run_id: runId, approval_id: approvalId, approved: false, note }),
   });
 
+export const cancelAgentRun = (runId: string) =>
+  request<{ status: string; run_id: string }>(`/agent/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: "POST",
+  });
+
 export const agentApi = {
   runAgentQuery: (datasourceId: string, question: string, config?: AgentRunConfig, signal?: AbortSignal) =>
     request<AgentRunResponse>("/agent/run", {
@@ -406,6 +411,8 @@ export const agentApi = {
   resumeAgentRun,
 
   rejectAgentApproval,
+
+  cancelAgentRun,
 
   streamResumeAgentRun,
 };
