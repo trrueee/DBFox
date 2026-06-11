@@ -151,6 +151,9 @@ class ChartSuggestOutput(BaseModel):
     x: Optional[str] = None
     y: Optional[str] = None
     reason: str
+    title: Optional[str] = None
+    unit: Optional[str] = None
+    series: List[dict[str, Any]] = Field(default_factory=list)
 
 class FollowupSuggestInput(BaseModel):
     question: Optional[str] = None
@@ -170,6 +173,7 @@ class AnswerSynthesizeInput(BaseModel):
     safety: Optional[dict[str, Any]] = None
     execution: Optional[dict[str, Any]] = None
     result_profile: Optional[dict[str, Any]] = None
+    chart_suggestion: Optional[dict[str, Any]] = None
     suggestions: Optional[List[dict[str, Any]]] = None
     error: Optional[str] = None
 
@@ -180,6 +184,7 @@ class AnswerSynthesizeOutput(BaseModel):
     caveats: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
     follow_up_questions: List[str] = Field(default_factory=list)
+    display_plan: List[dict[str, Any]] = Field(default_factory=list)
 
 
 # Helper function to construct a dummy request for the legacy tools
