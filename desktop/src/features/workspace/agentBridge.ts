@@ -205,33 +205,17 @@ function formatCell(value: unknown): string {
 // Answer / progress text helpers
 // ---------------------------------------------------------------------------
 
-const STEP_LABELS: Record<string, string> = {
-  load_follow_up_context: "加载上下文",
-  build_schema_context: "分析表结构",
-  generate_sql_candidate: "生成 SQL",
-  validate_sql: "校验 SQL 安全性",
-  execute_sql: "执行查询",
-  profile_result: "分析查询结果",
-  suggest_chart: "生成图表建议",
-  suggest_followups: "整理追问建议",
-  answer_synthesizer: "撰写结论",
-  approval_interrupt: "等待人工审批",
-  plan_agent: "规划任务",
-};
-
 export function describeRuntimeEvent(event: AgentRuntimeEvent): string | null {
-  if (event.type === "agent.run.started") return "正在理解问题…";
+  if (event.type === "agent.run.started") return "思考中…";
   if (event.type === "agent.step.started") {
-    const name = typeof event.step?.name === "string" ? event.step.name : "";
-    const label = STEP_LABELS[name] || name;
-    return label ? `正在${label}…` : null;
+    return "思考中…";
   }
   return null;
 }
 
 export function buildAnswerText(answer: AgentAnswer | null | undefined, fallback?: string | null): string {
   if (!answer || !answer.answer) {
-    return fallback?.trim() || "分析已完成，结果见下方。";
+    return fallback?.trim() || "已为您生成分析结果。";
   }
   const parts: string[] = [answer.answer.trim()];
   if (answer.key_findings?.length) {

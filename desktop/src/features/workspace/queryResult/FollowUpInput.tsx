@@ -12,7 +12,7 @@ export function FollowUpInput({ tabId, onSendFollowUp }: FollowUpInputProps) {
         <input
           type="text"
           className="hifi-chat-input"
-          placeholder="针对此问数结果继续追问..."
+          placeholder="继续提问..."
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               onSendFollowUp(tabId, (event.target as HTMLInputElement).value);
