@@ -1,0 +1,25 @@
+name: analysis.compose
+group: answer
+kind: hybrid
+description: >
+  Compose the final data-analysis delivery from existing evidence artifacts.
+  Use this as the preferred final tool for analysis tasks after SQL execution,
+  result profiling, chart suggestion, and follow-up suggestion. It decides the
+  presentation plan at the artifact level: summary, metrics, chart, table,
+  insight, recommendations, SQL, and trace. It does NOT generate React/HTML.
+  The frontend renders fixed artifact components based on the emitted artifact
+  types and priorities.
+handler: answer_synthesize
+input_schema:
+  type: object
+  description: Optional question override. Omit it to use current agent state.
+  properties:
+    question:
+      type: string
+      description: Question to use for this final analysis composition.
+binding:
+  consumes_state_keys: [query_plan, sql, safety, execution, result_profile, chart_suggestion, suggestions, artifacts]
+  produces_state_keys: [answer, final_answer, analysis_report]
+  artifact_types: [insight, recommendation]
+metadata:
+  next_route: finalize
