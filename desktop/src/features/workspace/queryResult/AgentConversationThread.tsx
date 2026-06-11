@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock3, Layers, Loader2, ShieldAlert, Sparkles, User } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { AgentApprovalInfo, WorkspaceTab } from "../../../mock/databoxMock";
+import type { AgentAnswer, AgentMessageBlock, AgentRuntimeEvent, FollowUpSuggestion } from "../../../lib/api/types";
+import type { AgentArtifact as ViewAgentArtifact } from "../../../types/agentArtifact";
 import { ArtifactRenderer } from "../artifacts/ArtifactRenderer";
 import { AnswerCard } from "./AnswerCard";
 import { FollowUpChips } from "./FollowUpChips";
@@ -11,10 +13,12 @@ type QueryMessage = NonNullable<WorkspaceTab["chatMessages"]>[number];
 
 type MessagePart =
   | { id: string; type: "text"; text: string }
+  | { id: string; type: "timeline"; events: AgentRuntimeEvent[] }
   | { id: string; type: "approval"; approval: AgentApprovalInfo }
+  | { id: string; type: "artifact_ref"; artifactId: string; display?: "compact" | "full" | null }
   | { id: string; type: "artifacts" }
-  | { id: string; type: "answer" }
-  | { id: string; type: "suggestions" }
+  | { id: string; type: "answer"; answer: AgentAnswer }
+  | { id: string; type: "suggestions"; suggestions: FollowUpSuggestion[] }
   | { id: string; type: "error"; text: string };
 
 interface AgentConversationThreadProps {
@@ -127,26 +131,18 @@ function MessagePartRenderer(props: AgentConversationThreadProps & { part: Messa
   const { part, tab } = props;
 
   if (part.type === "text") return <AgentNarration text={part.text} running={tab.agentStatus === "running"} />;
+  if (part.type === "timeline") return <AgentTimelineCard events={part.events} status={tab.agentStatus} />;
   if (part.type === "approval") return <AgentApprovalCard tabId={tab.id} approval={part.approval} onApproveAgent={props.onApproveAgent} onRejectAgent={props.onRejectAgent} />;
-  if (part.type === "artifacts") {
-    return (
-      <div className="agent-artifact-group">
-        <div className="agent-artifact-group-head">
-          <div>
-            <span className="agent-artifact-group-title"><Layers size={12} /> 本轮产物</span>
-            <span className="agent-artifact-group-subtitle">SQL、结果表、图表和洞察固定在当前回复中</span>
-          </div>
-          <span className="agent-artifact-count">{tab.artifacts?.length ?? 0}</span>
-        </div>
-        <div className="agent-artifact-renderer-wrap">
-          <ArtifactRenderer artifacts={tab.artifacts ?? []} onOpenSqlConsole={props.onOpenSqlConsole} onSetSqlQuery={props.onSetSqlQuery} onToast={props.onToast} />
-        </div>
-      </div>
-    );
+  if (part.type === "artifact_ref") {
+    const artifacts = findReferencedArtifacts(tab.artifacts || [], part.artifactId);
+    return <AgentArtifactBlock artifacts={artifacts} count={artifacts.length} compact={part.display === "compact"} {...props} />;
   }
-  if (part.type === "answer") return tab.agentAnswer ? <AnswerCard answer={tab.agentAnswer} /> : null;
+  if (part.type === "artifacts") {
+    return <AgentArtifactBlock artifacts={tab.artifacts ?? []} count={tab.artifacts?.length ?? 0} {...props} />;
+  }
+  if (part.type === "answer") return <AnswerCard answer={part.answer} />;
   if (part.type === "suggestions") {
-    return tab.agentSuggestions?.length ? <div className="agent-follow-up-in-thread"><FollowUpChips suggestions={tab.agentSuggestions} onSendFollowUp={props.onSendFollowUp} tabId={tab.id} /></div> : null;
+    return part.suggestions.length ? <div className="agent-follow-up-in-thread"><FollowUpChips suggestions={part.suggestions} onSendFollowUp={props.onSendFollowUp} tabId={tab.id} /></div> : null;
   }
   if (part.type === "error") {
     return <div className="agent-inline-error"><AlertTriangle size={13} /><span>{part.text}</span></div>;
@@ -154,20 +150,68 @@ function MessagePartRenderer(props: AgentConversationThreadProps & { part: Messa
   return null;
 }
 
+function AgentArtifactBlock(props: AgentConversationThreadProps & { artifacts: ViewAgentArtifact[]; count: number; compact?: boolean }) {
+  const { artifacts, count, compact } = props;
+  if (count === 0) return null;
+
+  return (
+    <div className={`agent-artifact-group ${compact ? "agent-artifact-group-compact" : ""}`}>
+      <div className="agent-artifact-group-head">
+        <div>
+          <span className="agent-artifact-group-title"><Layers size={12} /> 本轮产物</span>
+          <span className="agent-artifact-group-subtitle">SQL、结果表、图表和洞察固定在当前回复中</span>
+        </div>
+        <span className="agent-artifact-count">{count}</span>
+      </div>
+      <div className="agent-artifact-renderer-wrap">
+        <ArtifactRenderer artifacts={artifacts} onOpenSqlConsole={props.onOpenSqlConsole} onSetSqlQuery={props.onSetSqlQuery} onToast={props.onToast} />
+      </div>
+    </div>
+  );
+}
+
 function buildMessageParts(tab: WorkspaceTab, message?: QueryMessage): MessagePart[] {
   const parts: MessagePart[] = [];
+  const backendParts = buildPartsFromBlocks(tab.agentMessageBlocks || [], tab);
   const hasAnswer = Boolean(tab.agentAnswer?.answer || tab.agentAnswer?.key_findings?.length || tab.agentAnswer?.caveats?.length);
-  const progressText = getProgressText(tab, message, hasAnswer);
+  const progressText = getProgressText(tab, message, hasAnswer || backendParts.some((part) => part.type === "answer"));
+  const events = tab.agentRuntimeEvents || [];
+
+  if (backendParts.length > 0) {
+    if (progressText && tab.agentStatus === "running" && !backendParts.some((part) => part.type === "text")) parts.push({ id: "progress", type: "text", text: progressText });
+    if (events.length) parts.push({ id: "timeline", type: "timeline", events });
+    if (tab.agentApproval) parts.push({ id: "approval", type: "approval", approval: tab.agentApproval });
+    parts.push(...backendParts);
+    if (tab.agentStatus === "failed" && !backendParts.some((part) => part.type === "answer")) parts.push({ id: "error", type: "error", text: message?.text || "Agent 未能完成分析，可以重新生成或查看原始消息流。" });
+    return parts;
+  }
 
   if (progressText) parts.push({ id: "progress", type: "text", text: progressText });
+  if (events.length) parts.push({ id: "timeline", type: "timeline", events });
   if (tab.agentApproval) parts.push({ id: "approval", type: "approval", approval: tab.agentApproval });
   if (tab.artifacts?.length) parts.push({ id: "artifacts", type: "artifacts" });
-  if (hasAnswer) parts.push({ id: "answer", type: "answer" });
+  if (tab.agentAnswer && hasAnswer) parts.push({ id: "answer", type: "answer", answer: tab.agentAnswer });
   if (tab.agentStatus === "failed" && !hasAnswer) parts.push({ id: "error", type: "error", text: message?.text || "Agent 未能完成分析，可以重新生成或查看原始消息流。" });
   if (tab.agentStatus === "running" && parts.length === 0) parts.push({ id: "working", type: "text", text: "正在分析问题并等待第一个工具结果…" });
-  if (tab.agentStatus === "completed" && tab.agentSuggestions?.length) parts.push({ id: "suggestions", type: "suggestions" });
+  if (tab.agentStatus === "completed" && tab.agentSuggestions?.length) parts.push({ id: "suggestions", type: "suggestions", suggestions: tab.agentSuggestions });
 
   return parts;
+}
+
+function buildPartsFromBlocks(blocks: AgentMessageBlock[], tab: WorkspaceTab): MessagePart[] {
+  return [...blocks]
+    .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+    .flatMap((block, index): MessagePart[] => {
+      const id = block.block_id || `block-${index}-${block.type}`;
+      if (block.type === "text" && block.content?.trim()) return [{ id, type: "text", text: block.content.trim() }];
+      if (block.type === "artifact_ref" && block.artifact_id) return [{ id, type: "artifact_ref", artifactId: block.artifact_id, display: block.display }];
+      if (block.type === "answer" && (block.answer || tab.agentAnswer)) return [{ id, type: "answer", answer: (block.answer || tab.agentAnswer)! }];
+      if (block.type === "suggestions") {
+        const suggestions = block.suggestions?.length ? block.suggestions : tab.agentSuggestions || [];
+        return suggestions.length ? [{ id, type: "suggestions", suggestions }] : [];
+      }
+      return [];
+    });
 }
 
 function AgentNarration({ text, running }: { text: string; running: boolean }) {
@@ -175,6 +219,30 @@ function AgentNarration({ text, running }: { text: string; running: boolean }) {
     <div className="agent-narration-card">
       <div className="agent-narration-icon">{running ? <Clock3 size={12} /> : <CheckCircle2 size={12} />}</div>
       <div className="agent-narration-text">{text}</div>
+    </div>
+  );
+}
+
+function AgentTimelineCard({ events, status }: { events: AgentRuntimeEvent[]; status?: WorkspaceTab["agentStatus"] }) {
+  const [expanded, setExpanded] = useState(status === "running");
+  const visibleEvents = expanded ? events : events.slice(-4);
+  const hiddenCount = Math.max(0, events.length - visibleEvents.length);
+
+  return (
+    <div className="agent-timeline-card">
+      <button className="agent-timeline-head" onClick={() => setExpanded((value) => !value)}>
+        <span>{expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 执行流</span>
+        <strong>{events.length}</strong>
+      </button>
+      <div className="agent-timeline-list">
+        {!expanded && hiddenCount > 0 && <div className="agent-timeline-muted">已折叠 {hiddenCount} 条早期事件</div>}
+        {visibleEvents.map((event) => (
+          <div key={event.event_id || `${event.sequence}-${event.type}`} className={`agent-timeline-item ${event.type.includes("failed") ? "agent-timeline-item-error" : ""}`}>
+            <span className="agent-timeline-dot">{event.type.includes("completed") ? <CheckCircle2 size={10} /> : event.type.includes("failed") ? <AlertTriangle size={10} /> : <Clock3 size={10} />}</span>
+            <span className="agent-timeline-label">{formatRuntimeEvent(event)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -195,6 +263,31 @@ function AgentApprovalCard({ tabId, approval, onApproveAgent, onRejectAgent }: {
       </div>
     </div>
   );
+}
+
+function findReferencedArtifacts(artifacts: ViewAgentArtifact[], artifactId: string) {
+  return artifacts.filter((artifact) => artifact.id === artifactId);
+}
+
+function formatRuntimeEvent(event: AgentRuntimeEvent) {
+  const stepName = firstString(event.step, ["title", "name", "node_name"]);
+  if (event.type === "agent.step.started") return stepName ? `开始：${stepName}` : "开始执行步骤";
+  if (event.type === "agent.step.completed") return stepName ? `完成：${stepName}` : "步骤完成";
+  if (event.type === "agent.artifact.created") return event.artifact?.title ? `生成产物：${event.artifact.title}` : "生成新产物";
+  if (event.type === "agent.approval.required") return "等待用户审批";
+  if (event.type === "agent.answer.completed") return "回答生成完成";
+  if (event.type === "agent.run.completed") return "运行完成";
+  if (event.type === "agent.run.failed") return event.error ? `运行失败：${event.error}` : "运行失败";
+  return stepName ? `${event.type} · ${stepName}` : event.type;
+}
+
+function firstString(source: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!source) return "";
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function getProgressText(tab: WorkspaceTab, message: QueryMessage | undefined, hasAnswer: boolean) {
