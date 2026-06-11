@@ -192,6 +192,19 @@ describe("agent approval api", () => {
       note: null,
     });
   });
+
+  it("skips malformed SSE events and continues to the final response", async () => {
+    const completed = event("agent.run.completed", { response: completedResponse });
+    const body = `event: agent.noisy\ndata: {not-json}\n\nevent: agent.run.completed\ndata: ${JSON.stringify(completed)}\n\n`;
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onEvent = vi.fn();
+
+    const result = await streamResumeAgentRun("run_1", "approval_1", { onEvent });
+
+    expect(result.run_id).toBe("run_1");
+    expect(onEvent).toHaveBeenCalledTimes(1);
+  });
 });
 
 function event(type: AgentRuntimeEvent["type"], patch: Partial<AgentRuntimeEvent>): AgentRuntimeEvent {
