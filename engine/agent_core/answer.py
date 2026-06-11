@@ -51,9 +51,10 @@ def synthesize_agent_answer(
         if result_profile:
             facts = []
     else:
-        answer = "I do not have a successful result set to analyze yet."
-        if result_profile and result_profile.detected_patterns and "execution_skipped" not in result_profile.detected_patterns:
-            facts = list(result_profile.notable_facts if result_profile else [])
+        # No execution happened — the model should not have called answer_synthesize.
+        # Return a minimal answer so the UI doesn't show misleading boilerplate.
+        answer = ""
+        facts = []
 
     caveats = list(result_profile.limitations if result_profile else [])
     if safety and safety.get("messages"):
