@@ -1,1 +1,217 @@
-.agent-thread {}
+.agent-thread {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 18px 8px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agent-turn {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.agent-turn-user {
+  justify-content: flex-end;
+}
+
+.agent-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+}
+
+.agent-avatar-user {
+  order: 2;
+  background: #F8FAFC;
+  color: #475569;
+}
+
+.agent-avatar-ai {
+  background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%);
+  color: var(--color-primary);
+  border-color: #C7D2FE;
+}
+
+.agent-user-bubble {
+  max-width: 720px;
+  padding: 9px 12px;
+  border-radius: 13px 13px 4px 13px;
+  background: #1E293B;
+  color: #F8FAFC;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.agent-assistant-bubble {
+  width: min(860px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+.agent-assistant-text-only {
+  width: auto;
+  max-width: 760px;
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.agent-run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #EEF2F7;
+}
+
+.agent-run-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1E293B;
+}
+
+.agent-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+.agent-status-running {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.agent-status-completed {
+  background: #ECFDF5;
+  color: #16A34A;
+}
+
+.agent-status-failed {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.agent-status-waiting_approval {
+  background: #FFFBEB;
+  color: #B45309;
+}
+
+.agent-narration-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.agent-artifact-group {
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  background: #FFFFFF;
+  overflow: hidden;
+}
+
+.agent-artifact-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.agent-artifact-group-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.agent-artifact-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #EEF2FF;
+  color: #4F46E5;
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-artifact-list {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.agent-artifact-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  background: #FFFFFF;
+}
+
+.agent-artifact-mini strong {
+  font-size: 11px;
+  color: #1E293B;
+}
+
+.agent-artifact-mini span {
+  font-size: 10px;
+  color: #64748B;
+  line-height: 1.5;
+}
+
+.agent-artifact-mini-chart { border-color: #BFDBFE; background: #EFF6FF; }
+.agent-artifact-mini-table { border-color: #BBF7D0; background: #F0FDF4; }
+.agent-artifact-mini-sql { border-color: #DDD6FE; background: #F5F3FF; }
+.agent-artifact-mini-markdown { border-color: #FED7AA; background: #FFF7ED; }
+
+.agent-follow-up-in-thread {
+  padding-top: 2px;
+}
+
+.agent-spin {
+  animation: agent-spin 0.9s linear infinite;
+}
+
+@keyframes agent-spin {
+  to { transform: rotate(360deg); }
+}
