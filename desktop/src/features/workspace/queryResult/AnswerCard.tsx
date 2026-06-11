@@ -5,10 +5,25 @@ interface AnswerCardProps {
   answer: AgentAnswer;
 }
 
+const BOILERPLATE = new Set([
+  "i do not have a successful result set to analyze yet.",
+  "the query returned no rows",
+  "i could not complete the analysis",
+]);
+
+function isRealAnswer(answer: AgentAnswer): boolean {
+  const text = (answer.answer || "").trim().toLowerCase();
+  if (!text) return false;
+  if (BOILERPLATE.has(text)) return false;
+  return true;
+}
+
 export function AnswerCard({ answer }: AnswerCardProps) {
   const hasFindings = answer.key_findings && answer.key_findings.length > 0;
   const hasCaveats = answer.caveats && answer.caveats.length > 0;
   const hasEvidence = answer.evidence && answer.evidence.length > 0;
+
+  if (!isRealAnswer(answer) && !hasFindings && !hasCaveats) return null;
 
   return (
     <div className="hifi-answer-card">
