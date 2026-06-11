@@ -2,8 +2,10 @@ import type { AgentArtifact } from "../../../types/agentArtifact";
 import { ChartArtifactView } from "./ChartArtifactView";
 import { EmptyArtifactsState } from "./EmptyArtifactsState";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
+import { MetricArtifactView } from "./MetricArtifactView";
 import { SqlArtifactView } from "./SqlArtifactView";
 import { TableArtifactView } from "./TableArtifactView";
+import { TraceArtifactView } from "./TraceArtifactView";
 
 interface ArtifactRendererProps {
   artifacts: AgentArtifact[];
@@ -20,6 +22,9 @@ export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, o
   return (
     <>
       {artifacts.map((artifact) => {
+        if (artifact.type === "metric") {
+          return <MetricArtifactView key={artifact.id} artifact={artifact} />;
+        }
         if (artifact.type === "chart") {
           return <ChartArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;
         }
@@ -28,6 +33,9 @@ export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, o
         }
         if (artifact.type === "table") {
           return <TableArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;
+        }
+        if (artifact.type === "trace") {
+          return <TraceArtifactView key={artifact.id} artifact={artifact} />;
         }
         return <MarkdownArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;
       })}
