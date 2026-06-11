@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from engine.policy.gate import PolicyGate
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
+from engine.agent.graph.message_utils import message_tool_calls
 from engine.agent.tools.tool_aliases import to_internal
 
 logger = logging.getLogger("databox.databox_agent.nodes.policy_node")
@@ -45,7 +46,7 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
     db = ctx.db
 
     last = state.get("messages")[-1]
-    tool_calls = getattr(last, "tool_calls", []) or []
+    tool_calls = message_tool_calls(last)
 
     allowed = []
     blocked_messages: list[Any] = []

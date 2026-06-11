@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.message_utils import first_user_text, message_content_text
 
 logger = logging.getLogger("databox.databox_agent.nodes.finalize_node")
 
@@ -23,13 +24,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
     answer_text = ""
     if messages:
         last = messages[-1]
-        content = getattr(last, "content", "")
-        if isinstance(content, str):
-            answer_text = content
-        elif isinstance(content, list):
-            # Anthropic-style content blocks
-            parts = [p.get("text", "") for p in content if isinstance(p, dict)]
-            answer_text = " ".join(parts).strip()
+        answer_text = message_content_text(last)
 
     if pending_approval:
         status = "waiting_approval"
@@ -166,15 +161,7 @@ def _auto_write_trajectory(
 
         # Extract user question from first message
         messages = state.get("messages", [])
-        question = ""
-        if messages:
-            first = messages[0]
-            content = getattr(first, "content", "")
-            if isinstance(content, str):
-                question = content
-            elif isinstance(content, list):
-                parts = [p.get("text", "") for p in content if isinstance(p, dict)]
-                question = " ".join(parts).strip()
+        question = first_user_text(messages)
 
         # Extract tables from schema context
         schema_ctx = state.get("schema_context")
