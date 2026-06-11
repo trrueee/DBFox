@@ -1,4 +1,4 @@
-import type { AgentArtifact } from "../../../types/agentArtifact";
+import type { AgentArtifact, AgentArtifactType } from "../../../types/agentArtifact";
 import { ChartArtifactView } from "./ChartArtifactView";
 import { EmptyArtifactsState } from "./EmptyArtifactsState";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
@@ -7,21 +7,51 @@ import { SqlArtifactView } from "./SqlArtifactView";
 import { TableArtifactView } from "./TableArtifactView";
 import { TraceArtifactView } from "./TraceArtifactView";
 
+type DisplayPlanComponent = "metric" | "chart" | "table" | "markdown" | "recommendation" | "sql" | "trace";
+
+export interface ArtifactDisplayPlanItem {
+  component: DisplayPlanComponent;
+  reason?: string;
+  priority?: number;
+}
+
 interface ArtifactRendererProps {
   artifacts: AgentArtifact[];
+  displayPlan?: ArtifactDisplayPlanItem[];
   onOpenSqlConsole: () => void;
   onSetSqlQuery: (sql: string) => void;
   onToast: (message: string) => void;
 }
 
-export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, onToast }: ArtifactRendererProps) {
+const COMPONENT_TYPES: Record<DisplayPlanComponent, AgentArtifactType[]> = {
+  metric: ["metric"],
+  chart: ["chart"],
+  table: ["table"],
+  markdown: ["markdown"],
+  recommendation: ["markdown"],
+  sql: ["sql"],
+  trace: ["trace"],
+};
+
+const FALLBACK_TYPE_ORDER: Record<AgentArtifactType, number> = {
+  metric: 10,
+  chart: 20,
+  table: 30,
+  markdown: 40,
+  sql: 80,
+  trace: 90,
+};
+
+export function ArtifactRenderer({ artifacts, displayPlan, onOpenSqlConsole, onSetSqlQuery, onToast }: ArtifactRendererProps) {
   if (artifacts.length === 0) {
     return <EmptyArtifactsState />;
   }
 
+  const orderedArtifacts = orderArtifactsByDisplayPlan(artifacts, displayPlan);
+
   return (
     <>
-      {artifacts.map((artifact) => {
+      {orderedArtifacts.map((artifact) => {
         if (artifact.type === "metric") {
           return <MetricArtifactView key={artifact.id} artifact={artifact} />;
         }
@@ -41,4 +71,32 @@ export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, o
       })}
     </>
   );
+}
+
+function orderArtifactsByDisplayPlan(artifacts: AgentArtifact[], displayPlan?: ArtifactDisplayPlanItem[]): AgentArtifact[] {
+  if (!displayPlan?.length) {
+    return [...artifacts].sort((a, b) => (FALLBACK_TYPE_ORDER[a.type] ?? 100) - (FALLBACK_TYPE_ORDER[b.type] ?? 100));
+  }
+
+  const remaining = [...artifacts];
+  const ordered: AgentArtifact[] = [];
+
+  const plan = [...displayPlan].sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+  for (const item of plan) {
+    const targetTypes = COMPONENT_TYPES[item.component] ?? [];
+    if (targetTypes.length === 0) continue;
+
+    for (let index = 0; index < remaining.length;) {
+      const artifact = remaining[index];
+      if (targetTypes.includes(artifact.type)) {
+        ordered.push(artifact);
+        remaining.splice(index, 1);
+        continue;
+      }
+      index += 1;
+    }
+  }
+
+  remaining.sort((a, b) => (FALLBACK_TYPE_ORDER[a.type] ?? 100) - (FALLBACK_TYPE_ORDER[b.type] ?? 100));
+  return [...ordered, ...remaining];
 }
