@@ -1,0 +1,233 @@
+.sql-console-toolbar-hint {
+  margin-left: 10px;
+  color: #94A3B8;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.sql-console-stmt-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.sql-console-rewritten {
+  margin-top: 5px;
+  color: #64748B;
+  font-size: 11px;
+}
+
+.sql-console-rewritten summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sql-console-rewritten pre {
+  margin: 5px 0 0;
+  padding: 8px;
+  border: 1px solid #1E293B;
+  border-radius: 6px;
+  background: #0B1120;
+  color: #93C5FD;
+  white-space: pre-wrap;
+}
+
+.sql-console-annotation-block {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px 32px;
+  color: #94A3B8;
+  font-size: 11px;
+}
+
+.sql-console-annotation-title {
+  color: #818CF8;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.sql-console-annotation-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid #1E293B;
+  border-radius: 999px;
+  background: rgba(30, 41, 59, 0.65);
+  color: #CBD5E1;
+  font-size: 10.5px;
+}
+
+.sql-console-annotation-muted {
+  color: #475569;
+}
+
+.sql-console-annotation-warning {
+  color: #FBBF24;
+}
+
+.sql-console-result-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sql-console-export-btn {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #1E293B;
+  border-radius: 5px;
+  background: #0B1120;
+  color: #93C5FD;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.sql-console-export-btn:hover {
+  border-color: #2563EB;
+  color: #DBEAFE;
+}
+
+.sql-console-chart {
+  margin: 6px 0 8px;
+  padding: 10px;
+  border: 1px solid #1E293B;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.94));
+  color: #DBEAFE;
+}
+
+.sql-console-chart-empty {
+  color: #FBBF24;
+}
+
+.sql-console-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sql-console-chart-head strong {
+  display: block;
+  color: #E0E7FF;
+  font-size: 12px;
+}
+
+.sql-console-chart-head span {
+  color: #64748B;
+  font-size: 10.5px;
+}
+
+.sql-console-chart-type {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.18);
+  color: #A5B4FC !important;
+  font-size: 10px !important;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sql-console-chart-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sql-console-chart-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 150px) minmax(120px, 1fr) 78px;
+  align-items: center;
+  gap: 8px;
+}
+
+.sql-console-chart-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #CBD5E1;
+  font-size: 10.5px;
+}
+
+.sql-console-chart-track {
+  height: 9px;
+  border-radius: 999px;
+  background: #111827;
+  overflow: hidden;
+}
+
+.sql-console-chart-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563EB, #7C3AED);
+}
+
+.sql-console-chart-value {
+  color: #93C5FD;
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.sql-console-chart-line {
+  color: #60A5FA;
+}
+
+.sql-console-chart-line svg {
+  display: block;
+  width: 100%;
+  height: 150px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid #16233A;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.52);
+}
+
+.sql-console-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  color: #64748B;
+  font-size: 10px;
+}
+
+.sql-console-chart-pie-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+}
+
+.sql-console-chart-pie-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px 68px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #16233A;
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.5);
+}
+
+.sql-console-chart-pie-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #CBD5E1;
+}
+
+.sql-console-chart-pie-item strong {
+  color: #A5B4FC;
+  text-align: right;
+}
+
+.sql-console-chart-pie-item em {
+  color: #93C5FD;
+  font-style: normal;
+  text-align: right;
+}
