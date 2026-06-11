@@ -33,6 +33,7 @@ def _step_name(tool_name: str) -> str:
         "chart.suggest": "suggest_chart",
         "followup.suggest": "suggest_followups",
         "answer.synthesize": "answer_synthesizer",
+        "analysis.compose": "analysis_compose",
         "schema.list_tables": "list_tables",
         "schema.describe_table": "describe_table",
         "schema.refresh_catalog": "refresh_catalog",
@@ -93,7 +94,6 @@ def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> d
             "output": observation.output,
             "error": observation.error,
         })
-
     return {
         "messages": messages,
         "last_tool_results": tool_results,
@@ -277,11 +277,27 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         x_col = output.get("x", "")
         y_col = output.get("y", "")
         reason = output.get("reason", "")
-        return f"[chart.suggest] type={chart_type}, x={x_col}, y={y_col}, reason={reason}"
+        series = output.get("series") or []
+        return (
+            f"[chart.suggest] type={chart_type}, x={x_col}, y={y_col}, "
+            f"series_points={len(series) if isinstance(series, list) else 0}, reason={reason}"
+        )
 
     if tool_name == "answer.synthesize":
         answer_text = output.get("answer", "")
         return f"[answer.synthesize] {answer_text[:500]}"
+
+    if tool_name == "analysis.compose":
+        answer_text = output.get("answer", "")
+        key_findings = output.get("key_findings") or []
+        recommendations = output.get("recommendations") or []
+        display_plan = output.get("display_plan") or []
+        return (
+            f"[analysis.compose] final analysis ready. "
+            f"findings={len(key_findings)}, recommendations={len(recommendations)}, "
+            f"display_plan_items={len(display_plan) if isinstance(display_plan, list) else 0}. "
+            f"Answer: {answer_text[:420]}"
+        )
 
     if tool_name == "followup.suggest":
         suggestions = output.get("suggestions") or []
