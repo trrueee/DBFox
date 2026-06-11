@@ -1,4 +1,5 @@
 import type { AgentArtifact } from "../types/agentArtifact";
+import type { AgentMessageBlock, AgentRuntimeEvent, AgentVisibleEvent } from "../lib/api/types";
 
 export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-config" | "datasource-settings" | "agent-eval";
 
@@ -29,6 +30,9 @@ export interface WorkspaceTab {
   agentApproval?: AgentApprovalInfo | null;
   agentAnswer?: import("../lib/api/types").AgentAnswer | null;
   agentSuggestions?: import("../lib/api/types").FollowUpSuggestion[] | null;
+  agentMessageBlocks?: AgentMessageBlock[] | null;
+  agentRuntimeEvents?: AgentRuntimeEvent[];
+  agentVisibleEvents?: AgentVisibleEvent[] | null;
 }
 
 export interface ContextMenuState {
