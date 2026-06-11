@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { FileText, GitMerge, MessageSquare, Plus, Sparkles, Terminal, TrendingUp, X, Cpu, Settings, Database } from "lucide-react";
+import { FileText, GitMerge, MessageSquare, Plus, Sparkles, Terminal, TrendingUp, X, Cpu, Database } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/databoxMock";
 
 interface WorkspaceTabsProps {
@@ -31,7 +31,6 @@ export function WorkspaceTabs({
               {tab.type === "query-result" && <TrendingUp size={11} className="text-purple-500" />}
               {tab.type === "conversation-history" && <MessageSquare size={11} className="text-indigo-500" />}
               {tab.type === "llm-config" && <Cpu size={11} className="text-pink-500" />}
-              {tab.type === "system-settings" && <Settings size={11} className="text-slate-500" />}
               {tab.type === "datasource-settings" && <Database size={11} className="text-blue-500" />}
               <span className="truncate max-w-[100px]">{tab.title}</span>
               <X size={10} className="hifi-tab-close ml-1.5 opacity-60 hover:opacity-100" onClick={(event) => onCloseTab(tab.id, event)} />

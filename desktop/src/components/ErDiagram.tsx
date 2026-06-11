@@ -674,7 +674,7 @@ export function ErDiagram({
             target: e.target,
             data: {
               label: `${e.sourceHandle} → ${e.targetHandle}`,
-              edge_type: e.edge_type,
+              edge_type: e.edge_type || "real",
               isSecondary: isSecondaryEdge,
             } satisfies ErEdgeData & { isSecondary: boolean },
           };

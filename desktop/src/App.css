@@ -25,6 +25,133 @@
   --color-danger-soft: #FEF2F2;
 
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* Legacy / Semantic variables mapping to Design System */
+  --accent-indigo: var(--color-primary);
+  --accent-green: var(--color-success);
+  --accent-red: var(--color-danger);
+  --accent-amber: var(--color-warning);
+  
+  --bg-primary: var(--color-bg);
+  --bg-secondary: var(--color-bg);
+  --bg-surface: var(--color-panel);
+  --bg-active: var(--color-primary-soft);
+  --bg-hover: #F1F5F9;
+
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+
+  --border-light: var(--color-border);
+  --border-medium: var(--color-border);
+  --border-subtle: var(--color-border);
+}
+
+.dark {
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  --color-border: #1E293B;
+  --color-bg: #020617;
+  --color-panel: #0B1329;
+
+  --color-primary-soft: rgba(79, 70, 229, 0.15);
+  --color-info-soft: rgba(37, 99, 235, 0.15);
+  --color-success-soft: rgba(22, 163, 74, 0.15);
+  --color-warning-soft: rgba(249, 115, 22, 0.15);
+  --color-danger-soft: rgba(220, 38, 38, 0.15);
+
+  --bg-hover: #1E293B;
+}
+
+/* Unified custom inputs and elements */
+.hifi-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.hifi-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.hifi-input:hover {
+  border-color: #CBD5E1;
+}
+
+.hifi-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+  background: var(--color-panel);
+}
+
+.hifi-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+
+.hifi-select:hover {
+  border-color: #CBD5E1;
+}
+
+.hifi-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.hifi-textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-family: var(--font-family);
+}
+
+.hifi-textarea:hover {
+  border-color: #CBD5E1;
+}
+
+.hifi-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.field-label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-top: 10px;
+  margin-bottom: 5px;
 }
 
 /* Base resets for mock view */
@@ -2507,17 +2634,18 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-surface, #F8FAFC);
+  background: var(--color-panel);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .hifi-eval-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--color-border);
-  background: #FFFFFF;
+  background: var(--color-panel);
 }
 
 .hifi-eval-header-title {
@@ -2838,5 +2966,722 @@
   padding-top: 6px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* ===== Command Palette ===== */
+.hifi-command-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  padding-top: 14vh;
+  background: rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.hifi-command-panel {
+  width: min(620px, 94vw);
+  max-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.hifi-command-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.hifi-command-search-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.hifi-command-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.82rem;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+}
+
+.hifi-command-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.hifi-command-kbd {
+  font-size: 0.62rem;
+  font-family: "Fira Code", monospace;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+
+.hifi-command-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.hifi-command-empty {
+  padding: 32px 20px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.hifi-command-group {
+  margin-bottom: 4px;
+}
+
+.hifi-command-category {
+  padding: 4px 12px 2px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hifi-command-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.08s;
+  font-family: var(--font-family);
+}
+
+.hifi-command-item:hover,
+.hifi-command-item.active {
+  background: var(--color-primary-soft);
+}
+
+.hifi-command-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+
+.hifi-command-item.active .hifi-command-item-icon {
+  background: rgba(79, 70, 229, 0.12);
+  color: var(--color-primary);
+}
+
+.hifi-command-item-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.hifi-command-item.active .hifi-command-item-label {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.hifi-command-footer {
+  display: flex;
+  gap: 16px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+}
+
+/* ===== Settings panels (LLM + System) ===== */
+.hifi-settings-page,
+.hifi-settings-dialog-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-panel);
+}
+
+.hifi-settings-page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px 0;
+}
+
+.hifi-settings-page-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.hifi-settings-page-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 4px;
+}
+
+.hifi-settings-page-desc {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 520px;
+}
+
+.hifi-settings-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.hifi-settings-dialog-body .hifi-settings-body {
+  padding: 16px 24px;
+  max-height: 58vh;
+}
+
+.hifi-settings-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.hifi-settings-section-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.hifi-settings-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.hifi-settings-section-subtitle {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  margin: 2px 0 0;
+}
+
+.hifi-settings-field {
+  margin-bottom: 14px;
+}
+
+.hifi-settings-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.hifi-settings-hint {
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+}
+
+.hifi-settings-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.hifi-settings-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.hifi-settings-eye-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+.hifi-settings-eye-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+.hifi-model-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hifi-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.67rem;
+  font-weight: 500;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-family);
+}
+
+.hifi-model-chip:hover {
+  border-color: rgba(79, 70, 229, 0.35);
+  color: var(--color-text-primary);
+}
+
+.hifi-model-chip.active {
+  border-color: rgba(79, 70, 229, 0.45);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.hifi-settings-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 18px 0;
+}
+
+.hifi-settings-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hifi-settings-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.hifi-settings-mono {
+  font-family: "Fira Code", monospace;
+  font-size: 0.65rem;
+  color: var(--color-text-primary);
+}
+
+.hifi-settings-saved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 0.7rem;
+  color: var(--color-success);
+}
+
+.hifi-settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.hifi-settings-shell {
+  display: flex;
+  height: 100%;
+  background: var(--color-panel);
+}
+
+.hifi-settings-nav {
+  width: 188px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hifi-settings-nav-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.hifi-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-family);
+  transition: background 0.12s, color 0.12s;
+}
+
+.hifi-settings-nav-item:hover {
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+}
+
+.hifi-settings-nav-item.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.hifi-settings-main {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.hifi-settings-main-inner {
+  max-width: 480px;
+  padding: 24px;
+}
+
+.hifi-settings-main-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 16px;
+}
+
+.hifi-settings-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hifi-settings-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hifi-settings-form-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hifi-settings-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  outline: none;
+  font-family: var(--font-family);
+}
+
+.hifi-settings-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.hifi-settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.hifi-settings-checkbox input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--color-primary);
+}
+
+.hifi-settings-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.hifi-settings-warning {
+  padding: 8px 12px;
+  background: var(--color-warning-soft);
+  border: 1px solid #FDBA74;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: var(--color-warning);
+  line-height: 1.45;
+}
+
+.hifi-shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(4px);
+}
+
+.hifi-shortcuts-panel {
+  width: min(380px, 92vw);
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+}
+
+.hifi-shortcuts-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 14px;
+}
+
+.hifi-shortcuts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  padding: 6px 0;
+}
+
+.hifi-shortcuts-close {
+  width: 100%;
+  margin-top: 18px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+
+.hifi-settings-tab-frame {
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-panel);
+}
+
+/* ===== Shared tab page layout ===== */
+.hifi-tab-pane {
+  height: 100%;
+  overflow: auto;
+  background: var(--color-panel);
+  padding: 20px 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hifi-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.hifi-page-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.hifi-page-desc {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.hifi-card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.hifi-card-title {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hifi-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: var(--font-family);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.hifi-btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  color: #fff;
+  border: none;
+}
+
+.hifi-btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.hifi-btn-outline {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.hifi-btn-outline:hover {
+  background: var(--color-bg);
+}
+
+.hifi-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.hifi-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.hifi-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hifi-section-count {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
+.hifi-empty-state {
+  padding: 48px 32px;
+  text-align: center;
+  border: 1px dashed var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+}
+
+.hifi-empty-icon {
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.hifi-empty-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hifi-empty-desc {
+  margin: 4px 0 16px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.hifi-datasource-page {
+  gap: 18px;
+}
+
+.hifi-datasource-form {
+  padding: 20px 22px;
+}
+
+.hifi-datasource-list-section {
+  flex: 1;
+  min-height: 0;
 }
 

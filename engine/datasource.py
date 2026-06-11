@@ -430,7 +430,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
     if not host or not database_name or not username:
         raise DataSourceConnectionError("Missing host, database name, or username configuration.")
 
-        temp_tunnel = None
+    temp_tunnel = None
     try:
         test_host = host
         test_port = port

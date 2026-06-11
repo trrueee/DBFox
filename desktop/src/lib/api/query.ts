@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { GuardrailCheckResult, QueryHistory, QueryResult } from "./types";
+import type { GuardrailCheckResult, QueryResult } from "./types";
 
 export const queryApi = {
   validateSql: (sql: string, options?: { datasourceId?: string; signal?: AbortSignal }) =>
@@ -21,25 +21,4 @@ export const queryApi = {
       method: "POST",
       body: JSON.stringify({ execution_id: executionId }),
     }),
-
-  listHistory: (datasourceId?: string, filters?: { search?: string; status?: string; limit?: number }) => {
-    const params = new URLSearchParams();
-    if (datasourceId) params.set("datasource_id", datasourceId);
-    if (filters?.search) params.set("search", filters.search);
-    if (filters?.status && filters.status !== "all") params.set("status", filters.status);
-    if (filters?.limit) params.set("limit", String(filters.limit));
-    const query = params.toString();
-    return request<QueryHistory[]>(`/query/history${query ? `?${query}` : ""}`);
-  },
-
-  deleteHistory: (historyId: string) =>
-    request<{ success: boolean; deleted: number }>(`/query/history/${encodeURIComponent(historyId)}`, {
-      method: "DELETE",
-    }),
-
-  clearHistory: (datasourceId: string) =>
-    request<{ success: boolean; deleted: number }>(
-      `/query/history?datasource_id=${encodeURIComponent(datasourceId)}`,
-      { method: "DELETE" },
-    ),
 };

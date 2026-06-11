@@ -8,11 +8,14 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  X,
-  Sparkles,
 } from "lucide-react";
 import { api } from "../lib/api";
 import type { DataSource, Project } from "../lib/api";
+import {
+  buildDatasourceCreatePayload,
+  buildDatasourceTestPayload,
+  type DatasourceFormShape,
+} from "../lib/datasourcePayload";
 import { StatusIndicator } from "../components/StatusIndicator";
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -111,7 +114,7 @@ export const DataSourcesPage = ({
     }
     setTestResult({ status: "testing", message: "正在测试连接..." });
     try {
-      const result = await api.testConnection(form);
+      const result = await api.testConnection(buildDatasourceTestPayload(form as DatasourceFormShape));
       setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
@@ -162,7 +165,9 @@ export const DataSourcesPage = ({
     try {
       setSubmitting(true);
       setFormError("");
-      const created = await api.createDatasource({ ...form, project_id: activeProject?.id });
+      const created = await api.createDatasource(
+        buildDatasourceCreatePayload(form as DatasourceFormShape, activeProject?.id),
+      );
       setSyncingId(created.id);
       await api.syncSchema(created.id);
       await syncLists();
@@ -245,8 +250,6 @@ export const DataSourcesPage = ({
     }
   };
 
-  const statusType = (ds: DataSource) =>
-    ds.last_sync_status === "success" ? "success" : ds.last_sync_status === "failed" ? "error" : "idle";
 
   const healthStatusType = (ds: DataSource) =>
     ds.last_test_status === "success" ? "success" : ds.last_test_status === "failed" ? "error" : "idle";
@@ -255,35 +258,21 @@ export const DataSourcesPage = ({
     value ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
 
   return (
-    <div
-      className="animate-fade-in"
-      style={{ display: "flex", flexDirection: "column", gap: 20, height: "100%", overflow: "auto" }}
-    >
-      {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="hifi-tab-pane hifi-datasource-page animate-fade-in">
+      <div className="hifi-page-header">
         <div>
-          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)" }}>
-            连接管理
-          </h2>
-          <p style={{ color: "var(--text-secondary)", marginTop: 2, fontSize: "0.75rem" }}>
-            管理本地保存的数据源连接，测试可用性，同步 Schema 缓存
-          </p>
+          <h2 className="hifi-page-title">连接管理</h2>
+          <p className="hifi-page-desc">管理本地保存的数据源连接，测试可用性，同步 Schema 缓存</p>
         </div>
-        <button
-          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md cursor-pointer border-none hover:brightness-110 transition-colors"
-          onClick={() => setShowAddForm((v) => !v)}
-        >
+        <button type="button" className="hifi-btn hifi-btn-primary" onClick={() => setShowAddForm((v) => !v)}>
           <Plus size={13} />
           {showAddForm ? "收起" : "新建连接"}
         </button>
       </div>
 
-      {/* Add Form */}
       {showAddForm && (
-        <div className="bg-card border border-border rounded-lg animate-slide-down" style={{ padding: 24 }}>
-          <h3 className="text-display" style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 20 }}>
-            新增数据源
-          </h3>
+        <div className="hifi-card hifi-datasource-form animate-slide-down">
+          <h3 className="hifi-card-title">新增数据源</h3>
 
           <div style={{ marginBottom: 20 }}>
             <label className="field-label">数据库类型</label>
@@ -329,7 +318,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">连接名称</label>
                 <input
-                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="hifi-input"
                   value={form.name}
                   onChange={(e) => updateForm("name", e.target.value)}
                   placeholder="例：本地 SQLite 数据库"
@@ -338,7 +327,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">SQLite 数据库文件绝对路径</label>
                 <input
-                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="hifi-input"
                   value={form.database_name}
                   onChange={(e) => updateForm("database_name", e.target.value)}
                   placeholder="C:\Users\username\databases\mydb.sqlite"
@@ -354,7 +343,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">连接名称</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.name}
                     onChange={(e) => updateForm("name", e.target.value)}
                     placeholder={form.db_type === "postgresql" ? "例：测试 PG 数据库" : "例：生产只读库"}
@@ -363,7 +352,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">主机地址</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.host}
                     onChange={(e) => updateForm("host", e.target.value)}
                     placeholder="db.example.com"
@@ -375,7 +364,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">端口</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     type="number"
                     value={form.port}
                     onChange={(e) => updateForm("port", Number(e.target.value) || (form.db_type === "postgresql" ? 5432 : 3306))}
@@ -384,7 +373,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">数据库名</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.database_name}
                     onChange={(e) => updateForm("database_name", e.target.value)}
                   />
@@ -392,7 +381,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">用户名</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.username}
                     onChange={(e) => updateForm("username", e.target.value)}
                   />
@@ -402,7 +391,7 @@ export const DataSourcesPage = ({
               <div style={{ marginTop: 16 }}>
                 <label className="field-label">密码</label>
                 <input
-                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="hifi-input"
                   type="password"
                   value={form.password}
                   onChange={(e) => updateForm("password", e.target.value)}
@@ -416,10 +405,9 @@ export const DataSourcesPage = ({
             <div>
               <label className="field-label">环境标签</label>
               <select
-                className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="hifi-select"
                 value={form.env}
                 onChange={(e) => updateForm("env", e.target.value)}
-                style={{ width: "100%", background: "var(--bg-primary)", color: "var(--text-primary)" }}
               >
                 <option value="dev">💻 开发环境 (DEV)</option>
                 <option value="test">🔬 测试环境 (TEST)</option>
@@ -463,7 +451,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 主机地址</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.ssh_host}
                     onChange={(e) => updateForm("ssh_host", e.target.value)}
                     placeholder="ssh.example.com"
@@ -472,7 +460,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 端口</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     type="number"
                     value={form.ssh_port}
                     onChange={(e) => updateForm("ssh_port", Number(e.target.value) || 22)}
@@ -481,7 +469,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 用户名</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.ssh_username}
                     onChange={(e) => updateForm("ssh_username", e.target.value)}
                     placeholder="username"
@@ -493,7 +481,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 密码 (密码认证)</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     type="password"
                     value={form.ssh_password}
                     onChange={(e) => updateForm("ssh_password", e.target.value)}
@@ -503,7 +491,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">SSH 私钥绝对路径 (密钥认证)</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.ssh_pkey_path}
                     onChange={(e) => updateForm("ssh_pkey_path", e.target.value)}
                     placeholder="例：C:\Users\username\.ssh\id_rsa"
@@ -515,7 +503,7 @@ export const DataSourcesPage = ({
                 <div className="animate-slide-down">
                   <label className="field-label">私钥密码 (Passphrase)</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     type="password"
                     value={form.ssh_pkey_passphrase}
                     onChange={(e) => updateForm("ssh_pkey_passphrase", e.target.value)}
@@ -549,7 +537,7 @@ export const DataSourcesPage = ({
               <div>
                 <label className="field-label">CA 证书路径</label>
                 <input
-                  className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="hifi-input"
                   value={form.ssl_ca_path}
                   onChange={(e) => updateForm("ssl_ca_path", e.target.value)}
                   placeholder="例如：C:\\certs\\mysql-ca.pem"
@@ -563,7 +551,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">客户端证书路径（可选）</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.ssl_cert_path}
                     onChange={(e) => updateForm("ssl_cert_path", e.target.value)}
                     placeholder="例如：C:\\certs\\client-cert.pem"
@@ -572,7 +560,7 @@ export const DataSourcesPage = ({
                 <div>
                   <label className="field-label">客户端私钥路径（可选）</label>
                   <input
-                    className="h-9 w-full rounded-sm border border-input bg-transparent px-3 py-1 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="hifi-input"
                     value={form.ssl_key_path}
                     onChange={(e) => updateForm("ssl_key_path", e.target.value)}
                     placeholder="例如：C:\\certs\\client-key.pem"
@@ -651,25 +639,22 @@ export const DataSourcesPage = ({
             </div>
           )}
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={handleTestConnection} disabled={submitting}>
+          <div className="hifi-form-actions">
+            <button type="button" className="hifi-btn hifi-btn-outline" onClick={handleTestConnection} disabled={submitting}>
               测试连接
             </button>
-            <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleCreateDataSource} disabled={submitting}>
+            <button type="button" className="hifi-btn hifi-btn-primary" onClick={handleCreateDataSource} disabled={submitting}>
               {submitting ? "保存中..." : "保存并同步 Schema"}
             </button>
           </div>
         </div>
       )}
 
-      {/* Connection List */}
-      <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+      <div className="hifi-datasource-list-section">
+        <div className="hifi-section-head">
+          <div className="hifi-section-title">
             已保存连接
-            <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: "0.7rem" }}>
-              {dataSources.length}
-            </span>
+            <span className="hifi-section-count">{dataSources.length}</span>
           </div>
         </div>
 
@@ -683,21 +668,11 @@ export const DataSourcesPage = ({
             ))}
           </div>
         ) : dataSources.length === 0 ? (
-          <div style={{
-            padding: "48px 32px", textAlign: "center",
-            border: "1px dashed var(--border-subtle, #e6eaf2)", borderRadius: 10,
-          }}>
-            <Database size={28} style={{ color: "var(--text-muted)", marginBottom: 12 }} />
-            <h3 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-primary)" }}>
-              暂无数据源连接
-            </h3>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: 4, marginBottom: 16 }}>
-              添加一个数据库连接以开始使用 AI 问数功能
-            </p>
-            <button
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md cursor-pointer border-none hover:brightness-110 transition-colors"
-              onClick={() => setShowAddForm(true)}
-            >
+          <div className="hifi-empty-state">
+            <Database size={28} className="hifi-empty-icon" />
+            <h3 className="hifi-empty-title">暂无数据源连接</h3>
+            <p className="hifi-empty-desc">添加一个数据库连接以开始使用 AI 问数功能</p>
+            <button type="button" className="hifi-btn hifi-btn-primary" onClick={() => setShowAddForm(true)}>
               <Plus size={13} />新建连接
             </button>
           </div>
@@ -720,9 +695,7 @@ export const DataSourcesPage = ({
             </div>
             {dataSources.map((ds) => {
               const isActive = activeDataSource?.id === ds.id;
-              const st = statusType(ds);
               const healthSt = healthStatusType(ds);
-              const healthWarnings = ds.last_test_warnings ?? [];
 
               const dbBadge = ds.db_type === "postgresql" ? { label: "PG", color: "#818CF8", bg: "rgba(99,102,241,0.1)" }
                 : ds.db_type === "sqlite" ? { label: "Lite", color: "#94A3B8", bg: "rgba(100,116,139,0.08)" }

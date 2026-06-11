@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { ChevronDown, ChevronRight, Database, FileText, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, Database, FileText, RefreshCw, Search } from "lucide-react";
 import type { EngineDataSource, EngineSchemaTable } from "../engine/engineApi";
 
 interface DataSourceTreeProps {
@@ -65,7 +65,9 @@ export function DataSourceTree({
             >
               +
             </button>
-            <RefreshCw size={12} className={`text-gray-400 cursor-pointer ${loading ? "animate-spin" : ""}`} onClick={handleRefresh} title="刷新" />
+            <span title="刷新" onClick={handleRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
+              <RefreshCw size={12} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
+            </span>
           </div>
         </div>
 

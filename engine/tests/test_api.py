@@ -80,6 +80,28 @@ def test_test_connection_failure(client) -> None:
     assert resp.json()["detail"]["code"] == "CONNECTION_FAILED"
 
 
+def test_test_connection_mysql_unreachable_returns_connection_failed_not_500(client) -> None:
+    """Regression: failed MySQL probe must not crash on undefined temp_tunnel."""
+    resp = client.post(
+        "/api/v1/datasources/test",
+        json={
+            "db_type": "mysql",
+            "host": "127.0.0.1",
+            "port": 3306,
+            "database_name": "analytics",
+            "username": "root",
+            "password": "wrong",
+            "ssh_enabled": False,
+            "ssl_enabled": False,
+        },
+        headers=_headers(),
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["detail"]["code"] == "CONNECTION_FAILED"
+    assert "temp_tunnel" not in str(body).lower()
+
+
 def test_create_datasource(client, test_datasource) -> None:
     resp = client.post("/api/v1/datasources", json=sqlite_datasource_create_payload(
         test_datasource.database_name,

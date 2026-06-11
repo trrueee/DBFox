@@ -147,7 +147,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
   };
 
   return (
-    <div className="hifi-eval-page hifi-tab-pane">
+    <div className="hifi-eval-page">
       <div className="hifi-eval-header">
         <div className="hifi-eval-header-title">
           <FlaskConical size={15} />
