@@ -29,12 +29,11 @@ def install_node_dependencies():
         print(">>> node_modules 缓存命中。")
 
 def run_backend():
-    """Launch the FastAPI server engine"""
-    print(">>> 正在启动 DataBox 安全审计及 AI 引擎后台...")
+    """Launch the FastAPI server engine with hot reload in dev."""
+    print(">>> 正在启动 DataBox 安全审计及 AI 引擎后台 (热更新: engine/*.py)...")
     backend_path = os.path.dirname(os.path.abspath(__file__))
-    # Run uvicorn server in a separate background process
     return subprocess.Popen(
-        [sys.executable, "-m", "engine.main"],
+        [sys.executable, "-m", "engine.main", "--reload"],
         cwd=backend_path,
         env=os.environ.copy()
     )

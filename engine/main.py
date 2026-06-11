@@ -248,15 +248,17 @@ app.include_router(router)
 
 # 6. 本地运行脚本守护 (Uvicorn CLI Web Server)
 if __name__ == "__main__":
-    # Python 知识点:
-    #   - `if __name__ == "__main__":` 保证了该文件只有在被作为主脚本直接执行（例如：python main.py）时才运行内部代码，
-    #     如果在其他脚本里导入该文件，内部的服务器启动逻辑不会执行。
-    is_frozen = getattr(sys, "frozen", False)
-    if is_frozen:
-        # 生产单文件包：关闭热重载，避免多进程运行冲突
-        uvicorn.run(app, host="127.0.0.1", port=18625)
-    else:
-        # 本地开发模式：开启 reload=True，这样修改后台代码时，Uvicorn 服务器会自动重新加载，非常方便开发调试！
-        # 这里必须用字符串形式 "engine.main:app" 来指明应用，才能启用热重载
-        uvicorn.run("engine.main:app", host="127.0.0.1", port=18625, reload=True)
+    import argparse
+
+    from engine.dev_server import default_reload_enabled, run_engine_server
+
+    parser = argparse.ArgumentParser(description="DataBox local engine")
+    parser.add_argument(
+        "--reload",
+        action=argparse.BooleanOptionalAction,
+        default=default_reload_enabled(),
+        help="Watch engine/*.py and auto-restart on save (default: on in dev)",
+    )
+    args = parser.parse_args()
+    run_engine_server(reload=args.reload)
 

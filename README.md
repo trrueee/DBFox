@@ -88,10 +88,11 @@ LangGraph interrupt/resume for human-in-the-loop approval.
 ## Local Development
 
 ```bash
-# Backend
+# Backend (hot reload watches engine/*.py)
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python -m uvicorn engine.main:app --host 127.0.0.1 --port 18625
+python -m engine.main
+# or: python -m engine.main --no-reload
 
 # Frontend
 cd desktop && npm install && npm run dev
