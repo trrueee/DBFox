@@ -76,13 +76,15 @@ function buildDirectives(annotations: SqlAnnotation[], warnings: string[]) {
   for (const annotation of annotations) {
     switch (annotation.name) {
       case "limit": {
-        const parsedLimit = parsePositiveInt(readSingleValue(annotation.value) ?? readKeyValues(annotation.value).rows ?? readKeyValues(annotation.value).limit);
+        const args = readKeyValues(annotation.value);
+        const parsedLimit = parsePositiveInt(readSingleValue(annotation.value) ?? args.rows ?? args.limit);
         if (parsedLimit) limit = parsedLimit;
         else warnings.push(`无法识别 @limit 参数：${annotation.value || "空"}`);
         break;
       }
       case "timeout": {
-        const parsedTimeout = parseDurationMs(readSingleValue(annotation.value) ?? readKeyValues(annotation.value).ms ?? readKeyValues(annotation.value).timeout);
+        const args = readKeyValues(annotation.value);
+        const parsedTimeout = parseDurationMs(readSingleValue(annotation.value) ?? args.ms ?? args.timeout);
         if (parsedTimeout) timeoutMs = parsedTimeout;
         else warnings.push(`无法识别 @timeout 参数：${annotation.value || "空"}`);
         break;
@@ -95,8 +97,7 @@ function buildDirectives(annotations: SqlAnnotation[], warnings: string[]) {
         break;
       case "chart": {
         const args = readKeyValues(annotation.value);
-        const firstValue = readSingleValue(annotation.value);
-        const chartType = normalizeChartType(args.type || firstValue);
+        const chartType = normalizeChartType(args.type || readLeadingToken(annotation.value));
         chart = {
           enabled: true,
           type: chartType,
@@ -168,6 +169,12 @@ function readSingleValue(value?: string) {
   const trimmed = value.trim();
   if (!trimmed || trimmed.includes("=")) return undefined;
   return trimmed.split(/\s+/)[0];
+}
+
+function readLeadingToken(value?: string) {
+  if (!value) return undefined;
+  const token = value.trim().split(/\s+/)[0];
+  return token && !token.includes("=") ? token : undefined;
 }
 
 function readKeyValues(value?: string): Record<string, string> {
