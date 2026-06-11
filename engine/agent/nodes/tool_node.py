@@ -111,6 +111,7 @@ def _execute_tool(
     args: dict[str, Any],
 ) -> ToolObservation:
     tool = registry.require(tool_name)
+    print(f"\n[DEBUG TOOL] tool_name={tool_name}, state.get('safety')={state.get('safety')}, state.get('execute')={state.get('execute')}")
     if hasattr(tool, "base_tool") and tool.base_tool is not None:
         merged_args = dict(args)
         if "question" not in merged_args and req is not None:

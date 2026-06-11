@@ -10,6 +10,10 @@ from engine.agent.model.context_builder import build_context_message, build_prog
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
+from engine.agent.graph.message_utils import first_user_text
+
+import logging
+logger = logging.getLogger("databox.databox_agent.nodes.model_node")
 
 
 def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -77,12 +81,29 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
         SystemMessage(content=build_system_prompt(state)),
         build_context_message(state),
     ]
+
+    # Auto-inject memory context on first model turn (migrated from deleted planner).
+    # Subsequent turns already have this context in the conversation history.
+    if int(state.get("step_count", 0)) == 0:
+        memory_ctx = _get_memory_context(state)
+        if memory_ctx:
+            messages.append(SystemMessage(content=memory_ctx))
+
     progress_msg = build_progress_guidance_message(state)
     if progress_msg is not None:
         messages.append(progress_msg)
-    messages.extend(state.get("messages", []))
+    history = state.get("messages", [])
 
-    ai_msg = model_with_tools.invoke(messages)
+    # Compact message history to prevent context window overflow.
+    # Multi-turn ReAct loops accumulate tool messages rapidly —
+    # keep the most recent N tool messages, preserve all non-tool messages.
+    if len(history) > 20:
+        from engine.memory.memory_compactor import compact_messages
+        history = compact_messages(list(history))
+
+    messages.extend(history)
+
+    ai_msg = model_with_tools.invoke(messages, config)
 
     return {
         "messages": [ai_msg],
@@ -134,3 +155,31 @@ def _build_escalate_tool(registry: Any) -> Any | None:
         args_schema=EscalateInput,
         func=_noop,
     )
+
+
+def _get_memory_context(state: DataBoxAgentState) -> str:
+    """Auto-inject relevant long-term memory into the first model turn.
+
+    Migrated from the deleted planner_node.  Searches for user preferences,
+    project rules, past successful trajectories, metric definitions, and
+    schema aliases — then formats them as a SystemMessage for the LLM.
+
+    Best-effort: exceptions are logged but never block the model call.
+    """
+    try:
+        from engine.agent.memory_bridge import search_memory_for_planner
+
+        messages = state.get("messages", [])
+        question = first_user_text(messages)
+        if not question:
+            return ""
+
+        return search_memory_for_planner(
+            question=question,
+            user_id=state.get("user_id") or state.get("thread_id"),
+            datasource_id=str(state.get("datasource_id") or ""),
+            project_id=state.get("project_id"),
+        )
+    except Exception as exc:
+        logger.warning("Failed to retrieve memory context for model: %s", exc)
+        return ""

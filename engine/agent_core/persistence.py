@@ -269,6 +269,24 @@ def fail_run(
         logger.exception("Failed to record failure for run %s", run_id)
 
 
+def cancel_run(db: Session, *, run_id: str) -> None:
+    """Mark an agent run as cancelled by user request."""
+    try:
+        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if run is None:
+            logger.warning("Cannot cancel run %s: run not found", run_id)
+            return
+        run.status = "cancelled"  # type: ignore[assignment]
+        run.current_step_name = None  # type: ignore[assignment]
+        run.waiting_approval_id = None  # type: ignore[assignment]
+        run.error = "User cancelled the agent run."  # type: ignore[assignment]
+        run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
+        run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+        db.flush()
+    except Exception:
+        logger.exception("Failed to cancel run %s", run_id)
+
+
 def create_approval(
     db: Session,
     *,

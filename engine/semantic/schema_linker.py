@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from engine.models import SchemaColumn, SchemaTable, WorkspaceTableScope
 from engine.semantic.alias import AliasMatch, SemanticAliasResolver
 
-TOKEN_PATTERN = re.compile(r"[一-鿿A-Za-z0-9_]+")
+TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+|[一-鿿]")
 
 
 @dataclass

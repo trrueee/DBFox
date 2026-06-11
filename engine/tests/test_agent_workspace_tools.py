@@ -78,7 +78,6 @@ def test_workspace_assist_runtime_records_artifacts_but_does_not_execute(db_sess
     assert res.execution is None
     assert res.answer is not None
     semantic_ids = {artifact.semantic_id for artifact in res.artifacts}
-    assert "agent_plan_draft" in semantic_ids
     assert "sql_suggestion" in semantic_ids
 
 

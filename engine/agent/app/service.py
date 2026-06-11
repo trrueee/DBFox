@@ -35,9 +35,17 @@ from engine.agent.app.response_builder import build_response
 
 logger = logging.getLogger("databox.databox_agent.service")
 
+# Full set of safe tool groups available to the model on every run.
+# The policy gate and execution_mode control what actually executes.
+FULL_SAFE_TOOL_GROUPS = [
+    "workspace", "environment", "schema", "semantic", "query_plan",
+    "sql_generation", "sql_validation", "sql_repair", "execution",
+    "result", "chart", "answer",
+]
+
 
 class DataBoxAgentService:
-    """Next-generation DataBox agent service built on a clean ReAct graph.
+    """Next-generation DataBox agent service built on a pure ReAct graph.
 
     Replaces engine.agent_kernel.service.AgentKernelService.
     """
@@ -99,7 +107,8 @@ class DataBoxAgentService:
         # Build and run graph. The LangGraph checkpoint thread is keyed by
         # run_id (not session_id): each run starts from a fresh thread, and
         # conversation continuity is provided via follow_up_context. Keying by
-        # session would leak prior runs' messages into new runs.
+        # session would leak prior runs' messages into new runs, bloating the
+        # context window and causing timeouts on multi-turn conversations.
         app = build_databox_react_graph(checkpointer=self._checkpointer)
         config = ctx.graph_config(run_id)
 
@@ -122,19 +131,12 @@ class DataBoxAgentService:
                         emit, update, agent_state, artifact_identity, emitted_artifact_ids
                     )
 
-                if node_str in ("observe", "progress", "planner", "repair"):
+                if node_str in ("observe", "progress", "repair"):
                     event, last_context_summary = self._context_update_event(
                         emit, accumulated_state, last_context_summary,
                     )
                     if event is not None:
                         yield event
-
-                # Emit the plan draft artifact when the planner produces a directive
-                if node_str == "planner":
-                    yield from self._planner_events(
-                        emit, update, agent_state, artifact_identity, emitted_artifact_ids,
-                        run_id, session_id,
-                    )
 
                 # Emit trace events (including approval-related traffic
                 # that the approval_node emits before/after interrupt())
@@ -318,10 +320,9 @@ class DataBoxAgentService:
             follow_up_context=req.follow_up_context.model_dump(mode="json") if req.follow_up_context else None,
             max_steps=req.max_steps,
             step_count=0,
-            # ---- Planner / Progress Judge state ----
-            plan_directive=None,
+            # ---- Progress Judge state ----
             execution_mode=execution_mode,
-            allowed_tool_groups=[],
+            allowed_tool_groups=FULL_SAFE_TOOL_GROUPS,
             progress_decision=None,
             replan_count=0,
             consecutive_blocks=0,
@@ -425,43 +426,6 @@ class DataBoxAgentService:
                             "summary": artifact.title,
                         },
                     )
-
-    def _planner_events(
-        self,
-        emit: Any,
-        update: dict[str, Any],
-        agent_state: Any,
-        artifact_identity: AgentArtifactIdentity,
-        emitted_ids: set[str],
-        run_id: str,
-        session_id: str,
-    ) -> Iterator[AgentRuntimeEvent]:
-        """Surface the planner directive as the `agent_plan_draft` artifact."""
-        directive = update.get("plan_directive")
-        if not isinstance(directive, dict) or not directive:
-            return
-
-        from engine.agent_core.artifacts import build_agent_plan_artifact
-
-        artifact = build_agent_plan_artifact(directive, identity=artifact_identity)
-        if artifact.id in emitted_ids:
-            return
-        emitted_ids.add(artifact.id)
-        if hasattr(agent_state, "artifacts"):
-            agent_state.artifacts.append(artifact)
-
-        try:
-            from engine.models import AgentArtifactRecord
-            existing_count = self.db.query(AgentArtifactRecord).filter(
-                AgentArtifactRecord.run_id == run_id
-            ).count()
-            agent_persistence.record_artifact(
-                self.db, session_id, run_id, artifact, sequence=existing_count + 1
-            )
-        except Exception as exc:
-            logger.warning("Failed to save plan artifact for run %s: %s", run_id, exc)
-
-        yield emit("agent.artifact.created", artifact=artifact)
 
     def _artifacts_from_state(
         self, final_state: dict[str, Any], agent_state: Any

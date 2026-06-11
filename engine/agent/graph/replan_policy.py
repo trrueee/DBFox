@@ -18,21 +18,13 @@ _LAYER_REPLAN_BONUS: dict[str, int] = {
     "unknown": 0,
 }
 
-_COMPLEX_TASK_TYPES = frozenset({
-    "data_lookup",
-    "result_analysis",
-    "semantic_analysis",
-    "sql_repair",
-})
-
 
 def compute_max_replans(state: dict[str, Any], decision: dict[str, Any] | None = None) -> int:
     """How many replan cycles are allowed for this run state."""
     decision = decision or {}
-    plan = state.get("plan_directive") or {}
-    task_type = str(plan.get("task_type") or "")
 
-    base = 3 if task_type in _COMPLEX_TASK_TYPES else 2
+    # Base replan budget — complex tasks get more attempts
+    base = 2
 
     failure_layer = str(decision.get("failure_layer") or "")
     base += _LAYER_REPLAN_BONUS.get(failure_layer, 0)

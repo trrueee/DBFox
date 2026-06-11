@@ -21,7 +21,8 @@ import { useApiConfig, getStoredApiConfig } from "./components/SettingsDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import TitleBar from "./components/TitleBar";
-import { agentApi, resolveAgentApproval, streamResumeAgentRun, testLlmConnection } from "./lib/api/agent";
+import { agentApi, resolveAgentApproval, streamResumeAgentRun, testLlmConnection, mergeArtifactDelta } from "./lib/api/agent";
+import { BASE_URL } from "./lib/api/client";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "./lib/api/types";
 import {
   buildAnswerText,
@@ -67,6 +68,8 @@ export default function App() {
   const tabsRef = useRef<WorkspaceTab[]>(tabs);
   const conversationsRef = useRef<Conversation[]>(conversations);
   const msgIdSeq = useRef(Date.now());
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const runIdsRef = useRef<Map<string, string>>(new Map()); // tabId -> runId for cancel/regenerate
   useEffect(() => { tabsRef.current = tabs; }, [tabs]);
   useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   const nextMsgId = () => ++msgIdSeq.current;
@@ -352,6 +355,15 @@ export default function App() {
         artifactsBox.list = mergeApiArtifacts(artifactsBox.list, [event.artifact]);
         patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });
       }
+      if (event.type === "agent.artifact.delta" && event.artifact_delta) {
+        const delta = event.artifact_delta as { artifact_id?: string; payload_merge?: Record<string, unknown> };
+        const artifactId = delta.artifact_id;
+        const payloadMerge = delta.payload_merge;
+        if (artifactId && payloadMerge) {
+          artifactsBox.list = mergeArtifactDelta(artifactsBox.list, artifactId, payloadMerge);
+          patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });
+        }
+      }
     };
   };
 
@@ -361,6 +373,10 @@ export default function App() {
     response: AgentRunResponse,
     apiArtifacts: ApiAgentArtifact[],
   ) => {
+    // Store run_id for cancel/regenerate
+    if (response.run_id) {
+      runIdsRef.current.set(tabId, response.run_id);
+    }
     const merged = mergeApiArtifacts(apiArtifacts, response.artifacts || []);
     const viewArtifacts = toViewArtifacts(merged);
 
@@ -404,6 +420,8 @@ export default function App() {
       agentSessionId: response.session_id,
       agentStatus: succeeded ? "completed" : "failed",
       agentApproval: null,
+      agentAnswer: response.answer || null,
+      agentSuggestions: response.suggestions || null,
     });
     persistTabConversation(tabId);
   };
@@ -448,6 +466,7 @@ export default function App() {
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
     const abortController = new AbortController();
+    abortControllersRef.current.set(tabId, abortController);
     const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
     try {
       const response = await agentApi.streamAgentQuery(
@@ -471,6 +490,7 @@ export default function App() {
       persistTabConversation(tabId);
     } finally {
       window.clearTimeout(timeoutId);
+      abortControllersRef.current.delete(tabId);
     }
   };
 
@@ -558,6 +578,39 @@ export default function App() {
     void runAgentForTab(tabId, content, {
       sessionId: targetTab?.agentSessionId,
       parentRunId: targetTab?.agentRunId,
+    });
+  };
+
+  const cancelAgentRun = async (tabId: string) => {
+    // 1. Abort the fetch/SSE stream
+    const ctrl = abortControllersRef.current.get(tabId);
+    if (ctrl) {
+      ctrl.abort();
+      abortControllersRef.current.delete(tabId);
+    }
+    // 2. Tell the backend to mark the run as cancelled
+    const runId = runIdsRef.current.get(tabId);
+    if (runId) {
+      try {
+        await fetch(`${BASE_URL}/agent/runs/${runId}/cancel`, { method: "POST" });
+      } catch { /* best-effort */ }
+      runIdsRef.current.delete(tabId);
+    }
+    // 3. Update UI
+    updateTabMessage(tabId, -1, "已取消。");
+    patchTab(tabId, { agentStatus: "failed", agentApproval: null });
+    persistTabConversation(tabId);
+  };
+
+  const regenerateAgentRun = (tabId: string) => {
+    const targetTab = tabsRef.current.find((tab) => tab.id === tabId);
+    if (!targetTab) return;
+    // Re-run the original question with follow-up context from the previous run
+    const originalQuestion = targetTab.queryText || targetTab.chatMessages?.find(m => m.sender === "user")?.text || "";
+    if (!originalQuestion) return;
+    void runAgentForTab(tabId, originalQuestion, {
+      sessionId: targetTab.agentSessionId,
+      parentRunId: targetTab.agentRunId,
     });
   };
 
@@ -743,6 +796,8 @@ export default function App() {
         onSendFollowUp={sendFollowUp}
         onApproveAgent={(tabId) => void handleApprovalDecision(tabId, true)}
         onRejectAgent={(tabId) => void handleApprovalDecision(tabId, false)}
+        onCancelRun={cancelAgentRun}
+        onRegenerateRun={regenerateAgentRun}
         onToast={showToast}
       />
     );
@@ -924,7 +979,6 @@ function LlmConfigTabContent({ showToast }: { showToast: (msg: string) => void }
           showToast("LLM 配置保存成功");
         }}
         onTestConnection={async () => {
-          const toastId = `llm-test-${Date.now()}`;
           showToast("正在测试与模型接口握手…");
           try {
             const result = await testLlmConnection(

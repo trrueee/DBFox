@@ -24,12 +24,14 @@ def _prepare_waiting_run(db_session, test_datasource, monkeypatch):
         "latencyMs": 1,
         "schemaValidationWarnings": [],
     })
+    import uuid
+    session_id = f"resume-session-{uuid.uuid4()}"
     response = DataBoxAgentRuntime(db_session).run(
         AgentRunRequest(
             datasource_id=test_datasource.id,
             question="list users",
             execute=True,
-            session_id="resume-session",
+            session_id=session_id,
         )
     )
     approval = agent_persistence.get_pending_approval_for_run(db_session, response.run_id)
@@ -62,13 +64,16 @@ def test_approved_resume_continues_from_execute_sql(db_session, test_datasource,
     assert resolved.status == "approved"
 
     events = list(DataBoxAgentRuntime(db_session).resume_iter(response.run_id, approval.id))
+    print("\n--- RESUME EVENTS ---")
+    for ev in events:
+        print(f"  Event: type={ev.type}, step={ev.step}")
     final = events[-1]
     assert final.type == "agent.run.completed"
     assert final.response is not None
     assert final.response.success is True
     assert final.response.status == "success"
-    assert final.response.execution is not None
-    assert final.response.execution["success"] is True
+    print(f"\n[DEBUG] execution payload: {final.response.execution}")
+    assert final.response.execution.get("success") is True
     assert final.response.result_profile is not None
     assert final.response.chart_suggestion is not None
     assert final.response.answer is not None
