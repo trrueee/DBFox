@@ -438,6 +438,7 @@ def test_agent_run_stream_endpoint_returns_sse_final_response(client, test_datas
     assert [payload["sequence"] for payload in payloads] == list(range(1, len(payloads) + 1))
     final_response = payloads[-1]["response"]
     assert final_response["success"] is True
+
     assert final_response["run_id"] == payloads[-1]["run_id"]
     assert final_response["sql"].upper().startswith("SELECT")
     assert [step["name"] for step in final_response["steps"]] == [
@@ -469,6 +470,37 @@ def test_agent_run_stream_endpoint_returns_sse_final_response(client, test_datas
     assert [artifact["semantic_id"] for artifact in final_response["artifacts"]] == [
         artifact["semantic_id"] for artifact in fallback["artifacts"]
     ]
+
+
+def test_agent_run_stream_normalizes_llm_auth_errors(client, test_datasource, monkeypatch) -> None:
+    from engine.api import agent as agent_api
+
+    class FailingRuntime:
+        def __init__(self, db) -> None:
+            pass
+
+        def run_iter(self, req):
+            raise RuntimeError(
+                "Error code: 401 - {'error': {'message': 'Incorrect API key provided', "
+                "'code': 'invalid_api_key'}}"
+            )
+            yield
+
+    monkeypatch.setattr(agent_api, "DataBoxAgentRuntime", FailingRuntime)
+
+    resp = client.post("/api/v1/agent/run/stream", json={
+        "datasource_id": test_datasource.id,
+        "question": "hello",
+        "execute": False,
+        "api_key": "sk-test",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    payload = json.loads(resp.text.strip().splitlines()[-1].removeprefix("data: "))
+    assert payload["type"] == "agent.run.failed"
+    assert payload["code"] == "LLM_AUTH_ERROR"
+    assert "API Key" in payload["error"]
+
 
 def test_agent_run_endpoint_accepts_followup_context(client, test_datasource, monkeypatch) -> None:
     _mock_sql_generation(monkeypatch, sql="SELECT role, COUNT(*) AS cnt FROM users GROUP BY role")
@@ -666,3 +698,28 @@ def test_cancel_unknown_query(client) -> None:
     assert data["success"] is False
     assert data["cancelled"] is False
     assert data["executionId"] == "missing-execution-id"
+
+
+def test_conversations_crud(client) -> None:
+    payload = {
+        "id": "conversation-test-1",
+        "title": "??",
+        "created_at": 1_700_000_000_000,
+        "updated_at": 1_700_000_100_000,
+        "context_tables_json": "[]",
+        "messages_json": '[{"id":"m1","role":"user","content":"??","createdAt":1}]',
+        "artifacts_json": "[]",
+    }
+    resp = client.put("/api/v1/conversations/conversation-test-1", json=payload, headers=_headers())
+    assert resp.status_code == 200
+
+    resp = client.get("/api/v1/conversations", headers=_headers())
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["title"] == "??"
+
+    resp = client.delete("/api/v1/conversations/conversation-test-1", headers=_headers())
+    assert resp.status_code == 200
+    resp = client.get("/api/v1/conversations", headers=_headers())
+    assert resp.json() == []

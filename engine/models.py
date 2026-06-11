@@ -650,3 +650,18 @@ class AgentEvalCaseResult(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     eval_run = relationship("AgentEvalRun", back_populates="case_results")
+
+
+class ChatConversation(Base):  # type: ignore[misc,valid-type]
+    """Local chat session history mirrored from the desktop UI."""
+
+    __tablename__ = "chat_conversations"
+    __table_args__ = (Index("ix_chat_conversations_updated_at", "updated_at"),)
+
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    created_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+    context_tables_json = Column(Text, nullable=False, default="[]")
+    messages_json = Column(Text, nullable=False, default="[]")
+    artifacts_json = Column(Text, nullable=False, default="[]")

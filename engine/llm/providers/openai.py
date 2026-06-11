@@ -26,6 +26,7 @@ def create_openai_client(
         "api_key": api_key,
         "base_url": api_base,
         "timeout": timeout,
+        "max_retries": 0,
     }
 
     if not is_reasoning:

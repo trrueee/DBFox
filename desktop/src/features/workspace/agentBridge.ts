@@ -207,8 +207,16 @@ function formatCell(value: unknown): string {
 
 export function describeRuntimeEvent(event: AgentRuntimeEvent): string | null {
   if (event.type === "agent.run.started") return "思考中…";
-  if (event.type === "agent.step.started") {
-    return "思考中…";
+  if (event.type === "agent.step.started") return "思考中…";
+  if (event.type === "agent.context.update") {
+    const summary = event.step?.summary;
+    if (typeof summary === "string" && summary.trim()) return summary.trim();
+  }
+  if (event.type === "agent.step.completed") {
+    const summary = event.step?.summary;
+    if (typeof summary === "string" && summary.trim()) return summary.trim();
+    const name = event.step?.name;
+    if (typeof name === "string" && name.trim()) return `正在处理：${name}`;
   }
   return null;
 }

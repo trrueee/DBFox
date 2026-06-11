@@ -30,6 +30,7 @@ from engine.agent_core.types import (
 from engine.agent_core.events import EventEmitter
 from engine.db import get_db
 from engine.errors import DataBoxError
+from engine.llm.errors import llm_error_from_exception
 
 logger = logging.getLogger("databox.api.agent")
 router = APIRouter()
@@ -45,14 +46,15 @@ def _check_llm_credentials(req: AgentRunRequest) -> None:
         return
     key = (req.api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
     if not key:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "NO_LLM_KEY", "message": "Agent requires a configured LLM API key."},
-        )
+        raise DataBoxError("请先在设置中配置 LLM API Key。", code="NO_LLM_KEY")
 
 
 def _format_sse_event(event: AgentRuntimeEvent) -> str:
     return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
+
+
+def _http_detail(exc: DataBoxError) -> dict[str, str]:
+    return {"code": exc.code, "message": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -111,12 +113,15 @@ def api_get_run_checkpoints(run_id: str, db: Session = Depends(get_db)) -> list[
 
 @router.post("/agent/run", response_model=AgentRunResponse)
 def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentRunResponse:
-    _check_llm_credentials(req)
     try:
+        _check_llm_credentials(req)
         return DataBoxAgentRuntime(db).run(req)
     except DataBoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        raise HTTPException(status_code=400, detail=_http_detail(exc))
     except Exception as exc:
+        llm_error = llm_error_from_exception(exc)
+        if llm_error is not None:
+            raise HTTPException(status_code=400, detail=_http_detail(llm_error))
         logger.exception("Agent runtime failed")
         raise HTTPException(
             status_code=500,
@@ -137,6 +142,9 @@ def api_agent_run_resume(
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
         db.rollback()
+        llm_error = llm_error_from_exception(exc)
+        if llm_error is not None:
+            raise HTTPException(status_code=400, detail=_http_detail(llm_error))
         logger.exception("Agent runtime resume failed")
         raise HTTPException(
             status_code=500,
@@ -209,6 +217,20 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
             }
             yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
         except Exception as exc:
+            llm_error = llm_error_from_exception(exc)
+            if llm_error is not None:
+                payload = {
+                    "event_id": "runtime_error_llm",
+                    "run_id": "",
+                    "sequence": 1,
+                    "created_at_ms": 0,
+                    "type": "agent.run.failed",
+                    "error": str(llm_error),
+                    "response": None,
+                    "code": llm_error.code,
+                }
+                yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+                return
             logger.exception("Agent runtime stream failed")
             payload = {
                 "event_id": "runtime_error_unhandled",
@@ -255,6 +277,20 @@ def api_agent_run_resume_stream(
             }
             yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
         except Exception as exc:
+            llm_error = llm_error_from_exception(exc)
+            if llm_error is not None:
+                payload = {
+                    "event_id": "runtime_resume_error_llm",
+                    "run_id": run_id,
+                    "sequence": 1,
+                    "created_at_ms": 0,
+                    "type": "agent.run.failed",
+                    "error": str(llm_error),
+                    "response": None,
+                    "code": llm_error.code,
+                }
+                yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+                return
             logger.exception("Agent runtime resume stream failed")
             payload = {
                 "event_id": "runtime_resume_error_unhandled",

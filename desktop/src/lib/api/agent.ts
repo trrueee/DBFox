@@ -262,7 +262,10 @@ async function streamAgentEndpoint(
           if (event.response) {
             finalResponse = event.response;
           } else if (event.type === "agent.run.failed") {
-            throw new Error(event.error || "Agent stream failed.");
+            const failed = event as AgentRuntimeEvent & { code?: string };
+            const error = new Error(failed.error || "Agent stream failed.") as Error & { code?: string };
+            error.code = failed.code;
+            throw error;
           }
         }
       }

@@ -407,6 +407,18 @@ export default function App() {
     persistTabConversation(tabId);
   };
 
+  const formatAgentError = (err: unknown): string => {
+    if (!(err instanceof Error)) return "AI 分析失败";
+    const coded = err as Error & { code?: string };
+    if (coded.code === "NO_LLM_KEY") {
+      return "请先在右上角「设置 → LLM 配置」中填写 API Key 与模型，保存后重试。";
+    }
+    if (err.name === "AbortError") {
+      return "请求超时：LLM 响应过慢或网络异常，请检查 API Key、模型与网络后重试。";
+    }
+    return err.message.replace(/agent\s*runtime\s*failed:?/i, "服务请求出错:");
+  };
+
   const runAgentForTab = async (
     tabId: string,
     question: string,
@@ -415,14 +427,27 @@ export default function App() {
     if (!activeDatasourceId) {
       appendTabMessages(tabId, [{ id: nextMsgId(), sender: "ai", text: "请先在左侧选择并连接一个数据源，然后重试。" }]);
       patchTab(tabId, { agentStatus: "failed" });
+      persistTabConversation(tabId);
       return;
     }
     const llm = getStoredApiConfig();
+    if (!llm.apiKey?.trim()) {
+      appendTabMessages(tabId, [{
+        id: nextMsgId(),
+        sender: "ai",
+        text: "请先在右上角「设置 → LLM 配置」中填写 API Key 与模型，保存后重试。",
+      }]);
+      patchTab(tabId, { agentStatus: "failed" });
+      persistTabConversation(tabId);
+      return;
+    }
     const progressId = nextMsgId();
     appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: "思考中…" }]);
     patchTab(tabId, { agentStatus: "running", agentApproval: null });
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
+    const abortController = new AbortController();
+    const timeoutId = window.setTimeout(() => abortController.abort(), 90_000);
     try {
       const response = await agentApi.streamAgentQuery(
         activeDatasourceId,
@@ -436,14 +461,15 @@ export default function App() {
           workspaceContext: { datasource_id: activeDatasourceId, selected_table_names: contextTables },
           execute: true,
         },
-        { onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox) },
+        { signal: abortController.signal, onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox) },
       );
       finishAgentRun(tabId, progressId, response, artifactsBox.list);
     } catch (err) {
-      const message = err instanceof Error ? err.message.replace(/agent\s*runtime\s*failed:?/i, "服务请求出错:") : "AI 分析失败";
-      updateTabMessage(tabId, progressId, `执行失败：${message}`);
+      updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err)}`);
       patchTab(tabId, { agentStatus: "failed", agentApproval: null });
       persistTabConversation(tabId);
+    } finally {
+      window.clearTimeout(timeoutId);
     }
   };
 
