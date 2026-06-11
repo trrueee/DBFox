@@ -6,7 +6,9 @@ import { SuggestionChips } from "./SuggestionChips";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Separator } from "../../components/ui/separator";
+import { AgentTaskLensPanel } from "./AgentTaskLens";
 import type { ChatMessage, ActivityStepState } from "./useAgentChat";
+import type { AgentTaskLens } from "../../lib/api";
 import type { AgentArtifact, AgentApproval, FollowUpSuggestion, AgentRunResponse } from "../../lib/api";
 
 interface MessageListProps {
@@ -54,8 +56,18 @@ export function MessageList({
                 onInsertSql={onInsertSql} onRunSql={onRunSql} onExplainSql={onExplainSql} />
             );
           case "activity":
-            return <ActivityBubble key={msg.id} label={msg.label} steps={msg.steps}
-              status={msg.status} collapsed={msg.collapsed} />;
+            return (
+              <ActivityBubble
+                key={msg.id}
+                label={msg.label}
+                steps={msg.steps}
+                status={msg.status}
+                collapsed={msg.collapsed}
+                contextSummary={msg.contextSummary}
+                taskLens={msg.taskLens}
+                repairMode={msg.repairMode}
+              />
+            );
           case "approval":
             return <ApprovalBubble key={msg.id} runId={msg.runId} approval={approval}
               onResume={onResumeApproval} onReject={onRejectApproval} />;
@@ -175,10 +187,11 @@ function ArtifactBubble({
 
 // ── Activity Bubble ──
 function ActivityBubble({
-  label, steps, status, collapsed: initialCollapsed,
+  label, steps, status, collapsed: initialCollapsed, contextSummary, taskLens, repairMode,
 }: {
   label: string; steps: ActivityStepState[];
   status: "running" | "completed" | "failed"; collapsed: boolean;
+  contextSummary?: string | null; taskLens?: AgentTaskLens | null; repairMode?: boolean;
 }) {
   const [expanded, setExpanded] = useState(!initialCollapsed);
 
@@ -195,6 +208,9 @@ function ActivityBubble({
           {status === "failed" && <span className="text-[hsl(var(--destructive))]">✗</span>}
         </span>
         <span className="font-medium">{status === "running" ? label : "已完成"}</span>
+        {repairMode && status === "running" && (
+          <Badge variant="outline" className="text-[0.58rem] py-0 px-1 h-4">SQL repair</Badge>
+        )}
         {steps.length > 0 && (
           <span className="ml-auto flex items-center gap-1 text-[0.6rem] text-[hsl(var(--muted-foreground))]">
             {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
@@ -202,6 +218,16 @@ function ActivityBubble({
           </span>
         )}
       </button>
+      {status === "running" && taskLens ? (
+        <div className="mt-0.5 ml-[22px]">
+          <AgentTaskLensPanel taskLens={taskLens} compact />
+        </div>
+      ) : null}
+      {contextSummary && status === "running" && !taskLens?.current_focus && (
+        <div className="mt-0.5 ml-[22px] text-[0.62rem] text-[hsl(var(--muted-foreground))] leading-snug">
+          {contextSummary}
+        </div>
+      )}
       {expanded && steps.length > 0 && (
         <div className="mt-1 ml-[22px] flex flex-col gap-0.5">
           {steps.map((step) => (

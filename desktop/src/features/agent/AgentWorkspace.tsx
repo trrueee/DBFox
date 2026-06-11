@@ -3,6 +3,7 @@ import { ArtifactInspector } from "./ArtifactInspector";
 import { AgentComposer } from "./AgentComposer";
 import { AgentNarrativeStream } from "./AgentNarrativeStream";
 import { ApprovalCard } from "./ApprovalCard";
+import { AgentRunTimeline } from "./AgentRunTimeline";
 import { AgentStepTimeline } from "./AgentStepTimeline";
 import { TraceDrawer } from "./TraceDrawer";
 import type { AgentRunDraftState, AgentRunResponse, AgentRuntimeEvent, AgentStep, AgentVisibleEvent, AgentWorkspaceContext, FollowUpSuggestion } from "./types";
@@ -94,6 +95,19 @@ export function AgentWorkspace({
 
       {/* Workspace Context Indicator (Horizontal & Compact) */}
       <WorkspaceContextIndicator context={workspaceContext} />
+
+      {/* Live run timeline — execution trace, not an approval plan */}
+      {(isRunningDraft || steps.length > 0 || (draft?.events?.length || 0) > 0) ? (
+        <AgentRunTimeline
+          steps={steps}
+          runtimeEvents={draft?.events || []}
+          artifacts={artifacts}
+          contextSummary={contextPackSummary(result, draft)}
+          taskLens={taskLensFromDraft(result, draft)}
+          onOpenArtifact={handleOpenArtifact}
+          onOpenSql={onOpenSql}
+        />
+      ) : null}
 
       {/* Chat Narrative Feed */}
       <div style={{ flex: 1, minHeight: 0 }}>
@@ -294,6 +308,36 @@ function WorkspaceContextIndicator({ context }: { context?: AgentWorkspaceContex
       {selectedArtifact && <span><span>Selected artifact</span>: <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>{selectedArtifact}</span></span>}
     </div>
   );
+}
+
+function contextPackSummary(
+  result?: AgentRunResponse | null,
+  draft?: AgentRunDraftState | null,
+): string | null {
+  return (
+    draft?.contextSummary
+    || result?.context_summary
+    || draft?.response?.context_summary
+    || null
+  );
+}
+
+function taskLensFromDraft(
+  result?: AgentRunResponse | null,
+  draft?: AgentRunDraftState | null,
+) {
+  if (draft?.taskLens) return draft.taskLens;
+  const canvas = result?.canvas || draft?.response?.canvas;
+  const lens = canvas && typeof canvas === "object" ? (canvas as Record<string, unknown>).task_lens : null;
+  if (!lens || typeof lens !== "object" || Array.isArray(lens)) return null;
+  return {
+    goal: typeof lens.goal === "string" ? lens.goal : undefined,
+    current_focus: typeof lens.current_focus === "string" ? lens.current_focus : undefined,
+    next_likely: typeof lens.next_likely === "string" ? lens.next_likely : undefined,
+    missing_evidence: Array.isArray(lens.missing_evidence)
+      ? lens.missing_evidence.filter((v): v is string => typeof v === "string")
+      : undefined,
+  };
 }
 
 function draftVisibleEvents(draft?: AgentRunDraftState | null): AgentVisibleEvent[] {

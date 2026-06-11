@@ -20,16 +20,16 @@ def _fake_select_sql(*_args, **_kwargs):
     }
 
 
-def _waiting_run(db_session, demo_datasource, monkeypatch):
-    sync_schema(db_session, demo_datasource.id)
-    demo_datasource.env = "prod"
+def _waiting_run(db_session, test_datasource, monkeypatch):
+    sync_schema(db_session, test_datasource.id)
+    test_datasource.env = "prod"
     db_session.commit()
     monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", _fake_select_sql)
 
     events = list(DataBoxAgentRuntime(db_session).run_iter(
         AgentRunRequest(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             question="list users",
             execute=True,
             session_id="approval-session",
@@ -43,8 +43,8 @@ def _waiting_run(db_session, demo_datasource, monkeypatch):
     return final.response, approval, events
 
 
-def test_prod_datasource_enters_waiting_approval_instead_of_failed(db_session, demo_datasource, monkeypatch) -> None:
-    response, approval, events = _waiting_run(db_session, demo_datasource, monkeypatch)
+def test_prod_datasource_enters_waiting_approval_instead_of_failed(db_session, test_datasource, monkeypatch) -> None:
+    response, approval, events = _waiting_run(db_session, test_datasource, monkeypatch)
 
     assert response.success is False
     assert response.status == "waiting_approval"
@@ -75,8 +75,8 @@ def test_prod_datasource_enters_waiting_approval_instead_of_failed(db_session, d
     assert checkpoints[0].next_step_name == "execute_sql"
 
 
-def test_pending_approval_cannot_resume(db_session, demo_datasource, monkeypatch) -> None:
-    response, approval, _events = _waiting_run(db_session, demo_datasource, monkeypatch)
+def test_pending_approval_cannot_resume(db_session, test_datasource, monkeypatch) -> None:
+    response, approval, _events = _waiting_run(db_session, test_datasource, monkeypatch)
 
     with pytest.raises(DataBoxError) as exc:
         DataBoxAgentRuntime(db_session).resume(response.run_id, approval.id)
@@ -84,8 +84,8 @@ def test_pending_approval_cannot_resume(db_session, demo_datasource, monkeypatch
     assert exc.value.code == "APPROVAL_PENDING"
 
 
-def test_rejected_approval_marks_run_failed_and_cannot_resolve_twice(db_session, demo_datasource, monkeypatch) -> None:
-    response, approval, _events = _waiting_run(db_session, demo_datasource, monkeypatch)
+def test_rejected_approval_marks_run_failed_and_cannot_resolve_twice(db_session, test_datasource, monkeypatch) -> None:
+    response, approval, _events = _waiting_run(db_session, test_datasource, monkeypatch)
 
     rejected = agent_persistence.resolve_approval(
         db_session,
@@ -111,9 +111,9 @@ def test_rejected_approval_marks_run_failed_and_cannot_resolve_twice(db_session,
     assert exc.value.code == "APPROVAL_ALREADY_RESOLVED"
 
 
-def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, demo_datasource, monkeypatch) -> None:
-    sync_schema(db_session, demo_datasource.id)
-    demo_datasource.env = "prod"
+def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, test_datasource, monkeypatch) -> None:
+    sync_schema(db_session, test_datasource.id)
+    test_datasource.env = "prod"
     db_session.commit()
     monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
 
@@ -125,7 +125,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
         "schemaValidationWarnings": [],
     })
     guardrail_response = DataBoxAgentRuntime(db_session).run(
-        AgentRunRequest(datasource_id=demo_datasource.id, question="delete users", execute=True, api_key="test-key")
+        AgentRunRequest(datasource_id=test_datasource.id, question="delete users", execute=True, api_key="test-key")
     )
     assert guardrail_response.success is False
     assert guardrail_response.status == "failed"
@@ -139,7 +139,7 @@ def test_guardrail_and_schema_hard_blockers_do_not_enter_approval(db_session, de
         "schemaValidationWarnings": [],
     })
     schema_response = DataBoxAgentRuntime(db_session).run(
-        AgentRunRequest(datasource_id=demo_datasource.id, question="bad column", execute=True, api_key="test-key")
+        AgentRunRequest(datasource_id=test_datasource.id, question="bad column", execute=True, api_key="test-key")
     )
     assert schema_response.success is False
     assert schema_response.status == "failed"

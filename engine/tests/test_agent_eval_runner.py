@@ -35,10 +35,10 @@ def _make_task(db_session, datasource_id, **overrides):
     return task
 
 
-def test_eval_runner_creates_run(db_session, demo_datasource):
-    task = _make_task(db_session, demo_datasource.id)
+def test_eval_runner_creates_run(db_session, test_datasource):
+    task = _make_task(db_session, test_datasource.id)
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=[task.id],
         execute=False,
     )
@@ -54,9 +54,9 @@ def test_eval_runner_creates_run(db_session, demo_datasource):
     assert db_run.status == "completed"
 
 
-def test_eval_runner_empty_tasks(db_session, demo_datasource):
+def test_eval_runner_empty_tasks(db_session, test_datasource):
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=["nonexistent"],
     )
     runner = AgentEvalRunner(db_session)
@@ -65,10 +65,10 @@ def test_eval_runner_empty_tasks(db_session, demo_datasource):
     assert result.status == "completed"
 
 
-def test_eval_runner_saves_case_result(db_session, demo_datasource):
-    task = _make_task(db_session, demo_datasource.id)
+def test_eval_runner_saves_case_result(db_session, test_datasource):
+    task = _make_task(db_session, test_datasource.id)
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=[task.id],
         execute=False,
     )
@@ -83,10 +83,10 @@ def test_eval_runner_saves_case_result(db_session, demo_datasource):
     assert cases[0].status in ("passed", "failed", "error")
 
 
-def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, demo_datasource, monkeypatch):
+def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, test_datasource, monkeypatch):
     task = _make_task(
         db_session,
-        demo_datasource.id,
+        test_datasource.id,
         expected_tools_json='["sql.validate"]',
     )
 
@@ -124,7 +124,7 @@ def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, dem
     monkeypatch.setattr("engine.evaluation.agent_eval.DataBoxAgentRuntime", FakeRuntime)
 
     result = AgentEvalRunner(db_session).run(
-        AgentEvalRunRequest(datasource_id=demo_datasource.id, task_ids=[task.id], execute=False)
+        AgentEvalRunRequest(datasource_id=test_datasource.id, task_ids=[task.id], execute=False)
     )
 
     assert result.case_results[0].status == "passed"
@@ -135,10 +135,10 @@ def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, dem
     assert "sql.validate" in json.loads(case.actual_tools_json)
 
 
-def test_eval_runner_execute_defaults_false(db_session, demo_datasource):
-    task = _make_task(db_session, demo_datasource.id)
+def test_eval_runner_execute_defaults_false(db_session, test_datasource):
+    task = _make_task(db_session, test_datasource.id)
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=[task.id],
         execute=False,
     )
@@ -151,12 +151,12 @@ def test_eval_runner_execute_defaults_false(db_session, demo_datasource):
     # execute=false should prevent SQL execution
 
 
-def test_eval_runner_source_filter(db_session, demo_datasource):
-    task_int = _make_task(db_session, demo_datasource.id, source="internal", tags_json='["x"]')
-    task_custom = _make_task(db_session, demo_datasource.id, source="custom", tags_json='["x"]', name="custom_task")
+def test_eval_runner_source_filter(db_session, test_datasource):
+    task_int = _make_task(db_session, test_datasource.id, source="internal", tags_json='["x"]')
+    task_custom = _make_task(db_session, test_datasource.id, source="custom", tags_json='["x"]', name="custom_task")
 
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         source="custom",
         execute=False,
     )
@@ -166,12 +166,12 @@ def test_eval_runner_source_filter(db_session, demo_datasource):
     assert result.case_results[0].task_id == task_custom.id
 
 
-def test_eval_runner_tag_filter(db_session, demo_datasource):
-    task_a = _make_task(db_session, demo_datasource.id, tags_json='["regression"]', name="reg_task")
-    task_b = _make_task(db_session, demo_datasource.id, tags_json='["other"]', name="other_task")
+def test_eval_runner_tag_filter(db_session, test_datasource):
+    task_a = _make_task(db_session, test_datasource.id, tags_json='["regression"]', name="reg_task")
+    task_b = _make_task(db_session, test_datasource.id, tags_json='["other"]', name="other_task")
 
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         tags=["regression"],
         execute=False,
     )
@@ -181,10 +181,10 @@ def test_eval_runner_tag_filter(db_session, demo_datasource):
     assert result.case_results[0].task_id == task_a.id
 
 
-def test_eval_run_preserves_summary(db_session, demo_datasource):
-    task = _make_task(db_session, demo_datasource.id)
+def test_eval_run_preserves_summary(db_session, test_datasource):
+    task = _make_task(db_session, test_datasource.id)
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=[task.id],
         execute=False,
     )
@@ -197,12 +197,12 @@ def test_eval_run_preserves_summary(db_session, demo_datasource):
     assert "pass_rate" in summary
 
 
-def test_eval_runner_merges_task_ids(db_session, demo_datasource):
-    task1 = _make_task(db_session, demo_datasource.id, name="t1")
-    task2 = _make_task(db_session, demo_datasource.id, name="t2")
-    task3 = _make_task(db_session, demo_datasource.id, name="t3")
+def test_eval_runner_merges_task_ids(db_session, test_datasource):
+    task1 = _make_task(db_session, test_datasource.id, name="t1")
+    task2 = _make_task(db_session, test_datasource.id, name="t2")
+    task3 = _make_task(db_session, test_datasource.id, name="t3")
     req = AgentEvalRunRequest(
-        datasource_id=demo_datasource.id,
+        datasource_id=test_datasource.id,
         task_ids=[task1.id, task3.id],
         execute=False,
     )

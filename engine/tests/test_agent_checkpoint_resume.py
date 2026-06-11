@@ -12,9 +12,9 @@ from engine.models import AgentRun
 from engine.schema_sync import sync_schema
 
 
-def _prepare_waiting_run(db_session, demo_datasource, monkeypatch):
-    sync_schema(db_session, demo_datasource.id)
-    demo_datasource.env = "prod"
+def _prepare_waiting_run(db_session, test_datasource, monkeypatch):
+    sync_schema(db_session, test_datasource.id)
+    test_datasource.env = "prod"
     db_session.commit()
     monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", lambda *_args, **_kwargs: {
@@ -26,7 +26,7 @@ def _prepare_waiting_run(db_session, demo_datasource, monkeypatch):
     })
     response = DataBoxAgentRuntime(db_session).run(
         AgentRunRequest(
-            datasource_id=demo_datasource.id,
+            datasource_id=test_datasource.id,
             question="list users",
             execute=True,
             session_id="resume-session",
@@ -37,8 +37,8 @@ def _prepare_waiting_run(db_session, demo_datasource, monkeypatch):
     return response, approval
 
 
-def test_checkpoint_state_restores_sql_safety_and_query_plan(db_session, demo_datasource, monkeypatch) -> None:
-    response, _approval = _prepare_waiting_run(db_session, demo_datasource, monkeypatch)
+def test_checkpoint_state_restores_sql_safety_and_query_plan(db_session, test_datasource, monkeypatch) -> None:
+    response, _approval = _prepare_waiting_run(db_session, test_datasource, monkeypatch)
 
     payload = agent_persistence.get_latest_checkpoint_payload(db_session, response.run_id)
     assert payload is not None
@@ -50,8 +50,8 @@ def test_checkpoint_state_restores_sql_safety_and_query_plan(db_session, demo_da
     assert state["safety"]["can_execute"] is False
 
 
-def test_approved_resume_continues_from_execute_sql(db_session, demo_datasource, monkeypatch) -> None:
-    response, approval = _prepare_waiting_run(db_session, demo_datasource, monkeypatch)
+def test_approved_resume_continues_from_execute_sql(db_session, test_datasource, monkeypatch) -> None:
+    response, approval = _prepare_waiting_run(db_session, test_datasource, monkeypatch)
     resolved = agent_persistence.resolve_approval(
         db_session,
         run_id=response.run_id,
@@ -100,9 +100,9 @@ def test_approved_resume_continues_from_execute_sql(db_session, demo_datasource,
     assert run_row.status == "success"
 
 
-def test_approval_must_belong_to_run_for_resume(db_session, demo_datasource, monkeypatch) -> None:
-    first_response, _first_approval = _prepare_waiting_run(db_session, demo_datasource, monkeypatch)
-    second_response, second_approval = _prepare_waiting_run(db_session, demo_datasource, monkeypatch)
+def test_approval_must_belong_to_run_for_resume(db_session, test_datasource, monkeypatch) -> None:
+    first_response, _first_approval = _prepare_waiting_run(db_session, test_datasource, monkeypatch)
+    second_response, second_approval = _prepare_waiting_run(db_session, test_datasource, monkeypatch)
     agent_persistence.resolve_approval(
         db_session,
         run_id=second_response.run_id,
@@ -116,8 +116,8 @@ def test_approval_must_belong_to_run_for_resume(db_session, demo_datasource, mon
     assert exc.value.code == "APPROVAL_RUN_MISMATCH"
 
 
-def test_resume_sse_event_payloads_are_json_serializable(db_session, demo_datasource, monkeypatch) -> None:
-    response, approval = _prepare_waiting_run(db_session, demo_datasource, monkeypatch)
+def test_resume_sse_event_payloads_are_json_serializable(db_session, test_datasource, monkeypatch) -> None:
+    response, approval = _prepare_waiting_run(db_session, test_datasource, monkeypatch)
     agent_persistence.resolve_approval(
         db_session,
         run_id=response.run_id,

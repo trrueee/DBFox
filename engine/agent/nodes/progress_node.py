@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.progress.prompts import PROGRESS_JUDGE_SYSTEM_PROMPT
+from engine.agent.progress.clarification_policy import should_progress_clarify
 from engine.agent.skills.registry import get_skill_registry
 from engine.agent.skills.renderer import render_recovery_for_progress
 from engine.llm import get_chat_model
@@ -46,7 +47,12 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
     # ---- Fast path: escalate.tool_group was called --------------------------
     escalate_result = _check_escalate(state)
     if escalate_result:
-        return escalate_result
+        return _enrich_progress_result(escalate_result, state)
+
+    # ---- Fast path: SQL / schema repair without LLM judge -------------------
+    repair_result = _check_sql_repair_fastpath(state)
+    if repair_result:
+        return _enrich_progress_result(repair_result, state)
 
     # ---- Build the judgment context -----------------------------------------
     context_parts = ["## Progress Judgment Request"]
@@ -235,11 +241,36 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
         trace["root_cause"] = decision.root_cause
     if decision.recovery_strategy:
         trace["recovery_strategy"] = decision.recovery_strategy
+    if decision.next_action_hint:
+        trace["next_action_hint"] = decision.next_action_hint
+    if decision.missing_evidence:
+        trace["missing_evidence"] = decision.missing_evidence
+    if decision.user_visible_update:
+        trace["user_visible_update"] = decision.user_visible_update
 
-    return {
-        "progress_decision": decision.model_dump(mode="json"),
+    decision_dump = decision.model_dump(mode="json")
+
+    # Apply clarification policy to LLM clarify decisions
+    if not should_progress_clarify(
+        failure_layer=decision.failure_layer,
+        root_cause=decision.root_cause,
+        progress_status=decision.status,
+    ):
+        decision_dump["status"] = "continue"
+        decision_dump["should_ask_user"] = False
+        decision_dump["clarification_question"] = None
+        if not decision_dump.get("next_action_hint"):
+            decision_dump["next_action_hint"] = (
+                decision.recovery_strategy
+                or "Explore schema and repair SQL before asking the user."
+            )
+        trace["status"] = "continue"
+        trace["clarification_suppressed"] = True
+
+    return _enrich_progress_result({
+        "progress_decision": decision_dump,
         "trace_events": [trace],
-    }
+    }, state)
 
 
 def _compact_json(obj: Any) -> str:
@@ -248,6 +279,89 @@ def _compact_json(obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False, default=str, separators=(",", ":"))
     except Exception:
         return str(obj)[:500]
+
+
+def _enrich_progress_result(result: dict[str, Any], state: DataBoxAgentState) -> dict[str, Any]:
+    """Attach visible_plan (Task Lens) and bump revision_count on repair continue."""
+    decision_raw = result.get("progress_decision") or {}
+    if not isinstance(decision_raw, dict):
+        return result
+
+    plan = state.get("plan_directive") or {}
+    user_text = _first_user_text(state)
+    visible = {
+        "goal": plan.get("reasoning_summary") or user_text[:120] or "Agent task",
+        "current_focus": (
+            decision_raw.get("user_visible_update")
+            or decision_raw.get("next_action_hint")
+            or decision_raw.get("reason_summary")
+            or ""
+        ),
+        "next_likely": decision_raw.get("next_action_hint") or "",
+        "missing_evidence": decision_raw.get("missing_evidence") or [],
+    }
+    result["visible_plan"] = visible
+
+    recovery = decision_raw.get("recovery_strategy")
+    next_groups = decision_raw.get("next_tool_groups") or []
+    if decision_raw.get("status") == "continue" and (recovery or next_groups):
+        if recovery:
+            result["revision_count"] = int(state.get("revision_count") or 0) + 1
+        if next_groups:
+            current_groups = list(state.get("allowed_tool_groups") or [])
+            merged = list(dict.fromkeys(current_groups + list(next_groups)))
+            result["allowed_tool_groups"] = merged
+            result["repair_mode"] = True
+
+    return result
+
+
+def _first_user_text(state: DataBoxAgentState) -> str:
+    messages = state.get("messages", [])
+    if not messages:
+        return ""
+    first = messages[0]
+    content = getattr(first, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [p.get("text", "") for p in content if isinstance(p, dict)]
+        return " ".join(parts).strip()
+    return ""
+
+
+def _check_sql_repair_fastpath(state: DataBoxAgentState) -> dict[str, Any] | None:
+    """Rule-based repair routing — coding-agent style before LLM judge."""
+    from engine.agent.repair.sql_repair import (
+        build_repair_trace_event,
+        plan_sql_repair,
+        repair_plan_to_progress_decision,
+    )
+
+    plan = plan_sql_repair(state)
+    if plan is None:
+        return None
+
+    attempt = int(state.get("revision_count") or 0) + 1
+    repair_trace = build_repair_trace_event(plan, attempt)
+    decision_dump = repair_plan_to_progress_decision(plan)
+
+    progress_trace: dict[str, Any] = {
+        "type": "agent.progress.judged",
+        "status": "continue",
+        "failure_layer": plan.failure_layer,
+        "root_cause": plan.root_cause,
+        "recovery_strategy": plan.recovery_strategy,
+        "user_visible_update": plan.user_visible_update,
+        "fastpath": True,
+        "error_class": plan.error_class,
+    }
+
+    return {
+        "progress_decision": decision_dump,
+        "repair_trace": [repair_trace],
+        "trace_events": [repair_trace, progress_trace],
+    }
 
 
 def _guess_failure_layer(error: str) -> str:

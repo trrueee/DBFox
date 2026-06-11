@@ -12,6 +12,7 @@ export type {
   AgentRunResponse,
   AgentRuntimeEvent,
   AgentStep,
+  AgentTaskLens,
   AgentTraceEvent,
   AgentVisibleEvent,
   AgentWorkspaceContext,

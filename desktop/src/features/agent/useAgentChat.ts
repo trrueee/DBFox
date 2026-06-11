@@ -1,10 +1,16 @@
 import { useCallback, useRef, useState } from "react";
-import { api } from "../../lib/api";
+import {
+  api,
+  createAgentRunDraft,
+  reduceAgentRuntimeEvent,
+} from "../../lib/api";
 import type {
   AgentArtifact,
   AgentRunConfig,
+  AgentRunDraftState,
   AgentRunResponse,
   AgentRuntimeEvent,
+  AgentTaskLens,
   AgentWorkspaceContext,
 } from "../../lib/api";
 
@@ -46,6 +52,9 @@ export interface ActivityChatMessage {
   steps: ActivityStepState[];
   status: "running" | "completed" | "failed";
   collapsed: boolean;
+  contextSummary?: string | null;
+  taskLens?: AgentTaskLens | null;
+  repairMode?: boolean;
   createdAt: number;
 }
 
@@ -81,6 +90,7 @@ export interface UseAgentChatOptions {
 
 export interface UseAgentChatReturn {
   messages: ChatMessage[];
+  draft: AgentRunDraftState | null;
   isRunning: boolean;
   finalResponse: AgentRunResponse | null;
   error: string | null;
@@ -108,6 +118,8 @@ const STEP_LABELS: Record<string, string> = {
   suggest_chart: "正在推荐图表…",
   suggest_followups: "正在生成后续建议…",
   answer_synthesizer: "正在整理回答…",
+  sql_repair: "正在修复 SQL…",
+  planner: "正在重新规划…",
 };
 
 function stepLabel(name: string): string {
@@ -121,12 +133,14 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
     options;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState<AgentRunDraftState | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [finalResponse, setFinalResponse] = useState<AgentRunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const msgRef = useRef<ChatMessage[]>([]);
+  const draftRef = useRef<AgentRunDraftState | null>(null);
 
   const append = useCallback((msg: ChatMessage) => {
     msgRef.current = [...msgRef.current, msg];
@@ -178,10 +192,18 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
       setError(null);
       setFinalResponse(null);
 
+      const initialDraft = createAgentRunDraft(question);
+      draftRef.current = initialDraft;
+      setDraft(initialDraft);
+
       const controller = new AbortController();
       abortRef.current = controller;
 
       const onEvent = (event: AgentRuntimeEvent) => {
+        if (draftRef.current) {
+          draftRef.current = reduceAgentRuntimeEvent(draftRef.current, event);
+          setDraft(draftRef.current);
+        }
         handleRuntimeEvent(event, {
           append,
           updateLastActivity,
@@ -243,6 +265,8 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
   const clear = useCallback(() => {
     abortRef.current?.abort();
     msgRef.current = [];
+    draftRef.current = null;
+    setDraft(null);
     setMessages([]);
     setFinalResponse(null);
     setError(null);
@@ -263,9 +287,17 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
       };
       append(activityMsg);
 
+      const resumeDraft = createAgentRunDraft("resume");
+      draftRef.current = resumeDraft;
+      setDraft(resumeDraft);
+
       api
         .streamResumeAgentRun(runId, approvalId, {
           onEvent: (event) => {
+            if (draftRef.current) {
+              draftRef.current = reduceAgentRuntimeEvent(draftRef.current, event);
+              setDraft(draftRef.current);
+            }
             handleRuntimeEvent(event, {
               append,
               updateLastActivity,
@@ -322,6 +354,7 @@ export function useAgentChat(options: UseAgentChatOptions): UseAgentChatReturn {
 
   return {
     messages,
+    draft,
     isRunning,
     finalResponse,
     error,
@@ -350,6 +383,59 @@ function handleRuntimeEvent(
   switch (event.type) {
     case "agent.run.started": {
       ctx.updateLastActivity((a) => ({ ...a, label: "正在理解问题…" }));
+      break;
+    }
+
+    case "agent.context.update": {
+      const summary = typeof event.step?.summary === "string" ? event.step.summary : null;
+      const repairMode = event.step?.repair_mode === true;
+      const rawLens = event.step?.task_lens;
+      const taskLens = rawLens && typeof rawLens === "object" && !Array.isArray(rawLens)
+        ? {
+            goal: typeof rawLens.goal === "string" ? rawLens.goal : undefined,
+            current_focus: typeof rawLens.current_focus === "string" ? rawLens.current_focus : undefined,
+            next_likely: typeof rawLens.next_likely === "string" ? rawLens.next_likely : undefined,
+            missing_evidence: Array.isArray(rawLens.missing_evidence)
+              ? rawLens.missing_evidence.filter((v): v is string => typeof v === "string")
+              : undefined,
+          }
+        : undefined;
+      if (summary || taskLens) {
+        ctx.updateLastActivity((a) => ({
+          ...a,
+          label: repairMode
+            ? "正在修复 SQL…"
+            : (taskLens?.current_focus || summary || a.label),
+          contextSummary: summary || a.contextSummary,
+          taskLens: taskLens || a.taskLens,
+          repairMode: repairMode || a.repairMode,
+        }));
+      }
+      break;
+    }
+
+    case "agent.progress.update": {
+      const step = event.step || {};
+      const name = typeof step.name === "string" ? step.name : "progress";
+      const summary = typeof step.summary === "string" ? step.summary : "";
+      const stepStatus = step.status === "failed"
+        ? "failed" as const
+        : step.status === "completed"
+          ? "completed" as const
+          : "running" as const;
+      const label = summary || stepLabel(name);
+      ctx.updateLastActivity((a) => {
+        const existing = a.steps.find((s) => s.name === name);
+        const nextSteps = existing
+          ? a.steps.map((s) => (s.name === name ? { ...s, label, status: stepStatus } : s))
+          : [...a.steps, { name, label, status: stepStatus }];
+        return {
+          ...a,
+          label: stepStatus === "running" ? label : a.label,
+          repairMode: name === "sql_repair" || a.repairMode,
+          steps: nextSteps,
+        };
+      });
       break;
     }
 

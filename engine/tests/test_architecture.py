@@ -128,7 +128,8 @@ def test_engine_agent_init_exports_runtime_only() -> None:
     unexpected = {u for u in unexpected
                   if u not in ("annotations", "app", "graph", "nodes", "planning",
                                "progress", "guardrails", "model", "tools", "runtime",
-                               "checkpoints", "environment", "events", "memory", "tests")}
+                               "checkpoints", "environment", "events", "memory", "tests",
+                               "skills")}
     assert not unexpected, (
         f"engine.agent exports unexpected names: {unexpected}. "
         f"Public types belong in engine.agent_core."

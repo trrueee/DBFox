@@ -11,6 +11,7 @@ from engine.agent_core.types import (
     AgentRunResponse,
     AgentRunCanvas,
     PlanCard,
+    TaskLensCard,
     ActivityStep,
     EvidenceItem,
     SafetyCheck,
@@ -89,10 +90,13 @@ def build_response(
     if isinstance(answer_raw, dict):
         explanation = str(answer_raw.get("answer") or "")
 
-    summary_text = build_response_context_summary(
-        req=req,
-        answer=explanation or (answer.answer if answer else None),
-        artifacts=artifacts or [],
+    summary_text = _merge_context_summaries(
+        state=state,
+        response_summary=build_response_context_summary(
+            req=req,
+            answer=explanation or (answer.answer if answer else None),
+            artifacts=artifacts or [],
+        ),
     )
 
     # Map raw trace events in state to AgentStep and AgentTraceEvent
@@ -427,6 +431,15 @@ def build_canvas(
             approval_status=approval_result.get("status"),
         ))
 
+    # ── Task Lens (live focus, not an approval plan) ───────────────────────
+    visible = state.get("visible_plan") or {}
+    task_lens = TaskLensCard(
+        goal=str(visible.get("goal") or "") if isinstance(visible, dict) else "",
+        current_focus=str(visible.get("current_focus") or "") if isinstance(visible, dict) else "",
+        next_likely=str(visible.get("next_likely") or "") if isinstance(visible, dict) else "",
+        missing_evidence=list(visible.get("missing_evidence") or []) if isinstance(visible, dict) else [],
+    )
+
     # ── Recovery Card ──────────────────────────────────────────────────────
     recovery: list[RecoveryRecord] = []
     progress = state.get("progress_decision") or {}
@@ -440,6 +453,25 @@ def build_canvas(
             outcome="recovered" if progress.get("status") == "replan" else "finalized_with_caveat",
         ))
 
+    repair_trace = state.get("repair_trace") or []
+    if isinstance(repair_trace, list):
+        repair_stats = state.get("repair_stats") or {}
+        for i, entry in enumerate(repair_trace):
+            if not isinstance(entry, dict):
+                continue
+            recovery.append(RecoveryRecord(
+                attempt=int(entry.get("attempt") or repair_stats.get("attempts") or i + 1),
+                failure_layer=str(entry.get("error_class") or repair_stats.get("last_error_class") or ""),
+                root_cause=str(entry.get("user_visible_update") or entry.get("detail") or ""),
+                recovery_strategy=str(
+                    entry.get("recovery_strategy")
+                    or repair_stats.get("recovery_strategy")
+                    or ""
+                ),
+                retry_budget=int(repair_stats.get("max_attempts") or 3),
+                outcome="recovered" if entry.get("type") == "agent.repair.prepared" else "in_progress",
+            ))
+
     # ── Assemble ───────────────────────────────────────────────────────────
     total_ms = sum(s.latency_ms for s in steps)
 
@@ -448,6 +480,7 @@ def build_canvas(
         session_id=session_id,
         status=status,
         plan=plan,
+        task_lens=task_lens,
         activity=activity,
         evidence=evidence,
         safety=safety_checks,
@@ -549,3 +582,34 @@ def _step_to_tool(step_name: str) -> str:
         "summarize_session": "memory.summarize_session",
     }
     return mapping.get(step_name, step_name)
+
+
+def _merge_context_summaries(*, state: dict[str, Any], response_summary: str) -> str:
+    """Prepend ContextPack ui_summary and visible plan focus to the response summary."""
+    parts: list[str] = []
+
+    pack = state.get("context_pack")
+    if isinstance(pack, dict):
+        ui_summary = pack.get("ui_summary")
+        if isinstance(ui_summary, str) and ui_summary.strip():
+            parts.append(ui_summary.strip())
+
+    visible = state.get("visible_plan") or {}
+    if isinstance(visible, dict):
+        focus = visible.get("current_focus")
+        if isinstance(focus, str) and focus.strip():
+            if not parts or focus.strip() not in parts[0]:
+                parts.append(f"Focus: {focus.strip()}")
+
+    repair_trace = state.get("repair_trace") or []
+    if isinstance(repair_trace, list) and repair_trace:
+        last = repair_trace[-1]
+        if isinstance(last, dict) and last.get("user_visible_update"):
+            repair_note = str(last["user_visible_update"])
+            if repair_note not in " ".join(parts):
+                parts.append(f"Repair: {repair_note}")
+
+    if response_summary:
+        parts.append(response_summary)
+
+    return " | ".join(parts) if parts else response_summary

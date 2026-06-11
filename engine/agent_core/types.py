@@ -24,6 +24,8 @@ AgentRuntimeEventType = Literal[
     "agent.run.started",
     "agent.step.started",
     "agent.step.completed",
+    "agent.progress.update",
+    "agent.context.update",
     "agent.artifact.created",
     "agent.answer.completed",
     "agent.run.completed",
@@ -394,6 +396,15 @@ class AgentRuntimeEvent(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+class TaskLensCard(BaseModel):
+    """Live task focus — driven by Progress Judge, not a step-by-step plan."""
+
+    goal: str = ""
+    current_focus: str = ""
+    next_likely: str = ""
+    missing_evidence: list[str] = Field(default_factory=list)
+
+
 class PlanCard(BaseModel):
     """What the agent plans to do — intent, scope, success definition."""
 
@@ -467,6 +478,7 @@ class AgentRunCanvas(BaseModel):
     status: str = ""  # running | completed | failed | waiting_approval | waiting_user
 
     plan: PlanCard = Field(default_factory=PlanCard)
+    task_lens: TaskLensCard = Field(default_factory=TaskLensCard)
     activity: list[ActivityStep] = Field(default_factory=list)
     evidence: list[EvidenceItem] = Field(default_factory=list)
     safety: list[SafetyCheck] = Field(default_factory=list)

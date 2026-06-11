@@ -48,7 +48,13 @@ def get_chat_model(
 
     This is the single entry point for ALL LLM access in the DataBox engine.
     """
-    key = (api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+    key = (
+        api_key
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("QWEN_API_KEY")
+        or os.environ.get("DATABOX_LLM_API_KEY")
+        or ""
+    ).strip()
     base = (
         api_base or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
     ).strip()

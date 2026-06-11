@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from langgraph.graph import END
 
+from engine.agent.graph.replan_policy import allow_replan
 from engine.agent.graph.state import DataBoxAgentState
 
 
@@ -63,12 +64,11 @@ def route_approval_output(state: DataBoxAgentState) -> Literal["tools", "model",
     return "progress"
 
 
-def route_progress_output(state: DataBoxAgentState) -> Literal["model", "planner", "finalize"]:
+def route_progress_output(state: DataBoxAgentState) -> Literal["model", "planner", "finalize", "repair"]:
     """After progress judge: complete/clarify → finalize; continue → model;
     replan → planner (with anti-loop limit + retry_budget check)."""
     decision = state.get("progress_decision") or {}
     status = decision.get("status", "failed")
-    retry_budget = int(decision.get("retry_budget", 0))
     replan_count = int(state.get("replan_count", 0))
 
     if status == "complete":
@@ -76,10 +76,11 @@ def route_progress_output(state: DataBoxAgentState) -> Literal["model", "planner
     if status == "clarify":
         return "finalize"
     if status == "continue":
+        if decision.get("recovery_strategy") or state.get("repair_mode"):
+            return "repair"
         return "model"
     if status == "replan":
-        # Anti-loop: max 2 replans total, AND retry_budget must be > 0
-        if replan_count < 2 and retry_budget > 0:
+        if allow_replan(state, decision):
             return "planner"
         return "finalize"
     # blocked / failed → finalize

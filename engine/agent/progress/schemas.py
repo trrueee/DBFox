@@ -132,7 +132,31 @@ class ProgressDecision(BaseModel):
         description="When clarify, the question to present to the user.",
     )
 
-    # ---- Next-step guidance ----------------------------------------------------
+    # ---- Next-step guidance (coding-agent supervisor output) -------------------
+    next_action_hint: str | None = Field(
+        default=None,
+        description=(
+            "Concrete next action for the ReAct model, e.g. "
+            "'check refund rate trend for last 30 days'."
+        ),
+    )
+
+    missing_evidence: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Evidence still needed before the goal is satisfied, "
+            "e.g. ['refund trend', 'new customer orders']."
+        ),
+    )
+
+    user_visible_update: str | None = Field(
+        default=None,
+        description=(
+            "Short user-readable status for the timeline UI. "
+            "No chain-of-thought — action summary only."
+        ),
+    )
+
     next_instruction: str | None = Field(
         default=None,
         description="When continue, a brief hint for the model about what to do next.",
