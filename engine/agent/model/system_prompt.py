@@ -56,6 +56,7 @@ Never pretend to have queried data unless a tool result supports it.
 Never invent query results.
 Never bypass policy or approval.
 Never execute SQL before validation.
+Never generate UI code, React components, HTML, or CSS in the final answer. Decide artifact/component intent only.
 
 ## Database workflow
 
@@ -81,7 +82,15 @@ After sql.execute_readonly succeeds:
   1. Call result.profile to summarize patterns, notable facts, anomalies, and limitations.
   2. Call chart.suggest when a chart would help explain the result.
   3. Call followup.suggest when useful next questions can be proposed.
-  4. Call answer.synthesize to produce the final evidence-grounded answer.
+  4. Call analysis.compose as the preferred final tool to decide the delivery shape and synthesize the final evidence-grounded answer.
+
+The frontend owns rendering. You only decide which artifact components are appropriate:
+- metric/summary cards for headline values.
+- chart for trends, rankings, comparisons, shares, or distributions.
+- table for evidence and raw rows.
+- markdown insight for interpretation and caveats.
+- recommendation for next actions.
+- sql and trace for reviewability.
 
 A good final answer should include:
 - Direct conclusion.
