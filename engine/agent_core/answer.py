@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.agent_core.analysis_composer import build_display_plan
 from engine.agent_core.recommendations import recommendation_texts
 from engine.agent_core.types import AgentAnswer, AnswerEvidence, FollowUpSuggestion, ResultProfile
 
@@ -15,7 +16,19 @@ def synthesize_agent_answer(
     result_profile: ResultProfile | None,
     suggestions: list[FollowUpSuggestion] | None = None,
     error: str | None = None,
+    chart_suggestion: dict[str, Any] | None = None,
 ) -> AgentAnswer:
+    display_plan = build_display_plan(
+        question=question,
+        sql=sql,
+        safety=safety,
+        execution=execution,
+        result_profile=result_profile,
+        chart_suggestion=chart_suggestion,
+        suggestions=list(suggestions or []),
+        error=error,
+    )
+
     if error:
         return AgentAnswer(
             answer=f"I could not complete the analysis because: {error}",
@@ -24,6 +37,7 @@ def synthesize_agent_answer(
             caveats=["No business conclusion was produced because the run did not complete successfully."],
             recommendations=recommendation_texts(suggestions or []),
             follow_up_questions=[suggestion.question for suggestion in (suggestions or [])],
+            display_plan=display_plan,
         )
 
     execution_success = bool((execution or {}).get("success"))
@@ -69,6 +83,7 @@ def synthesize_agent_answer(
         caveats=_dedupe(caveats)[:5],
         recommendations=recommendation_texts(suggestions or []),
         follow_up_questions=[suggestion.question for suggestion in (suggestions or [])],
+        display_plan=display_plan,
     )
 
 
