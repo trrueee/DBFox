@@ -349,3 +349,57 @@ def _apply_failed_telemetry(
         update["error"] = observation.error or f"{tool_name} failed."
     else:
         update["error"] = None
+
+
+# ---------------------------------------------------------------------------
+# State merging
+# ---------------------------------------------------------------------------
+#
+# merge_state is for streaming event view only, NOT the source of truth.
+# During streaming, it mirrors LangGraph's internal state accumulation so that
+# intermediate event emitters (plan_artifact_events, events_from_graph_update)
+# have access to the latest accumulated state.
+#
+# After the stream completes, app.get_state(config).values is the authoritative
+# source for final response/checkpoint/persistence.
+
+
+ADDITIVE_STATE_KEYS: frozenset[str] = frozenset({
+    "plan_events",
+    "tool_results",
+    "artifacts",
+    "trace_events",
+})
+
+MESSAGE_STATE_KEY: str = "messages"
+
+
+def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
+    """Accumulate node updates into a streaming event view (NOT source of truth)."""
+    for key, value in update.items():
+        if key == MESSAGE_STATE_KEY:
+            from langgraph.graph.message import add_messages
+
+            current = state.get(key, [])
+            state[key] = add_messages(current, value)
+        elif key in ADDITIVE_STATE_KEYS:
+            current = state.setdefault(key, [])
+            if isinstance(current, list) and isinstance(value, list):
+                current.extend(value)
+            else:
+                state[key] = value
+        else:
+            state[key] = value
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _artifact_event(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": f"artifact_{uuid4().hex}",
+        "tool_name": tool_name,
+        "payload": payload,
+    }
