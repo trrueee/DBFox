@@ -12,6 +12,7 @@ from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
+    build_recommendations_artifact,
     build_semantic_resolution_artifact,
     build_sql_suggestion_artifact,
     build_profile_artifact,
@@ -20,7 +21,7 @@ from engine.agent_core.artifacts import (
     build_sql_artifact,
     build_table_artifact,
 )
-from engine.agent_core.types import ResultProfile
+from engine.agent_core.types import AgentAnswer, ResultProfile
 
 logger = logging.getLogger("databox.databox_agent.nodes.observe_node")
 
@@ -39,6 +40,7 @@ def _tool_name_from_step(step_name: str) -> str:
         "suggest_chart": "chart.suggest",
         "suggest_followups": "followup.suggest",
         "answer_synthesizer": "answer.synthesize",
+        "analysis_compose": "analysis.compose",
     }
     return mapping.get(step_name, step_name)
 
@@ -130,6 +132,11 @@ def emit_artifacts_from_observation(
         and state.get("chart_suggestion", {}).get("type") != "table"
     ):
         artifacts.append(build_chart_artifact(state["chart_suggestion"], safety=state.get("safety"), identity=identity))
+
+    if step_name == "analysis_compose" and state.get("answer"):
+        answer = AgentAnswer.model_validate(state["answer"])
+        if answer.recommendations or answer.follow_up_questions:
+            artifacts.append(build_recommendations_artifact(answer, identity=identity))
 
     if step_name.startswith("workspace.") and observation.output:
         payload = dict(observation.output)
