@@ -2,13 +2,54 @@ name: chart.suggest
 group: chart
 kind: code
 description: >
-  Suggest a chart type and axis encoding based on execution result columns.
-  Use AFTER result.profile when visualization would help.
+  Decide whether a visualization helps and suggest a chart type, axis encoding,
+  and optional series payload based on execution result columns. Use AFTER
+  result.profile when visualization would help explain trends, rankings,
+  comparisons, shares, or distributions. The frontend renders the chart with a
+  fixed Plotly component; this tool must not return UI code.
 handler: chart_suggest
 input_schema:
   type: object
   description: This tool reads all required inputs from current agent state.
+output_schema:
+  type: object
+  description: Chart artifact contract for the frontend Plotly renderer.
+  properties:
+    type:
+      type: string
+      description: Chart type. Prefer line, bar, area, scatter, pie, or table.
+    x:
+      type: string
+      description: Suggested category/time/dimension column.
+    y:
+      type: string
+      description: Suggested numeric/measure column.
+    reason:
+      type: string
+      description: Why this visualization is useful or why table-only is better.
+    title:
+      type: string
+      description: Optional chart title.
+    unit:
+      type: string
+      description: Optional y-axis unit.
+    series:
+      type: array
+      description: Optional direct series points for frontend rendering.
+      items:
+        type: object
+        properties:
+          label:
+            type: string
+          value:
+            type: number
+        required: [label, value]
+        additionalProperties: true
+  required: [type, reason]
+  additionalProperties: true
 binding:
+  consumes_state_keys: [execution, result_profile]
   produces_state_keys: [chart_suggestion]
+  artifact_types: [chart]
 metadata:
   next_route: followup_suggest
