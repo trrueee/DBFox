@@ -54,6 +54,7 @@ AgentPlannerIntent = Literal[
     "unknown",
 ]
 AgentPlanConfidence = Literal["low", "medium", "high"]
+AgentDisplayComponent = Literal["metric", "chart", "table", "markdown", "recommendation", "sql", "trace"]
 
 
 class AgentApprovalRecord(BaseModel):
@@ -266,6 +267,12 @@ class AnswerEvidence(BaseModel):
     value: str | int | float | None = None
 
 
+class AnswerDisplayPlanItem(BaseModel):
+    component: AgentDisplayComponent
+    reason: str
+    priority: int = 100
+
+
 class AgentAnswer(BaseModel):
     answer: str
     key_findings: list[str] = Field(default_factory=list)
@@ -273,6 +280,7 @@ class AgentAnswer(BaseModel):
     caveats: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
+    display_plan: list[AnswerDisplayPlanItem] = Field(default_factory=list)
 
 
 class AgentMessageBlock(BaseModel):
@@ -494,4 +502,3 @@ class AgentRunCanvas(BaseModel):
     answer_summary: str = ""
     total_latency_ms: int = 0
     step_count: int = 0
-
