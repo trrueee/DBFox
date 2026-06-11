@@ -9,7 +9,7 @@ export type AgentArtifactBase = {
 
 export type ChartArtifact = AgentArtifactBase & {
   type: "chart";
-  chartType: "line" | "bar";
+  chartType: "line" | "bar" | "scatter" | "pie" | "area";
   unit?: string;
   series: Array<{ label: string; value: number }>;
 };
