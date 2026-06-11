@@ -117,33 +117,44 @@ class DataBoxAgentService:
         accumulated_state: dict[str, Any] = dict(initial_state)
         last_context_summary = ""
 
-        for chunk in app.stream(initial_state, config=config, stream_mode="updates"):
-            for node_name, update in chunk.items():
-                if not isinstance(update, dict):
-                    continue
+        try:
+            for chunk in app.stream(initial_state, config=config, stream_mode="updates"):
+                for node_name, update in chunk.items():
+                    if not isinstance(update, dict):
+                        continue
 
-                self._merge_state(accumulated_state, update)
-                node_str = str(node_name)
+                    self._merge_state(accumulated_state, update)
+                    node_str = str(node_name)
 
-                # Emit artifacts from observe node
-                if node_str == "observe":
-                    yield from self._observe_events(
-                        emit, update, agent_state, artifact_identity, emitted_artifact_ids
-                    )
+                    # Emit artifacts from observe node
+                    if node_str == "observe":
+                        yield from self._observe_events(
+                            emit, update, agent_state, artifact_identity, emitted_artifact_ids
+                        )
 
-                if node_str in ("observe", "progress", "repair"):
-                    event, last_context_summary = self._context_update_event(
-                        emit, accumulated_state, last_context_summary,
-                    )
-                    if event is not None:
-                        yield event
+                    if node_str in ("observe", "progress", "repair"):
+                        event, last_context_summary = self._context_update_event(
+                            emit, accumulated_state, last_context_summary,
+                        )
+                        if event is not None:
+                            yield event
 
-                # Emit trace events (including approval-related traffic
-                # that the approval_node emits before/after interrupt())
-                if "trace_events" in update:
-                    for te in update["trace_events"]:
-                        if isinstance(te, dict):
-                            yield from self._trace_to_events(emit, te)
+                    # Emit trace events (including approval-related traffic
+                    # that the approval_node emits before/after interrupt())
+                    if "trace_events" in update:
+                        for te in update["trace_events"]:
+                            if isinstance(te, dict):
+                                yield from self._trace_to_events(emit, te)
+        except GeneratorExit:
+            # Client disconnected (SSE stream closed by frontend cancel/abort).
+            # Mark the run as cancelled and exit cleanly — no traceback.
+            try:
+                agent_persistence.cancel_run(self.db, run_id=run_id)
+                self.db.commit()
+            except Exception:
+                self._rollback_quietly()
+            yield emit("agent.run.cancelled", error="Client disconnected — run cancelled.")
+            return
 
         # ---- after the stream loop: check for LangGraph interrupt ----------
         # The graph may have been paused by approval_interrupt() calling
