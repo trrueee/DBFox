@@ -23,37 +23,26 @@ interface DataSourcesPageProps {
   activeDataSource: DataSource | null;
   activeProject: Project | null;
   onRefreshDatasources: () => Promise<void>;
+  initialShowAddForm?: boolean;
 }
-
-const DEMO_STEPS = [
-  "正在检测本地 Docker 运行环境...",
-  "正在拉取并启动 MySQL 8.0 容器 (映射本地 3309 端口)...",
-  "正在等待数据库实例就绪并测试 TCP 连接握手...",
-  "正在创建电子商务表结构并建立物理外键关联 (20 张表)...",
-  "正在生成高度逼真的商品、订单、支付、退款等多表电商演练数据集...",
-  "正在自动保存数据源连接配置并深度同步 Schema 元数据缓存...",
-  "Demo 数据库启动成功！正在为您切换至 AI SQL 工作台..."
-];
 
 export const DataSourcesPage = ({
   onSelectDataSource,
   activeDataSource,
   activeProject,
   onRefreshDatasources,
+  initialShowAddForm,
 }: DataSourcesPageProps) => {
   const toast = useToast();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DataSource | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(initialShowAddForm ?? false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [healthCheckingId, setHealthCheckingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [demoStarting, setDemoStarting] = useState(false);
-  const [demoStep, setDemoStep] = useState(0);
-  const [demoError, setDemoError] = useState("");
   const [testResult, setTestResult] = useState<{
     status: "idle" | "testing" | "success" | "error";
     message: string;
@@ -102,37 +91,7 @@ export const DataSourcesPage = ({
     await onRefreshDatasources();
   };
 
-  const handleStartDemoDb = async () => {
-    setDemoStarting(true);
-    setDemoStep(0);
-    setDemoError("");
 
-    let currentStep = 0;
-    const interval = window.setInterval(() => {
-      if (currentStep < DEMO_STEPS.length - 2) {
-        currentStep++;
-        setDemoStep(currentStep);
-      }
-    }, 2800);
-
-    try {
-      const created = await api.startDemoMysql(activeProject?.id);
-      window.clearInterval(interval);
-      setDemoStep(DEMO_STEPS.length - 2);
-      await new Promise(r => setTimeout(r, 1200));
-      setDemoStep(DEMO_STEPS.length - 1);
-      await new Promise(r => setTimeout(r, 800));
-
-      await syncLists();
-      onSelectDataSource(created);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      window.clearInterval(interval);
-      setDemoError(err.message ?? "未知错误。请确保 Docker Desktop 已启动且能以管理员权限在后台运行。");
-    } finally {
-      setDemoStarting(false);
-    }
-  };
 
   const updateForm = (key: keyof typeof form, value: string | number | boolean) => {
     setForm((c) => ({ ...c, [key]: value }));
@@ -301,23 +260,21 @@ export const DataSourcesPage = ({
       style={{ display: "flex", flexDirection: "column", gap: 20, height: "100%", overflow: "auto" }}
     >
       {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 className="text-display" style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--text-primary)" }}>
-            连接管理器
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-primary)" }}>
+            连接管理
           </h2>
-          <p style={{ color: "var(--text-secondary)", marginTop: 4, fontSize: "0.9rem" }}>
-            管理远程 MySQL 连接，测试可用性，同步本地 Schema 缓存
+          <p style={{ color: "var(--text-secondary)", marginTop: 2, fontSize: "0.75rem" }}>
+            管理本地保存的数据源连接，测试可用性，同步 Schema 缓存
           </p>
-          {activeProject && (
-            <p style={{ color: "var(--text-muted)", marginTop: 6, fontSize: "0.78rem" }}>
-              Current project: {activeProject.name}
-            </p>
-          )}
         </div>
-        <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={() => setShowAddForm((v) => !v)}>
-          {showAddForm ? <X size={15} /> : <Plus size={15} />}
-          {showAddForm ? "收起" : "添加连接"}
+        <button
+          className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md cursor-pointer border-none hover:brightness-110 transition-colors"
+          onClick={() => setShowAddForm((v) => !v)}
+        >
+          <Plus size={13} />
+          {showAddForm ? "收起" : "新建连接"}
         </button>
       </div>
 
@@ -707,366 +664,194 @@ export const DataSourcesPage = ({
 
       {/* Connection List */}
       <div style={{ flex: 1 }}>
-        <h3 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-          已保存连接
-          <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: "0.85rem" }}>
-            ({dataSources.length})
-          </span>
-        </h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+            已保存连接
+            <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: "0.7rem" }}>
+              {dataSources.length}
+            </span>
+          </div>
+        </div>
 
         {loading ? (
-          <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer rounded-sm" style={{ height: 80, borderRadius: 10 }} />
+              <div key={i}
+                className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer"
+                style={{ height: 44, borderRadius: 8 }}
+              />
             ))}
           </div>
-        ) : demoStarting ? (
-          <div 
-            className="bg-card border border-border rounded-lg animate-fade-in" 
-            style={{ 
-              padding: "48px 32px", 
-              textAlign: "center", 
-              background: "linear-gradient(135deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6))", 
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              backdropFilter: "blur(12px)",
-              borderRadius: 16,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 24,
-              minHeight: 380,
-              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.3)"
-            }}
-          >
-            <div style={{ position: "relative", width: 80, height: 80 }}>
-              <div 
-                style={{ 
-                  position: "absolute", 
-                  top: 0, 
-                  left: 0, 
-                  right: 0, 
-                  bottom: 0, 
-                  borderRadius: "50%", 
-                  background: "radial-gradient(circle, var(--accent-indigo) 0%, transparent 70%)", 
-                  opacity: 0.4,
-                  animation: "pulse 2s infinite" 
-                }} 
-              />
-              <RefreshCw 
-                size={48} 
-                className="animate-spin" 
-                style={{ 
-                  color: "var(--accent-indigo)", 
-                  position: "absolute", 
-                  top: 16, 
-                  left: 16 
-                }} 
-              />
-            </div>
-
-            <div style={{ maxWidth: 500 }}>
-              <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#fff", marginBottom: 8 }}>
-                正在一键整备 Demo 演示环境
-              </h3>
-              <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                DataBox 正在自动化下载、编排 Docker 容器，并构建一套标准的电子商业务只读数据库以进行完整的 AI 问数功能端到端体验。这通常需要 10-15 秒，请稍候。
-              </p>
-            </div>
-
-            <div 
-              style={{ 
-                width: "100%", 
-                maxWidth: 460, 
-                background: "rgba(0, 0, 0, 0.2)", 
-                borderRadius: 10, 
-                padding: 16, 
-                border: "1px solid rgba(255, 255, 255, 0.05)",
-                textAlign: "left"
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--accent-indigo)", background: "rgba(74, 91, 192, 0.15)", padding: "2px 8px", borderRadius: 4 }}>
-                  运行进度
-                </span>
-                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-                  {Math.min(Math.round(((demoStep + 1) / DEMO_STEPS.length) * 100), 100)}%
-                </span>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {DEMO_STEPS.map((s, idx) => {
-                  const isPassed = idx < demoStep;
-                  const isCurrent = idx === demoStep;
-                  return (
-                    <div 
-                      key={s} 
-                      style={{ 
-                        display: "flex", 
-                        alignItems: "center", 
-                        gap: 8, 
-                        fontSize: "0.82rem",
-                        color: isPassed ? "var(--text-muted)" : isCurrent ? "#fff" : "rgba(255, 255, 255, 0.25)",
-                        transition: "color 0.3s",
-                        fontWeight: isCurrent ? 600 : 400
-                      }}
-                    >
-                      <div 
-                        style={{ 
-                          width: 6, 
-                          height: 6, 
-                          borderRadius: "50%", 
-                          background: isPassed ? "var(--accent-green)" : isCurrent ? "var(--accent-indigo)" : "rgba(255, 255, 255, 0.15)",
-                          boxShadow: isCurrent ? "0 0 8px var(--accent-indigo)" : undefined
-                        }} 
-                      />
-                      <span>{s}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : demoError ? (
-          <div 
-            className="bg-card border border-border rounded-lg animate-fade-in" 
-            style={{ 
-              padding: "48px 32px", 
-              textAlign: "center", 
-              background: "linear-gradient(135deg, rgba(30, 41, 59, 0.4), rgba(15, 23, 42, 0.6))", 
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              backdropFilter: "blur(12px)",
-              borderRadius: 16,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 20,
-              minHeight: 380
-            }}
-          >
-            <AlertTriangle size={48} style={{ color: "var(--accent-red)" }} />
-            <div style={{ maxWidth: 500 }}>
-              <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#fff", marginBottom: 8 }}>
-                启动 Demo 数据库失败
-              </h3>
-              <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                {demoError}
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: 12 }}>
-              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" onClick={() => setDemoError("")}>
-                返回列表
-              </button>
-              <button className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" onClick={handleStartDemoDb} style={{ background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)" }}>
-                重新尝试启动
-              </button>
-            </div>
-          </div>
         ) : dataSources.length === 0 ? (
-          <div 
-            className="bg-card border border-border rounded-lg animate-fade-in" 
-            style={{ 
-              padding: "56px 40px", 
-              textAlign: "center", 
-              background: "linear-gradient(135deg, rgba(20, 25, 45, 0.4), rgba(15, 17, 30, 0.6))",
-              borderColor: "rgba(74, 91, 192, 0.2)",
-              borderWidth: 1.5,
-              borderRadius: 16,
-              boxShadow: "0 12px 30px rgba(0, 0, 0, 0.15)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 24
-            }}
-          >
-            <div 
-              style={{ 
-                width: 68, 
-                height: 68, 
-                borderRadius: "50%", 
-                background: "rgba(74, 91, 192, 0.1)", 
-                display: "grid", 
-                placeItems: "center",
-                border: "1px solid rgba(74, 91, 192, 0.2)"
-              }}
+          <div style={{
+            padding: "48px 32px", textAlign: "center",
+            border: "1px dashed var(--border-subtle, #e6eaf2)", borderRadius: 10,
+          }}>
+            <Database size={28} style={{ color: "var(--text-muted)", marginBottom: 12 }} />
+            <h3 style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-primary)" }}>
+              暂无数据源连接
+            </h3>
+            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: 4, marginBottom: 16 }}>
+              添加一个数据库连接以开始使用 AI 问数功能
+            </p>
+            <button
+              className="inline-flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md cursor-pointer border-none hover:brightness-110 transition-colors"
+              onClick={() => setShowAddForm(true)}
             >
-              <Database size={32} style={{ color: "var(--accent-indigo)" }} />
-            </div>
-
-            <div style={{ maxWidth: 500 }}>
-              <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                快速开启您的数据探索之旅
-              </h3>
-              <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: 8, lineHeight: 1.6 }}>
-                DataBox 自动化下载、编排 Docker 容器，并构建一套标准的电子商业务只读数据库以进行完整的 AI 问数功能端到端体验。您可以通过下方快速接入您已有的 MySQL 数据库，或者使用 Docker 一键生成高仿真演示库。
-              </p>
-            </div>
-
-            <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-              <button 
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-transparent rounded-sm cursor-pointer hover:bg-accent text-foreground transition-colors" 
-                onClick={() => {
-                  setShowAddForm(true);
-                  setTimeout(() => {
-                    document.querySelector(".bg-card border border-border rounded-lg")?.scrollIntoView({ behavior: "smooth" });
-                  }, 100);
-                }}
-                style={{ padding: "12px 24px", fontSize: "0.92rem", borderRadius: 10 }}
-              >
-                连接已有 MySQL
-              </button>
-              <button 
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-primary text-primary-foreground rounded-sm cursor-pointer border-none hover:brightness-110 transition-colors" 
-                onClick={handleStartDemoDb}
-                style={{ 
-                  padding: "12px 24px", 
-                  fontSize: "0.92rem", 
-                  borderRadius: 10,
-                  background: "linear-gradient(135deg, #2D3B8C, #4A5BC0)",
-                  border: "none",
-                  boxShadow: "0 4px 15px rgba(74, 91, 192, 0.4)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8
-                }}
-              >
-                <Sparkles size={16} />
-                一键启动 Demo 数据库
-              </button>
-            </div>
+              <Plus size={13} />新建连接
+            </button>
           </div>
         ) : (
-          <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* List header */}
+            <div style={{
+              display: "flex", alignItems: "center",
+              padding: "6px 16px",
+              fontSize: "0.68rem", fontWeight: 600, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "0.04em",
+              borderBottom: "1px solid var(--border-subtle, #edf1f7)",
+              marginBottom: 2,
+            }}>
+              <span style={{ flex: 2, minWidth: 0 }}>连接</span>
+              <span style={{ width: 100, flexShrink: 0 }}>类型 / 环境</span>
+              <span style={{ width: 130, flexShrink: 0 }}>Schema 同步</span>
+              <span style={{ width: 110, flexShrink: 0 }}>状态</span>
+              <span style={{ width: 140, flexShrink: 0, textAlign: "right" }}>操作</span>
+            </div>
             {dataSources.map((ds) => {
               const isActive = activeDataSource?.id === ds.id;
               const st = statusType(ds);
               const healthSt = healthStatusType(ds);
               const healthWarnings = ds.last_test_warnings ?? [];
 
+              const dbBadge = ds.db_type === "postgresql" ? { label: "PG", color: "#818CF8", bg: "rgba(99,102,241,0.1)" }
+                : ds.db_type === "sqlite" ? { label: "Lite", color: "#94A3B8", bg: "rgba(100,116,139,0.08)" }
+                : { label: "MySQL", color: "#60A5FA", bg: "rgba(59,130,246,0.08)" };
+
+              const envBadge = ds.env === "prod" ? { label: "生产", color: "var(--accent-red)", bg: "rgba(220,38,38,0.06)" }
+                : ds.env === "test" ? { label: "测试", color: "var(--accent-amber)", bg: "rgba(217,119,6,0.06)" }
+                : { label: "开发", color: "var(--text-secondary)", bg: "transparent" };
+
               return (
                 <div
                   key={ds.id}
-                  className="bg-card border border-border rounded-lg hover-lift"
-                  style={{
-                    padding: "16px 20px",
-                    borderColor: isActive ? "var(--accent-indigo)" : undefined,
-                    borderWidth: isActive ? 1.5 : 1,
-                    cursor: "pointer",
-                  }}
                   onClick={() => onSelectDataSource(ds)}
+                  style={{
+                    display: "flex", alignItems: "center",
+                    padding: "10px 16px", cursor: "pointer",
+                    background: isActive ? "var(--bg-active, #e8edff)" : "transparent",
+                    borderRadius: 8,
+                    border: isActive ? "1px solid rgba(91,92,240,0.2)" : "1px solid transparent",
+                    transition: "background 0.1s, border-color 0.1s",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--bg-hover, #eef3ff)"; }}
+                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                 >
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "minmax(0, 1.4fr) 120px 180px 180px 110px auto",
-                      gap: 16,
-                      alignItems: "center",
-                    }}
-                  >
+                  {/* Name + address */}
+                  <div style={{ flex: 2, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Database size={14} style={{ color: isActive ? "var(--accent-indigo)" : "var(--text-muted)", flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Database size={15} style={{ color: isActive ? "var(--accent-indigo)" : "var(--text-muted)" }} />
-                        <h4
-                          style={{
-                            fontSize: "0.94rem",
-                            fontWeight: 600,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {ds.name}
-                        </h4>
-                        {isActive && <span className="tag tag-indigo">当前</span>}
-                        {ds.db_type === "postgresql" && <span className="tag tag-indigo" style={{ background: "rgba(99, 102, 241, 0.1)", color: "#818CF8", border: "1px solid rgba(99, 102, 241, 0.2)", fontWeight: 600 }}>PostgreSQL</span>}
-                        {ds.db_type === "sqlite" && <span className="tag tag-neutral" style={{ background: "rgba(100, 116, 139, 0.1)", color: "#94A3B8", border: "1px solid rgba(100, 116, 139, 0.2)", fontWeight: 600 }}>SQLite</span>}
-                        {(ds.db_type === "mysql" || !ds.db_type) && <span className="tag tag-indigo" style={{ background: "rgba(59, 130, 246, 0.1)", color: "#60A5FA", border: "1px solid rgba(59, 130, 246, 0.2)", fontWeight: 600 }}>MySQL</span>}
-                        {ds.env === "prod" && <span className="tag tag-error" style={{ background: "rgba(220, 38, 38, 0.1)", color: "var(--accent-red)", border: "1px solid rgba(220, 38, 38, 0.2)", fontWeight: 600 }}>PROD</span>}
-                        {ds.env === "test" && <span className="tag tag-warning" style={{ background: "rgba(217, 119, 6, 0.1)", color: "var(--accent-amber)", border: "1px solid rgba(217, 119, 6, 0.2)" }}>测试</span>}
-                        {ds.env === "dev" && <span className="tag tag-neutral" style={{ background: "var(--bg-active)", color: "var(--text-secondary)", border: "1px solid var(--border-light)" }}>开发</span>}
-                        {ds.is_read_only && <span className="tag tag-indigo" style={{ background: "rgba(74, 91, 192, 0.1)", color: "var(--accent-indigo)", border: "1px solid rgba(74, 91, 192, 0.2)" }}>只读</span>}
-                        {ds.ssh_enabled && <span className="tag tag-amber" style={{ background: "rgba(180, 83, 9, 0.1)", color: "var(--accent-amber)", border: "1px solid rgba(180, 83, 9, 0.2)" }}>SSH 隧道</span>}
-                        {ds.ssl_enabled && <span className="tag tag-green" style={{ background: "rgba(22, 163, 74, 0.1)", color: "var(--accent-green)", border: "1px solid rgba(22, 163, 74, 0.2)" }}>TLS</span>}
+                        </span>
+                        {isActive && (
+                          <span style={{ fontSize: "0.58rem", fontWeight: 600, color: "var(--accent-indigo)", background: "rgba(91,92,240,0.08)", padding: "1px 4px", borderRadius: 3, flexShrink: 0 }}>当前</span>
+                        )}
                       </div>
-                      <p
-                        style={{
-                          marginTop: 3,
-                          fontSize: "0.8rem",
-                          color: "var(--text-muted)",
-                          fontFamily: "var(--font-mono)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                      <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
                         {ds.db_type === "sqlite" ? ds.database_name : `${ds.host}:${ds.port} / ${ds.database_name}`}
-                      </p>
-                    </div>
-
-                    <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                      {ds.db_type === "sqlite" ? "-" : ds.username}
-                    </div>
-
-                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                      <div style={{ color: "var(--text-secondary)", fontWeight: 600 }}>Schema</div>
-                      <div>{ds.last_sync_at ? formatDateTime(ds.last_sync_at) : "未同步"}</div>
-                    </div>
-
-                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                        <StatusIndicator
-                          type={healthSt}
-                          label={healthSt === "success" ? "连接正常" : healthSt === "error" ? "连接失败" : "未检查"}
-                        />
                       </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {typeof ds.last_test_latency_ms === "number" && <span>{ds.last_test_latency_ms}ms</span>}
-                        {typeof ds.last_test_tables_count === "number" && <span>{ds.last_test_tables_count} tables</span>}
-                        {ds.last_test_readonly === false && <span style={{ color: "var(--accent-amber)" }}>有写权限</span>}
+                    </div>
+                  </div>
+
+                  {/* Type + Env badges */}
+                  <div style={{ width: 100, flexShrink: 0, display: "flex", gap: 4 }}>
+                    <span style={{ fontSize: "0.62rem", fontWeight: 500, color: dbBadge.color, background: dbBadge.bg, padding: "1px 5px", borderRadius: 3, border: `1px solid ${dbBadge.color}20` }}>
+                      {dbBadge.label}
+                    </span>
+                    <span style={{ fontSize: "0.62rem", fontWeight: 500, color: envBadge.color, background: envBadge.bg, padding: "1px 5px", borderRadius: 3, border: `1px solid ${envBadge.color}20` }}>
+                      {envBadge.label}
+                    </span>
+                    {ds.is_read_only && (
+                      <span style={{ fontSize: "0.58rem", color: "var(--accent-indigo)", background: "rgba(91,92,240,0.06)", padding: "1px 4px", borderRadius: 3 }}>R</span>
+                    )}
+                  </div>
+
+                  {/* Schema info */}
+                  <div style={{ width: 130, flexShrink: 0, fontSize: "0.7rem", color: "var(--text-secondary)" }}>
+                    {ds.last_sync_at ? (
+                      <span>{formatDateTime(ds.last_sync_at)}</span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)" }}>未同步</span>
+                    )}
+                    {typeof ds.last_test_tables_count === "number" && (
+                      <span style={{ marginLeft: 4, color: "var(--text-muted)", fontSize: "0.62rem" }}>{ds.last_test_tables_count}t</span>
+                    )}
+                  </div>
+
+                  {/* Health status */}
+                  <div style={{ width: 110, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                        background: healthSt === "success" ? "var(--accent-green)" : healthSt === "error" ? "var(--accent-red)" : "#cbd5e1",
+                      }} />
+                      <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                        {healthSt === "success" ? "正常" : healthSt === "error" ? "失败" : "未检测"}
+                      </span>
+                      {typeof ds.last_test_latency_ms === "number" && (
+                        <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{ds.last_test_latency_ms}ms</span>
+                      )}
+                    </div>
+                    {ds.last_test_error && (
+                      <div style={{ fontSize: "0.6rem", color: "var(--accent-red)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+                        {ds.last_test_error}
                       </div>
-                      {ds.last_test_at && <div>检查于 {formatDateTime(ds.last_test_at)}</div>}
-                      {ds.last_test_error && (
-                        <div style={{ color: "var(--accent-red)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {ds.last_test_error}
-                        </div>
-                      )}
-                      {healthWarnings.length > 0 && !ds.last_test_error && (
-                        <div style={{ color: "var(--accent-amber)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {healthWarnings[0]}
-                        </div>
-                      )}
-                    </div>
+                    )}
+                  </div>
 
-                    <StatusIndicator type={st} label={st === "success" ? "已同步" : st === "error" ? "失败" : "待同步"} />
-
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                      <button
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
-                        onClick={(e) => handleHealthCheck(ds.id, e)}
-                        disabled={healthCheckingId === ds.id}
-                        style={{ color: healthSt === "error" ? "var(--accent-red)" : "var(--accent-green)" }}
-                      >
-                        <Activity size={14} className={healthCheckingId === ds.id ? "animate-spin" : ""} />
-                        {healthCheckingId === ds.id ? "检查中" : "健康"}
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
-                        onClick={(e) => handleSyncSchema(ds.id, e)}
-                        disabled={syncingId === ds.id}
-                        style={{ color: "var(--accent-indigo)" }}
-                      >
-                        <RefreshCw size={14} className={syncingId === ds.id ? "animate-spin" : ""} />
-                        {syncingId === ds.id ? "同步中" : "同步"}
-                      </button>
-                      <button
-                        className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-muted-foreground bg-transparent border border-border rounded-sm cursor-pointer hover:bg-accent hover:text-foreground transition-colors"
-                        onClick={(e) => handleDeleteDataSource(ds.id, e)}
-                        style={{ color: "var(--accent-red)" }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                  {/* Actions */}
+                  <div style={{ width: 140, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 2 }}>
+                    <button
+                      onClick={(e) => handleHealthCheck(ds.id, e)}
+                      disabled={healthCheckingId === ds.id}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        padding: "3px 8px", fontSize: "0.65rem", fontWeight: 500,
+                        color: healthSt === "error" ? "var(--accent-red)" : "var(--text-secondary)",
+                        background: "transparent", border: "1px solid var(--border-subtle)",
+                        borderRadius: 5, cursor: "pointer",
+                      }}
+                    >
+                      <Activity size={11} className={healthCheckingId === ds.id ? "animate-spin" : ""} />
+                      检测
+                    </button>
+                    <button
+                      onClick={(e) => handleSyncSchema(ds.id, e)}
+                      disabled={syncingId === ds.id}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        padding: "3px 8px", fontSize: "0.65rem", fontWeight: 500,
+                        color: "var(--accent-indigo)", background: "transparent",
+                        border: "1px solid var(--border-subtle)", borderRadius: 5, cursor: "pointer",
+                      }}
+                    >
+                      <RefreshCw size={11} className={syncingId === ds.id ? "animate-spin" : ""} />
+                      同步
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteDataSource(ds.id, e)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: 24, height: 24, fontSize: "0.65rem",
+                        color: "var(--text-muted)", background: "transparent",
+                        border: "none", borderRadius: 5, cursor: "pointer",
+                      }}
+                      title="删除"
+                    >
+                      <Trash2 size={11} />
+                    </button>
                   </div>
                 </div>
               );

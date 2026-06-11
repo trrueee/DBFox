@@ -31,8 +31,9 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
 
     This is a SEMANTIC judge, not a rule checker.
 
-    When no LLM credentials are available, falls back to simple rule-based
-    judgment (check step_count vs max_steps, check for error).
+    When no LLM credentials are available, the agent cannot run; this is
+    enforced at the API layer. If this node is reached without credentials
+    (defense-in-depth), raise immediately.
     """
     ctx = graph_context(config)
     model_name = ctx.model_name
@@ -40,7 +41,7 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
     api_base = ctx.api_base
 
     if not ctx.has_llm_credentials:
-        return _rule_fallback(state)
+        raise RuntimeError("Progress judge requires LLM credentials.")
 
     # ---- Fast path: escalate.tool_group was called --------------------------
     escalate_result = _check_escalate(state)
@@ -356,10 +357,30 @@ def _rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
     elif answer and answer.get("answer"):
         decision = ProgressDecision(status="complete", reason_summary="Agent produced an answer.")
     elif step_count >= max_steps:
+        # No answer and the step budget is exhausted — this is a failure, not a
+        # completion. Mirror model_node's hard-block error semantics.
+        if not state.get("safety"):
+            max_steps_error = "Agent stopped before SQL validation because max_steps was reached."
+        else:
+            max_steps_error = f"Agent exceeded max_steps ({max_steps})."
         decision = ProgressDecision(
-            status="complete", reason_summary="Max steps reached — finalizing.",
+            status="failed", reason_summary="Max steps reached without an answer.",
+            root_cause=max_steps_error,
+            should_finalize=True,
             completion_reason="max_steps_reached",
         )
+        return {
+            "status": "failed",
+            "error": error or max_steps_error,
+            "progress_decision": decision.model_dump(mode="json"),
+            "trace_events": [{
+                "type": "agent.progress.judged",
+                "status": decision.status,
+                "should_finalize": True,
+                "completion_reason": "max_steps_reached",
+                "fallback": True,
+            }],
+        }
     else:
         decision = ProgressDecision(status="continue", reason_summary="Continuing ReAct loop.")
 

@@ -11,171 +11,10 @@ import sqlglot
 from sqlglot import exp
 from sqlalchemy.orm import Session
 
-from engine.datasource import is_demo_db
 from engine.errors import AIServiceError
 from engine.models import DataSource, LLMLog, SchemaColumn, SchemaTable
 from engine.semantic import QueryPlanBuilder, SchemaContextBuilder, SchemaLinker
 from engine.sql.trust_gate import TrustGate
-
-# Built-in heuristic translations to support instant, no-key offline demos
-DEMO_TRANSLATIONS = {
-    # 用户相关
-    "所有用户": "SELECT * FROM users",
-    "查询所有用户": "SELECT * FROM users",
-    "用户数量": "SELECT COUNT(*) AS total_users FROM users",
-    "统计用户数": "SELECT COUNT(*) AS total_users FROM users",
-    "管理员列表": "SELECT * FROM users WHERE role = 'admin'",
-    # 商品相关
-    "商品列表": "SELECT * FROM products WHERE status = 'active'",
-    "查询商品": "SELECT * FROM products",
-    "库存少于10": "SELECT name, sku, stock FROM products WHERE stock < 10 AND status = 'active'",
-    "缺货商品": "SELECT name, sku, stock FROM products WHERE stock = 0",
-    "最贵商品": "SELECT name, price FROM products ORDER BY price DESC LIMIT 10",
-    # 订单相关
-    "所有订单": "SELECT * FROM orders ORDER BY created_at DESC",
-    "订单总额": "SELECT SUM(total_amount) AS total_sales FROM orders WHERE status != 'cancelled'",
-    "订单数量": "SELECT COUNT(*) AS total_orders FROM orders",
-    "张三的订单": "SELECT o.* FROM orders o JOIN users u ON o.user_id = u.id WHERE u.username = 'zhangsan'",
-    "订单状态统计": "SELECT status, COUNT(*) AS count, SUM(total_amount) AS amount FROM orders GROUP BY status",
-    "最近的订单": "SELECT o.id, u.username, o.total_amount, o.status, o.created_at FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.created_at DESC LIMIT 10",
-    "已取消订单": "SELECT * FROM orders WHERE status = 'cancelled'",
-    # 销售分析
-    "销售最好的商品": "SELECT p.name, SUM(oi.quantity) AS total_sold FROM order_items oi JOIN products p ON oi.product_id = p.id GROUP BY p.id ORDER BY total_sold DESC LIMIT 5",
-    "销量前五": "SELECT p.name, SUM(oi.quantity) AS total_sold FROM order_items oi JOIN products p ON oi.product_id = p.id GROUP BY p.id ORDER BY total_sold DESC LIMIT 5",
-    "最高销售额": "SELECT p.name, SUM(oi.price * oi.quantity) AS total_revenue FROM order_items oi JOIN products p ON oi.product_id = p.id GROUP BY p.id ORDER BY total_revenue DESC LIMIT 5",
-    "每日订单统计": "SELECT DATE(created_at) AS order_date, COUNT(*) AS order_count FROM orders GROUP BY DATE(created_at) ORDER BY order_date DESC LIMIT 30",
-    # 支付相关
-    "支付渠道统计": "SELECT payment_method, COUNT(*) AS count, SUM(amount) AS total_paid FROM payments WHERE status = 'success' GROUP BY payment_method",
-    "支付状态统计": "SELECT status, COUNT(*), SUM(amount) FROM payments GROUP BY status",
-    "退款记录": "SELECT * FROM payments WHERE status = 'refunded'",
-    # 评价相关
-    "低评分评价": "SELECT r.rating, r.comment, p.name AS product_name, u.username FROM reviews r JOIN products p ON r.product_id = p.id JOIN users u ON r.user_id = u.id WHERE r.rating <= 3",
-    "商品评分": "SELECT p.name, AVG(r.rating) AS avg_rating, COUNT(*) AS review_count FROM reviews r JOIN products p ON r.product_id = p.id GROUP BY p.id ORDER BY avg_rating DESC",
-    # 购物车
-    "购物车加购": "SELECT u.username, p.name AS product_name, c.quantity FROM cart c JOIN users u ON c.user_id = u.id JOIN products p ON c.product_id = p.id",
-    # 供应商
-    "供应商列表": "SELECT name, contact, phone FROM suppliers",
-    # 物流
-    "物流状态统计": "SELECT o.id AS order_id, s.tracking_number, s.carrier, s.status FROM shipping s JOIN orders o ON s.order_id = o.id ORDER BY o.created_at DESC LIMIT 20",
-    "已妥投订单": "SELECT o.id, u.username, s.carrier, s.tracking_number, s.delivered_at FROM shipping s JOIN orders o ON s.order_id = o.id JOIN users u ON o.user_id = u.id WHERE s.status = 'delivered'",
-    # 系统
-    "系统配置": "SELECT * FROM system_settings",
-    # 推荐
-    "商品推荐": "SELECT u.username, p.name, r.score FROM recommendations r JOIN users u ON r.user_id = u.id JOIN products p ON r.product_id = p.id ORDER BY r.score DESC LIMIT 20",
-    # 库存
-    "库存变更记录": "SELECT p.name, il.change_amount, il.reason, il.created_at FROM inventory_logs il JOIN products p ON il.product_id = p.id ORDER BY il.created_at DESC LIMIT 50",
-    # 分类
-    "商品分类": "SELECT c.name, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON c.id = p.category_id GROUP BY c.id ORDER BY product_count DESC",
-    # 用户地址
-    "用户地址": "SELECT u.username, ua.consignee, ua.province, ua.city, ua.address, ua.is_default FROM user_addresses ua JOIN users u ON ua.user_id = u.id",
-}
-
-def search_demo_sql(question: str) -> str:
-    """Fallback fuzzy matcher to turn Chinese/English inputs into high-quality SQL offline"""
-    cleaned = question.strip().lower()
-
-    # Direct matching
-    for key, sql in DEMO_TRANSLATIONS.items():
-        if key in cleaned or cleaned in key:
-            return sql
-
-    # Key-word combination matches
-    if "用户" in cleaned:
-        if any(w in cleaned for w in ("数", "统计", "总量", "多少人", "几个")):
-            return "SELECT COUNT(*) AS total_users FROM users"
-        if "角色" in cleaned or "管理员" in cleaned:
-            return "SELECT username, role FROM users WHERE role = 'admin'"
-        if "地址" in cleaned or "收货" in cleaned:
-            return "SELECT u.username, ua.consignee, ua.province, ua.city, ua.address, ua.is_default FROM user_addresses ua JOIN users u ON ua.user_id = u.id"
-        return "SELECT * FROM users"
-
-    if "商品" in cleaned or "产品" in cleaned:
-        if any(w in cleaned for w in ("库存", "少于", "缺货", "没货")):
-            return "SELECT name, sku, stock FROM products WHERE stock < 10 AND status = 'active'"
-        if any(w in cleaned for w in ("贵", "最高", "价格", "最便宜", "降序")):
-            return "SELECT name, price, stock FROM products ORDER BY price DESC LIMIT 5"
-        if "分类" in cleaned or "类别" in cleaned or "品类" in cleaned:
-            return "SELECT c.name, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON c.id = p.category_id GROUP BY c.id ORDER BY product_count DESC"
-        if "评分" in cleaned or "评价" in cleaned or "口碑" in cleaned:
-            return "SELECT p.name, AVG(r.rating) AS avg_rating, COUNT(*) AS review_count FROM reviews r JOIN products p ON r.product_id = p.id GROUP BY p.id ORDER BY avg_rating DESC"
-        if "推荐" in cleaned or "个性" in cleaned:
-            return "SELECT u.username, p.name, r.score FROM recommendations r JOIN users u ON r.user_id = u.id JOIN products p ON r.product_id = p.id ORDER BY r.score DESC LIMIT 20"
-        return "SELECT name, price, stock, status FROM products"
-
-    if "订单" in cleaned:
-        if any(w in cleaned for w in ("支付方式", "支付渠道", "付款")):
-            return "SELECT payment_method, COUNT(*) AS count, SUM(total_amount) AS total FROM orders WHERE status != 'cancelled' GROUP BY payment_method"
-        if any(w in cleaned for w in ("额", "钱", "总计", "汇总", "总销售", "收入")):
-            return "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE status = 'completed'"
-        if any(w in cleaned for w in ("数", "总量", "统计", "多少单", "每日")):
-            return "SELECT status, COUNT(*) AS count FROM orders GROUP BY status"
-        if any(w in cleaned for w in ("取消", "失败", "退款")):
-            return "SELECT * FROM orders WHERE status = 'cancelled'"
-        if any(w in cleaned for w in ("最近", "最新", "近期")):
-            return "SELECT o.id, u.username, o.total_amount, o.status, o.created_at FROM orders o JOIN users u ON o.user_id = u.id ORDER BY o.created_at DESC LIMIT 10"
-        return "SELECT * FROM orders ORDER BY created_at DESC"
-
-    if "销售" in cleaned or "销量" in cleaned:
-        if any(w in cleaned for w in ("最好", "前", "top", "热门", "畅销")):
-            return "SELECT p.name, SUM(oi.quantity) AS total_sold FROM order_items oi JOIN products p ON oi.product_id = p.id GROUP BY p.id ORDER BY total_sold DESC LIMIT 5"
-        if any(w in cleaned for w in ("额", "收入", "金额")):
-            return "SELECT p.name, SUM(oi.price * oi.quantity) AS total_revenue FROM order_items oi JOIN products p ON oi.product_id = p.id GROUP BY p.id ORDER BY total_revenue DESC LIMIT 5"
-        return "SELECT * FROM orders ORDER BY created_at DESC"
-
-    if "支付" in cleaned:
-        if any(w in cleaned for w in ("渠道", "方式")):
-            return "SELECT payment_method, COUNT(*) AS count, SUM(amount) AS total_paid FROM payments WHERE status = 'success' GROUP BY payment_method"
-        if "退款" in cleaned:
-            return "SELECT * FROM payments WHERE status = 'refunded'"
-        return "SELECT status, COUNT(*), SUM(amount) FROM payments GROUP BY status"
-
-    if "评价" in cleaned or "评论" in cleaned or "星级" in cleaned:
-        if any(w in cleaned for w in ("低", "差", "不好", "1", "2", "3")):
-            return "SELECT r.rating, r.comment, p.name AS product_name, u.username FROM reviews r JOIN products p ON r.product_id = p.id JOIN users u ON r.user_id = u.id WHERE r.rating <= 3"
-        if any(w in cleaned for w in ("平均", "统计", "汇总")):
-            return "SELECT p.name, AVG(r.rating) AS avg_rating, COUNT(*) AS review_count FROM reviews r JOIN products p ON r.product_id = p.id GROUP BY p.id ORDER BY avg_rating DESC"
-        return "SELECT r.rating, r.comment, p.name AS product_name, u.username FROM reviews r JOIN products p ON r.product_id = p.id JOIN users u ON r.user_id = u.id ORDER BY r.created_at DESC LIMIT 20"
-
-    if "物流" in cleaned or "配送" in cleaned or "快递" in cleaned:
-        if any(w in cleaned for w in ("妥投", "已送达", "完成")):
-            return "SELECT o.id, u.username, s.carrier, s.tracking_number, s.delivered_at FROM shipping s JOIN orders o ON s.order_id = o.id JOIN users u ON o.user_id = u.id WHERE s.status = 'delivered'"
-        return "SELECT o.id AS order_id, s.tracking_number, s.carrier, s.status FROM shipping s JOIN orders o ON s.order_id = o.id ORDER BY o.created_at DESC LIMIT 20"
-
-    if "供应商" in cleaned or "供货商" in cleaned:
-        if "采购" in cleaned:
-            return "SELECT s.name, po.status, po.total_cost, po.created_at FROM purchase_orders po JOIN suppliers s ON po.supplier_id = s.id ORDER BY po.created_at DESC"
-        return "SELECT name, contact, phone FROM suppliers"
-
-    if "购物车" in cleaned or "加购" in cleaned:
-        return "SELECT u.username, p.name AS product_name, c.quantity FROM cart c JOIN users u ON c.user_id = u.id JOIN products p ON c.product_id = p.id"
-
-    if "优惠券" in cleaned or "折扣" in cleaned:
-        if "使用" in cleaned or "记录" in cleaned:
-            return "SELECT cu.id, c.code, c.discount_type, c.value, u.username, cu.created_at FROM coupon_usages cu JOIN coupons c ON cu.coupon_id = c.id JOIN users u ON cu.user_id = u.id"
-        return "SELECT code, discount_type, value, min_spend, expires_at FROM coupons"
-
-    if "分类" in cleaned or "品类" in cleaned:
-        return "SELECT c.name, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON c.id = p.category_id GROUP BY c.id ORDER BY product_count DESC"
-
-    if "库存" in cleaned:
-        if "变更" in cleaned or "日志" in cleaned or "记录" in cleaned:
-            return "SELECT p.name, il.change_amount, il.reason, il.created_at FROM inventory_logs il JOIN products p ON il.product_id = p.id ORDER BY il.created_at DESC LIMIT 50"
-        return "SELECT name, sku, stock FROM products WHERE stock < 10 AND status = 'active'"
-
-    if "系统" in cleaned or "配置" in cleaned or "设置" in cleaned:
-        return "SELECT * FROM system_settings"
-
-    if "推荐" in cleaned:
-        return "SELECT u.username, p.name, r.score FROM recommendations r JOIN users u ON r.user_id = u.id JOIN products p ON r.product_id = p.id ORDER BY r.score DESC LIMIT 20"
-
-    if "管理员" in cleaned or "审计" in cleaned or "操作日志" in cleaned:
-        return "SELECT al.id, u.username, al.action, al.ip, al.created_at FROM admin_logs al JOIN users u ON al.admin_id = u.id ORDER BY al.created_at DESC LIMIT 50"
-
-    if "点击" in cleaned or "浏览" in cleaned or "访问" in cleaned:
-        return "SELECT ac.source, COUNT(*) AS click_count FROM analytics_clicks ac GROUP BY ac.source"
-
-    # Default fallback
-    return "SELECT * FROM products LIMIT 10"
 
 
 def _persist_llm_log(db, log_entry) -> None:
@@ -490,7 +329,6 @@ def generate_sql_from_schema_context(
         "used_query_plan": False,
         "used_query_plan_as_prompt": False,
         "used_renderer": False,
-        "used_demo_fallback": False,
         "used_guardrail_in_generate": False,
         "used_semantic_retry": False,
     }
@@ -503,7 +341,7 @@ def generate_sql_from_schema_context(
             "latencyMs": int((time.time() - start_time) * 1000),
             "schemaValidationWarnings": [],
             "metadata": metadata,
-            "error": "LLM API key required for non-demo Text-to-SQL generation",
+            "error": "LLM API key required for Text-to-SQL generation",
         }
 
     system_prompt, user_prompt = build_schema_direct_prompt(
@@ -650,100 +488,23 @@ def generate_sql(
     prompt_raw = f"Context:\n{schema_context}\n\nQuestion: {question}"
     prompt_hash = hashlib.sha256(prompt_raw.encode("utf-8")).hexdigest()
     
-    # 2. Check if we are running in Offline Demo Mode
+    # 2. Require LLM API key for Text-to-SQL generation
     if not api_key:
-        datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
-        is_demo_datasource = bool(
-            datasource is not None
-            and is_demo_db(str(datasource.host or ""), str(datasource.database_name or ""))
-        )
-        if not is_demo_datasource:
-            latency_ms = int((time.time() - start_time) * 1000)
-            return {
-                "sql": None,
-                "model": "databox-local-heuristic",
-                "mode": "fallback_unavailable",
-                "latencyMs": latency_ms,
-                "schemaValidationWarnings": [],
-                "queryPlan": query_plan.to_dict(),
-                **schema_metadata,
-                "metadata": {
-                    "generation_source": "legacy_generate_sql",
-                    "fallback_reason": "no_llm_api_key",
-                    "blocked_reason": "no_llm_api_key",
-                    "used_demo_fallback": False,
-                },
-                "error": "LLM API key required for non-demo Text-to-SQL generation",
-            }
-        # If the query plan indicates complex intent that requires LLM, we must fail-closed here.
-        try:
-            qp_dict = query_plan.to_dict() if query_plan is not None else {}
-        except Exception:
-            qp_dict = {}
-
-        if _query_plan_requires_llm(qp_dict):
-            latency_ms = int((time.time() - start_time) * 1000)
-            # Log the attempted offline fallback as a blocked/unsupported operation
-            log_entry = LLMLog(
-                request_type="text_to_sql",
-                data_source_id=datasource_id,
-                prompt_hash=prompt_hash,
-                model_name="databox-local-heuristic",
-                latency_ms=latency_ms,
-                status="blocked",
-                error_message="LLM fallback required but no API key configured",
-                prompt_version=PROMPT_VERSION,
-                prompt_template_hash=PROMPT_TEMPLATE_HASH,
-                model_temperature=0.0,
-                max_tokens=None,
-            )
-            _persist_llm_log(db, log_entry)
-            return {
-                "sql": None,
-                "model": "databox-local-heuristic",
-                "mode": "fallback_unavailable",
-                "latencyMs": latency_ms,
-                "schemaValidationWarnings": [],
-                "queryPlan": qp_dict,
-                **schema_metadata,
-                "metadata": {"generation_source": "generate_sql_fallback", "fallback_reason": "no_llm_api_key", "blocked_reason": "no_llm_api_key"},
-                "error": "Complex SQL fallback requires a configured LLM API key.",
-            }
-
-        # Otherwise run local heuristic matcher (only for simple offline cases)
-        generated_query = search_demo_sql(question)
         latency_ms = int((time.time() - start_time) * 1000)
-        
-        trust_gate = TrustGate(db, validate_sql_schema).evaluate(datasource_id, generated_query)
-        guard_res = trust_gate["guardrail"]
-        schema_warnings = trust_gate["schemaWarnings"]
-        
-        # Log the call with premium versioning & audit parameters
-        log_entry = LLMLog(
-            request_type="text_to_sql",
-            data_source_id=datasource_id,
-            prompt_hash=prompt_hash,
-            model_name="databox-local-heuristic",
-            latency_ms=latency_ms,
-            status="success",
-            prompt_version=PROMPT_VERSION,
-            prompt_template_hash=PROMPT_TEMPLATE_HASH,
-            model_temperature=0.0,
-            max_tokens=None,
-            schema_validation_warnings="; ".join(schema_warnings) if schema_warnings else None
-        )
-        _persist_llm_log(db, log_entry)
-        
         return {
-            "sql": generated_query,
-            "model": "databox-local-heuristic",
+            "sql": None,
+            "model": "databox",
+            "mode": "fallback_unavailable",
             "latencyMs": latency_ms,
-            "guardrail": guard_res,
-            "trustGate": trust_gate,
-            "mode": "offline",
-            "schemaValidationWarnings": schema_warnings,
+            "schemaValidationWarnings": [],
             "queryPlan": query_plan.to_dict(),
             **schema_metadata,
+            "metadata": {
+                "generation_source": "legacy_generate_sql",
+                "fallback_reason": "no_llm_api_key",
+                "blocked_reason": "no_llm_api_key",
+            },
+            "error": "LLM API key required for Text-to-SQL generation",
         }
 
     # 3. Connect to Online LLM via httpx
@@ -872,115 +633,6 @@ AI_TABLE_DESIGN_SYSTEM_PROMPT = (
     "}\n"
 )
 
-OFFLINE_USER_SCHEMA = {
-    "table_name": "users",
-    "table_comment": "用户账户表",
-    "columns": [
-        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "用户ID"},
-        {"name": "username", "type": "VARCHAR(50)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "用户名"},
-        {"name": "email", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "电子邮箱"},
-        {"name": "password_hash", "type": "VARCHAR(255)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "加密密码"},
-        {"name": "status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "账号状态"},
-        {"name": "last_login_at", "type": "TIMESTAMP", "nullable": True, "primary_key": False, "auto_increment": False, "comment": "最后登录时间"},
-        {"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"}
-    ],
-    "indexes": [
-        {"name": "uk_username", "columns": ["username"], "unique": True},
-        {"name": "uk_email", "columns": ["email"], "unique": True}
-    ]
-}
-
-OFFLINE_ORDER_SCHEMA = {
-    "table_name": "orders",
-    "table_comment": "业务订单表",
-    "columns": [
-        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "订单ID"},
-        {"name": "order_sn", "type": "VARCHAR(64)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "订单流水号"},
-        {"name": "user_id", "type": "BIGINT", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "关联用户ID"},
-        {"name": "total_amount", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "订单总金额"},
-        {"name": "pay_status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "unpaid", "comment": "支付状态"},
-        {"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "下单时间"}
-    ],
-    "indexes": [
-        {"name": "uk_order_sn", "columns": ["order_sn"], "unique": True},
-        {"name": "idx_user_id", "columns": ["user_id"], "unique": False}
-    ]
-}
-
-OFFLINE_PRODUCT_SCHEMA = {
-    "table_name": "products",
-    "table_comment": "商品信息表",
-    "columns": [
-        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "商品ID"},
-        {"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "商品名称"},
-        {"name": "price", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "商品价格"},
-        {"name": "stock", "type": "INT", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0", "comment": "库存数量"},
-        {"name": "status", "type": "VARCHAR(20)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "上架状态"}
-    ],
-    "indexes": [
-        {"name": "idx_product_status", "columns": ["status"], "unique": False}
-    ]
-}
-
-
-def make_offline_fallback_schema(question: str) -> dict[str, Any]:
-    t_name = "business_table"
-    cleaned = question.lower()
-    if "用户" in question or "user" in cleaned:
-        t_name = "users"
-    elif "订单" in question or "order" in cleaned:
-        t_name = "orders"
-    elif "商品" in question or "product" in cleaned:
-        t_name = "products"
-    elif "日志" in question or "log" in cleaned:
-        t_name = "logs"
-    elif "会员" in question or "member" in cleaned:
-        t_name = "members"
-    
-    columns = [
-        {"name": "id", "type": "BIGINT", "nullable": False, "primary_key": True, "auto_increment": True, "comment": "主键ID"}
-    ]
-    indexes = []
-    
-    if any(w in question or w in cleaned for w in ["name", "姓名", "名称", "标题", "title"]):
-        columns.append({"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "名称"})
-        indexes.append({"name": "idx_name", "columns": ["name"], "unique": False})
-        
-    if any(w in question or w in cleaned for w in ["status", "状态", "类型", "type"]):
-        columns.append({"name": "status", "type": "VARCHAR(32)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "active", "comment": "状态"})
-        
-    if any(w in question or w in cleaned for w in ["price", "价格", "金额", "amount"]):
-        columns.append({"name": "amount", "type": "DECIMAL(10,2)", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "0.00", "comment": "金额"})
-        
-    if any(w in question or w in cleaned for w in ["desc", "描述", "备注", "content", "内容", "comment"]):
-        columns.append({"name": "description", "type": "VARCHAR(255)", "nullable": True, "primary_key": False, "auto_increment": False, "comment": "描述"})
-        
-    if any(w in question or w in cleaned for w in ["time", "时间", "日期", "date", "created_at"]):
-        columns.append({"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"})
-
-    if len(columns) == 1:
-        columns.append({"name": "name", "type": "VARCHAR(100)", "nullable": False, "primary_key": False, "auto_increment": False, "comment": "名称"})
-        columns.append({"name": "created_at", "type": "TIMESTAMP", "nullable": False, "primary_key": False, "auto_increment": False, "default_value": "CURRENT_TIMESTAMP", "comment": "创建时间"})
-
-    return {
-        "table_name": t_name,
-        "table_comment": f"基于提示词生成的{t_name}表",
-        "columns": columns,
-        "indexes": indexes
-    }
-
-
-def generate_offline_table_design(question: str) -> dict[str, Any]:
-    cleaned = question.strip()
-    if "用户" in cleaned or "user" in cleaned.lower():
-        return OFFLINE_USER_SCHEMA
-    if "订单" in cleaned or "order" in cleaned.lower():
-        return OFFLINE_ORDER_SCHEMA
-    if "商品" in cleaned or "product" in cleaned.lower():
-        return OFFLINE_PRODUCT_SCHEMA
-    
-    return make_offline_fallback_schema(question)
-
 
 def generate_table_design_ai(
     question: str, llm_config: dict[str, Any] | None = None
@@ -994,7 +646,7 @@ def generate_table_design_ai(
     model_name = llm_config.get("model", "gpt-4o-mini").strip()
 
     if not api_key:
-        return generate_offline_table_design(question)
+        raise AIServiceError("LLM API key required for AI table design generation")
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -1029,8 +681,7 @@ def generate_table_design_ai(
         design_json: dict[str, Any] = json.loads(response_text)
         return design_json
     except Exception as e:
-        print(f"Online table design failed, falling back: {e}")
-        return generate_offline_table_design(question)
+        raise AIServiceError(f"AI table design generation failed: {e}")
 
 
 AI_SCHEMA_ALTERATION_SYSTEM_PROMPT = (
@@ -1043,25 +694,6 @@ AI_SCHEMA_ALTERATION_SYSTEM_PROMPT = (
     "3. Do not drop existing tables or columns unless explicitly asked by the instruction.\n"
     "4. Ensure that the table and column names referenced match the current database schema accurately."
 )
-
-def generate_offline_schema_alteration(instruction: str) -> str:
-    cleaned = instruction.strip().lower()
-    if "deleted_at" in cleaned or "软删除" in cleaned:
-        return (
-            "ALTER TABLE users ADD COLUMN deleted_at DATETIME NULL COMMENT '删除时间';\n"
-            "ALTER TABLE products ADD COLUMN deleted_at DATETIME NULL COMMENT '删除时间';\n"
-            "ALTER TABLE orders ADD COLUMN deleted_at DATETIME NULL COMMENT '删除时间';"
-        )
-    if "status" in cleaned or "状态" in cleaned:
-        return (
-            "ALTER TABLE orders ADD COLUMN status VARCHAR(50) DEFAULT 'pending' COMMENT '订单状态';\n"
-            "CREATE INDEX idx_orders_status ON orders(status);"
-        )
-    if "uuid" in cleaned or "唯一" in cleaned:
-        return "ALTER TABLE users ADD COLUMN uuid VARCHAR(64) UNIQUE COMMENT '唯一标识';"
-        
-    return "ALTER TABLE users ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';"
-
 
 def generate_schema_alteration_ai(
     db: Session,
@@ -1078,8 +710,7 @@ def generate_schema_alteration_ai(
     model_name = llm_config.get("model", "gpt-4o-mini").strip()
 
     if not api_key:
-        ddl = generate_offline_schema_alteration(instruction)
-        return {"ddl": ddl, "model": "databox-local-heuristic", "mode": "offline"}
+        raise AIServiceError("LLM API key required for AI schema alteration generation")
 
     schema_context = generate_schema_context(db, datasource_id, instruction, optimize_rag=False)
 
@@ -1126,7 +757,5 @@ def generate_schema_alteration_ai(
 
         return {"ddl": generated_ddl, "model": model_name, "mode": "online"}
     except Exception as e:
-        print(f"Online schema alteration failed, falling back: {e}")
-        ddl = generate_offline_schema_alteration(instruction)
-        return {"ddl": ddl, "model": "databox-local-heuristic", "mode": "offline"}
+        raise AIServiceError(f"AI schema alteration generation failed: {e}")
 

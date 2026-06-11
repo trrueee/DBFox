@@ -26,17 +26,6 @@ from engine.environment.database_map import (
     Relationship,
 )
 from engine.environment.service import EnvironmentService
-from engine.environment.manager import (
-    EnvironmentError,
-    create_local_mysql_environment,
-    start_environment,
-    stop_environment,
-    get_environment_logs,
-    check_environment_health,
-    destroy_environment,
-    rebuild_environment,
-)
-
 __all__ = [
     "CatalogSnapshot",
     "ColumnSnapshot",
@@ -49,12 +38,4 @@ __all__ = [
     "EnvironmentService",
     "ForeignKeySnapshot",
     "TableSnapshot",
-    "EnvironmentError",
-    "create_local_mysql_environment",
-    "start_environment",
-    "stop_environment",
-    "get_environment_logs",
-    "check_environment_health",
-    "destroy_environment",
-    "rebuild_environment",
 ]

@@ -4,7 +4,7 @@ import {
   RefreshCw, Bug, X,
 } from "lucide-react";
 import type { AgentWorkspaceContext, DataSource, QueryResult } from "../../lib/api";
-import { ApiConfigButton } from "../../components/ApiConfigDialog";
+import { SettingsButton } from "../../components/SettingsDialog";
 import { ThemeToggle } from "../../components/ThemeToggle";
 import { Button } from "../../components/ui/button";
 
@@ -49,7 +49,7 @@ export function AgentHeader({
         </span>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <ApiConfigButton onClick={onOpenApiConfig} isConfigured={apiConfigured} />
+          <SettingsButton onClick={onOpenApiConfig} isConfigured={apiConfigured} />
           {hasMessages && (
             <Button variant="ghost" size="sm" onClick={onNewChat} title="新建对话"
               className="h-7 text-[0.64rem] gap-1 px-2">

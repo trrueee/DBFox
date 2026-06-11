@@ -83,7 +83,7 @@ class TestProcessRows:
 
 class TestMySQLPool:
     def test_queue_pool_checkout_does_not_require_sqlalchemy_dialect(self, monkeypatch) -> None:
-        from engine import executor
+        from engine.sql import executor
         from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
 
         class FakeConnection:
@@ -120,53 +120,55 @@ class TestMySQLPool:
 class TestExecutorSQLite:
     """Integration test: execute real queries against the demo SQLite database."""
 
-    def test_select_all_users(self) -> None:
+    def test_select_all_users(self, demo_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5")
+        rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5", sqlite_path=demo_datasource.database_name)
         assert len(rows) >= 1
         assert "username" in columns
         assert "email" in columns
         assert truncated is False
         assert isinstance(rows[0]["username"], str)
 
-    def test_aggregation_query(self) -> None:
+    def test_aggregation_query(self, demo_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users")
+        rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users", sqlite_path=demo_datasource.database_name)
         assert len(rows) == 1
         assert columns == ["cnt"]
         assert int(rows[0]["cnt"]) > 0
 
-    def test_join_query(self) -> None:
+    def test_join_query(self, demo_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT u.username, o.total_amount FROM users u "
-            "JOIN orders o ON u.id = o.user_id LIMIT 5"
+            "JOIN orders o ON u.id = o.user_id LIMIT 5",
+            sqlite_path=demo_datasource.database_name,
         )
         assert len(rows) >= 1
         assert "username" in columns
         assert "total_amount" in columns
 
-    def test_row_limit_enforced(self) -> None:
+    def test_row_limit_enforced(self, demo_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
-        rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users")
+        rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users", sqlite_path=demo_datasource.database_name)
         assert len(rows) <= MAX_ROWS
 
-    def test_non_select_rejected(self) -> None:
+    def test_non_select_rejected(self, demo_datasource) -> None:
         """SQLite executes DDL without issue, but guardrail should be tested separately."""
         # This test verifies SQLite execution works; guardrail handles DDL blocking.
         from engine.sql.executor import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
-            "SELECT name FROM sqlite_master WHERE type='table' LIMIT 5"
+            "SELECT name FROM sqlite_master WHERE type='table' LIMIT 5",
+            sqlite_path=demo_datasource.database_name,
         )
         assert len(columns) == 1
         assert "name" in columns
 
-    def test_sqlite_timeout(self) -> None:
+    def test_sqlite_timeout(self, demo_datasource) -> None:
         from engine.sql.executor import _execute_on_sqlite
 
         with pytest.raises(TimeoutError):
@@ -175,9 +177,10 @@ class TestExecutorSQLite:
                 "SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 100000000"
                 ") SELECT sum(x) FROM cnt",
                 timeout_ms=0,
+                sqlite_path=demo_datasource.database_name,
             )
 
-    def test_sqlite_query_can_be_cancelled(self) -> None:
+    def test_sqlite_query_can_be_cancelled(self, demo_datasource) -> None:
         from engine.errors import SQLQueryCancelledError
         from engine.sql.executor import _execute_on_sqlite
         from engine.query_registry import QUERY_REGISTRY
@@ -190,7 +193,7 @@ class TestExecutorSQLite:
         )
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_execute_on_sqlite, long_sql, 30000, execution_id, "demo")
+            future = pool.submit(_execute_on_sqlite, long_sql, 30000, execution_id, demo_datasource.database_name)
 
             deadline = time.time() + 3
             while time.time() < deadline and not QUERY_REGISTRY.is_running(execution_id):
@@ -206,11 +209,7 @@ class TestExecutorSQLite:
 
 class TestPerformanceAndExplain:
     def test_execute_query_latency_metrics(self, db_session, demo_datasource) -> None:
-        # Set database to demo_shop to trigger SQLite path in testing
-        demo_datasource.host = "demo"
-        demo_datasource.database_name = "demo_shop"
-        db_session.commit()
-
+        sync_schema(db_session, demo_datasource.id)
         res = execute_query(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 3")
         assert res["success"] is True
         assert res["safetyDecision"]["can_execute"] is True
@@ -236,9 +235,6 @@ class TestPerformanceAndExplain:
     def test_execute_query_blocks_schema_hallucination(self, db_session, demo_datasource) -> None:
         from engine.errors import GuardrailValidationError
 
-        demo_datasource.host = "demo"
-        demo_datasource.database_name = "demo_shop"
-        db_session.commit()
         sync_schema(db_session, demo_datasource.id)
 
         with pytest.raises(GuardrailValidationError) as exc_info:
@@ -282,9 +278,7 @@ class TestPerformanceAndExplain:
         assert any(check["rule"] == "trust_gate_bypass_disabled" for check in exc_info.value.checks)
 
     def test_explain_sql_sqlite(self, db_session, demo_datasource) -> None:
-        demo_datasource.host = "demo"
-        demo_datasource.database_name = "demo_shop"
-        db_session.commit()
+        sync_schema(db_session, demo_datasource.id)
 
         res = explain_sql(db_session, demo_datasource.id, "SELECT id, username FROM users LIMIT 3")
         assert res["success"] is True

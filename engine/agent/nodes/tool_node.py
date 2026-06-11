@@ -89,6 +89,9 @@ def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> d
             "tool_name": internal_name,
             "status": observation.status,
             "latency_ms": observation.latency_ms,
+            "input": observation.input,
+            "output": observation.output,
+            "error": observation.error,
         })
 
     return {
@@ -145,6 +148,13 @@ def _execute_tool(
             api_base=req.api_base if req else None,
             model_name=req.model_name if req else None,
         )
+        # Step input recorded for the trace/response: the model's raw args
+        # enriched with the contextual flags legacy tools always reported.
+        obs_input = dict(args)
+        if "question" not in obs_input and merged_args.get("question"):
+            obs_input["question"] = merged_args["question"]
+        obs_input["has_follow_up_context"] = bool(merged_args.get("follow_up_context"))
+
         start_time = time.perf_counter()
         try:
             base_tool = tool.base_tool
@@ -157,7 +167,7 @@ def _execute_tool(
             return ToolObservation(
                 name=obs_name,
                 status=status,
-                input=args,
+                input=obs_input,
                 output=output_dict,
                 error=None,
                 latency_ms=latency_ms,
@@ -168,7 +178,7 @@ def _execute_tool(
             return ToolObservation(
                 name=obs_name,
                 status="failed",
-                input=args,
+                input=obs_input,
                 output=None,
                 error=str(exc),
                 latency_ms=latency_ms,

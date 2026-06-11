@@ -98,23 +98,298 @@ def spider_datasource(db_session):
     return _make_spider_ds(db_session, "concert_singer")
 
 
+def _init_test_db(db_path: str) -> str:
+    """Create a test SQLite database with sample tables."""
+    import sqlite3
+    from pathlib import Path
+
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            phone TEXT,
+            role TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            parent_id INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (parent_id) REFERENCES categories (id)
+        );
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            sku TEXT NOT NULL UNIQUE,
+            category_id INTEGER NOT NULL,
+            price REAL NOT NULL,
+            stock INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (category_id) REFERENCES categories (id)
+        );
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            total_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            payment_method TEXT,
+            shipping_address TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        CREATE TABLE IF NOT EXISTS order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            price REAL NOT NULL,
+            quantity INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        );
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            transaction_id TEXT,
+            payment_method TEXT NOT NULL DEFAULT 'alipay',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS shipping (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            tracking_number TEXT,
+            carrier TEXT,
+            status TEXT NOT NULL DEFAULT 'packing',
+            shipped_at TEXT,
+            delivered_at TEXT,
+            FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            rating INTEGER NOT NULL,
+            comment TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        CREATE TABLE IF NOT EXISTS cart (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS inventory_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            change_amount INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS coupons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL UNIQUE,
+            discount_type TEXT NOT NULL,
+            value REAL NOT NULL,
+            min_spend REAL NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS coupon_usages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            coupon_id INTEGER NOT NULL,
+            order_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (coupon_id) REFERENCES coupons (id) ON DELETE CASCADE,
+            FOREIGN KEY (order_id) REFERENCES orders (id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        );
+        CREATE TABLE IF NOT EXISTS user_addresses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            consignee TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            province TEXT NOT NULL,
+            city TEXT NOT NULL,
+            district TEXT,
+            address TEXT NOT NULL,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            contact TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            address TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supplier_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            total_cost REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers (id)
+        );
+        CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_order_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            cost REAL NOT NULL,
+            quantity INTEGER NOT NULL,
+            FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders (id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        );
+        CREATE TABLE IF NOT EXISTS analytics_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            product_id INTEGER NOT NULL,
+            source TEXT NOT NULL,
+            ip TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS system_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            description TEXT,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS admin_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            ip TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (admin_id) REFERENCES users (id)
+        );
+        CREATE TABLE IF NOT EXISTS recommendations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            score REAL NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+            FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+        );
+    """)
+    conn.commit()
+    # Seed minimal data for tests
+    now = "2025-01-15T12:00:00"
+    conn.execute("INSERT OR IGNORE INTO users (id, username, email, role, created_at) VALUES (1, 'admin', 'admin@test.local', 'admin', ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO users (id, username, email, role, created_at) VALUES (2, 'testuser', 'test@test.local', 'user', ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO categories (id, name, created_at) VALUES (1, 'Test Category', ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO products (id, name, sku, category_id, price, stock, status, created_at) VALUES (1, 'Test Product', 'SKU001', 1, 99.99, 50, 'active', ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO orders (id, user_id, total_amount, status, shipping_address, created_at, updated_at) VALUES (1, 1, 199.99, 'completed', '123 Test St', ?, ?)", (now, now))
+    conn.execute("INSERT OR IGNORE INTO order_items (id, order_id, product_id, price, quantity, created_at) VALUES (1, 1, 1, 99.99, 2, ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO payments (id, order_id, amount, status, payment_method, created_at) VALUES (1, 1, 199.99, 'success', 'alipay', ?)", (now,))
+    conn.execute("INSERT OR IGNORE INTO shipping (id, order_id, tracking_number, carrier, status, shipped_at, delivered_at) VALUES (1, 1, 'TRACK001', 'sf', 'delivered', ?, ?)", (now, now))
+    conn.execute("INSERT OR IGNORE INTO reviews (id, product_id, user_id, rating, comment, created_at) VALUES (1, 1, 1, 5, 'Great!', ?)", (now,))
+    conn.commit()
+    conn.close()
+    return db_path
+
+
 @pytest.fixture
-def demo_datasource(db_session):
-    """Create a demo datasource row for testing."""
+def demo_datasource(db_session, tmp_path):
+    """Create a test datasource row backed by a minimal SQLite database."""
+    db_file = tmp_path / "test_demo.db"
+    db_path = _init_test_db(str(db_file))
+
     ds = DataSource(
         id=str(uuid.uuid4()),
         name="test_demo",
-        host="demo",
-        port=3306,
-        database_name="demo_shop",
+        host="localhost",
+        port=0,
+        database_name=db_path,
         username="demo",
         password_ciphertext="test",
         password_nonce="test",
+        db_type="sqlite",
         status="active",
     )
     db_session.add(ds)
     db_session.commit()
     return ds
+
+
+@pytest.fixture(autouse=True)
+def reset_checkpointer():
+    """Reset the global _SHARED_MEMORY_SAVER before and after every test."""
+    from engine.agent_core import checkpointer
+    checkpointer._SHARED_MEMORY_SAVER = None
+    yield
+    checkpointer._SHARED_MEMORY_SAVER = None
+
+
+@pytest.fixture(autouse=True)
+def mock_openai_client(monkeypatch):
+    import engine.llm.factory
+    orig_create = engine.llm.factory.create_openai_client
+
+    def fake_create(*args, **kwargs):
+        if not kwargs.get("api_key"):
+            kwargs["api_key"] = "mock-key-for-testing"
+        return orig_create(*args, **kwargs)
+
+    monkeypatch.setattr(engine.llm.factory, "create_openai_client", fake_create)
+
+
+@pytest.fixture(autouse=True)
+def mock_agent_planner(monkeypatch):
+    """Planner node fail-fasts on LLM errors; without real credentials tests
+    use the permissive fallback plan so the (mocked) ReAct loop can run."""
+    import os
+    if os.environ.get("DATABOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
+        return
+
+    from engine.agent.nodes import planner_node
+
+    def fake_create_plan(state, config):
+        return planner_node._permissive_fallback(
+            replan_count=int(state.get("replan_count", 0) or 0),
+            execute=bool(state.get("execute")),
+        )
+
+    monkeypatch.setattr(planner_node, "create_plan", fake_create_plan)
+
+
+@pytest.fixture(autouse=True)
+def mock_agent_progress_judge(monkeypatch):
+    """Progress Judge requires LLM credentials; without real keys use the
+    module's rule-based fallback (mirrors the legacy routing logic)."""
+    import os
+    if os.environ.get("DATABOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
+        return
+
+    from engine.agent.nodes import progress_node
+
+    def fake_judge_progress(state, config):
+        escalate_result = progress_node._check_escalate(state)
+        if escalate_result:
+            return escalate_result
+        return progress_node._rule_fallback(state)
+
+    monkeypatch.setattr(progress_node, "judge_progress", fake_judge_progress)
 
 
 @pytest.fixture(autouse=True)
@@ -207,8 +482,10 @@ def mock_agent_call_model(monkeypatch):
             elif "sql_validate" not in called_tools:
                 next_tool = "sql_validate"
             elif "sql_execute_readonly" not in called_tools and "sql_skip_execution" not in called_tools:
-                safety = state.get("safety")
-                if safety and not safety.get("can_execute"):
+                safety = state.get("safety") or {}
+                blocked = safety.get("blocked_reasons") or []
+                hard_blocked = any(r != "requires_confirmation" for r in blocked)
+                if safety and hard_blocked:
                     if "sql_revise" not in called_tools:
                         next_tool = "sql_revise"
                 else:
@@ -243,9 +520,12 @@ def mock_agent_call_model(monkeypatch):
             status = "completed"
             error = None
             safety = state.get("safety")
-            if safety and not safety.get("can_execute"):
-                status = "failed"
-                error = "SQL validation failed."
+            if safety:
+                blocked = safety.get("blocked_reasons") or []
+                hard_blocked = any(r != "requires_confirmation" for r in blocked)
+                if hard_blocked:
+                    status = "failed"
+                    error = "SQL validation failed."
             execution = state.get("execution")
             if execution and "success" in execution and not execution.get("success"):
                 status = "failed"

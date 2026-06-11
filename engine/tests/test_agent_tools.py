@@ -48,8 +48,7 @@ def test_generate_sql_tool_returns_raw_select_star_without_rewrite(db_session, d
                 "dialect": "mysql",
                 "used_query_plan": False,
                 "used_renderer": False,
-                "used_demo_fallback": False,
-            },
+                },
         }
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
@@ -134,8 +133,7 @@ def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_genera
                 "dialect": kwargs["dialect"],
                 "used_query_plan": False,
                 "used_renderer": False,
-                "used_demo_fallback": False,
-            },
+                },
         }
 
     monkeypatch.setattr("engine.tools.sql_tools._render_sql_from_query_plan", fail_renderer)
@@ -171,7 +169,7 @@ def test_generate_sql_tool_schema_direct_does_not_call_renderer_or_legacy_genera
     assert obs.output["metadata"]["generation_source"] == "schema_direct_llm"
     assert obs.output["metadata"]["used_renderer"] is False
     assert obs.output["metadata"]["used_query_plan_as_prompt"] is False
-    assert obs.output["metadata"]["used_demo_fallback"] is False
+
     assert "COUNT(*) AS total_users" in obs.output["sql"]
     assert "FROM users" in obs.output["sql"]
 
@@ -198,8 +196,8 @@ def test_generate_sql_tool_non_demo_without_api_key_fails_closed(db_session) -> 
     assert obs.status == "success"
     assert obs.output is not None
     assert obs.output["sql"] is None
-    assert obs.output["error"] == "LLM API key required for non-demo Text-to-SQL generation"
-    assert obs.output["metadata"]["used_demo_fallback"] is False
+    assert obs.output["error"] == "LLM API key required for Text-to-SQL generation"
+
 
 
 def test_generate_sql_tool_records_semantic_contract_violations(db_session, demo_datasource, monkeypatch) -> None:
@@ -247,7 +245,7 @@ def test_generate_sql_tool_retries_once_with_contract_violations(db_session, dem
                 "mode": "schema_direct",
                 "latencyMs": 1,
                 "schemaValidationWarnings": [],
-                "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False, "used_demo_fallback": False},
+                "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False},
             }
         return {
             "sql": "SELECT Airline FROM flights GROUP BY Airline HAVING COUNT(*) >= 10",
@@ -255,7 +253,7 @@ def test_generate_sql_tool_retries_once_with_contract_violations(db_session, dem
             "mode": "schema_direct",
             "latencyMs": 1,
             "schemaValidationWarnings": [],
-            "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False, "used_demo_fallback": False},
+            "metadata": {"generation_source": "schema_direct_llm", "used_renderer": False},
         }
 
     monkeypatch.setattr("engine.tools.sql_tools.generate_sql_from_schema_context", fake_generate_sql_from_schema_context)
@@ -385,8 +383,8 @@ def test_generate_sql_tool_demo_without_api_key_fails_closed(db_session, demo_da
     assert obs.input["has_api_key"] is False
     assert obs.output is not None
     assert obs.output["sql"] is None
-    assert obs.output["error"] == "LLM API key required for non-demo Text-to-SQL generation"
-    assert obs.output["metadata"]["used_demo_fallback"] is False
+    assert obs.output["error"] == "LLM API key required for Text-to-SQL generation"
+
 
 
 def test_validate_sql_tool_rewrites_select_star_with_truncation_limit(db_session, demo_datasource) -> None:

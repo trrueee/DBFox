@@ -13,8 +13,7 @@ import pymysql
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
-from engine.datasource import get_mysql_connection_params, get_postgres_connection_params, is_demo_db
-from engine.demo_db_init import DEMO_DB_PATH, init_demo_database
+from engine.datasource import get_mysql_connection_params, get_postgres_connection_params
 from engine.errors import (
     GuardrailValidationError,
     SQLExecutionError,
@@ -165,7 +164,9 @@ def _execute_on_sqlite_profiled(
     sqlite_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], bool, int, int, int, int, int]:
     """Execute a safe SQL query on the SQLite database, returning timing breakdown."""
-    db_path = sqlite_path if sqlite_path else init_demo_database()
+    db_path = sqlite_path
+    if not db_path:
+        raise ValueError("SQLite database path is required for query execution")
     
     t_conn_start = time.perf_counter()
     conn = sqlite3.connect(db_path)
@@ -523,10 +524,35 @@ def _decision_checks_for_error(decision: ExecutionSafetyDecision) -> list[dict[s
 def _decision_block_message(decision: ExecutionSafetyDecision) -> str:
     if decision.guardrail.get("result") == "reject":
         return str(decision.guardrail.get("message") or "TrustGate blocked execution.")
-    if decision.schema_warnings:
+    if "select_star" in decision.blocked_reasons:
+        return "Agent execution requires explicit projected columns instead of SELECT *."
+    if "schema_validation" in decision.blocked_reasons or decision.schema_warnings:
         return "TrustGate blocked execution because schema validation found unknown tables or columns."
-    if decision.requires_confirmation:
+    if "requires_confirmation" in decision.blocked_reasons or decision.requires_confirmation:
         return "TrustGate blocked execution because this datasource requires manual confirmation."
+    if "safe_sql_missing" in decision.blocked_reasons:
+        return "Guardrail did not produce safe_sql. Execution is blocked."
+    if "datasource_scope" in decision.blocked_reasons:
+        return "Datasource scope could not be resolved."
+
+    explain_detail = next(
+        (
+            msg
+            for msg in decision.messages
+            if msg.startswith("EXPLAIN dry-run failed") or msg.startswith("EXPLAIN dry-run unavailable")
+        ),
+        "",
+    )
+    suffix = f"（{explain_detail}）" if explain_detail else ""
+    if "schema_error" in decision.blocked_reasons:
+        return f"表或字段在目标数据库中不存在，本地 Schema 元数据可能已过期，请重新同步 Schema 后重试。{suffix}"
+    if "syntax_error" in decision.blocked_reasons:
+        return f"SQL 语法未通过目标数据库校验，请检查语句。{suffix}"
+    if "explain_unavailable" in decision.blocked_reasons:
+        return f"无法连接到目标数据库，数据源可能已离线，请在数据源管理中检查连接后重试。{suffix}"
+    if explain_detail:
+        return explain_detail
+
     return "TrustGate blocked execution before SQL reached the database."
 
 
@@ -640,41 +666,34 @@ def execute_query(
                 execution_id=execution_id,
             )
         else:
-            if is_demo_db(str(ds.host), str(ds.database_name)):
-                rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_sqlite_profiled(
-                    safe_sql,
-                    execution_id=execution_id,
-                    datasource_id=datasource_id,
-                )
-            else:
-                conn_params = get_mysql_connection_params({
-                    "host": ds.host,
-                    "port": ds.port,
-                    "username": ds.username,
-                    "database_name": ds.database_name,
-                    "password_ciphertext": ds.password_ciphertext,
-                    "password_nonce": ds.password_nonce,
-                    "ssh_enabled": ds.ssh_enabled,
-                    "ssh_host": ds.ssh_host,
-                    "ssh_port": ds.ssh_port,
-                    "ssh_username": ds.ssh_username,
-                    "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-                    "ssh_password_nonce": ds.ssh_password_nonce,
-                    "ssh_pkey_path": ds.ssh_pkey_path,
-                    "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-                    "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-                    "ssl_enabled": ds.ssl_enabled,
-                    "ssl_ca_path": ds.ssl_ca_path,
-                    "ssl_cert_path": ds.ssl_cert_path,
-                    "ssl_key_path": ds.ssl_key_path,
-                    "ssl_verify_identity": ds.ssl_verify_identity,
-                })
-                rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_mysql_profiled(
-                    datasource_id,
-                    conn_params,
-                    safe_sql,
-                    execution_id=execution_id,
-                )
+            conn_params = get_mysql_connection_params({
+                "host": ds.host,
+                "port": ds.port,
+                "username": ds.username,
+                "database_name": ds.database_name,
+                "password_ciphertext": ds.password_ciphertext,
+                "password_nonce": ds.password_nonce,
+                "ssh_enabled": ds.ssh_enabled,
+                "ssh_host": ds.ssh_host,
+                "ssh_port": ds.ssh_port,
+                "ssh_username": ds.ssh_username,
+                "ssh_password_ciphertext": ds.ssh_password_ciphertext,
+                "ssh_password_nonce": ds.ssh_password_nonce,
+                "ssh_pkey_path": ds.ssh_pkey_path,
+                "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
+                "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
+                "ssl_enabled": ds.ssl_enabled,
+                "ssl_ca_path": ds.ssl_ca_path,
+                "ssl_cert_path": ds.ssl_cert_path,
+                "ssl_key_path": ds.ssl_key_path,
+                "ssl_verify_identity": ds.ssl_verify_identity,
+            })
+            rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_mysql_profiled(
+                datasource_id,
+                conn_params,
+                safe_sql,
+                execution_id=execution_id,
+            )
     except SQLQueryCancelledError as e:
         execution_status = "cancelled"
         error_message = e.message
@@ -714,16 +733,22 @@ def execute_query(
         db.add(history)
         db.commit()
 
-    # Detect cell truncation by scanning if any string value ends with "..."
+    # Detect cell truncation precisely: _process_rows cuts long strings to exactly
+    # MAX_CELL_CHARS chars + "...", so only that shape indicates a truncated cell.
+    # (Checking just endswith("...") false-positives on legitimate data.)
     cell_truncated = any(
-        isinstance(v, str) and v.endswith("...") for r in rows for v in r.values()
+        isinstance(v, str) and len(v) == MAX_CELL_CHARS + 3 and v.endswith("...")
+        for r in rows
+        for v in r.values()
     )
 
     warnings = []
+    notices = []
     if truncated:
         warnings.append("查询结果已超过最大传输字节限制，部分行被截断")
     if cell_truncated:
-        warnings.append("部分字段内容超过最大长度限制，已被截断")
+        # Informational, not a problem: long text cells are clipped for preview/transfer.
+        notices.append(f"部分长文本字段仅返回前 {MAX_CELL_CHARS} 字符")
     if len(columns) > MAX_COLUMNS:
         warnings.append("列数超过最大展示限制，仅显示前 100 列")
 
@@ -738,9 +763,11 @@ def execute_query(
         "historyId": history.id,
         "executionId": execution_id,
         "truncated": truncated,
+        "cellTruncated": cell_truncated,
         "responseBytes": response_bytes,
         "maxResponseBytes": MAX_RESPONSE_BYTES,
         "warnings": warnings,
+        "notices": notices,
         # Timing latency breakdown properties (camelCase for frontend TS, snake_case for Python tests)
         "connectMs": connect_ms,
         "guardrailMs": guardrail_ms,
@@ -790,10 +817,9 @@ def explain_sql(
     warnings = []
     records = []
 
-    if is_demo_db(str(ds.host), str(ds.database_name)):
+    if ds.db_type == "sqlite":
         # SQLite Explain Query Plan
-        demo_path = init_demo_database()
-        conn = sqlite3.connect(demo_path)
+        conn = sqlite3.connect(str(ds.database_name))
         conn.row_factory = sqlite3.Row
         try:
             cursor = conn.cursor()
