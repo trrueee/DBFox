@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, ShieldAlert, XCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, ShieldAlert, XCircle, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/databoxMock";
 import { ArtifactRenderer } from "./artifacts/ArtifactRenderer";
 import { FollowUpInput } from "./queryResult/FollowUpInput";
@@ -51,6 +51,15 @@ export function QueryResultWorkspace({
       />
 
       <div className="hifi-query-result-body">
+        {/* Error state — agent failed without producing an answer */}
+        {isDone && tab.agentStatus === "failed" && !hasAnswer && (
+          <div className="hifi-answer-error">
+            <AlertTriangle size={14} />
+            <span>Agent 未能完成分析</span>
+            <span className="hifi-answer-error-hint">展开下方"查看思考过程"了解详情，或点击"重新生成"重试</span>
+          </div>
+        )}
+
         {/* Answer card — the main result */}
         {hasAnswer && tab.agentAnswer && (
           <AnswerCard answer={tab.agentAnswer} />
