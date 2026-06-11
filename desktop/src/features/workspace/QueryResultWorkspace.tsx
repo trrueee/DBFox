@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Loader2, ShieldAlert, XCircle, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/databoxMock";
-import { ArtifactRenderer } from "./artifacts/ArtifactRenderer";
+import { ArtifactRenderer, type ArtifactDisplayPlanItem } from "./artifacts/ArtifactRenderer";
 import { FollowUpInput } from "./queryResult/FollowUpInput";
 import { QueryMessages } from "./queryResult/QueryMessages";
 import { QueryResultHeader } from "./queryResult/QueryResultHeader";
@@ -42,6 +42,7 @@ export function QueryResultWorkspace({
   const isDone = tab.agentStatus === "completed" || tab.agentStatus === "failed";
   const hasAnswer = !!tab.agentAnswer?.answer;
   const [showThinking, setShowThinking] = useState(false);
+  const displayPlan = getDisplayPlan(tab.agentAnswer);
 
   return (
     <div className="hifi-query-result-workspace hifi-tab-pane">
@@ -97,10 +98,11 @@ export function QueryResultWorkspace({
           </div>
         )}
 
-        {/* Artifacts — charts, tables, SQL */}
+        {/* Artifacts — ordered by answer.display_plan when available */}
         {((tab.artifacts?.length ?? 0) > 0) && (
           <ArtifactRenderer
             artifacts={tab.artifacts ?? []}
+            displayPlan={displayPlan}
             onOpenSqlConsole={onOpenSqlConsole}
             onSetSqlQuery={onSetSqlQuery}
             onToast={onToast}
@@ -146,4 +148,26 @@ export function QueryResultWorkspace({
       <FollowUpInput tabId={tab.id} onSendFollowUp={onSendFollowUp} />
     </div>
   );
+}
+
+function getDisplayPlan(answer: unknown): ArtifactDisplayPlanItem[] | undefined {
+  if (!answer || typeof answer !== "object") return undefined;
+  const raw = (answer as { display_plan?: unknown }).display_plan;
+  if (!Array.isArray(raw)) return undefined;
+  const result: ArtifactDisplayPlanItem[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const component = record.component;
+    if (component !== "metric" && component !== "chart" && component !== "table" && component !== "markdown" && component !== "recommendation" && component !== "sql" && component !== "trace") {
+      continue;
+    }
+    const priority = typeof record.priority === "number" ? record.priority : undefined;
+    result.push({
+      component,
+      reason: typeof record.reason === "string" ? record.reason : undefined,
+      priority,
+    });
+  }
+  return result.length ? result : undefined;
 }
