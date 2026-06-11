@@ -6,14 +6,14 @@ from langgraph.graph import END
 
 from engine.agent.graph.replan_policy import allow_replan
 from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.message_utils import message_tool_calls
 
 
 def _last_tool_calls(state: DataBoxAgentState) -> list[Any]:
     messages = state.get("messages", [])
     if not messages:
         return []
-    last = messages[-1]
-    return list(getattr(last, "tool_calls", None) or [])
+    return message_tool_calls(messages[-1])
 
 
 def route_planner_output(state: DataBoxAgentState) -> Literal["model", "finalize"]:
