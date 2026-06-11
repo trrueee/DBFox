@@ -20,7 +20,8 @@ import { AgentEvalPage } from "./pages/AgentEvalPage";
 import { useApiConfig, getStoredApiConfig } from "./components/SettingsDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { LlmConfigPanel } from "./components/LlmConfigPanel";
-import { agentApi, resolveAgentApproval, streamResumeAgentRun } from "./lib/api/agent";
+import TitleBar from "./components/TitleBar";
+import { agentApi, resolveAgentApproval, streamResumeAgentRun, testLlmConnection } from "./lib/api/agent";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "./lib/api/types";
 import {
   buildAnswerText,
@@ -746,8 +747,9 @@ export default function App() {
   return (
     <div className="hifi-viewport-wrapper">
       <div className="hifi-canvas-board" style={{ "--scale": scale } as CSSProperties}>
+        <TitleBar />
         {/* Main Work Area */}
-        <main className="hifi-workspace" style={{ height: "calc(1066px - 32px)", paddingTop: 0, paddingBottom: 0 }}>
+        <main className="hifi-workspace" style={{ height: "calc(1066px - 64px)", paddingTop: 0, paddingBottom: 0 }}>
           <DataSourceTree
             treeSearch={treeSearch}
             selectedTables={selectedTables}
@@ -917,9 +919,29 @@ function LlmConfigTabContent({ showToast }: { showToast: (msg: string) => void }
           handleSave();
           showToast("LLM 配置保存成功");
         }}
-        onTestConnection={() => {
+        onTestConnection={async () => {
+          const toastId = `llm-test-${Date.now()}`;
           showToast("正在测试与模型接口握手…");
-          setTimeout(() => showToast("连接测试通过，目标 API 可达"), 800);
+          try {
+            const result = await testLlmConnection(
+              config.apiKey || "",
+              config.apiBase || "https://api.openai.com/v1",
+              config.modelName || "gpt-4o-mini",
+            );
+            if (result.ok) {
+              showToast(
+                `连接测试通过 (${result.latency_ms}ms)，模型 ${result.model} 可达`,
+              );
+            } else {
+              showToast(
+                `连接失败 [${result.error_code || "UNKNOWN"}]: ${result.error_message || "未知错误"}`,
+              );
+            }
+          } catch (e: unknown) {
+            const msg =
+              e instanceof Error ? e.message : "无法连接到引擎服务，请确认引擎正在运行。";
+            showToast(`连接测试失败: ${msg}`);
+          }
         }}
       />
     </div>

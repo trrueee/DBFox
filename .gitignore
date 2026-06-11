@@ -82,6 +82,13 @@ desktop/src-tauri/.tauri/
 diff.txt
 diff_tests.txt
 databox-mysql-ssl-test/
+_server_pid.txt
+log.txt
+desktop/log.txt
+desktop/log_*.txt
+
+# Root-level dependency leakage (desktop/node_modules is covered above)
+node_modules/
 
 # OS / editor
 .DS_Store

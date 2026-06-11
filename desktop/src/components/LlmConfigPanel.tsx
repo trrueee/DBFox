@@ -17,7 +17,7 @@ interface LlmConfigPanelProps {
   config: ApiConfig;
   onChange: (partial: Partial<ApiConfig>) => void;
   onSave?: () => void;
-  onTestConnection?: () => void;
+  onTestConnection?: () => void | Promise<void>;
   saved?: boolean;
   variant?: "dialog" | "page";
 }
@@ -78,12 +78,21 @@ export function LlmConfigPanel({
   variant = "page",
 }: LlmConfigPanelProps) {
   const [showKey, setShowKey] = useState(false);
+  const [testing, setTesting] = useState(false);
   const presetValues = LLM_MODEL_PRESETS.map((m) => m.value);
   const isCustomModel = Boolean(config.modelName) && !presetValues.includes(config.modelName);
   const activePreset = findModelPreset(config.modelName);
 
   return (
-    <div className={variant === "page" ? "hifi-settings-page" : "hifi-settings-dialog-body"}>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (variant === "page") {
+          onSave?.();
+        }
+      }}
+      className={variant === "page" ? "hifi-settings-page" : "hifi-settings-dialog-body"}
+    >
       {variant === "page" ? (
         <header className="hifi-settings-page-header">
           <div className="hifi-settings-page-icon">
@@ -222,19 +231,32 @@ export function LlmConfigPanel({
       {variant === "page" && (onSave || onTestConnection) ? (
         <footer className="hifi-settings-footer">
           {onTestConnection ? (
-            <Button variant="outline" size="sm" onClick={onTestConnection}>
-              测试连接
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testing}
+              onClick={async () => {
+                setTesting(true);
+                try {
+                  await onTestConnection();
+                } finally {
+                  setTesting(false);
+                }
+              }}
+            >
+              {testing ? "测试中…" : "测试连接"}
             </Button>
           ) : <span />}
           {onSave ? (
-            <Button size="sm" onClick={onSave} className="gap-1.5">
+            <Button type="submit" size="sm" className="gap-1.5">
               <CheckCircle2 size={13} />
               保存配置
             </Button>
           ) : null}
         </footer>
       ) : null}
-    </div>
+    </form>
   );
 }
 

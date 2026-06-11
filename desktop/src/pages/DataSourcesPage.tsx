@@ -271,7 +271,10 @@ export const DataSourcesPage = ({
       </div>
 
       {showAddForm && (
-        <div className="hifi-card hifi-datasource-form animate-slide-down">
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          className="hifi-card hifi-datasource-form animate-slide-down"
+        >
           <h3 className="hifi-card-title">新增数据源</h3>
 
           <div style={{ marginBottom: 20 }}>
@@ -647,7 +650,7 @@ export const DataSourcesPage = ({
               {submitting ? "保存中..." : "保存并同步 Schema"}
             </button>
           </div>
-        </div>
+        </form>
       )}
 
       <div className="hifi-datasource-list-section">

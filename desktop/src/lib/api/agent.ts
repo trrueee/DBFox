@@ -373,3 +373,37 @@ export const agentApi = {
 
   streamResumeAgentRun,
 };
+
+// ---------------------------------------------------------------------------
+// LLM Connection Test
+// ---------------------------------------------------------------------------
+
+export interface LlmTestRequest {
+  api_key: string;
+  api_base: string;
+  model_name: string;
+}
+
+export interface LlmTestResponse {
+  ok: boolean;
+  model: string;
+  api_base: string;
+  latency_ms: number;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export async function testLlmConnection(
+  apiKey: string,
+  apiBase: string,
+  modelName: string,
+): Promise<LlmTestResponse> {
+  return request<LlmTestResponse>("/agent/llm/test", {
+    method: "POST",
+    body: JSON.stringify({
+      api_key: apiKey,
+      api_base: apiBase,
+      model_name: modelName,
+    }),
+  });
+}

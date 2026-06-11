@@ -1,3 +1,8 @@
+"""
+Fallback desktop launcher using pywebview.
+Primary desktop path is Tauri: `cd desktop && npm run tauri dev`.
+"""
+
 import os
 import sys
 import subprocess

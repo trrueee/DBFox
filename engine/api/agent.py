@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.agent import DataBoxAgentRuntime
@@ -31,9 +32,79 @@ from engine.agent_core.events import EventEmitter
 from engine.db import get_db
 from engine.errors import DataBoxError
 from engine.llm.errors import llm_error_from_exception
+from engine.llm.providers.openai import create_openai_client
 
 logger = logging.getLogger("databox.api.agent")
 router = APIRouter()
+
+
+class LlmTestRequest(BaseModel):
+    api_key: str
+    api_base: str = "https://api.openai.com/v1"
+    model_name: str = "gpt-4o-mini"
+
+
+class LlmTestResponse(BaseModel):
+    ok: bool
+    model: str
+    api_base: str
+    latency_ms: int
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# LLM connection test — POST /agent/llm/test
+# ---------------------------------------------------------------------------
+
+@router.post("/agent/llm/test", response_model=LlmTestResponse)
+def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
+    """Test LLM API connectivity with a minimal chat completion call.
+
+    This endpoint validates that the provided api_key, api_base, and model_name
+    can actually reach the target LLM service before the user attempts a full
+    agent run.
+    """
+    import time as _time
+
+    t0 = _time.monotonic()
+    try:
+        client = create_openai_client(
+            model_name=req.model_name,
+            api_key=req.api_key,
+            api_base=req.api_base,
+            timeout=10.0,
+            max_tokens=1,
+        )
+        # Minimal invocation to verify auth + connectivity + model existence.
+        client.invoke("ping")
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        return LlmTestResponse(
+            ok=True,
+            model=req.model_name,
+            api_base=req.api_base,
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        llm_error = llm_error_from_exception(exc)
+        if llm_error is not None:
+            return LlmTestResponse(
+                ok=False,
+                model=req.model_name,
+                api_base=req.api_base,
+                latency_ms=latency_ms,
+                error_code=llm_error.code,
+                error_message=str(llm_error),
+            )
+        return LlmTestResponse(
+            ok=False,
+            model=req.model_name,
+            api_base=req.api_base,
+            latency_ms=latency_ms,
+            error_code="LLM_UNKNOWN_ERROR",
+            error_message=f"{type(exc).__name__}: {exc}",
+        )
 
 
 # ---------------------------------------------------------------------------
