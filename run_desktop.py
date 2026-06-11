@@ -37,9 +37,9 @@ def main():
     
     # Check if FastAPI backend (Port 18625) is running
     if not is_port_open(18625):
-        print(">>> 检测到 DataBox 审计及 AI 引擎后台未启动，正在拉起...")
+        print(">>> 检测到 DataBox 审计及 AI 引擎后台未启动，正在拉起 (热更新已开启)...")
         backend_proc = subprocess.Popen(
-            [sys.executable, "-m", "engine.main"],
+            [sys.executable, "-m", "engine.main", "--reload"],
             cwd=root_dir,
             env=os.environ.copy()
         )

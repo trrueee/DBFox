@@ -189,4 +189,8 @@ def schema_refresh_catalog(ctx: ToolContext, args: dict[str, Any]) -> ToolObserv
 # ---------------------------------------------------------------------------
 
 def _datasource_id(ctx: ToolContext) -> str:
-    return str(ctx.state.get("datasource_id") or "")
+    return str(
+        ctx.state_view.get("datasource_id")
+        or getattr(ctx.request, "datasource_id", "")
+        or ""
+    )

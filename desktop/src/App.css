@@ -1524,6 +1524,29 @@
   padding: 12px;
 }
 
+.hifi-artifact-empty {
+  margin-top: 8px;
+  background: var(--color-bg);
+}
+
+.hifi-artifact-empty-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-panel);
+}
+
+.hifi-artifact-empty-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.hifi-artifact-empty-body {
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
 /* SQL Card Specifics */
 .hifi-sql-card {
   background: #F8FAFC;
