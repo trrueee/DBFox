@@ -1,23 +1,54 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.planning.prompts import PLANNER_SYSTEM_PROMPT
+from engine.agent.planning.deterministic_router import (
+    build_deterministic_plan,
+    should_use_llm_planner,
+)
 from engine.agent.skills.registry import get_skill_registry
 from engine.agent.skills.renderer import render_skill_list_for_planner
 from engine.llm import get_chat_model
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
+from engine.agent.graph.message_utils import first_user_text
 
 logger = logging.getLogger("databox.databox_agent.nodes.planner_node")
 
 
 def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+    """Create an initial plan with deterministic routing by default.
+
+    The planner node remains in the graph for compatibility, but the common
+    path is now a cheap router. The old LLM planner is reserved for semantic
+    recovery during replans or can be forced with DATABOX_AGENT_PLANNER_MODE=llm.
+    """
+    mode = os.environ.get("DATABOX_AGENT_PLANNER_MODE", "hybrid").strip().lower()
+    if mode not in {"hybrid", "deterministic", "llm"}:
+        mode = "hybrid"
+
+    use_llm = mode == "llm" or (mode == "hybrid" and should_use_llm_planner(state))
+    if use_llm:
+        return _create_llm_plan(state, config)
+
+    replan_count = int(state.get("replan_count", 0))
+    progress = state.get("progress_decision") or {}
+    is_replan = progress.get("status") == "replan"
+    next_replan_count = replan_count + 1 if is_replan else replan_count
+
+    directive = build_deterministic_plan(state)
+    directive = _apply_clarification_policy(directive, state)
+    return _plan_result(directive, next_replan_count, is_replan)
+
+
+def _create_llm_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM Planner node — produces an AgentPlanDirective from the user message.
 
     Called at the start of every run and on replan (when the Progress Judge
@@ -45,16 +76,7 @@ def create_plan(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, A
     next_replan_count = replan_count + 1 if is_replan else replan_count
 
     # ---- Build the planner prompt -------------------------------------------
-    messages = state.get("messages", [])
-    user_text = ""
-    if messages:
-        first = messages[0]
-        content = getattr(first, "content", "")
-        if isinstance(content, str):
-            user_text = content
-        elif isinstance(content, list):
-            parts = [p.get("text", "") for p in content if isinstance(p, dict)]
-            user_text = " ".join(parts).strip()
+    user_text = first_user_text(state.get("messages", []))
 
     workspace = state.get("workspace_context")
     follow_up = state.get("follow_up_context")
