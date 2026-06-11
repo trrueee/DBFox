@@ -101,27 +101,15 @@
   color: #64748B;
 }
 
-.agent-status-running {
-  background: #EFF6FF;
-  color: #2563EB;
-}
-
-.agent-status-completed {
-  background: #ECFDF5;
-  color: #16A34A;
-}
-
-.agent-status-failed {
-  background: #FEF2F2;
-  color: #DC2626;
-}
-
-.agent-status-waiting_approval {
-  background: #FFFBEB;
-  color: #B45309;
-}
+.agent-status-running { background: #EFF6FF; color: #2563EB; }
+.agent-status-completed { background: #ECFDF5; color: #16A34A; }
+.agent-status-failed { background: #FEF2F2; color: #DC2626; }
+.agent-status-waiting_approval { background: #FFFBEB; color: #B45309; }
 
 .agent-narration-card {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
   padding: 8px 10px;
   border-radius: 10px;
   background: #F8FAFC;
@@ -129,6 +117,13 @@
   font-size: 11.5px;
   color: #475569;
   line-height: 1.6;
+}
+
+.agent-narration-icon {
+  display: inline-flex;
+  color: #64748B;
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .agent-artifact-group {
@@ -157,6 +152,13 @@
   color: #334155;
 }
 
+.agent-artifact-group-subtitle {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #94A3B8;
+}
+
 .agent-artifact-count {
   min-width: 22px;
   height: 22px;
@@ -171,46 +173,144 @@
   justify-content: center;
 }
 
-.agent-artifact-list {
+.agent-artifact-renderer-wrap {
   padding: 10px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-artifact-renderer-wrap .hifi-ai-card {
+  margin-top: 0;
+  box-shadow: none;
+}
+
+.agent-approval-inline {
+  border: 1px solid #FBBF24;
+  background: #FFFBEB;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.agent-artifact-mini {
+.agent-approval-danger {
+  border-color: #FCA5A5;
+  background: #FEF2F2;
+}
+
+.agent-approval-inline-head {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 9px 10px;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  background: #FFFFFF;
+  align-items: center;
+  gap: 6px;
+  color: #92400E;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.agent-artifact-mini strong {
-  font-size: 11px;
-  color: #1E293B;
+.agent-approval-danger .agent-approval-inline-head {
+  color: #B91C1C;
 }
 
-.agent-artifact-mini span {
+.agent-approval-inline-head strong {
+  margin-left: auto;
   font-size: 10px;
-  color: #64748B;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.agent-approval-inline p {
+  margin: 0;
+  font-size: 11px;
+  color: #78350F;
   line-height: 1.5;
 }
 
-.agent-artifact-mini-chart { border-color: #BFDBFE; background: #EFF6FF; }
-.agent-artifact-mini-table { border-color: #BBF7D0; background: #F0FDF4; }
-.agent-artifact-mini-sql { border-color: #DDD6FE; background: #F5F3FF; }
-.agent-artifact-mini-markdown { border-color: #FED7AA; background: #FFF7ED; }
-
-.agent-follow-up-in-thread {
-  padding-top: 2px;
+.agent-approval-inline pre {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 8px;
+  background: #FFFFFF;
+  padding: 8px;
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  color: #1E293B;
+  white-space: pre-wrap;
 }
 
-.agent-spin {
-  animation: agent-spin 0.9s linear infinite;
+.agent-approval-inline-actions {
+  display: flex;
+  gap: 8px;
 }
+
+.agent-approval-inline-actions button {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.agent-approval-primary {
+  border: 1px solid #2563EB;
+  background: #2563EB;
+  color: #FFFFFF;
+}
+
+.agent-approval-secondary {
+  border: 1px solid #FCA5A5;
+  background: #FFFFFF;
+  color: #B91C1C;
+}
+
+.agent-inline-error {
+  display: flex;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid #FECACA;
+  background: #FEF2F2;
+  color: #B91C1C;
+  font-size: 11.5px;
+}
+
+.agent-follow-up-in-thread { padding-top: 2px; }
+
+.agent-raw-messages {
+  margin-left: 38px;
+  max-width: 860px;
+}
+
+.agent-raw-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: #94A3B8;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.agent-raw-toggle strong {
+  font-size: 10px;
+  color: #64748B;
+}
+
+.agent-raw-body {
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+
+.agent-spin { animation: agent-spin 0.9s linear infinite; }
 
 @keyframes agent-spin {
   to { transform: rotate(360deg); }

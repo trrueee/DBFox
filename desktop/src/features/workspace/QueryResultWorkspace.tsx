@@ -21,6 +21,8 @@ export function QueryResultWorkspace({
   onOpenSqlConsole,
   onSetSqlQuery,
   onSendFollowUp,
+  onApproveAgent,
+  onRejectAgent,
   onCancelRun,
   onRegenerateRun,
   onToast,
@@ -41,13 +43,18 @@ export function QueryResultWorkspace({
           <div className="hifi-answer-error">
             <AlertTriangle size={14} />
             <span>Agent 未能完成分析</span>
-            <span className="hifi-answer-error-hint">可以查看下方对话中的运行状态，或点击“重新生成”重试</span>
+            <span className="hifi-answer-error-hint">可以查看对话中的运行状态，或点击“重新生成”重试</span>
           </div>
         )}
 
         <AgentConversationThread
           tab={tab}
+          onOpenSqlConsole={onOpenSqlConsole}
+          onSetSqlQuery={onSetSqlQuery}
           onSendFollowUp={onSendFollowUp}
+          onApproveAgent={onApproveAgent}
+          onRejectAgent={onRejectAgent}
+          onToast={onToast}
         />
       </div>
 
