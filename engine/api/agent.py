@@ -223,6 +223,26 @@ def api_agent_run_resume(
         )
 
 
+@router.post("/agent/runs/{run_id}/cancel")
+def api_cancel_agent_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Cancel a running agent run. Marks the run as cancelled in the database.
+    The frontend should also abort the SSE stream via AbortController."""
+    try:
+        agent_persistence.cancel_run(db, run_id=run_id)
+        db.commit()
+        return {"status": "cancelled", "run_id": run_id}
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to cancel agent run %s", run_id)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "AGENT_CANCEL_ERROR", "message": f"Failed to cancel run: {str(exc)}"},
+        )
+
+
 @router.post("/agent/runs/{run_id}/approvals/{approval_id}")
 def api_resolve_agent_approval(
     run_id: str,

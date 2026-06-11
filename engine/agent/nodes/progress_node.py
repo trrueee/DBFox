@@ -73,11 +73,6 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
     user_text = first_user_text(messages)
     context_parts.append(f"### User Question\n{user_text}")
 
-    # Plan directive
-    plan = state.get("plan_directive") or {}
-    if plan:
-        context_parts.append(f"### Plan Directive\n```json\n{_compact_json(plan)}\n```")
-
     # States relevant to progress
     schema_ctx = state.get("schema_context")
     if schema_ctx:
@@ -203,7 +198,7 @@ def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str
         decision = structured_model.invoke([
             {"role": "system", "content": PROGRESS_JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": judge_prompt},
-        ])
+        ], config)
     except Exception as exc:
         logger.error("Progress Judge LLM call failed: %s", exc)
         # Fallback: check if we have an answer, then complete; else fail

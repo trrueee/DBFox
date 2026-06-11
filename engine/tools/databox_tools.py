@@ -553,7 +553,10 @@ for _name in [
 def _request(ctx: ToolContext, args: dict[str, Any]) -> AgentRunRequest:
     if not args.get("question"):
         return ctx.request
-    return ctx.request.model_copy(update={"question": str(args["question"])})
+    return ctx.request.model_copy(update={
+        "question": str(args["question"]),
+        "follow_up_context": None,
+    })
 
 
 def _load_followup_context(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:

@@ -340,9 +340,9 @@ def build_canvas(
     plan = PlanCard(
         task_type=plan_directive.get("task_type", ""),
         intent_summary=plan_directive.get("reasoning_summary", ""),
-        execution_mode=plan_directive.get("execution_mode", ""),
+        execution_mode=state.get("execution_mode") or plan_directive.get("execution_mode", ""),
         selected_skills=skill_ids,
-        allowed_tool_groups=plan_directive.get("allowed_tool_groups") or [],
+        allowed_tool_groups=state.get("allowed_tool_groups") or plan_directive.get("allowed_tool_groups") or [],
         forbidden_tool_groups=[],
         success_criteria=plan_directive.get("success_criteria") or [],
         risk_notes=plan_directive.get("risk_notes") or [],

@@ -63,17 +63,8 @@ class PolicyGate:
                     risk_level="danger",
                 )
 
-        # ---- Hard boundary: check Planner's should_execute_sql flag ----
-        plan = state.get("plan_directive") or {}
+        # ---- SQL execution gating via execution_mode ----
         if tool_name == "sql.execute_readonly":
-            if plan.get("should_execute_sql") is False:
-                return PolicyDecision(
-                    status="blocked",
-                    reason="Planner directive forbids SQL execution for this task.",
-                    risk_level="danger",
-                )
-
-            # Backward-compat: derive from state["execute"] if execution_mode not explicitly set
             effective_mode = execution_mode
             if execution_mode == "user_requested_read" and not state.get("execute", True):
                 effective_mode = "suggest_only"

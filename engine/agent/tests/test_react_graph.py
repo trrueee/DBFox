@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.react_graph import build_databox_react_graph
 from engine.agent.graph.routes import (
-    route_planner_output,
     route_model_output,
     route_policy_output,
     route_approval_output,
@@ -19,7 +18,6 @@ class TestGraphCompilation:
         graph = build_databox_react_graph()
         nodes = list(graph.nodes.keys())
         assert "__start__" in nodes
-        assert "planner" in nodes
         assert "model" in nodes
         assert "policy" in nodes
         assert "tools" in nodes
@@ -28,44 +26,6 @@ class TestGraphCompilation:
         assert "repair" in nodes
         assert "approval" in nodes
         assert "finalize" in nodes
-
-
-class TestPlannerRoute:
-    def test_no_tools_still_routes_to_model(self):
-        """Chat with no tools must go through model → progress → finalize, not skip model."""
-        plan = {"task_type": "chat", "should_call_tools": False, "needs_clarification": False}
-        state: DataBoxAgentState = {
-            "plan_directive": plan,
-            "allowed_tool_groups": [],
-            "status": "running",
-        }
-        assert route_planner_output(state) == "model"
-
-    def test_with_tools_routes_to_model(self):
-        plan = {"task_type": "data_lookup", "should_call_tools": True, "needs_clarification": False}
-        state: DataBoxAgentState = {
-            "plan_directive": plan,
-            "allowed_tool_groups": ["schema", "sql_generation"],
-            "status": "running",
-        }
-        assert route_planner_output(state) == "model"
-
-    def test_needs_clarification_routes_to_finalize(self):
-        plan = {"task_type": "ambiguous", "should_call_tools": False, "needs_clarification": True}
-        state: DataBoxAgentState = {
-            "plan_directive": plan,
-            "allowed_tool_groups": [],
-            "status": "running",
-        }
-        assert route_planner_output(state) == "finalize"
-
-    def test_waiting_user_routes_to_finalize(self):
-        state: DataBoxAgentState = {
-            "plan_directive": {},
-            "allowed_tool_groups": [],
-            "status": "waiting_user",
-        }
-        assert route_planner_output(state) == "finalize"
 
 
 class TestModelRoute:
@@ -183,16 +143,18 @@ class TestProgressRoute:
         }
         assert route_progress_output(state) == "repair"
 
-    def test_replan_routes_to_planner(self):
+    def test_replan_routes_to_model(self):
+        """Replan now routes to model — the model adapts autonomously with progress guidance."""
         state: DataBoxAgentState = {
             "progress_decision": {"status": "replan", "retry_budget": 1},
             "replan_count": 0,
         }
-        assert route_progress_output(state) == "planner"
+        assert route_progress_output(state) == "model"
 
     def test_replan_exceeded_routes_to_finalize(self):
+        """Replan with exhausted budget (no retry_budget set) → finalize."""
         state: DataBoxAgentState = {
-            "progress_decision": {"status": "replan"},
+            "progress_decision": {"status": "replan", "retry_budget": 0},
             "replan_count": 3,
         }
         assert route_progress_output(state) == "finalize"

@@ -27,6 +27,8 @@ export interface WorkspaceTab {
   agentSessionId?: string;
   agentStatus?: AgentTabStatus;
   agentApproval?: AgentApprovalInfo | null;
+  agentAnswer?: import("../lib/api/types").AgentAnswer | null;
+  agentSuggestions?: import("../lib/api/types").FollowUpSuggestion[] | null;
 }
 
 export interface ContextMenuState {

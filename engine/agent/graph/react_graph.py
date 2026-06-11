@@ -5,7 +5,6 @@ from langgraph.graph import END, START, StateGraph
 
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.routes import (
-    route_planner_output,
     route_model_output,
     route_policy_output,
     route_approval_output,
@@ -14,18 +13,20 @@ from engine.agent.graph.routes import (
 
 
 def build_databox_react_graph(*, checkpointer=None) -> Any:
-    """Build the DataBox Agent ReAct graph.
+    """Build the DataBox Agent ReAct graph — pure ReAct loop with state-machine guarantees.
 
     Flow:
-        START → planner → model → policy → tools → observe → progress → ...
-        progress can route to: model (continue), planner (replan), finalize (done).
+        START → model → policy → tools → observe → progress → model/repair/finalize
 
-    The Planner decides task intent, tool scope, and execution mode.
-    The Model (ReAct) executes with dynamically scoped tools.
-    PolicyGate enforces hard safety boundaries.
-    The Progress Judge determines completion / continuation / replanning.
+    The Model decides every action by observing state (messages, tool results,
+    environment).  There is no separate Planner — the ReAct loop IS the plan.
+
+    Graph provides state-machine guarantees only:
+      - Step limit (model_node hard block + progress_node fast path)
+      - Checkpoint / resume (LangGraph checkpointer + approval interrupts)
+      - Anti-loop (replan budget, consecutive block limit)
+      - Policy gate (safety boundary enforcement)
     """
-    from engine.agent.nodes.planner_node import create_plan
     from engine.agent.nodes.model_node import call_model
     from engine.agent.nodes.policy_node import apply_policy
     from engine.agent.nodes.tool_node import execute_allowed_tools
@@ -38,7 +39,6 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     graph = StateGraph(DataBoxAgentState)
 
     # ---- Nodes -----------------------------------------------------------
-    graph.add_node("planner", create_plan)
     graph.add_node("model", call_model)
     graph.add_node("policy", apply_policy)
     graph.add_node("tools", execute_allowed_tools)
@@ -49,16 +49,7 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     graph.add_node("finalize", finalize_answer)
 
     # ---- Edges -----------------------------------------------------------
-    graph.add_edge(START, "planner")
-
-    graph.add_conditional_edges(
-        "planner",
-        route_planner_output,
-        {
-            "model": "model",
-            "finalize": "finalize",
-        },
-    )
+    graph.add_edge(START, "model")
 
     graph.add_conditional_edges(
         "model",
@@ -98,7 +89,6 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
         route_progress_output,
         {
             "model": "model",
-            "planner": "planner",
             "repair": "repair",
             "finalize": "finalize",
         },
