@@ -23,7 +23,7 @@ class LLMClientFactory:
         *,
         temperature: float = 0.0,
         max_tokens: int | None = None,
-        timeout: float = 30.0,
+        timeout: float = 120.0,
     ) -> ChatOpenAI:
         return create_openai_client(
             model_name=self.model_name,
@@ -42,7 +42,7 @@ def get_chat_model(
     api_base: str | None = None,
     temperature: float = 0.0,
     max_tokens: int | None = None,
-    timeout: float = 30.0,
+    timeout: float = 120.0,
 ) -> ChatOpenAI:
     """Build a ChatOpenAI client from explicit args, falling back to env vars.
 
