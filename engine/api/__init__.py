@@ -7,6 +7,7 @@ from engine.api.backup import router as backup_router
 from engine.api.table_design import router as table_design_router
 from engine.api.semantic import router as semantic_router
 from engine.api.agent_eval import router as agent_eval_router
+from engine.api.conversations import router as conversations_router
 
 router = APIRouter(prefix="/api/v1")
 
@@ -18,5 +19,6 @@ router.include_router(backup_router)
 router.include_router(table_design_router)
 router.include_router(semantic_router)
 router.include_router(agent_eval_router)
+router.include_router(conversations_router)
 
 __all__ = ["router"]
