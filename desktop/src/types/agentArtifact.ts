@@ -1,4 +1,4 @@
-export type AgentArtifactType = "chart" | "sql" | "table" | "markdown";
+export type AgentArtifactType = "chart" | "sql" | "table" | "markdown" | "metric" | "trace";
 
 export type AgentArtifactBase = {
   id: string;
@@ -30,4 +30,23 @@ export type MarkdownArtifact = AgentArtifactBase & {
   content: string;
 };
 
-export type AgentArtifact = ChartArtifact | SqlArtifact | TableArtifact | MarkdownArtifact;
+export type MetricArtifact = AgentArtifactBase & {
+  type: "metric";
+  cards: Array<{
+    label: string;
+    value: string;
+    helper?: string;
+    tone?: "neutral" | "good" | "warn" | "danger";
+  }>;
+};
+
+export type TraceArtifact = AgentArtifactBase & {
+  type: "trace";
+  stages: Array<{
+    label: string;
+    status: "success" | "running" | "warning" | "failed" | "skipped";
+    detail?: string;
+  }>;
+};
+
+export type AgentArtifact = ChartArtifact | SqlArtifact | TableArtifact | MarkdownArtifact | MetricArtifact | TraceArtifact;
