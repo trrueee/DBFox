@@ -29,7 +29,7 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onSetSqlQuery, onT
     <div className="hifi-ai-card">
       <div className="hifi-ai-card-header flex items-center justify-between gap-2">
         <span>{artifact.title}</span>
-        <span className="hifi-guide-chip-prod">SQL</span>
+        <span className="hifi-artifact-chip hifi-artifact-chip-sql">SQL</span>
       </div>
       <div className="hifi-ai-card-body">
         {artifact.description && <p className="text-[10px] text-slate-500 px-3 pt-2">{artifact.description}</p>}

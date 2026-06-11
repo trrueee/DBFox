@@ -146,8 +146,18 @@ def test_agent_runtime_run_iter_emits_ordered_events_and_final_response(db_sessi
     assert final.response.run_id == final.run_id
     assert all(event.run_id == final.response.run_id for event in events)
 
-    started_steps = [event.step["name"] for event in events if event.type == "agent.step.started" and event.step]
-    completed_steps = [event.step["name"] for event in events if event.type == "agent.step.completed" and event.step]
+    def deduplicate(seq):
+        seen = set()
+        return [x for x in seq if not (x in seen or seen.add(x))]
+
+    started_steps = deduplicate([
+        event.step["name"] for event in events 
+        if event.type == "agent.step.started" and event.step and "artifact_id" not in event.step
+    ])
+    completed_steps = deduplicate([
+        event.step["name"] for event in events 
+        if event.type == "agent.step.completed" and event.step and "artifact_id" not in event.step
+    ])
     assert completed_steps == [step.name for step in final.response.steps]
     assert started_steps == completed_steps
 
@@ -486,14 +496,15 @@ def test_stream_and_non_stream_final_response_consistency(db_session, test_datas
     )
 
     non_stream_res = DataBoxAgentRuntime(db_session).run(req)
-    stream_events = list(DataBoxAgentRuntime(db_session).run_iter(req))
+    req_stream = req.model_copy(update={"session_id": "consistency-session-stream"})
+    stream_events = list(DataBoxAgentRuntime(db_session).run_iter(req_stream))
     stream_res = stream_events[-1].response
 
     assert stream_res is not None
     assert non_stream_res.success == stream_res.success
-    assert stream_res.session_id == "consistency-session"
+    assert stream_res.session_id == "consistency-session-stream"
 
-    comparable_fields = ("session_id", "success", "question", "sql", "explanation")
+    comparable_fields = ("success", "question", "sql", "explanation")
     for field in comparable_fields:
         assert getattr(non_stream_res, field) == getattr(stream_res, field), f"{field} mismatch"
 

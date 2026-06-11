@@ -31,9 +31,20 @@ def synthesize_agent_answer(
     facts: list[str] = []
 
     if execution_success:
+        row_count = int(execution.get("rowCount") or 0)
+        columns = list(execution.get("columns") or [])
+        rows = list(execution.get("rows") or [])
         facts = list(result_profile.notable_facts if result_profile else [])
-        lead = facts[0] if facts else "The query completed and returned data for the requested analysis."
-        answer = f"{lead} I treated the returned rows as evidence for the question: {question}"
+
+        if row_count == 0:
+            answer = f"The query returned no rows for: {question}"
+        elif row_count <= 10 and rows:
+            # For small results, include the data directly so the user sees it
+            preview = _format_result_preview(columns, rows)
+            answer = f"Query returned {row_count} row(s) for \"{question}\":\n{preview}"
+        else:
+            lead = facts[0] if facts else f"The query returned {row_count} rows."
+            answer = f"{lead} — analyzed for question: {question}"
     elif review_only:
         answer = "I generated and validated the SQL, but execution was disabled for this review-only run. No result set was retrieved."
         # Do NOT include profile facts — they are misleading when no execution happened
@@ -106,6 +117,27 @@ def _base_evidence(
             )
         )
     return evidence
+
+
+def _format_result_preview(columns: list[str], rows: list[list[Any]]) -> str:
+    """Format a small result set as a readable text table for the answer."""
+    if not columns or not rows:
+        return "(no data)"
+
+    lines: list[str] = []
+    # Header
+    header = " | ".join(str(c) for c in columns[:8])
+    lines.append(header)
+    lines.append("-" * len(header))
+    # Rows (max 10)
+    for row in rows[:10]:
+        cells = [str(cell)[:80] for cell in (row if isinstance(row, list) else [row])]
+        # Pad to column count
+        while len(cells) < len(columns):
+            cells.append("")
+        lines.append(" | ".join(cells[:8]))
+
+    return "\n".join(lines)
 
 
 def _dedupe(values: list[str]) -> list[str]:

@@ -479,10 +479,21 @@
   box-sizing: border-box;
 }
 
+.hifi-query-home-content {
+  max-width: 680px;
+  width: 100%;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+}
+
 .hifi-hero {
   margin-bottom: 24px;
   position: relative;
   z-index: 1;
+  text-align: center;
 }
 
 .hifi-hero-title {
@@ -490,6 +501,7 @@
   font-weight: 700;
   color: var(--color-text-primary);
   margin-bottom: 6px;
+  text-align: center;
 }
 
 .hifi-gradient-text {
@@ -501,18 +513,11 @@
 .hifi-hero-subtitle {
   font-size: 13px;
   color: var(--color-text-muted);
+  text-align: center;
 }
 
 .hifi-hero-pattern {
-  position: absolute;
-  right: 20px;
-  top: 10px;
-  width: 220px;
-  height: 140px;
-  background-image: radial-gradient(#C4B5FD 1.5px, transparent 1.5px);
-  background-size: 12px 12px;
-  opacity: 0.35;
-  pointer-events: none;
+  display: none;
 }
 
 /* Ask Box Input styling */
@@ -1579,41 +1584,52 @@
   position: relative;
   display: flex;
   align-items: center;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.08);
+  border-radius: 12px;
 }
 
 .hifi-chat-input {
   width: 100%;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
+  height: 44px;
+  border-radius: 12px;
+  border: 2px solid var(--color-secondary);
   background: #FFFFFF;
-  padding: 0 38px 0 10px;
-  font-size: 11.5px;
+  padding: 0 48px 0 16px;
+  font-size: 12.5px;
   outline: none;
   box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .hifi-chat-input:focus {
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
 }
 
 .hifi-chat-send-btn {
   position: absolute;
   right: 6px;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: #FFFFFF;
-  color: var(--color-primary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   cursor: pointer;
+  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .hifi-chat-send-btn:hover {
-  background: var(--color-primary-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(124, 58, 237, 0.3);
 }
 
 /* Design Guide Panel (Column 4) */
@@ -2145,7 +2161,7 @@
 
 /* Drag and Drop Zone */
 .hifi-drop-zone {
-  margin: 12px;
+  margin: 12px 0 24px 0;
   padding: 10px 14px;
   border: 1.5px dashed #C7D2FE;
   border-radius: 10px;
@@ -2543,9 +2559,9 @@
 }
 
 .hifi-query-result-footer {
-  padding: 12px 16px;
+  padding: 16px 24px;
   border-top: 1px solid var(--color-border);
-  background: #FFFFFF;
+  background: var(--color-panel);
 }
 
 /* ===== Agent approval card ===== */
@@ -2981,6 +2997,271 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ===== Agent cancel / regenerate buttons ===== */
+.hifi-agent-cancel-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #FCA5A5;
+  color: #DC2626;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.hifi-agent-cancel-btn:hover {
+  background: #FEF2F2;
+}
+.hifi-agent-regenerate-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #E2E8F0;
+  color: #64748B;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.hifi-agent-regenerate-btn:hover {
+  background: #F8FAFC;
+  border-color: #CBD5E1;
+  color: #475569;
+}
+
+/* ===== Answer Card ===== */
+.hifi-answer-card {
+  background: #fff;
+  border: 1px solid #E0E7FF;
+  border-left: 3px solid #4F46E5;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 8px 0;
+}
+.hifi-answer-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #1E293B;
+  white-space: pre-wrap;
+}
+.hifi-answer-section-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  margin: 12px 0 6px;
+  padding-top: 10px;
+  border-top: 1px solid #F1F5F9;
+}
+.hifi-answer-findings ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.hifi-answer-findings li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  color: #334155;
+  padding: 3px 0;
+}
+.hifi-answer-findings li svg {
+  color: #22C55E;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.hifi-answer-evidence ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.hifi-answer-evidence li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #64748B;
+  padding: 2px 0;
+}
+.hifi-evidence-label {
+  color: #475569;
+  font-weight: 500;
+}
+.hifi-evidence-value {
+  color: #4F46E5;
+  font-weight: 600;
+}
+.hifi-answer-caveats {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 8px;
+}
+.hifi-answer-caveats .hifi-answer-section-title {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+  color: #B45309;
+}
+.hifi-answer-caveats ul {
+  list-style: disc;
+  padding-left: 16px;
+  margin: 4px 0 0;
+}
+.hifi-answer-caveats li {
+  font-size: 10px;
+  color: #92400E;
+  padding: 1px 0;
+}
+
+/* ===== Follow-up Chips ===== */
+.hifi-followup-chips {
+  margin: 10px 0;
+}
+.hifi-followup-label {
+  font-size: 10px;
+  color: #94A3B8;
+  margin-bottom: 6px;
+  display: block;
+}
+.hifi-followup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hifi-followup-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 10px;
+  color: #4F46E5;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.hifi-followup-chip:hover {
+  background: #E0E7FF;
+}
+
+/* ===== Artifact Chips (fixed colors) ===== */
+.hifi-artifact-chip {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+.hifi-artifact-chip-table {
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
+}
+.hifi-artifact-chip-chart {
+  background: #F5F3FF;
+  color: #7C3AED;
+  border: 1px solid #DDD6FE;
+}
+.hifi-artifact-chip-sql {
+  background: #FFFBEB;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+.hifi-artifact-chip-insight {
+  background: #ECFDF5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+/* ===== Chart Card ===== */
+.hifi-chart-card .hifi-chart-body {
+  padding: 4px 8px 8px;
+}
+.hifi-chart-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  font-size: 9px;
+  border: 1px solid #E2E8F0;
+  border-radius: 4px;
+  background: #fff;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s;
+  height: 22px;
+}
+.hifi-chart-type-btn.active {
+  background: #EEF2FF;
+  border-color: #4F46E5;
+  color: #4F46E5;
+}
+.hifi-chart-type-btn:hover:not(.active) {
+  background: #F8FAFC;
+}
+
+/* ===== Markdown Content ===== */
+.hifi-markdown-content {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+/* ===== Thinking Process (collapsible) ===== */
+.hifi-thinking-section {
+  margin-top: 12px;
+}
+.hifi-thinking-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 10px;
+  color: #94A3B8;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.hifi-thinking-toggle:hover {
+  background: #F1F5F9;
+  color: #64748B;
+}
+.hifi-thinking-count {
+  margin-left: auto;
+  font-size: 9px;
+  color: #CBD5E1;
+}
+.hifi-thinking-body {
+  margin-top: 6px;
+  padding: 8px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ===== Query Result Body (scrollable) ===== */
+.hifi-query-result-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px;
 }
 
 .hifi-sql-card-action {

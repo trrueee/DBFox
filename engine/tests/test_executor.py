@@ -193,7 +193,13 @@ class TestExecutorSQLite:
         )
 
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_execute_on_sqlite, long_sql, 30000, execution_id, test_datasource.database_name)
+            future = pool.submit(
+                _execute_on_sqlite,
+                long_sql,
+                timeout_ms=30000,
+                execution_id=execution_id,
+                sqlite_path=test_datasource.database_name,
+            )
 
             deadline = time.time() + 3
             while time.time() < deadline and not QUERY_REGISTRY.is_running(execution_id):

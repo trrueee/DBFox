@@ -24,7 +24,7 @@ export function TableArtifactView({ artifact, onToast }: TableArtifactViewProps)
     <div className="hifi-ai-card">
       <div className="hifi-ai-card-header flex items-center justify-between gap-2">
         <span>{artifact.title}</span>
-        <span className="hifi-guide-chip-prod">TABLE</span>
+        <span className="hifi-artifact-chip hifi-artifact-chip-table">数据表</span>
       </div>
       <div className="hifi-ai-card-body p-3">
         {artifact.description && <p className="text-[10px] text-slate-500 mb-2">{artifact.description}</p>}

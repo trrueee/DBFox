@@ -363,25 +363,6 @@ def mock_openai_client(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def mock_agent_planner(monkeypatch):
-    """Planner node fail-fasts on LLM errors; without real credentials tests
-    use the permissive fallback plan so the (mocked) ReAct loop can run."""
-    import os
-    if os.environ.get("DATABOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
-        return
-
-    from engine.agent.nodes import planner_node
-
-    def fake_create_plan(state, config):
-        return planner_node._permissive_fallback(
-            replan_count=int(state.get("replan_count", 0) or 0),
-            execute=bool(state.get("execute")),
-        )
-
-    monkeypatch.setattr(planner_node, "create_plan", fake_create_plan)
-
-
-@pytest.fixture(autouse=True)
 def mock_agent_progress_judge(monkeypatch):
     """Progress Judge requires LLM credentials; without real keys use the
     module's rule-based fallback (mirrors the legacy routing logic)."""
@@ -497,6 +478,7 @@ def mock_agent_call_model(monkeypatch):
                     if "sql_revise" not in called_tools:
                         next_tool = "sql_revise"
                 else:
+                    print(f"\n[DEBUG MOCK LLM] state.get('execute')={state.get('execute')}, keys={list(state.keys())}")
                     if state.get("execute"):
                         next_tool = "sql_execute_readonly"
                     else:

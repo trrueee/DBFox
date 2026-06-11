@@ -27,9 +27,11 @@ AgentRuntimeEventType = Literal[
     "agent.progress.update",
     "agent.context.update",
     "agent.artifact.created",
+    "agent.artifact.delta",
     "agent.answer.completed",
     "agent.run.completed",
     "agent.run.failed",
+    "agent.run.cancelled",
     "agent.approval.required",
     "agent.approval.resolved",
     "agent.checkpoint.saved",
@@ -383,6 +385,9 @@ class AgentRuntimeEvent(BaseModel):
     type: AgentRuntimeEventType
     step: dict[str, Any] | None = None
     artifact: AgentArtifact | None = None
+    artifact_delta: dict[str, Any] | None = None
+    # artifact_delta format: {"artifact_id": str, "payload_merge": dict}
+    # payload_merge list fields → append, scalar fields → replace
     answer: AgentAnswer | None = None
     response: AgentRunResponse | None = None
     approval: AgentApprovalRecord | None = None

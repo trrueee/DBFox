@@ -504,6 +504,7 @@ export type AgentRuntimeEventType =
   | "agent.progress.update"
   | "agent.context.update"
   | "agent.artifact.created"
+  | "agent.artifact.delta"
   | "agent.answer.completed"
   | "agent.approval.required"
   | "agent.approval.resolved"
@@ -511,7 +512,8 @@ export type AgentRuntimeEventType =
   | "agent.run.waiting_approval"
   | "agent.run.resumed"
   | "agent.run.completed"
-  | "agent.run.failed";
+  | "agent.run.failed"
+  | "agent.run.cancelled";
 
 export interface AgentRuntimeEvent {
   event_id: string;
@@ -521,6 +523,9 @@ export interface AgentRuntimeEvent {
   type: AgentRuntimeEventType | string;
   step?: Record<string, unknown> | null;
   artifact?: AgentArtifact | null;
+  artifact_delta?: Record<string, unknown> | null;
+  // artifact_delta: { artifact_id: string; payload_merge: Record<string, unknown> }
+  // list fields in payload_merge → append; scalar fields → replace
   answer?: AgentAnswer | null;
   response?: AgentRunResponse | null;
   approval?: AgentApproval | null;

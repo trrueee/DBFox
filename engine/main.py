@@ -11,11 +11,20 @@ DataBox 本地引擎主入口模块 (Main Entrypoint Module)
 """
 
 import logging
+import os
 import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+# Load .env before any other imports so LangSmith env vars are available
+# when langchain-core initializes its tracing subsystem.
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if _ENV_FILE.exists():
+    load_dotenv(_ENV_FILE)
 
 import uvicorn
 from fastapi import FastAPI, Request

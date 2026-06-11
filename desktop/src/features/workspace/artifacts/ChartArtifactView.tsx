@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { useState } from "react";
+import ReactECharts from "echarts-for-react";
+import { BarChart3, LineChart, Download } from "lucide-react";
 import type { ChartArtifact } from "../../../types/agentArtifact";
-import { downloadTextFile } from "./artifactActions";
+
+const CHART_COLORS = ["#4F46E5", "#0D7377", "#B45309", "#2E7D32", "#DB2777", "#7C3AED"];
 
 interface ChartArtifactViewProps {
   artifact: ChartArtifact;
@@ -9,72 +11,99 @@ interface ChartArtifactViewProps {
 }
 
 export function ChartArtifactView({ artifact, onToast }: ChartArtifactViewProps) {
-  const [viewType, setViewType] = useState<"line" | "bar">(artifact.chartType);
-  const values = artifact.series.map((point) => point.value);
-  const max = Math.max(...values, 1);
-  const points = useMemo(() => artifact.series
-    .map((point, index) => {
-      const x = 30 + (index * 350) / Math.max(artifact.series.length - 1, 1);
-      const y = 100 - (point.value / max) * 80;
-      return `${x},${y}`;
-    })
-    .join(" "), [artifact.series, max]);
+  const [chartType, setChartType] = useState<"line" | "bar">(artifact.chartType);
 
-  const exportSvg = () => {
-    const chartBody = viewType === "line"
-      ? `<polyline points="${points}" fill="none" stroke="#4F46E5" stroke-width="2.5" />`
-      : artifact.series.map((point, index) => {
-        const width = 22;
-        const x = 25 + (index * 350) / Math.max(artifact.series.length - 1, 1);
-        const height = (point.value / max) * 80;
-        return `<rect x="${x}" y="${100 - height}" width="${width}" height="${height}" rx="4" fill="#4F46E5" opacity="0.82" />`;
-      }).join("");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 130">${chartBody}</svg>`;
-    const ok = downloadTextFile(`${artifact.id}-${viewType}.svg`, svg, "image/svg+xml;charset=utf-8");
-    onToast(ok ? "已下载图表 SVG" : "图表下载失败");
+  const labels = artifact.series.map((p) => p.label);
+  const values = artifact.series.map((p) => p.value);
+
+  const option = {
+    tooltip: {
+      trigger: "axis" as const,
+      backgroundColor: "#fff",
+      borderColor: "#E2E8F0",
+      textStyle: { color: "#334155", fontSize: 12 },
+      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+    },
+    grid: { left: 48, right: 24, top: 24, bottom: 40 },
+    xAxis: {
+      type: "category" as const,
+      data: labels,
+      axisLabel: { color: "#64748B", fontSize: 10, rotate: labels.length > 6 ? 30 : 0 },
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: "#E2E8F0" } },
+    },
+    yAxis: {
+      type: "value" as const,
+      axisLabel: { color: "#64748B", fontSize: 10 },
+      splitLine: { lineStyle: { color: "#F1F5F9" } },
+      name: artifact.unit || "",
+      nameTextStyle: { color: "#94A3B8", fontSize: 10 },
+    },
+    series: [
+      {
+        name: artifact.title,
+        type: chartType,
+        data: values,
+        itemStyle: { color: CHART_COLORS[0] },
+        ...(chartType === "line"
+          ? {
+              smooth: true,
+              lineStyle: { width: 2.5 },
+              areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: "rgba(79,70,229,0.12)" }, { offset: 1, color: "rgba(79,70,229,0)" }] } },
+              symbol: "circle",
+              symbolSize: 6,
+            }
+          : {
+              barWidth: Math.max(12, Math.min(32, 320 / Math.max(labels.length, 1))),
+              borderRadius: [4, 4, 0, 0],
+            }),
+      },
+    ],
+  };
+
+  const handleExportPng = () => {
+    const chartInstance = (document.querySelector(`[data-chart-id="${artifact.id}"]`) as any)?._echarts_instance;
+    if (chartInstance) {
+      const url = chartInstance.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${artifact.id}-${chartType}.png`;
+      a.click();
+      onToast("已下载图表 PNG");
+    } else {
+      onToast("图表导出失败");
+    }
   };
 
   return (
-    <div className="hifi-ai-card mt-2">
+    <div className="hifi-ai-card hifi-chart-card mt-2">
       <div className="hifi-ai-card-header flex justify-between items-center">
         <span>{artifact.title}</span>
         <div className="flex items-center gap-1.5">
-          <button className="hifi-guide-btn-secondary" style={{ height: "22px", fontSize: "9px" }} onClick={() => setViewType("line")}>折线</button>
-          <button className="hifi-guide-btn-secondary" style={{ height: "22px", fontSize: "9px" }} onClick={() => setViewType("bar")}>柱状</button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "22px", fontSize: "9px" }} onClick={exportSvg}><Download size={9} /> SVG</button>
+          <button
+            className={`hifi-chart-type-btn ${chartType === "line" ? "active" : ""}`}
+            onClick={() => setChartType("line")}
+          >
+            <LineChart size={12} />
+            <span>折线</span>
+          </button>
+          <button
+            className={`hifi-chart-type-btn ${chartType === "bar" ? "active" : ""}`}
+            onClick={() => setChartType("bar")}
+          >
+            <BarChart3 size={12} />
+            <span>柱状</span>
+          </button>
+          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "22px", fontSize: "9px" }} onClick={handleExportPng}>
+            <Download size={9} /> PNG
+          </button>
         </div>
       </div>
-      <div className="hifi-ai-card-body p-3">
-        {artifact.description && <p className="text-[10px] text-slate-500 mb-2">{artifact.description}</p>}
-        <svg viewBox="0 0 400 130" width="100%" height="112">
-          <line x1="30" y1="20" x2="380" y2="20" stroke="#F1F5F9" strokeWidth="1" />
-          <line x1="30" y1="50" x2="380" y2="50" stroke="#F1F5F9" strokeWidth="1" />
-          <line x1="30" y1="80" x2="380" y2="80" stroke="#F1F5F9" strokeWidth="1" />
-          <line x1="30" y1="100" x2="380" y2="100" stroke="#E2E8F0" strokeWidth="1.5" />
-          <text x="4" y="23" fontSize="8" fill="#64748B">{max}</text>
-          <text x="4" y="103" fontSize="8" fill="#64748B">0</text>
-          {viewType === "line" ? (
-            <>
-              <polyline points={points} fill="none" stroke="#4F46E5" strokeWidth="2.5" />
-              {artifact.series.map((point, index) => {
-                const x = 30 + (index * 350) / Math.max(artifact.series.length - 1, 1);
-                const y = 100 - (point.value / max) * 80;
-                return <circle key={point.label} cx={x} cy={y} r="3" fill="#FFFFFF" stroke="#4F46E5" strokeWidth="1.5" />;
-              })}
-            </>
-          ) : (
-            artifact.series.map((point, index) => {
-              const width = 22;
-              const x = 25 + (index * 350) / Math.max(artifact.series.length - 1, 1);
-              const height = (point.value / max) * 80;
-              return <rect key={point.label} x={x} y={100 - height} width={width} height={height} rx="4" fill="#4F46E5" opacity="0.82" />;
-            })
-          )}
-          {artifact.series.map((point, index) => {
-            const x = 22 + (index * 350) / Math.max(artifact.series.length - 1, 1);
-            return <text key={point.label} x={x} y="124" fontSize="7" fill="#64748B">{point.label}</text>;
-          })}
-        </svg>
+      {artifact.description && (
+        <p className="text-[10px] text-slate-500 px-3 pt-1">{artifact.description}</p>
+      )}
+      <div className="hifi-chart-body" data-chart-id={artifact.id}>
+        <ReactECharts option={option} style={{ height: "280px", width: "100%" }} />
       </div>
     </div>
   );

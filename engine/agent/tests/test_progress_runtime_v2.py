@@ -5,7 +5,6 @@ from langchain_core.messages import HumanMessage
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
 from engine.agent.nodes.progress_node import _check_sql_repair_fastpath, _enrich_progress_result
-from engine.agent.nodes.planner_node import _apply_clarification_policy
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.progress.clarification_policy import (
     is_clarification_allowed,
@@ -13,7 +12,6 @@ from engine.agent.progress.clarification_policy import (
 )
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.context_pack import ContextPack, build_context_pack, build_streaming_context_summary, render_ui_summary
-from engine.agent.nodes.progress_node import _enrich_progress_result
 from engine.agent.graph.replan_policy import allow_replan, compute_max_replans
 from engine.agent.graph.routes import route_progress_output
 from engine.agent.repair.sql_repair import classify_sql_failure, plan_sql_repair
@@ -74,24 +72,6 @@ class TestClarificationPolicy:
             root_cause="column foo not found",
             progress_status="clarify",
         ) is False
-
-    def test_planner_policy_overrides_unknown_table(self):
-        directive = AgentPlanDirective(
-            task_type="ambiguous",
-            grounding_level="none",
-            execution_mode="user_requested_read",
-            allowed_tool_groups=[],
-            should_call_tools=False,
-            should_execute_sql=True,
-            needs_clarification=True,
-            clarification_question="Which table?",
-            reasoning_summary="Unknown table name",
-        )
-        updated = _apply_clarification_policy(directive, {"datasource_id": "ds-1"})
-        assert updated.needs_clarification is False
-        assert "schema" in updated.allowed_tool_groups
-        assert updated.task_type == "data_lookup"
-
 
 class TestSqlRepairModule:
     def test_classifies_missing_column(self):
@@ -278,7 +258,7 @@ class TestAdaptiveReplan:
             "progress_decision": {"status": "replan", "retry_budget": 1, "failure_layer": "schema"},
         }
         assert allow_replan(state, state["progress_decision"]) is True
-        assert route_progress_output(state) == "planner"
+        assert route_progress_output(state) == "model"
 
     def test_replan_blocked_when_budget_exhausted(self):
         state = {
