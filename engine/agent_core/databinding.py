@@ -31,6 +31,7 @@ RESET_EXECUTION_FLOW: dict[str, Any] = {
     "execution": None,
     "result_profile": None,
     "chart_suggestion": None,
+    "analysis_report": None,
     "suggestions": [],
 }
 
@@ -162,6 +163,15 @@ def _apply_answer_synthesize(_state: dict[str, Any], output: dict[str, Any], _ob
     }
 
 
+def _apply_analysis_compose(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {
+        "analysis_report": output,
+        "answer": output,
+        "final_answer": output,
+        "status": "completed",
+    }
+
+
 def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
     suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
     evidence: list[dict[str, Any]] = []
@@ -232,6 +242,7 @@ TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
     "chart.suggest": _apply_chart_suggest,
     "followup.suggest": _apply_followup_suggest,
     "answer.synthesize": _apply_answer_synthesize,
+    "analysis.compose": _apply_analysis_compose,
     "environment.get_profile": _apply_environment_get_profile,
     "semantic.resolve": _apply_semantic_resolve,
     "schema.list_tables": _apply_schema_list_tables,
@@ -248,6 +259,7 @@ _ARTIFACT_TOOLS: frozenset[str] = frozenset({
     "result.profile",
     "chart.suggest",
     "answer.synthesize",
+    "analysis.compose",
 })
 
 
@@ -337,57 +349,3 @@ def _apply_failed_telemetry(
         update["error"] = observation.error or f"{tool_name} failed."
     else:
         update["error"] = None
-
-
-# ---------------------------------------------------------------------------
-# State merging
-# ---------------------------------------------------------------------------
-#
-# merge_state is for streaming event view only, NOT the source of truth.
-# During streaming, it mirrors LangGraph's internal state accumulation so that
-# intermediate event emitters (plan_artifact_events, events_from_graph_update)
-# have access to the latest accumulated state.
-#
-# After the stream completes, app.get_state(config).values is the authoritative
-# source for final response/checkpoint/persistence.
-
-
-ADDITIVE_STATE_KEYS: frozenset[str] = frozenset({
-    "plan_events",
-    "tool_results",
-    "artifacts",
-    "trace_events",
-})
-
-MESSAGE_STATE_KEY: str = "messages"
-
-
-def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
-    """Accumulate node updates into a streaming event view (NOT source of truth)."""
-    for key, value in update.items():
-        if key == MESSAGE_STATE_KEY:
-            from langgraph.graph.message import add_messages
-
-            current = state.get(key, [])
-            state[key] = add_messages(current, value)
-        elif key in ADDITIVE_STATE_KEYS:
-            current = state.setdefault(key, [])
-            if isinstance(current, list) and isinstance(value, list):
-                current.extend(value)
-            else:
-                state[key] = value
-        else:
-            state[key] = value
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _artifact_event(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": f"artifact_{uuid4().hex}",
-        "tool_name": tool_name,
-        "payload": payload,
-    }
