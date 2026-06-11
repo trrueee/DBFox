@@ -33,6 +33,7 @@
     "echarts-for-react": "^3.0.6",
     "gsap": "^3.15.0",
     "lucide-react": "^1.17.0",
+    "plotly.js-dist-min": "^3.1.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
