@@ -63,6 +63,17 @@ const EVENT_REDUCERS: Record<
       artifacts: mergeArtifacts(draft.artifacts, [event.artifact]),
     };
   },
+  "agent.artifact.delta": (next, event, draft) => {
+    if (!event.artifact_delta) return next;
+    const delta = event.artifact_delta as { artifact_id?: string; payload_merge?: Record<string, unknown> };
+    const artifactId = delta.artifact_id;
+    const payloadMerge = delta.payload_merge;
+    if (!artifactId || !payloadMerge) return next;
+    return {
+      ...next,
+      artifacts: mergeArtifactDelta(draft.artifacts, artifactId, payloadMerge),
+    };
+  },
   "agent.answer.completed": (next, event, draft) => {
     return { ...next, answer: event.answer || draft.answer || null };
   },
@@ -145,6 +156,27 @@ function mergeArtifacts(current: AgentArtifact[], incoming: AgentArtifact[]): Ag
   return Array.from(byId.values());
 }
 
+export function mergeArtifactDelta(
+  artifacts: AgentArtifact[],
+  artifactId: string,
+  payloadMerge: Record<string, unknown>,
+): AgentArtifact[] {
+  return artifacts.map((artifact) => {
+    if ((artifact.semantic_id || artifact.id) !== artifactId) return artifact;
+    const mergedPayload = { ...artifact.payload };
+    for (const [key, value] of Object.entries(payloadMerge)) {
+      if (Array.isArray(value) && Array.isArray(mergedPayload[key])) {
+        // Append list fields (e.g., rows arriving in batches)
+        mergedPayload[key] = [...(mergedPayload[key] as unknown[]), ...value];
+      } else {
+        // Replace scalar fields
+        mergedPayload[key] = value;
+      }
+    }
+    return { ...artifact, payload: mergedPayload };
+  });
+}
+
 function artifactKey(artifact: AgentArtifact): string {
   return artifact.semantic_id || artifact.id;
 }
@@ -182,7 +214,11 @@ function parseSseEvent(rawEvent: string): AgentRuntimeEvent | null {
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart());
   if (dataLines.length === 0) return null;
-  return JSON.parse(dataLines.join("\n")) as AgentRuntimeEvent;
+  try {
+    return JSON.parse(dataLines.join("\n")) as AgentRuntimeEvent;
+  } catch {
+    return null;
+  }
 }
 
 async function streamAgentRun(
