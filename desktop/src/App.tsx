@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo, useRef, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useState, useMemo, useRef, type CSSProperties, type MouseEvent, useCallback } from "react";
 import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
 import "./App.css";
+import { setDialogContainer } from "./components/ui/dialog";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
 import { ConversationHistoryPanel } from "./features/conversation/ConversationHistoryPanel";
 import { deleteConversation, listConversations, saveConversation } from "./features/conversation/conversationRepository";
@@ -60,6 +61,35 @@ export default function App() {
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const resizingRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleResizeStart = (e: MouseEvent) => {
+    e.preventDefault();
+    resizingRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      if (!resizingRef.current) return;
+      const delta = (e.clientX - resizingRef.current.startX) / scale;
+      const next = Math.max(180, Math.min(480, resizingRef.current.startWidth + delta));
+      setSidebarWidth(next);
+    };
+    const handleMouseUp = () => {
+      resizingRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [scale]);
 
   const activeDatasource = useMemo(() => datasources.find((item) => item.id === activeDatasourceId) || null, [activeDatasourceId, datasources]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
@@ -826,7 +856,11 @@ export default function App() {
 
   return (
     <div className="hifi-viewport-wrapper">
-      <div className="hifi-canvas-board" style={{ "--scale": scale } as CSSProperties}>
+      <div
+        className="hifi-canvas-board"
+        style={{ "--scale": scale } as CSSProperties}
+        ref={useCallback((el: HTMLDivElement | null) => setDialogContainer(el), [])}
+      >
         <TitleBar />
         {/* Main Work Area */}
         <main className="hifi-workspace" style={{ height: "calc(1066px - 64px)", paddingTop: 0, paddingBottom: 0 }}>
@@ -847,7 +881,22 @@ export default function App() {
             tables={tables}
             loading={loadingSchema}
             error={schemaError}
+            sidebarWidth={sidebarWidth}
           />
+
+          {/* Resize handle */}
+          {!sidebarCollapsed && (
+            <div
+              onMouseDown={handleResizeStart}
+              style={{
+                width: 4, flexShrink: 0, cursor: "col-resize",
+                background: "transparent",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-border)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            />
+          )}
 
           <section className="hifi-col hifi-main-workspace-col" style={{ gap: 0 }}>
             {/* Top Workspace Tab Bar Container */}
