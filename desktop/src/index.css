@@ -14,11 +14,11 @@
 @layer base {
   :root {
     --background: 40 15% 97%;            /* #FAF9F7 warm paper */
-    --foreground: 40 5% 10%;             /* #1A1A18 near-black */
+    --foreground: 30 5% 18%;             /* #1A1A18 near-black */
     --card: 0 0% 100%;                   /* #FFFFFF */
-    --card-foreground: 40 5% 10%;
+    --card-foreground: 30 5% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 40 5% 10%;
+    --popover-foreground: 30 5% 18%;
     --primary: 14 60% 52%;               /* #D4653C copper */
     --primary-foreground: 0 0% 100%;
     --secondary: 40 8% 94%;              /* #F0EFEC */
