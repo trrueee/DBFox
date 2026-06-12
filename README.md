@@ -1,119 +1,282 @@
-# DataBox — Local-First Database Workbench with AI Agent Copilot
+# DataBox
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![Node.js 20.19+](https://img.shields.io/badge/node-20.19+-green.svg)](https://nodejs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2.x-24C8DB.svg)](https://tauri.app/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-DataBox combines a deterministic database workbench with a LangGraph-based ReAct
-agent. The **workbench** provides datasource management, schema browsing, SQL
-editing, result grids, query history, and ER/table visualization. The **agent**
-acts as an intelligent collaborator — reading workspace context, selecting tools,
-generating SQL, explaining results, and producing artifacts.
+**DataBox 是一个本地优先、AI 原生的数据库工作台。**
 
-## Product Domains
+它把数据源管理、Schema 浏览、SQL 控制台、结果分析、对话式问数 Agent 和执行安全策略放在同一个桌面应用里。目标不是替代数据库本身，而是为分析师、开发者和数据团队提供一个可信的本地操作台：先理解数据，再生成 SQL，最后在可审计、可回滚、可审批的边界内执行。
 
-- **Basic Database Software**: datasource management, schema browsing, SQL editor
-  with inline annotations (`@limit`, `@timeout`, `@explain`, `@export`, `@chart`),
-  result grid, query history, ER diagram visualization, multi-table workspace.
-- **Agent Copilot**: chat, context understanding, SQL generation / fix / explain
-  / optimize, result explanation, tool calling, approval when needed.
+---
 
-No third domain (Workbench platform, Workbench API, complex workflow engine).
+## 目录
 
-## Architecture
+- [核心能力](#核心能力)
+- [技术架构](#技术架构)
+- [项目结构](#项目结构)
+- [快速开始](#快速开始)
+- [LLM 配置](#llm-配置)
+- [常用命令](#常用命令)
+- [API 概览](#api-概览)
+- [Agent 运行时](#agent-运行时)
+- [安全模型](#安全模型)
+- [开发状态](#开发状态)
+- [License](#license)
 
-```
-desktop/                         React + Tauri workbench (Vite, TypeScript, ECharts)
-engine/                          FastAPI local engine (port 18625)
-engine/agent/                    LangGraph ReAct Agent (graph, nodes, tools, planning, progress, repair, skills)
-engine/agent/graph/              StateGraph, conditional routes, state, re-plan policy
-engine/agent/nodes/              planner → model → policy → tools → observe → progress → repair → approval → finalize
-engine/agent/tools/              tool aliases, registry bridge, tool manifest
-engine/agent/planning/           Planner prompts, AgentPlanDirective schema
-engine/agent/progress/           Progress Judge prompts, ProgressDecision schema, clarification policy
-engine/agent/repair/             SQL repair classifier and recovery plan
-engine/agent/model/              system prompt builder, model context builder
-engine/agent/skills/             skill registry, loader, renderer
-engine/agent_core/               shared Agent contracts, persistence, events, runtime facade
-engine/environment/              datasource resolver, dialect, introspection, catalog sync, tools
-engine/memory/                   session memory, long-term store, compaction, retrieval
-engine/semantic/                 schema linking, context builder, query planning
-engine/sql/                      SQL safety, execution, generator, guardrail, trust gate
-engine/policy/                   PolicyEngine and query policy enforcement
-engine/api/                      REST and SSE API
-engine/llm/                      LLM provider client configuration
-engine/schemas/                  Schema management API
-```
+---
 
-> **Note**: Phase 2 sub-modules (`engine/semantic/`, `engine/environment/`,
-> `engine/memory/`, `engine/agent/skills/`) are active and shipping. The memory
-> and environment layers feed context into the Planner and Progress Judge.
-> Conversations are now persisted via the `ChatConversation` model.
+## 核心能力
 
-## Agent Runtime
+### 1. 数据源与 Schema 工作台
 
-The agent is a LangGraph StateGraph with 9 nodes and semantic conditional routing.
+- 支持 **MySQL、PostgreSQL、SQLite** 数据源连接。
+- 支持直连、SSH 隧道、MySQL SSL 证书配置。
+- 支持连接测试、健康检查、Schema 同步、表/字段浏览、ER 图数据生成。
+- 支持数据源删除的二次确认，降低误操作风险。
+
+### 2. SQL 控制台
+
+- SQL 校验、执行、EXPLAIN、取消执行。
+- 查询历史记录，可按数据源、状态、关键字过滤。
+- 执行结果做行数、列数、单元格长度和响应体大小限制，避免本地 UI 被超大结果集拖垮。
+- 所有 SQL 执行都会进入策略层和 TrustGate，不直接裸奔到数据库。
+
+### 3. AI 问数 Agent
+
+- 基于 LangGraph / ReAct 的本地 Agent Runtime。
+- Agent 能读取当前数据源、已选表、Schema、语义上下文和对话历史。
+- 支持自然语言问数、SQL 生成、SQL 修复、结果解释、后续追问。
+- 支持 SSE 流式事件，把计划、工具调用、产物、审批状态同步到前端时间线。
+- 高风险动作进入人工审批，用户确认后才继续。
+
+### 4. 桌面级交互
+
+- React + TypeScript + Vite 前端。
+- Tauri 2 桌面壳，支持无浏览器的原生窗口体验。
+- Monaco SQL 编辑器、ECharts 图表、Radix UI 组件、工作区 Tabs、命令面板、对话历史、Agent 评测页面。
+
+### 5. Agent 评测与可观测性
+
+- Agent Run、事件、产物、Trace、Checkpoint、审批记录均有 API。
+- 内置 Agent Eval 入口，可维护评测任务、导入 benchmark、运行评测并查看 case。
+- 适合持续验证 Agent 在真实数据库 Schema 下的可靠性。
+
+---
+
+## 技术架构
+
+DataBox 由三层组成：
 
 ```text
-START → planner → [model | finalize]
-model → [policy | progress]
-policy → [tools | approval | model | progress]
-approval → [tools | model | progress]
-tools → observe → progress
-progress → [model | planner | repair | finalize]
-repair → model
-finalize → END
+┌─────────────────────────────────────────────────────────────┐
+│ Desktop UI                                                   │
+│ React + TypeScript + Vite + Tauri                            │
+│ 工作区 / 数据源管理 / SQL 控制台 / Agent 问数 / 评测页面       │
+└───────────────────────────────▲─────────────────────────────┘
+                                │ HTTP + SSE + X-Local-Token
+┌───────────────────────────────┴─────────────────────────────┐
+│ Local Engine                                                  │
+│ FastAPI @ 127.0.0.1:18625                                     │
+│ API Router / Policy / SQL Executor / Schema Sync / Persistence│
+└───────────────────────────────▲─────────────────────────────┘
+                                │ DB Driver / SSH Tunnel / SSL
+┌───────────────────────────────┴─────────────────────────────┐
+│ Datasources                                                   │
+│ MySQL / PostgreSQL / SQLite                                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Planner** (`create_plan`): LLM semantic classifier that infers user intent,
-produces an `AgentPlanDirective` (task type, tool scope, execution mode), and
-incorporates skill catalog and memory context. Routes to `model` for execution
-or `finalize` if clarification is needed.
+Agent 不是单独的云服务，它运行在本地 Engine 里，只在需要模型推理时访问你配置的 OpenAI-compatible LLM Provider。
 
-**Model** (`call_model`): ReAct reasoning node. Calls the LLM with dynamically
-scoped LangChain tools based on the plan's `allowed_tool_groups`. Can escalate
-its own tool scope via `escalate.tool_group`. Routes to `policy` when tool_calls
-are present, `progress` otherwise.
+---
 
-**Policy** (`apply_policy`): Deterministic PolicyGate that validates tool calls
-against execution mode, safety rules, and trust boundaries. Routes allowed calls
-to `tools`, blocked calls back to `model` for retry (up to 3 consecutive blocks
-before escalating to `progress`), and to `approval` when human confirmation is
-required.
+## 项目结构
 
-**Approval** (`approval_interrupt`): Human-in-the-loop gate using LangGraph
-`interrupt()`. Suspends the graph and presents the pending action to the user.
-On resume, routes approved calls to `tools` and rejected calls back to `model`.
+```text
+.
+├── start.py                     # 一键开发启动器：安装依赖、启动 Engine 和前端
+├── requirements.txt             # 后端运行依赖
+├── requirements-dev.txt         # 后端测试 / 类型检查依赖
+├── pyproject.toml               # pytest / mypy 配置
+├── engine/                      # FastAPI Local Engine
+│   ├── main.py                  # Engine 入口、本地 Token、中间件、路由挂载
+│   ├── api/                     # /api/v1 路由：datasources/query/agent/eval/semantic 等
+│   ├── agent/                   # LangGraph Agent：节点、图、工具、规划、修复、技能
+│   ├── agent_core/              # Agent 通用类型、持久化、事件、运行时门面
+│   ├── datasource.py            # DB 连接、SSH 隧道、健康检查
+│   ├── environment/             # 环境解析、方言、Schema introspection、工具
+│   ├── memory/                  # 会话记忆、长期存储、压缩与检索
+│   ├── policy/                  # 查询策略、确认机制、脱敏
+│   ├── semantic/                # 语义层：别名、指标、维度、表范围
+│   └── sql/                     # SQL 校验、TrustGate、执行、历史记录
+└── desktop/                     # React + Tauri 客户端
+    ├── package.json             # 前端脚本和依赖
+    ├── src/                     # UI、工作区、Agent Bridge、Engine API Client
+    └── src-tauri/               # Tauri 2 配置和桌面打包资源
+```
 
-**Tools** (`execute_allowed_tools`): Executes policy-approved tool calls through
-the tool registry bridge. Supports environment introspection, schema linking,
-SQL generation / validation / execution, result profiling, and chart suggestions.
+---
 
-**Observe** (`observe_tools`): Observation-driven state binding. Applies tool
-results to agent state via `databinding`, emits structured artifacts (query
-plan, SQL, safety, table, profile, chart), and rebuilds the ContextPack for
-downstream nodes.
+## 快速开始
 
-**Progress** (`judge_progress`): LLM semantic judge that classifies task state
-after each observation cycle: `complete` (answer ready), `continue` (more work),
-`replan` (plan was wrong), `clarify` (ask user), or `failed`. Routes accordingly
-to `model`, `planner`, `repair`, or `finalize`. Re-planning is gated by an
-anti-loop limit and retry budget.
+### 环境要求
 
-**Repair** (`prepare_repair`): Lightweight pre-model node activated when the
-Progress Judge selects a recovery strategy. Consolidates tool scope for the
-repair attempt and records repair trace metrics. Routes to `model`.
+- Python **3.12+**
+- Node.js **20.19+**
+- npm
+- Rust Toolchain（仅 Tauri 桌面开发/打包需要）
 
-**Finalize** (`finalize_answer`): Terminal node. Extracts the final answer from
-the last AIMessage, sets terminal status, auto-writes the execution trajectory
-to long-term memory, and emits error artifacts for failed runs.
+### 一键启动开发环境
 
-## API Overview
+```bash
+python start.py
+```
 
-All routes are mounted under `/api/v1`.
+启动器会做三件事：
+
+1. 安装或检查 Python 后端依赖。
+2. 安装或检查 `desktop/node_modules`。
+3. 启动后端 Engine 和前端 Vite Dev Server。
+
+默认地址：
+
+```text
+Backend:  http://127.0.0.1:18625
+Frontend: http://localhost:5173
+```
+
+### 手动启动
+
+后端：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m engine.main --reload
+```
+
+前端：
+
+```bash
+cd desktop
+npm install
+npm run dev
+```
+
+浏览器访问：
+
+```text
+http://localhost:5173
+```
+
+### 启动 Tauri 桌面应用
+
+```bash
+cd desktop
+npm install
+npm run tauri -- dev
+```
+
+构建桌面应用：
+
+```bash
+cd desktop
+npm run tauri -- build
+```
+
+---
+
+## LLM 配置
+
+DataBox 使用 OpenAI-compatible Chat API。你可以在前端「LLM 配置」里填写 API Key、Base URL 和模型名，也可以通过根目录 `.env` 设置：
+
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_MODEL_NAME=gpt-4o-mini
+```
+
+兼容环境变量：
+
+```bash
+QWEN_API_KEY=...
+DATABOX_LLM_API_KEY=...
+```
+
+说明：
+
+- `OPENAI_API_BASE` 可指向 OpenAI、Qwen、DeepSeek 或本地 OpenAI-compatible 服务。
+- 推理类模型会自动避免传入不兼容的 `temperature` / `max_tokens` 参数。
+- 没有配置 API Key 时，Agent 会拒绝运行并在 UI 中提示用户完成配置。
+
+---
+
+## 常用命令
+
+### 后端
+
+```bash
+# 安装运行依赖
+pip install -r requirements.txt
+
+# 安装开发依赖
+pip install -r requirements-dev.txt
+
+# 启动 Engine
+python -m engine.main --reload
+
+# 运行测试
+python -m pytest
+
+# 跳过 E2E 测试
+python -m pytest -m "not e2e"
+
+# 类型检查
+python -m mypy engine
+```
+
+### 前端
+
+```bash
+cd desktop
+
+# 开发服务器
+npm run dev
+
+# 单元测试
+npm test
+
+# 监听测试
+npm run test:watch
+
+# ESLint
+npm run lint
+
+# 生产构建
+npm run build
+
+# Vite 预览
+npm run preview
+```
+
+---
+
+## API 概览
+
+所有业务接口都挂载在 `/api/v1` 下。
+
+### Health
+
+```http
+GET /api/v1/health
+```
 
 ### Projects & Datasources
-```
+
+```http
 GET    /api/v1/projects
 POST   /api/v1/projects
 POST   /api/v1/datasources/test
@@ -125,15 +288,16 @@ POST   /api/v1/datasources/{id}/sync
 ```
 
 ### Schema
-```
-GET    /api/v1/schema/tables
-GET    /api/v1/schema/tables/{table_id}/columns
-GET    /api/v1/schema/er-diagram
-POST   /api/v1/schema/generate-test-data
+
+```http
+GET /api/v1/schema/tables
+GET /api/v1/schema/tables/{table_id}/columns
+GET /api/v1/schema/er-diagram
 ```
 
 ### Query
-```
+
+```http
 POST   /api/v1/query/validate
 POST   /api/v1/query/execute
 POST   /api/v1/query/explain
@@ -144,31 +308,58 @@ DELETE /api/v1/query/history
 ```
 
 ### Agent
-```
-POST   /api/v1/agent/run
-POST   /api/v1/agent/run/stream
-GET    /api/v1/agent/runs/{run_id}
-POST   /api/v1/agent/runs/{run_id}/resume
-POST   /api/v1/agent/runs/{run_id}/resume/stream
-GET    /api/v1/agent/runs/recent
-GET    /api/v1/agent/runs/{run_id}/artifacts
-GET    /api/v1/agent/runs/{run_id}/events
-GET    /api/v1/agent/runs/{run_id}/trace
-GET    /api/v1/agent/runs/{run_id}/approvals
-POST   /api/v1/agent/runs/{run_id}/approvals/{approval_id}
-GET    /api/v1/agent/runs/{run_id}/checkpoints
-GET    /api/v1/agent/sessions/{session_id}/runs
+
+```http
+POST /api/v1/agent/llm/test
+POST /api/v1/agent/run
+POST /api/v1/agent/run/stream
+GET  /api/v1/agent/runs/{run_id}
+GET  /api/v1/agent/runs/recent
+POST /api/v1/agent/runs/{run_id}/resume
+POST /api/v1/agent/runs/{run_id}/resume/stream
+POST /api/v1/agent/runs/{run_id}/cancel
+GET  /api/v1/agent/runs/{run_id}/artifacts
+GET  /api/v1/agent/runs/{run_id}/events
+GET  /api/v1/agent/runs/{run_id}/trace
+GET  /api/v1/agent/runs/{run_id}/approvals
+POST /api/v1/agent/runs/{run_id}/approvals/{approval_id}
+GET  /api/v1/agent/runs/{run_id}/checkpoints
+GET  /api/v1/agent/sessions/{session_id}/runs
 ```
 
 ### Conversations
-```
+
+```http
 GET    /api/v1/conversations
 PUT    /api/v1/conversations/{conversation_id}
 DELETE /api/v1/conversations/{conversation_id}
 ```
 
-### Agent Evaluation
+### Semantic Layer
+
+```http
+GET    /api/v1/semantic/aliases
+POST   /api/v1/semantic/aliases
+PUT    /api/v1/semantic/aliases/{id}
+DELETE /api/v1/semantic/aliases/{id}
+
+GET    /api/v1/semantic/metrics
+POST   /api/v1/semantic/metrics
+PUT    /api/v1/semantic/metrics/{id}
+DELETE /api/v1/semantic/metrics/{id}
+
+GET    /api/v1/semantic/dimensions
+POST   /api/v1/semantic/dimensions
+PUT    /api/v1/semantic/dimensions/{id}
+DELETE /api/v1/semantic/dimensions/{id}
+
+GET    /api/v1/semantic/table-scope
+POST   /api/v1/semantic/table-scope
 ```
+
+### Agent Eval
+
+```http
 GET    /api/v1/agent-eval/tasks
 POST   /api/v1/agent-eval/tasks
 PUT    /api/v1/agent-eval/tasks/{task_id}
@@ -180,98 +371,106 @@ GET    /api/v1/agent-eval/runs/{eval_run_id}
 GET    /api/v1/agent-eval/runs/{eval_run_id}/cases
 ```
 
-### Semantic Layer
-```
-GET    /api/v1/semantic/aliases
-POST   /api/v1/semantic/aliases
-PUT    /api/v1/semantic/aliases/{id}
-DELETE /api/v1/semantic/aliases/{id}
-GET    /api/v1/semantic/metrics
-POST   /api/v1/semantic/metrics
-PUT    /api/v1/semantic/metrics/{id}
-DELETE /api/v1/semantic/metrics/{id}
-GET    /api/v1/semantic/dimensions
-POST   /api/v1/semantic/dimensions
-PUT    /api/v1/semantic/dimensions/{id}
-DELETE /api/v1/semantic/dimensions/{id}
-GET    /api/v1/semantic/table-scope
-POST   /api/v1/semantic/table-scope
+### Backup
+
+```http
+GET  /api/v1/projects/{project_id}/backups
+POST /api/v1/backups
+GET  /api/v1/backups/{backup_id}
+POST /api/v1/backups/{backup_id}/restore-precheck
+POST /api/v1/backups/{backup_id}/restore
 ```
 
-### Backups
-```
-GET    /api/v1/projects/{project_id}/backups
-POST   /api/v1/backups
-GET    /api/v1/backups/{backup_id}
-POST   /api/v1/backups/{backup_id}/restore-precheck
-POST   /api/v1/backups/{backup_id}/restore
-```
+---
 
-> Old paths (`/query/generate`, `/golden-sql/*`, `/llm-logs/stats`,
-> `/query/agent-*`) have been removed in Phase 1. Use `/agent/*` for all AI
-> interactions.
+## Agent 运行时
 
-## Local Development
+DataBox Agent 是一个带策略门控的 LangGraph StateGraph。典型流程如下：
 
-### Quick Start (one-click launcher)
-
-```bash
-python start.py
-```
-
-This launches both backend (port 18625, hot-reload) and frontend (port 5173),
-installs dependencies on first run, and opens the browser automatically.
-
-### Desktop App (Tauri)
-
-```bash
-cd desktop && npm run tauri dev
+```text
+START
+  ↓
+planner
+  ↓
+model
+  ↓
+policy ──需要确认──▶ approval
+  ↓                    ↓
+tools ◀────────────────┘
+  ↓
+observe
+  ↓
+progress ──需要修复──▶ repair ──▶ model
+  ↓
+finalize
+  ↓
+END
 ```
 
-Launches the native desktop window with custom title bar (drag, minimize,
-maximize, close). Requires Rust toolchain. The browser dev server and `start.py`
-remain available for development.
+关键节点：
 
-> `run_desktop.py` is a pywebview-based fallback for environments without Rust.
+- **planner**：理解用户意图，生成任务类型、工具范围、执行模式。
+- **model**：基于计划调用 LLM，进行 ReAct 推理与工具调用。
+- **policy**：校验工具调用是否符合安全策略。
+- **approval**：高风险动作进入人工审批。
+- **tools**：执行已批准工具，包括 Schema、SQL、结果画像、图表建议等。
+- **observe**：把工具结果绑定回 Agent State，并生成结构化 Artifacts。
+- **progress**：判断任务是否完成、继续、重规划、澄清或失败。
+- **repair**：针对 SQL / Schema / 执行失败准备修复上下文。
+- **finalize**：输出最终回答并持久化运行轨迹。
 
-### Manual Setup
+---
 
-```bash
-# Backend (hot reload watches engine/*.py)
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m engine.main
-# or: python -m engine.main --no-reload
+## 安全模型
 
-# Frontend
-cd desktop && npm install && npm run dev
+DataBox 的默认安全边界是：**本地优先、最小权限、先验证再执行、必要时人工确认**。
 
-# Tests
-pip install -r requirements-dev.txt   # adds pytest, mypy, type stubs
-python -m pytest                      # all tests
-python -m pytest -m "not e2e"         # skip E2E tests
-cd desktop && npm test                # Vitest
-cd desktop && npm run test:watch      # Vitest watch mode
-cd desktop && npm run lint            # ESLint
-cd desktop && npm run build           # production build
-cd desktop && npm run preview         # Vite preview
-cd desktop && npm run tauri           # Tauri desktop app
-```
+### 本地访问控制
 
-## Safety Principles
+- Engine 绑定本地端口 `18625`。
+- 启动时生成高强度本地 Token。
+- 前端调用 Engine 必须携带 `X-Local-Token`。
+- Tauri 生产模式下限制请求来源为 `tauri://localhost`。
 
-- All SQL queries pass through policy enforcement before execution.
-- Agent autonomous SQL execution must be policy-gated and validated.
-- Agent must not bypass `sql.validate` or `safe_sql`.
-- All blocked/error responses return user-friendly messages, not TrustGate internals.
-- Local runtime state, API keys, SQLite databases, eval outputs, and generated
-  reports must not be committed.
+### 数据库访问安全
 
-## Project Status
+- 数据源密码、SSH 密码、私钥口令会加密保存。
+- 支持只读账号检测，并对具备写权限的账号给出风险提醒。
+- SSH 隧道由本地 TunnelManager 管理，支持健康检查、自愈重连和关闭回收。
 
-- **Phase 1** (complete): Repository boundary cleanup — removed old Text-to-SQL
-  product entry points, workbench platform designs, golden-sql, legacy kernel.
-- **Phase 2** (in progress): Agent internal redesign — semantic understanding
-  (`engine/semantic/`), environment layer (`engine/environment/`), context and
-  memory architecture (`engine/memory/`), skill registry, conversations
-  persistence, and ContextPack state management.
+### SQL 执行安全
+
+- SQL 执行前经过 PolicyEngine 与 TrustGate。
+- TrustGate 会检查 SQL 安全性、Schema 范围、执行策略和人工确认需求。
+- 普通运行环境不允许绕过 TrustGate；测试绕过也限制在测试/开发数据源。
+- 查询结果做最大行数、最大列数、最大单元格长度和最大响应大小限制。
+
+### 仓库安全
+
+`.gitignore` 已排除以下本地敏感或高噪声文件：
+
+- `.env` / `.env.*`
+- `.databox_runtime/`
+- 本地 Token、密钥、SQLite 数据库
+- Agent checkpoint、eval 输出、报告、日志
+- `node_modules/`、前端构建产物、Tauri target
+
+请不要把生产 API Key、数据库密码、私钥、真实业务数据提交到仓库。
+
+---
+
+## 开发状态
+
+DataBox 当前处于快速迭代阶段，核心方向包括：
+
+- 打磨数据库工作台基础体验。
+- 提升 Agent 在复杂 Schema 下的 SQL 生成、修复和解释能力。
+- 完善 Semantic Layer、Context Pack、Memory、技能系统。
+- 强化 Agent Eval，让每次能力升级都有可回归的评测依据。
+- 收敛旧接口，统一使用 `/api/v1/agent/*` 作为 AI 能力入口。
+
+---
+
+## License
+
+DataBox is released under the [MIT License](./LICENSE).
