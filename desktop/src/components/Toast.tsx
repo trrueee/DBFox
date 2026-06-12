@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, X, AlertTriangle, Info, XCircle } from "lucide-react";
 import gsap from "gsap";
 
@@ -16,12 +17,15 @@ interface ToastCtx {
 
 const ToastContext = createContext<ToastCtx>({ toast: () => {} });
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   return useContext(ToastContext);
 }
 
 let nextId = 0;
+
+/** Container element inside the scaled canvas where toasts render (avoids viewport overflow). */
+let toastRoot: HTMLElement | null = null;
+export function setToastRoot(el: HTMLElement | null) { toastRoot = el; }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
@@ -70,7 +74,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, type: ToastType = "info") => {
       const id = nextId++;
       setItems((prev) => [...prev.slice(-4), { id, type, message }]);
-      const timer = setTimeout(() => remove(id), 4000);
+      const timer = setTimeout(() => remove(id), 3500);
       timersRef.current.set(id, timer);
     },
     [remove],
@@ -79,8 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const setItemRef = useCallback((id: number, el: HTMLDivElement | null) => {
     if (el) {
       itemRefs.current.set(id, el);
-      // Animate in
-      gsap.fromTo(el, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.4, ease: "back.out(1.4)" });
+      gsap.fromTo(el, { opacity: 0, x: 20, scale: 0.95 }, { opacity: 1, x: 0, scale: 1, duration: 0.3, ease: "back.out(1.3)" });
     }
   }, []);
 
@@ -93,69 +96,81 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const icon = (type: ToastType) => {
     switch (type) {
-      case "success":
-        return <CheckCircle2 size={16} style={{ color: "var(--accent-green)" }} />;
-      case "error":
-        return <XCircle size={16} style={{ color: "var(--accent-red)" }} />;
-      case "warning":
-        return <AlertTriangle size={16} style={{ color: "var(--accent-amber)" }} />;
-      case "info":
-        return <Info size={16} style={{ color: "var(--accent-indigo)" }} />;
+      case "success": return <CheckCircle2 size={15} style={{ color: "hsl(var(--success))", flexShrink: 0 }} />;
+      case "error":   return <XCircle size={15} style={{ color: "hsl(var(--destructive))", flexShrink: 0 }} />;
+      case "warning": return <AlertTriangle size={15} style={{ color: "hsl(var(--warning))", flexShrink: 0 }} />;
+      case "info":    return <Info size={15} style={{ color: "hsl(var(--primary))", flexShrink: 0 }} />;
     }
   };
+
+  const toastElement = items.length > 0 ? createPortal(
+    <div
+      style={{
+        position: "absolute",
+        bottom: 20,
+        right: 20,
+        zIndex: 9999,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        pointerEvents: "none",
+      }}
+    >
+      {items.map((item) => (
+        <div
+          key={item.id}
+          ref={(el) => setItemRef(item.id, el)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            background: "hsl(var(--card))",
+            border: "1px solid hsl(var(--border))",
+            borderLeft: `3px solid ${
+              item.type === "success" ? "hsl(var(--success))" :
+              item.type === "error" ? "hsl(var(--destructive))" :
+              item.type === "warning" ? "hsl(var(--warning))" :
+              "hsl(var(--primary))"
+            }`,
+            borderRadius: "var(--radius)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+            fontSize: "13px",
+            color: "hsl(var(--foreground))",
+            minWidth: 200,
+            maxWidth: 400,
+            pointerEvents: "auto",
+          }}
+        >
+          {icon(item.type)}
+          <span style={{ flex: 1, lineHeight: 1.4 }}>{item.message}</span>
+          <button
+            onClick={() => remove(item.id)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "hsl(var(--muted-foreground))",
+              padding: 2,
+              display: "flex",
+              opacity: 0.6,
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      ))}
+    </div>,
+    toastRoot || document.body,
+  ) : null;
 
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 40,
-          right: 24,
-          zIndex: 9999,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
-        {items.map((item) => (
-          <div
-            key={item.id}
-            ref={(el) => setItemRef(item.id, el)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "12px 16px",
-              background: "var(--bg-surface)",
-              border: "1px solid var(--border-light)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--shadow-md)",
-              fontSize: "0.85rem",
-              color: "var(--text-primary)",
-              minWidth: 200,
-              maxWidth: 420,
-              borderLeft: `3px solid ${item.type === "success" ? "var(--accent-green)" : item.type === "error" ? "var(--accent-red)" : item.type === "warning" ? "var(--accent-amber)" : "var(--accent-indigo)"}`,
-            }}
-          >
-            {icon(item.type)}
-            <span style={{ flex: 1 }}>{item.message}</span>
-            <button
-              onClick={() => remove(item.id)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                padding: 2,
-                display: "flex",
-              }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
+      {toastElement}
     </ToastContext.Provider>
   );
 }
