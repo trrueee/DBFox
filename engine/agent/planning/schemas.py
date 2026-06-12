@@ -39,15 +39,9 @@ AgentToolGroup = Literal[
     "workspace",
     "environment",
     "schema",
+    "db",
     "semantic",
-    "query_plan",
-    "sql_generation",
-    "sql_validation",
-    "sql_repair",
-    "execution",
-    "result",
-    "chart",
-    "answer",
+    "memory",
 ]
 
 

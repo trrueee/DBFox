@@ -336,18 +336,9 @@ TOOL_GROUP_MAP: dict[str, str] = {
     "workspace.": "workspace",
     "environment.": "environment",
     "schema.": "schema",
+    "db.": "db",
     "semantic.": "semantic",
-    "query_plan.": "query_plan",
-    "sql.generate": "sql_generation",
-    "sql.validate": "sql_validation",
-    "sql.revise": "sql_repair",
-    "sql.execute_readonly": "execution",
-    "sql.skip_execution": "execution",
-    "result.": "result",
-    "chart.": "chart",
-    "followup.": "answer",
-    "answer.": "answer",
-    "memory.": "answer",
+    "memory.": "memory",
 }
 
 

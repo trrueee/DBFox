@@ -1,0 +1,38 @@
+name: db.remember
+group: db
+kind: code
+description: >
+  Persist a business-semantic memory proposed by the Agent. Supports five types:
+  table_alias, column_alias, column_values, join_path, business_definition.
+  Simple aliases are written immediately. join_path and business_definition
+  require user confirmation. All memories feed back into db.search for future
+  queries.
+handler: db_remember
+input_schema:
+  type: object
+  description: Save a discovered semantic memory.
+  properties:
+    type:
+      type: string
+      description: table_alias, column_alias, column_values, join_path, or business_definition.
+      enum: [table_alias, column_alias, column_values, join_path, business_definition]
+    target:
+      type: string
+      description: Target table, column, table-pair, or business term.
+    value:
+      description: "Memory payload: alias string, values list, join_condition dict, or definition dict."
+    aliases:
+      type: array
+      items:
+        type: string
+      description: "Alternative form: list of alias names for the target."
+    evidence:
+      type: string
+      description: Why the Agent believes this is correct (source of the observation).
+  required: [type, target]
+policy:
+  side_effect: none
+  risk_level: warning
+  requires_approval: true
+metadata:
+  next_route: model

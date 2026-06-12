@@ -17,18 +17,6 @@ Adding a new tool: just add an entry to ALIAS_TO_INTERNAL.
 
 # Alias → internal name (underscore-safe names for model-facing usage)
 ALIAS_TO_INTERNAL: dict[str, str] = {
-    "followup_load_context": "followup.load_context",
-    "schema_build_context": "schema.build_context",
-    "query_plan_build": "query_plan.build",
-    "sql_generate": "sql.generate",
-    "sql_validate": "sql.validate",
-    "sql_execute_readonly": "sql.execute_readonly",
-    "sql_skip_execution": "sql.skip_execution",
-    "sql_revise": "sql.revise",
-    "result_profile": "result.profile",
-    "chart_suggest": "chart.suggest",
-    "followup_suggest": "followup.suggest",
-    "answer_synthesize": "answer.synthesize",
     # Workspace tools
     "workspace_explain_sql": "workspace.explain_sql",
     "workspace_fix_sql": "workspace.fix_sql",
@@ -41,6 +29,13 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "schema_list_tables": "schema.list_tables",
     "schema_describe_table": "schema.describe_table",
     "schema_refresh_catalog": "schema.refresh_catalog",
+    # db.* exploration tools
+    "db_observe": "db.observe",
+    "db_search": "db.search",
+    "db_inspect": "db.inspect",
+    "db_preview": "db.preview",
+    "db_query": "db.query",
+    "db_remember": "db.remember",
     # Escalate
     "escalate_tool_group": "escalate.tool_group",
     # Memory tools

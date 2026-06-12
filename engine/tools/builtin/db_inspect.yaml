@@ -1,0 +1,25 @@
+name: db.inspect
+group: db
+kind: code
+description: >
+  Live introspection of a table or column from the real database. Connects to the
+  live database and runs dialect-specific system queries (information_schema,
+  pg_catalog, PRAGMA) to return the current structure: columns, types, keys,
+  foreign keys (outbound + inbound), indexes, and row estimates. Use after
+  db.search to verify candidate table structures before writing SQL.
+handler: db_inspect
+input_schema:
+  type: object
+  description: Inspect one table or column from the live database.
+  properties:
+    target:
+      type: string
+      description: Table or column reference, e.g. "users", "orders.user_id".
+  required: [target]
+policy:
+  side_effect: read
+  risk_level: safe
+binding:
+  produces_state_keys: [table_inspect]
+metadata:
+  next_route: model

@@ -21,21 +21,15 @@ logger = logging.getLogger("databox.databox_agent.nodes.tool_node")
 
 def _step_name(tool_name: str) -> str:
     step_names = {
-        "followup.load_context": "load_follow_up_context",
-        "schema.build_context": "build_schema_context",
-        "query_plan.build": "build_query_plan",
-        "sql.generate": "generate_sql_candidate",
-        "sql.validate": "validate_sql",
-        "sql.execute_readonly": "execute_sql",
-        "sql.skip_execution": "skip_execution",
-        "sql.revise": "revise_sql",
-        "result.profile": "profile_result",
-        "chart.suggest": "suggest_chart",
-        "followup.suggest": "suggest_followups",
-        "answer.synthesize": "answer_synthesizer",
         "schema.list_tables": "list_tables",
         "schema.describe_table": "describe_table",
         "schema.refresh_catalog": "refresh_catalog",
+        "db.observe": "observe_database",
+        "db.search": "search_database",
+        "db.inspect": "inspect_database",
+        "db.preview": "preview_table",
+        "db.query": "query_database",
+        "db.remember": "remember_database_semantics",
         "memory.search": "memory_search",
         "memory.write": "memory_write",
         "memory.delete": "memory_delete",
@@ -311,6 +305,63 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
             f"tables_created={output.get('tables_created')}, "
             f"columns_created={output.get('columns_created')}"
         )
+
+    if tool_name == "db.observe":
+        schemas = output.get("schemas") or []
+        domains = output.get("domains") or []
+        table_count = output.get("table_count", 0)
+        return (
+            f"[db.observe] {table_count} table(s), "
+            f"schemas={len(schemas)}, domains={[d.get('name') for d in domains[:8]]}."
+        )
+
+    if tool_name == "db.search":
+        results = output.get("results") or []
+        parts = []
+        for item in results[:8]:
+            parts.append(
+                f"{item.get('name')} ({item.get('type')}, score={item.get('score')}, "
+                f"reasons={','.join(item.get('reasons') or [])})"
+            )
+        return f"[db.search] {len(results)} result(s): " + "; ".join(parts)
+
+    if tool_name == "db.inspect":
+        if output.get("object_type") == "column":
+            fk = output.get("foreign_key") or {}
+            fk_text = f", fk={fk.get('table')}.{fk.get('column')}" if fk else ""
+            return (
+                f"[db.inspect] column {output.get('table')}.{output.get('name')} "
+                f"type={output.get('type')}, nullable={output.get('nullable')}{fk_text}"
+            )
+        columns = output.get("columns") or []
+        fks = output.get("foreign_keys") or []
+        indexes = output.get("indexes") or []
+        col_names = [c.get("name", "") for c in columns[:20]]
+        return (
+            f"[db.inspect] table {output.get('name')}: {len(columns)} column(s), "
+            f"fks={len(fks)}, indexes={len(indexes)}. Columns: {', '.join(col_names)}"
+        )
+
+    if tool_name == "db.preview":
+        rows = output.get("rows") or []
+        columns = output.get("columns") or []
+        return (
+            f"[db.preview] table={output.get('table')}, rows={len(rows)}, "
+            f"columns={', '.join(str(c) for c in columns[:15])}. "
+            f"Sample={json.dumps(rows[:3], ensure_ascii=False, default=str)[:500]}"
+        )
+
+    if tool_name == "db.query":
+        rows = output.get("rows") or []
+        columns = output.get("columns") or []
+        return (
+            f"[db.query] status={output.get('status')}, rows={output.get('returned_rows')}, "
+            f"columns={', '.join(str(c) for c in columns[:15])}. "
+            f"Sample={json.dumps(rows[:5], ensure_ascii=False, default=str)[:700]}"
+        )
+
+    if tool_name == "db.remember":
+        return f"[db.remember] status={output.get('status')}, target={output.get('target')}"
 
     if tool_name == "memory.search":
         memories = output.get("memories") or []

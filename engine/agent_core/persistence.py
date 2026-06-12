@@ -503,7 +503,7 @@ def mark_run_waiting_approval(
     db.flush()
 
 
-def mark_run_resumed(db: Session, *, run_id: str, current_step_name: str | None = "execute_sql") -> None:
+def mark_run_resumed(db: Session, *, run_id: str, current_step_name: str | None = "query_database") -> None:
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if run is None:
         raise DataBoxError("Agent run not found.", code="RUN_NOT_FOUND")

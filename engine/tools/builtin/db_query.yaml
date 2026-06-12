@@ -1,0 +1,26 @@
+name: db.query
+group: db
+kind: code
+description: >
+  Safely execute a read-only SQL query. This tool always revalidates SQL inside
+  the tool with TrustGate and guardrails, injects LIMIT when needed, enforces
+  timeout/truncation, masks sensitive values, and returns audit metadata.
+handler: db_query
+input_schema:
+  type: object
+  description: Execute read-only SQL through TrustGate.
+  properties:
+    sql:
+      type: string
+      description: Read-only SELECT SQL to validate and execute.
+    question:
+      type: string
+      description: Optional question used for query history.
+  required: [sql]
+binding:
+  produces_state_keys: [execution]
+policy:
+  side_effect: read
+  risk_level: warning
+metadata:
+  next_route: execution_result_route

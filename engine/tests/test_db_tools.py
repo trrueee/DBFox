@@ -1,0 +1,167 @@
+from __future__ import annotations
+
+from engine.agent_core.tool_registry import ToolContext
+from engine.agent_core.types import AgentRunRequest
+from engine.models import QueryHistory
+from engine.schema_sync import sync_schema
+
+
+def _ctx(db_session, datasource, question: str = "hello") -> ToolContext:
+    return ToolContext(
+        db=db_session,
+        request=AgentRunRequest(datasource_id=datasource.id, question=question),
+        state_view={"datasource_id": datasource.id, "question": question},
+    )
+
+
+def test_db_observe_returns_catalog_map(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_observe
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_observe(_ctx(db_session, test_datasource), {"mode": "overview"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["dialect"] == "sqlite"
+    assert obs.output["table_count"] >= 20
+    schemas = obs.output["schemas"]
+    assert schemas[0]["name"] == "main"
+    users = next(t for t in schemas[0]["tables"] if t["name"] == "users")
+    assert users["columns"] >= 5
+    assert "user" in users["tags"]
+    assert any(domain["label"] == "user" for domain in obs.output["domains"])
+
+
+def test_db_observe_tables_mode_includes_connected_tables(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_observe
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_observe(_ctx(db_session, test_datasource), {"mode": "tables", "table_names": ["orders"]})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["tables"][0]["name"] == "orders"
+    assert "users" in obs.output["tables"][0]["connected_tables"]
+    assert obs.output["tables"][0]["primary_key"] == "id"
+
+
+def test_db_search_uses_catalog_aliases_and_reasons(db_session, test_datasource) -> None:
+    from engine.models import SemanticAlias
+    from engine.tools.db_tools import db_search
+
+    sync_schema(db_session, test_datasource.id)
+    db_session.add(
+        SemanticAlias(
+            data_source_id=test_datasource.id,
+            alias="会员",
+            target_type="table",
+            target="users",
+            description="用户主表",
+        )
+    )
+    db_session.commit()
+
+    obs = db_search(_ctx(db_session, test_datasource), {"query": "会员 手机号", "limit": 5})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["total_matches"] >= 1
+    first = obs.output["results"][0]
+    assert first["type"] in {"table", "column"}
+    assert any(result.get("table_name") == "users" for result in obs.output["results"])
+    assert any("alias_match" in reason for result in obs.output["results"] for reason in result["reasons"])
+
+
+def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_inspect
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_inspect(_ctx(db_session, test_datasource), {"target": "orders"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["object_type"] == "table"
+    assert obs.output["name"] == "orders"
+    assert any(col["name"] == "user_id" and col["foreign_key"]["table"] == "users" for col in obs.output["columns"])
+    assert any(fk["column"] == "user_id" for fk in obs.output["foreign_keys_out"])
+    assert obs.output["indexes"]
+
+
+def test_db_inspect_reads_live_sqlite_column(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_inspect
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_inspect(_ctx(db_session, test_datasource), {"target": "orders.user_id"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output == {
+        "object_type": "column",
+        "table": "orders",
+        "name": "user_id",
+        "type": "INTEGER",
+        "nullable": False,
+        "default": None,
+        "primary_key": False,
+        "foreign_key": {"table": "users", "column": "id"},
+        "comment": "",
+    }
+
+
+def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_preview
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_preview(
+        _ctx(db_session, test_datasource),
+        {"table": "users", "columns": ["id", "email", "phone"], "limit": 50},
+    )
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["table"] == "users"
+    assert obs.output["columns"] == ["id", "email", "phone"]
+    assert obs.output["limit_applied"] == 20
+    assert obs.output["returned_rows"] <= 20
+    assert obs.output["rows"][0]["email"] == "[REDACTED_EMAIL]"
+    assert "column_summaries" in obs.output
+    assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == test_datasource.id).count() == 1
+
+
+def test_db_preview_rejects_unknown_columns_before_query(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_preview
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_preview(_ctx(db_session, test_datasource), {"table": "users", "columns": ["missing"]})
+
+    assert obs.status == "failed"
+    assert "Unknown column" in str(obs.error)
+    assert db_session.query(QueryHistory).count() == 0
+
+
+def test_db_query_revalidates_and_executes_readonly_sql(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_query
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_query(_ctx(db_session, test_datasource, "count users"), {"sql": "SELECT id, email FROM users"})
+
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["status"] == "success"
+    assert obs.output["columns"] == ["id", "email"]
+    assert obs.output["returned_rows"] >= 1
+    assert obs.output["audit"]["readonly_checked"] is True
+    assert obs.output["audit"]["limit_injected"] is True
+    assert "LIMIT" in obs.output["safe_sql"].upper()
+
+
+def test_db_query_blocks_writes_inside_tool(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_query
+
+    sync_schema(db_session, test_datasource.id)
+    obs = db_query(_ctx(db_session, test_datasource), {"sql": "DELETE FROM users"})
+
+    assert obs.status == "failed"
+    assert obs.output is not None
+    assert obs.output["status"] == "blocked"
+    assert any(check["rule"] == "select_only" for check in obs.output["checks"])
