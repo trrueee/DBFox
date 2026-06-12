@@ -1,0 +1,731 @@
+/* ═════════════════════════════════════════════════════════════
+   AgentTaskView — Refined Codex-style
+   Type-driven. Precise spacing. Fira Sans + Fira Code.
+   ═════════════════════════════════════════════════════════════ */
+
+.agent-task-view {
+  /* ── Type scale ── */
+  --at-text-xs:   0.8125rem;  /* 13px — meta, labels */
+  --at-text-sm:   0.875rem;   /* 14px — secondary, trace */
+  --at-text-base: 0.9375rem;  /* 15px — body */
+  --at-text-lg:   0.9375rem;  /* 15px — answer body */
+  --at-leading:   1.6;
+  --at-leading-relaxed: 1.7;
+
+  /* ── Palette — cool neutral scale ── */
+  --at-white:       #FFFFFF;
+  --at-bg:          #FAFBFC;
+  --at-surface:     #FFFFFF;
+  --at-hover:       #F3F4F6;
+  --at-border:      #E5E7EB;
+  --at-border-light:#EEF0F2;
+  --at-fg:          #111827;
+  --at-fg-secondary:#5C626D;
+  --at-fg-tertiary: #9298A0;
+  --at-fg-disabled: #BFC4CC;
+  --at-accent:      #3B5CCC;
+  --at-accent-soft: #EEF1FA;
+  --at-success:     #15803D;
+  --at-success-soft:#ECFDF5;
+  --at-warn:        #B45309;
+  --at-warn-soft:   #FFFBEB;
+  --at-fail:        #DC2626;
+  --at-fail-soft:   #FEF2F2;
+
+  /* ── Radii ── */
+  --at-radius-sm:  6px;
+  --at-radius-md:  8px;
+  --at-radius-lg:  14px;
+  --at-radius-full:9999px;
+
+  /* ── Shadows ── */
+  --at-shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --at-shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--at-bg);
+  color: var(--at-fg);
+  font-family: "Fira Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: var(--at-text-base);
+  line-height: var(--at-leading);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Dark mode ── */
+.dark .agent-task-view {
+  --at-bg:          #0D1117;
+  --at-surface:     #161B22;
+  --at-hover:       #1C2333;
+  --at-border:      #30363D;
+  --at-border-light:#21262D;
+  --at-fg:          #E6EDF3;
+  --at-fg-secondary:#8B949E;
+  --at-fg-tertiary: #6E7681;
+  --at-fg-disabled: #484F58;
+  --at-accent:      #6C8EEF;
+  --at-accent-soft: rgba(108,142,239,0.08);
+  --at-success:     #3FB950;
+  --at-success-soft:rgba(63,185,80,0.08);
+  --at-warn:        #D29922;
+  --at-warn-soft:   rgba(210,153,34,0.08);
+  --at-fail:        #F85149;
+  --at-fail-soft:   rgba(248,81,73,0.08);
+  --at-shadow-xs: 0 1px 2px rgba(0,0,0,0.15);
+  --at-shadow-sm: 0 1px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.12);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Header
+   ════════════════════════════════════════════════════════════ */
+
+.task-header {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--at-border-light);
+  background: var(--at-surface);
+}
+
+.task-header-left  { display: flex; align-items: center; gap: 12px; }
+.task-header-title { font-size: var(--at-text-xs); font-weight: 500; color: var(--at-fg-tertiary); letter-spacing: 0.01em; }
+
+.task-status-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: var(--at-radius-full);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.02em;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.task-status-running           { color: var(--at-accent); background: var(--at-accent-soft); }
+.task-status-waiting_approval  { color: var(--at-warn);   background: var(--at-warn-soft); }
+.task-status-completed         { color: var(--at-success); background: var(--at-success-soft); }
+.task-status-failed            { color: var(--at-fail);   background: var(--at-fail-soft); }
+.task-status-idle              { color: var(--at-fg-tertiary); background: var(--at-hover); }
+
+.task-header-elapsed {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  color: var(--at-fg-tertiary);
+}
+
+.task-header-actions { display: flex; align-items: center; gap: 8px; }
+
+.task-header-cancel-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: var(--at-radius-sm);
+  border: 1px solid rgba(220,38,38,0.2); background: var(--at-fail-soft);
+  color: var(--at-fail); font-size: var(--at-text-xs); font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: background 0.15s ease;
+}
+.task-header-cancel-btn:hover { background: #FEE2E2; }
+
+.task-header-regenerate-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: var(--at-radius-sm);
+  border: 1px solid var(--at-border); background: transparent;
+  color: var(--at-fg-secondary); font-size: var(--at-text-xs); font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: all 0.15s ease;
+}
+.task-header-regenerate-btn:hover { background: var(--at-hover); border-color: var(--at-fg-disabled); }
+
+/* ════════════════════════════════════════════════════════════
+   Scroll body
+   ════════════════════════════════════════════════════════════ */
+
+.task-scroll-body {
+  flex: 1; min-height: 0; overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 36px 44px 48px;
+  display: flex; flex-direction: column;
+}
+
+/* ════════════════════════════════════════════════════════════
+   Conversation Turn
+   ════════════════════════════════════════════════════════════ */
+
+.task-turn {
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--at-border-light);
+}
+.task-turn:first-child { padding-top: 0; }
+.task-turn:last-child  { border-bottom: none; padding-bottom: 0; }
+
+/* ════════════════════════════════════════════════════════════
+   User message — right-aligned gray bubble
+   ════════════════════════════════════════════════════════════ */
+
+.task-user-prompt {
+  align-self: flex-end;
+  max-width: 540px;
+  background: var(--at-hover);
+  border-radius: var(--at-radius-lg);
+  padding: 10px 16px;
+  box-shadow: var(--at-shadow-xs);
+}
+
+.task-prompt-text {
+  font-size: var(--at-text-base);
+  line-height: var(--at-leading);
+  color: var(--at-fg);
+  font-weight: 400;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ════════════════════════════════════════════════════════════
+   AI response — transparent body column
+   ════════════════════════════════════════════════════════════ */
+
+.task-turn-ai {
+  max-width: 760px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: transparent; border: none;
+}
+
+/* Plain AI text (history turns) */
+.task-turn-ai-text {
+  font-size: var(--at-text-base);
+  line-height: var(--at-leading);
+  color: var(--at-fg);
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Starting indicator */
+.task-turn-ai-starting {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--at-text-sm); color: var(--at-fg-tertiary);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Trace Summary Bar
+   ════════════════════════════════════════════════════════════ */
+
+.task-trace-summary {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; border-radius: var(--at-radius-sm);
+  cursor: pointer; user-select: none;
+  font-size: var(--at-text-xs);
+  color: var(--at-fg-tertiary);
+  transition: all 0.15s ease;
+}
+.task-trace-summary:hover { background: var(--at-hover); color: var(--at-fg-secondary); }
+
+.task-trace-summary-status { font-weight: 600; color: var(--at-fg); }
+.task-trace-summary-stat   { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.task-trace-summary-chevron { margin-left: auto; display: flex; align-items: center; }
+
+/* ════════════════════════════════════════════════════════════
+   Trace Timeline — rail + rows
+   ════════════════════════════════════════════════════════════ */
+
+.task-trace-timeline {
+  position: relative;
+  display: flex; flex-direction: column; gap: 1px;
+  padding-left: 26px;
+  max-height: 400px; overflow-y: auto;
+}
+
+.task-trace-rail {
+  position: absolute; left: 10px; top: 4px; bottom: 4px;
+  width: 1.5px; background: var(--at-border);
+  border-radius: 1px;
+}
+
+.task-trace-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  position: relative; z-index: 1;
+}
+
+/* Rail dots */
+.task-trace-dot {
+  display: flex; align-items: flex-start; justify-content: center;
+  width: 22px; padding-top: 4px; flex-shrink: 0;
+}
+.task-trace-dot > svg,
+.task-trace-dot > span { position: relative; z-index: 2; }
+
+.task-trace-dot-info    { color: var(--at-fg-disabled); }
+.task-trace-dot-success { color: var(--at-success); }
+.task-trace-dot-failed  { color: var(--at-fail); }
+.task-trace-dot-running { color: var(--at-accent); }
+
+/* ════════════════════════════════════════════════════════════
+   Thinking Step
+   ════════════════════════════════════════════════════════════ */
+
+.task-thinking-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  position: relative; z-index: 1;
+  padding: 3px 0;
+}
+
+.task-thinking-dot {
+  display: flex; align-items: flex-start; justify-content: center;
+  width: 22px; padding-top: 5px; flex-shrink: 0;
+}
+
+.task-thinking-card { min-width: 0; }
+
+.task-thinking-text {
+  font-size: var(--at-text-sm);
+  line-height: var(--at-leading);
+  color: var(--at-fg-secondary);
+  white-space: pre-wrap; word-break: break-word;
+  font-weight: 400;
+}
+.task-thinking-active .task-thinking-text { color: var(--at-fg); }
+
+.task-thinking-cursor {
+  display: inline-block; width: 1.5px; height: 1em;
+  background: var(--at-accent); margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: at-cursor-blink 0.8s step-end infinite;
+}
+@keyframes at-cursor-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ════════════════════════════════════════════════════════════
+   Tool Call Row — compact, bordered
+   ════════════════════════════════════════════════════════════ */
+
+.task-tool-card {
+  min-width: 0;
+  border: 1px solid var(--at-border);
+  background: var(--at-surface);
+  border-radius: var(--at-radius-md);
+  overflow: hidden;
+  box-shadow: var(--at-shadow-xs);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.task-tool-card:hover { border-color: var(--at-fg-disabled); }
+.task-tool-card-running { border-color: #B8C8F0; }
+.task-tool-card-shimmer { border-color: var(--at-accent); box-shadow: 0 0 0 1px rgba(59,92,204,0.08); }
+
+.task-tool-card-header {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 14px; min-height: 36px;
+  border: none; background: transparent;
+  cursor: pointer; text-align: left;
+  color: inherit; font-family: inherit;
+  transition: background 0.1s ease;
+}
+.task-tool-card-header:hover { background: var(--at-bg); }
+.task-tool-card-header:disabled { cursor: default; background: transparent; }
+
+.task-tool-icon    { display: flex; align-items: center; color: var(--at-fg-tertiary); flex-shrink: 0; }
+.task-tool-name     { font-family: "Fira Code", ui-monospace, monospace; font-size: var(--at-text-xs); font-weight: 600; color: var(--at-fg); }
+.task-tool-subtitle  { font-family: "Fira Code", ui-monospace, monospace; font-size: 11px; color: var(--at-fg-tertiary); }
+
+.task-tool-status-tag {
+  margin-left: auto; font-size: 10px; font-weight: 500;
+  padding: 2px 7px; border-radius: var(--at-radius-full);
+  font-family: "Fira Code", ui-monospace, monospace;
+  letter-spacing: 0.01em;
+}
+.task-tool-card .task-tool-status-tag        { color: var(--at-success); background: var(--at-success-soft); }
+.task-tool-card-running .task-tool-status-tag { color: var(--at-accent);  background: var(--at-accent-soft); }
+.border-l-red-500 .task-tool-status-tag       { color: var(--at-fail);   background: var(--at-fail-soft); }
+
+.task-tool-latency {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 11px; color: var(--at-fg-tertiary); font-variant-numeric: tabular-nums;
+}
+.task-tool-expand { display: flex; align-items: center; color: var(--at-fg-tertiary); }
+
+/* Tool detail panel */
+.task-tool-detail {
+  border-top: 1px solid var(--at-border-light);
+  padding: 10px 14px 12px;
+  background: var(--at-bg);
+}
+
+.task-json-block { margin-bottom: 10px; }
+.task-json-block:last-child { margin-bottom: 0; }
+
+.task-json-title {
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--at-fg-tertiary); margin-bottom: 3px;
+}
+
+.task-json-pre {
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 11px; line-height: 1.55;
+  color: var(--at-fg-secondary);
+  padding: 8px 10px; border-radius: var(--at-radius-sm);
+  background: var(--at-surface);
+  border: 1px solid var(--at-border-light);
+  overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+  max-height: 200px; overflow-y: auto;
+}
+
+.task-json-danger .task-json-title { color: var(--at-fail); }
+.task-json-danger .task-json-pre   { color: var(--at-fail); border-color: rgba(220,38,38,0.15); background: var(--at-fail-soft); }
+
+/* Collapse toggle */
+.task-trace-collapse-btn {
+  display: block; width: 100%; padding: 8px 0;
+  border: none; background: transparent;
+  color: var(--at-fg-tertiary); font-size: var(--at-text-xs);
+  cursor: pointer; text-align: center; font-family: inherit;
+  transition: color 0.15s ease;
+}
+.task-trace-collapse-btn:hover { color: var(--at-fg-secondary); }
+
+/* ════════════════════════════════════════════════════════════
+   Legacy trace cards (keep minimal)
+   ════════════════════════════════════════════════════════════ */
+
+.task-trace-card       { min-width: 0; overflow: hidden; }
+.task-trace-card-user  { }
+.task-trace-card-header { display: flex; align-items: center; gap: 8px; padding: 4px 0; min-height: 28px; }
+.task-trace-card-title  { font-size: var(--at-text-xs); font-weight: 600; color: var(--at-fg); }
+.task-trace-card-body   { padding: 2px 0 6px; }
+.task-trace-user-text   { font-size: var(--at-text-sm); line-height: 1.5; color: var(--at-fg-secondary); white-space: pre-wrap; word-break: break-word; }
+
+/* ════════════════════════════════════════════════════════════
+   Final Answer — pure body text
+   ════════════════════════════════════════════════════════════ */
+
+.task-answer-card {
+  display: flex; flex-direction: column; gap: 24px;
+  padding: 2px 0 0;
+  background: transparent; border: none;
+}
+
+.task-answer-text {
+  font-size: var(--at-text-lg);
+  line-height: var(--at-leading-relaxed);
+  color: var(--at-fg);
+  font-weight: 400;
+}
+.task-answer-text p { margin-bottom: 10px; }
+.task-answer-text p:last-child { margin-bottom: 0; }
+
+/* Sections */
+.task-answer-section-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--at-text-xs); font-weight: 600;
+  color: var(--at-fg-tertiary); margin-bottom: 10px;
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+
+.task-answer-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.task-answer-list li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: var(--at-text-sm); line-height: 1.55;
+  color: var(--at-fg-secondary);
+}
+.task-answer-caveats .task-answer-list li { color: var(--at-warn); }
+.dark .task-answer-caveats .task-answer-list li { color: #FCD34D; }
+
+.task-evidence-label { font-weight: 600; color: var(--at-fg); font-size: var(--at-text-xs); }
+.task-evidence-sep   { margin: 0 5px; color: var(--at-fg-tertiary); }
+.task-evidence-value { font-family: "Fira Code", ui-monospace, monospace; font-size: var(--at-text-xs); color: var(--at-fg-secondary); }
+
+/* Follow-up chips */
+.task-followup-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.task-followup-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 0; color: var(--at-accent);
+  font-size: var(--at-text-sm); font-weight: 500;
+  cursor: pointer; transition: opacity 0.15s ease;
+}
+.task-followup-chip:hover { opacity: 0.6; }
+
+/* ════════════════════════════════════════════════════════════
+   Artifacts — light, thin borders
+   ════════════════════════════════════════════════════════════ */
+
+.task-artifacts-grid { display: flex; flex-direction: column; gap: 20px; }
+.task-artifact-item  { overflow: hidden; }
+
+.task-artifact-item-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; font-size: var(--at-text-xs); font-weight: 600;
+  color: var(--at-fg); border-bottom: 1px solid var(--at-border-light);
+}
+
+.task-artifact-sql-pre {
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: var(--at-text-sm); line-height: 1.55;
+  padding: 12px 0; margin: 0; color: var(--at-fg);
+  overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+}
+
+.task-artifact-sql-actions {
+  display: flex; gap: 12px; padding: 8px 0;
+  border-top: 1px solid var(--at-border-light);
+}
+
+.task-artifact-btn {
+  padding: 0; border: none; background: transparent;
+  color: var(--at-accent); font-size: var(--at-text-xs); font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: opacity 0.15s ease;
+}
+.task-artifact-btn:hover { opacity: 0.6; }
+
+/* Table */
+.task-artifact-table-wrap { overflow-x: auto; }
+.task-artifact-table { width: 100%; border-collapse: collapse; }
+
+.task-artifact-table th {
+  padding: 7px 14px 7px 0; text-align: left;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--at-fg-tertiary); letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--at-border);
+  white-space: nowrap;
+}
+
+.task-artifact-table td {
+  padding: 7px 14px 7px 0;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: var(--at-text-sm); color: var(--at-fg);
+  border-bottom: 1px solid var(--at-border-light);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.task-artifact-table tr:last-child td { border-bottom: none; }
+
+.task-artifact-table-more {
+  padding: 10px 0 0; font-size: var(--at-text-xs); color: var(--at-fg-tertiary);
+}
+
+/* Chart bars */
+.task-artifact-chart-bars { padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+
+.task-chart-bar-row { display: flex; align-items: center; gap: 12px; }
+
+.task-chart-bar-label {
+  width: 100px; flex-shrink: 0;
+  font-size: var(--at-text-xs); color: var(--at-fg-secondary);
+  text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.task-chart-bar-track {
+  flex: 1; height: 8px; background: var(--at-border-light);
+  border-radius: var(--at-radius-full); overflow: hidden;
+}
+.task-chart-bar-fill {
+  height: 100%; background: var(--at-accent);
+  border-radius: var(--at-radius-full); min-width: 2px;
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.task-chart-bar-value {
+  width: 60px; flex-shrink: 0;
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: var(--at-text-xs); color: var(--at-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Markdown artifact */
+.task-artifact-markdown-body {
+  padding: 10px 0; font-size: var(--at-text-sm);
+  color: var(--at-fg-secondary); line-height: var(--at-leading);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Empty + Failed states
+   ════════════════════════════════════════════════════════════ */
+
+.task-empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; padding: 64px 16px; flex: 1;
+}
+
+.task-empty-scan-line {
+  width: 140px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--at-fg-disabled), transparent);
+  background-size: 30% 100%; background-repeat: no-repeat;
+  animation: at-scan 2.4s ease-in-out infinite;
+}
+@keyframes at-scan {
+  0%   { background-position: -50% 0; }
+  100% { background-position: 150% 0; }
+}
+.task-empty-text { font-size: var(--at-text-sm); color: var(--at-fg-tertiary); }
+
+.task-failed-banner-inline {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px 0;
+}
+.task-failed-banner-inline-title { font-size: var(--at-text-sm); font-weight: 600; color: var(--at-fail); }
+.task-failed-banner-inline-msg  { font-size: var(--at-text-sm); color: var(--at-fg-secondary); line-height: 1.5; }
+
+/* ════════════════════════════════════════════════════════════
+   Approval
+   ════════════════════════════════════════════════════════════ */
+
+.task-approval-card { max-width: 640px; width: 100%; padding: 16px 0; }
+.task-approval-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.task-approval-title { font-size: var(--at-text-sm); font-weight: 600; color: var(--at-fg); }
+
+.task-approval-risk {
+  margin-left: auto; font-size: 10px; font-weight: 500;
+  padding: 2px 8px; border-radius: var(--at-radius-full);
+  font-family: "Fira Code", ui-monospace, monospace;
+}
+.task-approval-risk-safe    { color: var(--at-success); background: var(--at-success-soft); }
+.task-approval-risk-warning { color: var(--at-warn);    background: var(--at-warn-soft); }
+.task-approval-risk-danger  { color: var(--at-fail);    background: var(--at-fail-soft); }
+
+.task-approval-reason {
+  font-size: var(--at-text-sm); line-height: 1.5;
+  color: var(--at-fg-secondary); margin-bottom: 12px;
+}
+
+.task-approval-sql {
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: var(--at-text-xs); line-height: 1.55;
+  padding: 10px; margin-bottom: 14px; color: var(--at-fg);
+  background: var(--at-bg); border: 1px solid var(--at-border-light);
+  border-radius: var(--at-radius-sm);
+  overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+}
+
+.task-approval-actions  { display: flex; gap: 8px; justify-content: flex-end; }
+.task-approval-btn {
+  display: inline-flex; align-items: center;
+  padding: 7px 20px; border-radius: var(--at-radius-sm);
+  font-size: var(--at-text-xs); font-weight: 600;
+  cursor: pointer; border: none; font-family: inherit;
+  transition: opacity 0.15s ease;
+}
+.task-approval-approve  { background: var(--at-success); color: #fff; }
+.task-approval-approve:hover { opacity: 0.88; }
+.task-approval-reject {
+  background: transparent; color: var(--at-fg-secondary);
+  border: 1px solid var(--at-border);
+}
+.task-approval-reject:hover { background: var(--at-hover); }
+
+/* ════════════════════════════════════════════════════════════
+   Footer follow-up input
+   ════════════════════════════════════════════════════════════ */
+
+.task-footer {
+  flex-shrink: 0; border-top: 1px solid var(--at-border-light);
+  background: var(--at-surface); padding: 12px 24px;
+}
+
+.task-chat-input-wrapper {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--at-bg); border: 1px solid var(--at-border);
+  border-radius: var(--at-radius-md); padding: 0 16px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.task-chat-input-wrapper:focus-within {
+  border-color: var(--at-accent);
+  box-shadow: 0 0 0 2px rgba(59,92,204,0.1);
+}
+
+.task-chat-input {
+  flex: 1; height: 38px; border: none; background: transparent;
+  color: var(--at-fg); font-size: var(--at-text-base); outline: none;
+  font-family: inherit; font-weight: 400;
+}
+.task-chat-input::placeholder { color: var(--at-fg-tertiary); }
+
+.task-chat-send-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border: none; border-radius: var(--at-radius-sm);
+  background: transparent; color: var(--at-fg-tertiary);
+  cursor: pointer; transition: all 0.15s ease; flex-shrink: 0;
+}
+.task-chat-send-btn:hover { color: var(--at-accent); background: var(--at-accent-soft); }
+
+/* ════════════════════════════════════════════════════════════
+   Markdown overrides
+   ════════════════════════════════════════════════════════════ */
+
+.task-answer-text .hifi-markdown-content { margin: 0; font-size: inherit; line-height: inherit; color: inherit; }
+.task-answer-text .hifi-markdown-content p { margin-bottom: 10px; font-size: inherit; }
+.task-answer-text .hifi-markdown-content h1,
+.task-answer-text .hifi-markdown-content h2,
+.task-answer-text .hifi-markdown-content h3 { font-size: 1.1em; }
+.task-answer-text .hifi-markdown-content ul,
+.task-answer-text .hifi-markdown-content ol { font-size: inherit; }
+.task-answer-text .hifi-markdown-content li { font-size: inherit; margin-bottom: 4px; }
+.task-answer-text .hifi-markdown-content strong { font-size: inherit; }
+.task-answer-text .hifi-markdown-content code {
+  font-family: "Fira Code", ui-monospace, monospace;
+  font-size: 0.9em; padding: 1px 5px;
+  background: var(--at-hover); border-radius: 3px;
+}
+.task-answer-text .hifi-markdown-content pre {
+  margin: 12px 0; padding: 0; overflow-x: auto;
+}
+.task-answer-text .hifi-markdown-content pre code {
+  padding: 12px 14px; display: block;
+  background: var(--at-bg); border: 1px solid var(--at-border-light);
+  border-radius: var(--at-radius-md);
+}
+
+/* ════════════════════════════════════════════════════════════
+   Placeholder classes (referenced in TSX)
+   ════════════════════════════════════════════════════════════ */
+
+.task-turn-last { }
+.task-turn-active { }
+.task-approval-danger { }
+.task-answer-success { }
+.task-answer-warn { }
+.task-answer-error { }
+.task-answer-head { display: none; }
+.task-answer-head-title { display: none; }
+.task-trace-zone { }
+.task-failed-banner { }
+.task-failed-banner-body { }
+.task-failed-banner-title { }
+.task-failed-banner-error { }
+.task-failed-retry-btn { }
+.task-answer-zone { }
+.task-prompt-label { display: none; }
+.task-prompt-time { display: none; }
+.task-turn-ai-head { display: none; }
+.task-turn-ai-label { display: none; }
+.task-turn-status { display: none; }
+.task-turn-status-running { display: none; }
+.task-turn-status-waiting_approval { display: none; }
+.task-turn-status-completed { display: none; }
+.task-turn-status-failed { display: none; }
+.task-trace-dot-pulse { }
+.task-tool-dot { display: inline-flex; }
+.task-tool-dot-running { color: var(--at-accent); }
+
+/* ════════════════════════════════════════════════════════════
+   Utilities
+   ════════════════════════════════════════════════════════════ */
+
+.tabular-nums { font-variant-numeric: tabular-nums; }
+.animate-fade-up { animation: at-fade-in 0.25s ease-out both; }
+.animate-slide-up { animation: at-slide-in 0.3s ease-out both; }
+
+@keyframes at-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes at-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

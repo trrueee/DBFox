@@ -1,10 +1,12 @@
-import type { MouseEvent } from "react";
-import { ChevronDown, Database, FileText, RefreshCw, Search } from "lucide-react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Check, ChevronDown, Database, FileText, RefreshCw, Search } from "lucide-react";
 import type { EngineDataSource, EngineSchemaTable } from "../engine/engineApi";
 
 interface DataSourceTreeProps {
   treeSearch: string;
   selectedTables: string[];
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onTreeSearchChange: (value: string) => void;
   onTableClick: (tableName: string, event: MouseEvent) => void;
   onTableDoubleClick: (tableName: string) => void;
@@ -22,6 +24,8 @@ interface DataSourceTreeProps {
 export function DataSourceTree({
   treeSearch,
   selectedTables,
+  collapsed,
+  onToggleCollapse,
   onTreeSearchChange,
   onTableClick,
   onTableDoubleClick,
@@ -36,6 +40,30 @@ export function DataSourceTree({
   error,
 }: DataSourceTreeProps) {
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
+  const [dbDropdownOpen, setDbDropdownOpen] = useState(false);
+  const dbDropdownRef = useRef<HTMLDivElement>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [schemaCollapsed, setSchemaCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!dbDropdownOpen) return;
+    const handleClick = (e: Event) => {
+      if (dbDropdownRef.current && !dbDropdownRef.current.contains(e.target as Node)) {
+        setDbDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [dbDropdownOpen]);
+
+  const toggleGroup = (groupName: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupName)) next.delete(groupName);
+      else next.add(groupName);
+      return next;
+    });
+  };
 
   const handleRefresh = () => {
     onRefresh();
@@ -51,6 +79,20 @@ export function DataSourceTree({
     }
     return acc;
   }, {}) : {};
+
+  if (collapsed) {
+    return (
+      <section className="hifi-col" style={{ width: 36, flexShrink: 0, background: "var(--color-panel)", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
+        <button
+          onClick={onToggleCollapse}
+          title="展开侧栏"
+          style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", padding: 4, display: "flex" }}
+        >
+          <ChevronDown size={14} style={{ transform: "rotate(-90deg)" }} />
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section className="hifi-col hifi-sidebar-col">
@@ -68,17 +110,60 @@ export function DataSourceTree({
             <span title="刷新" onClick={handleRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
               <RefreshCw size={12} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
             </span>
+            <button
+              onClick={onToggleCollapse}
+              title="收起侧栏"
+              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}
+            >
+              <ChevronDown size={14} style={{ transform: "rotate(90deg)" }} />
+            </button>
           </div>
         </div>
 
         {activeDatasource ? (
-          <div className="hifi-db-select" onContextMenu={(event) => onNodeContextMenu(event, "database", activeDatasource.name)}>
-            <Database size={16} className="text-blue-600" />
-            <div className="hifi-db-info">
-              <span className="hifi-db-name">{activeDatasource.name}</span>
-              <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
+          <div ref={dbDropdownRef} style={{ position: "relative" }}>
+            <div
+              className="hifi-db-select"
+              onClick={() => setDbDropdownOpen((v) => !v)}
+              onContextMenu={(event) => onNodeContextMenu(event, "database", activeDatasource.name)}
+              style={{ cursor: "pointer" }}
+            >
+              <Database size={16} className="text-blue-600" />
+              <div className="hifi-db-info">
+                <span className="hifi-db-name">{activeDatasource.name}</span>
+                <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
+              </div>
+              <ChevronDown size={14} className="text-gray-400" style={{ transform: dbDropdownOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
             </div>
-            <ChevronDown size={14} className="text-gray-400" />
+            {dbDropdownOpen && datasources.length > 0 && (
+              <div
+                style={{
+                  position: "absolute", top: "100%", left: 4, right: 4, zIndex: 50,
+                  background: "var(--bg-surface, #fff)", border: "1px solid var(--border-medium, #e5e7eb)",
+                  borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4, overflow: "hidden",
+                }}
+              >
+                {datasources.map((ds) => (
+                  <div
+                    key={ds.id}
+                    onClick={() => { setActiveDatasourceId(ds.id); setDbDropdownOpen(false); }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                      cursor: "pointer", fontSize: 12,
+                      background: ds.id === activeDatasourceId ? "var(--color-accent, #f0f4ff)" : "transparent",
+                      color: ds.id === activeDatasourceId ? "var(--color-primary, #1e3a5f)" : "var(--color-text-primary, #111827)",
+                    }}
+                  >
+                    <Database size={12} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{ds.name}</div>
+                      <div style={{ fontSize: 10, color: "var(--color-text-secondary, #6b7280)" }}>{ds.db_type}</div>
+                    </div>
+                    {ds.id === activeDatasourceId && <Check size={14} style={{ color: "var(--color-primary, #1e3a5f)" }} />}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="hifi-db-select opacity-70">
@@ -87,14 +172,6 @@ export function DataSourceTree({
               <span className="hifi-db-name">未连接数据源</span>
               <span className="hifi-db-version">Local Engine</span>
             </div>
-          </div>
-        )}
-
-        {datasources.length > 1 && (
-          <div className="px-2 pb-2">
-            <select className="w-full border border-slate-200 rounded-lg text-[10px] px-2 py-1 bg-white" value={activeDatasource?.id || ""} onChange={(event) => setActiveDatasourceId(event.target.value)}>
-              {datasources.map((datasource) => <option key={datasource.id} value={datasource.id}>{datasource.name}</option>)}
-            </select>
           </div>
         )}
 
@@ -117,22 +194,37 @@ export function DataSourceTree({
           {activeDatasource && (
             <div
               className="hifi-tree-node font-semibold text-gray-900 cursor-pointer"
+              onClick={() => setSchemaCollapsed((v) => !v)}
               onContextMenu={(event) => onNodeContextMenu(event, "schema", activeDatasource.database_name || activeDatasource.name)}
             >
-              <ChevronDown size={12} className="mr-1 text-slate-500" />
+              <ChevronDown
+                size={12}
+                className="mr-1 text-slate-500"
+                style={{ transform: schemaCollapsed ? "rotate(-90deg)" : undefined, transition: "transform 0.15s" }}
+              />
               <Database size={12} className="mr-1 text-blue-600" />
               <span>{activeDatasource.database_name || activeDatasource.name}</span>
             </div>
           )}
 
-          {Object.entries(groupedTables).map(([moduleName, moduleTables]) => (
+          {!schemaCollapsed && Object.entries(groupedTables).map(([moduleName, moduleTables]) => {
+            const groupCollapsed = collapsedGroups.has(moduleName);
+            return (
             <div key={moduleName} style={{ marginLeft: "12px" }}>
-              <div className="hifi-tree-node">
-                <ChevronDown size={10} className="mr-1 text-gray-400" />
+              <div
+                className="hifi-tree-node"
+                style={{ cursor: "pointer" }}
+                onClick={() => toggleGroup(moduleName)}
+              >
+                <ChevronDown
+                  size={10}
+                  className="mr-1 text-gray-400"
+                  style={{ transform: groupCollapsed ? "rotate(-90deg)" : undefined, transition: "transform 0.15s" }}
+                />
                 <span className="text-gray-500 font-medium">{moduleName}</span>
               </div>
 
-              {moduleTables.map((table) => {
+              {!groupCollapsed && moduleTables.map((table) => {
                 const isSelected = selectedTables.includes(table.table_name);
                 return (
                   <div
@@ -155,7 +247,8 @@ export function DataSourceTree({
                 );
               })}
             </div>
-          ))}
+          );
+          })}
 
           {activeDatasource && !loading && Object.keys(groupedTables).length === 0 && (
             <div className="text-[10px] text-slate-400 p-2">没有匹配的表。请先同步 Schema 或调整搜索词。</div>
