@@ -9,18 +9,17 @@ class _FakeResponse:
 
 
 class TestExtractFinalSql:
-    def test_prefers_validated_safe_sql(self) -> None:
+    def test_prefers_db_query_safe_sql(self) -> None:
         events = [
-            {"step": {"name": "generate_sql_candidate", "sql": "SELECT * FROM t"}},
-            {"step": {"name": "validate_sql", "safe_sql": "SELECT * FROM t LIMIT 10"}},
+            {"step": {"tool_name": "db.query", "output": {"safe_sql": "SELECT * FROM t LIMIT 10"}}},
         ]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT * FROM t LIMIT 10"
 
-    def test_last_validate_wins(self) -> None:
+    def test_falls_back_to_legacy_validate(self) -> None:
         events = [
-            {"step": {"name": "validate_sql", "safe_sql": "SELECT a FROM t"}},
-            {"step": {"name": "validate_sql", "safe_sql": "SELECT b FROM t"}},
+            {"step": {"tool_name": "sql.validate", "safe_sql": "SELECT a FROM t"}},
+            {"step": {"tool_name": "sql.validate", "safe_sql": "SELECT b FROM t"}},
         ]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT b FROM t"
@@ -32,7 +31,7 @@ class TestExtractFinalSql:
 
     def test_falls_back_to_generated_sql(self) -> None:
         events = [
-            {"step": {"name": "generate_sql_candidate", "sql": "SELECT gen FROM t"}},
+            {"step": {"tool_name": "sql.generate", "output": {"sql": "SELECT gen FROM t"}}},
         ]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT gen FROM t"
@@ -41,11 +40,11 @@ class TestExtractFinalSql:
         assert extract_final_sql(_FakeResponse(), []) is None
 
     def test_empty_string_not_returned(self) -> None:
-        events = [{"step": {"name": "validate_sql", "safe_sql": ""}}]
+        events = [{"step": {"tool_name": "sql.validate", "safe_sql": ""}}]
         assert extract_final_sql(_FakeResponse(), events) is None
 
     def test_output_dict_safe_sql(self) -> None:
-        events = [{"step": {"name": "validate_sql", "output": {"safe_sql": "SELECT out FROM t"}}}]
+        events = [{"step": {"tool_name": "db.query", "output": {"safe_sql": "SELECT out FROM t"}}}]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT out FROM t"
 
@@ -56,8 +55,8 @@ class TestExtractFinalSql:
 
     def test_does_not_return_list(self) -> None:
         events = [
-            {"step": {"name": "generate_sql_candidate", "sql": "SELECT 1"}},
-            {"step": {"name": "generate_sql_candidate", "sql": "SELECT 2"}},
+            {"step": {"tool_name": "sql.generate", "sql": "SELECT 1"}},
+            {"step": {"tool_name": "sql.generate", "sql": "SELECT 2"}},
         ]
         sql = extract_final_sql(_FakeResponse(), events)
         assert isinstance(sql, str)

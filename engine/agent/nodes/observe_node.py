@@ -26,21 +26,7 @@ logger = logging.getLogger("databox.databox_agent.nodes.observe_node")
 
 
 def _tool_name_from_step(step_name: str) -> str:
-    mapping = {
-        "load_follow_up_context": "followup.load_context",
-        "build_schema_context": "schema.build_context",
-        "build_query_plan": "query_plan.build",
-        "generate_sql_candidate": "sql.generate",
-        "validate_sql": "sql.validate",
-        "execute_sql": "sql.execute_readonly",
-        "skip_execution": "sql.skip_execution",
-        "revise_sql": "sql.revise",
-        "profile_result": "result.profile",
-        "suggest_chart": "chart.suggest",
-        "suggest_followups": "followup.suggest",
-        "answer_synthesizer": "answer.synthesize",
-    }
-    return mapping.get(step_name, step_name)
+    return step_name
 
 
 def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> dict[str, Any] | None:
@@ -91,45 +77,12 @@ def emit_artifacts_from_observation(
     identity = AgentArtifactIdentity(run_id)
     artifacts = []
 
-    if step_name == "build_query_plan" and state.get("query_plan"):
-        artifacts.append(build_query_plan_artifact(state["query_plan"], identity=identity))
-
-    if step_name == "generate_sql_candidate" and not state.get("query_plan"):
-        # The model skipped the explicit query_plan.build step (the generator can
-        # work directly from schema context). Still surface a query_plan artifact
-        # so the UI/persistence layer always has the plan-level view of the run.
-        plan = _derive_query_plan(state, observation)
-        if plan:
-            artifacts.append(build_query_plan_artifact(plan, identity=identity))
+    # Artifact emission for new db.* tools
+    if step_name in ("db.query", "sql.execute_readonly") and state.get("execution") and state.get("execution", {}).get("success"):
+        artifacts.append(build_table_artifact(state["execution"], safety=state.get("safety"), identity=identity))
 
     if step_name == "semantic.resolve" and state.get("semantic_resolution"):
         artifacts.append(build_semantic_resolution_artifact(state["semantic_resolution"], identity=identity))
-
-    if step_name == "validate_sql" and state.get("sql") and state.get("safety"):
-        artifacts.append(build_sql_artifact(state["sql"], safety=state["safety"], identity=identity))
-        artifacts.append(build_safety_artifact(state["safety"], identity=identity))
-
-    if step_name == "execute_sql" and state.get("execution") and state.get("execution", {}).get("success"):
-        artifacts.append(build_table_artifact(state["execution"], safety=state.get("safety"), identity=identity))
-
-    if step_name == "profile_result" and state.get("result_profile"):
-        parsed_profile = ResultProfile.model_validate(state["result_profile"])
-        artifacts.append(
-            build_profile_artifact(
-                parsed_profile,
-                execution=state.get("execution"),
-                safety=state.get("safety"),
-                identity=identity,
-            )
-        )
-
-    if (
-        step_name == "suggest_chart"
-        and state.get("chart_suggestion")
-        and state.get("chart_suggestion", {}).get("type")
-        and state.get("chart_suggestion", {}).get("type") != "table"
-    ):
-        artifacts.append(build_chart_artifact(state["chart_suggestion"], safety=state.get("safety"), identity=identity))
 
     if step_name.startswith("workspace.") and observation.output:
         payload = dict(observation.output)

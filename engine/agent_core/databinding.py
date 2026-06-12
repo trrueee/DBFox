@@ -6,189 +6,26 @@ from uuid import uuid4
 
 from engine.agent_core.types import ToolObservation
 
-# ---------------------------------------------------------------------------
-# Per-tool state-applier functions — one handler per tool name.
-# Each receives (state, output, observation) and returns a dict of
-# state updates to merge.  The caller handles the common prefix
-# (tool_results, trace_events, failed-telemetry, artifacts).
-#
-# To emit extra trace events from a handler, include a ``"_trace"`` key
-# containing a list of event dicts.  The caller appends them to the
-# shared trace_events list and strips ``"_trace"`` before merging.
-# ---------------------------------------------------------------------------
-
 _ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
 # State reset namespaces
 # ---------------------------------------------------------------------------
-RESET_SQL_FLOW: dict[str, Any] = {
-    "safety": None,
-}
-
-RESET_EXECUTION_FLOW: dict[str, Any] = {
-    "execution": None,
-    "result_profile": None,
-    "chart_suggestion": None,
-    "suggestions": [],
-}
-
-RESET_ANSWER_FLOW: dict[str, Any] = {
-    "error": None,
-}
 
 RESET_SELF_HEALING: dict[str, Any] = {
     "last_error_telemetry": None,
     "last_failed_tool_call": None,
 }
 
-RESET_LIFECYCLE: dict[str, Any] = {
-    "agent_sql_critique": None,
-    "agent_reflection": None,
-}
 
-
-def _apply_followup_load_context(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"followup_context": output}
-
-
-def _apply_schema_build_context(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"schema_context": output}
-
-
-def _apply_query_plan_build(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"query_plan": output}
-
-
-def _apply_sql_generate(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    sql = str(output.get("sql") or "").strip() or None
-    update: dict[str, Any] = {
-        "sql_candidate": output,
-        "sql": sql or state.get("sql"),
-        "agent_sql_critique": None,
-        "safety": None,
-        **RESET_SELF_HEALING,
-    }
-    if not sql and output.get("mode") == "fallback_unavailable":
-        update["error"] = output.get("error") or "SQL generation unavailable: no LLM API key configured."
-    return update
-
-
-def _apply_sql_validate(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    safe_sql = str(output.get("safe_sql") or "").strip()
-    sql_candidate = state.get("sql_candidate")
-    generation_metadata = (
-        sql_candidate.get("metadata")
-        if isinstance(sql_candidate, dict) and isinstance(sql_candidate.get("metadata"), dict)
-        else None
-    )
-    if generation_metadata and "generation_metadata" not in output:
-        output = dict(output)
-        output["generation_metadata"] = generation_metadata
-    update: dict[str, Any] = {
-        "safety": output,
-        **RESET_SELF_HEALING,
-    }
-    if safe_sql:
-        update["sql"] = safe_sql
-    return update
-
-
-def _apply_sql_execute_readonly(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {
-        "execution": output,
-        **RESET_SELF_HEALING,
-    }
-
-
-def _apply_sql_skip_execution(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {
-        "execution": output,
-        **RESET_SELF_HEALING,
-    }
-
-
-def _apply_sql_revise(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    previous_count = state.get("revision_count") if isinstance(state.get("revision_count"), int) else 0
-    fixed_sql = str(output.get("fixed_sql") or "").strip()
-    update: dict[str, Any] = {
-        "revision_count": previous_count + 1,
-        "revision_attempted": True,
-    }
-    if fixed_sql:
-        update.update({
-            "sql": fixed_sql,
-            **RESET_SQL_FLOW,
-            **RESET_EXECUTION_FLOW,
-            **RESET_ANSWER_FLOW,
-            **RESET_SELF_HEALING,
-            **RESET_LIFECYCLE,
-        })
-        if state.get("pending_approval"):
-            update["pending_approval"] = None
-            update["_trace"] = [
-                {
-                    "type": "approval.superseded",
-                    "payload": {"reason": "User requested SQL revision before approval."},
-                }
-            ]
-    else:
-        if not state.get("pending_approval"):
-            update["error"] = str(output.get("revise_suggestion") or output.get("reason") or state.get("error") or "SQL revision could not produce a safe executable query.")
-    return update
-
-
-def _apply_result_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"result_profile": output}
-
-
-def _apply_chart_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"chart_suggestion": output}
-
-
-def _apply_followup_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    raw_suggestions = output.get("suggestions")
-    if isinstance(raw_suggestions, list):
-        return {"suggestions": [dict(item) for item in raw_suggestions if isinstance(item, dict)]}
-    return {}
-
-
-def _apply_answer_synthesize(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {
-        "answer": output,
-        "final_answer": output,
-        "status": "completed",
-    }
-
-
-def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
-    evidence: list[dict[str, Any]] = []
-    if suggestions or output.get("proposed_sql"):
-        evidence.append({
-            "artifact_id": "sql_suggestion",
-            "label": "SQL suggestion",
-            "value": suggestions[0].get("title") if suggestions and isinstance(suggestions[0], dict) else "workspace suggestion",
-        })
-    answer = {
-        "answer": str(output.get("answer") or ""),
-        "key_findings": [],
-        "evidence": evidence,
-        "caveats": [],
-        "recommendations": [],
-        "follow_up_questions": [],
-    }
-    return {
-        "answer": answer,
-        "final_answer": answer,
-        "status": "completed",
-    }
+# ---------------------------------------------------------------------------
+# State appliers
+# ---------------------------------------------------------------------------
 
 
 def _apply_environment_get_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
     result: dict[str, Any] = {"environment_profile": output}
-    # Agent v2: extract DatabaseMap to top-level state
     db_map = output.get("database_map")
     if db_map is not None:
         result["database_map"] = db_map
@@ -219,19 +56,61 @@ def _apply_memory_write(_state: dict[str, Any], output: dict[str, Any], _obs: To
     return {}
 
 
+def _apply_db_observe(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"database_map": output}
+
+
+def _apply_db_search(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"db_search_results": output}
+
+
+def _apply_db_inspect(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"db_inspection": output}
+
+
+def _apply_db_preview(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"db_preview": output}
+
+
+def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    execution = dict(output)
+    execution["success"] = output.get("status") == "success"
+    execution["rowCount"] = output.get("rowCount", output.get("returned_rows", 0))
+    execution["latencyMs"] = output.get("latencyMs", output.get("execution_time_ms", 0))
+    update: dict[str, Any] = {
+        "execution": execution,
+        **RESET_SELF_HEALING,
+    }
+    if output.get("safe_sql"):
+        update["sql"] = output.get("safe_sql")
+    return update
+
+
+def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    suggestions = output.get("suggestions") if isinstance(output.get("suggestions"), list) else []
+    evidence: list[dict[str, Any]] = []
+    if suggestions or output.get("proposed_sql"):
+        evidence.append({
+            "artifact_id": "sql_suggestion",
+            "label": "SQL suggestion",
+            "value": suggestions[0].get("title") if suggestions and isinstance(suggestions[0], dict) else "workspace suggestion",
+        })
+    answer = {
+        "answer": str(output.get("answer") or ""),
+        "key_findings": [],
+        "evidence": evidence,
+        "caveats": [],
+        "recommendations": [],
+        "follow_up_questions": [],
+    }
+    return {
+        "answer": answer,
+        "final_answer": answer,
+        "status": "completed",
+    }
+
+
 TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
-    "followup.load_context": _apply_followup_load_context,
-    "schema.build_context": _apply_schema_build_context,
-    "query_plan.build": _apply_query_plan_build,
-    "sql.generate": _apply_sql_generate,
-    "sql.validate": _apply_sql_validate,
-    "sql.execute_readonly": _apply_sql_execute_readonly,
-    "sql.skip_execution": _apply_sql_skip_execution,
-    "sql.revise": _apply_sql_revise,
-    "result.profile": _apply_result_profile,
-    "chart.suggest": _apply_chart_suggest,
-    "followup.suggest": _apply_followup_suggest,
-    "answer.synthesize": _apply_answer_synthesize,
     "environment.get_profile": _apply_environment_get_profile,
     "semantic.resolve": _apply_semantic_resolve,
     "schema.list_tables": _apply_schema_list_tables,
@@ -239,15 +118,16 @@ TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
     "schema.refresh_catalog": _apply_schema_refresh_catalog,
     "memory.search": _apply_memory_search,
     "memory.write": _apply_memory_write,
+    "db.observe": _apply_db_observe,
+    "db.search": _apply_db_search,
+    "db.inspect": _apply_db_inspect,
+    "db.preview": _apply_db_preview,
+    "db.query": _apply_db_query,
 }
 
 _ARTIFACT_TOOLS: frozenset[str] = frozenset({
-    "sql.generate",
-    "sql.validate",
-    "sql.execute_readonly",
-    "result.profile",
-    "chart.suggest",
-    "answer.synthesize",
+    "db.preview",
+    "db.query",
 })
 
 
@@ -296,7 +176,7 @@ def apply_tool_result_to_state(
         update["trace_events"].extend(extra_trace)
     update.update(tool_update)
 
-    # ---- artifact emission (common postfix) ---------------------------------
+    # ---- artifact emission --------------------------------------------------
     if tool_name in _ARTIFACT_TOOLS or tool_name.startswith("workspace."):
         update["artifacts"] = [_artifact_event(tool_name, output)]
 
@@ -327,7 +207,7 @@ def _apply_failed_telemetry(
             "retryable": bool(update["last_error_telemetry"].get("retryable")),
         },
     })
-    if tool_name == "sql.execute_readonly":
+    if tool_name == "db.query":
         update["execution"] = {
             "success": False,
             "error": observation.error,
@@ -340,17 +220,8 @@ def _apply_failed_telemetry(
 
 
 # ---------------------------------------------------------------------------
-# State merging
+# State merging (for streaming event view)
 # ---------------------------------------------------------------------------
-#
-# merge_state is for streaming event view only, NOT the source of truth.
-# During streaming, it mirrors LangGraph's internal state accumulation so that
-# intermediate event emitters (plan_artifact_events, events_from_graph_update)
-# have access to the latest accumulated state.
-#
-# After the stream completes, app.get_state(config).values is the authoritative
-# source for final response/checkpoint/persistence.
-
 
 ADDITIVE_STATE_KEYS: frozenset[str] = frozenset({
     "plan_events",
@@ -367,7 +238,6 @@ def merge_state(state: dict[str, Any], update: dict[str, Any]) -> None:
     for key, value in update.items():
         if key == MESSAGE_STATE_KEY:
             from langgraph.graph.message import add_messages
-
             current = state.get(key, [])
             state[key] = add_messages(current, value)
         elif key in ADDITIVE_STATE_KEYS:

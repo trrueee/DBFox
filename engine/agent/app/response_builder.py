@@ -101,28 +101,12 @@ def build_response(
 
     # Map raw trace events in state to AgentStep and AgentTraceEvent
     tool_to_step_name = {
-        "schema_build_context": "build_schema_context",
-        "schema.build_context": "build_schema_context",
-        "sql_generate": "generate_sql_candidate",
-        "sql.generate": "generate_sql_candidate",
-        "sql_validate": "validate_sql",
-        "sql.validate": "validate_sql",
-        "sql_execute_readonly": "execute_sql",
-        "sql.execute_readonly": "execute_sql",
-        "sql_skip_execution": "execute_sql",
-        "sql.skip_execution": "execute_sql",
-        "sql_revise": "revise_sql",
-        "sql.revise": "revise_sql",
-        "result_profile": "profile_result",
-        "result.profile": "profile_result",
-        "chart_suggest": "suggest_chart",
-        "chart.suggest": "suggest_chart",
-        "followup_suggest": "suggest_followups",
-        "followup.suggest": "suggest_followups",
-        "followup_load_context": "load_follow_up_context",
-        "followup.load_context": "load_follow_up_context",
-        "answer_synthesize": "answer_synthesizer",
-        "answer.synthesize": "answer_synthesizer",
+        "db.observe": "observe_database",
+        "db.search": "search_database",
+        "db.inspect": "inspect_database",
+        "db.preview": "preview_table",
+        "db.query": "query_database",
+        "db.remember": "remember_database_semantics",
     }
 
     raw_traces = state.get("trace_events") or []
@@ -497,21 +481,15 @@ def build_canvas(
 
 def _activity_title(step_name: str) -> str:
     titles: dict[str, str] = {
-        "build_schema_context": "Built schema context",
-        "build_query_plan": "Built query plan",
-        "generate_sql_candidate": "Generated SQL",
-        "validate_sql": "Validated SQL",
-        "execute_sql": "Executed query",
-        "skip_execution": "Skipped execution",
-        "revise_sql": "Revised SQL",
-        "profile_result": "Profiled results",
-        "suggest_chart": "Suggested chart",
-        "suggest_followups": "Suggested follow-ups",
-        "answer_synthesizer": "Synthesized answer",
+        "observe_database": "Observed database map",
+        "search_database": "Searched database",
+        "inspect_database": "Inspected table",
+        "preview_table": "Previewed data",
+        "query_database": "Executed query",
+        "remember_database_semantics": "Remembered semantics",
         "list_tables": "Listed tables",
         "describe_table": "Described table",
         "refresh_catalog": "Refreshed catalog",
-        "load_follow_up_context": "Loaded follow-up context",
         "memory_search": "Searched memory",
         "memory_write": "Wrote to memory",
         "memory_delete": "Deleted memory",
@@ -528,28 +506,19 @@ def _activity_summary(step_name: str, status: str, output: Any) -> str:
     if output is None:
         return "Completed"
     if isinstance(output, dict):
-        # Extract compact summary per step type
-        if step_name == "build_schema_context":
-            tables = output.get("selected_tables") or []
-            return f"Selected {len(tables)} table(s)"
-        if step_name == "build_query_plan":
-            metrics = output.get("metrics") or []
-            return f"Plan: {len(metrics)} metric(s)"
-        if step_name == "generate_sql_candidate":
-            sql = output.get("sql") or ""
-            return f"SQL: {len(sql)} chars"
-        if step_name == "validate_sql":
-            return "Passed" if output.get("can_execute") else "Blocked"
-        if step_name == "execute_sql":
-            return f"{output.get('rowCount', 0)} rows"
-        if step_name == "profile_result":
-            facts = output.get("notable_facts") or []
-            return f"{len(facts)} notable fact(s)"
-        if step_name == "suggest_chart":
-            return f"Chart: {output.get('type', '?')}"
-        if step_name == "answer_synthesizer":
-            ans = output.get("answer", "")
-            return ans[:80] + ("..." if len(ans) > 80 else "")
+        if step_name == "observe_database":
+            return f"{output.get('table_count', 0)} tables"
+        if step_name == "search_database":
+            return f"{len(output.get('results', [])) or output.get('total_matches', 0)} matches"
+        if step_name == "inspect_database":
+            cols = output.get("columns") or []
+            return f"{len(cols)} columns"
+        if step_name == "preview_table":
+            return f"{output.get('returned_rows', 0)} rows"
+        if step_name == "query_database":
+            return f"{output.get('returned_rows', output.get('rowCount', 0))} rows"
+        if step_name == "remember_database_semantics":
+            return f"Saved: {output.get('type', '?')}"
         if step_name == "list_tables":
             tables = output.get("tables") or []
             return f"{len(tables)} tables"
@@ -561,20 +530,15 @@ def _activity_summary(step_name: str, status: str, output: Any) -> str:
 
 def _step_to_tool(step_name: str) -> str:
     mapping = {
-        "build_schema_context": "schema.build_context",
-        "build_query_plan": "query_plan.build",
-        "generate_sql_candidate": "sql.generate",
-        "validate_sql": "sql.validate",
-        "execute_sql": "sql.execute_readonly",
-        "skip_execution": "sql.skip_execution",
-        "revise_sql": "sql.revise",
-        "profile_result": "result.profile",
-        "suggest_chart": "chart.suggest",
-        "suggest_followups": "followup.suggest",
-        "answer_synthesizer": "answer.synthesize",
         "list_tables": "schema.list_tables",
         "describe_table": "schema.describe_table",
         "refresh_catalog": "schema.refresh_catalog",
+        "observe_database": "db.observe",
+        "search_database": "db.search",
+        "inspect_database": "db.inspect",
+        "preview_table": "db.preview",
+        "query_database": "db.query",
+        "remember_database_semantics": "db.remember",
         "load_follow_up_context": "followup.load_context",
         "memory_search": "memory.search",
         "memory_write": "memory.write",

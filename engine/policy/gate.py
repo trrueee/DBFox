@@ -64,14 +64,15 @@ class PolicyGate:
                 )
 
         # ---- SQL execution gating via execution_mode ----
-        if tool_name == "sql.execute_readonly":
+        data_read_tools = {"db.preview", "db.query"}
+        if tool_name in data_read_tools:
             effective_mode = execution_mode
             if execution_mode == "user_requested_read" and not state.get("execute", True):
                 effective_mode = "suggest_only"
             if effective_mode in ("none", "suggest_only"):
                 return PolicyDecision(
                     status="blocked",
-                    reason=f"SQL execution is not allowed in {effective_mode} mode.",
+                    reason=f"Live data reads are not allowed in {effective_mode} mode.",
                     risk_level="danger",
                 )
 
@@ -149,6 +150,17 @@ class PolicyGate:
                 risk_level="safe",
                 safe_args={"sql": safe_sql},
             )
+
+        if tool_name in {"db.preview", "db.query"} and execution_mode == "agent_autonomous_read":
+            env_profile = state.get("environment_profile") or {}
+            env = env_profile.get("env", "unknown")
+            if env == "prod" or policy.risk_level in ("warning", "danger"):
+                return PolicyDecision(
+                    status="approval_required",
+                    reason=f"Agent-autonomous data read with {tool_name} on {env} datasource requires human approval.",
+                    risk_level="warning",
+                    safe_args=args,
+                )
 
         if policy.requires_approval:
             return PolicyDecision(

@@ -52,6 +52,9 @@ class DataBoxAgentState(TypedDict, total=False):
     environment_profile: dict[str, Any] | None
     database_map: dict[str, Any] | None
     semantic_resolution: dict[str, Any] | None
+    db_search_results: dict[str, Any] | None
+    db_inspection: dict[str, Any] | None
+    db_preview: dict[str, Any] | None
 
     # ---- Request-level context --------------------------------------------
     workspace_context: dict[str, Any] | None

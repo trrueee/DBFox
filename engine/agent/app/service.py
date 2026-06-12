@@ -38,9 +38,7 @@ logger = logging.getLogger("databox.databox_agent.service")
 # Full set of safe tool groups available to the model on every run.
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
-    "workspace", "environment", "schema", "semantic", "query_plan",
-    "sql_generation", "sql_validation", "sql_repair", "execution",
-    "result", "chart", "answer",
+    "workspace", "environment", "schema", "db", "semantic", "memory",
 ]
 
 
@@ -336,11 +334,15 @@ class DataBoxAgentService:
             allowed_tool_groups=FULL_SAFE_TOOL_GROUPS,
             progress_decision=None,
             replan_count=0,
-            consecutive_blocks=0,
-            # ---- Environment / Semantic layers ----
-            environment_profile=None,
-            semantic_resolution=None,
-            # ---- Tool-call / policy routing ----
+             consecutive_blocks=0,
+             # ---- Environment / Semantic layers ----
+             environment_profile=None,
+             database_map=None,
+             semantic_resolution=None,
+             db_search_results=None,
+             db_inspection=None,
+             db_preview=None,
+             # ---- Tool-call / policy routing ----
             pending_tool_calls=[],
             allowed_tool_calls=[],
             blocked_tool_calls=[],
@@ -467,28 +469,12 @@ class DataBoxAgentService:
         tool_name = trace.get("tool_name", "")
 
         tool_to_step_name = {
-            "schema_build_context": "build_schema_context",
-            "schema.build_context": "build_schema_context",
-            "sql_generate": "generate_sql_candidate",
-            "sql.generate": "generate_sql_candidate",
-            "sql_validate": "validate_sql",
-            "sql.validate": "validate_sql",
-            "sql_execute_readonly": "execute_sql",
-            "sql.execute_readonly": "execute_sql",
-            "sql_skip_execution": "execute_sql",
-            "sql.skip_execution": "execute_sql",
-            "sql_revise": "revise_sql",
-            "sql.revise": "revise_sql",
-            "result_profile": "profile_result",
-            "result.profile": "profile_result",
-            "chart_suggest": "suggest_chart",
-            "chart.suggest": "suggest_chart",
-            "followup_suggest": "suggest_followups",
-            "followup.suggest": "suggest_followups",
-            "followup_load_context": "load_follow_up_context",
-            "followup.load_context": "load_follow_up_context",
-            "answer_synthesize": "answer_synthesizer",
-            "answer.synthesize": "answer_synthesizer",
+            "db.observe": "observe_database",
+            "db.search": "search_database",
+            "db.inspect": "inspect_database",
+            "db.preview": "preview_table",
+            "db.query": "query_database",
+            "db.remember": "remember_database_semantics",
         }
         mapped_name = tool_to_step_name.get(tool_name, tool_name)
 
@@ -717,13 +703,7 @@ class DataBoxAgentService:
 def _artifact_timeline_step(artifact_type: str) -> str | None:
     """Map artifact types to timeline step names for artifact linking."""
     mapping = {
-        "query_plan": "build_query_plan",
-        "sql": "validate_sql",
-        "safety": "validate_sql",
-        "table": "execute_sql",
-        "insight": "profile_result",
-        "chart": "suggest_chart",
-        "sql_suggestion": "revise_sql",
+        "table": "query_database",
         "agent_plan": "planner",
     }
     return mapping.get(artifact_type)
