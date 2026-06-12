@@ -161,7 +161,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0F172A; /* Slate 900 background to frame the white prototype canvas */
+  background: #1A1D23;
   overflow: hidden;
 }
 
@@ -169,8 +169,8 @@
   width: 1598px;
   height: 1066px;
   background: var(--color-bg);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -322,11 +322,11 @@
 
 /* Left Sidebar - Data Source */
 .hifi-sidebar-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  padding: 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -337,13 +337,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  padding: 0 4px;
 }
 
 .hifi-sidebar-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.02em;
 }
 
 .hifi-db-select {
@@ -353,93 +355,46 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #FFFFFF;
+  background: hsl(var(--card));
   cursor: pointer;
-  margin-bottom: 10px;
-  transition: border-color 0.2s;
+  margin-bottom: 8px;
+  transition: border-color 0.15s ease;
 }
 
 .hifi-db-select:hover {
-  border-color: #CBD5E1;
+  border-color: hsl(var(--primary) / 0.3);
 }
 
-.hifi-db-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
+.hifi-db-info { flex: 1; display: flex; flex-direction: column; line-height: 1.3; }
+.hifi-db-name { font-size: 12px; font-weight: 600; color: var(--color-text-primary); }
+.hifi-db-version { font-size: 10px; color: var(--color-text-muted); }
 
-.hifi-db-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-db-version {
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-.hifi-search-box {
-  position: relative;
-  margin-bottom: 12px;
-}
+.hifi-search-box { position: relative; margin-bottom: 8px; }
 
 .hifi-search-input {
-  width: 100%;
-  height: 28px;
-  border-radius: 6px;
+  width: 100%; height: 28px; border-radius: 6px;
   border: 1px solid var(--color-border);
-  padding: 0 8px 0 28px;
-  font-size: 11px;
-  outline: none;
-  box-sizing: border-box;
-  background: #F8FAFC;
-  transition: border-color 0.2s, background 0.2s;
+  padding: 0 8px 0 28px; font-size: 12px; outline: none;
+  box-sizing: border-box; background: hsl(var(--card));
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-
 .hifi-search-input:focus {
-  border-color: var(--color-primary);
-  background: #FFFFFF;
+  border-color: hsl(var(--primary) / 0.4);
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.06);
 }
-
-.hifi-search-icon {
-  position: absolute;
-  left: 8px;
-  top: 7px;
-  color: var(--color-text-muted);
-}
+.hifi-search-icon { position: absolute; left: 8px; top: 7px; color: var(--color-text-muted); }
 
 .hifi-tree-container {
-  flex: 1;
-  overflow-y: auto;
-  margin-right: -4px;
-  padding-right: 4px;
+  flex: 1; overflow-y: auto; margin-right: -4px; padding-right: 4px;
 }
 
 .hifi-tree-node {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 4px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  transition: background 0.2s, color 0.2s;
+  display: flex; align-items: center; height: 28px; padding: 0 6px;
+  border-radius: 6px; cursor: pointer; font-size: 12px;
+  color: var(--color-text-secondary); transition: background 0.1s ease, color 0.1s ease;
 }
-
-.hifi-tree-node:hover {
-  background: #F1F5F9;
-  color: var(--color-text-primary);
-}
-
-.hifi-tree-node.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: 500;
-}
+.hifi-tree-node:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
+.hifi-tree-node.active { background: hsl(var(--primary) / 0.08); color: hsl(var(--primary)); font-weight: 500; }
 
 .hifi-tree-indent {
   width: 12px;
@@ -1892,10 +1847,10 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--color-panel);
+  background: hsl(var(--card));
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -1923,59 +1878,32 @@
 
 /* Tab bar container */
 .hifi-workspace-tab-bar {
-  height: 38px;
+  height: 36px;
   border-bottom: 1px solid var(--color-border);
-  background: #F8FAFC;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 8px;
   flex-shrink: 0;
 }
 
 .hifi-workspace-tabs-scroll {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-  flex: 1;
-  height: 100%;
-  padding-right: 10px;
+  display: flex; align-items: center; gap: 2px;
+  overflow-x: auto; flex: 1; height: 100%; padding-right: 8px;
 }
-
-.hifi-workspace-tabs-scroll::-webkit-scrollbar {
-  display: none;
-}
+.hifi-workspace-tabs-scroll::-webkit-scrollbar { display: none; }
 
 .hifi-workspace-tab {
-  height: 26px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  background: #FFFFFF;
-  border-radius: 6px;
-  cursor: pointer;
-  max-width: 140px;
-  transition: all 0.15s;
-  position: relative;
-  user-select: none;
+  height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: var(--color-text-secondary);
+  border: none; background: transparent; border-radius: 6px;
+  cursor: pointer; max-width: 150px; transition: all 0.1s ease;
+  position: relative; user-select: none;
 }
-
-.hifi-workspace-tab:hover {
-  background: #F1F5F9;
-  border-color: #CBD5E1;
-}
-
+.hifi-workspace-tab:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
 .hifi-workspace-tab.active {
-  background: var(--color-primary-soft);
-  border-color: #C7D2FE;
-  color: var(--color-primary);
-  font-weight: 600;
+  background: hsl(var(--primary) / 0.08); color: hsl(var(--primary)); font-weight: 600;
 }
 
 .hifi-tab-close {
