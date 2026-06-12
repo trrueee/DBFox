@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from langchain_openai import ChatOpenAI
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 from engine.llm.providers.openai import create_openai_client
 
@@ -24,7 +25,7 @@ class LLMClientFactory:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         timeout: float = 120.0,
-    ) -> ChatOpenAI:
+    ) -> "ChatOpenAI":
         return create_openai_client(
             model_name=self.model_name,
             api_key=self.api_key,
@@ -43,7 +44,7 @@ def get_chat_model(
     temperature: float = 0.0,
     max_tokens: int | None = None,
     timeout: float = 120.0,
-) -> ChatOpenAI:
+) -> "ChatOpenAI":
     """Build a ChatOpenAI client from explicit args, falling back to env vars.
 
     This is the single entry point for ALL LLM access in the DataBox engine.
