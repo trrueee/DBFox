@@ -135,9 +135,7 @@ def _build_escalate_tool(registry: Any) -> Any | None:
 
     class EscalateInput(BaseModel):
         group: str = Field(description=(
-            "Tool group you need: workspace, environment, schema, semantic, "
-            "query_plan, sql_generation, sql_validation, sql_repair, execution, "
-            "result, chart, answer."
+            "Tool group you need: workspace, environment, schema, db, semantic, memory."
         ))
         reason: str = Field(description="Why you need this tool group.")
 
