@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, type CSSProperties, type MouseEve
 import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
 import "./App.css";
 import { setDialogContainer } from "./components/ui/dialog";
+import { setToastRoot } from "./components/Toast";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
 import { ConversationHistoryPanel } from "./features/conversation/ConversationHistoryPanel";
 import { deleteConversation, listConversations, saveConversation } from "./features/conversation/conversationRepository";
@@ -859,7 +860,7 @@ export default function App() {
       <div
         className="hifi-canvas-board"
         style={{ "--scale": scale } as CSSProperties}
-        ref={useCallback((el: HTMLDivElement | null) => setDialogContainer(el), [])}
+        ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
         <TitleBar />
         {/* Main Work Area */}
