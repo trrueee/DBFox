@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Check, ChevronDown, Database, FileText, RefreshCw, Search } from "lucide-react";
+import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
 import type { EngineDataSource, EngineSchemaTable } from "../engine/engineApi";
 
 interface DataSourceTreeProps {
@@ -105,9 +105,9 @@ export function DataSourceTree({
             <button
               onClick={onNewConnection}
               title="新建连接"
-              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 2, lineHeight: 1 }}
+              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}
             >
-              <span style={{ fontSize: 18, fontWeight: 300 }}>+</span>
+              <Plus size={15} strokeWidth={1.5} />
             </button>
             <span title="刷新" onClick={handleRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
               <RefreshCw size={13} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />

@@ -3,28 +3,28 @@
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --color-primary: #4F46E5;
-  --color-secondary: #7C3AED;
-  --color-info: #2563EB;
-  --color-success: #16A34A;
-  --color-warning: #F97316;
-  --color-danger: #DC2626;
+  --color-primary: #C45A3C;
+  --color-secondary: #B88A60;
+  --color-info: #C45A3C;
+  --color-success: #3D7A58;
+  --color-warning: #B4732A;
+  --color-danger: #C84040;
 
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748B;
+  --color-text-primary: #1A1A18;
+  --color-text-secondary: #5C5B55;
+  --color-text-muted: #8C8A82;
 
-  --color-border: #E2E8F0;
-  --color-bg: #F8FAFC;
+  --color-border: #E5E3DE;
+  --color-bg: #FAF9F7;
   --color-panel: #FFFFFF;
 
-  --color-primary-soft: #EEF2FF;
-  --color-info-soft: #EFF6FF;
-  --color-success-soft: #ECFDF5;
-  --color-warning-soft: #FFF7ED;
-  --color-danger-soft: #FEF2F2;
+  --color-primary-soft: rgba(196,90,60,0.06);
+  --color-info-soft: rgba(196,90,60,0.05);
+  --color-success-soft: rgba(61,122,88,0.06);
+  --color-warning-soft: rgba(180,115,42,0.06);
+  --color-danger-soft: rgba(200,64,64,0.06);
 
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-family: 'Fira Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
   /* Legacy / Semantic variables mapping to Design System */
   --accent-indigo: var(--color-primary);
@@ -161,7 +161,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #1A1D23;
+  background: #2C2926;
   overflow: hidden;
 }
 
@@ -460,7 +460,7 @@
 }
 
 .hifi-gradient-text {
-  background: linear-gradient(90deg, #2563EB 0%, #7C3AED 100%);
+  background: linear-gradient(90deg, #C85A3E 0%, #D48050 100%);
   -webkit-background-clip: text;
   color: transparent;
 }
@@ -516,13 +516,13 @@
   justify-content: center;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 4px 10px rgba(196, 90, 60, 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .hifi-ask-send-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 6px 14px rgba(196, 90, 60, 0.3);
 }
 
 /* Recommended questions styling */
@@ -1346,7 +1346,7 @@
 .hifi-ai-badge {
   padding: 1px 4px;
   background: #F3E8FF;
-  color: #7C3AED;
+  color: #C45A3C;
   font-size: 9px;
   font-weight: 700;
   border-radius: 3px;
@@ -1587,7 +1587,7 @@
 
 .hifi-chat-send-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 12px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 6px 12px rgba(196, 90, 60, 0.2);
 }
 
 /* Design Guide Panel (Column 4) */
@@ -2334,7 +2334,7 @@
 }
 
 .sql-console-running {
-  color: #818CF8;
+  color: #D08060;
   margin: 6px 0;
 }
 
@@ -2579,7 +2579,7 @@
 }
 
 .hifi-approval-approve {
-  background: #2563EB;
+  background: #C45A3C;
   color: #FFFFFF;
 }
 
@@ -2650,8 +2650,8 @@
 }
 
 .hifi-eval-btn-primary {
-  background: #2563EB;
-  border-color: #2563EB;
+  background: #C45A3C;
+  border-color: #C45A3C;
   color: #FFFFFF;
 }
 
@@ -2791,7 +2791,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: #EFF6FF;
-  color: #2563EB;
+  color: #C45A3C;
 }
 
 .hifi-eval-chip-keyword {
@@ -2905,7 +2905,7 @@
   gap: 7px;
   padding: 6px 16px;
   font-size: 11px;
-  color: #2563EB;
+  color: #C45A3C;
   background: #EFF6FF;
   border-top: 1px solid #BFDBFE;
 }
@@ -3140,12 +3140,12 @@
 }
 .hifi-artifact-chip-table {
   background: #EFF6FF;
-  color: #2563EB;
+  color: #C45A3C;
   border: 1px solid #BFDBFE;
 }
 .hifi-artifact-chip-chart {
   background: #F5F3FF;
-  color: #7C3AED;
+  color: #C45A3C;
   border: 1px solid #DDD6FE;
 }
 .hifi-artifact-chip-sql {
@@ -3679,7 +3679,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
   color: #fff;
   flex-shrink: 0;
 }
@@ -4059,7 +4059,7 @@
   height: 34px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
   color: #fff;
   font-size: 0.78rem;
   font-weight: 600;
@@ -4136,7 +4136,7 @@
 }
 
 .hifi-btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), #6366F1);
+  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
   color: #fff;
   border: none;
 }
