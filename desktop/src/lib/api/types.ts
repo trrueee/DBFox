@@ -520,7 +520,7 @@ export interface AgentRuntimeEvent {
   run_id: string;
   sequence: number;
   created_at_ms: number;
-  type: AgentRuntimeEventType | string;
+  type: AgentRuntimeEventType;
   step?: Record<string, unknown> | null;
   artifact?: AgentArtifact | null;
   artifact_delta?: Record<string, unknown> | null;

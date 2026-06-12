@@ -22,6 +22,12 @@
       "@/*": ["./src/*"]
     },
 
+    /* Strict mode */
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
