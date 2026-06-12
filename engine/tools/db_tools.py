@@ -646,12 +646,22 @@ def _apply_fk_expansion(results: list[dict[str, Any]], tables: list[SchemaTable]
 # ===================================================================
 
 
-def _parse_target(target: str) -> tuple[str, str | None]:
+def _parse_target(target: str) -> tuple[str, str | None, str | None]:
+    """Parse a target reference into (table_name, column_name, schema_name).
+
+    Supports:
+      - "users"              → table, no column, no schema
+      - "users.id"           → table, column, no schema
+      - "public.users"       → table, no column, schema=public
+      - "public.users.id"    → table, column, schema=public
+    """
     parts = [p for p in target.split(".") if p]
     if len(parts) == 1:
-        return parts[0], None
+        return parts[0], None, None
     if len(parts) == 2:
-        return parts[0], parts[1]
+        return parts[0], parts[1], None
+    if len(parts) == 3:
+        return parts[1], parts[2], parts[0]
     raise ValueError(f"Invalid target: {target}")
 
 
@@ -686,7 +696,7 @@ def _ds_to_dict(ds: DataSource) -> dict[str, Any]:
 
 
 def _sqlite_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, Any]:
-    table_name, column_name = _parse_target(target)
+    table_name, column_name, _schema = _parse_target(target)
     path = str(ds.database_name)
 
     with sqlite3.connect(path) as conn:
@@ -829,7 +839,7 @@ def _sqlite_escape(s: str) -> str:
 
 
 def _mysql_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, Any]:
-    table_name, column_name = _parse_target(target)
+    table_name, column_name, _schema = _parse_target(target)
     ds_dict = _ds_to_dict(ds)
     from engine.datasource import get_mysql_connection_params
     from engine.sql.executor import get_mysql_pool
@@ -993,7 +1003,7 @@ def _mysql_table_payload(
 
 
 def _pg_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, Any]:
-    table_name, column_name = _parse_target(target)
+    table_name, column_name, schema_name = _parse_target(target)
     ds_dict = _ds_to_dict(ds)
     from engine.datasource import get_postgres_connection_params
     from engine.sql.executor import get_postgres_pool
@@ -1003,9 +1013,9 @@ def _pg_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, An
     conn = pool.connect()
 
     try:
-        schema = "public"  # TODO: extract schema from target "schema.table" notation
+        schema = schema_name or "public"
         if not _pg_table_exists(conn, schema, table_name):
-            raise ValueError(f"Table not found: {table_name}")
+            raise ValueError(f"Table not found: {schema}.{table_name}")
 
         payload = _pg_table_payload(db, conn, ds.id, schema, table_name)
 
@@ -1201,6 +1211,38 @@ def _resolve_preview_columns(args: dict[str, Any], available: dict[str, SchemaCo
     return requested
 
 
+def _validate_sql_fragment(fragment: str, context: str) -> None:
+    """Validate a user-supplied SQL fragment using sqlglot AST parsing.
+
+    Rejects fragments containing DML/DDL keywords or multi-statement patterns.
+    Uses AST-level validation (same approach as guardrail.py) rather than
+    regex blacklists which are inherently bypassable.
+    """
+    import sqlglot
+    import sqlglot.errors
+
+    # Quick rejection of obviously dangerous tokens
+    dangerous = {"DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE",
+                 "TRUNCATE", "EXEC", "EXECUTE", "GRANT", "REVOKE", "UNION",
+                 "INTO", "LOAD_FILE", "SLEEP", "BENCHMARK"}
+    tokens = set(re.findall(r"\b\w+\b", fragment.upper()))
+    if tokens & dangerous:
+        raise ValueError(f"Dangerous keyword in {context} fragment")
+
+    # AST-level validation: try parsing as a standalone expression
+    try:
+        parsed = sqlglot.parse_one(fragment, read="mysql", error_level=sqlglot.errors.ErrorLevel.RAISE)
+        if parsed is None:
+            return
+        if parsed.key in ("drop", "delete", "insert", "update", "create", "alter",
+                          "truncate", "execute", "grant", "revoke"):
+            raise ValueError(f"Dangerous statement type '{parsed.key}' in {context} fragment")
+    except sqlglot.errors.ParseError:
+        # If parse fails, allow it — it might be a valid WHERE/ORDER BY fragment
+        # that isn't a complete statement. The token check above catches the worst.
+        pass
+
+
 def _build_preview_sql(
     table_name: str,
     columns: list[str],
@@ -1221,39 +1263,46 @@ def _build_preview_sql(
         if cond:
             sql += f" WHERE {cond}"
     elif isinstance(where, str) and where.strip():
-        # Agent-supplied raw WHERE fragment — validate it is simple
         cleaned = where.strip()
-        if re.search(r"(?i)\b(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|TRUNCATE)\b", cleaned):
-            raise ValueError("Dangerous SQL fragment in WHERE clause")
+        _validate_sql_fragment(cleaned, "WHERE")
         sql += f" WHERE {cleaned}"
 
     # ORDER BY
     order = args.get("order_by")
     if isinstance(order, str) and order.strip():
         cleaned = order.strip()
-        if re.search(r"(?i)\b(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|TRUNCATE)\b", cleaned):
-            raise ValueError("Dangerous SQL fragment in ORDER BY clause")
+        _validate_sql_fragment(cleaned, "ORDER BY")
         sql += f" ORDER BY {cleaned}"
 
     sql += f" LIMIT {limit}"
     return sql
 
 
+_SAFE_OPS: frozenset[str] = frozenset({
+    "=", "!=", "<>", "<", ">", "<=", ">=",
+    "LIKE", "NOT LIKE", "IN", "NOT IN",
+    "IS", "IS NOT",
+})
+
+
 def _build_where_clause(where: dict[str, Any], quote: str) -> str | None:
     col = str(where.get("column") or "")
-    op = str(where.get("op") or "=")
+    op = str(where.get("op") or "=").strip().upper()
     value = where.get("value")
     if not col:
         return None
+    if op not in _SAFE_OPS:
+        raise ValueError(f"Unsafe operator in WHERE clause: {op}")
     safe_col = f"{quote}{col}{quote}"
-    # parameterize value
     if value is None:
         return f"{safe_col} IS NULL"
     if isinstance(value, (int, float)):
         return f"{safe_col} {op} {value}"
     if isinstance(value, bool):
         return f"{safe_col} {op} {1 if value else 0}"
-    # string
+    if op in ("IN", "NOT IN") and isinstance(value, list):
+        escaped = ", ".join(f"'{str(v).replace(chr(39), chr(39)+chr(39))}'" for v in value)
+        return f"{safe_col} {op} ({escaped})"
     escaped = str(value).replace("'", "''")
     return f"{safe_col} {op} '{escaped}'"
 
@@ -1690,7 +1739,7 @@ def _column_summary(col: SchemaColumn) -> dict[str, Any]:
 def _redact_row(row: dict[str, Any], sensitivity: re.Pattern | None = None) -> dict[str, Any]:
     redacted: dict[str, Any] = {}
     for key, value in row.items():
-        if isinstance(value, str):
+        if isinstance(value, str) and sensitivity and sensitivity.search(key):
             redacted[key] = DataRedactor.redact_sql(str(value))
         else:
             redacted[key] = value

@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime
 import decimal
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -24,6 +25,8 @@ from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
+
+logger = logging.getLogger("databox.sql.executor")
 
 MAX_ROWS = 1000
 MAX_COLUMNS = 100
@@ -441,12 +444,29 @@ def _resolve_execution_safety_decision(
                     "message": "bypass_guardrail requires DATABOX_TESTING=1 and cannot be used in normal execution.",
                 }],
             )
+        # Double-gate: bypass is only allowed on dev/test datasources.
+        # Prevents DATABOX_TESTING=1 from being inadvertently set in staging/prod.
+        ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+        ds_env = (ds.env or "").lower() if ds else ""
+        if ds_env not in ("", "dev", "test", "unknown"):
+            raise GuardrailValidationError(
+                "TrustGate bypass is not allowed on non-dev datasources.",
+                checks=[{
+                    "rule": "trust_gate_bypass_env_blocked",
+                    "level": "reject",
+                    "message": f"bypass_guardrail blocked: datasource env is '{ds_env}', only dev/test allowed.",
+                }],
+            )
+        logger.warning(
+            "TrustGate bypass active: datasource=%s env=%s policy=%s",
+            datasource_id, ds_env, policy,
+        )
         guard_res = {
             "result": "pass",
             "originalSql": sql_str,
             "safeSql": sql_str,
             "checks": [],
-            "message": "Bypassed via system request",
+            "message": "Bypassed via system request (DATABOX_TESTING=1 + dev/test env)",
         }
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,

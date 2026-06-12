@@ -12,7 +12,7 @@ interface TablePreviewPaneProps {
 
 interface PreviewData {
   columns: string[];
-  rows: Array<Record<string, string | null>>;
+  rows: Array<Record<string, unknown>>;
   latencyMs: number;
   hasNext: boolean;
   warnings: string[];
@@ -164,11 +164,11 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
                 {rows.map((row, rowIndex) => (
                   <tr key={rowIndex}>
                     {columns.map((column) => {
-                      const value = row[column];
+                      const value = row[column] as string | null | undefined;
                       if (isImageUrl(value)) {
                         return (
                           <td key={column} className="max-w-[240px]">
-                            <ImageCell url={value} />
+                            <ImageCell url={value ?? ""} />
                           </td>
                         );
                       }

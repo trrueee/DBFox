@@ -40,7 +40,7 @@ export interface EngineColumn {
 export interface EngineSqlResult {
   success: boolean;
   columns: string[];
-  rows: Array<Record<string, string | null>>;
+  rows: Array<Record<string, unknown>>;
   rowCount: number;
   latencyMs: number;
   warnings?: string[];

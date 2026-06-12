@@ -184,11 +184,11 @@ function ResultBlock({ result, time }: { result: EngineSqlResult; time: string }
               {result.rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {result.columns.map((column) => {
-                    const value = row[column];
+                    const value = row[column] as string | null | undefined;
                     if (isImageUrl(value)) {
                       return (
                         <td key={column}>
-                          <ImageCell url={value} />
+                          <ImageCell url={value ?? ""} />
                         </td>
                       );
                     }

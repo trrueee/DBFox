@@ -33,6 +33,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
       const timer = setTimeout(() => setMounted(false), 200);
       return () => clearTimeout(timer);
     }
+    return;
   }, [open, mounted]);
 
   const filteredCommands = useMemo(() => {

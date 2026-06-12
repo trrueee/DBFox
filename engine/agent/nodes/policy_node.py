@@ -62,8 +62,8 @@ def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, 
                     content=(
                         f"Tool calls must be issued one at a time because later "
                         f"tools depend on state produced by earlier tools. "
-                        f"Please wait for the result of '{c['name']}' before "
-                        f"calling '{c.get('name', 'next tool')}'."
+                        f"Please wait for the result of '{first['name']}' before "
+                        f"calling '{c['name']}'."
                     ),
                     tool_call_id=c["id"],
                     name=c["name"],
