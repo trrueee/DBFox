@@ -108,6 +108,99 @@ def test_db_inspect_reads_live_sqlite_column(db_session, test_datasource) -> Non
     }
 
 
+def test_mysql_table_exists_uses_cursor_fetchone_after_execute() -> None:
+    from engine.tools.db_tools import _mysql_table_exists
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.executed: tuple[str, tuple[str, str]] | None = None
+
+        def execute(self, sql: str, params: tuple[str, str]) -> int:
+            self.executed = (sql, params)
+            return 1
+
+        def fetchone(self) -> tuple[int]:
+            return (1,)
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_obj = FakeCursor()
+
+        def cursor(self) -> FakeCursor:
+            return self.cursor_obj
+
+    conn = FakeConnection()
+
+    assert _mysql_table_exists(conn, "app_db", "users") is True
+    assert conn.cursor_obj.executed is not None
+    assert conn.cursor_obj.executed[1] == ("app_db", "users")
+
+
+def test_mysql_table_payload_accepts_dict_cursor_rows(db_session) -> None:
+    from engine.tools.db_tools import _mysql_table_payload
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.rows: list[dict[str, object]] = []
+
+        def execute(self, sql: str, _params=None) -> int:
+            if "information_schema.COLUMNS" in sql:
+                self.rows = [
+                    {
+                        "COLUMN_NAME": "id",
+                        "DATA_TYPE": "bigint",
+                        "IS_NULLABLE": "NO",
+                        "COLUMN_DEFAULT": None,
+                        "COLUMN_COMMENT": "primary id",
+                        "is_pk": 1,
+                        "REFERENCED_TABLE_NAME": None,
+                        "REFERENCED_COLUMN_NAME": None,
+                    },
+                    {
+                        "COLUMN_NAME": "tool_name",
+                        "DATA_TYPE": "varchar",
+                        "IS_NULLABLE": "NO",
+                        "COLUMN_DEFAULT": None,
+                        "COLUMN_COMMENT": "tool display name",
+                        "is_pk": 0,
+                        "REFERENCED_TABLE_NAME": None,
+                        "REFERENCED_COLUMN_NAME": None,
+                    },
+                ]
+            elif "REFERENCED_TABLE_NAME = %s" in sql:
+                self.rows = []
+            elif sql.startswith("SHOW INDEX"):
+                self.rows = [
+                    {"Key_name": "PRIMARY", "Non_unique": 0, "Column_name": "id"},
+                ]
+            elif "TABLE_ROWS" in sql:
+                self.rows = [{"TABLE_ROWS": 19}]
+            elif "TABLE_COMMENT" in sql:
+                self.rows = [{"TABLE_COMMENT": "AI tools registry"}]
+            else:
+                self.rows = []
+            return len(self.rows)
+
+        def fetchall(self):
+            return self.rows
+
+        def fetchone(self):
+            return self.rows[0] if self.rows else None
+
+    class FakeConnection:
+        def cursor(self) -> FakeCursor:
+            return FakeCursor()
+
+    payload = _mysql_table_payload(db_session, FakeConnection(), "ds-1", "app_db", "ai_tools")
+
+    assert payload["name"] == "ai_tools"
+    assert payload["row_estimate"] == 19
+    assert payload["comment"] == "AI tools registry"
+    assert payload["primary_key"] == ["id"]
+    assert payload["columns"][1]["name"] == "tool_name"
+    assert payload["indexes"] == [{"name": "PRIMARY", "columns": ["id"], "unique": True}]
+
+
 def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, test_datasource) -> None:
     from engine.tools.db_tools import db_preview
 

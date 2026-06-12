@@ -10,7 +10,7 @@ from engine.agent.model.context_builder import build_context_message, build_prog
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.graph.message_utils import first_user_text
+from engine.agent.graph.message_utils import first_user_text, message_content_text
 
 import logging
 logger = logging.getLogger("databox.databox_agent.nodes.model_node")
@@ -110,6 +110,7 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
         "trace_events": [
             {
                 "type": "agent.model.completed",
+                "content": message_content_text(ai_msg),
                 "tool_calls": getattr(ai_msg, "tool_calls", []) or [],
             }
         ],

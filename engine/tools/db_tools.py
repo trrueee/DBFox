@@ -868,11 +868,13 @@ def _mysql_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str,
 
 
 def _mysql_table_exists(conn: Any, database: str, table_name: str) -> bool:
-    row = conn.cursor().execute(
+    cur = conn.cursor()
+    cur.execute(
         "SELECT 1 FROM information_schema.TABLES "
         "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s",
         (database, table_name),
-    ).fetchone()
+    )
+    row = cur.fetchone()
     return row is not None
 
 
@@ -904,22 +906,24 @@ def _mysql_table_payload(
     pk_cols: list[str] = []
     fks_out: list[dict[str, Any]] = []
     for row in cur.fetchall():
-        name = str(row[0])
-        is_pk = bool(row[5])
+        name = str(_row_value(row, 0, "COLUMN_NAME"))
+        is_pk = bool(_row_value(row, 5, "is_pk"))
         if is_pk:
             pk_cols.append(name)
         fk = None
-        if row[6]:
-            fk = {"table": str(row[6]), "column": str(row[7])}
+        ref_table = _row_value(row, 6, "REFERENCED_TABLE_NAME")
+        ref_column = _row_value(row, 7, "REFERENCED_COLUMN_NAME")
+        if ref_table:
+            fk = {"table": str(ref_table), "column": str(ref_column)}
             fks_out.append({"column": name, "references": fk})
         columns.append({
             "name": name,
-            "type": str(row[1]),
-            "nullable": str(row[2]).upper() == "YES",
-            "default": row[3],
+            "type": str(_row_value(row, 1, "DATA_TYPE")),
+            "nullable": str(_row_value(row, 2, "IS_NULLABLE")).upper() == "YES",
+            "default": _row_value(row, 3, "COLUMN_DEFAULT"),
             "primary_key": is_pk,
             "foreign_key": fk,
-            "comment": comment_map.get(name, str(row[4] or "")),
+            "comment": comment_map.get(name, str(_row_value(row, 4, "COLUMN_COMMENT") or "")),
         })
 
     # reverse FKs
@@ -932,9 +936,9 @@ def _mysql_table_payload(
     )
     for row in cur.fetchall():
         fks_in.append({
-            "table": str(row[0]),
-            "column": str(row[1]),
-            "references": {"column": str(row[2])},
+            "table": str(_row_value(row, 0, "TABLE_NAME")),
+            "column": str(_row_value(row, 1, "COLUMN_NAME")),
+            "references": {"column": str(_row_value(row, 2, "REFERENCED_COLUMN_NAME"))},
         })
 
     # indexes
@@ -943,14 +947,14 @@ def _mysql_table_payload(
         cur.execute(f"SHOW INDEX FROM `{table_name}` FROM `{database}`")
         index_groups: dict[str, dict[str, Any]] = {}
         for row in cur.fetchall():
-            iname = str(row[2])
+            iname = str(_row_value(row, 2, "Key_name"))
             if iname not in index_groups:
                 index_groups[iname] = {
                     "name": iname,
                     "columns": [],
-                    "unique": bool(not row[3]),
+                    "unique": bool(not _row_value(row, 3, "Non_unique")),
                 }
-            index_groups[iname]["columns"].append(str(row[4]))
+            index_groups[iname]["columns"].append(str(_row_value(row, 4, "Column_name")))
         indexes = list(index_groups.values())
     except Exception:
         pass
@@ -965,7 +969,7 @@ def _mysql_table_payload(
         )
         est = cur.fetchone()
         if est:
-            row_est = int(est[0])
+            row_est = int(_row_value(est, 0, "TABLE_ROWS") or 0)
     except Exception:
         pass
 
@@ -979,7 +983,7 @@ def _mysql_table_payload(
         )
         tc = cur.fetchone()
         if tc:
-            table_comment = str(tc[0] or "")
+            table_comment = str(_row_value(tc, 0, "TABLE_COMMENT") or "")
     except Exception:
         pass
 
@@ -997,6 +1001,15 @@ def _mysql_table_payload(
         "indexes": indexes,
         "source": "live",
     }
+
+
+def _row_value(row: Any, index: int, key: str) -> Any:
+    if isinstance(row, dict):
+        return row.get(key)
+    try:
+        return row[index]
+    except (IndexError, KeyError, TypeError):
+        return None
 
 
 # ---- PostgreSQL live introspection -----------------------------------
