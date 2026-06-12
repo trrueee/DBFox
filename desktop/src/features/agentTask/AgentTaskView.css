@@ -48,12 +48,10 @@
   overflow: hidden;
   background: var(--at-bg);
   color: var(--at-fg);
-  font-family: "Fira Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: inherit;
   font-size: var(--at-text-base);
   line-height: var(--at-leading);
   font-weight: 400;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ── Dark mode ── */
@@ -101,7 +99,7 @@
   display: inline-flex; align-items: center;
   padding: 2px 8px; border-radius: var(--at-radius-full);
   font-size: 10px; font-weight: 500; letter-spacing: 0.02em;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 .task-status-running           { color: var(--at-accent); background: var(--at-accent-soft); }
@@ -112,7 +110,7 @@
 
 .task-header-elapsed {
   display: inline-flex; align-items: center; gap: 4px;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px; font-variant-numeric: tabular-nums;
   color: var(--at-fg-tertiary);
 }
@@ -328,13 +326,13 @@
 .task-tool-card-header:disabled { cursor: default; background: transparent; }
 
 .task-tool-icon    { display: flex; align-items: center; color: var(--at-fg-tertiary); flex-shrink: 0; }
-.task-tool-name     { font-family: "Fira Code", ui-monospace, monospace; font-size: var(--at-text-xs); font-weight: 600; color: var(--at-fg); }
-.task-tool-subtitle  { font-family: "Fira Code", ui-monospace, monospace; font-size: 11px; color: var(--at-fg-tertiary); }
+.task-tool-name     { font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace; font-size: var(--at-text-xs); font-weight: 600; color: var(--at-fg); }
+.task-tool-subtitle  { font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace; font-size: 11px; color: var(--at-fg-tertiary); }
 
 .task-tool-status-tag {
   margin-left: auto; font-size: 10px; font-weight: 500;
   padding: 2px 7px; border-radius: var(--at-radius-full);
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0.01em;
 }
 .task-tool-card .task-tool-status-tag        { color: var(--at-success); background: var(--at-success-soft); }
@@ -343,7 +341,7 @@
 
 .task-tool-latency {
   display: inline-flex; align-items: center; gap: 3px;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px; color: var(--at-fg-tertiary); font-variant-numeric: tabular-nums;
 }
 .task-tool-expand { display: flex; align-items: center; color: var(--at-fg-tertiary); }
@@ -359,14 +357,14 @@
 .task-json-block:last-child { margin-bottom: 0; }
 
 .task-json-title {
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 10px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--at-fg-tertiary); margin-bottom: 3px;
 }
 
 .task-json-pre {
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px; line-height: 1.55;
   color: var(--at-fg-secondary);
   padding: 8px 10px; border-radius: var(--at-radius-sm);
@@ -441,7 +439,7 @@
 
 .task-evidence-label { font-weight: 600; color: var(--at-fg); font-size: var(--at-text-xs); }
 .task-evidence-sep   { margin: 0 5px; color: var(--at-fg-tertiary); }
-.task-evidence-value { font-family: "Fira Code", ui-monospace, monospace; font-size: var(--at-text-xs); color: var(--at-fg-secondary); }
+.task-evidence-value { font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace; font-size: var(--at-text-xs); color: var(--at-fg-secondary); }
 
 /* Follow-up chips */
 .task-followup-chips { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -467,7 +465,7 @@
 }
 
 .task-artifact-sql-pre {
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: var(--at-text-sm); line-height: 1.55;
   padding: 12px 0; margin: 0; color: var(--at-fg);
   overflow-x: auto; white-space: pre-wrap; word-break: break-all;
@@ -492,7 +490,7 @@
 
 .task-artifact-table th {
   padding: 7px 14px 7px 0; text-align: left;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px; font-weight: 600;
   color: var(--at-fg-tertiary); letter-spacing: 0.03em;
   border-bottom: 1px solid var(--at-border);
@@ -501,7 +499,7 @@
 
 .task-artifact-table td {
   padding: 7px 14px 7px 0;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: var(--at-text-sm); color: var(--at-fg);
   border-bottom: 1px solid var(--at-border-light);
   white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -534,7 +532,7 @@
 }
 .task-chart-bar-value {
   width: 60px; flex-shrink: 0;
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: var(--at-text-xs); color: var(--at-fg);
   font-variant-numeric: tabular-nums;
 }
@@ -583,7 +581,7 @@
 .task-approval-risk {
   margin-left: auto; font-size: 10px; font-weight: 500;
   padding: 2px 8px; border-radius: var(--at-radius-full);
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
 }
 .task-approval-risk-safe    { color: var(--at-success); background: var(--at-success-soft); }
 .task-approval-risk-warning { color: var(--at-warn);    background: var(--at-warn-soft); }
@@ -595,7 +593,7 @@
 }
 
 .task-approval-sql {
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: var(--at-text-xs); line-height: 1.55;
   padding: 10px; margin-bottom: 14px; color: var(--at-fg);
   background: var(--at-bg); border: 1px solid var(--at-border-light);
@@ -668,7 +666,7 @@
 .task-answer-text .hifi-markdown-content li { font-size: inherit; margin-bottom: 4px; }
 .task-answer-text .hifi-markdown-content strong { font-size: inherit; }
 .task-answer-text .hifi-markdown-content code {
-  font-family: "Fira Code", ui-monospace, monospace;
+  font-family: "Fira Code", "JetBrains Mono", ui-monospace, monospace;
   font-size: 0.9em; padding: 1px 5px;
   background: var(--at-hover); border-radius: 3px;
 }
