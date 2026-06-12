@@ -1,4 +1,3 @@
-import type { Conversation } from "../../types/conversation";
 import { AskContextDropZone } from "./smartQuery/AskContextDropZone";
 import { AskInputBox } from "./smartQuery/AskInputBox";
 import { SmartQueryHero } from "./smartQuery/SmartQueryHero";
@@ -6,19 +5,11 @@ import { SmartQueryHero } from "./smartQuery/SmartQueryHero";
 interface SmartQueryHomeProps {
   askInputValue: string;
   contextTables: string[];
-  conversations: Conversation[];
-  recentTab: string;
   onAskInputChange: (value: string) => void;
   onSubmitAsk: () => void;
-  onRecommendClick: (text: string) => void;
-  onRecentTabChange: (tab: string) => void;
-  onOpenTable: (tableName: string) => void;
-  onOpenConversation: (conversation: Conversation) => void;
   onAddContextTable: (tableName: string) => void;
   onRemoveContextTable: (tableName: string) => void;
   onClearContextTables: () => void;
-  onOpenConversationHistory: () => void;
-  onToast: (message: string) => void;
 }
 
 export function SmartQueryHome({

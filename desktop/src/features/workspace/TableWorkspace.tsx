@@ -1,7 +1,5 @@
 import { TableErPane } from "./table/TableErPane";
-import { TableHistoryPane } from "./table/TableHistoryPane";
 import { TablePreviewPane } from "./table/TablePreviewPane";
-import { TableQueriesPane } from "./table/TableQueriesPane";
 import { TableSchemaPane } from "./table/TableSchemaPane";
 
 interface TableWorkspaceProps {
@@ -16,8 +14,6 @@ const subTabs = [
   ["preview", "数据预览"],
   ["schema", "字段结构"],
   ["er", "关系图"],
-  ["queries", "样例查询"],
-  ["history", "使用记录"],
 ] as const;
 
 export function TableWorkspace({ tableId, currentSubTab, onSubTabChange, onOpenSqlConsole, onToast }: TableWorkspaceProps) {
@@ -35,8 +31,6 @@ export function TableWorkspace({ tableId, currentSubTab, onSubTabChange, onOpenS
         {currentSubTab === "preview" && <TablePreviewPane tableId={tableId} onOpenSqlConsole={onOpenSqlConsole} onToast={onToast} />}
         {currentSubTab === "schema" && <TableSchemaPane tableId={tableId} />}
         {currentSubTab === "er" && <TableErPane tableId={tableId} />}
-        {currentSubTab === "queries" && <TableQueriesPane tableId={tableId} onOpenSqlConsole={onOpenSqlConsole} />}
-        {currentSubTab === "history" && <TableHistoryPane tableId={tableId} />}
       </div>
     </div>
   );

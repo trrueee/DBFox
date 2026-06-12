@@ -47,7 +47,6 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, type: "database", targetNode: "" });
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [sqlQuery, setSqlQuery] = useState(defaultSql);
-  const [recentTab, setRecentTab] = useState("tables");
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
   // Lifted data sources states
@@ -60,7 +59,7 @@ export default function App() {
 
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const activeDatasource = useMemo(() => datasources.find((item) => item.id === activeDatasourceId) || null, [activeDatasourceId, datasources]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
@@ -757,19 +756,11 @@ export default function App() {
         <SmartQueryHome
           askInputValue={askInputValue}
           contextTables={contextTables}
-          conversations={conversations}
-          recentTab={recentTab}
           onAskInputChange={setAskInputValue}
           onSubmitAsk={() => openQueryResultTab(askInputValue)}
-          onRecommendClick={setAskInputValue}
-          onRecentTabChange={setRecentTab}
-          onOpenTable={openTableTab}
-          onOpenConversation={openConversationResult}
           onAddContextTable={addContextTable}
           onRemoveContextTable={(tableName) => setContextTables((prev) => prev.filter((table) => table !== tableName))}
           onClearContextTables={() => setContextTables([])}
-          onOpenConversationHistory={openConversationHistoryTab}
-          onToast={showToast}
         />
       );
     }
@@ -842,6 +833,8 @@ export default function App() {
           <DataSourceTree
             treeSearch={treeSearch}
             selectedTables={selectedTables}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
             onTreeSearchChange={setTreeSearch}
             onTableClick={handleTableClick}
             onTableDoubleClick={openTableTab}
@@ -870,7 +863,7 @@ export default function App() {
                 onOpenSqlConsole={openSqlConsole}
               />
               
-              {/* Minimalist Top Right Actions */}
+              {/* Top Right Actions */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 12 }}>
                 <button
                   className="hifi-icon-btn text-xs font-semibold"
@@ -881,36 +874,6 @@ export default function App() {
                   <span style={{ color: "var(--color-text-secondary)" }}>命令面板</span>
                   <kbd style={{ background: "var(--color-border)", padding: "0 4px", borderRadius: 3, fontSize: 9 }}>⌘K</kbd>
                 </button>
-                <div style={{ position: "relative" }}>
-                  <button
-                    className="hifi-icon-btn"
-                    style={{ width: 26, height: 26, borderRadius: 4, border: "1px solid var(--color-border)", background: "var(--color-bg)", fontSize: 13, fontWeight: 700 }}
-                    onClick={() => setShowMoreMenu((prev) => !prev)}
-                    title="更多选项"
-                  >
-                    ...
-                  </button>
-                  {showMoreMenu && (
-                    <div
-                      className="data-grid-menu animate-fade-in"
-                      style={{
-                        position: "absolute",
-                        top: 32,
-                        right: 0,
-                        zIndex: 100,
-                        background: "var(--bg-surface)",
-                        border: "1px solid var(--border-medium)",
-                        boxShadow: "var(--shadow-lg)",
-                        borderRadius: 8,
-                        padding: 4,
-                        minWidth: 160
-                      }}
-                    >
-                      <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { openLlmConfigTab(); setShowMoreMenu(false); }}>LLM 配置</button>
-                      <button className="data-grid-menu-item" style={{ border: "none" }} onClick={() => { openConnectionManagerTab(); setShowMoreMenu(false); }}>数据源连接管理</button>
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
             

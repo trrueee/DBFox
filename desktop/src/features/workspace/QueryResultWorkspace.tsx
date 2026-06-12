@@ -8,6 +8,7 @@ import { QueryResultHeader } from "./queryResult/QueryResultHeader";
 import { AnswerCard } from "./queryResult/AnswerCard";
 import { FollowUpChips } from "./queryResult/FollowUpChips";
 import { AgentTimelineView } from "./queryResult/AgentTimelineView";
+import { AgentTaskView } from "../agentTask/AgentTaskView";
 
 interface QueryResultWorkspaceProps {
   tab: WorkspaceTab;
@@ -49,6 +50,10 @@ export function QueryResultWorkspace({
     (artifact) => !(hasAnswer && artifact.type === "markdown" && artifact.title === "Agent stopped"),
   );
 
+  // Use the new AgentTaskView when agent timeline data is present
+  const hasAgentTimeline = timeline.length > 0;
+  const agentIsActive = tab.agentStatus === "running" || tab.agentStatus === "waiting_approval" || tab.agentStatus === "completed" || tab.agentStatus === "failed";
+
   useEffect(() => {
     if (isRunning) {
       setShowThinking(true);
@@ -59,6 +64,24 @@ export function QueryResultWorkspace({
     }
   }, [hasAnswer, isRunning, tab.agentStatus]);
 
+  // ── Agent Task View mode (new Observatory Dark trace-based layout) ──
+  if (hasAgentTimeline || agentIsActive) {
+    return (
+      <AgentTaskView
+        tab={tab}
+        onCancel={(tabId) => onCancelRun(tabId)}
+        onRegenerate={(tabId) => onRegenerateRun(tabId)}
+        onApproveAgent={(tabId) => onApproveAgent(tabId)}
+        onRejectAgent={(tabId) => onRejectAgent(tabId)}
+        onSendFollowUp={(tabId, text) => onSendFollowUp(tabId, text)}
+        onOpenSqlConsole={onOpenSqlConsole}
+        onSetSqlQuery={onSetSqlQuery}
+        onToast={onToast}
+      />
+    );
+  }
+
+  // ── Legacy chat-style layout (fallback for old conversations) ──
   return (
     <div className="hifi-query-result-workspace hifi-tab-pane">
       <QueryResultHeader
