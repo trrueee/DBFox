@@ -147,32 +147,13 @@ app = FastAPI(
     openapi_url=None if is_frozen else "/openapi.json",
 )
 
-# 2. 配置跨域资源共享 (CORS Middleware)
-# 允许桌面外壳（Tauri 原生协议）以及开发模式下的各种常用本地端口进行安全跨域通信
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-        "tauri://localhost",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],  # 允许所有 HTTP 方法 (GET, POST, PUT, DELETE, OPTIONS等)
-    allow_headers=["*"],  # 允许所有 HTTP 请求头 (包括我们自定义的 X-Local-Token)
-)
-
-
-# 3. 核心安全防护中间件 (Security Guard Middleware)
+# 2. 核心安全防护中间件 (Security Guard Middleware)
 # 拦截所有请求，校验请求来源 Origin 并且强制校验 X-Local-Token 头部，防止 CSRF 或非法调用
 @app.middleware("http")
 async def verify_local_access_token(request: Request, call_next):  # type: ignore[no-untyped-def]
     """
     请求校验中间件
-    
+
     FastAPI 知识点:
       - `verify_local_access_token` 被 `@app.middleware("http")` 装饰后，会在每一次 HTTP 请求到达具体接口路由前被自动调用。
       - `call_next` 是一个协程函数，调用它表示把请求放行并传递给下一个处理器或目标路由，并返回路由生成的 Response。
@@ -216,6 +197,26 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
 
     # 校验通过，放行请求，返回响应
     return await call_next(request)
+
+
+# 3. 配置跨域资源共享 (CORS Middleware)
+# 必须放在安全中间件之后注册，确保 CORS 在最外层包装所有响应（包括安全中间件直接返回的错误响应）
+# FastAPI/Starlette 的中间件栈是从后往前应用的——最后注册的中间件成为最外层
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "tauri://localhost",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有 HTTP 方法 (GET, POST, PUT, DELETE, OPTIONS等)
+    allow_headers=["*"],  # 允许所有 HTTP 请求头 (包括我们自定义的 X-Local-Token)
+)
 
 
 # 4. 全局业务异常捕获器 (Global Exception Handler)
