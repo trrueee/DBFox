@@ -1,8 +1,10 @@
 """OpenAI-compatible provider (covers OpenAI / Qwen / DeepSeek / local)."""
 from __future__ import annotations
 
-from typing import Any
-from langchain_openai import ChatOpenAI
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 
 def create_openai_client(
@@ -13,7 +15,8 @@ def create_openai_client(
     temperature: float = 0.0,
     max_tokens: int | None = None,
     timeout: float = 120.0,
-) -> ChatOpenAI:
+) -> "ChatOpenAI":
+    from langchain_openai import ChatOpenAI
     """Build a ChatOpenAI client with reasoning-model awareness."""
     model_lower = model_name.lower()
     is_reasoning = any(

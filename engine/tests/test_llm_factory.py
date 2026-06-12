@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.llm.providers import openai as openai_provider
-
 
 def test_openai_client_disables_provider_retries(monkeypatch) -> None:
     captured: dict[str, Any] = {}
@@ -12,9 +10,11 @@ def test_openai_client_disables_provider_retries(monkeypatch) -> None:
         def __init__(self, **kwargs: Any) -> None:
             captured.update(kwargs)
 
-    monkeypatch.setattr(openai_provider, "ChatOpenAI", FakeChatOpenAI)
+    # Monkeypatch via the module where ChatOpenAI is actually imported at runtime
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", FakeChatOpenAI)
 
-    openai_provider.create_openai_client(
+    from engine.llm.providers.openai import create_openai_client
+    create_openai_client(
         model_name="gpt-test",
         api_key="sk-test",
         api_base="https://example.test/v1",
