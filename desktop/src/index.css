@@ -6,72 +6,73 @@
 
 /* ═══════════════════════════════════════════════════════
    DataBox Design System
-   Palette: Invoice & Billing Tool (navy professional)
-   Typography: Dashboard Data (Fira Code + Fira Sans)
+   Palette: Gallery White + Warm Copper
+   Typography: Fira Sans (UI) + Fira Code (data)
+   Feel: warm, airy, type-forward, Japanese-tool restraint
    ═══════════════════════════════════════════════════════ */
 
 @layer base {
   :root {
-    --background: 210 30% 98%;          /* #F8FAFC */
-    --foreground: 222 47% 11%;          /* #0F172A */
-    --card: 0 0% 100%;                  /* #FFFFFF */
-    --card-foreground: 222 47% 11%;
+    --background: 40 15% 97%;            /* #FAF9F7 warm paper */
+    --foreground: 40 5% 10%;             /* #1A1A18 near-black */
+    --card: 0 0% 100%;                   /* #FFFFFF */
+    --card-foreground: 40 5% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 212 54% 23%;             /* #1E3A5F navy */
+    --popover-foreground: 40 5% 10%;
+    --primary: 14 60% 52%;               /* #D4653C copper */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 96%;           /* #F1F3F5 */
-    --secondary-foreground: 215 25% 27%;
-    --muted: 210 20% 95%;
-    --muted-foreground: 215 16% 47%;    /* #64748B */
-    --accent: 210 20% 94%;
-    --accent-foreground: 215 25% 27%;
-    --destructive: 0 72% 51%;
+    --secondary: 40 8% 94%;              /* #F0EFEC */
+    --secondary-foreground: 40 5% 28%;
+    --muted: 40 8% 94%;
+    --muted-foreground: 40 5% 46%;       /* #7A7972 */
+    --accent: 14 60% 95%;                /* copper tint */
+    --accent-foreground: 14 60% 38%;
+    --destructive: 0 50% 48%;
     --destructive-foreground: 0 0% 100%;
-    --success: 161 94% 25%;             /* #059669 */
+    --success: 155 30% 38%;              /* muted green */
     --success-foreground: 0 0% 100%;
-    --warning: 32 95% 44%;
+    --warning: 35 60% 45%;
     --warning-foreground: 0 0% 100%;
-    --border: 220 13% 91%;              /* #E4E7EB */
-    --input: 220 13% 91%;
-    --ring: 212 54% 23%;
-    --radius: 4px;
-    --sidebar-background: 210 20% 96%;
-    --sidebar-foreground: 215 25% 27%;
-    --sidebar-primary: 212 54% 23%;
+    --border: 40 8% 88%;                 /* #E5E3DE */
+    --input: 40 8% 88%;
+    --ring: 14 60% 52%;
+    --radius: 5px;
+    --sidebar-background: 40 10% 95%;
+    --sidebar-foreground: 40 5% 28%;
+    --sidebar-primary: 14 60% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 20% 93%;
-    --sidebar-accent-foreground: 215 25% 27%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 212 54% 23%;
-    font-family: "Fira Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --sidebar-accent: 40 8% 92%;
+    --sidebar-accent-foreground: 40 5% 28%;
+    --sidebar-border: 40 8% 88%;
+    --sidebar-ring: 14 60% 52%;
+    font-family: "Fira Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
 
   .dark {
-    --background: 222 30% 8%;
-    --foreground: 210 20% 92%;
-    --card: 222 25% 12%;
-    --card-foreground: 210 20% 92%;
-    --primary: 210 80% 65%;
-    --primary-foreground: 222 30% 8%;
-    --secondary: 220 20% 16%;
-    --secondary-foreground: 210 15% 80%;
-    --muted: 220 18% 13%;
-    --muted-foreground: 215 14% 58%;
-    --accent: 220 20% 16%;
-    --accent-foreground: 210 15% 80%;
-    --destructive: 0 72% 55%;
+    --background: 40 5% 7%;
+    --foreground: 40 15% 90%;
+    --card: 40 5% 11%;
+    --card-foreground: 40 15% 90%;
+    --primary: 14 70% 58%;
+    --primary-foreground: 40 5% 7%;
+    --secondary: 40 5% 16%;
+    --secondary-foreground: 40 10% 78%;
+    --muted: 40 5% 14%;
+    --muted-foreground: 40 8% 55%;
+    --accent: 14 60% 16%;
+    --accent-foreground: 14 60% 70%;
+    --destructive: 0 55% 52%;
     --destructive-foreground: 0 0% 100%;
-    --success: 161 70% 38%;
+    --success: 155 35% 42%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 90% 50%;
-    --warning-foreground: 222 30% 8%;
-    --border: 220 18% 18%;
-    --input: 220 18% 15%;
-    --ring: 210 80% 65%;
+    --warning: 35 65% 50%;
+    --warning-foreground: 40 5% 7%;
+    --border: 40 5% 20%;
+    --input: 40 5% 18%;
+    --ring: 14 60% 52%;
   }
 }
 
