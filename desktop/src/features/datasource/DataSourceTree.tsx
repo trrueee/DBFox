@@ -19,6 +19,7 @@ interface DataSourceTreeProps {
   tables: EngineSchemaTable[];
   loading: boolean;
   error: string;
+  sidebarWidth: number;
 }
 
 export function DataSourceTree({
@@ -38,6 +39,7 @@ export function DataSourceTree({
   tables,
   loading,
   error,
+  sidebarWidth,
 }: DataSourceTreeProps) {
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
   const [dbDropdownOpen, setDbDropdownOpen] = useState(false);
@@ -95,7 +97,7 @@ export function DataSourceTree({
   }
 
   return (
-    <section className="hifi-col hifi-sidebar-col">
+    <section className="hifi-col" style={{ width: sidebarWidth, flexShrink: 0, minWidth: 180, maxWidth: 480 }}>
       <div className="hifi-sidebar-panel">
         <div className="hifi-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)" }}>数据源</span>
@@ -103,12 +105,12 @@ export function DataSourceTree({
             <button
               onClick={onNewConnection}
               title="新建连接"
-              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}
+              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 2, lineHeight: 1 }}
             >
-              +
+              <span style={{ fontSize: 18, fontWeight: 300 }}>+</span>
             </button>
             <span title="刷新" onClick={handleRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
-              <RefreshCw size={12} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw size={13} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
             </span>
             <button
               onClick={onToggleCollapse}
