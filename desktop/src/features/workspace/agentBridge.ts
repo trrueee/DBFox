@@ -11,6 +11,7 @@ import type {
   SqlArtifact,
   TableArtifact,
 } from "../../types/agentArtifact";
+import { normalizeAgentProgressText } from "./agentTimeline";
 
 // ---------------------------------------------------------------------------
 // Backend AgentArtifact (payload-based) → hifi view artifact models
@@ -208,9 +209,15 @@ function formatCell(value: unknown): string {
 export function describeRuntimeEvent(event: AgentRuntimeEvent): string | null {
   if (event.type === "agent.run.started") return "思考中…";
   if (event.type === "agent.step.started") return "思考中…";
+  if (event.type === "agent.progress.update") {
+    const summary = event.step?.summary ?? event.step?.detail;
+    if (typeof summary === "string" && summary.trim()) {
+      return normalizeAgentProgressText(summary);
+    }
+  }
   if (event.type === "agent.context.update") {
     const summary = event.step?.summary;
-    if (typeof summary === "string" && summary.trim()) return summary.trim();
+    if (typeof summary === "string" && summary.trim()) return normalizeContextSummary(summary);
   }
   if (event.type === "agent.step.completed") {
     const summary = event.step?.summary;
@@ -219,6 +226,20 @@ export function describeRuntimeEvent(event: AgentRuntimeEvent): string | null {
     if (typeof name === "string" && name.trim()) return `正在处理：${name}`;
   }
   return null;
+}
+
+function normalizeContextSummary(summary: string): string {
+  const text = summary.trim();
+  if (/^Using agent SQL/i.test(text) && /\bartifacts?\b/i.test(text)) {
+    return "已得到查询结果，正在组织最终回答。";
+  }
+  if (/^Using agent SQL/i.test(text)) {
+    return "正在使用 Agent SQL 分析数据。";
+  }
+  if (/^Focus:/i.test(text)) {
+    return text.replace(/^Focus:/i, "当前重点：").trim();
+  }
+  return text;
 }
 
 export function buildAnswerText(answer: AgentAnswer | null | undefined, fallback?: string | null): string {

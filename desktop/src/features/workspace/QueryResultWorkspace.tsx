@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, ShieldAlert, XCircle, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/databoxMock";
 import { ArtifactRenderer } from "./artifacts/ArtifactRenderer";
@@ -7,6 +7,7 @@ import { QueryMessages } from "./queryResult/QueryMessages";
 import { QueryResultHeader } from "./queryResult/QueryResultHeader";
 import { AnswerCard } from "./queryResult/AnswerCard";
 import { FollowUpChips } from "./queryResult/FollowUpChips";
+import { AgentTimelineView } from "./queryResult/AgentTimelineView";
 
 interface QueryResultWorkspaceProps {
   tab: WorkspaceTab;
@@ -41,7 +42,22 @@ export function QueryResultWorkspace({
   const isRunning = tab.agentStatus === "running";
   const isDone = tab.agentStatus === "completed" || tab.agentStatus === "failed";
   const hasAnswer = !!tab.agentAnswer?.answer;
-  const [showThinking, setShowThinking] = useState(false);
+  const [showThinking, setShowThinking] = useState(true);
+  const latestAgentMessage = latestAiMessage(tab.chatMessages || []);
+  const timeline = tab.agentTimeline || [];
+  const visibleArtifacts = (tab.artifacts ?? []).filter(
+    (artifact) => !(hasAnswer && artifact.type === "markdown" && artifact.title === "Agent stopped"),
+  );
+
+  useEffect(() => {
+    if (isRunning) {
+      setShowThinking(true);
+      return;
+    }
+    if (tab.agentStatus === "completed" || (tab.agentStatus === "failed" && hasAnswer)) {
+      setShowThinking(false);
+    }
+  }, [hasAnswer, isRunning, tab.agentStatus]);
 
   return (
     <div className="hifi-query-result-workspace hifi-tab-pane">
@@ -98,9 +114,9 @@ export function QueryResultWorkspace({
         )}
 
         {/* Artifacts — charts, tables, SQL */}
-        {((tab.artifacts?.length ?? 0) > 0) && (
+        {visibleArtifacts.length > 0 && (
           <ArtifactRenderer
-            artifacts={tab.artifacts ?? []}
+            artifacts={visibleArtifacts}
             onOpenSqlConsole={onOpenSqlConsole}
             onSetSqlQuery={onSetSqlQuery}
             onToast={onToast}
@@ -108,19 +124,23 @@ export function QueryResultWorkspace({
         )}
 
         {/* Collapsible thinking process */}
-        {!isRunning && (tab.chatMessages?.length ?? 0) > 0 && (
+        {((tab.chatMessages?.length ?? 0) > 0 || timeline.length > 0) && (
           <div className="hifi-thinking-section">
             <button
               className="hifi-thinking-toggle"
               onClick={() => setShowThinking(!showThinking)}
             >
               {showThinking ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-              <span>查看思考过程</span>
-              <span className="hifi-thinking-count">{tab.chatMessages?.length ?? 0} 条消息</span>
+              <span>{isRunning ? "查看实时过程" : "查看思考过程"}</span>
+              <span className="hifi-thinking-count">{timeline.length || tab.chatMessages?.length || 0} 条事件</span>
             </button>
             {showThinking && (
               <div className="hifi-thinking-body">
-                <QueryMessages messages={tab.chatMessages || []} />
+                {timeline.length > 0 ? (
+                  <AgentTimelineView items={timeline} />
+                ) : (
+                  <QueryMessages messages={tab.chatMessages || []} />
+                )}
               </div>
             )}
           </div>
@@ -131,7 +151,7 @@ export function QueryResultWorkspace({
       {isRunning && (
         <div className="hifi-agent-running-bar">
           <Loader2 size={12} className="hifi-agent-running-spinner" />
-          <span>AI 正在分析并生成回答，请稍候…</span>
+          <span className="hifi-agent-running-text">{latestAgentMessage || "AI 正在分析并生成回答，请稍候…"}</span>
           <button
             className="hifi-agent-cancel-btn"
             title="取消运行"
@@ -146,4 +166,14 @@ export function QueryResultWorkspace({
       <FollowUpInput tabId={tab.id} onSendFollowUp={onSendFollowUp} />
     </div>
   );
+}
+
+function latestAiMessage(messages: NonNullable<WorkspaceTab["chatMessages"]>): string {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.sender === "ai" && message.text.trim()) {
+      return message.text.replace(/[#*`|]/g, "").replace(/\s+/g, " ").trim();
+    }
+  }
+  return "";
 }

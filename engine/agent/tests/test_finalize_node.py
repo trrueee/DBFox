@@ -33,6 +33,26 @@ class TestFinalizeNode:
         assert result["status"] == "failed"
         assert result["error"] == "Something went wrong"
 
+    def test_finalize_with_answer_and_stale_error_completes_with_caveat(self):
+        state: DataBoxAgentState = {
+            "messages": [
+                HumanMessage(content="Inspect users"),
+                AIMessage(content="Found the users table and sample rows."),
+            ],
+            "status": "running",
+            "error": "Inspect error: 'int' object has no attribute 'fetchone'",
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(state, {})
+
+        assert result["status"] == "completed"
+        assert result["error"] is None
+        assert result["trace_events"][0]["has_answer"] is True
+        assert result["trace_events"][0]["has_error"] is True
+        assert "artifacts" not in result
+        assert any("部分后续检查未完成" in item for item in result["answer"]["caveats"])
+
     def test_finalize_with_pending_approval(self):
         state: DataBoxAgentState = {
             "messages": [AIMessage(content="Approval needed.")],

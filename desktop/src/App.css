@@ -1472,6 +1472,9 @@
   line-height: 1.5;
   white-space: pre-line;
 }
+.hifi-ai-msg-bubble .hifi-markdown-content {
+  white-space: normal;
+}
 
 .hifi-user-bubble {
   background: var(--color-primary-soft);
@@ -2993,6 +2996,13 @@
   animation: hifi-spin 0.9s linear infinite;
 }
 
+.hifi-agent-running-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes hifi-spin {
   to {
     transform: rotate(360deg);
@@ -3063,16 +3073,38 @@
 .hifi-answer-card {
   background: #fff;
   border: 1px solid #E0E7FF;
-  border-left: 3px solid #4F46E5;
   border-radius: 10px;
-  padding: 16px 18px;
+  padding: 12px 16px 16px;
   margin: 8px 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.hifi-answer-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+.hifi-answer-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFEDD5;
+  color: #EA580C;
 }
 .hifi-answer-text {
   font-size: 13px;
   line-height: 1.65;
   color: #1E293B;
   white-space: pre-wrap;
+}
+.hifi-answer-text.hifi-markdown-content {
+  white-space: normal;
 }
 .hifi-answer-section-title {
   display: flex;
@@ -3242,6 +3274,113 @@
   line-height: 1.6;
   color: #334155;
 }
+.hifi-md-h1 {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+}
+.hifi-md-h2 {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #334155;
+}
+.hifi-md-h3 {
+  margin: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 650;
+  color: #475569;
+}
+.hifi-md-p {
+  margin: 4px 0;
+}
+.hifi-md-ul,
+.hifi-md-ol {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+.hifi-md-ul {
+  list-style: disc;
+}
+.hifi-md-ol {
+  list-style: decimal;
+}
+.hifi-md-li {
+  margin: 2px 0;
+}
+.hifi-md-strong {
+  font-weight: 700;
+  color: #0F172A;
+}
+.hifi-md-em {
+  font-style: italic;
+}
+.hifi-md-code {
+  border-radius: 4px;
+  background: #EEF2F7;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+  padding: 1px 4px;
+}
+.hifi-md-pre {
+  margin: 8px 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #F8FAFC;
+}
+.hifi-md-pre .hifi-md-code {
+  padding: 0;
+  background: transparent;
+}
+.hifi-md-link {
+  color: #4F46E5;
+  text-decoration: underline;
+}
+.hifi-md-quote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 2px solid #CBD5E1;
+  color: #64748B;
+}
+.hifi-md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+.hifi-md-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  background: #fff;
+  white-space: normal;
+}
+.hifi-md-table th,
+.hifi-md-table td {
+  border-bottom: 1px solid #E2E8F0;
+  border-right: 1px solid #E2E8F0;
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+.hifi-md-table th {
+  background: #F8FAFC;
+  color: #0F172A;
+  font-weight: 650;
+}
+.hifi-md-table tr:last-child td {
+  border-bottom: 0;
+}
+.hifi-md-table th:last-child,
+.hifi-md-table td:last-child {
+  border-right: 0;
+}
 
 /* ===== Thinking Process (collapsible) ===== */
 .hifi-thinking-section {
@@ -3276,8 +3415,162 @@
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
   border-radius: 8px;
-  max-height: 300px;
+  max-height: min(560px, 58vh);
   overflow-y: auto;
+}
+
+.hifi-agent-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 4px 6px;
+}
+.hifi-agent-timeline::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: #D8E0F0;
+}
+.hifi-agent-timeline-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+}
+.hifi-agent-timeline-icon {
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  margin-top: 5px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #F1F5F9;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+}
+.hifi-agent-timeline-status-running {
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-color: #C7D2FE;
+}
+.hifi-agent-timeline-status-success {
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
+}
+.hifi-agent-timeline-status-failed {
+  background: #FEF2F2;
+  color: #DC2626;
+  border-color: #FECACA;
+}
+.hifi-agent-timeline-card {
+  min-width: 0;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.hifi-agent-timeline-assistant .hifi-agent-timeline-card {
+  border-color: #DDE5FF;
+  background: #FBFCFF;
+}
+.hifi-agent-timeline-tool .hifi-agent-timeline-card {
+  background: #FFFFFF;
+}
+.hifi-agent-timeline-head {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: #0F172A;
+}
+.hifi-agent-timeline-head:disabled {
+  cursor: default;
+}
+.hifi-agent-timeline-title {
+  font-size: 12px;
+  font-weight: 650;
+}
+.hifi-agent-timeline-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: #64748B;
+}
+.hifi-agent-timeline-latency {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #94A3B8;
+}
+.hifi-agent-timeline-expand {
+  display: inline-flex;
+  color: #64748B;
+}
+.hifi-agent-timeline-content {
+  padding: 0 10px 10px;
+  color: #334155;
+}
+.hifi-agent-timeline-tool .hifi-agent-timeline-content {
+  color: #475569;
+  font-size: 11px;
+  border-top: 1px solid #F1F5F9;
+  padding-top: 8px;
+  background: #FCFDFF;
+}
+.hifi-agent-timeline-detail {
+  border-top: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+.hifi-agent-json-block {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.hifi-agent-json-danger {
+  border-color: #FECACA;
+}
+.hifi-agent-json-title {
+  padding: 6px 8px;
+  border-bottom: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  font-size: 10px;
+  font-weight: 650;
+  color: #475569;
+}
+.hifi-agent-json-danger .hifi-agent-json-title {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border-bottom-color: #FECACA;
+}
+.hifi-agent-json-block pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 /* ===== Query Result Body (scrollable) ===== */

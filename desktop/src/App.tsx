@@ -24,6 +24,7 @@ import TitleBar from "./components/TitleBar";
 import { agentApi, resolveAgentApproval, streamResumeAgentRun, testLlmConnection, mergeArtifactDelta } from "./lib/api/agent";
 import { BASE_URL } from "./lib/api/client";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "./lib/api/types";
+import { appendAgentRuntimeEvent, createInitialAgentTimeline, timelineFromFinalResponse } from "./features/workspace/agentTimeline";
 import {
   buildAnswerText,
   buildSuggestionsText,
@@ -328,6 +329,15 @@ export default function App() {
     )));
   };
 
+  const patchTabTimeline = (
+    tabId: string,
+    updater: (items: NonNullable<WorkspaceTab["agentTimeline"]>) => NonNullable<WorkspaceTab["agentTimeline"]>,
+  ) => {
+    setTabs((prev) => prev.map((tab) => (
+      tab.id === tabId ? { ...tab, agentTimeline: updater(tab.agentTimeline || []) } : tab
+    )));
+  };
+
   /** Persist the tab transcript into SQLite conversation history (after state flush). */
   const persistTabConversation = (tabId: string) => {
     setTimeout(() => {
@@ -347,8 +357,15 @@ export default function App() {
     }, 0);
   };
 
-  const makeAgentEventHandler = (tabId: string, progressId: number, artifactsBox: { list: ApiAgentArtifact[] }) => {
+  const makeAgentEventHandler = (
+    tabId: string,
+    progressId: number,
+    artifactsBox: { list: ApiAgentArtifact[] },
+    timelineBox: { list: NonNullable<WorkspaceTab["agentTimeline"]> },
+  ) => {
     return (event: AgentRuntimeEvent) => {
+      timelineBox.list = appendAgentRuntimeEvent(timelineBox.list, event);
+      patchTabTimeline(tabId, () => timelineBox.list);
       const progressText = describeRuntimeEvent(event);
       if (progressText) updateTabMessage(tabId, progressId, progressText);
       if (event.type === "agent.artifact.created" && event.artifact) {
@@ -372,6 +389,7 @@ export default function App() {
     progressId: number,
     response: AgentRunResponse,
     apiArtifacts: ApiAgentArtifact[],
+    timelineItems?: NonNullable<WorkspaceTab["agentTimeline"]>,
   ) => {
     // Store run_id for cancel/regenerate
     if (response.run_id) {
@@ -379,6 +397,10 @@ export default function App() {
     }
     const merged = mergeApiArtifacts(apiArtifacts, response.artifacts || []);
     const viewArtifacts = toViewArtifacts(merged);
+    const finalTimeline = timelineFromFinalResponse(
+      timelineItems || tabsRef.current.find((item) => item.id === tabId)?.agentTimeline || [],
+      response,
+    );
 
     if (response.status === "waiting_approval") {
       const approval = response.approval;
@@ -387,6 +409,7 @@ export default function App() {
       updateTabMessage(tabId, progressId, "该操作存在风险，需要你确认后才会继续执行。请在下方审批卡片中选择。");
       patchTab(tabId, {
         artifacts: viewArtifacts,
+        agentTimeline: finalTimeline,
         agentRunId: response.run_id,
         agentSessionId: response.session_id,
         agentStatus: "waiting_approval",
@@ -416,6 +439,7 @@ export default function App() {
     }
     patchTab(tabId, {
       artifacts: viewArtifacts,
+      agentTimeline: finalTimeline,
       agentRunId: response.run_id,
       agentSessionId: response.session_id,
       agentStatus: succeeded ? "completed" : "failed",
@@ -462,9 +486,14 @@ export default function App() {
     }
     const progressId = nextMsgId();
     appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: "思考中…" }]);
-    patchTab(tabId, { agentStatus: "running", agentApproval: null });
+    patchTab(tabId, {
+      agentStatus: "running",
+      agentApproval: null,
+      agentTimeline: createInitialAgentTimeline(question),
+    });
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
+    const timelineBox = { list: createInitialAgentTimeline(question) };
     const abortController = new AbortController();
     abortControllersRef.current.set(tabId, abortController);
     const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
@@ -481,9 +510,9 @@ export default function App() {
           workspaceContext: { datasource_id: activeDatasourceId, selected_table_names: contextTables },
           execute: true,
         },
-        { signal: abortController.signal, onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox) },
+        { signal: abortController.signal, onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox) },
       );
-      finishAgentRun(tabId, progressId, response, artifactsBox.list);
+      finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
     } catch (err) {
       updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err)}`);
       patchTab(tabId, { agentStatus: "failed", agentApproval: null });
@@ -515,14 +544,15 @@ export default function App() {
         return;
       }
       const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
+      const timelineBox = { list: tab.agentTimeline || [] };
       const abortController = new AbortController();
       const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
       const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
         signal: abortController.signal,
-        onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox),
+        onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox),
       });
       window.clearTimeout(timeoutId);
-      finishAgentRun(tabId, progressId, response, artifactsBox.list);
+      finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
     } catch (err) {
       const message = err instanceof Error ? err.message : "审批处理失败";
       updateTabMessage(tabId, progressId, `审批处理失败：${message}`);

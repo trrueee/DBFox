@@ -1,5 +1,6 @@
-import { Lightbulb, AlertTriangle, CheckCircle2, FileText } from "lucide-react";
+import { Bot, Lightbulb, AlertTriangle, CheckCircle2, FileText } from "lucide-react";
 import type { AgentAnswer } from "../../../lib/api/types";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface AnswerCardProps {
   answer: AgentAnswer;
@@ -27,9 +28,16 @@ export function AnswerCard({ answer }: AnswerCardProps) {
 
   return (
     <div className="hifi-answer-card">
+      <div className="hifi-answer-card-head">
+        <span className="hifi-answer-avatar">
+          <Bot size={13} />
+        </span>
+        <span>AI</span>
+      </div>
+
       {/* Main answer text */}
       {answer.answer && (
-        <div className="hifi-answer-text">{answer.answer}</div>
+        <MarkdownContent content={answer.answer} className="hifi-answer-text" />
       )}
 
       {/* Key findings */}
