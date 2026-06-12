@@ -100,7 +100,7 @@ export function DataSourceTree({
     <section className="hifi-col" style={{ width: sidebarWidth, flexShrink: 0, minWidth: 180, maxWidth: 480 }}>
       <div className="hifi-sidebar-panel">
         <div className="hifi-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-text-primary)" }}>数据源</span>
+          <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-primary)" }}>数据源</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={onNewConnection}
