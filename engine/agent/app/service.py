@@ -479,9 +479,27 @@ class DataBoxAgentService:
         mapped_name = tool_to_step_name.get(tool_name, tool_name)
 
         if trace_type == "agent.tool.started":
-            yield emit("agent.step.started", step={"name": mapped_name})
+            yield emit(
+                "agent.step.started",
+                step={
+                    "name": mapped_name,
+                    "tool_name": tool_name,
+                    "input": trace.get("input"),
+                },
+            )
         elif trace_type == "agent.tool.completed":
-            yield emit("agent.step.completed", step={"name": mapped_name, "status": trace.get("status")})
+            yield emit(
+                "agent.step.completed",
+                step={
+                    "name": mapped_name,
+                    "tool_name": tool_name,
+                    "status": trace.get("status"),
+                    "latency_ms": trace.get("latency_ms"),
+                    "input": trace.get("input"),
+                    "output": trace.get("output"),
+                    "error": trace.get("error"),
+                },
+            )
         elif trace_type == "agent.repair.prepared":
             summary = trace.get("recovery_strategy") or "Preparing SQL repair"
             yield emit(
@@ -518,6 +536,20 @@ class DataBoxAgentService:
                         "summary": summary,
                         "detail": trace.get("root_cause"),
                         "fastpath": trace.get("fastpath", False),
+                    },
+                )
+        elif trace_type == "agent.model.completed":
+            content = _safe_model_progress_text(trace.get("content"))
+            tool_names = _tool_call_names(trace.get("tool_calls"))
+            if content or tool_names:
+                summary = content or f"准备调用工具：{', '.join(tool_names[:3])}"
+                yield emit(
+                    "agent.progress.update",
+                    step={
+                        "name": "model",
+                        "status": "running" if tool_names else "success",
+                        "summary": summary,
+                        "tool_calls": tool_names,
                     },
                 )
         elif trace_type == "agent.approval.required":
@@ -707,3 +739,30 @@ def _artifact_timeline_step(artifact_type: str) -> str | None:
         "agent_plan": "planner",
     }
     return mapping.get(artifact_type)
+
+
+def _safe_model_progress_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.lower()
+    if lowered.startswith(("thought:", "reasoning:", "chain of thought:", "思考:", "推理:")):
+        return ""
+    if len(text) > 1200:
+        return text[:1200].rstrip() + "..."
+    return text
+
+
+def _tool_call_names(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    names: list[str] = []
+    for item in value:
+        name = ""
+        if isinstance(item, dict):
+            name = str(item.get("name") or "")
+        else:
+            name = str(getattr(item, "name", "") or "")
+        if name:
+            names.append(name)
+    return names

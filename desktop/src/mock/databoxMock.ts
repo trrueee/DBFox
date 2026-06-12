@@ -1,4 +1,5 @@
 import type { AgentArtifact } from "../types/agentArtifact";
+import type { AgentTimelineItem } from "../features/workspace/agentTimeline";
 
 export type WorkspaceTabType = "smart-query" | "table" | "sql" | "multi-table" | "query-result" | "conversation-history" | "llm-config" | "datasource-settings" | "agent-eval";
 
@@ -22,6 +23,7 @@ export interface WorkspaceTab {
   queryText?: string;
   conversationId?: string;
   chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
+  agentTimeline?: AgentTimelineItem[];
   artifacts?: AgentArtifact[];
   agentRunId?: string;
   agentSessionId?: string;

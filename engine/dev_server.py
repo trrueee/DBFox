@@ -12,9 +12,7 @@ ENGINE_PORT = 18625
 _RELOAD_EXCLUDES = [
     "**/__pycache__/**",
     "**/.pytest_cache/**",
-    "**/.databox_runtime/**",
     "**/.codegraph/**",
-    "**/node_modules/**",
 ]
 
 

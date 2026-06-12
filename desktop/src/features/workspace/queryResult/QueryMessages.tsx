@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import type { WorkspaceTab } from "../../../mock/databoxMock";
+import { MarkdownContent } from "./MarkdownContent";
 
 type QueryMessage = NonNullable<WorkspaceTab["chatMessages"]>[number];
 
@@ -13,7 +14,9 @@ export function QueryMessages({ messages }: { messages: QueryMessage[] }) {
               <Sparkles size={11} />
             </div>
           )}
-          <div className={message.sender === "ai" ? "hifi-ai-msg-bubble" : ""}>{message.text}</div>
+          <div className={message.sender === "ai" ? "hifi-ai-msg-bubble" : ""}>
+            {message.sender === "ai" ? <MarkdownContent content={message.text} /> : message.text}
+          </div>
         </div>
       ))}
     </>

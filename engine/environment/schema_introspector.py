@@ -267,7 +267,6 @@ class SchemaIntrospector:
     # ------------------------------------------------------------------
 
     def _decrypt_datasource_password(self, db: Session, datasource_id: str) -> str:
-        row = db.query(db.get_bind()).first()  # not used; we query from passed db
         from engine.models import DataSource as DS
 
         ds = db.query(DS).filter(DS.id == datasource_id).first()

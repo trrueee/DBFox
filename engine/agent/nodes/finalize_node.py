@@ -18,6 +18,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
     """
     messages = state.get("messages", [])
     error = state.get("error")
+    original_error = error
     pending_approval = state.get("pending_approval")
 
     # Determine final answer text
@@ -28,10 +29,11 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
 
     if pending_approval:
         status = "waiting_approval"
-    elif error:
-        status = "failed"
     elif answer_text:
         status = "completed"
+        error = None
+    elif error:
+        status = "failed"
     else:
         status = "failed"
         if not error:
@@ -58,6 +60,13 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
             "follow_up_questions": [],
         }
 
+    if answer_text and original_error:
+        caveats = answer_payload.setdefault("caveats", [])
+        if isinstance(caveats, list):
+            caveat = f"部分后续检查未完成：{original_error}"
+            if caveat not in caveats:
+                caveats.append(caveat)
+
     # Clean up any raw tool node prefix from answer if present
     if isinstance(answer_payload.get("answer"), str):
         ans_str = answer_payload["answer"]
@@ -70,8 +79,10 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         "type": "agent.finalized",
         "status": status,
         "has_answer": bool(answer_text),
-        "has_error": bool(error),
+        "has_error": bool(original_error),
     }
+    if original_error and status == "completed":
+        trace_event["nonfatal_error"] = str(original_error)
     if pending_approval:
         trace_event["pending_approval"] = True
 
