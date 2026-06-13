@@ -7,9 +7,26 @@
     <title>DataBox - AI 问数数据库客户端</title>
     <link rel="preconnect" href="https://fonts.loli.net" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <style>
+      /* Boot indicator — visible until React mounts; helps diagnose white-screen */
+      #boot-indicator {
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        font-family: system-ui, sans-serif;
+        color: #e0e0e0; background: #020617;
+      }
+      #boot-indicator h1 { font-size: 20px; font-weight: 600; margin: 16px 0 8px; }
+      #boot-indicator p  { font-size: 13px; color: #888; max-width: 400px; text-align: center; line-height: 1.5; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-indicator">
+      <span style="font-size:40px">🦊</span>
+      <h1>DataBox 正在启动…</h1>
+      <p>如果此画面持续超过 10 秒，请关闭应用后重试。<br>首次冷启动可能需要较长时间。</p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
