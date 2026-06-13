@@ -140,6 +140,17 @@ fn conversation_db_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("databox.sqlite3"))
 }
 
+fn log_sidecar_error(message: &str) {
+    let log_path = std::env::temp_dir().join("databox-sidecar.log");
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_default();
+    let entry = format!("[{}] {}\n", ts, message);
+    let _ = std::fs::write(&log_path, entry);
+    eprintln!("{}", message);
+}
+
 fn spawn_python_engine() -> Option<Child> {
     if cfg!(debug_assertions) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -161,7 +172,7 @@ fn spawn_python_engine() -> Option<Child> {
                 Some(child)
             }
             Err(e) => {
-                eprintln!("Warning: Failed to start Python Dev engine: {}", e);
+                log_sidecar_error(&format!("Failed to start Python Dev engine: {}", e));
                 None
             }
         }
@@ -170,14 +181,14 @@ fn spawn_python_engine() -> Option<Child> {
         let exe_path = match std::env::current_exe() {
             Ok(path) => path,
             Err(e) => {
-                eprintln!("Error: Unable to resolve current exe path: {}", e);
+                log_sidecar_error(&format!("Unable to resolve current exe path: {}", e));
                 return None;
             }
         };
         let exe_dir = match exe_path.parent() {
             Some(dir) => dir,
             None => {
-                eprintln!("Error: Unable to resolve exe parent directory");
+                log_sidecar_error("Unable to resolve exe parent directory");
                 return None;
             }
         };
@@ -216,7 +227,10 @@ fn spawn_python_engine() -> Option<Child> {
                 Some(child)
             }
             Err(e) => {
-                eprintln!("Error: Failed to start DataBox Sidecar Engine at {:?}: {}", final_path, e);
+                log_sidecar_error(&format!(
+                    "Failed to start Sidecar Engine at {:?}: {}",
+                    final_path, e
+                ));
                 None
             }
         }
