@@ -54,6 +54,9 @@ checkpoints/
 pyinstaller_dist/
 pyinstaller_build/
 databox_engine.spec
+.build_venv/
+engine/token_preset.py
+desktop/.env.local
 
 # Frontend / Tauri
 desktop/node_modules/
