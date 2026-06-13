@@ -53,8 +53,8 @@ export function AgentTurnItem({
     }
     const steps = timeline.map((item, i) => ({
       id: item.id || `s-${i}`,
-      type: (item.kind === "assistant" ? "thinking" : item.kind === "tool" ? "tool_call" : "user") as any,
-      status: item.status as any,
+      type: item.kind === "assistant" ? "thinking" as const : item.kind === "tool" ? "tool_call" as const : "user" as const,
+      status: item.status,
       title: item.title || "",
       content: item.content || "",
       toolName: item.toolName,
@@ -62,7 +62,7 @@ export function AgentTurnItem({
       output: item.output,
       error: item.error,
       latencyMs: item.latencyMs,
-      timestamp: Date.now(),
+      timestamp: 0,
     }));
     return computeSummary(steps);
   }, [hasAgent, timeline]);

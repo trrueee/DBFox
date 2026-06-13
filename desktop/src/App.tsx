@@ -8,6 +8,7 @@ import { ConversationHistoryPanel } from "./features/conversation/ConversationHi
 import { deleteConversation, listConversations, saveConversation } from "./features/conversation/conversationRepository";
 import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
 import { DataSourceTree } from "./features/datasource/DataSourceTree";
+import { useAgentRunner } from "./features/agentTask/useAgentRunner";
 import { MultiTableWorkspace } from "./features/workspace/MultiTableWorkspace";
 import { QueryResultWorkspace } from "./features/workspace/QueryResultWorkspace";
 import { SmartQueryHome } from "./features/workspace/SmartQueryHome";
@@ -16,24 +17,14 @@ import { TableWorkspace } from "./features/workspace/TableWorkspace";
 import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
 import { defaultSql, type ContextMenuState, type WorkspaceTab } from "./mock/databoxMock";
 import type { Conversation, ConversationMessage } from "./types/conversation";
-import { listDatasources, listTables, listColumns } from "./features/engine/engineApi";
+import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { DataSourcesPage } from "./pages/DataSourcesPage";
 import { AgentEvalPage } from "./pages/AgentEvalPage";
-import { useApiConfig, getStoredApiConfig } from "./components/SettingsDialog";
+import { useApiConfig } from "./components/SettingsDialog";
 import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import TitleBar from "./components/TitleBar";
-import { agentApi, resolveAgentApproval, streamResumeAgentRun, testLlmConnection, mergeArtifactDelta } from "./lib/api/agent";
-import { BASE_URL } from "./lib/api/client";
-import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "./lib/api/types";
-import { appendAgentRuntimeEvent, createInitialAgentTimeline, timelineFromFinalResponse } from "./features/workspace/agentTimeline";
-import {
-  buildAnswerText,
-  buildSuggestionsText,
-  describeRuntimeEvent,
-  mergeApiArtifacts,
-  toViewArtifacts,
-} from "./features/workspace/agentBridge";
+import { testLlmConnection } from "./lib/api/agent";
 
 export default function App() {
   const [scale, setScale] = useState(1);
@@ -50,14 +41,23 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [sqlQuery, setSqlQuery] = useState(defaultSql);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-
-  // Lifted data sources states
-  const [datasources, setDatasources] = useState<any[]>([]);
-  const [activeDatasourceId, setActiveDatasourceId] = useState("");
-  const [tables, setTables] = useState<any[]>([]);
-  const [loadingSchema, setLoadingSchema] = useState(false);
-  const [schemaError, setSchemaError] = useState("");
-  const [tableColumns, setTableColumns] = useState<Record<string, any[]>>({});
+  const showToast = useCallback((message: string) => {
+    setToastMsg(message);
+    setTimeout(() => setToastMsg(null), 2500);
+  }, []);
+  const {
+    datasources,
+    activeDatasource,
+    activeDatasourceForSettings,
+    activeDatasourceId,
+    setActiveDatasourceId,
+    tables,
+    loadingSchema,
+    schemaError,
+    tableColumns,
+    loadDatasources,
+    refreshSchema,
+  } = useDatasourceState({ onToast: showToast });
 
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -92,95 +92,10 @@ export default function App() {
     };
   }, [scale]);
 
-  const activeDatasource = useMemo(() => datasources.find((item) => item.id === activeDatasourceId) || null, [activeDatasourceId, datasources]);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
 
-  // Refs that mirror state for async agent stream handlers
-  const tabsRef = useRef<WorkspaceTab[]>(tabs);
-  const conversationsRef = useRef<Conversation[]>(conversations);
-  const msgIdSeq = useRef(Date.now());
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const runIdsRef = useRef<Map<string, string>>(new Map()); // tabId -> runId for cancel/regenerate
-  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
-  const nextMsgId = () => ++msgIdSeq.current;
-
-  const loadDatasources = async () => {
-    setLoadingSchema(true);
-    setSchemaError("");
-    try {
-      const nextDatasources = await listDatasources();
-      setDatasources(nextDatasources);
-      const nextActive = activeDatasourceId && nextDatasources.some((item) => item.id === activeDatasourceId)
-        ? activeDatasourceId
-        : nextDatasources[0]?.id || "";
-      setActiveDatasourceId(nextActive);
-      if (nextActive) {
-        const nextTables = await listTables(nextActive);
-        setTables(nextTables);
-      } else {
-        setTables([]);
-      }
-    } catch (err) {
-      setSchemaError(err instanceof Error ? err.message : "读取本地 Engine 数据源失败");
-      setDatasources([]);
-      setTables([]);
-    } finally {
-      setLoadingSchema(false);
-    }
-  };
-
-  const handleRefreshSchema = async () => {
-    if (!activeDatasourceId) {
-      showToast("没有活动数据源");
-      return;
-    }
-    setLoadingSchema(true);
-    try {
-      const nextTables = await listTables(activeDatasourceId);
-      setTables(nextTables);
-      showToast("已刷新 Schema 元数据");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "刷新 Schema 失败");
-    } finally {
-      setLoadingSchema(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadDatasources();
-  }, []);
-
-  useEffect(() => {
-    if (!activeDatasourceId) return;
-    const fetchTables = async () => {
-      try {
-        const nextTables = await listTables(activeDatasourceId);
-        setTables(nextTables);
-      } catch (err) {
-        setSchemaError(err instanceof Error ? err.message : "读取表结构失败");
-      }
-    };
-    void fetchTables();
-  }, [activeDatasourceId]);
-
-  // Fetch columns for tables to support field search in command palette
-  useEffect(() => {
-    if (tables.length === 0) return;
-    const fetchColumns = async () => {
-      const cols: Record<string, any[]> = {};
-      for (const table of tables) {
-        try {
-          const tableCols = await listColumns(table.id);
-          cols[table.table_name] = tableCols;
-        } catch {
-          // ignore error for individual table column loading
-        }
-      }
-      setTableColumns(cols);
-    };
-    void fetchColumns();
-  }, [tables]);
+  const msgIdSeq = useRef(1);
+  const nextMsgId = useCallback(() => ++msgIdSeq.current, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -199,32 +114,27 @@ export default function App() {
     return () => window.removeEventListener("click", handleDocumentClick);
   }, []);
 
-  useEffect(() => {
-    void refreshConversations();
-  }, []);
-
-  const showToast = (message: string) => {
-    setToastMsg(message);
-    setTimeout(() => setToastMsg(null), 2500);
-  };
-
-  const refreshConversations = async () => {
+  const refreshConversations = useCallback(async () => {
     try {
       const history = await listConversations();
       setConversations(history);
     } catch {
       showToast("读取 SQLite 对话历史失败");
     }
-  };
+  }, [showToast]);
 
-  const persistConversation = async (conversation: Conversation) => {
+  useEffect(() => {
+    void refreshConversations();
+  }, [refreshConversations]);
+
+  const persistConversation = useCallback(async (conversation: Conversation) => {
     try {
       await saveConversation(conversation);
       setConversations((prev) => [conversation, ...prev.filter((item) => item.id !== conversation.id)].sort((a, b) => b.updatedAt - a.updatedAt));
     } catch {
       showToast("写入 SQLite 对话历史失败");
     }
-  };
+  }, [showToast]);
 
   const openTableTab = (tableName: string, initialSubtab = "preview") => {
     const tabId = `table-${tableName}`;
@@ -234,8 +144,8 @@ export default function App() {
     setTableSubTabs((prev) => ({ ...prev, [tableName]: initialSubtab }));
   };
 
-  const closeTab = (tabId: string, event: MouseEvent) => {
-    event.stopPropagation();
+  const closeTab = (tabId: string, event?: { stopPropagation: () => void }) => {
+    event?.stopPropagation();
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     if (nextTabs.length === 0) {
       setTabs([{ id: "smart-query", title: "问数工作台", type: "smart-query" }]);
@@ -255,19 +165,19 @@ export default function App() {
 
   const openLlmConfigTab = () => {
     const tabId = "llm-config";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "LLM 配置", type: "llm-config" as any }]));
+    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "LLM 配置", type: "llm-config" }]));
     setActiveTabId(tabId);
   };
 
   const openConnectionManagerTab = () => {
     const tabId = "datasource-settings";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "数据源管理", type: "datasource-settings" as any }]));
+    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "数据源管理", type: "datasource-settings" }]));
     setActiveTabId(tabId);
   };
 
   const openNewConnectionTab = () => {
     const tabId = "datasource-settings";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "新建数据源", type: "datasource-settings" as any }]));
+    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "新建数据源", type: "datasource-settings" }]));
     setActiveTabId(tabId);
     
     // Auto toggle add connection form
@@ -361,227 +271,25 @@ export default function App() {
     )));
   };
 
-  /** Persist the tab transcript into SQLite conversation history (after state flush). */
-  const persistTabConversation = (tabId: string) => {
-    setTimeout(() => {
-      const tab = tabsRef.current.find((item) => item.id === tabId);
-      if (!tab?.conversationId) return;
-      const origin = conversationsRef.current.find((item) => item.id === tab.conversationId);
-      const now = Date.now();
-      void persistConversation({
-        id: tab.conversationId,
-        title: origin?.title || tab.queryText || "未命名问答",
-        createdAt: origin?.createdAt || now,
-        updatedAt: now,
-        contextTables: origin?.contextTables || contextTables,
-        messages: tabMessagesToConversationMessages(tab.chatMessages || []),
-        artifacts: tab.artifacts || [],
-      });
-    }, 0);
-  };
-
-  const makeAgentEventHandler = (
-    tabId: string,
-    progressId: number,
-    artifactsBox: { list: ApiAgentArtifact[] },
-    timelineBox: { list: NonNullable<WorkspaceTab["agentTimeline"]> },
-  ) => {
-    return (event: AgentRuntimeEvent) => {
-      timelineBox.list = appendAgentRuntimeEvent(timelineBox.list, event);
-      patchTabTimeline(tabId, () => timelineBox.list);
-      const progressText = describeRuntimeEvent(event);
-      if (progressText) updateTabMessage(tabId, progressId, progressText);
-      if (event.type === "agent.artifact.created" && event.artifact) {
-        artifactsBox.list = mergeApiArtifacts(artifactsBox.list, [event.artifact]);
-        patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });
-      }
-      if (event.type === "agent.artifact.delta" && event.artifact_delta) {
-        const delta = event.artifact_delta as { artifact_id?: string; payload_merge?: Record<string, unknown> };
-        const artifactId = delta.artifact_id;
-        const payloadMerge = delta.payload_merge;
-        if (artifactId && payloadMerge) {
-          artifactsBox.list = mergeArtifactDelta(artifactsBox.list, artifactId, payloadMerge);
-          patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });
-        }
-      }
-    };
-  };
-
-  const finishAgentRun = (
-    tabId: string,
-    progressId: number,
-    response: AgentRunResponse,
-    apiArtifacts: ApiAgentArtifact[],
-    timelineItems?: NonNullable<WorkspaceTab["agentTimeline"]>,
-  ) => {
-    // Store run_id for cancel/regenerate
-    if (response.run_id) {
-      runIdsRef.current.set(tabId, response.run_id);
-    }
-    const merged = mergeApiArtifacts(apiArtifacts, response.artifacts || []);
-    const viewArtifacts = toViewArtifacts(merged);
-    const finalTimeline = timelineFromFinalResponse(
-      timelineItems || tabsRef.current.find((item) => item.id === tabId)?.agentTimeline || [],
-      response,
-    );
-
-    if (response.status === "waiting_approval") {
-      const approval = response.approval;
-      const requestedAction = (approval?.requested_action || {}) as { args?: { sql?: unknown } };
-      const approvalSql = typeof requestedAction.args?.sql === "string" ? requestedAction.args.sql : response.sql || undefined;
-      updateTabMessage(tabId, progressId, "该操作存在风险，需要你确认后才会继续执行。请在下方审批卡片中选择。");
-      patchTab(tabId, {
-        artifacts: viewArtifacts,
-        agentTimeline: finalTimeline,
-        agentRunId: response.run_id,
-        agentSessionId: response.session_id,
-        agentStatus: "waiting_approval",
-        agentApproval: approval
-          ? {
-              runId: response.run_id,
-              approvalId: approval.id,
-              stepName: approval.step_name,
-              riskLevel: approval.risk_level,
-              reason: approval.reason || undefined,
-              sql: approvalSql,
-            }
-          : null,
-      });
-      return;
-    }
-
-    const succeeded = response.success || response.status === "success" || response.status === "completed";
-    updateTabMessage(
-      tabId,
-      progressId,
-      succeeded ? buildAnswerText(response.answer, response.explanation) : `执行未完成：${response.error || "Agent 已停止。"}`,
-    );
-    const suggestionText = buildSuggestionsText(response.suggestions);
-    if (succeeded && suggestionText) {
-      appendTabMessages(tabId, [{ id: nextMsgId(), sender: "ai", text: suggestionText }]);
-    }
-    patchTab(tabId, {
-      artifacts: viewArtifacts,
-      agentTimeline: finalTimeline,
-      agentRunId: response.run_id,
-      agentSessionId: response.session_id,
-      agentStatus: succeeded ? "completed" : "failed",
-      agentApproval: null,
-      agentAnswer: response.answer || null,
-      agentSuggestions: response.suggestions || null,
-    });
-    persistTabConversation(tabId);
-  };
-
-  const formatAgentError = (err: unknown): string => {
-    if (!(err instanceof Error)) return "AI 分析失败";
-    const coded = err as Error & { code?: string };
-    if (coded.code === "NO_LLM_KEY") {
-      return "请先在右上角「设置 → LLM 配置」中填写 API Key 与模型，保存后重试。";
-    }
-    if (err.name === "AbortError") {
-      return "请求超时：LLM 响应过慢或网络异常，请检查 API Key、模型与网络后重试。";
-    }
-    return err.message.replace(/agent\s*runtime\s*failed:?/i, "服务请求出错:");
-  };
-
-  const runAgentForTab = async (
-    tabId: string,
-    question: string,
-    opts?: { sessionId?: string; parentRunId?: string },
-  ) => {
-    if (!activeDatasourceId) {
-      appendTabMessages(tabId, [{ id: nextMsgId(), sender: "ai", text: "请先在左侧选择并连接一个数据源，然后重试。" }]);
-      patchTab(tabId, { agentStatus: "failed" });
-      persistTabConversation(tabId);
-      return;
-    }
-    const llm = getStoredApiConfig();
-    if (!llm.apiKey?.trim()) {
-      appendTabMessages(tabId, [{
-        id: nextMsgId(),
-        sender: "ai",
-        text: "请先在右上角「设置 → LLM 配置」中填写 API Key 与模型，保存后重试。",
-      }]);
-      patchTab(tabId, { agentStatus: "failed" });
-      persistTabConversation(tabId);
-      return;
-    }
-    const progressId = nextMsgId();
-    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: "思考中…" }]);
-    patchTab(tabId, {
-      agentStatus: "running",
-      agentApproval: null,
-      agentTimeline: createInitialAgentTimeline(question),
-    });
-
-    const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
-    const timelineBox = { list: createInitialAgentTimeline(question) };
-    const abortController = new AbortController();
-    abortControllersRef.current.set(tabId, abortController);
-    const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
-    try {
-      const response = await agentApi.streamAgentQuery(
-        activeDatasourceId,
-        question,
-        {
-          apiKey: llm.apiKey || undefined,
-          apiBase: llm.apiBase || undefined,
-          model: llm.modelName || undefined,
-          sessionId: opts?.sessionId,
-          parentRunId: opts?.parentRunId,
-          workspaceContext: { datasource_id: activeDatasourceId, selected_table_names: contextTables },
-          execute: true,
-        },
-        { signal: abortController.signal, onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox) },
-      );
-      finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
-    } catch (err) {
-      updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err)}`);
-      patchTab(tabId, { agentStatus: "failed", agentApproval: null });
-      persistTabConversation(tabId);
-    } finally {
-      window.clearTimeout(timeoutId);
-      abortControllersRef.current.delete(tabId);
-    }
-  };
-
-  const handleApprovalDecision = async (tabId: string, approve: boolean) => {
-    const tab = tabsRef.current.find((item) => item.id === tabId);
-    const approval = tab?.agentApproval;
-    if (!approval) return;
-
-    patchTab(tabId, { agentApproval: null, agentStatus: approve ? "running" : "failed" });
-    const progressId = nextMsgId();
-    appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: approve ? "已确认，正在生成回答…" : "已拒绝执行操作。" }]);
-
-    try {
-      await resolveAgentApproval(
-        approval.runId,
-        approval.approvalId,
-        approve ? "approved" : "rejected",
-        approve ? "Approved in DataBox UI" : "Rejected in DataBox UI",
-      );
-      if (!approve) {
-        persistTabConversation(tabId);
-        return;
-      }
-      const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
-      const timelineBox = { list: tab.agentTimeline || [] };
-      const abortController = new AbortController();
-      const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
-      const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
-        signal: abortController.signal,
-        onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox),
-      });
-      window.clearTimeout(timeoutId);
-      finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "审批处理失败";
-      updateTabMessage(tabId, progressId, `审批处理失败：${message}`);
-      patchTab(tabId, { agentStatus: "failed" });
-    }
-  };
+  const {
+    runAgentForTab,
+    handleApprovalDecision,
+    sendFollowUp,
+    cancelAgentRun,
+    regenerateAgentRun,
+  } = useAgentRunner({
+    tabs,
+    conversations,
+    activeDatasourceId,
+    contextTables,
+    appendTabMessages,
+    updateTabMessage,
+    patchTab,
+    patchTabTimeline,
+    persistConversation,
+    showToast,
+    nextMsgId,
+  });
 
   const handleTableClick = (tableName: string, event: MouseEvent) => {
     if (event.ctrlKey || event.metaKey) {
@@ -615,58 +323,6 @@ export default function App() {
     }
   };
 
-  const sendFollowUp = (tabId: string, text: string) => {
-    const content = text.trim();
-    if (!content) return;
-    const targetTab = tabsRef.current.find((tab) => tab.id === tabId);
-    if (targetTab?.agentStatus === "running") {
-      showToast("AI 正在生成回答，请稍候");
-      return;
-    }
-    if (targetTab?.agentStatus === "waiting_approval") {
-      showToast("请先处理待审批的操作");
-      return;
-    }
-    appendTabMessages(tabId, [{ id: nextMsgId(), sender: "user", text: content }]);
-    void runAgentForTab(tabId, content, {
-      sessionId: targetTab?.agentSessionId,
-      parentRunId: targetTab?.agentRunId,
-    });
-  };
-
-  const cancelAgentRun = async (tabId: string) => {
-    // 1. Abort the fetch/SSE stream
-    const ctrl = abortControllersRef.current.get(tabId);
-    if (ctrl) {
-      ctrl.abort();
-      abortControllersRef.current.delete(tabId);
-    }
-    // 2. Tell the backend to mark the run as cancelled
-    const runId = runIdsRef.current.get(tabId);
-    if (runId) {
-      try {
-        await fetch(`${BASE_URL}/agent/runs/${runId}/cancel`, { method: "POST" });
-      } catch { /* best-effort */ }
-      runIdsRef.current.delete(tabId);
-    }
-    // 3. Update UI
-    updateTabMessage(tabId, -1, "已取消。");
-    patchTab(tabId, { agentStatus: "failed", agentApproval: null });
-    persistTabConversation(tabId);
-  };
-
-  const regenerateAgentRun = (tabId: string) => {
-    const targetTab = tabsRef.current.find((tab) => tab.id === tabId);
-    if (!targetTab) return;
-    // Re-run the original question with follow-up context from the previous run
-    const originalQuestion = targetTab.queryText || targetTab.chatMessages?.find(m => m.sender === "user")?.text || "";
-    if (!originalQuestion) return;
-    void runAgentForTab(tabId, originalQuestion, {
-      sessionId: targetTab.agentSessionId,
-      parentRunId: targetTab.agentRunId,
-    });
-  };
-
   const deleteConversationById = async (conversationId: string) => {
     try {
       await deleteConversation(conversationId);
@@ -692,7 +348,7 @@ export default function App() {
       }
       if (mod && event.key.toLowerCase() === "w" && activeTabId) {
         event.preventDefault();
-        closeTab(activeTabId, event as any);
+        closeTab(activeTabId);
       }
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
@@ -801,7 +457,7 @@ export default function App() {
     if (activeTab.type === "multi-table") {
       return <MultiTableWorkspace tables={activeTab.selectedTables || []} onOpenQueryResult={openQueryResultTab} onToast={showToast} />;
     }
-    if (activeTab.type === "llm-config" as any) {
+    if (activeTab.type === "llm-config") {
       return <LlmConfigTabContent showToast={showToast} />;
     }
     if (activeTab.type === "agent-eval") {
@@ -813,7 +469,7 @@ export default function App() {
         />
       );
     }
-    if (activeTab.type === "datasource-settings" as any) {
+    if (activeTab.type === "datasource-settings") {
       return (
         <div className="hifi-settings-tab-frame hifi-tab-pane">
           <DataSourcesPage
@@ -825,7 +481,7 @@ export default function App() {
                 setActiveDatasourceId("");
               }
             }}
-            activeDataSource={activeDatasource}
+            activeDataSource={activeDatasourceForSettings}
             activeProject={null}
             onRefreshDatasources={loadDatasources}
             initialShowAddForm={activeTab.title === "新建数据源"}
@@ -867,7 +523,7 @@ export default function App() {
             onTableClick={handleTableClick}
             onTableDoubleClick={openTableTab}
             onNodeContextMenu={handleNodeContextMenu}
-            onRefresh={handleRefreshSchema}
+            onRefresh={refreshSchema}
             onNewConnection={openNewConnectionTab}
             datasources={datasources}
             activeDatasourceId={activeDatasourceId}
@@ -989,15 +645,6 @@ function conversationMessagesToTabMessages(messages: ConversationMessage[]) {
     id: Number(message.id.replace(/\D/g, "")) || index + 1,
     sender: message.role === "user" ? "user" as const : "ai" as const,
     text: message.content,
-  }));
-}
-
-function tabMessagesToConversationMessages(messages: NonNullable<WorkspaceTab["chatMessages"]>): ConversationMessage[] {
-  return messages.map((message, index) => ({
-    id: `message-${message.id || index}`,
-    role: message.sender === "user" ? "user" : "assistant",
-    content: message.text,
-    createdAt: Number(message.id) || Date.now(),
   }));
 }
 
