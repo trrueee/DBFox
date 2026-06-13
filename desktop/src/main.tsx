@@ -7,6 +7,10 @@ import { ToastProvider } from './components/Toast'
 import { ThemeProvider } from './hooks/useTheme'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
+// Hide the static boot indicator once React successfully mounts
+const bootEl = document.getElementById('boot-indicator')
+if (bootEl) bootEl.style.display = 'none'
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
