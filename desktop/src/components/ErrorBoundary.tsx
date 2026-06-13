@@ -1,29 +1,91 @@
-import { Component } from "react";
-import type { ErrorInfo, ReactNode } from "react";
-import { ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
-interface Props { children: ReactNode; fallback?: ReactNode; title?: string; }
-interface State { hasError: boolean; error: Error | null; }
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
 
 export class ErrorBoundary extends Component<Props, State> {
-  public state: State = { hasError: false, error: null };
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-  public static getDerivedStateFromError(error: Error): State { return { hasError: true, error }; }
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) { console.error("ErrorBoundary:", error, errorInfo); }
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
 
-  public render() {
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[ErrorBoundary]", error, info.componentStack);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
+
+  render() {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
-        <div className="p-5 border border-[hsl(var(--destructive))] bg-[hsl(var(--destructive)/0.03)] rounded-lg flex flex-col gap-3 items-start m-2">
-          <div className="flex items-center gap-2 text-[hsl(var(--destructive))]">
-            <ShieldAlert size={18} />
-            <strong className="text-sm">{this.props.title || "局部模块渲染异常"}</strong>
-          </div>
-          <p className="text-xs text-[hsl(var(--muted-foreground))] leading-relaxed">组件内部发生未捕获解析错误。可能是由于异常大字段、数据解析失败或格式不兼容所致。</p>
-          <pre className="w-full max-h-[100px] overflow-auto bg-[hsl(var(--secondary))] border rounded p-2 text-[0.7rem] font-mono text-[hsl(var(--muted-foreground))] whitespace-pre-wrap break-all">{this.state.error?.stack || this.state.error?.message}</pre>
-          <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false, error: null })}>尝试重新加载</Button>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+            padding: 24,
+            fontFamily: "system-ui, sans-serif",
+            color: "#e0e0e0",
+            background: "#0f0f1a",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠</div>
+          <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 8px" }}>
+            DataBox 启动异常
+          </h1>
+          <p style={{ fontSize: 14, color: "#888", maxWidth: 480, lineHeight: 1.6 }}>
+            应用初始化时发生了未预期的错误。请尝试重启应用。
+          </p>
+          {this.state.error && (
+            <pre
+              style={{
+                marginTop: 16,
+                padding: "8px 16px",
+                background: "#1a1a2e",
+                borderRadius: 6,
+                fontSize: 12,
+                color: "#e06060",
+                maxWidth: 560,
+                overflow: "auto",
+                textAlign: "left",
+              }}
+            >
+              {this.state.error.message}
+            </pre>
+          )}
+          <button
+            onClick={this.handleReset}
+            style={{
+              marginTop: 20,
+              padding: "8px 24px",
+              fontSize: 14,
+              borderRadius: 6,
+              border: "1px solid #444",
+              background: "#1a1a2e",
+              color: "#e0e0e0",
+              cursor: "pointer",
+            }}
+          >
+            重新加载
+          </button>
         </div>
       );
     }
