@@ -1,6 +1,6 @@
 """Introspect real databases and produce a SchemaInventory.
 
-Supports SQLite, MySQL, and a stub for PostgreSQL / DuckDB.
+Supports SQLite, MySQL, PostgreSQL, and DuckDB.
 """
 from __future__ import annotations
 
@@ -34,12 +34,11 @@ class SchemaIntrospector:
             return self._inspect_sqlite(resolved)
         if resolved.dialect == "mysql":
             return self._inspect_mysql(db, resolved)
-        # Postgres / DuckDB — stub for now
-        return SchemaInventory(
-            datasource_id=datasource_id,
-            dialect=resolved.dialect,
-            database_name=resolved.safe_display_name,
-        )
+        if resolved.dialect == "postgres":
+            return self._inspect_postgres(db, resolved)
+        if resolved.dialect == "duckdb":
+            return self._inspect_duckdb(resolved)
+        raise ValueError(f"Unsupported datasource dialect: {resolved.dialect}")
 
     # ------------------------------------------------------------------
     # SQLite
@@ -263,6 +262,330 @@ class SchemaIntrospector:
             return []
 
     # ------------------------------------------------------------------
+    # PostgreSQL
+    # ------------------------------------------------------------------
+
+    def _inspect_postgres(self, db: Session, resolved: ResolvedDataSource) -> SchemaInventory:
+        try:
+            conn = self._connect_postgres(db, resolved)
+        except Exception as exc:
+            logger.warning("PostgreSQL connect failed for %s: %s", resolved.datasource_id, exc)
+            return SchemaInventory(
+                datasource_id=resolved.datasource_id,
+                dialect="postgres",
+                database_name=resolved.safe_display_name,
+            )
+
+        try:
+            tables = self._postgres_tables(conn)
+            table_count = len(tables)
+            column_count = sum(len(t.columns) for t in tables)
+            return SchemaInventory(
+                datasource_id=resolved.datasource_id,
+                dialect="postgres",
+                database_name=resolved.database or resolved.safe_display_name,
+                tables=tables,
+                table_count=table_count,
+                column_count=column_count,
+            )
+        finally:
+            conn.close()
+
+    def _connect_postgres(self, db: Session, resolved: ResolvedDataSource) -> Any:
+        import psycopg2
+
+        return psycopg2.connect(
+            host=resolved.host or "127.0.0.1",
+            port=resolved.port or 5432,
+            user=resolved.username or "postgres",
+            password=self._decrypt_datasource_password(db, resolved.datasource_id),
+            dbname=resolved.database or "postgres",
+            connect_timeout=10,
+        )
+
+    def _postgres_tables(self, conn: Any) -> list[TableInventory]:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                t.table_schema,
+                t.table_name,
+                t.table_type,
+                COALESCE(pg_catalog.obj_description(c.oid), '') AS table_comment,
+                COALESCE(c.reltuples::bigint, 0) AS row_count_estimate
+            FROM information_schema.tables t
+            LEFT JOIN pg_catalog.pg_namespace n
+                ON n.nspname = t.table_schema
+            LEFT JOIN pg_catalog.pg_class c
+                ON c.relname = t.table_name AND c.relnamespace = n.oid
+            WHERE t.table_schema NOT IN ('pg_catalog', 'information_schema')
+              AND t.table_type IN ('BASE TABLE', 'VIEW')
+            ORDER BY t.table_schema, t.table_name
+            """
+        )
+        tables: list[TableInventory] = []
+        for schema, table_name, table_type, comment, row_count in cursor.fetchall():
+            columns = self._postgres_columns(conn, str(schema), str(table_name))
+            fks = self._postgres_foreign_keys(conn, str(schema), str(table_name))
+            sample = self._sql_sample(conn, str(table_name), schema=str(schema), quote='"')
+            tables.append(
+                TableInventory(
+                    table_schema=str(schema),
+                    table_name=str(table_name),
+                    table_type="view" if "VIEW" in str(table_type or "") else "table",
+                    comment=str(comment) if comment else None,
+                    columns=columns,
+                    foreign_keys=fks,
+                    sample_rows=sample,
+                    row_count_estimate=int(row_count or 0),
+                )
+            )
+        return tables
+
+    def _postgres_columns(self, conn: Any, schema: str, table_name: str) -> list[ColumnInventory]:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                c.column_name,
+                c.data_type,
+                c.udt_name,
+                c.is_nullable,
+                c.column_default,
+                EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                      ON tc.constraint_name = kcu.constraint_name
+                     AND tc.table_schema = kcu.table_schema
+                    WHERE tc.constraint_type = 'PRIMARY KEY'
+                      AND tc.table_schema = c.table_schema
+                      AND tc.table_name = c.table_name
+                      AND kcu.column_name = c.column_name
+                ) AS is_primary_key,
+                EXISTS (
+                    SELECT 1
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                      ON tc.constraint_name = kcu.constraint_name
+                     AND tc.table_schema = kcu.table_schema
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                      AND tc.table_schema = c.table_schema
+                      AND tc.table_name = c.table_name
+                      AND kcu.column_name = c.column_name
+                ) AS is_foreign_key
+            FROM information_schema.columns c
+            WHERE c.table_schema = %s AND c.table_name = %s
+            ORDER BY c.ordinal_position
+            """,
+            (schema, table_name),
+        )
+        return [
+            ColumnInventory(
+                column_name=str(col_name),
+                data_type=str(data_type or ""),
+                column_type=str(column_type or data_type or ""),
+                is_nullable=str(nullable).upper() == "YES",
+                column_default=str(default) if default is not None else None,
+                is_primary_key=bool(is_pk),
+                is_foreign_key=bool(is_fk),
+            )
+            for col_name, data_type, column_type, nullable, default, is_pk, is_fk in cursor.fetchall()
+        ]
+
+    def _postgres_foreign_keys(self, conn: Any, schema: str, table_name: str) -> list[ForeignKeyInventory]:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                kcu.column_name,
+                ccu.table_name AS referenced_table,
+                ccu.column_name AS referenced_column
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+              ON ccu.constraint_name = tc.constraint_name
+             AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND tc.table_schema = %s
+              AND tc.table_name = %s
+            ORDER BY kcu.ordinal_position
+            """,
+            (schema, table_name),
+        )
+        return [
+            ForeignKeyInventory(
+                column_name=str(col_name),
+                referenced_table=str(ref_table),
+                referenced_column=str(ref_col),
+            )
+            for col_name, ref_table, ref_col in cursor.fetchall()
+        ]
+
+    # ------------------------------------------------------------------
+    # DuckDB
+    # ------------------------------------------------------------------
+
+    def _inspect_duckdb(self, resolved: ResolvedDataSource) -> SchemaInventory:
+        try:
+            conn = self._connect_duckdb(resolved)
+        except Exception as exc:
+            logger.warning("DuckDB connect failed for %s: %s", resolved.datasource_id, exc)
+            return SchemaInventory(
+                datasource_id=resolved.datasource_id,
+                dialect="duckdb",
+                database_name=resolved.safe_display_name,
+            )
+
+        try:
+            tables = self._duckdb_tables(conn)
+            table_count = len(tables)
+            column_count = sum(len(t.columns) for t in tables)
+            return SchemaInventory(
+                datasource_id=resolved.datasource_id,
+                dialect="duckdb",
+                database_name=resolved.database or resolved.safe_display_name,
+                tables=tables,
+                table_count=table_count,
+                column_count=column_count,
+            )
+        finally:
+            conn.close()
+
+    def _connect_duckdb(self, resolved: ResolvedDataSource) -> Any:
+        import duckdb
+
+        database = resolved.database_path or resolved.database or ":memory:"
+        return duckdb.connect(database=database, read_only=database != ":memory:")
+
+    def _duckdb_tables(self, conn: Any) -> list[TableInventory]:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT table_schema, table_name, table_type, ''
+            FROM information_schema.tables
+            WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+              AND table_type IN ('BASE TABLE', 'VIEW')
+            ORDER BY table_schema, table_name
+            """
+        )
+        tables: list[TableInventory] = []
+        for schema, table_name, table_type, comment in cursor.fetchall():
+            schema_str = str(schema)
+            table_str = str(table_name)
+            columns = self._duckdb_columns(conn, schema_str, table_str)
+            fks = self._duckdb_foreign_keys(conn, schema_str, table_str)
+            sample = self._sql_sample(conn, table_str, schema=schema_str, quote='"')
+            row_count = self._sql_row_count(conn, table_str, schema=schema_str, quote='"')
+            tables.append(
+                TableInventory(
+                    table_schema=schema_str,
+                    table_name=table_str,
+                    table_type="view" if "VIEW" in str(table_type or "") else "table",
+                    comment=str(comment) if comment else None,
+                    columns=columns,
+                    foreign_keys=fks,
+                    sample_rows=sample,
+                    row_count_estimate=row_count,
+                )
+            )
+        return tables
+
+    def _duckdb_columns(self, conn: Any, schema: str, table_name: str) -> list[ColumnInventory]:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                column_name,
+                data_type,
+                data_type,
+                is_nullable,
+                column_default,
+                false AS is_primary_key,
+                false AS is_foreign_key
+            FROM information_schema.columns
+            WHERE table_schema = ? AND table_name = ?
+            ORDER BY ordinal_position
+            """,
+            (schema, table_name),
+        )
+        columns = [
+            ColumnInventory(
+                column_name=str(col_name),
+                data_type=str(data_type or ""),
+                column_type=str(column_type or data_type or ""),
+                is_nullable=str(nullable).upper() == "YES",
+                column_default=str(default) if default is not None else None,
+                is_primary_key=bool(is_pk),
+                is_foreign_key=bool(is_fk),
+            )
+            for col_name, data_type, column_type, nullable, default, is_pk, is_fk in cursor.fetchall()
+        ]
+        fk_cols = {fk.column_name for fk in self._duckdb_foreign_keys(conn, schema, table_name)}
+        for column in columns:
+            if column.column_name == "id":
+                column.is_primary_key = True
+            if column.column_name in fk_cols:
+                column.is_foreign_key = True
+        return columns
+
+    def _duckdb_foreign_keys(self, conn: Any, schema: str, table_name: str) -> list[ForeignKeyInventory]:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT column_name, referenced_table_name, referenced_column_name
+                FROM information_schema.key_column_usage
+                WHERE table_schema = ? AND table_name = ?
+                  AND referenced_table_name IS NOT NULL
+                ORDER BY ordinal_position
+                """,
+                (schema, table_name),
+            )
+        except Exception:
+            return []
+        return [
+            ForeignKeyInventory(
+                column_name=str(col_name),
+                referenced_table=str(ref_table),
+                referenced_column=str(ref_col),
+            )
+            for col_name, ref_table, ref_col in cursor.fetchall()
+        ]
+
+    # ------------------------------------------------------------------
+    # SQL helpers
+    # ------------------------------------------------------------------
+
+    def _sql_sample(
+        self,
+        conn: Any,
+        table_name: str,
+        *,
+        schema: str = "",
+        quote: str = '"',
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT * FROM {_qualified_name(schema, table_name, quote)} LIMIT {limit}")
+            col_names = [desc[0] for desc in cursor.description]
+            return [dict(zip(col_names, row)) for row in cursor.fetchall()]
+        except Exception:
+            return []
+
+    def _sql_row_count(self, conn: Any, table_name: str, *, schema: str = "", quote: str = '"') -> int | None:
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM {_qualified_name(schema, table_name, quote)}")
+            row = cursor.fetchone()
+            return int(row[0]) if row else None
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
@@ -284,3 +607,13 @@ class SchemaIntrospector:
 # Module-level convenience
 def introspect_datasource(db: Session, datasource_id: str) -> SchemaInventory:
     return SchemaIntrospector().inspect(db, datasource_id)
+
+
+def _quote_sql_identifier(identifier: str, quote: str = '"') -> str:
+    return quote + identifier.replace(quote, quote + quote) + quote
+
+
+def _qualified_name(schema: str, table: str, quote: str = '"') -> str:
+    if schema:
+        return f"{_quote_sql_identifier(schema, quote)}.{_quote_sql_identifier(table, quote)}"
+    return _quote_sql_identifier(table, quote)

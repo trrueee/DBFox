@@ -77,6 +77,16 @@ class PolicyGate:
                 )
 
         if policy.requires_validated_sql:
+            effective_mode = execution_mode
+            if execution_mode == "user_requested_read" and not state.get("execute", True):
+                effective_mode = "suggest_only"
+            if effective_mode in ("none", "suggest_only"):
+                return PolicyDecision(
+                    status="blocked",
+                    reason=f"SQL execution is not allowed in {effective_mode} mode.",
+                    risk_level="danger",
+                )
+
             raw_safety = state.get("safety")
             safety: dict[str, Any] = raw_safety if isinstance(raw_safety, dict) else {}
             can_execute = bool(safety.get("can_execute"))
@@ -106,10 +116,6 @@ class PolicyGate:
 
             # agent_autonomous_read: enforce stricter approval even when SQL is valid
             if tool_name == "sql.execute_readonly":
-                effective_mode = execution_mode
-                if execution_mode == "user_requested_read" and not state.get("execute", True):
-                    effective_mode = "suggest_only"
-
                 if effective_mode == "agent_autonomous_read":
                     env_profile = state.get("environment_profile") or {}
                     env = env_profile.get("env", "unknown")
