@@ -26,6 +26,10 @@ import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import TitleBar from "./components/TitleBar";
 import { testLlmConnection } from "./lib/api/agent";
 
+let sqlConsoleSeq = 1;
+let multiTableSeq = 1;
+let queryResultSeq = 1;
+
 export default function App() {
   const [scale, setScale] = useState(1);
   const [treeSearch, setTreeSearch] = useState("");
@@ -136,15 +140,15 @@ export default function App() {
     }
   }, [showToast]);
 
-  const openTableTab = (tableName: string, initialSubtab = "preview") => {
+  const openTableTab = useCallback((tableName: string, initialSubtab = "preview") => {
     const tabId = `table-${tableName}`;
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: tableName, type: "table", tableId: tableName }]));
     setActiveTabId(tabId);
     setSelectedTables([tableName]);
     setTableSubTabs((prev) => ({ ...prev, [tableName]: initialSubtab }));
-  };
+  }, []);
 
-  const closeTab = (tabId: string, event?: { stopPropagation: () => void }) => {
+  const closeTab = useCallback((tabId: string, event?: { stopPropagation: () => void }) => {
     event?.stopPropagation();
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     if (nextTabs.length === 0) {
@@ -154,28 +158,28 @@ export default function App() {
     }
     setTabs(nextTabs);
     if (activeTabId === tabId) setActiveTabId(nextTabs[nextTabs.length - 1].id);
-  };
+  }, [activeTabId, tabs]);
 
-  const openSqlConsole = () => {
-    const tabId = `sql-${Date.now()}`;
+  const openSqlConsole = useCallback(() => {
+    const tabId = `sql-${sqlConsoleSeq++}`;
     setTabs((prev) => [...prev, { id: tabId, title: "SQL 控制台", type: "sql" }]);
     setActiveTabId(tabId);
     showToast("已打开 SQL 控制台");
-  };
+  }, [showToast]);
 
-  const openLlmConfigTab = () => {
+  const openLlmConfigTab = useCallback(() => {
     const tabId = "llm-config";
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "LLM 配置", type: "llm-config" }]));
     setActiveTabId(tabId);
-  };
+  }, []);
 
-  const openConnectionManagerTab = () => {
+  const openConnectionManagerTab = useCallback(() => {
     const tabId = "datasource-settings";
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "数据源管理", type: "datasource-settings" }]));
     setActiveTabId(tabId);
-  };
+  }, []);
 
-  const openNewConnectionTab = () => {
+  const openNewConnectionTab = useCallback(() => {
     const tabId = "datasource-settings";
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "新建数据源", type: "datasource-settings" }]));
     setActiveTabId(tabId);
@@ -188,22 +192,22 @@ export default function App() {
         if (addBtn) (addBtn as HTMLButtonElement).click();
       }
     }, 250);
-  };
+  }, []);
 
-  const openMultiTableWorkspace = (tables: string[]) => {
+  const openMultiTableWorkspace = useCallback((tables: string[]) => {
     if (tables.length === 0) return;
-    const tabId = `multi-table-${Date.now()}`;
+    const tabId = `multi-table-${multiTableSeq++}`;
     const title = `Workspace: ${tables.slice(0, 2).join(" & ")}${tables.length > 2 ? "..." : ""}`;
     setTabs((prev) => [...prev, { id: tabId, title, type: "multi-table", selectedTables: tables }]);
     setActiveTabId(tabId);
     showToast(`已创建多表联合 Workspace (${tables.length} 张表)`);
-  };
+  }, [showToast]);
 
-  const openAgentEvalTab = () => {
+  const openAgentEvalTab = useCallback(() => {
     const tabId = "agent-eval";
     setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "Agent 评测", type: "agent-eval" }]));
     setActiveTabId(tabId);
-  };
+  }, []);
 
   const openConversationResult = (conversation: Conversation) => {
     const tabId = `conversation-${conversation.id}`;
@@ -223,8 +227,8 @@ export default function App() {
   const openQueryResultTab = (queryText: string) => {
     const text = queryText.trim();
     if (!text) return;
-    const now = Date.now();
-    const tabId = `query-result-${now}`;
+    const nextId = queryResultSeq++;
+    const tabId = `query-result-${nextId}`;
     setTabs((prev) => [
       ...prev,
       {
@@ -232,7 +236,7 @@ export default function App() {
         title: "问数结果",
         type: "query-result",
         queryText: text,
-        conversationId: `conversation-${now}`,
+        conversationId: `conversation-${nextId}`,
         chatMessages: [{ id: nextMsgId(), sender: "user", text }],
         artifacts: [],
       },
@@ -353,7 +357,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [activeTabId, tabs]);
+  }, [activeTabId, closeTab, openSqlConsole]);
 
   const commandItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [
@@ -428,7 +432,16 @@ export default function App() {
     });
 
     return items;
-  }, [tables, tableColumns]);
+  }, [
+    openAgentEvalTab,
+    openConnectionManagerTab,
+    openLlmConfigTab,
+    openNewConnectionTab,
+    openSqlConsole,
+    openTableTab,
+    tables,
+    tableColumns,
+  ]);
 
   const renderActiveTab = () => {
     if (activeTab.type === "smart-query") {

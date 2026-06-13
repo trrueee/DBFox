@@ -38,7 +38,7 @@ export function AgentTurnItem({
   const isDone = agentStatus === "completed" || agentStatus === "failed";
   const isFailed = agentStatus === "failed";
   const hasAnswer = !!turn.agentAnswer?.answer;
-  const timeline = turn.agentTimeline || [];
+  const timeline = useMemo(() => turn.agentTimeline || [], [turn.agentTimeline]);
 
   // Per-turn trace expand state
   const [traceExpanded, setTraceExpanded] = useState(
