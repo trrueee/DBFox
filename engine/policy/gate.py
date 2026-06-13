@@ -112,9 +112,12 @@ class PolicyGate:
                     )
 
             blocked_reasons = [str(reason) for reason in safety.get("blocked_reasons", [])]
+            # "requires_confirmation" is a soft signal — the user should be
+            # prompted, not blocked outright.  Everything else is a hard blocker.
             hard_blockers = [reason for reason in blocked_reasons if reason != "requires_confirmation"]
 
-            # agent_autonomous_read: enforce stricter approval even when SQL is valid
+            # ---- agent_autonomous_read: enforce stricter approval even when
+            #      SQL is valid ----
             if tool_name == "sql.execute_readonly":
                 if effective_mode == "agent_autonomous_read":
                     env_profile = state.get("environment_profile") or {}
@@ -127,12 +130,13 @@ class PolicyGate:
                             safe_args={"sql": safe_sql or original_sql},
                         )
 
-            if safety.get("requires_confirmation") and not hard_blockers and original_sql:
+            # ---- Enforce TrustGate validation result ----
+
+            if hard_blockers:
                 return PolicyDecision(
-                    status="approval_required",
-                    reason="This SQL execution requires human approval.",
-                    risk_level="warning",
-                    safe_args={"sql": safe_sql or original_sql},
+                    status="blocked",
+                    reason=f"SQL blocked by TrustGate: {hard_blockers}",
+                    risk_level="danger",
                 )
 
             if not can_execute or not safe_sql:

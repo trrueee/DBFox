@@ -50,6 +50,10 @@ class _FakeCursor:
             ]
             return
 
+        if "table_constraints" in query and "primary key" in query:
+            self.rows = [("id",)]
+            return
+
         if "key_column_usage" in query:
             self.rows = [("customer_id", "customers", "id")]
             return

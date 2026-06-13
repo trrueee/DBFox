@@ -26,10 +26,6 @@ import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import TitleBar from "./components/TitleBar";
 import { testLlmConnection } from "./lib/api/agent";
 
-let sqlConsoleSeq = 1;
-let multiTableSeq = 1;
-let queryResultSeq = 1;
-
 export default function App() {
   const [scale, setScale] = useState(1);
   const [treeSearch, setTreeSearch] = useState("");
@@ -100,6 +96,7 @@ export default function App() {
 
   const msgIdSeq = useRef(1);
   const nextMsgId = useCallback(() => ++msgIdSeq.current, []);
+  const tabSeqRef = useRef({ sql: 1, multiTable: 1, queryResult: 1 });
 
   useEffect(() => {
     const handleResize = () => {
@@ -161,7 +158,7 @@ export default function App() {
   }, [activeTabId, tabs]);
 
   const openSqlConsole = useCallback(() => {
-    const tabId = `sql-${sqlConsoleSeq++}`;
+    const tabId = `sql-${tabSeqRef.current.sql++}`;
     setTabs((prev) => [...prev, { id: tabId, title: "SQL 控制台", type: "sql" }]);
     setActiveTabId(tabId);
     showToast("已打开 SQL 控制台");
@@ -196,7 +193,7 @@ export default function App() {
 
   const openMultiTableWorkspace = useCallback((tables: string[]) => {
     if (tables.length === 0) return;
-    const tabId = `multi-table-${multiTableSeq++}`;
+    const tabId = `multi-table-${tabSeqRef.current.multiTable++}`;
     const title = `Workspace: ${tables.slice(0, 2).join(" & ")}${tables.length > 2 ? "..." : ""}`;
     setTabs((prev) => [...prev, { id: tabId, title, type: "multi-table", selectedTables: tables }]);
     setActiveTabId(tabId);
@@ -227,7 +224,7 @@ export default function App() {
   const openQueryResultTab = (queryText: string) => {
     const text = queryText.trim();
     if (!text) return;
-    const nextId = queryResultSeq++;
+    const nextId = tabSeqRef.current.queryResult++;
     const tabId = `query-result-${nextId}`;
     setTabs((prev) => [
       ...prev,
