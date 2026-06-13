@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Minus, Square, X } from "lucide-react";
+import { FoxIcon } from "./brand/FoxIcon";
 import "./TitleBar.css";
 
 function isTauriRuntime(): boolean {
@@ -74,7 +75,12 @@ export default function TitleBar() {
 
   return (
     <div className="titlebar" data-tauri-drag-region>
-      <span className="titlebar-title">DataBox</span>
+      <span className="titlebar-brand">
+        <span className="titlebar-logo">
+          <FoxIcon variant="app" size={20} />
+        </span>
+        <span className="titlebar-title">DataBox</span>
+      </span>
       <div className="titlebar-controls">
         <button
           className="titlebar-btn"

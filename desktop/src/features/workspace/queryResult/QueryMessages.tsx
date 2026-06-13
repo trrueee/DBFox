@@ -1,5 +1,5 @@
-import { Sparkles } from "lucide-react";
 import type { WorkspaceTab } from "../../../mock/databoxMock";
+import { FoxIcon } from "../../../components/brand/FoxIcon";
 import { MarkdownContent } from "./MarkdownContent";
 
 type QueryMessage = NonNullable<WorkspaceTab["chatMessages"]>[number];
@@ -11,7 +11,7 @@ export function QueryMessages({ messages }: { messages: QueryMessage[] }) {
         <div key={message.id} className={message.sender === "user" ? "hifi-user-bubble" : "hifi-ai-msg-container"}>
           {message.sender === "ai" && (
             <div className="hifi-ai-avatar">
-              <Sparkles size={11} />
+              <FoxIcon variant="ai-tight" size={18} alt="DataBox AI" />
             </div>
           )}
           <div className={message.sender === "ai" ? "hifi-ai-msg-bubble" : ""}>

@@ -3,31 +3,32 @@
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --color-primary: #C45A3C;
-  --color-secondary: #B88A60;
-  --color-info: #C45A3C;
-  --color-success: #3D7A58;
-  --color-warning: #B4732A;
+  --color-primary: #7667F2;
+  --color-secondary: #55D4CF;
+  --color-info: #5E86F7;
+  --color-success: #28A987;
+  --color-warning: #7C6AF6;
   --color-danger: #C84040;
 
-  --color-text-primary: #2D2C2A;
-  --color-text-secondary: #63615B;
-  --color-text-muted: #8E8C85;
+  --color-text-primary: #162033;
+  --color-text-secondary: #5F6B7C;
+  --color-text-muted: #7C8798;
 
-  --color-border: #E5E3DE;
-  --color-bg: #FAF9F7;
+  --color-border: #DDEAF8;
+  --color-bg: #F6FBFF;
   --color-panel: #FFFFFF;
 
-  --color-primary-soft: rgba(196,90,60,0.06);
-  --color-info-soft: rgba(196,90,60,0.05);
-  --color-success-soft: rgba(61,122,88,0.06);
-  --color-warning-soft: rgba(180,115,42,0.06);
+  --color-primary-soft: rgba(118, 103, 242, 0.09);
+  --color-info-soft: rgba(94, 134, 247, 0.08);
+  --color-success-soft: rgba(85, 212, 207, 0.12);
+  --color-warning-soft: rgba(124, 106, 246, 0.1);
   --color-danger-soft: rgba(200,64,64,0.06);
 
   --font-family: 'Fira Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
   /* Legacy / Semantic variables mapping to Design System */
   --accent-indigo: var(--color-primary);
+  --accent-teal: var(--color-secondary);
   --accent-green: var(--color-success);
   --accent-red: var(--color-danger);
   --accent-amber: var(--color-warning);
@@ -460,7 +461,7 @@
 }
 
 .hifi-gradient-text {
-  background: linear-gradient(90deg, #C85A3E 0%, #D48050 100%);
+  background: linear-gradient(90deg, #7667F2 0%, #55D4CF 100%);
   -webkit-background-clip: text;
   color: transparent;
 }
@@ -469,6 +470,18 @@
   font-size: 13px;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+.hifi-hero-fox {
+  width: 86px;
+  height: 86px;
+  margin: 0 auto 14px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #FFFFFF 0%, #EAF6FF 100%);
+  border: 1px solid rgba(221, 234, 248, 0.9);
+  box-shadow: 0 16px 32px rgba(118, 103, 242, 0.12);
 }
 
 .hifi-hero-pattern {
@@ -1406,15 +1419,16 @@
 }
 
 .hifi-ai-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #FFFFFF 0%, #EAF6FF 100%);
+  border: 1px solid rgba(221, 234, 248, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(118, 103, 242, 0.08);
 }
 
 .hifi-ai-msg-bubble {
@@ -3006,14 +3020,15 @@
   color: #0F172A;
 }
 .hifi-answer-avatar {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #FFEDD5;
-  color: #EA580C;
+  background: linear-gradient(135deg, #FFFFFF 0%, #EAF6FF 100%);
+  border: 1px solid #DDEAF8;
+  box-shadow: 0 4px 10px rgba(118, 103, 242, 0.08);
 }
 .hifi-answer-text {
   font-size: 13px;

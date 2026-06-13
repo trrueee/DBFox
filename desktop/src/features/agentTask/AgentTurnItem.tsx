@@ -18,7 +18,6 @@ interface AgentTurnItemProps {
   onSetSqlQuery: (sql: string) => void;
   onSendFollowUp: (text: string) => void;
   onToast: (message: string) => void;
-  onCancel: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,7 +31,6 @@ export function AgentTurnItem({
   onSetSqlQuery,
   onSendFollowUp,
   onToast,
-  onCancel,
 }: AgentTurnItemProps) {
   const hasAgent = turn.hasAgentData;
   const agentStatus = turn.agentStatus || "idle";
@@ -123,7 +121,6 @@ export function AgentTurnItem({
               <div className="task-turn-trace-body" ref={traceBodyRef}>
                 <TraceTimeline
                   items={timeline}
-                  agentStatus={agentStatus}
                   isRunning={isRunning && isLast}
                 />
                 {isDone && (
