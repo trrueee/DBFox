@@ -133,10 +133,11 @@ export function computeSummary(steps: AgentTaskStep[]): AgentTaskSummary {
     }
 
     if (step.output) {
+      const output = step.output;
       const rows =
-        (typeof (step.output as any).returned_rows === "number" ? (step.output as any).returned_rows : undefined) ??
-        (typeof (step.output as any).rowCount === "number" ? (step.output as any).rowCount : undefined) ??
-        (Array.isArray((step.output as any).rows) ? (step.output as any).rows.length : undefined);
+        (typeof output.returned_rows === "number" ? output.returned_rows : undefined) ??
+        (typeof output.rowCount === "number" ? output.rowCount : undefined) ??
+        (Array.isArray(output.rows) ? output.rows.length : undefined);
       if (typeof rows === "number" && (rowCount === null || rows > rowCount)) {
         rowCount = rows;
       }

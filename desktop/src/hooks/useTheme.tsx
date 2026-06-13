@@ -20,7 +20,9 @@ function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark") return stored;
-  } catch {}
+  } catch {
+    // Ignore storage access errors in restricted browser contexts.
+  }
   // Prefer system preference
   if (window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
   return "dark";
@@ -36,7 +38,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } else {
       root.classList.remove("dark");
     }
-    try { localStorage.setItem(STORAGE_KEY, theme); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      // Ignore storage access errors in restricted browser contexts.
+    }
   }, [theme]);
 
   const toggle = useCallback(() => {

@@ -10,6 +10,12 @@ interface ChartArtifactViewProps {
   onToast: (message: string) => void;
 }
 
+type EChartsDomElement = HTMLElement & {
+  _echarts_instance?: {
+    getDataURL: (options: { type: "png"; pixelRatio: number; backgroundColor: string }) => string;
+  };
+};
+
 export function ChartArtifactView({ artifact, onToast }: ChartArtifactViewProps) {
   const [chartType, setChartType] = useState<"line" | "bar">(artifact.chartType);
 
@@ -62,7 +68,8 @@ export function ChartArtifactView({ artifact, onToast }: ChartArtifactViewProps)
   };
 
   const handleExportPng = () => {
-    const chartInstance = (document.querySelector(`[data-chart-id="${artifact.id}"]`) as any)?._echarts_instance;
+    const chartElement = document.querySelector(`[data-chart-id="${artifact.id}"]`) as EChartsDomElement | null;
+    const chartInstance = chartElement?._echarts_instance;
     if (chartInstance) {
       const url = chartInstance.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
       const a = document.createElement("a");
