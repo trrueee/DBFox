@@ -12,10 +12,26 @@
   z-index: 200;
 }
 
+.titlebar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.titlebar-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(118, 103, 242, 0.18);
+  flex-shrink: 0;
+}
+
 .titlebar-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   letter-spacing: 0.3px;
 }
 

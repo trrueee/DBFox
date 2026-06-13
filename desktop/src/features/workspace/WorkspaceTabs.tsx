@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
-import { FileText, GitMerge, MessageSquare, Plus, Sparkles, Terminal, TrendingUp, X, Cpu, Database } from "lucide-react";
+import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Cpu, Database } from "lucide-react";
+import { FoxIcon } from "../../components/brand/FoxIcon";
 import type { WorkspaceTab } from "../../mock/databoxMock";
 
 interface WorkspaceTabsProps {
@@ -24,7 +25,7 @@ export function WorkspaceTabs({
           const isActive = tab.id === activeTabId;
           return (
             <div key={tab.id} className={`hifi-workspace-tab ${isActive ? "active" : ""}`} onClick={() => onActivateTab(tab)}>
-              {tab.type === "smart-query" && <Sparkles size={11} className="text-purple-500" />}
+              {tab.type === "smart-query" && <FoxIcon variant="ai-tight" size={13} alt="" aria-hidden="true" />}
               {tab.type === "table" && <FileText size={11} className="text-blue-500" />}
               {tab.type === "sql" && <Terminal size={11} className="text-green-500" />}
               {tab.type === "multi-table" && <GitMerge size={11} className="text-orange-500" />}

@@ -1,9 +1,8 @@
 import { useReducer, useCallback } from "react";
-import type { AgentTimelineItem } from "../workspace/agentTimeline";
 import type { AgentAnswer } from "../../lib/api/types";
 import type { AgentTabStatus } from "../../mock/databoxMock";
 import type { AgentTaskState, AgentTaskAction, AgentTaskStep } from "./types";
-import { mapTimelineItemToTaskStep, computeSummary } from "./types";
+import { computeSummary } from "./types";
 
 // ---------------------------------------------------------------------------
 // Initial state
@@ -115,44 +114,6 @@ function agentTaskReducer(state: AgentTaskState, action: AgentTaskAction): Agent
 
 export function useAgentTask(queryText: string) {
   const [state, dispatch] = useReducer(agentTaskReducer, queryText, createInitialState);
-
-  /** Hydrate state from existing timeline data (e.g., when opening a completed tab).
-   *  Resets state and rebuilds steps from the provided timeline, then finalizes with answer/status. */
-  const hydrateFromTimeline = useCallback(
-    (timeline: AgentTimelineItem[], status: AgentTabStatus | undefined, answer: AgentAnswer | null | undefined) => {
-      // Clear existing state first
-      dispatch({ type: "CLEAR" });
-      // Queue microtask to rebuild steps after clear resolves
-      queueMicrotask(() => {
-        for (const item of timeline) {
-          const step = mapTimelineItemToTaskStep(item, 0);
-          if (step.type === "thinking") {
-            dispatch({
-              type: "ADD_THINKING_STEP",
-              payload: { id: step.id, title: step.title, content: step.content, status: step.status === "running" ? "running" : "info", timestamp: step.timestamp },
-            });
-          } else if (step.type === "tool_call") {
-            dispatch({
-              type: "ADD_TOOL_CALL_STEP",
-              payload: { id: step.id, toolName: step.toolName || "tool", title: step.title, subtitle: step.subtitle, input: step.input, timestamp: step.timestamp },
-            });
-            if (step.status !== "running") {
-              dispatch({
-                type: "UPDATE_STEP",
-                payload: { id: step.id, patch: { status: step.status, output: step.output, error: step.error, latencyMs: step.latencyMs } },
-              });
-            }
-          }
-        }
-        if (status === "completed" || status === "failed") {
-          dispatch({ type: "COMPLETE_TASK", payload: { finalAnswer: answer ?? null, error: status === "failed" ? "Agent run failed" : null } });
-        } else if (status) {
-          dispatch({ type: "SET_STATUS", payload: { status } });
-        }
-      });
-    },
-    [],
-  );
 
   const addThinkingStep = useCallback(
     (id: string, title: string, content: string, status: "running" | "info" = "info") => {

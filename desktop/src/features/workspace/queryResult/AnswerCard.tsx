@@ -1,5 +1,6 @@
-import { Bot, Lightbulb, AlertTriangle, CheckCircle2, FileText } from "lucide-react";
+import { Lightbulb, AlertTriangle, CheckCircle2, FileText } from "lucide-react";
 import type { AgentAnswer } from "../../../lib/api/types";
+import { FoxIcon } from "../../../components/brand/FoxIcon";
 import { MarkdownContent } from "./MarkdownContent";
 
 interface AnswerCardProps {
@@ -30,7 +31,7 @@ export function AnswerCard({ answer }: AnswerCardProps) {
     <div className="hifi-answer-card">
       <div className="hifi-answer-card-head">
         <span className="hifi-answer-avatar">
-          <Bot size={13} />
+          <FoxIcon variant="ai-tight" size={18} alt="DataBox AI" />
         </span>
         <span>AI</span>
       </div>

@@ -295,13 +295,6 @@ export default function App() {
     setActiveTabId(tabId);
   };
 
-  const openConversationHistoryTab = () => {
-    const tabId = "conversation-history";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "对话历史", type: "conversation-history" }]));
-    setActiveTabId(tabId);
-    setRecentTab("chat");
-  };
-
   const openConversationResult = (conversation: Conversation) => {
     const tabId = `conversation-${conversation.id}`;
     const tab: WorkspaceTab = {

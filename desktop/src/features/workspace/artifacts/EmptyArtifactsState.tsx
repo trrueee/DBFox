@@ -1,10 +1,10 @@
-import { Sparkles } from "lucide-react";
+import { FoxIcon } from "../../../components/brand/FoxIcon";
 
 export function EmptyArtifactsState() {
   return (
     <div className="hifi-ai-card hifi-artifact-empty">
       <div className="hifi-ai-card-header hifi-artifact-empty-header">
-        <Sparkles size={12} className="hifi-artifact-empty-icon" />
+        <FoxIcon variant="ai-tight" size={16} alt="" aria-hidden="true" className="hifi-artifact-empty-icon" />
         <span>等待 Agent 产物</span>
       </div>
       <div className="hifi-ai-card-body hifi-artifact-empty-body">

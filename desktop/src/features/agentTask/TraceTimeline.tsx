@@ -1,17 +1,15 @@
 import { useEffect, useRef } from "react";
 import { User } from "lucide-react";
 import type { AgentTimelineItem } from "../workspace/agentTimeline";
-import type { AgentTabStatus } from "../../mock/databoxMock";
 import { ToolCallCard } from "./ToolCallCard";
 import { ThinkingStep } from "./ThinkingStep";
 
 interface TraceTimelineProps {
   items: AgentTimelineItem[];
-  agentStatus: AgentTabStatus;
   isRunning: boolean;
 }
 
-export function TraceTimeline({ items, agentStatus, isRunning }: TraceTimelineProps) {
+export function TraceTimeline({ items, isRunning }: TraceTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(items.length);
 

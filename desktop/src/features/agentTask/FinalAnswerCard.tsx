@@ -9,7 +9,7 @@ interface FinalAnswerCardProps {
   answer: AgentAnswer | null | undefined;
   artifacts: AgentArtifact[];
   suggestions: FollowUpSuggestion[] | null | undefined;
-  agentStatus: AgentTabStatus;
+  agentStatus: AgentTabStatus | "idle";
   onSendFollowUp: (text: string) => void;
   onOpenSqlConsole: () => void;
   onSetSqlQuery: (sql: string) => void;
