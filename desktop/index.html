@@ -25,8 +25,33 @@
     <div id="boot-indicator">
       <span style="font-size:40px">🦊</span>
       <h1>DataBox 正在启动…</h1>
-      <p>如果此画面持续超过 10 秒，请关闭应用后重试。<br>首次冷启动可能需要较长时间。</p>
+      <p id="boot-msg">⏳ 等待引擎…</p>
+      <pre id="boot-debug" style="display:block;margin-top:16px;padding:8px 16px;background:#1a1a2e;border-radius:6px;font-size:12px;color:#aaa;max-width:500px;overflow:auto;text-align:left"></pre>
     </div>
+    <script>
+      // Minimal inline probe — if this fails, the WebView prohibits all JS.
+      try {
+        document.title = 'OK';
+        var d = document.getElementById('boot-debug');
+        if (d) d.textContent = '[inline ok] ';
+        window.__js_works = true;
+      } catch(e) { }
+    </script>
+    <script>
+      var d = document.getElementById('boot-debug');
+      if (d) d.textContent = (d.textContent||'') + '[script2 ok] ';
+      window.addEventListener('error', function(e) {
+        if (d) { d.style.color = '#ff6b6b'; d.textContent += 'ERROR: ' + (e.message || e) + ' '; }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        if (d) { d.style.color = '#ff6b6b'; d.textContent += 'REJECT: ' + (e.reason?.message || e.reason || '') + ' '; }
+      });
+      setTimeout(function() {
+        if (window.__js_works && d && document.getElementById('boot-indicator')?.style.display !== 'none') {
+          d.textContent += '[8s timeout — module did not execute]';
+        }
+      }, 8000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
