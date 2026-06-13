@@ -64,7 +64,6 @@ function AgentApprovalCard({
 export function AgentTaskView({
   tab,
   onCancel,
-  onRegenerate,
   onApproveAgent,
   onRejectAgent,
   onSendFollowUp,
@@ -200,7 +199,6 @@ export function AgentTaskView({
             onSetSqlQuery={onSetSqlQuery}
             onSendFollowUp={(text) => onSendFollowUp(tab.id, text)}
             onToast={onToast}
-            onCancel={() => onCancel(tab.id)}
           />
         ))}
 

@@ -1,0 +1,18 @@
+:root {
+  --fox-snow: #ffffff;
+  --fox-ice: #ddeaf8;
+  --fox-purple: #7667f2;
+  --fox-navy: #061b3f;
+}
+
+.fox-icon {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  vertical-align: middle;
+}
+
+.fox-icon--sm { width: 1rem; height: 1rem; }
+.fox-icon--md { width: 1.5rem; height: 1.5rem; }
+.fox-icon--lg { width: 2rem; height: 2rem; }
+.fox-icon--xl { width: 3rem; height: 3rem; }

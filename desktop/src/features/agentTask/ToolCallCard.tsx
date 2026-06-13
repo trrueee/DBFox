@@ -57,11 +57,6 @@ function formatJson(value: unknown): string {
   }
 }
 
-function computeDetailClip(expanded: boolean): string {
-  // Use a local clip class to animate expand
-  return "";
-}
-
 export function ToolCallCard({ data, isLatest = false }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(data.status === "failed");
   const hasDetail = Boolean(data.input || data.output || data.error);

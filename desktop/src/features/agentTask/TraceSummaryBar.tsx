@@ -4,7 +4,7 @@ import type { AgentTaskSummary } from "./types";
 
 interface TraceSummaryBarProps {
   summary: AgentTaskSummary;
-  status: AgentTabStatus;
+  status: AgentTabStatus | "idle";
   expanded: boolean;
   onToggle: () => void;
 }
