@@ -174,18 +174,68 @@ http://localhost:5173
 
 ### 启动 Tauri 桌面应用
 
+开发模式下需要先生成 Token（否则 Engine 认证会失败）：
+
 ```bash
+# 生成开发用 Token
+python build_sidecar.py --token-only
+
 cd desktop
 npm install
 npm run tauri -- dev
 ```
 
-构建桌面应用：
+构建桌面应用（完整打包流程）：
+
+```bash
+# 从项目根目录执行
+
+# 1. 安装 Python 依赖及 PyInstaller
+pip install -r requirements.txt
+pip install pyinstaller
+
+# 2. 构建 Python sidecar + 生成静态 Token
+python build_sidecar.py
+
+# 3. 构建 Tauri 桌面安装包
+cd desktop
+npm install
+npm run tauri -- build
+```
+
+清理并重新打包：
+
+```bash
+# Windows PowerShell
+Remove-Item -Recurse -Force desktop/dist -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force desktop/src-tauri/target -ErrorAction SilentlyContinue
+Remove-Item -Force engine/token_preset.py -ErrorAction SilentlyContinue
+Remove-Item -Force desktop/.env.local -ErrorAction SilentlyContinue
+
+# 然后重新执行上述三个步骤
+python build_sidecar.py
+cd desktop && npm run tauri -- build
+```
+
+打包产物位于：
+
+```text
+desktop/src-tauri/target/release/bundle/msi/DataBox_1.0.0_x64_en-US.msi
+desktop/src-tauri/target/release/bundle/nsis/DataBox_1.0.0_x64-setup.exe
+```
+
+若安装后出现白屏，请检查 `%TEMP%/databox-sidecar.log` 确认后端引擎是否启动成功。
+
+### 更新应用图标
 
 ```bash
 cd desktop
-npm run tauri -- build
+
+# 从 1024x1024 PNG 源文件生成所有平台图标
+npm run tauri -- icon ../assets/fox-icon-source.png
 ```
+
+图标素材位于 `desktop/public/assets/fox/`，Tauri 图标输出到 `desktop/src-tauri/icons/`。
 
 ---
 
