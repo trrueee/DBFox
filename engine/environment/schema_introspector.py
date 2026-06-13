@@ -86,7 +86,7 @@ class SchemaIntrospector:
             foreign_keys = self._sqlite_foreign_keys(conn, table_name)
             sample_rows = self._sqlite_sample(conn, table_name)
             row_count = conn.execute(
-                f'SELECT COUNT(*) FROM "{table_name}"'
+                f'SELECT COUNT(*) FROM {_quote_sql_identifier(table_name)}'
             ).fetchone()[0]
             tables.append(
                 TableInventory(
@@ -102,7 +102,7 @@ class SchemaIntrospector:
 
     def _sqlite_columns(self, conn: Any, table_name: str) -> list[ColumnInventory]:
         columns: list[ColumnInventory] = []
-        rows = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+        rows = conn.execute(f"PRAGMA table_info({_quote_sql_identifier(table_name)})").fetchall()
         # col: cid, name, type, notnull, dflt_value, pk
         for col in rows:
             columns.append(
@@ -119,7 +119,7 @@ class SchemaIntrospector:
 
     def _sqlite_foreign_keys(self, conn: Any, table_name: str) -> list[ForeignKeyInventory]:
         fks: list[ForeignKeyInventory] = []
-        rows = conn.execute(f'PRAGMA foreign_key_list("{table_name}")').fetchall()
+        rows = conn.execute(f"PRAGMA foreign_key_list({_quote_sql_identifier(table_name)})").fetchall()
         # col: id, seq, table, from, to, on_update, on_delete, match
         for fk in rows:
             fks.append(
@@ -133,7 +133,10 @@ class SchemaIntrospector:
 
     def _sqlite_sample(self, conn: Any, table_name: str, limit: int = 3) -> list[dict[str, Any]]:
         try:
-            rows = conn.execute(f'SELECT * FROM "{table_name}" LIMIT {limit}').fetchall()
+            rows = conn.execute(
+                f"SELECT * FROM {_quote_sql_identifier(table_name)} LIMIT ?",
+                (limit,),
+            ).fetchall()
             return [dict(r) for r in rows]
         except Exception:
             return []
@@ -194,7 +197,7 @@ class SchemaIntrospector:
             columns = self._mysql_columns(cursor, database, table_name)
             fks = self._mysql_foreign_keys(cursor, database, table_name)
             sample = self._mysql_sample(conn, table_name)
-            cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+            cursor.execute(f"SELECT COUNT(*) FROM {_quote_sql_identifier(table_name, '`')}")
             row_count = cursor.fetchone()[0]
             tables.append(
                 TableInventory(
@@ -255,7 +258,10 @@ class SchemaIntrospector:
     def _mysql_sample(self, conn: Any, table_name: str, limit: int = 3) -> list[dict[str, Any]]:
         try:
             cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM `{table_name}` LIMIT {limit}")
+            cursor.execute(
+                f"SELECT * FROM {_quote_sql_identifier(table_name, '`')} LIMIT %s",
+                (limit,),
+            )
             col_names = [desc[0] for desc in cursor.description]
             return [dict(zip(col_names, row)) for row in cursor.fetchall()]
         except Exception:
@@ -523,12 +529,36 @@ class SchemaIntrospector:
             )
             for col_name, data_type, column_type, nullable, default, is_pk, is_fk in cursor.fetchall()
         ]
+
+        # ---- Resolve real primary keys via table_constraints ----
+        pk_cols: set[str] = set()
+        try:
+            pk_rows = cursor.execute(
+                """
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                 AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'PRIMARY KEY'
+                  AND tc.table_schema = ?
+                  AND tc.table_name = ?
+                """,
+                (schema, table_name),
+            ).fetchall()
+            pk_cols = {str(r[0]) for r in pk_rows}
+        except Exception:
+            pass
+
+        # ---- Resolve real foreign keys ----
         fk_cols = {fk.column_name for fk in self._duckdb_foreign_keys(conn, schema, table_name)}
+
         for column in columns:
-            if column.column_name == "id":
+            if column.column_name in pk_cols:
                 column.is_primary_key = True
             if column.column_name in fk_cols:
                 column.is_foreign_key = True
+
         return columns
 
     def _duckdb_foreign_keys(self, conn: Any, schema: str, table_name: str) -> list[ForeignKeyInventory]:
@@ -570,7 +600,9 @@ class SchemaIntrospector:
     ) -> list[dict[str, Any]]:
         try:
             cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM {_qualified_name(schema, table_name, quote)} LIMIT {limit}")
+            cursor.execute(
+                f"SELECT * FROM {_qualified_name(schema, table_name, quote)} LIMIT {limit}"
+            )
             col_names = [desc[0] for desc in cursor.description]
             return [dict(zip(col_names, row)) for row in cursor.fetchall()]
         except Exception:

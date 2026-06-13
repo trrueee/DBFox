@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listColumns,
   listDatasources,
@@ -20,6 +20,9 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
   const [loadingSchema, setLoadingSchema] = useState(false);
   const [schemaError, setSchemaError] = useState("");
   const [tableColumns, setTableColumns] = useState<Record<string, EngineColumn[]>>({});
+
+  // Guard against double-fetch on mount in React Strict Mode
+  const mountedRef = useRef(false);
 
   const activeDatasource = useMemo(
     () => datasources.find((item) => item.id === activeDatasourceId) || null,
@@ -44,25 +47,86 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     };
   }, [activeDatasource]);
 
+  // ---- Initial load (mount once) ----
+
   const loadDatasources = useCallback(async () => {
     setLoadingSchema(true);
     setSchemaError("");
     try {
       const nextDatasources = await listDatasources();
       setDatasources(nextDatasources);
-      const nextActive = activeDatasourceId && nextDatasources.some((item) => item.id === activeDatasourceId)
-        ? activeDatasourceId
-        : nextDatasources[0]?.id || "";
-      setActiveDatasourceId(nextActive);
-      setTables(nextActive ? await listTables(nextActive) : []);
+      // Pick the first available datasource (or keep current if still valid)
+      setActiveDatasourceId((prev) => {
+        if (prev && nextDatasources.some((item) => item.id === prev)) {
+          return prev;
+        }
+        return nextDatasources[0]?.id || "";
+      });
     } catch (err) {
       setSchemaError(err instanceof Error ? err.message : "读取本地 Engine 数据源失败");
       setDatasources([]);
-      setTables([]);
     } finally {
       setLoadingSchema(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (mountedRef.current) return;
+    mountedRef.current = true;
+    void loadDatasources();
+  }, [loadDatasources]);
+
+  // ---- Fetch tables when active datasource changes ----
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTables = async () => {
+      if (!activeDatasourceId) {
+        if (!cancelled) setTables([]);
+        return;
+      }
+      try {
+        const result = await listTables(activeDatasourceId);
+        if (!cancelled) setTables(result);
+      } catch (err) {
+        if (!cancelled) {
+          setSchemaError(err instanceof Error ? err.message : "读取表结构失败");
+        }
+      }
+    };
+    void fetchTables();
+    return () => {
+      cancelled = true;
+    };
   }, [activeDatasourceId]);
+
+  // ---- Fetch columns when table list is ready ----
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchColumns = async () => {
+      if (tables.length === 0) {
+        if (!cancelled) setTableColumns({});
+        return;
+      }
+      const cols: Record<string, EngineColumn[]> = {};
+      for (const table of tables) {
+        if (cancelled) return;
+        try {
+          cols[table.table_name] = await listColumns(table.id);
+        } catch {
+          // Column search is an enhancement; keep the table list usable
+        }
+      }
+      if (!cancelled) setTableColumns(cols);
+    };
+    void fetchColumns();
+    return () => {
+      cancelled = true;
+    };
+  }, [tables]);
+
+  // ---- Manual refresh ----
 
   const refreshSchema = useCallback(async () => {
     if (!activeDatasourceId) {
@@ -79,41 +143,6 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
       setLoadingSchema(false);
     }
   }, [activeDatasourceId, onToast]);
-
-  useEffect(() => {
-    void loadDatasources();
-  }, [loadDatasources]);
-
-  useEffect(() => {
-    if (!activeDatasourceId) return;
-    const fetchTables = async () => {
-      try {
-        setTables(await listTables(activeDatasourceId));
-      } catch (err) {
-        setSchemaError(err instanceof Error ? err.message : "读取表结构失败");
-      }
-    };
-    void fetchTables();
-  }, [activeDatasourceId]);
-
-  useEffect(() => {
-    if (tables.length === 0) {
-      setTableColumns({});
-      return;
-    }
-    const fetchColumns = async () => {
-      const cols: Record<string, EngineColumn[]> = {};
-      for (const table of tables) {
-        try {
-          cols[table.table_name] = await listColumns(table.id);
-        } catch {
-          // Column search is an enhancement; keep the table list usable if a column request fails.
-        }
-      }
-      setTableColumns(cols);
-    };
-    void fetchColumns();
-  }, [tables]);
 
   return {
     datasources,
