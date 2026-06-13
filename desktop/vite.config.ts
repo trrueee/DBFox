@@ -29,29 +29,8 @@ export default defineConfig({
   build: {
     // The programmatic build (scripts/build.mjs) also strips crossorigin
     // from the output HTML because Tauri's custom protocol lacks CORS.
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: "react-vendor",
-              test: /node_modules[\/](react|react-dom|scheduler)[\/]/,
-              priority: 100,
-            },
-            {
-              name: "charting",
-              test: /node_modules[\/](echarts|echarts-for-react|zrender)[\/]/,
-              priority: 80,
-            },
-            {
-              name: "vendor",
-              test: /node_modules[\/]/,
-              maxSize: 350 * 1024,
-              priority: 10,
-            },
-          ],
-        },
-      },
-    },
+    // Note: codeSplitting groups are deliberately NOT set here because
+    // manual chunk naming can break ES module resolution under Tauri's
+    // custom protocol, yielding "a is not a function" in production.
   },
 });
