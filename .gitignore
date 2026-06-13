@@ -50,6 +50,11 @@ checkpoints/
 *.checkpoint.sqlite-shm
 *.checkpoint.sqlite-wal
 
+# Sidecar build artifacts
+pyinstaller_dist/
+pyinstaller_build/
+databox_engine.spec
+
 # Frontend / Tauri
 desktop/node_modules/
 desktop/dist/
