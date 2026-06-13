@@ -53,7 +53,7 @@ checkpoints/
 # Sidecar build artifacts
 pyinstaller_dist/
 pyinstaller_build/
-databox_engine.spec
+databox-engine.spec
 .build_venv/
 engine/token_preset.py
 desktop/.env.local
