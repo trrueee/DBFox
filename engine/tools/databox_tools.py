@@ -5,11 +5,11 @@ from typing import Any
 from engine.tools.db_tools import (
     db_inspect,
     db_observe,
-    db_preview,
     db_query,
     db_remember,
     db_search,
 )
+from engine.tools.safe_preview import db_preview
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.tool_registry import ToolContext, ToolRegistry
 
