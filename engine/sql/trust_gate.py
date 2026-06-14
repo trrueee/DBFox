@@ -53,6 +53,21 @@ class ExecutionSafetyDecision(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _public_guardrail_result(guardrail: GuardrailResult | dict[str, Any]) -> GuardrailResult:
+    """Strip internal-only parser artifacts from guardrail payloads.
+
+    guardrail_check intentionally carries _parsed_ast for TrustGate's internal
+    schema validation path. Once schema validation has consumed it, every value
+    stored in ExecutionSafetyDecision may be persisted or returned by FastAPI,
+    so it must be JSON serializable.
+    """
+    return {
+        key: value
+        for key, value in dict(guardrail).items()
+        if not key.startswith("_")
+    }  # type: ignore[return-value]
+
+
 class TrustGate:
     """Schema and safety gate for AI-generated SQL."""
 
@@ -68,9 +83,10 @@ class TrustGate:
         guardrail = guardrail_check(sql, dialect=dialect)
         parsed_ast = guardrail.get("_parsed_ast")
         schema_warnings = self.schema_validator(parsed_ast or sql, self.db, datasource_id)
+        public_guardrail = _public_guardrail_result(guardrail)
         messages: list[str] = []
 
-        guardrail_result = guardrail["result"]
+        guardrail_result = public_guardrail["result"]
         if guardrail_result == "reject":
             risk_level: RiskLevel = "danger"
             messages.append("Guardrail rejected this SQL. Execution is blocked.")
@@ -79,7 +95,7 @@ class TrustGate:
             if schema_warnings:
                 messages.append("Schema validation found unknown tables or columns.")
             if guardrail_result == "warn":
-                messages.append(guardrail["message"])
+                messages.append(public_guardrail["message"])
         else:
             risk_level = "safe"
             messages.append("SQL passed schema validation and guardrail checks.")
@@ -98,7 +114,7 @@ class TrustGate:
         return {
             "sql": sql,
             "schemaWarnings": schema_warnings,
-            "guardrail": guardrail,
+            "guardrail": public_guardrail,
             "riskLevel": risk_level,
             "requiresConfirmation": requires_confirmation,
             "messages": messages,
