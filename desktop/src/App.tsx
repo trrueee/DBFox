@@ -46,7 +46,6 @@ export default function App() {
   }, []);
   const {
     datasources,
-    activeDatasource,
     activeDatasourceForSettings,
     activeDatasourceId,
     setActiveDatasourceId,
@@ -160,23 +159,22 @@ export default function App() {
 
   const openConnectionManagerTab = useCallback(() => {
     const tabId = "datasource-settings";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "数据源管理", type: "datasource-settings" }]));
+    setTabs((prev) =>
+      prev.some((tab) => tab.id === tabId)
+        ? prev.map((tab) => (tab.id === tabId ? { ...tab, title: "数据源管理" } : tab))
+        : [...prev, { id: tabId, title: "数据源管理", type: "datasource-settings" }],
+    );
     setActiveTabId(tabId);
   }, []);
 
   const openNewConnectionTab = useCallback(() => {
     const tabId = "datasource-settings";
-    setTabs((prev) => (prev.some((tab) => tab.id === tabId) ? prev : [...prev, { id: tabId, title: "新建数据源", type: "datasource-settings" }]));
+    setTabs((prev) =>
+      prev.some((tab) => tab.id === tabId)
+        ? prev.map((tab) => (tab.id === tabId ? { ...tab, title: "新建数据源" } : tab))
+        : [...prev, { id: tabId, title: "新建数据源", type: "datasource-settings" }],
+    );
     setActiveTabId(tabId);
-    
-    // Auto toggle add connection form
-    setTimeout(() => {
-      const formEl = document.querySelector(".field-label") as HTMLElement | null;
-      if (!formEl) {
-        const addBtn = document.querySelector(".inline-flex[onClick*='setShowAddForm']") || document.querySelector("button[style*='cursor']");
-        if (addBtn) (addBtn as HTMLButtonElement).click();
-      }
-    }, 250);
   }, []);
 
   const openMultiTableWorkspace = useCallback((tables: string[]) => {
@@ -583,26 +581,6 @@ export default function App() {
             }}
           />
         </main>
-
-        {/* Desktop Status Bar */}
-        <footer className="app-statusbar">
-          <div className="app-statusbar-left">
-            <span className="app-status-dot-wrap">
-              <span className="app-status-dot" />
-              Engine Connected (Local)
-            </span>
-            {activeDatasource && (
-              <span>数据源: <strong>{activeDatasource.name}</strong> ({activeDatasource.db_type})</span>
-            )}
-          </div>
-          <div className="app-statusbar-right">
-            {activeTab && (
-              <span>活动标签页: {activeTab.title}</span>
-            )}
-            <span>UTF-8</span>
-            <span>MySQL 8.0</span>
-          </div>
-        </footer>
       </div>
 
       <DataSourceContextMenu

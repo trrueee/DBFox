@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
@@ -41,7 +41,13 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                let _ = window;
+                if let Some(engine) = window.try_state::<PythonEngine>() {
+                    if let Ok(mut guard) = engine.0.lock() {
+                        if let Some(ref mut child) = *guard {
+                            let _ = child.kill();
+                        }
+                    }
+                }
             }
         })
         .run(tauri::generate_context!())
@@ -151,6 +157,36 @@ fn log_sidecar_error(message: &str) {
     eprintln!("{}", message);
 }
 
+#[cfg(target_os = "windows")]
+const SIDECAR_BINARY_NAMES: &[&str] = &[
+    "databox-engine.exe",
+    "databox-engine-x86_64-pc-windows-msvc.exe",
+];
+
+#[cfg(target_os = "macos")]
+const SIDECAR_BINARY_NAMES: &[&str] = &[
+    "databox-engine",
+    "databox-engine-x86_64-apple-darwin",
+];
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+const SIDECAR_BINARY_NAMES: &[&str] = &[
+    "databox-engine",
+    "databox-engine-x86_64-unknown-linux-gnu",
+];
+
+fn sidecar_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    for name in SIDECAR_BINARY_NAMES {
+        candidates.push(exe_dir.join(name));
+        candidates.push(exe_dir.join("resources").join(name));
+        candidates.push(exe_dir.join("_up_").join("binaries").join(name));
+        candidates.push(exe_dir.join("resources").join("binaries").join(name));
+        candidates.push(exe_dir.join("binaries").join(name));
+    }
+    candidates
+}
+
 fn spawn_python_engine() -> Option<Child> {
     if cfg!(debug_assertions) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -193,33 +229,10 @@ fn spawn_python_engine() -> Option<Child> {
             }
         };
 
-        // Resolve target triplet name
-        let sidecar_name = if cfg!(target_os = "windows") {
-            "databox-engine-x86_64-pc-windows-msvc.exe".to_string()
-        } else if cfg!(target_os = "macos") {
-            "databox-engine-x86_64-apple-darwin".to_string()
-        } else {
-            "databox-engine-x86_64-unknown-linux-gnu".to_string()
-        };
+        let candidates = sidecar_candidate_paths(exe_dir);
+        let sidecar_path = candidates.iter().find(|path| path.exists()).cloned();
 
-        // Tauri packages sidecars next to the executable, inside "_up_", or "resources"
-        let candidates = [
-            exe_dir.join(&sidecar_name),
-            exe_dir.join("_up_").join("binaries").join(&sidecar_name),
-            exe_dir.join("resources").join("binaries").join(&sidecar_name),
-            exe_dir.join("binaries").join(&sidecar_name),
-        ];
-
-        let mut sidecar_path = None;
-        for path in &candidates {
-            if path.exists() {
-                sidecar_path = Some(path.clone());
-                break;
-            }
-        }
-
-        // Fallback if none exist yet (helps during tauri build packaging phase)
-        let final_path = sidecar_path.unwrap_or_else(|| exe_dir.join(&sidecar_name));
+        let final_path = sidecar_path.unwrap_or_else(|| candidates[0].clone());
 
         match Command::new(&final_path).current_dir(exe_dir).spawn() {
             Ok(child) => {
@@ -234,5 +247,29 @@ fn spawn_python_engine() -> Option<Child> {
                 None
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_candidates_include_generic_binary_next_to_app() {
+        let exe_dir = PathBuf::from(r"C:\DataBox");
+        let candidates = sidecar_candidate_paths(&exe_dir);
+
+        assert!(candidates.contains(&exe_dir.join("databox-engine.exe")));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn sidecar_candidates_keep_triplet_binary_compatibility() {
+        let exe_dir = PathBuf::from(r"C:\DataBox");
+        let candidates = sidecar_candidate_paths(&exe_dir);
+
+        assert!(candidates.contains(
+            &exe_dir.join("databox-engine-x86_64-pc-windows-msvc.exe")
+        ));
     }
 }

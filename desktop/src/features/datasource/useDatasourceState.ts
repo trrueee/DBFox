@@ -13,6 +13,19 @@ type UseDatasourceStateOptions = {
   onToast: (message: string) => void;
 };
 
+const DATASOURCE_LOAD_RETRY_DELAYS_MS = [300, 900, 1500, 3000, 5000];
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isTransientEngineFetchError(error: unknown) {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("failed to fetch") || message.includes("networkerror") || message.includes("load failed");
+}
+
 export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
   const [datasources, setDatasources] = useState<EngineDataSource[]>([]);
   const [activeDatasourceId, setActiveDatasourceId] = useState("");
@@ -53,17 +66,29 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     setLoadingSchema(true);
     setSchemaError("");
     try {
-      const nextDatasources = await listDatasources();
-      setDatasources(nextDatasources);
-      // Pick the first available datasource (or keep current if still valid)
-      setActiveDatasourceId((prev) => {
-        if (prev && nextDatasources.some((item) => item.id === prev)) {
-          return prev;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const nextDatasources = await listDatasources();
+          setDatasources(nextDatasources);
+          // Pick the first available datasource (or keep current if still valid)
+          setActiveDatasourceId((prev) => {
+            if (prev && nextDatasources.some((item) => item.id === prev)) {
+              return prev;
+            }
+            return nextDatasources[0]?.id || "";
+          });
+          return;
+        } catch (err) {
+          const retryDelay = DATASOURCE_LOAD_RETRY_DELAYS_MS[attempt];
+          if (retryDelay !== undefined && isTransientEngineFetchError(err)) {
+            await delay(retryDelay);
+            continue;
+          }
+          throw err;
         }
-        return nextDatasources[0]?.id || "";
-      });
+      }
     } catch (err) {
-      setSchemaError(err instanceof Error ? err.message : "读取本地 Engine 数据源失败");
+      setSchemaError(err instanceof Error ? err.message : "读取数据源失败");
       setDatasources([]);
     } finally {
       setLoadingSchema(false);
@@ -130,7 +155,7 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
 
   const refreshSchema = useCallback(async () => {
     if (!activeDatasourceId) {
-      onToast("没有活动数据源");
+      await loadDatasources();
       return;
     }
     setLoadingSchema(true);
@@ -142,7 +167,7 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     } finally {
       setLoadingSchema(false);
     }
-  }, [activeDatasourceId, onToast]);
+  }, [activeDatasourceId, loadDatasources, onToast]);
 
   return {
     datasources,
