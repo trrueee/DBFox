@@ -333,7 +333,6 @@ class ToolRegistry:
 # ---------------------------------------------------------------------------
 
 TOOL_GROUP_MAP: dict[str, str] = {
-    "workspace.": "workspace",
     "environment.": "environment",
     "schema.": "schema",
     "db.": "db",

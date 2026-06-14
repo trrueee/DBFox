@@ -57,7 +57,7 @@ def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> d
         args = call["args"] or {}
         call_id = call["id"]
 
-        logger.info("Executing tool %s with args %s", internal_name, args)
+        logger.info("Executing tool %s", internal_name)
 
         trace_events.append({
             "type": "agent.tool.started",
@@ -105,7 +105,7 @@ def _execute_tool(
     args: dict[str, Any],
 ) -> ToolObservation:
     tool = registry.require(tool_name)
-    print(f"\n[DEBUG TOOL] tool_name={tool_name}, state.get('safety')={state.get('safety')}, state.get('execute')={state.get('execute')}")
+    logger.debug("[DEBUG TOOL] tool_name=%s, state.get('safety')=%s, state.get('execute')=%s", tool_name, state.get('safety'), state.get('execute'))
     if hasattr(tool, "base_tool") and tool.base_tool is not None:
         merged_args = dict(args)
         if "question" not in merged_args and req is not None:
@@ -280,14 +280,6 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
     if tool_name == "followup.suggest":
         suggestions = output.get("suggestions") or []
         return f"[followup.suggest] {len(suggestions)} suggestion(s) generated."
-
-    if tool_name.startswith("workspace."):
-        answer = output.get("answer", "")
-        proposed = output.get("proposed_sql", "")
-        parts = [f"[{tool_name}] {answer[:300]}"]
-        if proposed:
-            parts.append(f"proposed_sql={proposed[:200]}")
-        return " ".join(parts)
 
     if tool_name == "schema.list_tables":
         tables = output.get("tables") or []

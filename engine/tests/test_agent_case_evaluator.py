@@ -216,16 +216,6 @@ def test_backup_tool_causes_hard_failure():
 # ─── workspace context usage ────────────────────────────────────
 
 
-def test_workspace_assist_auto_execute_fails():
-    task = _make_task(
-        workspace_context_json=json.dumps({"active_sql": "SELECT 1", "last_error": "bad column"}),
-    )
-    resp = _make_response(steps=[_step("sql.execute_readonly")])
-    result = evaluator.evaluate(task, resp)
-    assert not result.passed
-    assert any("auto-execute" in r.lower() or "must not" in r.lower() for r in result.failure_reasons)
-
-
 # ─── response contract ──────────────────────────────────────────
 
 
@@ -335,8 +325,8 @@ def test_evaluator_golden_sql_isomorphism(db_session, test_datasource, monkeypat
 
 
 
-def test_evaluator_plan_similarity_jaccard(db_session, test_datasource, monkeypatch):
-    # Test fallback query plan Jaccard similarity when execution is skipped
+def test_evaluator_skipped_execution_sql_similarity(db_session, test_datasource):
+    # Test fallback SQL similarity when execution is skipped
     from engine.models import GoldenSQL
     # Add a golden sql record so evaluator uses GoldenSQL path
     golden = GoldenSQL(
@@ -347,53 +337,25 @@ def test_evaluator_plan_similarity_jaccard(db_session, test_datasource, monkeypa
     db_session.add(golden)
     db_session.commit()
 
-    expected_plan_dict = {
-        "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
-        "dimensions": [{"name": "status", "column": "users.status"}],
-        "filters": [{"column": "users.status", "op": "=", "value": "active"}]
-    }
-
-    def mock_build(self, datasource_id, question, *args, **kwargs):
-        # returns a QueryPlan object or dict
-        from engine.agent_core.types import QueryPlan
-        return QueryPlan.model_validate({
-            "analysis_goal": "lookup",
-            "metrics": expected_plan_dict["metrics"],
-            "dimensions": expected_plan_dict["dimensions"],
-            "filters": expected_plan_dict["filters"],
-            "candidate_tables": ["users"],
-            "raw_plan": {}
-        })
-
-    monkeypatch.setattr("engine.semantic.QueryPlanBuilder.build", mock_build)
-
     evaluator = AgentCaseEvaluator(db=db_session)
     task = _make_task(datasource_id=test_datasource.id, question="Get active users")
 
-    # Test 1: Identical query plan, skipped execution
+    # Test 1: Identical SQL, skipped execution
     resp1 = _make_response(
-        query_plan={
-            "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
-            "dimensions": [{"name": "status", "column": "users.status"}],
-            "filters": [{"column": "users.status", "op": "=", "value": "active"}]
-        },
+        sql="SELECT id FROM users WHERE status = 'active'",
         execution={"reason": "Request execute=false; skipped"}
     )
     res1 = evaluator.evaluate(task, resp1)
     assert res1.passed
     assert res1.score == 1.0
 
-    # Test 2: Plan with slightly different filter
+    # Test 2: Substantially different SQL
     resp2 = _make_response(
-        query_plan={
-            "metrics": [{"name": "total_users", "column": "users.id", "agg": "count"}],
-            "dimensions": [{"name": "status", "column": "users.status"}],
-            "filters": [{"column": "users.status", "op": "=", "value": "inactive"}] # different value
-        },
+        sql="SELECT total_amount FROM orders",
         execution={"reason": "Request execute=false; skipped"}
     )
     res2 = evaluator.evaluate(task, resp2)
     assert not res2.passed
-    assert "similarity" in "".join(res2.failure_reasons)
+    assert "similarity is low" in "".join(res2.failure_reasons)
 
 
