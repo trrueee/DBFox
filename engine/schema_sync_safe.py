@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from engine.crypto import decrypt_password
@@ -82,18 +83,15 @@ def _build_postgresql_schema_snapshot(
         port = tunnel.local_bind_port
 
     ssl_params = build_postgres_ssl_params(_ds_connection_dict(ds))
-    engine = create_engine(
-        "postgresql+psycopg2://",
-        connect_args={
-            "host": host,
-            "port": port,
-            "user": user,
-            "password": password,
-            "database": database_name,
-            "connect_timeout": 5,
-            **ssl_params,
-        },
+    dsn = URL.create(
+        drivername="postgresql+psycopg2",
+        username=user,
+        password=password,
+        host=host,
+        port=port,
+        database=database_name,
     )
+    engine = create_engine(dsn, connect_args={"connect_timeout": 5, **ssl_params})
 
     try:
         tables_to_insert: list[SchemaTable] = []
