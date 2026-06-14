@@ -5,6 +5,12 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 struct PythonEngine(Mutex<Option<Child>>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,11 +26,7 @@ struct ConversationRecord {
 
 impl Drop for PythonEngine {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.0.lock() {
-            if let Some(ref mut child) = *guard {
-                let _ = child.kill();
-            }
-        }
+        stop_python_engine(self);
     }
 }
 
@@ -40,13 +42,12 @@ pub fn run() {
             delete_conversation
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
+            if matches!(
+                event,
+                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+            ) {
                 if let Some(engine) = window.try_state::<PythonEngine>() {
-                    if let Ok(mut guard) = engine.0.lock() {
-                        if let Some(ref mut child) = *guard {
-                            let _ = child.kill();
-                        }
-                    }
+                    stop_python_engine(&engine);
                 }
             }
         })
@@ -155,6 +156,34 @@ fn log_sidecar_error(message: &str) {
     let entry = format!("[{}] {}\n", ts, message);
     let _ = std::fs::write(&log_path, entry);
     eprintln!("{}", message);
+}
+
+fn stop_python_engine(engine: &PythonEngine) {
+    if let Ok(mut guard) = engine.0.lock() {
+        if let Some(child) = guard.take() {
+            stop_engine_child(child);
+        }
+    }
+}
+
+fn stop_engine_child(mut child: Child) {
+    let pid = child.id();
+
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+
+        if status.map(|status| status.success()).unwrap_or(false) {
+            let _ = child.wait();
+            return;
+        }
+    }
+
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 #[cfg(target_os = "windows")]
