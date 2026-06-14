@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, type CSSProperties, type MouseEvent, useCallback } from "react";
+import { useEffect, useState, useMemo, useRef, type MouseEvent, useCallback } from "react";
 import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
 import "./App.css";
 import { setDialogContainer } from "./components/ui/dialog";
@@ -27,7 +27,6 @@ import TitleBar from "./components/TitleBar";
 import { testLlmConnection } from "./lib/api/agent";
 
 export default function App() {
-  const [scale, setScale] = useState(1);
   const [treeSearch, setTreeSearch] = useState("");
   const [askInputValue, setAskInputValue] = useState("帮我查一下“市场运营部”上个月发布了多少资产？");
   const [tabs, setTabs] = useState<WorkspaceTab[]>([{ id: "smart-query", title: "问数工作台", type: "smart-query" }]);
@@ -75,7 +74,7 @@ export default function App() {
   useEffect(() => {
     const handleMouseMove = (e: globalThis.MouseEvent) => {
       if (!resizingRef.current) return;
-      const delta = (e.clientX - resizingRef.current.startX) / scale;
+      const delta = e.clientX - resizingRef.current.startX;
       const next = Math.max(180, Math.min(480, resizingRef.current.startWidth + delta));
       setSidebarWidth(next);
     };
@@ -90,24 +89,13 @@ export default function App() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [scale]);
+  }, []);
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
 
   const msgIdSeq = useRef(1);
   const nextMsgId = useCallback(() => ++msgIdSeq.current, []);
   const tabSeqRef = useRef({ sql: 1, multiTable: 1, queryResult: 1 });
-
-  useEffect(() => {
-    const handleResize = () => {
-      const targetWidth = 1598;
-      const targetHeight = 1066;
-      setScale(Math.min(window.innerWidth / targetWidth, window.innerHeight / targetHeight));
-    };
-    window.addEventListener("resize", handleResize);
-    handleResize();
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   useEffect(() => {
     const handleDocumentClick = () => setContextMenu((prev) => ({ ...prev, visible: false }));
@@ -515,15 +503,14 @@ export default function App() {
   };
 
   return (
-    <div className="hifi-viewport-wrapper">
+    <div className="app-shell">
       <div
-        className="hifi-canvas-board"
-        style={{ "--scale": scale } as CSSProperties}
+        className="app-shell-inner"
         ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
         <TitleBar />
-        {/* Main Work Area */}
-        <main className="hifi-workspace" style={{ height: "calc(1066px - 64px)", paddingTop: 0, paddingBottom: 0 }}>
+        {/* Window body: sidebar + main surface + right drawer */}
+        <main className="app-body">
           <DataSourceTree
             treeSearch={treeSearch}
             selectedTables={selectedTables}
@@ -547,20 +534,14 @@ export default function App() {
           {/* Resize handle */}
           {!sidebarCollapsed && (
             <div
+              className="app-resizer"
               onMouseDown={handleResizeStart}
-              style={{
-                width: 4, flexShrink: 0, cursor: "col-resize",
-                background: "transparent",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-border)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             />
           )}
 
-          <section className="hifi-col hifi-main-workspace-col" style={{ gap: 0 }}>
-            {/* Top Workspace Tab Bar Container */}
-            <div className="hifi-top-tabs-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--color-panel)", borderBottom: "1px solid var(--color-border)", height: 40, flexShrink: 0 }}>
+          <section className="app-main">
+            {/* Top Workspace Tab Bar */}
+            <div className="app-tabbar">
               <WorkspaceTabs
                 tabs={tabs}
                 activeTabId={activeTabId}
@@ -571,22 +552,21 @@ export default function App() {
                 onCloseTab={closeTab}
                 onOpenSqlConsole={openSqlConsole}
               />
-              
+
               {/* Top Right Actions */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 12 }}>
+              <div className="app-tabbar-actions">
                 <button
-                  className="hifi-icon-btn text-xs font-semibold"
-                  style={{ width: "auto", height: 26, padding: "0 8px", display: "flex", alignItems: "center", gap: 4, borderRadius: 4, border: "1px solid var(--color-border)", background: "var(--color-bg)", fontSize: 11 }}
+                  className="app-cmd-btn"
                   onClick={() => setShowCommandPalette(true)}
                   title="打开命令面板 (⌘K)"
                 >
-                  <span style={{ color: "var(--color-text-secondary)" }}>命令面板</span>
-                  <kbd style={{ background: "var(--color-border)", padding: "0 4px", borderRadius: 3, fontSize: 9 }}>⌘K</kbd>
+                  <span>命令面板</span>
+                  <kbd>⌘K</kbd>
                 </button>
               </div>
             </div>
-            
-            <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+
+            <div className="app-main-scroll">
               {renderActiveTab()}
             </div>
           </section>
@@ -604,18 +584,18 @@ export default function App() {
           />
         </main>
 
-        {/* Professional Desktop Status Bar at the bottom */}
-        <footer className="hifi-status-bar" style={{ height: 32, background: "var(--color-panel)", borderTop: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", fontSize: 11, color: "var(--color-text-secondary)", flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#16A34A" }}></span>
+        {/* Desktop Status Bar */}
+        <footer className="app-statusbar">
+          <div className="app-statusbar-left">
+            <span className="app-status-dot-wrap">
+              <span className="app-status-dot" />
               Engine Connected (Local)
             </span>
             {activeDatasource && (
               <span>数据源: <strong>{activeDatasource.name}</strong> ({activeDatasource.db_type})</span>
             )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="app-statusbar-right">
             {activeTab && (
               <span>活动标签页: {activeTab.title}</span>
             )}
