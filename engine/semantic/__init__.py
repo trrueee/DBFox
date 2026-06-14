@@ -4,7 +4,6 @@ Modules:
   alias            — SemanticAliasResolver
   schema_linker    — SchemaLinker, SchemaLinkingResult
   semantic_context — SchemaContextBuilder (renders DDL-style context)
-  query_plan       — QueryPlan, QueryPlanBuilder
   models           — SemanticResolution, ResolvedTerm, ResolvedMetric, etc.
   resolver         — SemanticResolver (LLM + verifier)
   verifier         — SemanticVerifier (deterministic catalog checks)
@@ -13,7 +12,6 @@ Modules:
 """
 
 from engine.semantic.alias import AliasMatch, SemanticAliasResolver
-from engine.semantic.query_plan import QueryDimension, QueryFilter, QueryJoin, QueryMetric, QueryPlan, QueryPlanBuilder
 from engine.semantic.schema_linker import ColumnLink, SchemaLinker, SchemaLinkingResult, TableLink
 from engine.semantic.semantic_context import SchemaContextBuilder
 from engine.semantic.models import (
@@ -38,12 +36,6 @@ __all__ = [
     "CandidateTable",
     "ColumnLink",
     "JoinPathCandidate",
-    "QueryDimension",
-    "QueryFilter",
-    "QueryJoin",
-    "QueryMetric",
-    "QueryPlan",
-    "QueryPlanBuilder",
     "ResolvedDimension",
     "ResolvedFilter",
     "ResolvedMetric",

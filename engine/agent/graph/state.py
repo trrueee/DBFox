@@ -4,10 +4,9 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
 
+
 # Reducer for append-only lists (artifacts, trace_events, runtime_events).
 # messages uses its own add_messages reducer from LangGraph.
-
-
 def _add_list(left: list[Any], right: list[Any]) -> list[Any]:
     if right and isinstance(right[0], dict) and right[0].get("__clear__"):
         return right[1:]
@@ -24,102 +23,160 @@ AgentStatus = Literal[
 
 
 class DataBoxAgentState(TypedDict, total=False):
-    # ---- Core LangGraph agent-loop state ----------------------------------
+    # =========================================================================
+    # 1. CORE & IDENTITY STATE
+    # =========================================================================
     messages: Annotated[list[Any], add_messages]
+    """LangGraph message history containing Human, AI, and Tool messages."""
 
-    # ---- Run identity -----------------------------------------------------
     run_id: str
+    """Unique UUID for this specific execution run."""
     thread_id: str
+    """LangGraph thread/session ID for state checkpointing."""
     session_id: str
+    """Active session ID mirroring the frontend's conversation ID."""
     datasource_id: str
+    """The database datasource ID to compile and execute SQL queries against."""
     user_id: str | None
+    """Optional user identifier associated with the session."""
     project_id: str | None
+    """Optional workspace project ID."""
     parent_run_id: str | None
+    """Parent run ID if this is a resumed or follow-up execution."""
 
-    # ---- Runtime flags ----------------------------------------------------
     execute: bool
+    """Whether the agent is permitted to execute write/read queries on the DB."""
     max_steps: int
+    """Maximum number of iterations allowed for the ReAct loop."""
     step_count: int
+    """Current step iteration index."""
     status: AgentStatus
-
-    # ---- Planner output ----------------------------------------------------
-    plan_directive: dict[str, Any] | None
-    execution_mode: str
-    allowed_tool_groups: list[str]
-    selected_skill_ids: list[str]
-
-    # ---- Environment / Semantic layers -------------------------------------
-    environment_profile: dict[str, Any] | None
-    database_map: dict[str, Any] | None
-    semantic_resolution: dict[str, Any] | None
-    db_search_results: dict[str, Any] | None
-    db_inspection: dict[str, Any] | None
-    db_preview: dict[str, Any] | None
-
-    # ---- Request-level context --------------------------------------------
-    workspace_context: dict[str, Any] | None
-    follow_up_context: dict[str, Any] | None
-
-    # ---- DataBox factual state (written by observe_node) ------------------
-    schema_context: dict[str, Any] | None
-    schema_metadata: dict[str, Any] | None
-    query_plan: dict[str, Any] | None
-    sql_candidate: dict[str, Any] | None
-    sql: str | None
-    safety: dict[str, Any] | None
-    execution: dict[str, Any] | None
-    result_profile: dict[str, Any] | None
-    chart_suggestion: dict[str, Any] | None
-    suggestions: list[dict[str, Any]]
-    answer: dict[str, Any] | None
-    final_answer: dict[str, Any] | None
-
-    # ---- Tool-call / policy routing ---------------------------------------
-    pending_tool_calls: list[dict[str, Any]]
-    allowed_tool_calls: list[dict[str, Any]]
-    blocked_tool_calls: list[dict[str, Any]]
-    last_tool_results: list[dict[str, Any]]
-    last_observation: dict[str, Any] | None
-    last_tool_name: str | None
-    last_tool_metadata: dict[str, Any] | None
-
-    # ---- ContextPack (Agent v2 structured context) -------------------------
-    context_pack: dict[str, Any] | None
-
-    # ---- Progress Judge output ---------------------------------------------
-    progress_decision: dict[str, Any] | None
-
-    # ---- Anti-loop ---------------------------------------------------------
-    replan_count: int
-    consecutive_blocks: int
-
-    # ---- Human-in-the-loop approval ---------------------------------------
-    pending_approval: dict[str, Any] | None
-    approval_result: dict[str, Any] | None
-
-    # ---- Append-only collections ------------------------------------------
-    artifacts: Annotated[list[dict[str, Any]], _add_list]
-    trace_events: Annotated[list[dict[str, Any]], _add_list]
-    runtime_events: Annotated[list[dict[str, Any]], _add_list]
-    plan_events: Annotated[list[dict[str, Any]], _add_list]
-
-    # ---- Errors -----------------------------------------------------------
+    """Terminal or transient status (running, waiting_approval, completed, etc.)."""
     error: str | None
+    """Runtime error message if the run failed."""
     last_error_telemetry: dict[str, Any] | None
+    """Detailed telemetry payload for the last occurred error."""
 
-    # ---- Revision tracking -------------------------------------------------
+    # =========================================================================
+    # 2. DB CONTEXT & SEMANTIC METADATA
+    # =========================================================================
+    environment_profile: dict[str, Any] | None
+    """Basic operating system/environment profiling."""
+    database_map: dict[str, Any] | None
+    """Static db schema structural map (tables, columns, types)."""
+    semantic_resolution: dict[str, Any] | None
+    """Resolved semantic vocabulary, aliases, and metrics from the Semantic Layer."""
+    db_search_results: dict[str, Any] | None
+    """Output from database metadata keyword searches."""
+    db_inspection: dict[str, Any] | None
+    """Detailed table/column schema inspection results."""
+    db_preview: dict[str, Any] | None
+    """Table data sample previews fetched from datasource."""
+    workspace_context: dict[str, Any] | None
+    """Active UI context (tabs, selection states, editor annotations)."""
+    follow_up_context: dict[str, Any] | None
+    """Prior messages and artifacts from preceding runs to maintain context."""
+    context_pack: dict[str, Any] | None
+    """Agent v2 consolidated metadata pack sent to the LLM and the frontend."""
+
+    # =========================================================================
+    # 3. SQL GENERATION & SAFETY GATE
+    # =========================================================================
+    schema_context: dict[str, Any] | None
+    """Active schema metadata compiled for model prompting."""
+    schema_metadata: dict[str, Any] | None
+    """Extra metadata properties for table relationships and indexes."""
+    query_plan: dict[str, Any] | None
+    """Step-by-step query blueprint generated by the agent."""
+    sql_candidate: dict[str, Any] | None
+    """The raw SQL query proposed by the LLM."""
+    sql: str | None
+    """The verified/validated SQL query ready for execution."""
+    safety: dict[str, Any] | None
+    """Output from the Policy/Trust gate (can_execute, risks, reasons)."""
+    execution: dict[str, Any] | None
+    """Results of SQL execution (success status, row count, error info)."""
+    result_profile: dict[str, Any] | None
+    """Descriptive profiling and analysis of the SQL query results."""
+    chart_suggestion: dict[str, Any] | None
+    """Auto-generated suggestion for rendering result charts."""
+    suggestions: list[dict[str, Any]]
+    """Follow-up questions or actions suggested by the agent."""
+    answer: dict[str, Any] | None
+    """Synthesized final response to the user's question."""
+    final_answer: dict[str, Any] | None
+    """Historical duplicate key for synthesis answer."""
+
+    # =========================================================================
+    # 4. TOOL ROUTING & POLICIES
+    # =========================================================================
+    pending_tool_calls: list[dict[str, Any]]
+    """Tool calls requested by the model but not yet executed."""
+    allowed_tool_calls: list[dict[str, Any]]
+    """Tool calls that cleared safety checks and are allowed to execute."""
+    blocked_tool_calls: list[dict[str, Any]]
+    """Tool calls blocked by the PolicyGate."""
+    last_tool_results: list[dict[str, Any]]
+    """Outputs from the most recently executed batch of tools."""
+    last_observation: dict[str, Any] | None
+    """Observation string returned from tool execution for model consumption."""
+    last_tool_name: str | None
+    """Name of the last tool invoked."""
+    last_tool_metadata: dict[str, Any] | None
+    """Metadata tags associated with the last tool call."""
+
+    # =========================================================================
+    # 5. HUMAN-IN-THE-LOOP & APPROVALS
+    # =========================================================================
+    pending_approval: dict[str, Any] | None
+    """The active approval request if the graph is interrupted waiting for user consent."""
+    approval_result: dict[str, Any] | None
+    """The user's response to the approval request (approved/rejected)."""
+
+    # =========================================================================
+    # 6. REVISION & REPAIR STATE
+    # =========================================================================
     revision_attempted: bool
+    """Flag indicating whether a SQL query correction step has been tried."""
     revision_count: int
+    """Number of query revisions attempted during execution."""
     repair_mode: bool
+    """True if the agent is actively executing error correction/repair nodes."""
     repair_stats: dict[str, Any] | None
+    """Performance and attempt metrics of the query repair loop."""
     repair_trace: Annotated[list[dict[str, Any]], _add_list]
+    """Trace logs of the repair steps taken."""
 
-    # ---- Follow-up --------------------------------------------------------
-    followup_context: dict[str, Any] | None
-    chart_request: bool
+    # =========================================================================
+    # 7. PROGRESS & LOOP CONTROL
+    # =========================================================================
+    progress_decision: dict[str, Any] | None
+    """Evaluation verdict from the Progress Judge node."""
+    replan_count: int
+    """Counter tracking consecutive replan loop iterations."""
+    consecutive_blocks: int
+    """Counter for tracking sequential policy violations to abort infinite loops."""
 
-    # ---- Visible plan (UI-only, not a scheduler) --------------------------
-    agent_intent: dict[str, Any] | None
-    agent_context: dict[str, Any] | None
+    # =========================================================================
+    # 8. PERSISTENCE COLLECTIONS & UI COMPATIBILITY
+    # =========================================================================
+    artifacts: Annotated[list[dict[str, Any]], _add_list]
+    """Collects rich user-facing cards (SQL code, tables, charts, insights)."""
+    trace_events: Annotated[list[dict[str, Any]], _add_list]
+    """Underlying step-by-step trace events for debugging."""
+    runtime_events: Annotated[list[dict[str, Any]], _add_list]
+    """Yielded user-facing events streamed via Server-Sent Events (SSE)."""
+    plan_events: Annotated[list[dict[str, Any]], _add_list]
+    """[UI Compatibility] Sequence of plans or step-status changes for frontend rendering."""
+    plan_directive: dict[str, Any] | None
+    """[UI/Eval Compatibility] Legacy planner output directing allowed tool groups."""
+    execution_mode: str
+    """[UI/Eval Compatibility] Legacy planner direction for tool usage mode."""
+    allowed_tool_groups: list[str]
+    """[UI/Eval Compatibility] Tool namespaces the agent is permitted to query."""
+    selected_skill_ids: list[str]
+    """[UI/Eval Compatibility] List of registered custom agent skills active in this context."""
     visible_plan: dict[str, Any] | None
+    """[UI/Task Lens Compatibility] The user-visible plan displayed in the frontend Task Lens."""
     plan: dict[str, Any] | None
+    """[UI Compatibility] Historic serialization structure mapped to database checkpoints."""

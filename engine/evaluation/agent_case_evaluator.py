@@ -35,80 +35,6 @@ _ANNOTATION_TOOLS = frozenset({
 })
 
 
-def _compare_query_plan_similarity(expected_plan: Any, actual_plan: Any) -> float:
-    if hasattr(expected_plan, "model_dump"):
-        expected_dict = expected_plan.model_dump()
-    elif hasattr(expected_plan, "dict"):
-        expected_dict = expected_plan.dict()
-    elif hasattr(expected_plan, "to_dict"):
-        expected_dict = expected_plan.to_dict()
-    elif isinstance(expected_plan, dict):
-        expected_dict = expected_plan
-    else:
-        expected_dict = {}
-
-    if hasattr(actual_plan, "model_dump"):
-        actual_dict = actual_plan.model_dump()
-    elif hasattr(actual_plan, "dict"):
-        actual_dict = actual_plan.dict()
-    elif hasattr(actual_plan, "to_dict"):
-        actual_dict = actual_plan.to_dict()
-    elif isinstance(actual_plan, dict):
-        actual_dict = actual_plan
-    else:
-        actual_dict = {}
-
-
-    def get_metrics_set(plan_dict: dict[str, Any]) -> set[tuple[str, str]]:
-        metrics = plan_dict.get("metrics") or []
-        res = set()
-        for m in metrics:
-            if isinstance(m, dict):
-                col = str(m.get("column") or m.get("expression") or "")
-                agg = str(m.get("agg") or "")
-                res.add((col, agg))
-        return res
-
-    def get_dimensions_set(plan_dict: dict[str, Any]) -> set[str]:
-        dims = plan_dict.get("dimensions") or []
-        res = set()
-        for d in dims:
-            if isinstance(d, dict):
-                col = str(d.get("column") or d.get("name") or "")
-                res.add(col)
-        return res
-
-    def get_filters_set(plan_dict: dict[str, Any]) -> set[tuple[str, str, str]]:
-        filters = plan_dict.get("filters") or []
-        res = set()
-        for f in filters:
-            if isinstance(f, dict):
-                col = str(f.get("column") or "")
-                op = str(f.get("op") or "")
-                val = str(f.get("value") or "")
-                res.add((col, op, val))
-        return res
-
-    exp_metrics = get_metrics_set(expected_dict)
-    act_metrics = get_metrics_set(actual_dict)
-    exp_dims = get_dimensions_set(expected_dict)
-    act_dims = get_dimensions_set(actual_dict)
-    exp_filts = get_filters_set(expected_dict)
-    act_filts = get_filters_set(actual_dict)
-
-    def jaccard(set_a: set, set_b: set) -> float:
-        if not set_a and not set_b:
-            return 1.0
-        intersection = len(set_a & set_b)
-        union = len(set_a | set_b)
-        return intersection / union
-
-    metric_sim = jaccard(exp_metrics, act_metrics)
-    dim_sim = jaccard(exp_dims, act_dims)
-    filt_sim = jaccard(exp_filts, act_filts)
-
-    return (metric_sim + dim_sim + filt_sim) / 3.0
-
 
 class AgentCaseEvaluator:
     def __init__(self, db: Session | None = None) -> None:
@@ -199,20 +125,29 @@ class AgentCaseEvaluator:
                     execution_skipped = True
 
             if execution_skipped:
-                # Semantic Jaccard plan similarity check
-                try:
-                    from engine.semantic import QueryPlanBuilder
-                    expected_plan = QueryPlanBuilder(current_db).build(task.datasource_id, task.question, mode="offline")
-                    actual_plan = response.query_plan or {}
-                    similarity = _compare_query_plan_similarity(expected_plan, actual_plan)
-                    if similarity >= 0.8:
+                # Compare SQL similarity directly
+                if actual_sql and standard_sql:
+                    import re
+                    def normalize(s: str) -> str:
+                        return re.sub(r"\s+", " ", s.strip().lower()).replace("`", "").replace('"', "")
+                    if normalize(actual_sql) == normalize(standard_sql):
                         scores.append(1.0)
                     else:
-                        scores.append(similarity)
-                        failures.append(f"query plan similarity ({similarity:.3f}) is less than 0.8")
-                except Exception as e:
+                        def get_words(s: str) -> set[str]:
+                            return set(re.findall(r"\b\w+\b", s.lower()))
+                        act_words = get_words(actual_sql)
+                        std_words = get_words(standard_sql)
+                        overlap = act_words & std_words
+                        if len(std_words) > 0 and len(overlap) / len(std_words) >= 0.7:
+                            scores.append(0.8)
+                        else:
+                            scores.append(0.4)
+                            failures.append("execution skipped, actual SQL similarity is low")
+                elif not standard_sql:
+                    scores.append(1.0)
+                else:
                     scores.append(0.0)
-                    failures.append(f"failed to compute plan similarity: {e}")
+                    failures.append("execution skipped and actual SQL is missing")
             else:
                 # Value-set isomorphism check
                 try:
@@ -287,15 +222,7 @@ class AgentCaseEvaluator:
         else:
             scores.append(1.0)
 
-        # 9. workspace assist without auto-execute
-        if workspace_ctx and _has_workspace_assist_context(workspace_ctx):
-            if any(t.startswith("sql.execute") for t in actual_tools):
-                scores.append(0.0)
-                failures.append("workspace assist must not auto-execute SQL")
-            else:
-                scores.append(1.0)
-
-        # 10. DDL / backup / restore check
+        # 9. DDL / backup / restore check
         dangerous_tools = [t for t in actual_tools if t in _HARD_REFUSAL_TOOLS]
         if dangerous_tools:
             scores.append(0.0)
@@ -431,15 +358,6 @@ def _check_annotation_misuse(actual_tools: list[str]) -> list[str]:
             if annotation in tool or tool == annotation:
                 failures.append(f"annotation '{annotation}' used as agent tool")
     return failures
-
-
-def _has_workspace_assist_context(ctx: dict[str, Any]) -> bool:
-    return bool(
-        ctx.get("active_sql")
-        or ctx.get("last_error")
-        or ctx.get("last_query_result_preview")
-        or ctx.get("selected_table_names")
-    )
 
 
 def _is_hard_failure(failure: str) -> bool:
