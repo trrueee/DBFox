@@ -1,4 +1,4 @@
-import { engineRequest } from "./engineClient";
+import { request } from "../../lib/api/client";
 
 export interface EngineDataSource {
   id: string;
@@ -52,25 +52,25 @@ export interface EngineSqlResult {
 }
 
 export async function listDatasources() {
-  return engineRequest<EngineDataSource[]>("/datasources");
+  return request<EngineDataSource[]>("/datasources");
 }
 
 export async function listTables(datasourceId: string) {
-  return engineRequest<EngineSchemaTable[]>(`/schema/tables?datasource_id=${encodeURIComponent(datasourceId)}`);
+  return request<EngineSchemaTable[]>("/schema/tables?datasource_id=" + encodeURIComponent(datasourceId));
 }
 
 export async function listColumns(tableId: string) {
-  return engineRequest<EngineColumn[]>(`/schema/tables/${encodeURIComponent(tableId)}/columns`);
+  return request<EngineColumn[]>("/schema/tables/" + encodeURIComponent(tableId) + "/columns");
 }
 
 export async function executeSql(datasourceId: string, sql: string, question?: string) {
-  return engineRequest<EngineSqlResult>("/query/execute", {
+  return request<EngineSqlResult>("/query/execute", {
     method: "POST",
     body: JSON.stringify({
       datasource_id: datasourceId,
       sql,
       question,
-      execution_id: `frontend-${Date.now()}`,
+      execution_id: "frontend-" + Date.now(),
     }),
   });
 }
@@ -89,7 +89,7 @@ export async function resolveTableByName(tableName: string) {
 }
 
 export function quoteIdentifier(identifier: string, dbType = "mysql") {
-  if (dbType === "postgresql") return `"${identifier.replaceAll('"', '""')}"`;
-  if (dbType === "sqlite") return `"${identifier.replaceAll('"', '""')}"`;
-  return `\`${identifier.replaceAll("`", "``")}\``;
+  if (dbType === "postgresql") return "\"" + identifier.replaceAll("\"", "\"\"") + "\"";
+  if (dbType === "sqlite") return "\"" + identifier.replaceAll("\"", "\"\"") + "\"";
+  return "`" + identifier.replaceAll("`", "``") + "`";
 }
