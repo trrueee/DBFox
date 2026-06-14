@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
-from engine.main import app
+from engine.main import LOCAL_SECURE_TOKEN, app
+import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
 
 def test_fastapi_app_startup_and_health() -> None:
@@ -26,3 +27,20 @@ def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:
     """
     assert "**/.databox_runtime/**" not in _RELOAD_EXCLUDES
     assert "**/node_modules/**" not in _RELOAD_EXCLUDES
+
+
+def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "is_frozen", True)
+
+    with TestClient(app) as client:
+        for origin in ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]:
+            response = client.get(
+                "/api/v1/datasources",
+                headers={
+                    "Origin": origin,
+                    "X-Local-Token": LOCAL_SECURE_TOKEN,
+                },
+            )
+
+            assert response.status_code != 403
+            assert response.headers.get("access-control-allow-origin") == origin

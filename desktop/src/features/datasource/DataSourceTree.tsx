@@ -172,7 +172,7 @@ export function DataSourceTree({
             <Database size={16} className="text-slate-400" />
             <div className="hifi-db-info">
               <span className="hifi-db-name">未连接数据源</span>
-              <span className="hifi-db-version">Local Engine</span>
+              <span className="hifi-db-version">DataBox</span>
             </div>
           </div>
         )}
@@ -190,7 +190,7 @@ export function DataSourceTree({
 
         <div className="hifi-tree-container">
           {error && <div className="text-[10px] text-red-500 bg-red-50 rounded-lg p-2 mb-2">{error}</div>}
-          {loading && <div className="text-[10px] text-slate-400 p-2">正在读取本地 Engine...</div>}
+          {loading && <div className="text-[10px] text-slate-400 p-2">正在加载...</div>}
           {!loading && !error && !activeDatasource && <div className="text-[10px] text-slate-400 p-2">暂无数据源，请先创建连接。</div>}
 
           {activeDatasource && (

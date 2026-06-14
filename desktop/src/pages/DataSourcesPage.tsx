@@ -75,6 +75,10 @@ export const DataSourcesPage = ({
     ssl_verify_identity: true,
   });
 
+  useEffect(() => {
+    setShowAddForm(initialShowAddForm ?? false);
+  }, [initialShowAddForm]);
+
   const fetchDataSources = async () => {
     try {
       setLoading(true);
