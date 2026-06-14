@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import sqlglot
 from sqlglot import exp
@@ -18,6 +18,7 @@ class GuardrailResult(TypedDict):
     safeSql: str
     checks: list[GuardrailCheck]
     message: str
+    _parsed_ast: NotRequired[exp.Expression]
 
 # System schemas we must block access to
 BLOCKED_SCHEMAS = {
