@@ -249,7 +249,7 @@ class TestPerformanceAndExplain:
         assert any(check["rule"] == "schema_validation" for check in exc_info.value.checks)
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session, test_datasource) -> None:
-        from engine.sql.generator import validate_sql_schema
+        from engine.sql.executor import validate_sql_schema
         from engine.errors import GuardrailValidationError
         from engine.sql.trust_gate import TrustGate
 

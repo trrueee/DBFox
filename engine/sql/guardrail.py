@@ -331,5 +331,6 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         "originalSql": sql_str,
         "safeSql": safe_sql,
         "checks": checks,
-        "message": message_summary
+        "message": message_summary,
+        "_parsed_ast": expression
     }
