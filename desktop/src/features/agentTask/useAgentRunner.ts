@@ -254,6 +254,7 @@ export function useAgentRunner({
     const progressId = nextMsgId();
     appendTabMessages(tabId, [{ id: progressId, sender: "ai", text: approve ? "已确认，正在生成回答…" : "已拒绝执行操作。" }]);
 
+    let timeoutId: number | undefined;
     try {
       await resolveAgentApproval(
         approval.runId,
@@ -269,17 +270,20 @@ export function useAgentRunner({
       const timelineBox = { list: tab.agentTimeline || [] };
       const abortController = new AbortController();
       abortControllersRef.current.set(tabId, abortController);
-      const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
+      timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
       const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
         signal: abortController.signal,
         onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox),
       });
-      window.clearTimeout(timeoutId);
       finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "审批处理失败";
+      const message = err instanceof Error ? formatAgentError(err, cancelledTabsRef.current.has(tabId)) : "审批处理失败";
+      cancelledTabsRef.current.delete(tabId);
       updateTabMessage(tabId, progressId, `审批处理失败：${message}`);
       patchTab(tabId, { agentStatus: "failed" });
+    } finally {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      abortControllersRef.current.delete(tabId);
     }
   }, [appendTabMessages, finishAgentRun, makeAgentEventHandler, nextMsgId, patchTab, persistTabConversation, updateTabMessage]);
 
