@@ -84,7 +84,7 @@ export function DataSourceTree({
 
   if (collapsed) {
     return (
-      <section className="hifi-col" style={{ width: 36, flexShrink: 0, background: "var(--color-panel)", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
+      <section className="hifi-col hifi-sidebar-col" style={{ width: 36, flexShrink: 0, background: "var(--sidebar-bg)", borderRight: "1px solid var(--hairline)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
         <button
           onClick={onToggleCollapse}
           title="展开侧栏"
@@ -97,7 +97,7 @@ export function DataSourceTree({
   }
 
   return (
-    <section className="hifi-col" style={{ width: sidebarWidth, flexShrink: 0, minWidth: 180, maxWidth: 480 }}>
+    <section className="hifi-col hifi-sidebar-col" style={{ width: sidebarWidth, flexShrink: 0, minWidth: 180, maxWidth: 480, background: "var(--sidebar-bg)" }}>
       <div className="hifi-sidebar-panel">
         <div className="hifi-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-primary)" }}>数据源</span>
