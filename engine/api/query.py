@@ -18,6 +18,16 @@ logger = logging.getLogger("databox.api.query")
 router = APIRouter()
 
 
+def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Return the JSON-safe guardrail payload exposed by public APIs.
+
+    guardrail_check keeps internal parser artifacts such as _parsed_ast so
+    TrustGate can validate schema against the SQL AST. Those objects are not
+    JSON serializable and must never be returned to the browser.
+    """
+    return {key: value for key, value in result.items() if not key.startswith("_")}
+
+
 def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
     return {
         "id": item.id,
@@ -49,7 +59,7 @@ def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> 
             )
         dialect = str(ds.db_type or "mysql")
     result = guardrail_check(req.sql, dialect=dialect)
-    return dict(result)
+    return _public_guardrail_result(dict(result))
 
 
 @router.post("/query/execute")
