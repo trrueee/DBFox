@@ -425,10 +425,10 @@ def create_qwen_text_to_sql_baseline_run_fn(
         response.sql = sql  # type: ignore
 
         events = [
-            {"step": {"name": "generate_sql_candidate", "tool_name": "sql.generate", "sql": sql or "", "output": {"sql": sql or ""}}},
+            {"step": {"name": "sql.generate", "tool_name": "sql.generate", "sql": sql or "", "output": {"sql": sql or ""}}},
         ]
         if error:
-            events.append({"step": {"name": "generate_sql_candidate", "tool_name": "sql.generate", "error": error}})
+            events.append({"step": {"name": "sql.generate", "tool_name": "sql.generate", "error": error}})
 
         return response, events, latency
 

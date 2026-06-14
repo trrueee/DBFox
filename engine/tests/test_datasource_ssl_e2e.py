@@ -4,7 +4,11 @@ import socket
 from engine.datasource import test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
 
+@pytest.mark.e2e
+@pytest.mark.integration
+@pytest.mark.slow
 def test_mysql_ssl_connection_e2e() -> None:
+
     # Probe if the local test container on port 3308 is up and listening
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(1.0)

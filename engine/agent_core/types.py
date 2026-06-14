@@ -42,18 +42,7 @@ AgentRuntimeEventType = Literal[
 AgentApprovalStatus = Literal["pending", "approved", "rejected", "expired"]
 AgentApprovalDecision = Literal["approved", "rejected"]
 AgentApprovalRiskLevel = Literal["safe", "warning", "danger"]
-AgentPlannerIntent = Literal[
-    "analysis",
-    "explain_sql",
-    "fix_sql",
-    "optimize_sql",
-    "rewrite_sql",
-    "explain_result",
-    "continue_from_artifact",
-    "explain_schema",
-    "unknown",
-]
-AgentPlanConfidence = Literal["low", "medium", "high"]
+
 
 
 class AgentApprovalRecord(BaseModel):
@@ -130,31 +119,6 @@ class AgentWorkspaceContext(BaseModel):
     semantic_context: dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentIntentPlan(BaseModel):
-    intent: AgentPlannerIntent = "analysis"
-    confidence: AgentPlanConfidence = "medium"
-    rationale: str | None = None
-    requires_context: list[str] = Field(default_factory=list)
-
-
-class AgentPlanStep(BaseModel):
-    id: str
-    tool_name: str
-    title: str | None = None
-    args: dict[str, Any] = Field(default_factory=dict)
-    depends_on: list[str] = Field(default_factory=list)
-    required: bool = True
-
-
-class AgentPlanDraft(BaseModel):
-    version: str = "agent-plan-draft/v1"
-    intent: AgentIntentPlan
-    steps: list[AgentPlanStep] = Field(default_factory=list)
-    should_execute_sql: bool = False
-    context_summary: str | None = None
-    safety_notes: list[str] = Field(default_factory=list)
-    model: str | None = None
-    raw_response: dict[str, Any] | None = None
 
 
 class AgentRunRequest(BaseModel):
@@ -191,17 +155,6 @@ class AgentStep(BaseModel):
     error: str | None = None
     latency_ms: int
 
-
-class QueryPlan(BaseModel):
-    analysis_goal: str
-    metrics: list[dict[str, Any]] = Field(default_factory=list)
-    dimensions: list[dict[str, Any]] = Field(default_factory=list)
-    filters: list[dict[str, Any]] = Field(default_factory=list)
-    time_range: dict[str, Any] | None = None
-    candidate_tables: list[str] = Field(default_factory=list)
-    assumptions: list[str] = Field(default_factory=list)
-    risk_notes: list[str] = Field(default_factory=list)
-    raw_plan: dict[str, Any] | None = None
 
 
 class SQLCandidate(BaseModel):
@@ -429,7 +382,7 @@ class ActivityStep(BaseModel):
     """Single entry in the Activity Timeline."""
 
     sequence: int = 0
-    step_name: str = ""  # build_schema_context, generate_sql_candidate...
+    step_name: str = ""  # schema.build_context, sql.generate...
     tool_name: str = ""  # schema.build_context, sql.generate...
     title: str = ""  # human-readable: "Built schema context"
     status: str = "pending"  # pending | running | success | failed | skipped | blocked

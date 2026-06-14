@@ -20,7 +20,7 @@ from engine.models import (
     SemanticMetric,
     WorkspaceTableScope,
 )
-from engine.semantic import QueryPlanBuilder, SchemaLinker, SemanticAliasResolver
+from engine.semantic import SchemaLinker, SemanticAliasResolver
 
 
 @pytest.fixture
@@ -281,122 +281,6 @@ class TestWorkspaceTableScope:
 # Task 6: Semantic metric & dimension in QueryPlan
 # ---------------------------------------------------------------------------
 
-class TestQueryPlanBuilderSemantic:
-    def test_metric_hit_includes_in_plan(self, db_session):
-        ds = _make_datasource(db_session, "metric_test")
-        _add_table(db_session, ds.id, "orders", [("id", "INT"), ("total_amount", "DECIMAL")])
-
-        metric = SemanticMetric(
-            id=str(uuid.uuid4()),
-            data_source_id=ds.id,
-            name="GMV",
-            expression="SUM(orders.total_amount)",
-            source_columns_json='["orders.total_amount"]',
-        )
-        db_session.add(metric)
-        db_session.commit()
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="统计 GMV",
-            selected_tables=["orders"],
-        )
-
-        metric_names = [m.name for m in plan.metrics]
-        assert "GMV" in metric_names
-        gmv = [m for m in plan.metrics if m.name == "GMV"][0]
-        assert gmv.expression == "SUM(orders.total_amount)"
-        assert gmv.source_column == "orders.total_amount"
-        assert "orders" in plan.tables
-
-    def test_dimension_hit_includes_in_plan(self, db_session):
-        ds = _make_datasource(db_session, "dim_test")
-        _add_table(db_session, ds.id, "orders", [("id", "INT"), ("created_at", "DATETIME")])
-
-        dim = SemanticDimension(
-            id=str(uuid.uuid4()),
-            data_source_id=ds.id,
-            name="下单日期",
-            column_ref="orders.created_at",
-            transform="DATE",
-        )
-        db_session.add(dim)
-        db_session.commit()
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="按下单日期统计",
-            selected_tables=["orders"],
-        )
-
-        dim_names = [d.name for d in plan.dimensions]
-        assert "下单日期" in dim_names
-        match = [d for d in plan.dimensions if d.name == "下单日期"][0]
-        assert match.column == "orders.created_at"
-        assert match.transform == "DATE"
-        assert "orders" in plan.tables
-
-    def test_metric_and_dimension_together(self, db_session):
-        ds = _make_datasource(db_session, "combined_test")
-        _add_table(db_session, ds.id, "orders", [
-            ("id", "INT"),
-            ("total_amount", "DECIMAL"),
-            ("created_at", "DATETIME"),
-        ])
-
-        db_session.add(SemanticMetric(
-            id=str(uuid.uuid4()), data_source_id=ds.id,
-            name="GMV", expression="SUM(orders.total_amount)",
-            source_columns_json='["orders.total_amount"]',
-        ))
-        db_session.add(SemanticDimension(
-            id=str(uuid.uuid4()), data_source_id=ds.id,
-            name="下单日期", column_ref="orders.created_at", transform="DATE",
-        ))
-        db_session.commit()
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="按下单日期统计 GMV",
-            selected_tables=["orders"],
-        )
-
-        assert plan.intent == "answer_question_with_semantic_definitions"
-        assert len(plan.metrics) == 1
-        assert len(plan.dimensions) == 1
-        assert plan.metrics[0].name == "GMV"
-        assert plan.dimensions[0].name == "下单日期"
-
-    def test_existing_heuristic_still_works(self, db_session):
-        """Without semantic definitions, the existing heuristic path works."""
-        ds = _make_datasource(db_session, "heuristic_test")
-        _add_table(db_session, ds.id, "orders", [("id", "INT"), ("total_amount", "DECIMAL")])
-        _add_table(db_session, ds.id, "products", [("id", "INT"), ("name", "VARCHAR")])
-        _add_table(db_session, ds.id, "order_items", [("id", "INT"), ("quantity", "INT")])
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="销售额",
-        )
-
-        assert plan.intent == "aggregate_order_amount"
-        assert len(plan.metrics) == 1
-        assert plan.metrics[0].name == "total_amount"
-
-    def test_sales_volume_heuristic_still_works(self, db_session):
-        ds = _make_datasource(db_session, "sales_vol_test")
-        _add_table(db_session, ds.id, "orders", [("id", "INT")])
-        _add_table(db_session, ds.id, "products", [("id", "INT"), ("name", "VARCHAR")])
-        _add_table(db_session, ds.id, "order_items", [("id", "INT"), ("quantity", "INT")])
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="销量最高的商品",
-        )
-
-        assert plan.intent == "rank_products_by_sales_volume"
-
-
 # ---------------------------------------------------------------------------
 # Task 3: Semantic API endpoints
 # ---------------------------------------------------------------------------
@@ -592,41 +476,3 @@ class TestAgentSemanticIntegration:
         assert any(a["alias"] == "GMV" for a in metadata["semanticAliasesUsed"])
         assert "orders" in str(context)
 
-    def test_agent_build_query_plan_works_with_semantic_definitions(self, db_session):
-        """Agent's build_query_plan path uses semantic definitions."""
-        ds = _make_datasource(db_session, "agent_plan_test")
-        _add_table(db_session, ds.id, "orders", [
-            ("id", "INT"), ("total_amount", "DECIMAL"), ("created_at", "DATETIME"),
-        ])
-
-        db_session.add(SemanticMetric(
-            id=str(uuid.uuid4()), data_source_id=ds.id,
-            name="GMV", expression="SUM(orders.total_amount)",
-            source_columns_json='["orders.total_amount"]',
-        ))
-        db_session.add(SemanticDimension(
-            id=str(uuid.uuid4()), data_source_id=ds.id,
-            name="日期", column_ref="orders.created_at", transform="DATE",
-        ))
-        db_session.commit()
-
-        # Simulate build_query_plan_tool
-        linker = SchemaLinker(db_session)
-        from engine.semantic import SchemaContextBuilder
-        linking_result = linker.link(datasource_id=ds.id, question="按日期统计 GMV")
-        schema_context = SchemaContextBuilder(db_session).build(linking_result)
-        metadata = linking_result.response_metadata(schema_context)
-        selected_tables = metadata.get("selectedTables", [])
-
-        plan = QueryPlanBuilder(db_session).build(
-            datasource_id=ds.id,
-            question="按日期统计 GMV",
-            schema_context=schema_context,
-            selected_tables=selected_tables,
-        )
-
-        assert plan.intent == "answer_question_with_semantic_definitions"
-        metric_names = [m.name for m in plan.metrics]
-        dim_names = [d.name for d in plan.dimensions]
-        assert "GMV" in metric_names
-        assert "日期" in dim_names

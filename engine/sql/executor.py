@@ -11,6 +11,8 @@ import uuid
 from typing import Any
 
 import pymysql
+import sqlglot
+from sqlglot import exp
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
@@ -21,7 +23,7 @@ from engine.errors import (
     SQLQueryCancelledError,
     SQLQueryTimeoutError,
 )
-from engine.models import DataSource, QueryHistory
+from engine.models import DataSource, QueryHistory, SchemaTable
 from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
@@ -486,8 +488,6 @@ def _resolve_execution_safety_decision(
             messages=["Legacy system bypass was used; prefer explicit non-query execution helpers."],
         )
 
-    from engine.sql.generator import validate_sql_schema
-
     return TrustGate(db, validate_sql_schema).execution_decision(datasource_id, sql_str, policy=policy)
 
 
@@ -931,3 +931,52 @@ def explain_sql(
         "warnings": list(set(warnings)),
         "safetyDecision": decision.model_dump(mode="json"),
     }
+
+
+def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, datasource_id: str) -> list[str]:
+    """Check generated SQL for hallucinated tables/columns against local schema cache."""
+    warnings = []
+    try:
+        tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+        if not tables:
+            return []
+
+        valid_schema = {t.table_name.lower(): {c.column_name.lower() for c in t.columns} for t in tables}
+        if isinstance(generated_sql, exp.Expression):
+            parsed = generated_sql
+        else:
+            parsed = sqlglot.parse_one(str(generated_sql), read="mysql")
+
+        query_tables = []
+        for table_node in parsed.find_all(exp.Table):
+            t_name = table_node.name.lower()
+            query_tables.append(t_name)
+            if t_name not in valid_schema:
+                warnings.append(f"生成 SQL 包含不存在的表: `{table_node.name}`")
+
+        for col_node in parsed.find_all(exp.Column):
+            col_name = col_node.name.lower()
+            if col_name == "*" or not col_name:
+                continue
+            col_table_ref = col_node.text("table").lower()
+            target_table = None
+            if col_table_ref:
+                for t_node in parsed.find_all(exp.Table):
+                    alias = t_node.alias.lower() if t_node.alias else ""
+                    if alias == col_table_ref or t_node.name.lower() == col_table_ref:
+                        target_table = t_node.name.lower()
+                        break
+            if target_table:
+                if target_table in valid_schema:
+                    if col_name not in valid_schema[target_table]:
+                        warnings.append(f"生成 SQL 包含表 `{target_table}` 中不存在的字段: `{col_node.name}`")
+            else:
+                queried_valid_tables = [t for t in query_tables if t in valid_schema]
+                if queried_valid_tables:
+                    exists_in_any = any(col_name in valid_schema[t] for t in queried_valid_tables)
+                    if not exists_in_any:
+                        tbl_list = ", ".join(f"`{t}`" for t in queried_valid_tables)
+                        warnings.append(f"生成 SQL 中的字段 `{col_node.name}` 不存在于查询的表 {tbl_list} 中")
+    except Exception as e:
+        logger.warning("Schema validation error: %s", e)
+    return warnings

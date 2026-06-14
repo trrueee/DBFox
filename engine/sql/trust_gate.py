@@ -65,8 +65,9 @@ class TrustGate:
         dialect = str(datasource.db_type or "mysql") if datasource else "mysql"
         env = str(datasource.env or "dev").lower() if datasource else "dev"
 
-        schema_warnings = self.schema_validator(sql, self.db, datasource_id)
         guardrail = guardrail_check(sql, dialect=dialect)
+        parsed_ast = guardrail.get("_parsed_ast")
+        schema_warnings = self.schema_validator(parsed_ast or sql, self.db, datasource_id)
         messages: list[str] = []
 
         guardrail_result = guardrail["result"]
