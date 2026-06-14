@@ -87,7 +87,16 @@ def api_execute_sql(req: SQLExecuteRequest, db: Session = Depends(get_db)) -> di
 
 @router.post("/query/explain")
 def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+    datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found"})
+
     try:
+        if str(datasource.db_type or "").lower() == "postgresql":
+            from engine.sql.postgres_explain import explain_postgres_sql
+
+            return explain_postgres_sql(db, req.datasource_id, req.sql)
+
         from engine.sql.executor import explain_sql
 
         return explain_sql(db, req.datasource_id, req.sql)
