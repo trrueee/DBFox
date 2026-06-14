@@ -1,10 +1,12 @@
+from pathlib import Path
+
 import pytest
 
 from engine.datasource import build_postgres_ssl_params, test_connection
 from engine.errors import DataSourceConnectionError
 
 
-def test_sqlite_connection_test_rejects_missing_file(tmp_path) -> None:
+def test_sqlite_connection_test_rejects_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "missing.sqlite"
 
     with pytest.raises(DataSourceConnectionError):
