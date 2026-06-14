@@ -39,8 +39,21 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "icons/icon.ico": "databox-icon.ico"
+    },
     "externalBin": [
       "binaries/databox-engine"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "template": "wix-template.wxs"
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "nsis-hooks.nsh"
+      }
+    }
   }
 }
