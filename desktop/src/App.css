@@ -610,12 +610,12 @@
   width: 86px;
   height: 86px;
   margin: 0 auto 14px;
-  border-radius: 24px;
+  border-radius: 999px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #FFFFFF 0%, #EAF6FF 100%);
-  border: 1px solid rgba(221, 234, 248, 0.9);
-  box-shadow: 0 16px 32px rgba(118, 103, 242, 0.12);
+  background: transparent;
+  border: 0;
+  box-shadow: 0 18px 34px rgba(118, 103, 242, 0.10);
 }
 
 .hifi-hero-pattern {

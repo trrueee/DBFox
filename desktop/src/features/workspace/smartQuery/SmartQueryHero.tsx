@@ -4,7 +4,7 @@ export function SmartQueryHero() {
   return (
     <div className="hifi-hero">
       <div className="hifi-hero-fox">
-        <FoxIcon variant="ai-tight" size={72} alt="DataBox AI fox" />
+        <FoxIcon variant="app" size={78} alt="DataBox fox" />
       </div>
       <h2 className="hifi-hero-title">
         你好，开始你的 <span className="hifi-gradient-text">智能问数之旅</span>
