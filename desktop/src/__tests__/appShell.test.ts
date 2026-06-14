@@ -30,9 +30,8 @@ describe("app shell layout", () => {
     const css = read("App.css");
 
     expect(css).toMatch(/\.app-shell\s*{[^}]*position:\s*fixed;[^}]*inset:\s*0;[^}]*width:\s*100vw;[^}]*height:\s*100vh;/s);
-    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\) auto;/s);
+    expect(css).toMatch(/\.app-shell-inner\s*{[^}]*display:\s*grid;[^}]*grid-template-rows:\s*auto minmax\(0,\s*1fr\);/s);
     expect(css).toMatch(/\.app-body\s*{[^}]*grid-row:\s*2;/s);
-    expect(css).toMatch(/\.app-statusbar\s*{[^}]*grid-row:\s*3;/s);
     expect(css).toMatch(/\.app-main\s*{[^}]*margin:\s*8px 8px 6px 0;[^}]*border-radius:\s*16px;[^}]*box-shadow:[^}]*overflow:\s*hidden;/s);
   });
 

@@ -84,6 +84,11 @@ def get_or_create_local_token() -> str:
 
 # 初始化并保存当前运行周期的安全令牌
 LOCAL_SECURE_TOKEN = get_or_create_local_token()
+ALLOWED_TAURI_ORIGINS = {
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+}
 
 # 仅在“非冷冻”（即本地源码开发模式）下，把 Token 自动写给 React 前端本地方便直接调试连接
 is_frozen = getattr(sys, "frozen", False)
@@ -165,7 +170,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
     # 🔒 在生产环境（Tauri 容器内）强制检查请求的 Origin 来源头部
     origin = request.headers.get("origin")
     if is_frozen and origin:
-        if origin != "tauri://localhost":
+        if origin not in ALLOWED_TAURI_ORIGINS:
             logger.warning("拦截到非法的跨域恶意连接请求，尝试来源: %s", origin)
             return JSONResponse(
                 status_code=403,
@@ -211,7 +216,7 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
-        "tauri://localhost",
+        *ALLOWED_TAURI_ORIGINS,
     ],
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有 HTTP 方法 (GET, POST, PUT, DELETE, OPTIONS等)
