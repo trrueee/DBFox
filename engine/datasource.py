@@ -1,16 +1,18 @@
+from pathlib import Path
 from typing import Any
 
+import logging
+import socket
+import threading
+
 import pymysql
+from sshtunnel import SSHTunnelForwarder
 
 from engine.crypto import decrypt_password
 from engine.errors import DataSourceConnectionError
 
-import threading
-import socket
-import logging
-from sshtunnel import SSHTunnelForwarder
-
 logger = logging.getLogger("databox.tunnel")
+
 
 class TunnelState:
     CONNECTED = "connected"
@@ -18,6 +20,7 @@ class TunnelState:
     RECONNECTING = "reconnecting"
     FAILED = "failed"
     CLOSED = "closed"
+
 
 class TunnelInstance:
     datasource_id: str
@@ -32,6 +35,7 @@ class TunnelInstance:
         self.tunnel = tunnel
         self.state = TunnelState.CONNECTED
         self.error_message = None
+
 
 class TunnelManager:
     def __init__(self) -> None:
@@ -53,7 +57,7 @@ class TunnelManager:
                 try:
                     instance.tunnel.stop()
                 except Exception as e:
-                    logger.error(f"Error stopping tunnel for {datasource_id}: {e}")
+                    logger.error("Error stopping tunnel for %s: %s", datasource_id, e)
 
     def close_all(self) -> None:
         with self._lock:
@@ -62,17 +66,14 @@ class TunnelManager:
                 try:
                     instance.tunnel.stop()
                 except Exception as e:
-                    logger.error(f"Error stopping tunnel for {ds_id}: {e}")
+                    logger.error("Error stopping tunnel for %s: %s", ds_id, e)
             self._tunnels.clear()
 
     def health_check(self, datasource_id: str) -> bool:
-        """
-        Performs deep health check on the specified tunnel by validating socket availability.
-        """
-        instance = None
+        """Validate that the tunnel object and local bind socket are alive."""
         with self._lock:
             instance = self._tunnels.get(datasource_id)
-        
+
         if not instance:
             return False
 
@@ -80,26 +81,26 @@ class TunnelManager:
             instance.state = TunnelState.STALE
             return False
 
-        # Attempt to probe the local bind port via a quick TCP connection test
         try:
             port = instance.tunnel.local_bind_port
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1.0)
-                s.connect(('127.0.0.1', port))
+                s.connect(("127.0.0.1", port))
             instance.state = TunnelState.CONNECTED
             return True
         except Exception as e:
-            logger.warning(f"Tunnel health probe failed on port {instance.tunnel.local_bind_port} for {datasource_id}: {e}")
+            logger.warning(
+                "Tunnel health probe failed on port %s for %s: %s",
+                instance.tunnel.local_bind_port,
+                datasource_id,
+                e,
+            )
             instance.state = TunnelState.STALE
             return False
 
     def get_or_reconnect(self, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-        """
-        Retrieves active tunnel or automatically triggers self-healing re-connections if stale.
-        """
-        ds_id = ds_dict.get("id")
-        if not ds_id:
-            ds_id = f"temp_{ds_dict.get('host')}_{ds_dict.get('port')}"
+        """Get an active tunnel or self-heal a stale one."""
+        ds_id = ds_dict.get("id") or f"temp_{ds_dict.get('host')}_{ds_dict.get('port')}"
 
         with self._lock:
             instance = self._tunnels.get(ds_id)
@@ -107,12 +108,10 @@ class TunnelManager:
         if not instance:
             return self._create_tunnel(ds_id, ds_dict)
 
-        # Deep health check probe
-        is_healthy = self.health_check(ds_id)
-        if is_healthy:
+        if self.health_check(ds_id):
             return instance.tunnel
 
-        logger.info(f"SSH Tunnel for {ds_id} went stale. Initiating self-healing auto-reconnect...")
+        logger.info("SSH Tunnel for %s went stale. Initiating self-healing auto-reconnect...", ds_id)
         with self._lock:
             instance.state = TunnelState.RECONNECTING
 
@@ -127,17 +126,17 @@ class TunnelManager:
                 instance.tunnel = new_tunnel
                 instance.state = TunnelState.CONNECTED
                 instance.error_message = None
-            logger.info(f"SSH Tunnel auto-reconnect successful for {ds_id}.")
+            logger.info("SSH Tunnel auto-reconnect successful for %s.", ds_id)
             return new_tunnel
         except Exception as e:
-            logger.error(f"SSH Tunnel self-healing auto-reconnect failed for {ds_id}: {e}")
+            logger.error("SSH Tunnel self-healing auto-reconnect failed for %s: %s", ds_id, e)
             with self._lock:
                 instance.state = TunnelState.FAILED
                 instance.error_message = str(e)
             raise DataSourceConnectionError(f"SSH 隧道连接已断开，自动尝试自愈重连失败: {str(e)}")
 
     def _create_tunnel(self, ds_id: str, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-        logger.info(f"Creating new SSH tunnel for {ds_id}")
+        logger.info("Creating new SSH tunnel for %s", ds_id)
         tunnel = self._start_physical_tunnel(ds_dict)
         instance = TunnelInstance(ds_id, ds_dict, tunnel)
         with self._lock:
@@ -168,8 +167,7 @@ class TunnelManager:
             ssh_pkey=ssh_pkey,
             ssh_private_key_password=pkey_passphrase,
             remote_bind_address=(target_host, target_port),
-            local_bind_address=('127.0.0.1', 0),
-            # Protocol transport-level KeepAlive (every 30s) to bypass idle remote firewall drops
+            local_bind_address=("127.0.0.1", 0),
             keepalive=30,
         )
         tunnel.start()
@@ -179,33 +177,48 @@ class TunnelManager:
         with self._lock:
             for ds_id, instance in list(self._tunnels.items()):
                 if not instance.tunnel.is_active:
-                    logger.info(f"Purging dead inactive tunnel instance: {ds_id}")
+                    logger.info("Purging dead inactive tunnel instance: %s", ds_id)
                     try:
                         instance.tunnel.stop()
                     except Exception:
                         pass
                     self._tunnels.pop(ds_id, None)
 
-# Instantiate global TunnelManager to serve all background drivers and connection requests
+
 TUNNEL_MANAGER = TunnelManager()
 
+
 def close_active_tunnel(datasource_id: str) -> None:
-    """Close active SSH tunnel for a data source if it exists"""
+    """Close active SSH tunnel for a data source if it exists."""
     TUNNEL_MANAGER.close_tunnel(datasource_id)
 
+
 def close_all_tunnels() -> None:
-    """Close all active SSH tunnels on app shutdown"""
+    """Close all active SSH tunnels on app shutdown."""
     TUNNEL_MANAGER.close_all()
 
+
 def get_or_create_tunnel_for_dict(ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-    """Gets or starts an SSH tunnel with deep health probes and auto-reconnects"""
+    """Get or start an SSH tunnel with deep health probes and auto-reconnects."""
     return TUNNEL_MANAGER.get_or_reconnect(ds_dict)
+
 
 def _normalized_optional_path(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _require_existing_sqlite_file(db_path: Any) -> Path:
+    path_text = str(db_path or "").strip()
+    if not path_text:
+        raise DataSourceConnectionError("未提供 SQLite 数据库文件路径。")
+    path = Path(path_text).expanduser()
+    if not path.is_file():
+        raise DataSourceConnectionError(f"SQLite 数据库文件不存在: {path}")
+    return path
+
 
 def build_mysql_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
     """Build PyMySQL SSL parameters with certificate verification enabled."""
@@ -218,9 +231,7 @@ def build_mysql_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
     verify_identity = bool(config.get("ssl_verify_identity", True))
 
     if verify_identity and not ca_path:
-        raise DataSourceConnectionError(
-            "SSL identity verification requires a CA certificate path."
-        )
+        raise DataSourceConnectionError("SSL identity verification requires a CA certificate path.")
 
     ssl_params: dict[str, Any] = {
         "ssl_verify_cert": True,
@@ -234,8 +245,34 @@ def build_mysql_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
         ssl_params["ssl_key"] = key_path
     return ssl_params
 
+
+def build_postgres_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
+    """Build psycopg2 SSL parameters from the shared datasource SSL fields."""
+    if not config.get("ssl_enabled"):
+        return {}
+
+    ca_path = _normalized_optional_path(config.get("ssl_ca_path"))
+    cert_path = _normalized_optional_path(config.get("ssl_cert_path"))
+    key_path = _normalized_optional_path(config.get("ssl_key_path"))
+    verify_identity = bool(config.get("ssl_verify_identity", True))
+
+    if verify_identity and not ca_path:
+        raise DataSourceConnectionError("PostgreSQL SSL identity verification requires a CA certificate path.")
+
+    params: dict[str, Any] = {
+        "sslmode": "verify-full" if verify_identity else ("verify-ca" if ca_path else "require"),
+    }
+    if ca_path:
+        params["sslrootcert"] = ca_path
+    if cert_path:
+        params["sslcert"] = cert_path
+    if key_path:
+        params["sslkey"] = key_path
+    return params
+
+
 def get_mysql_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Decrypt password and construct parameters for PyMySQL connection"""
+    """Decrypt password and construct parameters for PyMySQL connection."""
     pw = decrypt_password(datasource_dict["password_ciphertext"], datasource_dict["password_nonce"])
     host = datasource_dict["host"]
     port = datasource_dict["port"]
@@ -262,7 +299,7 @@ def get_mysql_connection_params(datasource_dict: dict[str, Any]) -> dict[str, An
 
 
 def get_postgres_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Decrypt password and construct parameters for PostgreSQL connection"""
+    """Decrypt password and construct parameters for PostgreSQL connection."""
     pw = decrypt_password(datasource_dict["password_ciphertext"], datasource_dict["password_nonce"])
     host = datasource_dict["host"]
     port = int(datasource_dict.get("port", 5432) or 5432)
@@ -279,7 +316,9 @@ def get_postgres_connection_params(datasource_dict: dict[str, Any]) -> dict[str,
         "password": pw,
         "database": datasource_dict["database_name"],
     }
+    params.update(build_postgres_ssl_params(datasource_dict))
     return params
+
 
 def test_connection(config: dict[str, Any]) -> dict[str, Any]:
     """
@@ -288,16 +327,13 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
     """
     db_type = config.get("db_type", "mysql")
 
-    # 1. Handle SQLite Database Connection Test
     if db_type == "sqlite":
-        db_path = config.get("database_name", "")
-        if not db_path:
-            raise DataSourceConnectionError("未提供 SQLite 数据库文件路径。")
-
+        db_path = _require_existing_sqlite_file(config.get("database_name", ""))
         import os
+        import sqlite3
+
         try:
-            import sqlite3
-            conn = sqlite3.connect(db_path, timeout=5)
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", timeout=5, uri=True)
             try:
                 cursor = conn.cursor()
                 cursor.execute("SELECT sqlite_version()")
@@ -308,9 +344,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                readonly = False
-                if os.path.exists(db_path) and not os.access(db_path, os.W_OK):
-                    readonly = True
+                readonly = not os.access(db_path, os.W_OK)
 
                 return {
                     "ok": True,
@@ -318,14 +352,15 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                     "readonly": readonly,
                     "tablesCount": tables_count,
                     "warnings": [],
-                    "message": "SQLite 数据库连接测试成功！"
+                    "message": "SQLite 数据库连接测试成功！",
                 }
             finally:
                 conn.close()
         except Exception as e:
+            if isinstance(e, DataSourceConnectionError):
+                raise e
             raise DataSourceConnectionError(f"无法建立 SQLite 数据库连接，请检查路径配置。错误: {str(e)}")
 
-    # 2. Handle PostgreSQL Database Connection Test
     if db_type == "postgresql":
         host = config.get("host", "")
         port = config.get("port", 5432)
@@ -357,7 +392,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                         ssh_pkey=ssh_pkey,
                         ssh_private_key_password=pkey_passphrase,
                         remote_bind_address=(host, port),
-                        local_bind_address=('127.0.0.1', 0),
+                        local_bind_address=("127.0.0.1", 0),
                     )
                     temp_tunnel.start()
                     test_host = "127.0.0.1"
@@ -366,34 +401,33 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                     raise DataSourceConnectionError(f"无法建立 SSH 隧道，请检查跳板机配置。错误: {str(se)}")
 
             import psycopg2
+
             conn = psycopg2.connect(
                 host=test_host,
                 port=test_port,
                 user=username,
                 password=password,
                 database=database_name,
-                connect_timeout=5
+                connect_timeout=5,
+                **build_postgres_ssl_params(config),
             )
             try:
                 with conn.cursor() as cursor:  # type: ignore[attr-defined]
-                    # Get PostgreSQL server version
                     cursor.execute("SELECT version()")
                     version_row = cursor.fetchone()
                     version = str(version_row[0]) if version_row else "unknown"
 
-                    # Get count of tables in this database (non-system tables)
                     cursor.execute("""
-                        SELECT COUNT(*) 
-                        FROM information_schema.tables 
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
                         WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
                     """)
                     tables_row = cursor.fetchone()
                     tables_count = int(tables_row[0]) if tables_row else 0
 
-                    # Assess write permissions
                     cursor.execute("SELECT current_setting('transaction_read_only')")
                     ro_res = cursor.fetchone()
-                    readonly = (ro_res[0] == 'on') if ro_res else False
+                    readonly = (ro_res[0] == "on") if ro_res else False
 
                     warnings = []
                     if not readonly:
@@ -405,7 +439,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                         "readonly": readonly,
                         "tablesCount": tables_count,
                         "warnings": warnings,
-                        "message": "PostgreSQL 数据库连接测试成功！"
+                        "message": "PostgreSQL 数据库连接测试成功！",
                     }
             finally:
                 conn.close()
@@ -420,7 +454,6 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 except Exception:
                     pass
 
-    # 3. Handle Real MySQL Connection Test
     host = config.get("host", "")
     port = config.get("port", 3306)
     database_name = config.get("database_name", "")
@@ -451,7 +484,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                     ssh_pkey=ssh_pkey,
                     ssh_private_key_password=pkey_passphrase,
                     remote_bind_address=(host, port),
-                    local_bind_address=('127.0.0.1', 0),
+                    local_bind_address=("127.0.0.1", 0),
                 )
                 temp_tunnel.start()
                 test_host = "127.0.0.1"
@@ -471,26 +504,22 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
         )
         try:
             with conn.cursor() as cursor:  # type: ignore[attr-defined]
-                # Get MySQL server version
                 cursor.execute("SELECT VERSION()")
                 version_row = cursor.fetchone()
                 version = str(version_row[0]) if version_row else "unknown"
 
-                # Get count of tables in this database
                 cursor.execute(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s",
-                    (database_name,)
+                    (database_name,),
                 )
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                # Assess write permissions by reading grants or querying table privileges
                 readonly = True
                 warnings = []
                 try:
                     cursor.execute("SHOW GRANTS FOR CURRENT_USER()")
                     grants = [row[0] for row in cursor.fetchall()]
-                    # Check if grants contain unsafe privileges
                     for grant in grants:
                         grant_upper = grant.upper()
                         if "ALL PRIVILEGES" in grant_upper or any(op in grant_upper for op in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER"]):
@@ -516,7 +545,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                     "readonly": readonly,
                     "tablesCount": tables_count,
                     "warnings": warnings,
-                    "message": "数据库连接测试成功！"
+                    "message": "数据库连接测试成功！",
                 }
         finally:
             conn.close()
