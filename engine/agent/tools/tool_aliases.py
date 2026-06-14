@@ -17,14 +17,6 @@ Adding a new tool: just add an entry to ALIAS_TO_INTERNAL.
 
 # Alias → internal name (underscore-safe names for model-facing usage)
 ALIAS_TO_INTERNAL: dict[str, str] = {
-    # Workspace tools
-    "workspace_explain_sql": "workspace.explain_sql",
-    "workspace_fix_sql": "workspace.fix_sql",
-    "workspace_optimize_sql": "workspace.optimize_sql",
-    "workspace_rewrite_sql": "workspace.rewrite_sql",
-    "workspace_explain_result": "workspace.explain_result",
-    "workspace_continue_from_artifact": "workspace.continue_from_artifact",
-    "workspace_explain_schema": "workspace.explain_schema",
     # Environment tools
     "schema_list_tables": "schema.list_tables",
     "schema_describe_table": "schema.describe_table",

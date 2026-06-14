@@ -76,7 +76,7 @@ Once db.query returns data, synthesize a direct answer. Do NOT call more tools u
 - Use schema.describe_table when the user asks for the schema of a NAMED table.
 - Use schema.list_tables when the user asks what tables exist.
 - Use schema.refresh_catalog when the catalog appears empty or stale.
-- Use workspace.explain_schema ONLY for tables already shown in the workspace editor — NOT to look up live database tables.
+- Use db.inspect to look up live database table and column information for schema understanding.
 
 ## Tool escalation
 

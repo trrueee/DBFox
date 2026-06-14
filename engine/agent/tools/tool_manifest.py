@@ -78,41 +78,11 @@ TOOL_AFFORDANCE: dict[str, str] = {
     ),
 }
 
-WORKSPACE_AFFORDANCE: dict[str, str] = {
-    "workspace.explain_sql": (
-        "Explain the SQL statement currently in the user's editor. "
-        "Only works when there is active SQL in the workspace editor."
-    ),
-    "workspace.fix_sql": (
-        "Fix errors in the user's existing editor SQL. "
-        "Use when the user reports an error. Does NOT execute SQL."
-    ),
-    "workspace.optimize_sql": (
-        "Optimize the user's editor SQL for performance. Does NOT execute SQL."
-    ),
-    "workspace.rewrite_sql": (
-        "Rewrite the user's editor SQL per their instructions. Does NOT execute SQL."
-    ),
-    "workspace.explain_result": (
-        "Explain the result set currently visible in the editor. "
-        "Uses the last query result preview. Does NOT execute new SQL."
-    ),
-    "workspace.continue_from_artifact": (
-        "Continue analysis from a previously generated artifact. "
-        "Uses the selected artifact as context."
-    ),
-    "workspace.explain_schema": (
-        "Explain schema information already present in the current workspace "
-        "context. Only works when a workspace is active with selected tables. "
-        "Do NOT use to look up a table from the live datasource — use "
-        "schema.describe_table instead."
-    ),
-}
 
 
 def enrich_description(name: str, raw_description: str) -> str:
     """Return an enriched tool description for the LLM."""
-    affordance = TOOL_AFFORDANCE.get(name) or WORKSPACE_AFFORDANCE.get(name)
+    affordance = TOOL_AFFORDANCE.get(name)
     if affordance:
         return affordance
     return raw_description
