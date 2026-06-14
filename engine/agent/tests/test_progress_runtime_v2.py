@@ -4,10 +4,10 @@ from langchain_core.messages import HumanMessage
 
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
-from engine.agent.nodes.progress_node import _check_sql_repair_fastpath, _enrich_progress_result
+from engine.agent.progress.fast_path import check_sql_repair_fastpath as _check_sql_repair_fastpath
+from engine.agent.progress.lens_formatter import enrich_progress_result as _enrich_progress_result
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.progress.clarification_policy import (
-    is_clarification_allowed,
     should_progress_clarify,
 )
 from engine.agent.progress.schemas import ProgressDecision
@@ -35,36 +35,6 @@ class TestProgressDecisionSchema:
 
 
 class TestClarificationPolicy:
-    def test_suppresses_unknown_table_clarification(self):
-        directive = AgentPlanDirective(
-            task_type="ambiguous",
-            grounding_level="schema",
-            execution_mode="user_requested_read",
-            allowed_tool_groups=[],
-            should_call_tools=False,
-            should_execute_sql=True,
-            needs_clarification=True,
-            clarification_question="Which table should I query?",
-            reasoning_summary="Unknown table name",
-        )
-        allowed, reason = is_clarification_allowed(directive, {"datasource_id": "ds-1"})
-        assert allowed is False
-        assert reason == "self_recoverable_gap"
-
-    def test_allows_missing_active_entity(self):
-        directive = AgentPlanDirective(
-            task_type="result_analysis",
-            grounding_level="workspace",
-            execution_mode="none",
-            allowed_tool_groups=["workspace"],
-            should_call_tools=True,
-            should_execute_sql=False,
-            needs_clarification=True,
-            clarification_question="Which table did you mean?",
-            reasoning_summary="User asked to analyze this table",
-        )
-        allowed, _ = is_clarification_allowed(directive, {"datasource_id": "ds-1", "workspace_context": {}})
-        assert allowed is True
 
     def test_progress_clarify_blocked_for_schema_errors(self):
         assert should_progress_clarify(

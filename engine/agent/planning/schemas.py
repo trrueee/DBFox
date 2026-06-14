@@ -8,7 +8,6 @@ AgentTaskType = Literal[
     "chat",
     "product_help",
     "database_concept",
-    "workspace_explanation",
     "schema_understanding",
     "semantic_analysis",
     "sql_generation",
@@ -22,7 +21,6 @@ AgentTaskType = Literal[
 
 AgentGroundingLevel = Literal[
     "none",
-    "workspace",
     "schema",
     "semantic",
     "data",
@@ -36,7 +34,6 @@ AgentExecutionMode = Literal[
 ]
 
 AgentToolGroup = Literal[
-    "workspace",
     "environment",
     "schema",
     "db",

@@ -10,11 +10,14 @@ DataBox 数据库连接与迁移管理模块 (Database Connection & Migration Ma
 """
 
 import contextvars
+import logging
 import os
 import sys
 import threading
 import traceback
 from pathlib import Path
+
+logger = logging.getLogger("databox.db")
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import Connection
@@ -209,7 +212,7 @@ def init_db() -> None:
                     except Exception:
                         pass
         except Exception as e:
-            print(f"迁移警告：升级前未能成功备份元数据库文件: {e}")
+            logger.warning("迁移警告：升级前未能成功备份元数据库文件: %s", e)
             backup_path = None
 
     try:
@@ -231,7 +234,7 @@ def init_db() -> None:
             script_location = Path(__file__).resolve().parent / "migrations"
 
         if not ini_path.exists():
-            print(f"Alembic配置文件不存在: {ini_path}")
+            logger.warning("Alembic配置文件不存在: %s", ini_path)
             return
 
         # 强制关闭所有连接，避免 Windows 下文件锁导致的迁移失败
@@ -246,37 +249,30 @@ def init_db() -> None:
 
         # If DB does not exist, create and stamp to head after creating tables.
         # For existing DB, ensure version table and upgrade.
-        print("DEBUG DB: entering engine.begin() context", file=sys.stderr, flush=True)
         with engine.begin() as conn:
-            print("DEBUG DB: inside engine.begin() context", file=sys.stderr, flush=True)
             inspector = None
             try:
                 from sqlalchemy import inspect
                 inspector = inspect(conn)
                 tables = inspector.get_table_names()
-                print(f"DEBUG DB: inspect tables completed, tables: {tables}", file=sys.stderr, flush=True)
+                logger.debug("Alembic migration: found %d existing tables", len(tables))
             except Exception as inspect_err:
-                print(f"DEBUG DB: inspect failed: {inspect_err}", file=sys.stderr, flush=True)
+                logger.warning("Alembic migration: inspect failed: %s", inspect_err)
                 tables = []
             if not tables:
-                print("DEBUG DB: no tables found, calling Base.metadata.create_all", file=sys.stderr, flush=True)
+                logger.info("Alembic migration: no tables found, creating schema and stamping head")
                 Base.metadata.create_all(bind=conn)
-                print("DEBUG DB: Base.metadata.create_all completed, calling command.stamp", file=sys.stderr, flush=True)
                 command.stamp(alembic_cfg, "head")
-                print("DEBUG DB: command.stamp completed", file=sys.stderr, flush=True)
             else:
-                print("DEBUG DB: tables found, calling command.upgrade", file=sys.stderr, flush=True)
+                logger.info("Alembic migration: upgrading to head")
                 command.upgrade(alembic_cfg, "head")
-                print("DEBUG DB: command.upgrade completed", file=sys.stderr, flush=True)
-        print("DEBUG DB: engine.begin() context exited successfully", file=sys.stderr, flush=True)
     except Exception as e:
-        print("数据库初始化失败:", e, file=sys.stderr, flush=True)
+        logger.error("数据库初始化失败: %s", e)
         if backup_path is not None and backup_path.exists():
             try:
                 engine.dispose()
                 import shutil
                 shutil.copy2(backup_path, DB_PATH)
-                print("已从备份恢复数据库", file=sys.stderr, flush=True)
+                logger.info("已从备份恢复数据库")
             except Exception as restore_err:
-                print("恢复备份失败:", restore_err, file=sys.stderr, flush=True)
-    print("DEBUG DB: init_db() completed and returning", file=sys.stderr, flush=True)
+                logger.error("恢复备份失败: %s", restore_err)

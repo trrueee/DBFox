@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from engine.tools.db_tools import (
     db_inspect,
     db_observe,
@@ -12,57 +10,8 @@ from engine.tools.db_tools import (
     db_remember,
     db_search,
 )
-from engine.agent_core.types import AgentRunRequest, ToolObservation
-from engine.agent_core.workspace_context import build_agent_context_bundle
-from engine.tools.workspace_tools import WORKSPACE_HANDLERS, WORKSPACE_TOOL_NAMES
-from engine.agent_core.tool_registry import (
-    RegisteredTool,
-    ToolContext,
-    ToolExecutionSpec,
-    ToolPolicy,
-    ToolRegistry,
-    ToolSpec,
-    ToolStateBinding,
-)
-
-
-class QuestionToolInput(BaseModel):
-    """Tool that accepts an optional question override."""
-    question: str | None = None
-
-
-# ---------------------------------------------------------------------------
-# Environment tool inputs
-# ---------------------------------------------------------------------------
-
-class DescribeTableInput(BaseModel):
-    """Describe a named table from the live datasource."""
-    table_name: str = Field(..., description="The exact table name to describe, e.g. 'singer', 'orders'.")
-
-
-class RefreshCatalogInput(BaseModel):
-    """Refresh the schema catalog from the live datasource."""
-    reason: str | None = Field(None, description="Why the catalog needs refreshing.")
-
-
-class MemorySearchInput(BaseModel):
-    """Search long-term memory for relevant context."""
-    query: str = Field(..., description="What to search for.")
-    scope: list[str] | None = Field(None, description="Where to search: 'user', 'project', 'datasource'.")
-    memory_types: list[str] | None = Field(None, description="Filter by type.")
-
-
-class MemoryWriteInput(BaseModel):
-    """Write a new memory entry."""
-    type: str = Field(..., description="Memory type.")
-    text: str = Field(..., description="Human-readable memory text.")
-    content: dict[str, Any] | None = Field(None, description="Structured content.")
-
-
-class MemoryDeleteInput(BaseModel):
-    """Delete a memory entry."""
-    memory_id: str = Field(..., description="The ID of the memory to delete.")
-    reason: str | None = Field("user_requested", description="Why this memory is being deleted.")
+from engine.agent_core.types import ToolObservation
+from engine.agent_core.tool_registry import ToolContext, ToolRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +62,6 @@ def register_databox_tools() -> ToolRegistry:
     handlers.force_register("memory_delete", memory_delete)
     handlers.force_register("memory_summarize_session", memory_summarize_session)
 
-    # -- Workspace ---------------------------------------------------------
-    handlers.force_register("workspace_assist", _workspace_assist)
-
     # -- Build registry from YAML specs + handlers -------------------------
     registry = ToolRegistry()
     registry.add_builtin_source()
@@ -133,38 +79,6 @@ def register_databox_tools() -> ToolRegistry:
     return registry
 
 
-# ---- Workspace handler ------------------------------------------------------
-
-
-def _workspace_assist(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    tool_name = str(ctx.state_view.get("_current_tool_name") or "")
-    if not tool_name:
-        pending_call = ctx.state_view.get("pending_tool_call")
-        if isinstance(pending_call, dict):
-            tool_name = str(pending_call.get("tool_name") or "")
-    handler = WORKSPACE_HANDLERS.get(tool_name)
-    if handler is None:
-        return ToolObservation(
-            name=tool_name, status="failed",
-            input=args, error=f"Unknown workspace tool: {tool_name}", latency_ms=0,
-        )
-    req = _request(ctx, args)
-    bundle = build_agent_context_bundle(ctx.db, req)
-    intent = tool_name.removeprefix("workspace.")
-    observation = handler(
-        {"intent": intent, "context_bundle": bundle},
-        ctx,
-    )
-    if tool_name == "workspace.explain_sql" and observation.output:
-        workspace = req.workspace_context
-        sql = str((workspace.selected_sql if workspace else None) or (workspace.active_sql if workspace else None) or "").strip()
-        if sql and sql not in str(observation.output.get("answer") or ""):
-            output = dict(observation.output)
-            output["answer"] = f"{output.get('answer')}\n\nSQL:\n```sql\n{sql}\n```"
-            return observation.model_copy(update={"output": output})
-    return observation
-
-
 # ---- Escalate ---------------------------------------------------------------
 
 
@@ -174,7 +88,7 @@ def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservat
     reason = str(args.get("reason", "")).strip()
 
     valid_groups = {
-        "workspace", "environment", "schema", "db", "semantic",
+        "environment", "schema", "db", "semantic",
         "memory", "execution",
     }
 
@@ -216,10 +130,4 @@ def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservat
 # ---- helpers ----------------------------------------------------------------
 
 
-def _request(ctx: ToolContext, args: dict[str, Any]) -> AgentRunRequest:
-    if not args.get("question"):
-        return ctx.request
-    return ctx.request.model_copy(update={
-        "question": str(args["question"]),
-        "follow_up_context": None,
-    })
+# helpers kept minimal; handler functions are imported from dedicated tool modules
