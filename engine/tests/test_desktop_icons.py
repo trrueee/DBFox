@@ -1,10 +1,15 @@
+import json
+import re
 from pathlib import Path
 
 from PIL import Image, ImageChops
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TAURI_CONF = ROOT / "desktop" / "src-tauri" / "tauri.conf.json"
 TAURI_ICONS = ROOT / "desktop" / "src-tauri" / "icons"
+NSIS_HOOKS = ROOT / "desktop" / "src-tauri" / "nsis-hooks.nsh"
+WIX_TEMPLATE = ROOT / "desktop" / "src-tauri" / "wix-template.wxs"
 FAVICON = ROOT / "desktop" / "public" / "favicon.png"
 
 
@@ -106,3 +111,37 @@ def test_favicon_uses_same_transparent_mark_as_bundle_icon() -> None:
     assert favicon.size == (32, 32)
     _assert_transparent_padding(FAVICON)
     assert ImageChops.difference(favicon, bundle_icon).getbbox() is None
+
+
+def test_windows_installer_uses_bundled_icon_for_distribution_shortcuts() -> None:
+    config = json.loads(TAURI_CONF.read_text(encoding="utf-8"))
+    bundle = config["bundle"]
+    windows = bundle["windows"]
+    nsis = windows["nsis"]
+    wix = windows["wix"]
+
+    assert bundle["targets"] == "all"
+    assert bundle["resources"]["icons/icon.ico"] == "databox-icon.ico"
+    assert nsis["installerIcon"] == "icons/icon.ico"
+    assert nsis["uninstallerIcon"] == "icons/icon.ico"
+    assert nsis["installerHooks"] == "nsis-hooks.nsh"
+    assert wix["template"] == "wix-template.wxs"
+
+    hooks = NSIS_HOOKS.read_text(encoding="utf-8")
+    assert "$INSTDIR\\databox-icon.ico" in hooks
+    assert "$DESKTOP\\${PRODUCTNAME}.lnk" in hooks
+    assert "$SMPROGRAMS\\${PRODUCTNAME}.lnk" in hooks
+    assert "CreateShortcut" in hooks
+    assert "SHChangeNotify" in hooks
+
+    wix_template = WIX_TEMPLATE.read_text(encoding="utf-8")
+    assert re.search(
+        r'<Shortcut\s+Id="ApplicationDesktopShortcut"[^>]*Icon="ProductIcon"',
+        wix_template,
+        re.DOTALL,
+    )
+    assert re.search(
+        r'<Shortcut\s+Id="ApplicationStartMenuShortcut"[^>]*Icon="ProductIcon"',
+        wix_template,
+        re.DOTALL,
+    )
