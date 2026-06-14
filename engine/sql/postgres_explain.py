@@ -11,7 +11,6 @@ from engine.sql.executor import (
     _decision_block_message,
     _decision_checks_for_error,
     _resolve_execution_safety_decision,
-    get_postgres_pool,
 )
 
 
@@ -59,18 +58,18 @@ def explain_postgres_sql(db: Session, datasource_id: str, sql_str: str) -> dict[
         "ssl_verify_identity": ds.ssl_verify_identity,
     })
 
-    pool = get_postgres_pool(datasource_id, conn_params)
-    conn_proxy: Any = pool.connect()
+    import psycopg2
+
+    conn: Any = psycopg2.connect(**conn_params, connect_timeout=5)
     try:
         records: list[dict[str, Any]] = []
         warnings: list[str] = []
-        with conn_proxy.cursor() as cursor:
+        with conn.cursor() as cursor:
             cursor.execute(f"EXPLAIN {safe_sql}")
             for row in cursor.fetchall():
                 plan_line = str(row[0]) if row else ""
                 records.append({"Plan": plan_line})
-                plan_upper = plan_line.upper()
-                if "SEQ SCAN" in plan_upper:
+                if "SEQ SCAN" in plan_line.upper():
                     warnings.append("检测到顺序扫描 (Seq Scan)，建议检查过滤字段或连接字段上的索引。")
 
         return {
@@ -80,4 +79,4 @@ def explain_postgres_sql(db: Session, datasource_id: str, sql_str: str) -> dict[
             "safetyDecision": decision.model_dump(mode="json"),
         }
     finally:
-        conn_proxy.close()
+        conn.close()
