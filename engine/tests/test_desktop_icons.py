@@ -93,7 +93,7 @@ def test_windows_ico_contains_common_shell_sizes() -> None:
         frame = icon.ico.getimage(size).convert("RGBA")
         label = f"icon.ico {size[0]}x{size[1]}"
 
-        _assert_image_transparent_padding(frame, label, min_padding_ratio=0.12)
+        _assert_image_transparent_padding(frame, label, min_padding_ratio=0.16)
         assert not _border_has_opaque_white_pixel(frame), (
             f"{label} has opaque white pixels on the canvas border"
         )

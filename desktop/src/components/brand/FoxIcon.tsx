@@ -8,25 +8,33 @@ type FoxIconProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "width" | 
   assetBasePath?: string;
 };
 
-const fileByVariant: Record<FoxIconVariant, string> = {
-  tight: "fox-icon-tight.svg",
-  plain: "fox-icon.svg",
-  ai: "fox-icon-ai.svg",
-  "ai-tight": "fox-icon-ai-tight.svg",
-  app: "fox-icon-app.svg",
+type FoxIconAsset = {
+  basePath: string;
+  file: string;
+};
+
+const assetByVariant: Record<FoxIconVariant, FoxIconAsset> = {
+  tight: { basePath: "/assets/fox/svg", file: "fox-icon-tight.svg" },
+  plain: { basePath: "/assets/fox/svg", file: "fox-icon.svg" },
+  ai: { basePath: "/assets/fox/svg", file: "fox-icon-ai.svg" },
+  "ai-tight": { basePath: "/assets/fox/svg", file: "fox-icon-ai-tight.svg" },
+  app: { basePath: "/assets/fox/png", file: "fox-icon-app-transparent-512.png" },
 };
 
 export function FoxIcon({
   size = 24,
   variant = "tight",
-  assetBasePath = "/assets/fox/svg",
+  assetBasePath,
   alt = "DataBox fox icon",
   style,
   ...props
 }: FoxIconProps) {
+  const asset = assetByVariant[variant];
+  const basePath = assetBasePath ?? asset.basePath;
+
   return (
     <img
-      src={`${assetBasePath}/${fileByVariant[variant]}`}
+      src={`${basePath}/${asset.file}`}
       width={size}
       height={size}
       alt={alt}
