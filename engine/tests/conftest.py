@@ -55,9 +55,12 @@ def db_session():
 
 def _make_spider_ds(db_session, db_key: str):
     """Create a DataSource row pointing at a Spider SQLite database."""
-    sqlite_path = SPIDER_SQLITE_DBS.get(db_key)
-    if not sqlite_path or not Path(sqlite_path).exists():
-        raise FileNotFoundError(f"Spider SQLite DB not found: {sqlite_path}")
+    if db_key not in SPIDER_SQLITE_DBS:
+        raise KeyError(f"Invalid Spider DB key '{db_key}'. Available keys: {list(SPIDER_SQLITE_DBS.keys())}")
+    sqlite_path = SPIDER_SQLITE_DBS[db_key]
+    if not Path(sqlite_path).exists():
+        import pytest
+        pytest.skip(f"Spider SQLite DB file not found: {sqlite_path}")
 
     ds_id = f"ds-spider-{db_key.replace('_', '-')}"
     from engine.models import DataSource

@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* https:; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://fonts.loli.net"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* https:; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://fonts.loli.net"
     }
   },
   "bundle": {
