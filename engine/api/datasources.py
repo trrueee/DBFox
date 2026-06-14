@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
-from engine.datasource import build_mysql_ssl_params, test_connection
+from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
 from engine.errors import DataBoxError
 from engine.models import (
     DEFAULT_PROJECT_ID,
@@ -18,7 +18,8 @@ from engine.models import (
     SchemaTable,
 )
 from engine.schemas import DataSourceTestRequest, DataSourceCreateRequest
-from engine.schema_sync import build_er_diagram_data, sync_schema
+from engine.schema_sync import build_er_diagram_data
+from engine.schema_sync_safe import sync_schema
 
 logger = logging.getLogger("databox.api.datasources")
 router = APIRouter()
@@ -161,8 +162,11 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
 @router.post("/datasources")
 def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
+        config = req.model_dump()
         if req.db_type == "mysql":
-            build_mysql_ssl_params(req.model_dump())
+            build_mysql_ssl_params(config)
+        elif req.db_type == "postgresql":
+            build_postgres_ssl_params(config)
         project_id = _resolve_project_id(db, req.project_id)
         cipher, nonce = encrypt_password(req.password or "")
 
@@ -309,7 +313,6 @@ def api_delete_datasource(
     if not datasource:
         raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
 
-    # 🔒 Two-Phase confirmation check for deleting datasources
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
         expected_details = {"datasource_id": id}
