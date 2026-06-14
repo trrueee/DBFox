@@ -7,6 +7,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from sqlalchemy.orm import Session
+from sqlglot import exp
 
 from engine.sql.guardrail import GuardrailResult, guardrail_check
 from engine.models import DataSource
@@ -23,7 +24,7 @@ ExecutionPolicy = Literal[
     "explain",
     "export",
 ]
-SchemaValidator = Callable[[str, Session, str], list[str]]
+SchemaValidator = Callable[[str | exp.Expression, Session, str], list[str]]
 
 
 class TrustGateResult(TypedDict, total=False):
@@ -82,7 +83,7 @@ class TrustGate:
 
         guardrail = guardrail_check(sql, dialect=dialect)
         parsed_ast = guardrail.get("_parsed_ast")
-        schema_warnings = self.schema_validator(parsed_ast or sql, self.db, datasource_id)
+        schema_warnings = self.schema_validator(parsed_ast if isinstance(parsed_ast, exp.Expression) else sql, self.db, datasource_id)
         public_guardrail = _public_guardrail_result(guardrail)
         messages: list[str] = []
 
