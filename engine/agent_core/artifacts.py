@@ -158,7 +158,7 @@ def build_sql_suggestion_artifact(
         mode="both",
         priority=25,
         identity=identity,
-        produced_by_step=str(payload.get("produced_by_step") or "workspace_assist"),
+        produced_by_step=str(payload.get("produced_by_step") or "db.query"),
         depends_on=["agent_plan_draft"],
     )
 

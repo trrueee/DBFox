@@ -58,6 +58,8 @@ _skip_if_no_api = pytest.mark.skipif(
 # Test A: Real model tool-calling with alias name trajectory
 # ---------------------------------------------------------------------------
 
+@pytest.mark.e2e
+@pytest.mark.real_llm
 @pytest.mark.integration
 @pytest.mark.slow
 class TestRealModelToolCalling:
@@ -164,6 +166,8 @@ class TestRealModelToolCalling:
 # Test B: execute=false → sql.skip_execution
 # ---------------------------------------------------------------------------
 
+@pytest.mark.e2e
+@pytest.mark.real_llm
 @pytest.mark.integration
 @pytest.mark.slow
 class TestExecuteFalse:
@@ -217,11 +221,23 @@ class TestExecuteFalse:
         # sql.skip_execution SHOULD appear (or answer.synthesize directly)
         allowed_skip = {
             "skip_execution",
+            "sql.skip_execution",
+            "sql_skip_execution",
             "answer_synthesizer",
+            "answer.synthesize",
+            "answer_synthesize",
             "generate_sql_candidate",
+            "sql.generate",
+            "sql_generate",
             "validate_sql",
+            "sql.validate",
+            "sql_validate",
             "build_schema_context",
+            "schema.build_context",
+            "schema_build_context",
             "build_query_plan",
+            "query_plan.build",
+            "query_plan_build",
         }
         has_skip_or_answer = any(s in allowed_skip for s in step_names)
         print(f"[EXECUTE=FALSE] Has skip/answer step: {has_skip_or_answer}")
@@ -236,6 +252,8 @@ class TestExecuteFalse:
 # Test C: Approval interrupt / resume E2E
 # ---------------------------------------------------------------------------
 
+@pytest.mark.e2e
+@pytest.mark.real_llm
 @pytest.mark.integration
 @pytest.mark.slow
 class TestApprovalE2E:
@@ -448,6 +466,8 @@ class TestApprovalE2E:
 # Test D: Artifact ↔ response consistency
 # ---------------------------------------------------------------------------
 
+@pytest.mark.e2e
+@pytest.mark.real_llm
 @pytest.mark.integration
 @pytest.mark.slow
 class TestArtifactConsistency:
@@ -503,6 +523,8 @@ class TestArtifactConsistency:
 # Test E: Blocked-loop termination
 # ---------------------------------------------------------------------------
 
+@pytest.mark.e2e
+@pytest.mark.real_llm
 @pytest.mark.integration
 @pytest.mark.slow
 class TestBlockedLoop:

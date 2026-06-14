@@ -61,7 +61,7 @@ def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> d
         "metrics": [],
         "dimensions": [],
         "filters": [],
-        "derived_from": "sql_generate",
+        "derived_from": "db.query",
     }
 
 
@@ -84,7 +84,7 @@ def emit_artifacts_from_observation(
     if step_name == "semantic.resolve" and state.get("semantic_resolution"):
         artifacts.append(build_semantic_resolution_artifact(state["semantic_resolution"], identity=identity))
 
-    if step_name.startswith("workspace.") and observation.output:
+    if step_name == "db.query" and observation.output and observation.status == "success":
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))

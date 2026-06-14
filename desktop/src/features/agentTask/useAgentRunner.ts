@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import type { Conversation, ConversationMessage } from "../../types/conversation";
 import type { WorkspaceTab } from "../../mock/databoxMock";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "../../lib/api/types";
-import { BASE_URL } from "../../lib/api/client";
+import { BASE_URL, ENGINE_TOKEN } from "../../lib/api/client";
 import { agentApi, mergeArtifactDelta, resolveAgentApproval, streamResumeAgentRun } from "../../lib/api/agent";
 import { getStoredApiConfig } from "../../components/SettingsDialog";
 import { appendAgentRuntimeEvent, createInitialAgentTimeline, timelineFromFinalResponse, type AgentTimelineItem } from "../workspace/agentTimeline";
@@ -48,6 +48,7 @@ export function useAgentRunner({
   const conversationsRef = useRef<Conversation[]>(conversations);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const runIdsRef = useRef<Map<string, string>>(new Map());
+  const cancelledTabsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -82,6 +83,10 @@ export function useAgentRunner({
     timelineBox: { list: AgentTimelineItem[] },
   ) => {
     return (event: AgentRuntimeEvent) => {
+      // Capture run_id from the first event so cancel can reach the backend
+      if (event.run_id && !runIdsRef.current.has(tabId)) {
+        runIdsRef.current.set(tabId, event.run_id);
+      }
       timelineBox.list = appendAgentRuntimeEvent(timelineBox.list, event);
       patchTabTimeline(tabId, () => timelineBox.list);
       const progressText = describeRuntimeEvent(event);
@@ -219,7 +224,9 @@ export function useAgentRunner({
       );
       finishAgentRun(tabId, progressId, response, artifactsBox.list, timelineBox.list);
     } catch (err) {
-      updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err)}`);
+      const cancelled = cancelledTabsRef.current.has(tabId);
+      cancelledTabsRef.current.delete(tabId);
+      updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err, cancelled)}`);
       patchTab(tabId, { agentStatus: "failed", agentApproval: null });
       persistTabConversation(tabId);
     } finally {
@@ -261,6 +268,7 @@ export function useAgentRunner({
       const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
       const timelineBox = { list: tab.agentTimeline || [] };
       const abortController = new AbortController();
+      abortControllersRef.current.set(tabId, abortController);
       const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
       const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
         signal: abortController.signal,
@@ -295,21 +303,31 @@ export function useAgentRunner({
   }, [appendTabMessages, nextMsgId, runAgentForTab, showToast]);
 
   const cancelAgentRun = useCallback(async (tabId: string) => {
+    // 1. Abort the in-flight fetch immediately — unblocks the UI
+    cancelledTabsRef.current.add(tabId);
     const ctrl = abortControllersRef.current.get(tabId);
     if (ctrl) {
       ctrl.abort();
       abortControllersRef.current.delete(tabId);
     }
+    // 2. Best-effort backend cancellation (run_id captured from first SSE event)
     const runId = runIdsRef.current.get(tabId);
     if (runId) {
-      try {
-        await fetch(`${BASE_URL}/agent/runs/${runId}/cancel`, { method: "POST" });
-      } catch {
-        // best-effort cancellation; local UI still moves out of running state
-      }
       runIdsRef.current.delete(tabId);
+      try {
+        await fetch(`${BASE_URL}/agent/runs/${encodeURIComponent(runId)}/cancel`, {
+          method: "POST",
+          headers: { "X-Local-Token": ENGINE_TOKEN },
+        });
+      } catch {
+        // best-effort; local state already reflects cancellation
+      }
     }
-    updateTabMessage(tabId, -1, "已取消。");
+    // 3. Update UI regardless of whether we had a run_id
+    const lastMsg = tabsRef.current.find((t) => t.id === tabId)?.chatMessages?.slice(-1)?.[0];
+    if (lastMsg) {
+      updateTabMessage(tabId, lastMsg.id, "已取消。");
+    }
     patchTab(tabId, { agentStatus: "failed", agentApproval: null });
     persistTabConversation(tabId);
   }, [patchTab, persistTabConversation, updateTabMessage]);
@@ -334,14 +352,14 @@ export function useAgentRunner({
   };
 }
 
-function formatAgentError(err: unknown): string {
+function formatAgentError(err: unknown, cancelled = false): string {
   if (!(err instanceof Error)) return "AI 分析失败";
   const coded = err as Error & { code?: string };
   if (coded.code === "NO_LLM_KEY") {
     return "请先在右上角「设置 → LLM 配置」中填写 API Key 与模型，保存后重试。";
   }
   if (err.name === "AbortError") {
-    return "请求超时：LLM 响应过慢或网络异常，请检查 API Key、模型与网络后重试。";
+    return cancelled ? "已取消。" : "请求超时：LLM 响应过慢或网络异常，请检查 API Key、模型与网络后重试。";
   }
   return err.message.replace(/agent\s*runtime\s*failed:?/i, "服务请求出错:");
 }
