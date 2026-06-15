@@ -52,6 +52,8 @@ HIDDEN_IMPORTS = [
     "python_multipart",
     "langgraph",
     "langgraph.checkpoint.sqlite",
+    "langchain",
+    "langchain_openai",
     "langchain_core",
 ]
 
