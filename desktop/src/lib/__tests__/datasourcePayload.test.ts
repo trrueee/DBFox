@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDatasourceCreatePayload, buildDatasourceTestPayload } from "../datasourcePayload";
+import { buildDatasourceCreatePayload, buildDatasourceTestPayload, buildDatasourceUpdatePayload } from "../datasourcePayload";
 
 describe("datasourcePayload", () => {
   it("strips UI-only fields for test payload", () => {
@@ -41,5 +41,55 @@ describe("datasourcePayload", () => {
     expect(payload.name).toBe("local-db");
     expect(payload.project_id).toBe("project-1");
     expect(payload.db_type).toBe("sqlite");
+  });
+});
+
+describe("buildDatasourceUpdatePayload", () => {
+  it("builds update payload without project_id", () => {
+    const payload = buildDatasourceUpdatePayload({
+      db_type: "mysql",
+      name: "Updated",
+      host: "db.example.com",
+      port: 3306,
+      database_name: "analytics",
+      username: "readonly",
+      password: "",
+      is_read_only: true,
+      env: "prod",
+      ssh_enabled: false,
+      ssl_enabled: false,
+    });
+
+    expect(payload).toMatchObject({
+      db_type: "mysql",
+      name: "Updated",
+      host: "db.example.com",
+      port: 3306,
+      database_name: "analytics",
+      username: "readonly",
+      password: "",
+      connection_mode: "direct",
+      is_read_only: true,
+      env: "prod",
+    });
+    expect(payload).not.toHaveProperty("project_id");
+  });
+
+  it("keeps blank edit secrets as empty strings", () => {
+    const payload = buildDatasourceUpdatePayload({
+      db_type: "mysql",
+      name: "Updated",
+      host: "db.example.com",
+      port: 3306,
+      database_name: "analytics",
+      username: "readonly",
+      password: "",
+      ssh_password: "",
+      ssh_pkey_passphrase: "",
+    });
+
+    expect(payload.password).toBe("");
+    expect(payload.ssh_password).toBeNull();
+    expect(payload.ssh_pkey_passphrase).toBeNull();
   });
 });

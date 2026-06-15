@@ -9,6 +9,7 @@ vi.mock("../../lib/api", () => ({
     listDatasources: vi.fn(),
     testConnection: vi.fn(),
     createDatasource: vi.fn(),
+    updateDatasource: vi.fn(),
     checkDatasourceHealth: vi.fn(),
     deleteDatasource: vi.fn(),
     syncSchema: vi.fn(),
