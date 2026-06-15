@@ -13,6 +13,11 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct PythonEngine(Mutex<Option<Child>>);
 
+// DEPRECATED: ConversationRecord and all conversation commands below are
+// migration-only dead code. The Python engine API is the single source of
+// truth for conversation storage. These remain temporarily to support a
+// one-time migration from the legacy Tauri-side databox.sqlite3 database.
+// See Spec 02: Conversation Storage Single Source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ConversationRecord {
     id: String,
@@ -36,11 +41,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(PythonEngine(Mutex::new(python_child)))
-        .invoke_handler(tauri::generate_handler![
-            list_conversations,
-            save_conversation,
-            delete_conversation
-        ])
+        .invoke_handler(tauri::generate_handler![])
         .on_window_event(|window, event| {
             if matches!(
                 event,
@@ -55,7 +56,9 @@ pub fn run() {
         .expect("error while running DataBox");
 }
 
+// DEPRECATED: Migration-only. Use engine HTTP API /api/v1/conversations instead.
 #[tauri::command]
+#[allow(dead_code)]
 fn list_conversations(app: AppHandle) -> Result<Vec<ConversationRecord>, String> {
     let conn = open_conversation_db(&app)?;
     let mut stmt = conn
@@ -87,7 +90,9 @@ fn list_conversations(app: AppHandle) -> Result<Vec<ConversationRecord>, String>
     Ok(conversations)
 }
 
+// DEPRECATED: Migration-only. Use engine HTTP API /api/v1/conversations instead.
 #[tauri::command]
+#[allow(dead_code)]
 fn save_conversation(app: AppHandle, conversation: ConversationRecord) -> Result<(), String> {
     let conn = open_conversation_db(&app)?;
     conn.execute(
@@ -114,7 +119,9 @@ fn save_conversation(app: AppHandle, conversation: ConversationRecord) -> Result
     Ok(())
 }
 
+// DEPRECATED: Migration-only. Use engine HTTP API /api/v1/conversations instead.
 #[tauri::command]
+#[allow(dead_code)]
 fn delete_conversation(app: AppHandle, id: String) -> Result<(), String> {
     let conn = open_conversation_db(&app)?;
     conn.execute("DELETE FROM conversations WHERE id = ?1", params![id])
