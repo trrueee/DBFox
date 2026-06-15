@@ -10,9 +10,12 @@ from engine.tools.db_tools import db_preview as _db_preview
 def db_preview(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Guard db.preview against raw SQL fragment injection.
 
-    The underlying preview helper still supports structured filters. This wrapper
-    blocks raw WHERE/ORDER BY strings at the tool boundary so the model cannot
-    turn a table preview into an arbitrary cross-table SELECT fragment.
+    This wrapper blocks raw WHERE/ORDER BY strings at the tool boundary.
+    The underlying SQL builder only accepts structured parameters:
+
+    - where:  {"column": "status", "op": "=", "value": "active"}
+    - order_by: {"column": "id", "direction": "desc"}
+      or [{"column": "name"}, {"column": "id", "direction": "desc"}]
     """
     if isinstance(args.get("where"), str) and str(args.get("where") or "").strip():
         return ToolObservation(
@@ -28,7 +31,7 @@ def db_preview(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
             name="db.preview",
             status="failed",
             input=args,
-            error="Raw string ORDER BY fragments are not allowed in db.preview.",
+            error="Raw string ORDER BY fragments are not allowed. Use structured order_by: {column, direction} or [{...}].",
             latency_ms=0,
         )
 
