@@ -595,69 +595,25 @@ def _decision_block_message(decision: ExecutionSafetyDecision) -> str:
     return "TrustGate blocked execution before SQL reached the database."
 
 
-def execute_query(
+def _run_approved_query(
     db: Session,
+    ds: DataSource,
     datasource_id: str,
+    safe_sql: str,
     sql_str: str,
-    question: str | None = None,
-    execution_id: str | None = None,
-    bypass_guardrail: bool = False,
-    safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
-    safety_policy: ExecutionPolicy = "readonly",
+    question: str | None,
+    execution_id: str,
+    guard_res: dict,
+    guardrail_ms: int,
+    guard_checks_json: str,
 ) -> dict[str, Any]:
+    """Execute safety-approved SQL on the target datasource and record history.
+
+    This is the shared execution tail called by both ``execute_query`` (public,
+    bypass_guardrail=False) and ``execute_query_for_test`` (test-only,
+    bypass_guardrail=True).  It assumes the caller has already resolved the
+    safety decision and verified ``can_execute`` / ``safe_sql``.
     """
-    Safely executes a SQL query:
-    1. Resolve an ExecutionSafetyDecision through TrustGate
-    2. Execute the approved safe SQL on the target datasource
-    3. Serialize results and log history
-    """
-    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
-    if not ds:
-        raise ValueError("Data source not found")
-
-    execution_id = execution_id or f"exec-{uuid.uuid4()}"
-    
-    t_guard_start = time.perf_counter()
-    decision = _resolve_execution_safety_decision(
-        db=db,
-        datasource_id=datasource_id,
-        sql_str=sql_str,
-        bypass_guardrail=bypass_guardrail,
-        safety_decision=safety_decision,
-        policy=safety_policy,
-    )
-    guard_res = decision.guardrail
-    guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)
-    guard_checks_json = json.dumps(_decision_checks_for_history(decision), ensure_ascii=False)
-
-    if not decision.can_execute or not str(decision.safe_sql or "").strip():
-        redacted_sql = DataRedactor.redact_sql(sql_str)
-        message = _decision_block_message(decision)
-        history = QueryHistory(
-            data_source_id=datasource_id,
-            question=question,
-            submitted_sql=redacted_sql,
-            generated_sql=redacted_sql,
-            safe_sql="",
-            executed_sql="",
-            guardrail_result=guard_res["result"],
-            guardrail_checks=guard_checks_json,
-            execution_status="failed",
-            error_message=message,
-            execution_time_ms=guardrail_ms,
-            connect_ms=0,
-            guardrail_ms=guardrail_ms,
-            execute_ms=0,
-            fetch_ms=0,
-            serialize_ms=0,
-        )
-        db.add(history)
-        db.commit()
-        raise GuardrailValidationError(
-            message, checks=_decision_checks_for_error(decision)
-        )
-
-    safe_sql = str(decision.safe_sql or "").strip()
     start_time = time.time()
     rows: list[dict[str, Any]] = []
     columns: list[str] = []
@@ -689,28 +645,7 @@ def execute_query(
                 execution_id=execution_id,
             )
         else:
-            conn_params = get_mysql_connection_params({
-                "host": ds.host,
-                "port": ds.port,
-                "username": ds.username,
-                "database_name": ds.database_name,
-                "password_ciphertext": ds.password_ciphertext,
-                "password_nonce": ds.password_nonce,
-                "ssh_enabled": ds.ssh_enabled,
-                "ssh_host": ds.ssh_host,
-                "ssh_port": ds.ssh_port,
-                "ssh_username": ds.ssh_username,
-                "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-                "ssh_password_nonce": ds.ssh_password_nonce,
-                "ssh_pkey_path": ds.ssh_pkey_path,
-                "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-                "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-                "ssl_enabled": ds.ssl_enabled,
-                "ssl_ca_path": ds.ssl_ca_path,
-                "ssl_cert_path": ds.ssl_cert_path,
-                "ssl_key_path": ds.ssl_key_path,
-                "ssl_verify_identity": ds.ssl_verify_identity,
-            })
+            conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
             rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_mysql_profiled(
                 datasource_id,
                 conn_params,
@@ -782,7 +717,7 @@ def execute_query(
         "rowCount": len(rows),
         "latencyMs": latency_ms,
         "guardrail": guard_res,
-        "safetyDecision": decision.model_dump(mode="json"),
+        "safetyDecision": None,  # filled by caller
         "historyId": history.id,
         "executionId": execution_id,
         "truncated": truncated,
@@ -805,6 +740,84 @@ def execute_query(
         "serialize_ms": serialize_ms,
         "total_ms": latency_ms,
     }
+
+
+def execute_query(
+    db: Session,
+    datasource_id: str,
+    sql_str: str,
+    question: str | None = None,
+    execution_id: str | None = None,
+    safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
+    safety_policy: ExecutionPolicy = "readonly",
+) -> dict[str, Any]:
+    """
+    Safely executes a SQL query:
+    1. Resolve an ExecutionSafetyDecision through TrustGate
+    2. Execute the approved safe SQL on the target datasource
+    3. Serialize results and log history
+    """
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise ValueError("Data source not found")
+
+    execution_id = execution_id or f"exec-{uuid.uuid4()}"
+    
+    t_guard_start = time.perf_counter()
+    decision = _resolve_execution_safety_decision(
+        db=db,
+        datasource_id=datasource_id,
+        sql_str=sql_str,
+        bypass_guardrail=False,
+        safety_decision=safety_decision,
+        policy=safety_policy,
+    )
+    guard_res = decision.guardrail
+    guardrail_ms = int((time.perf_counter() - t_guard_start) * 1000)
+    guard_checks_json = json.dumps(_decision_checks_for_history(decision), ensure_ascii=False)
+
+    if not decision.can_execute or not str(decision.safe_sql or "").strip():
+        redacted_sql = DataRedactor.redact_sql(sql_str)
+        message = _decision_block_message(decision)
+        history = QueryHistory(
+            data_source_id=datasource_id,
+            question=question,
+            submitted_sql=redacted_sql,
+            generated_sql=redacted_sql,
+            safe_sql="",
+            executed_sql="",
+            guardrail_result=guard_res["result"],
+            guardrail_checks=guard_checks_json,
+            execution_status="failed",
+            error_message=message,
+            execution_time_ms=guardrail_ms,
+            connect_ms=0,
+            guardrail_ms=guardrail_ms,
+            execute_ms=0,
+            fetch_ms=0,
+            serialize_ms=0,
+        )
+        db.add(history)
+        db.commit()
+        raise GuardrailValidationError(
+            message, checks=_decision_checks_for_error(decision)
+        )
+
+    safe_sql = str(decision.safe_sql or "").strip()
+    result = _run_approved_query(
+        db=db,
+        ds=ds,
+        datasource_id=datasource_id,
+        safe_sql=safe_sql,
+        sql_str=sql_str,
+        question=question,
+        execution_id=execution_id,
+        guard_res=guard_res,
+        guardrail_ms=guardrail_ms,
+        guard_checks_json=guard_checks_json,
+    )
+    result["safetyDecision"] = decision.model_dump(mode="json")
+    return result
 
 
 def explain_sql(
@@ -875,28 +888,7 @@ def explain_sql(
             conn.close()
     else:
         # Real MySQL Explain
-        conn_params = get_mysql_connection_params({
-            "host": ds.host,
-            "port": ds.port,
-            "username": ds.username,
-            "database_name": ds.database_name,
-            "password_ciphertext": ds.password_ciphertext,
-            "password_nonce": ds.password_nonce,
-            "ssh_enabled": ds.ssh_enabled,
-            "ssh_host": ds.ssh_host,
-            "ssh_port": ds.ssh_port,
-            "ssh_username": ds.ssh_username,
-            "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-            "ssh_password_nonce": ds.ssh_password_nonce,
-            "ssh_pkey_path": ds.ssh_pkey_path,
-            "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-            "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-            "ssl_enabled": ds.ssl_enabled,
-            "ssl_ca_path": ds.ssl_ca_path,
-            "ssl_cert_path": ds.ssl_cert_path,
-            "ssl_key_path": ds.ssl_key_path,
-            "ssl_verify_identity": ds.ssl_verify_identity,
-        })
+        conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
         
         pool = get_mysql_pool(datasource_id, conn_params)
         conn_proxy: Any = pool.connect()
