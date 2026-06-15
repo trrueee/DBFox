@@ -27,6 +27,9 @@ demo_shop
 *.sqlite-wal
 *.sqlite-journal
 
+# Exceptions for test databases that must be tracked
+!engine/tests/fixtures/**/*.sqlite
+
 # Python
 __pycache__/
 *.py[cod]
@@ -67,8 +70,11 @@ desktop/playwright-report/
 desktop/test-results/
 desktop/src-tauri/target/
 desktop/src-tauri/binaries/
-desktop/src-tauri/gen/
+desktop/src-tauri/gen/*
 desktop/src-tauri/.tauri/
+
+# Exceptions for Tauri schema generation files that must be tracked
+!desktop/src-tauri/gen/schemas/
 
 # Eval local config and generated artifacts
 .agent_eval/config.local.json
@@ -90,6 +96,10 @@ desktop/src-tauri/.tauri/
 # Generated artifacts and eval data
 artifacts/*.json
 artifacts/*_report*.md
+
+# Exceptions for benchmark and baseline files that must be tracked
+!artifacts/spider_*.json
+
 
 # Stale dev artifacts
 diff.txt
