@@ -262,7 +262,7 @@ export const DataSourcesPage = ({
     value ? new Date(value).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
 
   return (
-    <div className="hifi-tab-pane hifi-datasource-page animate-fade-in">
+    <div className="hifi-tab-pane hifi-datasource-page">
       <div className="hifi-page-header">
         <div>
           <h2 className="hifi-page-title">连接管理</h2>
@@ -277,7 +277,7 @@ export const DataSourcesPage = ({
       {showAddForm && (
         <form
           onSubmit={(e) => e.preventDefault()}
-          className="hifi-card hifi-datasource-form animate-slide-down"
+          className="hifi-card hifi-datasource-form"
         >
           <h3 className="hifi-card-title">新增数据源</h3>
 
@@ -597,7 +597,7 @@ export const DataSourcesPage = ({
           {/* Test Result */}
           {testResult.status !== "idle" && (
             <div
-              className="bg-card border border-border rounded-lg border-l-2 border-l-primary animate-slide-down"
+              className="bg-card border border-border rounded-lg border-l-2 border-l-primary"
               style={{
                 marginTop: 16,
                 padding: 14,
@@ -657,188 +657,6 @@ export const DataSourcesPage = ({
         </form>
       )}
 
-      <div className="hifi-datasource-list-section">
-        <div className="hifi-section-head">
-          <div className="hifi-section-title">
-            已保存连接
-            <span className="hifi-section-count">{dataSources.length}</span>
-          </div>
-        </div>
-
-        {loading ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i}
-                className="bg-gradient-to-r from-secondary via-muted to-secondary bg-[length:200%_100%] animate-shimmer"
-                style={{ height: 44, borderRadius: 8 }}
-              />
-            ))}
-          </div>
-        ) : dataSources.length === 0 ? (
-          <div className="hifi-empty-state">
-            <Database size={28} className="hifi-empty-icon" />
-            <h3 className="hifi-empty-title">暂无数据源连接</h3>
-            <p className="hifi-empty-desc">添加一个数据库连接以开始使用 AI 问数功能</p>
-            <button type="button" className="hifi-btn hifi-btn-primary" onClick={() => setShowAddForm(true)}>
-              <Plus size={13} />新建连接
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* List header */}
-            <div style={{
-              display: "flex", alignItems: "center",
-              padding: "6px 16px",
-              fontSize: "0.68rem", fontWeight: 600, color: "var(--text-muted)",
-              textTransform: "uppercase", letterSpacing: "0.04em",
-              borderBottom: "1px solid var(--border-subtle, #edf1f7)",
-              marginBottom: 2,
-            }}>
-              <span style={{ flex: 2, minWidth: 0 }}>连接</span>
-              <span style={{ width: 100, flexShrink: 0 }}>类型 / 环境</span>
-              <span style={{ width: 130, flexShrink: 0 }}>Schema 同步</span>
-              <span style={{ width: 110, flexShrink: 0 }}>状态</span>
-              <span style={{ width: 140, flexShrink: 0, textAlign: "right" }}>操作</span>
-            </div>
-            {dataSources.map((ds) => {
-              const isActive = activeDataSource?.id === ds.id;
-              const healthSt = healthStatusType(ds);
-
-              const dbBadge = ds.db_type === "postgresql" ? { label: "PG", color: "#818CF8", bg: "rgba(99,102,241,0.1)" }
-                : ds.db_type === "sqlite" ? { label: "Lite", color: "#94A3B8", bg: "rgba(100,116,139,0.08)" }
-                : { label: "MySQL", color: "#60A5FA", bg: "rgba(59,130,246,0.08)" };
-
-              const envBadge = ds.env === "prod" ? { label: "生产", color: "var(--accent-red)", bg: "rgba(220,38,38,0.06)" }
-                : ds.env === "test" ? { label: "测试", color: "var(--accent-amber)", bg: "rgba(217,119,6,0.06)" }
-                : { label: "开发", color: "var(--text-secondary)", bg: "transparent" };
-
-              return (
-                <div
-                  key={ds.id}
-                  onClick={() => onSelectDataSource(ds)}
-                  style={{
-                    display: "flex", alignItems: "center",
-                    padding: "10px 16px", cursor: "pointer",
-                    background: isActive ? "var(--bg-active, #e8edff)" : "transparent",
-                    borderRadius: 8,
-                    border: isActive ? "1px solid rgba(91,92,240,0.2)" : "1px solid transparent",
-                    transition: "background 0.1s, border-color 0.1s",
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "var(--bg-hover, #eef3ff)"; }}
-                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  {/* Name + address */}
-                  <div style={{ flex: 2, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
-                    <Database size={14} style={{ color: isActive ? "var(--accent-indigo)" : "var(--text-muted)", flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {ds.name}
-                        </span>
-                        {isActive && (
-                          <span style={{ fontSize: "0.58rem", fontWeight: 600, color: "var(--accent-indigo)", background: "rgba(91,92,240,0.08)", padding: "1px 4px", borderRadius: 3, flexShrink: 0 }}>当前</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
-                        {ds.db_type === "sqlite" ? ds.database_name : `${ds.host}:${ds.port} / ${ds.database_name}`}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Type + Env badges */}
-                  <div style={{ width: 100, flexShrink: 0, display: "flex", gap: 4 }}>
-                    <span style={{ fontSize: "0.62rem", fontWeight: 500, color: dbBadge.color, background: dbBadge.bg, padding: "1px 5px", borderRadius: 3, border: `1px solid ${dbBadge.color}20` }}>
-                      {dbBadge.label}
-                    </span>
-                    <span style={{ fontSize: "0.62rem", fontWeight: 500, color: envBadge.color, background: envBadge.bg, padding: "1px 5px", borderRadius: 3, border: `1px solid ${envBadge.color}20` }}>
-                      {envBadge.label}
-                    </span>
-                    {ds.is_read_only && (
-                      <span style={{ fontSize: "0.58rem", color: "var(--accent-indigo)", background: "rgba(91,92,240,0.06)", padding: "1px 4px", borderRadius: 3 }}>R</span>
-                    )}
-                  </div>
-
-                  {/* Schema info */}
-                  <div style={{ width: 130, flexShrink: 0, fontSize: "0.7rem", color: "var(--text-secondary)" }}>
-                    {ds.last_sync_at ? (
-                      <span>{formatDateTime(ds.last_sync_at)}</span>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)" }}>未同步</span>
-                    )}
-                    {typeof ds.last_test_tables_count === "number" && (
-                      <span style={{ marginLeft: 4, color: "var(--text-muted)", fontSize: "0.62rem" }}>{ds.last_test_tables_count}t</span>
-                    )}
-                  </div>
-
-                  {/* Health status */}
-                  <div style={{ width: 110, flexShrink: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-                        background: healthSt === "success" ? "var(--accent-green)" : healthSt === "error" ? "var(--accent-red)" : "#cbd5e1",
-                      }} />
-                      <span style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
-                        {healthSt === "success" ? "正常" : healthSt === "error" ? "失败" : "未检测"}
-                      </span>
-                      {typeof ds.last_test_latency_ms === "number" && (
-                        <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{ds.last_test_latency_ms}ms</span>
-                      )}
-                    </div>
-                    {ds.last_test_error && (
-                      <div style={{ fontSize: "0.6rem", color: "var(--accent-red)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
-                        {ds.last_test_error}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ width: 140, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 2 }}>
-                    <button
-                      onClick={(e) => handleHealthCheck(ds.id, e)}
-                      disabled={healthCheckingId === ds.id}
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: 3,
-                        padding: "3px 8px", fontSize: "0.65rem", fontWeight: 500,
-                        color: healthSt === "error" ? "var(--accent-red)" : "var(--text-secondary)",
-                        background: "transparent", border: "1px solid var(--border-subtle)",
-                        borderRadius: 5, cursor: "pointer",
-                      }}
-                    >
-                      <Activity size={11} className={healthCheckingId === ds.id ? "animate-spin" : ""} />
-                      检测
-                    </button>
-                    <button
-                      onClick={(e) => handleSyncSchema(ds.id, e)}
-                      disabled={syncingId === ds.id}
-                      style={{
-                        display: "inline-flex", alignItems: "center", gap: 3,
-                        padding: "3px 8px", fontSize: "0.65rem", fontWeight: 500,
-                        color: "var(--accent-indigo)", background: "transparent",
-                        border: "1px solid var(--border-subtle)", borderRadius: 5, cursor: "pointer",
-                      }}
-                    >
-                      <RefreshCw size={11} className={syncingId === ds.id ? "animate-spin" : ""} />
-                      同步
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteDataSource(ds.id, e)}
-                      style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: 24, height: 24, fontSize: "0.65rem",
-                        color: "var(--text-muted)", background: "transparent",
-                        border: "none", borderRadius: 5, cursor: "pointer",
-                      }}
-                      title="删除"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
       <DangerConfirmDialog details={confirmDetails} />
 
       <ConfirmDialog
