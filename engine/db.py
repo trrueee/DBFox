@@ -52,17 +52,27 @@ DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DATABOX_DB_POOL_RECYCLE_SECONDS", 
 DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DATABOX_DB_POOL_TIMEOUT_SECONDS", "30"))
 DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DATABOX_SQLITE_TIMEOUT_SECONDS", "30"))
 
-# Pre-configure SQLite for WAL mode (must run before engine creation, sqlite:// only)
-import sqlite3
-if DATABASE_URL.startswith("sqlite:///"):
-    _sqlite_db = Path(DATABASE_URL.replace("sqlite:///", ""))
-    if not _sqlite_db.exists():
-        _sqlite_db.parent.mkdir(parents=True, exist_ok=True)
-    _conn = sqlite3.connect(str(_sqlite_db))
-    _conn.execute("PRAGMA journal_mode=WAL")
-    _conn.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
-    _conn.execute("PRAGMA synchronous=NORMAL")
-    _conn.close()
+def configure_sqlite_pragmas(database_url: str = None) -> None:
+    """Apply WAL / busy_timeout / synchronous PRAGMAs for SQLite databases.
+
+    Safe to call multiple times; no-op for non-SQLite URLs.
+    Must be called before Alembic inspection in init_db().
+    """
+    import sqlite3 as _sqlite3
+    url = database_url or DATABASE_URL
+    if not url.startswith("sqlite:///"):
+        return
+    db_path = Path(url.replace("sqlite:///", ""))
+    if not db_path.exists():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = _sqlite3.connect(str(db_path))
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    finally:
+        conn.close()
+
 
 engine: Engine = create_engine(
     DATABASE_URL,
@@ -214,6 +224,9 @@ def init_db() -> None:
         except Exception as e:
             logger.warning("迁移警告：升级前未能成功备份元数据库文件: %s", e)
             backup_path = None
+
+    # 0. Ensure SQLite PRAGMAs are configured before any Alembic work
+    configure_sqlite_pragmas(DATABASE_URL)
 
     try:
         # 2. 动态计算 Alembic 配置文件及其脚本的绝对路径

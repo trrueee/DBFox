@@ -93,6 +93,8 @@ def _datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
         password = decrypt_password(str(ds.password_ciphertext), str(ds.password_nonce))
 
     return {
+        "id": ds.id,
+        "is_managed": True,
         "db_type": db_type,
         "host": host,
         "port": int(ds.port or 0),
@@ -103,15 +105,11 @@ def _datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
         "ssh_host": ds.ssh_host,
         "ssh_port": int(ds.ssh_port or 22),
         "ssh_username": ds.ssh_username,
-        "ssh_password": _decrypt_optional(
-            cast(str | None, ds.ssh_password_ciphertext),
-            cast(str | None, ds.ssh_password_nonce),
-        ),
+        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
+        "ssh_password_nonce": ds.ssh_password_nonce,
         "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase": _decrypt_optional(
-            cast(str | None, ds.ssh_pkey_passphrase_ciphertext),
-            cast(str | None, ds.ssh_pkey_passphrase_nonce),
-        ),
+        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
+        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
         "ssl_enabled": bool(ds.ssl_enabled),
         "ssl_ca_path": ds.ssl_ca_path,
         "ssl_cert_path": ds.ssl_cert_path,
@@ -143,11 +141,6 @@ def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, check
     setattr(ds, "last_test_warnings", json.dumps([], ensure_ascii=False))
 
 
-def _resolve_project_id(db: Session, project_id: str | None) -> str:
-    from engine.api.projects import _resolve_project_id as resolve
-    return resolve(db, project_id)
-
-
 @router.post("/datasources/test")
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     try:
@@ -162,12 +155,13 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
 @router.post("/datasources", response_model=DataSourceResponse)
 def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
+        from engine.projects.service import resolve_project_id
         config = req.model_dump()
         if req.db_type == "mysql":
             build_mysql_ssl_params(config)
         elif req.db_type == "postgresql":
             build_postgres_ssl_params(config)
-        project_id = _resolve_project_id(db, req.project_id)
+        project_id = resolve_project_id(db, req.project_id)
         cipher, nonce = encrypt_password(req.password or "")
 
         ssh_password_ciphertext = ""
@@ -234,8 +228,8 @@ def api_list_datasources(
     project_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    from engine.api.projects import _get_or_create_default_project
-    _get_or_create_default_project(db)
+    from engine.projects.service import get_or_create_default_project
+    get_or_create_default_project(db)
     db.commit()
 
     query = db.query(DataSource)

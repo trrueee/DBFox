@@ -32,37 +32,12 @@ def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, A
     }
 
 
-def _get_or_create_default_project(db: Session) -> Project:
-    project = db.query(Project).filter(Project.id == DEFAULT_PROJECT_ID).first()
-    if project:
-        return project
-
-    project = Project(
-        id=DEFAULT_PROJECT_ID,
-        name=DEFAULT_PROJECT_NAME,
-        description="Auto-created workspace for existing DataBox assets.",
-        status="active",
-    )
-    db.add(project)
-    db.flush()
-    return project
-
-
-def _resolve_project_id(db: Session, project_id: str | None) -> str:
-    if not project_id:
-        return str(_get_or_create_default_project(db).id)
-    if project_id == DEFAULT_PROJECT_ID:
-        return str(_get_or_create_default_project(db).id)
-
-    project = db.query(Project).filter(Project.id == project_id, Project.status == "active").first()
-    if not project:
-        raise HTTPException(status_code=404, detail={"code": "PROJECT_NOT_FOUND", "message": "Project not found"})
-    return str(project.id)
+from engine.projects.service import get_or_create_default_project
 
 
 @router.get("/projects")
 def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    _get_or_create_default_project(db)
+    get_or_create_default_project(db)
     db.commit()
 
     projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()
