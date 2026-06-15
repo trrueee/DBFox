@@ -1,6 +1,10 @@
 """
-Fallback desktop launcher using pywebview.
-Primary desktop path is Tauri: `cd desktop && npm run tauri dev`.
+⚠️ DEPRECATED — pywebview 原生窗口启动器已废弃。
+
+DataBox 的主要桌面交付路径是 Tauri:
+    cd desktop && npm run tauri dev
+
+此脚本仅保留用于快速体验，不会自动安装依赖。
 """
 
 import os
@@ -9,30 +13,34 @@ import subprocess
 import time
 import socket
 
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 def is_port_open(port):
     """Check if local port is active"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
-def install_pywebview():
-    """Ensure pywebview is installed"""
+
+def _ensure_pywebview():
+    """Check pywebview is available; fail with instructions if not."""
     try:
-        import webview
+        import webview  # noqa: F401
     except ImportError:
-        print(">>> 正在为桌面客户端安装 native 渲染引擎 (pywebview)...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pywebview"])
-        print("[+] pywebview 安装就绪。")
+        print("[-] pywebview 未安装。请运行: pip install pywebview")
+        sys.exit(1)
 
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(root_dir)
     
     print("=================================================================")
-    print("   DataBox 智能安全桌面客户端 - Native 窗口渲染启动器 V1.1")
+    print("   DataBox — Native 窗口渲染启动器 (遗留)")
+    print("   推荐使用: cd desktop && npm run tauri dev")
     print("=================================================================")
-    
-    # 1. Check requirements
-    install_pywebview()
+
+    # 1. Check pywebview
+    _ensure_pywebview()
     import webview
     
     # 2. Check if backend & frontend services are already running
@@ -64,13 +72,12 @@ def main():
             
     if not front_port:
         print(">>> 检测到 React 前端服务未激活，正在拉起开发服务服务器...")
-        desktop_dir = os.path.join(root_dir, "desktop")
-        
-        # Check node_modules
+        desktop_dir = os.path.join(ROOT_DIR, "desktop")
+
         if not os.path.exists(os.path.join(desktop_dir, "node_modules")):
-            print(">>> 正在为桌面包安装 npm 依赖...")
-            subprocess.check_call("npm install", shell=True, cwd=desktop_dir)
-            
+            print("[-] 前端依赖未安装。请运行: cd desktop && npm install")
+            sys.exit(1)
+
         frontend_proc = subprocess.Popen(
             "npm run dev",
             shell=True,

@@ -1,32 +1,54 @@
+"""
+⚠️ DEPRECATED — 此启动器已废弃。
+
+DataBox 推荐的启动方式:
+
+  浏览器开发模式:
+    pip install -r requirements.txt
+    cd desktop && npm install
+    python -m engine.main --reload     # 终端 1: 后端
+    cd desktop && npm run dev          # 终端 2: 前端 → http://localhost:5173
+
+  Tauri 桌面模式 (主要交付路径):
+    pip install -r requirements.txt
+    python -m engine.main --reload     # 终端 1: 后端
+    cd desktop && npm run tauri dev    # 终端 2: 桌面窗口
+
+此脚本仅保留作为快速体验入口，不会自动安装依赖。
+"""
+
 import os
 import sys
 import subprocess
 import time
 import socket
 import webbrowser
-import threading
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def is_port_open(port):
     """Check if local port is active"""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('127.0.0.1', port)) == 0
 
-def install_python_dependencies():
-    """Ensure all core backend libraries are installed in the environment"""
-    print(">>> 正在核对并安装 Python 后端依赖库...")
-    reqs_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "requirements.txt")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", reqs_file])
-    print(">>> Python 后端依赖库配置完毕。")
 
-def install_node_dependencies():
-    """Ensure npm dependencies are loaded in the desktop client folder"""
-    print(">>> 正在检测 React 前端 npm 依赖库...")
-    desktop_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desktop")
+def _check_backend_deps():
+    """Verify Python dependencies are installed."""
+    try:
+        import fastapi  # noqa: F401
+        import sqlalchemy  # noqa: F401
+    except ImportError:
+        print("[-] Python 依赖未安装。请运行: pip install -r requirements.txt")
+        sys.exit(1)
+
+
+def _check_frontend_deps():
+    """Verify npm dependencies are installed."""
+    desktop_dir = os.path.join(ROOT_DIR, "desktop")
     if not os.path.exists(os.path.join(desktop_dir, "node_modules")):
-        print(">>> 未检测到 node_modules，正在执行 npm install ...")
-        subprocess.check_call("npm install", shell=True, cwd=desktop_dir)
-    else:
-        print(">>> node_modules 缓存命中。")
+        print("[-] 前端依赖未安装。请运行: cd desktop && npm install")
+        sys.exit(1)
 
 def run_backend():
     """Launch the FastAPI server engine with hot reload in dev."""
@@ -55,17 +77,13 @@ def main():
     os.chdir(root_dir)
     
     print("=================================================================")
-    print("   DataBox 智能安全桌面客户端 - 自动化一键启动助手 V1.0")
+    print("   DataBox — 浏览器开发模式启动器 (遗留)")
+    print("   推荐使用: cd desktop && npm run tauri dev")
     print("=================================================================")
-    
-    # 1. Align environments
-    try:
-        install_python_dependencies()
-        install_node_dependencies()
-    except Exception as e:
-        print(f"[-] 环境初始化检查遇到阻碍: {str(e)}")
-        print("[!] 请检查系统网络环境，或尝试手动安装。")
-        sys.exit(1)
+
+    # 1. Check dependencies (no auto-install)
+    _check_backend_deps()
+    _check_frontend_deps()
 
     # 2. Launch Backend
     backend_proc = None
