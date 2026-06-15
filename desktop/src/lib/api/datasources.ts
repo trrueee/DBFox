@@ -19,6 +19,9 @@ export const datasourcesApi = {
     return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}${query}`, { method: "DELETE" });
   },
 
+  updateDatasource: (id: string, params: unknown) =>
+    request<DataSource>(`/datasources/${id}`, { method: "PUT", body: JSON.stringify(params) }),
+
   syncSchema: (id: string) =>
     request<SchemaSyncResult>(`/datasources/${id}/sync`, { method: "POST" }),
 };

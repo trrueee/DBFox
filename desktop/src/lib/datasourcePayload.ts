@@ -58,3 +58,13 @@ export function buildDatasourceCreatePayload(form: DatasourceFormShape, projectI
     env: form.env || "dev",
   };
 }
+
+export function buildDatasourceUpdatePayload(form: DatasourceFormShape) {
+  return {
+    ...buildDatasourceTestPayload(form),
+    name: form.name || "",
+    connection_mode: "direct",
+    is_read_only: Boolean(form.is_read_only),
+    env: form.env || "dev",
+  };
+}
