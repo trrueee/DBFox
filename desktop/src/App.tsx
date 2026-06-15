@@ -467,7 +467,7 @@ export default function App() {
     }
     if (activeTab.type === "datasource-settings") {
       return (
-        <div className="hifi-settings-tab-frame hifi-tab-pane">
+        <div className="hifi-settings-tab-frame">
           <DataSourcesPage
             onSelectDataSource={(ds) => {
               if (ds) {
