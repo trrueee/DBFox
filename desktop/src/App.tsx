@@ -25,6 +25,7 @@ import { CommandPalette, type CommandItem } from "./components/CommandPalette";
 import { LlmConfigPanel } from "./components/LlmConfigPanel";
 import TitleBar from "./components/TitleBar";
 import { testLlmConnection } from "./lib/api/agent";
+import { useSidebarLayout } from "./features/appShell/useSidebarLayout";
 
 export default function App() {
   const [treeSearch, setTreeSearch] = useState("");
@@ -59,36 +60,7 @@ export default function App() {
 
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(240);
-  const resizingRef = useRef<{ startX: number; startWidth: number } | null>(null);
-
-  const handleResizeStart = (e: MouseEvent) => {
-    e.preventDefault();
-    resizingRef.current = { startX: e.clientX, startWidth: sidebarWidth };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-
-  useEffect(() => {
-    const handleMouseMove = (e: globalThis.MouseEvent) => {
-      if (!resizingRef.current) return;
-      const delta = e.clientX - resizingRef.current.startX;
-      const next = Math.max(180, Math.min(480, resizingRef.current.startWidth + delta));
-      setSidebarWidth(next);
-    };
-    const handleMouseUp = () => {
-      resizingRef.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, []);
+  const { collapsed: sidebarCollapsed, width: sidebarWidth, handleResizeStart, toggleCollapse: toggleSidebarCollapse } = useSidebarLayout();
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
 
@@ -513,7 +485,7 @@ export default function App() {
             treeSearch={treeSearch}
             selectedTables={selectedTables}
             collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+            onToggleCollapse={toggleSidebarCollapse}
             onTreeSearchChange={setTreeSearch}
             onTableClick={handleTableClick}
             onTableDoubleClick={openTableTab}

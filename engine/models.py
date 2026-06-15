@@ -38,6 +38,9 @@ class Project(Base):  # type: ignore[misc,valid-type]
     backups = relationship("BackupRecord", back_populates="project", cascade="all, delete-orphan")
     drafts = relationship("TableDesignDraft", back_populates="project", cascade="all, delete-orphan")
 
+    def __repr__(self) -> str:
+        return f"<Project id={self.id!r} name={self.name!r} status={self.status!r}>"
+
 
 class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "database_environments"
@@ -141,6 +144,9 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     golden_sqls = relationship("GoldenSQL", back_populates="datasource", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
 
+    def __repr__(self) -> str:
+        return f"<DataSource id={self.id!r} name={self.name!r} db_type={self.db_type!r} env={self.env!r}>"
+
 
 class BackupRecord(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "backup_records"
@@ -195,6 +201,9 @@ class SchemaTable(Base):  # type: ignore[misc,valid-type]
     datasource = relationship("DataSource", back_populates="tables")
     columns = relationship("SchemaColumn", back_populates="table", cascade="all, delete-orphan")
 
+    def __repr__(self) -> str:
+        return f"<SchemaTable id={self.id!r} table_name={self.table_name!r} data_source_id={self.data_source_id!r}>"
+
 
 class SchemaColumn(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "schema_columns"
@@ -225,6 +234,9 @@ class SchemaColumn(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     table = relationship("SchemaTable", back_populates="columns")
+
+    def __repr__(self) -> str:
+        return f"<SchemaColumn id={self.id!r} column_name={self.column_name!r} data_type={self.data_type!r}>"
 
 
 class QueryHistory(Base):  # type: ignore[misc,valid-type]
@@ -260,6 +272,9 @@ class QueryHistory(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     datasource = relationship("DataSource", back_populates="queries")
+
+    def __repr__(self) -> str:
+        return f"<QueryHistory id={self.id!r} status={self.execution_status!r} latency_ms={self.execution_time_ms!r}>"
 
 
 class LLMLog(Base):  # type: ignore[misc,valid-type]
@@ -324,6 +339,9 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
 
     runs = relationship("AgentRun", back_populates="session", cascade="all, delete-orphan")
 
+    def __repr__(self) -> str:
+        return f"<AgentSession id={self.id!r} title={self.title!r} datasource_id={self.datasource_id!r}>"
+
 
 class AgentRun(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_runs"
@@ -355,6 +373,9 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     approvals = relationship("AgentApproval", back_populates="run", cascade="all, delete-orphan")
     checkpoints = relationship("AgentCheckpoint", back_populates="run", cascade="all, delete-orphan")
 
+    def __repr__(self) -> str:
+        return f"<AgentRun id={self.id!r} status={self.status!r} datasource_id={self.datasource_id!r}>"
+
 
 class AgentApproval(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_approvals"
@@ -385,6 +406,9 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
     expires_at = Column(DateTime, nullable=True)
 
     run = relationship("AgentRun", back_populates="approvals")
+
+    def __repr__(self) -> str:
+        return f"<AgentApproval id={self.id!r} status={self.status!r} risk_level={self.risk_level!r}>"
 
 
 class AgentCheckpoint(Base):  # type: ignore[misc,valid-type]
@@ -665,3 +689,6 @@ class ChatConversation(Base):  # type: ignore[misc,valid-type]
     context_tables_json = Column(Text, nullable=False, default="[]")
     messages_json = Column(Text, nullable=False, default="[]")
     artifacts_json = Column(Text, nullable=False, default="[]")
+
+    def __repr__(self) -> str:
+        return f"<ChatConversation id={self.id!r} title={self.title!r}>"

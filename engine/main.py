@@ -207,20 +207,24 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
 # 3. 配置跨域资源共享 (CORS Middleware)
 # 必须放在安全中间件之后注册，确保 CORS 在最外层包装所有响应（包括安全中间件直接返回的错误响应）
 # FastAPI/Starlette 的中间件栈是从后往前应用的——最后注册的中间件成为最外层
+_dev_cors_env = os.environ.get("DATABOX_DEV_CORS_ORIGINS", "")
+_dev_cors_origins: list[str] = (
+    [o.strip() for o in _dev_cors_env.split(",") if o.strip()]
+    if _dev_cors_env
+    else ["http://localhost:5173", "http://127.0.0.1:5173"]
+)
+if not is_frozen:
+    logger.info("Dev CORS origins: %s", _dev_cors_origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
+        *_dev_cors_origins,
         *ALLOWED_TAURI_ORIGINS,
     ],
     allow_credentials=True,
-    allow_methods=["*"],  # 允许所有 HTTP 方法 (GET, POST, PUT, DELETE, OPTIONS等)
-    allow_headers=["*"],  # 允许所有 HTTP 请求头 (包括我们自定义的 X-Local-Token)
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

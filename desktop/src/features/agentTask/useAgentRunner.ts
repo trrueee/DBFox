@@ -58,8 +58,14 @@ export function useAgentRunner({
     conversationsRef.current = conversations;
   }, [conversations]);
 
+  // Defers persistence to the next event-loop tick so that the tab ref
+  // (updated via useEffect after render) reflects the latest state.
+  const scheduleAfterStateFlush = (callback: () => void) => {
+    window.setTimeout(callback, 0);
+  };
+
   const persistTabConversation = useCallback((tabId: string) => {
-    setTimeout(() => {
+    scheduleAfterStateFlush(() => {
       const tab = tabsRef.current.find((item) => item.id === tabId);
       if (!tab?.conversationId) return;
       const origin = conversationsRef.current.find((item) => item.id === tab.conversationId);
@@ -73,7 +79,7 @@ export function useAgentRunner({
         messages: tabMessagesToConversationMessages(tab.chatMessages || []),
         artifacts: tab.artifacts || [],
       });
-    }, 0);
+    });
   }, [contextTables, persistConversation]);
 
   const makeAgentEventHandler = useCallback((
