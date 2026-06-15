@@ -1,12 +1,11 @@
 import base64
 import os
-import sys
 import logging
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from engine.runtime_paths import private_runtime_file, write_private_bytes
+from engine.runtime_paths import private_runtime_file, write_private_bytes, _chmod_private
 
 logger = logging.getLogger("databox.crypto")
 
@@ -46,6 +45,7 @@ def get_or_create_key() -> bytes:
     if KEY_FILE.exists():
         try:
             legacy_key = KEY_FILE.read_bytes()
+            _chmod_private(KEY_FILE, is_dir=False)
         except Exception:
             pass
 
@@ -86,7 +86,11 @@ def get_or_create_key() -> bytes:
     # 5. File system fallback if keychain is completely unavailable
     try:
         write_private_bytes(KEY_FILE, new_key)
-        logger.info("Symmetric key stored in local file system fallback.")
+        _chmod_private(KEY_FILE, is_dir=False)
+        logger.warning(
+            "OS keychain unavailable; using local encrypted-key fallback. "
+            "Restricting key file to current user."
+        )
     except Exception as e:
         logger.error(f"Critical: Failed to save fallback symmetric key: {e}")
         

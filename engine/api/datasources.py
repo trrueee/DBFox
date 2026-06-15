@@ -17,7 +17,7 @@ from engine.models import (
     DataSource,
     SchemaTable,
 )
-from engine.schemas import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
+from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceResponse
 from engine.schema_sync import build_er_diagram_data
 from engine.schema_sync_safe import sync_schema
 
@@ -159,7 +159,7 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail={"code": "CONNECTION_FAILED", "message": "数据库连接测试失败，请检查连接配置。"})
 
 
-@router.post("/datasources")
+@router.post("/datasources", response_model=DataSourceResponse)
 def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         config = req.model_dump()
@@ -229,7 +229,7 @@ def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(ge
         )
 
 
-@router.get("/datasources")
+@router.get("/datasources", response_model=list[DataSourceResponse])
 def api_list_datasources(
     project_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -252,7 +252,7 @@ def _replace_secret_if_present(obj: DataSource, value: str | None, cipher_attr: 
     setattr(obj, nonce_attr, nonce)
 
 
-@router.put("/datasources/{id}")
+@router.put("/datasources/{id}", response_model=DataSourceResponse)
 def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == id).first()
     if not datasource:

@@ -85,6 +85,7 @@ class TestMySQLPool:
     def test_queue_pool_checkout_does_not_require_sqlalchemy_dialect(self, monkeypatch) -> None:
         from engine.sql import executor
         from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
+        from engine.sql.pool_registry import get_pool_registry
 
         class FakeConnection:
             pinged = False
@@ -98,7 +99,7 @@ class TestMySQLPool:
             def close(self) -> None:
                 pass
 
-        executor._MYSQL_POOLS.clear()
+        get_pool_registry().dispose_all()
         monkeypatch.setattr(executor.pymysql, "connect", lambda **_params: FakeConnection())
 
         pool = get_mysql_pool("ds-mysql", {
@@ -114,7 +115,7 @@ class TestMySQLPool:
             assert raw_conn.pinged is True
         finally:
             conn_proxy.close()
-            executor._MYSQL_POOLS.clear()
+            get_pool_registry().dispose_all()
 
 
 class TestExecutorSQLite:

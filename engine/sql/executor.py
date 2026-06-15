@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sqlite3
+import sys
 import time
 import uuid
 from typing import Any
@@ -42,9 +43,61 @@ QUERY_TIMEOUT_MS = 30_000
 
 ProcessedRows = tuple[list[dict[str, Any]], list[str], bool, int]
 
-# Dynamic registry of pools mapped by database cache keys to support auto-updating of ports/credentials
-_MYSQL_POOLS: dict[tuple[Any, ...], QueuePool] = {}
-_POSTGRES_POOLS: dict[tuple[Any, ...], QueuePool] = {}
+
+def _fetch_and_serialize(cursor: Any, max_rows: int = MAX_ROWS, *, row_mapper: Any = None) -> tuple[list[dict[str, Any]], list[str], bool, int, int, int]:
+    """Common fetch/serialize logic shared by all database dialects.
+
+    Args:
+        row_mapper: Optional callable to convert each raw row to a dict.
+                    Used by psycopg2 which returns tuples instead of dicts.
+
+    Returns (rows, columns, truncated, response_bytes, fetch_ms, serialize_ms).
+    """
+    columns: list[str] = []
+    rows: list[dict[str, Any]] = []
+    truncated = False
+    response_bytes = 2
+    fetch_ms = 0
+    serialize_ms = 0
+
+    if cursor.description:
+        columns = [col[0] for col in cursor.description]
+
+        t_fetch_start = time.perf_counter()
+        raw_rows = cursor.fetchmany(max_rows)
+        if row_mapper:
+            raw_rows = [row_mapper(r) for r in raw_rows]
+        fetch_ms = int((time.perf_counter() - t_fetch_start) * 1000)
+
+        t_ser_start = time.perf_counter()
+        rows, columns, truncated, response_bytes = _process_rows(raw_rows, columns)
+        serialize_ms = int((time.perf_counter() - t_ser_start) * 1000)
+
+    return rows, columns, truncated, response_bytes, fetch_ms, serialize_ms
+
+
+def guardrail_bypass_allowed() -> bool:
+    """Centralized check for guardrail bypass availability.
+    
+    Requires both DATABOX_TESTING=1 and DATABOX_ALLOW_GUARDRAIL_BYPASS=1.
+    Always denied in frozen (packaged) builds.
+    """
+    is_frozen = getattr(sys, "frozen", False)
+    if is_frozen:
+        if os.environ.get("DATABOX_TESTING") == "1" or os.environ.get("DATABOX_ALLOW_GUARDRAIL_BYPASS") == "1":
+            logger.critical(
+                "Guardrail bypass env vars detected in frozen build — ignoring."
+            )
+        return False
+    if os.environ.get("DATABOX_TESTING") != "1":
+        return False
+    if os.environ.get("DATABOX_ALLOW_GUARDRAIL_BYPASS") != "1":
+        return False
+    return True
+
+
+# Global pool registry with LRU eviction
+from engine.sql.pool_registry import get_pool_registry
 
 
 def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
@@ -62,30 +115,32 @@ def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("sslcert", ""),
         pool_params.get("sslkey", ""),
     )
-    if pool_key not in _POSTGRES_POOLS:
-        def creator() -> Any:
-            import psycopg2
-            connect_kwargs: dict[str, Any] = {
-                "host": pool_params.get("host"),
-                "port": pool_params.get("port"),
-                "user": pool_params.get("user"),
-                "password": pool_params.get("password"),
-                "database": pool_params.get("database"),
-                "connect_timeout": 5,
-            }
-            for ssl_key in ("sslmode", "sslrootcert", "sslcert", "sslkey"):
-                val = pool_params.get(ssl_key)
-                if val:
-                    connect_kwargs[ssl_key] = val
-            return psycopg2.connect(**connect_kwargs)
+
+    registry = get_pool_registry()
+    if registry.has(pool_key):
         from typing import cast
-        _POSTGRES_POOLS[pool_key] = QueuePool(
-            cast(Any, creator),
-            pool_size=5,
-            max_overflow=10,
-            recycle=1800,
-        )
-    return _POSTGRES_POOLS[pool_key]
+        return cast(QueuePool, registry.get_or_create(pool_key, lambda: None))
+
+    def creator() -> Any:
+        import psycopg2
+        connect_kwargs: dict[str, Any] = {
+            "host": pool_params.get("host"),
+            "port": pool_params.get("port"),
+            "user": pool_params.get("user"),
+            "password": pool_params.get("password"),
+            "database": pool_params.get("database"),
+            "connect_timeout": 5,
+        }
+        for ssl_key in ("sslmode", "sslrootcert", "sslcert", "sslkey"):
+            val = pool_params.get(ssl_key)
+            if val:
+                connect_kwargs[ssl_key] = val
+        return psycopg2.connect(**connect_kwargs)
+
+    from typing import cast
+    return registry.get_or_create(
+        pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
+    )
 
 
 def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
@@ -105,18 +160,18 @@ def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("ssl_cert")
     )
     
-    if pool_key not in _MYSQL_POOLS:
-        def creator() -> pymysql.Connection:
-            return pymysql.connect(**pool_params)
-            
+    registry = get_pool_registry()
+    if registry.has(pool_key):
         from typing import cast
-        _MYSQL_POOLS[pool_key] = QueuePool(
-            cast(Any, creator),
-            pool_size=5,
-            max_overflow=10,
-            recycle=1800,
-        )
-    return _MYSQL_POOLS[pool_key]
+        return cast(QueuePool, registry.get_or_create(pool_key, lambda: None))
+    
+    def creator() -> pymysql.Connection:
+        return pymysql.connect(**pool_params)
+        
+    from typing import cast
+    return registry.get_or_create(
+        pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
+    )
 
 
 def _ping_mysql_connection(conn_proxy: Any) -> Any:
@@ -220,23 +275,7 @@ def _execute_on_sqlite_profiled(
             raise
         execute_ms = int((time.perf_counter() - t_exec_start) * 1000)
 
-        columns: list[str] = []
-        rows: list[dict[str, Any]] = []
-        truncated = False
-        response_bytes = 2
-        fetch_ms = 0
-        serialize_ms = 0
-
-        if cursor.description:
-            columns = [col[0] for col in cursor.description]
-            
-            t_fetch_start = time.perf_counter()
-            raw_rows = cursor.fetchmany(MAX_ROWS)
-            fetch_ms = int((time.perf_counter() - t_fetch_start) * 1000)
-            
-            t_ser_start = time.perf_counter()
-            rows, columns, truncated, response_bytes = _process_rows(raw_rows, columns)
-            serialize_ms = int((time.perf_counter() - t_ser_start) * 1000)
+        rows, columns, truncated, response_bytes, fetch_ms, serialize_ms = _fetch_and_serialize(cursor)
             
         return rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms
     finally:
@@ -302,30 +341,12 @@ def _execute_on_postgres_profiled(
                 raise
             execute_ms = int((time.perf_counter() - t_exec_start) * 1000)
 
-            columns: list[str] = []
-            rows: list[dict[str, Any]] = []
-            truncated = False
-            response_bytes = 2
-            fetch_ms = 0
-            serialize_ms = 0
+            pg_columns = [col[0] for col in cursor.description] if cursor.description else []
+            mapped_rows, columns_raw, truncated, response_bytes, fetch_ms, serialize_ms = _fetch_and_serialize(
+                cursor, row_mapper=lambda r, _c=pg_columns: dict(zip(_c, r)) if _c else r,
+            )
 
-            if cursor.description:
-                columns = [col[0] for col in cursor.description]
-                
-                t_fetch_start = time.perf_counter()
-                raw_rows = cursor.fetchmany(MAX_ROWS)
-                fetch_ms = int((time.perf_counter() - t_fetch_start) * 1000)
-                
-                # Convert tuples to dicts
-                mapped_rows = []
-                for row in raw_rows:
-                    mapped_rows.append(dict(zip(columns, row)))
-                    
-                t_ser_start = time.perf_counter()
-                rows, columns, truncated, response_bytes = _process_rows(mapped_rows, columns)
-                serialize_ms = int((time.perf_counter() - t_ser_start) * 1000)
-                
-            return rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms
+            return mapped_rows, columns_raw, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms
     finally:
         if execution_id:
             QUERY_REGISTRY.unregister(execution_id)
@@ -373,23 +394,7 @@ def _execute_on_mysql_profiled(
                 raise
             execute_ms = int((time.perf_counter() - t_exec_start) * 1000)
 
-            columns: list[str] = []
-            rows: list[dict[str, Any]] = []
-            truncated = False
-            response_bytes = 2
-            fetch_ms = 0
-            serialize_ms = 0
-
-            if cursor.description:
-                columns = [col[0] for col in cursor.description]
-                
-                t_fetch_start = time.perf_counter()
-                raw_rows = cursor.fetchmany(MAX_ROWS)
-                fetch_ms = int((time.perf_counter() - t_fetch_start) * 1000)
-                
-                t_ser_start = time.perf_counter()
-                rows, columns, truncated, response_bytes = _process_rows(raw_rows, columns)
-                serialize_ms = int((time.perf_counter() - t_ser_start) * 1000)
+            rows, columns, truncated, response_bytes, fetch_ms, serialize_ms = _fetch_and_serialize(cursor)
                 
             return rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms
     finally:
@@ -451,13 +456,13 @@ def _resolve_execution_safety_decision(
         return decision
 
     if bypass_guardrail:
-        if os.environ.get("DATABOX_TESTING") != "1":
+        if not guardrail_bypass_allowed():
             raise GuardrailValidationError(
                 "TrustGate bypass is only available in the test environment.",
                 checks=[{
                     "rule": "trust_gate_bypass_disabled",
                     "level": "reject",
-                    "message": "bypass_guardrail requires DATABOX_TESTING=1 and cannot be used in normal execution.",
+                    "message": "bypass_guardrail requires DATABOX_TESTING=1 and DATABOX_ALLOW_GUARDRAIL_BYPASS=1.",
                 }],
             )
         # Double-gate: bypass is only allowed on dev/test datasources.
@@ -482,7 +487,7 @@ def _resolve_execution_safety_decision(
             "originalSql": sql_str,
             "safeSql": sql_str,
             "checks": [],
-            "message": "Bypassed via system request (DATABOX_TESTING=1 + dev/test env)",
+            "message": "Bypassed via system request (DATABOX_TESTING=1 + DATABOX_ALLOW_GUARDRAIL_BYPASS=1 + dev/test env)",
         }
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
@@ -499,7 +504,7 @@ def _resolve_execution_safety_decision(
                 "bypass_guardrail": True,
                 "testing": os.environ.get("DATABOX_TESTING") == "1",
             },
-            messages=["Legacy system bypass was used; prefer explicit non-query execution helpers."],
+            messages=["Guardrail bypass was used; prefer explicit non-query execution helpers."],
         )
 
     return TrustGate(db, validate_sql_schema).execution_decision(datasource_id, sql_str, policy=policy)
