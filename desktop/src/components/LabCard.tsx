@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
 interface LabCardProps {
   children: ReactNode;
@@ -19,11 +19,21 @@ export function LabCard({ children, accent, elevated, hover, className, style, o
     .filter(Boolean)
     .join(" ");
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (onClick && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <div
       className={cls}
       style={{ cursor: onClick ? "pointer" : undefined, ...style }}
       onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? handleKeyDown : undefined}
     >
       {children}
     </div>

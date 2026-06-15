@@ -105,6 +105,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toastElement = items.length > 0 ? createPortal(
     <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
       style={{
         position: "absolute",
         bottom: 20,
@@ -120,6 +123,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <div
           key={item.id}
           ref={(el) => setItemRef(item.id, el)}
+          role={item.type === "error" ? "alert" : "status"}
+          aria-live={item.type === "error" ? "assertive" : "polite"}
           style={{
             display: "flex",
             alignItems: "center",
