@@ -38,11 +38,11 @@ interface WorkspaceRouterProps {
   activeDatasourceId: string;
   setActiveDatasourceId: (id: string) => void;
   activeDatasourceForSettings: DataSource | null;
-  loadDatasources: () => Promise<any>;
-  sendFollowUp: any;
+  loadDatasources: (preferredId?: string) => Promise<void>;
+  sendFollowUp: (tabId: string, text: string) => void;
   handleApprovalDecision: (tabId: string, approved: boolean) => Promise<void>;
-  cancelAgentRun: any;
-  regenerateAgentRun: any;
+  cancelAgentRun: (tabId: string) => Promise<void>;
+  regenerateAgentRun: (tabId: string) => void;
   datasourceActions?: DataSourceActions;
 }
 
