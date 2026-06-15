@@ -17,6 +17,8 @@ import {
 type ChatMessages = NonNullable<WorkspaceTab["chatMessages"]>;
 type TimelineItems = NonNullable<WorkspaceTab["agentTimeline"]>;
 
+import { useToast } from "../../components/Toast";
+
 type UseAgentRunnerOptions = {
   tabs: WorkspaceTab[];
   conversations: Conversation[];
@@ -27,7 +29,7 @@ type UseAgentRunnerOptions = {
   patchTab: (tabId: string, patch: Partial<WorkspaceTab>) => void;
   patchTabTimeline: (tabId: string, updater: (items: TimelineItems) => TimelineItems) => void;
   persistConversation: (conversation: Conversation) => Promise<void>;
-  showToast: (message: string) => void;
+  showToast?: (message: string) => void;
   nextMsgId: () => number;
 };
 
@@ -41,9 +43,11 @@ export function useAgentRunner({
   patchTab,
   patchTabTimeline,
   persistConversation,
-  showToast,
+  showToast: showToastParam,
   nextMsgId,
 }: UseAgentRunnerOptions) {
+  const { toast } = useToast();
+  const showToast = showToastParam || toast;
   const tabsRef = useRef<WorkspaceTab[]>(tabs);
   const conversationsRef = useRef<Conversation[]>(conversations);
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map());

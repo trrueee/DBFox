@@ -16,8 +16,7 @@ interface AgentTaskViewProps {
   onApproveAgent: (tabId: string) => void;
   onRejectAgent: (tabId: string) => void;
   onSendFollowUp: (tabId: string, text: string) => void;
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
@@ -68,7 +67,6 @@ export function AgentTaskView({
   onRejectAgent,
   onSendFollowUp,
   onOpenSqlConsole,
-  onSetSqlQuery,
   onToast,
 }: AgentTaskViewProps) {
   // ── Parse conversation ──
@@ -196,7 +194,6 @@ export function AgentTaskView({
             turn={turn}
             isLast={index === turns.length - 1}
             onOpenSqlConsole={onOpenSqlConsole}
-            onSetSqlQuery={onSetSqlQuery}
             onSendFollowUp={(text) => onSendFollowUp(tab.id, text)}
             onToast={onToast}
           />

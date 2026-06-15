@@ -3,8 +3,7 @@ import { AgentTaskView } from "../agentTask/AgentTaskView";
 
 interface QueryResultWorkspaceProps {
   tab: WorkspaceTab;
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onSendFollowUp: (tabId: string, text: string) => void;
   onApproveAgent: (tabId: string) => void;
   onRejectAgent: (tabId: string) => void;
@@ -16,7 +15,6 @@ interface QueryResultWorkspaceProps {
 export function QueryResultWorkspace({
   tab,
   onOpenSqlConsole,
-  onSetSqlQuery,
   onSendFollowUp,
   onApproveAgent,
   onRejectAgent,
@@ -33,7 +31,6 @@ export function QueryResultWorkspace({
       onRejectAgent={onRejectAgent}
       onSendFollowUp={onSendFollowUp}
       onOpenSqlConsole={onOpenSqlConsole}
-      onSetSqlQuery={onSetSqlQuery}
       onToast={onToast}
     />
   );

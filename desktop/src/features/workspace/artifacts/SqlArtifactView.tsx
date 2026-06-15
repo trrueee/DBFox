@@ -4,15 +4,13 @@ import { copyText, downloadTextFile } from "./artifactActions";
 
 interface SqlArtifactViewProps {
   artifact: SqlArtifact;
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
-export function SqlArtifactView({ artifact, onOpenSqlConsole, onSetSqlQuery, onToast }: SqlArtifactViewProps) {
+export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArtifactViewProps) {
   const openInSqlConsole = () => {
-    onSetSqlQuery(artifact.sql);
-    onOpenSqlConsole();
+    onOpenSqlConsole(artifact.sql);
   };
 
   const handleCopy = async () => {

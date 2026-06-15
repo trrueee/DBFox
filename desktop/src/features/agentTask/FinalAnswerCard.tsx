@@ -11,8 +11,7 @@ interface FinalAnswerCardProps {
   suggestions: FollowUpSuggestion[] | null | undefined;
   agentStatus: AgentTabStatus | "idle";
   onSendFollowUp: (text: string) => void;
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
@@ -36,7 +35,6 @@ export function FinalAnswerCard({
   agentStatus,
   onSendFollowUp,
   onOpenSqlConsole,
-  onSetSqlQuery,
   onToast,
 }: FinalAnswerCardProps) {
   const hasFindings = answer?.key_findings && answer.key_findings.length > 0;
@@ -182,8 +180,7 @@ export function FinalAnswerCard({
                       <button
                         className="task-artifact-btn"
                         onClick={() => {
-                          onSetSqlQuery(artifact.sql);
-                          onOpenSqlConsole();
+                          onOpenSqlConsole(artifact.sql);
                         }}
                         type="button"
                       >

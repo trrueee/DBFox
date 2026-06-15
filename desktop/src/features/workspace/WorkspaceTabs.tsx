@@ -8,7 +8,7 @@ interface WorkspaceTabsProps {
   activeTabId: string;
   onActivateTab: (tab: WorkspaceTab) => void;
   onCloseTab: (tabId: string, event: MouseEvent) => void;
-  onOpenSqlConsole: () => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
 }
 
 export function WorkspaceTabs({
@@ -38,7 +38,7 @@ export function WorkspaceTabs({
             </div>
           );
         })}
-        <button className="hifi-tab-add-btn" onClick={onOpenSqlConsole} title="新建 SQL 查询">
+        <button className="hifi-tab-add-btn" onClick={() => onOpenSqlConsole()} title="新建 SQL 查询">
           <Plus size={11} />
         </button>
       </div>

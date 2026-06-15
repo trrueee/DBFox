@@ -6,7 +6,7 @@ import type { EngineColumn } from "../../engine/engineApi";
 
 interface TablePreviewPaneProps {
   tableId: string;
-  onOpenSqlConsole: () => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
@@ -33,6 +33,25 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   const [error, setError] = useState("");
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   const requestSeqRef = useRef(0);
+
+  const [prevTableId, setPrevTableId] = useState(tableId);
+  const [prevPage, setPrevPage] = useState(page);
+  const [prevPageSize, setPrevPageSize] = useState(pageSize);
+
+  if (tableId !== prevTableId || page !== prevPage || pageSize !== prevPageSize) {
+    let nextPage = page;
+    if (tableId !== prevTableId) {
+      nextPage = 1;
+      setPage(1);
+      setPrevTableId(tableId);
+    }
+    setPrevPage(nextPage);
+    setPrevPageSize(pageSize);
+
+    const nextCacheKey = `${tableId}|${nextPage}|${pageSize}`;
+    const cached = previewCache.get(nextCacheKey);
+    setData(cached ?? null);
+  }
 
   const loadPreview = async () => {
     const seq = ++requestSeqRef.current;
@@ -76,21 +95,6 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   };
 
   useEffect(() => {
-    setPage(1);
-  }, [tableId]);
-
-  const prevTableRef = useRef(tableId);
-  useEffect(() => {
-    const cached = previewCache.get(cacheKey);
-    if (cached) {
-      // Cached page: render immediately, then revalidate in the background.
-      setData(cached);
-    } else if (prevTableRef.current !== tableId) {
-      // Different table: don't show stale rows from the previous table.
-      setData(null);
-    }
-    // Same table, new page/pageSize: keep previous rows visible (dimmed) while loading.
-    prevTableRef.current = tableId;
     void loadPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableId, page, pageSize]);
@@ -116,7 +120,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
         </div>
         <div className="hifi-toolbar-right">
           <Search size={12} className="text-gray-400 cursor-pointer" />
-          <button className="hifi-text-btn flex items-center gap-1" onClick={onOpenSqlConsole}><Code size={11} /> 在 SQL 运行</button>
+          <button className="hifi-text-btn flex items-center gap-1" onClick={() => onOpenSqlConsole()}><Code size={11} /> 在 SQL 运行</button>
         </div>
       </div>
 
@@ -256,7 +260,7 @@ function EmptyTableState({
 }: {
   page: number;
   onBackToFirstPage: () => void;
-  onOpenSqlConsole: () => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onGenerate: () => void;
 }) {
   const beyondFirstPage = page > 1;
@@ -275,7 +279,7 @@ function EmptyTableState({
         ) : (
           <>
             <button className="hifi-toolbar-btn" onClick={onGenerate}><Sparkles size={10} className="text-yellow-600" /> 生成测试数据</button>
-            <button className="hifi-toolbar-btn" onClick={onOpenSqlConsole}><Code size={10} /> 打开 SQL 控制台</button>
+            <button className="hifi-toolbar-btn" onClick={() => onOpenSqlConsole()}><Code size={10} /> 打开 SQL 控制台</button>
           </>
         )}
       </div>
