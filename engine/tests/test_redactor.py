@@ -23,12 +23,12 @@ def test_data_redactor_pii_and_credentials() -> None:
 
 
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
-    from engine.sql.executor import execute_query
+    from engine.sql.test_executor import execute_query_for_test
     from engine.models import QueryHistory
 
     # Execute a query containing a sensitive email and password assignment
     sensitive_sql = "SELECT id, email FROM users WHERE email = 'test@example.com'; -- password = 'supersecretpassword'"
-    res = execute_query(db_session, test_datasource.id, sensitive_sql, bypass_guardrail=True)
+    res = execute_query_for_test(db_session, test_datasource.id, sensitive_sql)
 
     assert res["success"] is True
 

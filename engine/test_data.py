@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
-from engine.sql.executor import execute_query
+from engine.sql.test_executor import execute_query_for_test
 from engine.errors import DataBoxError
 
 logger = logging.getLogger("databox.test_data")
@@ -297,7 +297,7 @@ def generate_smart_test_data(
     # Execute transactions sequentially or in one batch
     try:
         for sql in sql_statements:
-            res = execute_query(db, datasource_id, sql, bypass_guardrail=True)
+            res = execute_query_for_test(db, datasource_id, sql)
             if not res["success"]:
                 raise DataBoxError(
                     "BATCH_INSERT_FAILED",
