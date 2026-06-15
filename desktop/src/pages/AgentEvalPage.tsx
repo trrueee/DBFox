@@ -36,6 +36,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       setRuns([]);
       return;
     }
+    await Promise.resolve();
     setLoading(true);
     try {
       const [nextTasks, nextRuns] = await Promise.all([
