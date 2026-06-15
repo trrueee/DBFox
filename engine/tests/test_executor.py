@@ -1,6 +1,7 @@
 """Tests for executor module — query execution against SQLite demo DB."""
 import decimal
 import datetime
+import inspect
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -271,15 +272,15 @@ class TestPerformanceAndExplain:
 
     def test_execute_query_bypass_requires_testing_env(self, db_session, test_datasource, monkeypatch) -> None:
         from engine.errors import GuardrailValidationError
+        from engine.sql.test_executor import execute_query_for_test
 
         monkeypatch.delenv("DATABOX_TESTING", raising=False)
 
         with pytest.raises(GuardrailValidationError) as exc_info:
-            execute_query(
+            execute_query_for_test(
                 db_session,
                 test_datasource.id,
                 "SELECT id FROM users LIMIT 3",
-                bypass_guardrail=True,
             )
 
         assert any(check["rule"] == "trust_gate_bypass_disabled" for check in exc_info.value.checks)
@@ -307,3 +308,19 @@ class TestPerformanceAndExplain:
         with pytest.raises(GuardrailValidationError) as exc_info:
             explain_sql(db_session, test_datasource.id, "DELETE FROM users")
         assert any(check["rule"] in {"select_only", "blocked_command_type"} for check in exc_info.value.checks)
+
+
+class TestExecuteQueryBoundary:
+    def test_execute_query_has_no_bypass_guardrail_parameter(self) -> None:
+        """Public execute_query must not expose a bypass_guardrail parameter."""
+        import inspect
+        sig = inspect.signature(execute_query)
+        assert "bypass_guardrail" not in sig.parameters, (
+            "execute_query must not accept bypass_guardrail — use execute_query_for_test instead"
+        )
+
+    def test_execute_query_for_test_accepts_bypass(self) -> None:
+        """execute_query_for_test should be available for test bypass."""
+        from engine.sql.test_executor import execute_query_for_test
+        sig = inspect.signature(execute_query_for_test)
+        assert "bypass_guardrail" not in sig.parameters

@@ -2,6 +2,7 @@
 import os
 os.environ["DATABOX_BYPASS_CONFIRMATION"] = "1"
 os.environ["DATABOX_TESTING"] = "1"
+os.environ["DATABOX_ALLOW_GUARDRAIL_BYPASS"] = "1"
 
 # ---- LLM provider defaults for testing --------------------------------------
 # When a QWEN_API_KEY is set, auto-configure the OpenAI-compatible endpoint.
