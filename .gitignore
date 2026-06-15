@@ -87,6 +87,10 @@ desktop/src-tauri/.tauri/
 # Deprecated / archived
 弃用/
 
+# Generated artifacts and eval data
+artifacts/*.json
+artifacts/*_report*.md
+
 # Stale dev artifacts
 diff.txt
 diff_tests.txt
