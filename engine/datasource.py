@@ -37,6 +37,52 @@ class TunnelInstance:
         self.error_message = None
 
 
+def _create_physical_tunnel_forwarder(config: dict[str, Any], is_managed: bool) -> SSHTunnelForwarder:
+    ssh_password = None
+    pkey_passphrase = None
+
+    if is_managed:
+        if config.get("ssh_password_ciphertext") and config.get("ssh_password_nonce"):
+            ssh_password = decrypt_password(config["ssh_password_ciphertext"], config["ssh_password_nonce"])
+        if config.get("ssh_pkey_passphrase_ciphertext") and config.get("ssh_pkey_passphrase_nonce"):
+            pkey_passphrase = decrypt_password(config["ssh_pkey_passphrase_ciphertext"], config["ssh_pkey_passphrase_nonce"])
+    else:
+        ssh_password = config.get("ssh_password")
+        pkey_passphrase = config.get("ssh_pkey_passphrase")
+
+    ssh_pkey = config.get("ssh_pkey_path") if config.get("ssh_pkey_path") else None
+    ssh_host = config.get("ssh_host")
+    ssh_port = int(config.get("ssh_port", 22) or 22)
+    ssh_username = config.get("ssh_username")
+
+    target_host = config.get("host")
+    target_port = int(config.get("port", 3306) or 3306)
+
+    tunnel_type = "managed_datasource" if is_managed else "temporary_test"
+    logger.info(
+        "Starting %s SSH Tunnel: Jumpbox %s:%s -> Target %s:%s",
+        tunnel_type, ssh_host, ssh_port, target_host, target_port
+    )
+
+    tunnel = SSHTunnelForwarder(
+        (ssh_host, ssh_port),
+        ssh_username=ssh_username,
+        ssh_password=ssh_password,
+        ssh_pkey=ssh_pkey,
+        ssh_private_key_password=pkey_passphrase,
+        remote_bind_address=(target_host, target_port),
+        local_bind_address=("127.0.0.1", 0),
+        keepalive=30,
+    )
+    tunnel.start()
+    return tunnel
+
+
+def open_temporary_tunnel(config: dict[str, Any]) -> SSHTunnelForwarder:
+    """Open a temporary SSH tunnel for test connections, mirroring keepalive and mapping logic."""
+    return _create_physical_tunnel_forwarder(config, is_managed=False)
+
+
 class TunnelManager:
     def __init__(self) -> None:
         self._tunnels: dict[str, TunnelInstance] = {}
@@ -144,34 +190,7 @@ class TunnelManager:
         return tunnel
 
     def _start_physical_tunnel(self, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-        ssh_password = None
-        if ds_dict.get("ssh_password_ciphertext") and ds_dict.get("ssh_password_nonce"):
-            ssh_password = decrypt_password(ds_dict["ssh_password_ciphertext"], ds_dict["ssh_password_nonce"])
-
-        pkey_passphrase = None
-        if ds_dict.get("ssh_pkey_passphrase_ciphertext") and ds_dict.get("ssh_pkey_passphrase_nonce"):
-            pkey_passphrase = decrypt_password(ds_dict["ssh_pkey_passphrase_ciphertext"], ds_dict["ssh_pkey_passphrase_nonce"])
-
-        ssh_pkey = ds_dict.get("ssh_pkey_path") if ds_dict.get("ssh_pkey_path") else None
-        ssh_host = ds_dict.get("ssh_host")
-        ssh_port = int(ds_dict.get("ssh_port", 22))
-        ssh_username = ds_dict.get("ssh_username")
-
-        target_host = ds_dict.get("host")
-        target_port = int(ds_dict.get("port", 3306))
-
-        tunnel = SSHTunnelForwarder(
-            (ssh_host, ssh_port),
-            ssh_username=ssh_username,
-            ssh_password=ssh_password,
-            ssh_pkey=ssh_pkey,
-            ssh_private_key_password=pkey_passphrase,
-            remote_bind_address=(target_host, target_port),
-            local_bind_address=("127.0.0.1", 0),
-            keepalive=30,
-        )
-        tunnel.start()
-        return tunnel
+        return _create_physical_tunnel_forwarder(ds_dict, is_managed=True)
 
     def cleanup_stale(self) -> None:
         with self._lock:
@@ -377,24 +396,11 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
             test_port = port
 
             if config.get("ssh_enabled"):
-                ssh_host = config.get("ssh_host")
-                ssh_port = int(config.get("ssh_port", 22))
-                ssh_username = config.get("ssh_username")
-                ssh_password = config.get("ssh_password")
-                ssh_pkey = config.get("ssh_pkey_path") if config.get("ssh_pkey_path") else None
-                pkey_passphrase = config.get("ssh_pkey_passphrase")
-
                 try:
-                    temp_tunnel = SSHTunnelForwarder(
-                        (ssh_host, ssh_port),
-                        ssh_username=ssh_username,
-                        ssh_password=ssh_password,
-                        ssh_pkey=ssh_pkey,
-                        ssh_private_key_password=pkey_passphrase,
-                        remote_bind_address=(host, port),
-                        local_bind_address=("127.0.0.1", 0),
-                    )
-                    temp_tunnel.start()
+                    if config.get("is_managed"):
+                        temp_tunnel = get_or_create_tunnel_for_dict(config)
+                    else:
+                        temp_tunnel = open_temporary_tunnel(config)
                     test_host = "127.0.0.1"
                     test_port = temp_tunnel.local_bind_port
                 except Exception as se:
@@ -448,7 +454,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 raise e
             raise DataSourceConnectionError(f"无法建立 PostgreSQL 数据库连接，请检查配置信息。错误详情: {str(e)}")
         finally:
-            if temp_tunnel:
+            if temp_tunnel and not config.get("is_managed"):
                 try:
                     temp_tunnel.stop()
                 except Exception:
@@ -469,24 +475,11 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
         test_port = port
 
         if config.get("ssh_enabled"):
-            ssh_host = config.get("ssh_host")
-            ssh_port = int(config.get("ssh_port", 22))
-            ssh_username = config.get("ssh_username")
-            ssh_password = config.get("ssh_password")
-            ssh_pkey = config.get("ssh_pkey_path") if config.get("ssh_pkey_path") else None
-            pkey_passphrase = config.get("ssh_pkey_passphrase")
-
             try:
-                temp_tunnel = SSHTunnelForwarder(
-                    (ssh_host, ssh_port),
-                    ssh_username=ssh_username,
-                    ssh_password=ssh_password,
-                    ssh_pkey=ssh_pkey,
-                    ssh_private_key_password=pkey_passphrase,
-                    remote_bind_address=(host, port),
-                    local_bind_address=("127.0.0.1", 0),
-                )
-                temp_tunnel.start()
+                if config.get("is_managed"):
+                    temp_tunnel = get_or_create_tunnel_for_dict(config)
+                else:
+                    temp_tunnel = open_temporary_tunnel(config)
                 test_host = "127.0.0.1"
                 test_port = temp_tunnel.local_bind_port
             except Exception as se:
@@ -554,7 +547,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
             raise e
         raise DataSourceConnectionError(f"无法建立数据库连接，请检查配置信息。错误详情: {str(e)}")
     finally:
-        if temp_tunnel:
+        if temp_tunnel and not config.get("is_managed"):
             try:
                 temp_tunnel.stop()
             except Exception:
