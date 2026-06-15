@@ -29,7 +29,6 @@ ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
-ALEMBIC_DIR = ROOT / "alembic"
 
 SIDECAR_NAME = "databox-engine-x86_64-pc-windows-msvc.exe"
 
@@ -119,7 +118,6 @@ def build_pyinstaller(python_exe: str) -> Path:
         "--distpath", str(dist_dir),
         "--workpath", str(work_dir),
         "--add-data", f"{ENGINE_DIR}{os.pathsep}engine",
-        "--add-data", f"{ALEMBIC_DIR}{os.pathsep}alembic",
         "--add-data", f"{ROOT / 'alembic.ini'}{os.pathsep}.",
     ]
     for mod in HIDDEN_IMPORTS:
