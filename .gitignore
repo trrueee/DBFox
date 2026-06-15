@@ -132,3 +132,6 @@ Thumbs.db
 .superpowers/
 .worktrees/
 docs/skills/
+_linecount.py
+lint_results.txt
+session-ses_*.md
