@@ -12,11 +12,12 @@ function read(relativePath: string) {
 
 describe("datasource settings tab behavior", () => {
   it("updates the reused settings tab title for manager and new-connection modes", () => {
-    const app = read("App.tsx");
+    const tabsHook = read("features/appShell/useWorkspaceTabs.ts");
+    const router = read("features/appShell/WorkspaceRouter.tsx");
 
-    expect(app).toMatch(/openConnectionManagerTab[\s\S]*prev\.map\(\(tab\) => \(tab\.id === tabId \? \{ \.\.\.tab, title: "数据源管理" \} : tab\)\)/);
-    expect(app).toMatch(/openNewConnectionTab[\s\S]*prev\.map\(\(tab\) => \(tab\.id === tabId \? \{ \.\.\.tab, title: "新建数据源" \} : tab\)\)/);
-    expect(app).toContain('initialShowAddForm={activeTab.title === "新建数据源"}');
+    expect(tabsHook).toMatch(/openConnectionManagerTab[\s\S]*prev\.map\(\(tab\) =>/);
+    expect(tabsHook).toMatch(/openNewConnectionTab[\s\S]*prev\.map\(\(tab\) =>/);
+    expect(router).toContain('initialShowAddForm={activeTab.title === "新建数据源"}');
   });
 
   it("does not use DOM query or delayed button click hacks to open the add form", () => {

@@ -21,7 +21,7 @@ describe("app shell layout", () => {
   });
 
   it("resizes the sidebar using real viewport mouse delta", () => {
-    const app = read("App.tsx");
+    const app = read("features/appShell/useSidebarLayout.ts");
 
     expect(app).toContain("const delta = e.clientX - resizingRef.current.startX;");
   });
