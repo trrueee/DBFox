@@ -1224,38 +1224,6 @@ def _resolve_preview_columns(args: dict[str, Any], available: dict[str, SchemaCo
     return requested
 
 
-def _validate_sql_fragment(fragment: str, context: str) -> None:
-    """Validate a user-supplied SQL fragment using sqlglot AST parsing.
-
-    Rejects fragments containing DML/DDL keywords or multi-statement patterns.
-    Uses AST-level validation (same approach as guardrail.py) rather than
-    regex blacklists which are inherently bypassable.
-    """
-    import sqlglot
-    import sqlglot.errors
-
-    # Quick rejection of obviously dangerous tokens
-    dangerous = {"DROP", "DELETE", "INSERT", "UPDATE", "ALTER", "CREATE",
-                 "TRUNCATE", "EXEC", "EXECUTE", "GRANT", "REVOKE", "UNION",
-                 "INTO", "LOAD_FILE", "SLEEP", "BENCHMARK"}
-    tokens = set(re.findall(r"\b\w+\b", fragment.upper()))
-    if tokens & dangerous:
-        raise ValueError(f"Dangerous keyword in {context} fragment")
-
-    # AST-level validation: try parsing as a standalone expression
-    try:
-        parsed = sqlglot.parse_one(fragment, read="mysql", error_level=sqlglot.errors.ErrorLevel.RAISE)
-        if parsed is None:
-            return
-        if parsed.key in ("drop", "delete", "insert", "update", "create", "alter",
-                          "truncate", "execute", "grant", "revoke"):
-            raise ValueError(f"Dangerous statement type '{parsed.key}' in {context} fragment")
-    except sqlglot.errors.ParseError:
-        # If parse fails, allow it — it might be a valid WHERE/ORDER BY fragment
-        # that isn't a complete statement. The token check above catches the worst.
-        pass
-
-
 def _build_preview_sql(
     table_name: str,
     columns: list[str],
@@ -1269,23 +1237,24 @@ def _build_preview_sql(
 
     sql = f"SELECT {safe_cols} FROM {safe_table}"
 
-    # structured WHERE
+    # structured WHERE (only safe path — raw string fragments are blocked at tool boundary)
     where = args.get("where")
     if isinstance(where, dict):
         cond = _build_where_clause(where, q)
         if cond:
             sql += f" WHERE {cond}"
-    elif isinstance(where, str) and where.strip():
-        cleaned = where.strip()
-        _validate_sql_fragment(cleaned, "WHERE")
-        sql += f" WHERE {cleaned}"
 
-    # ORDER BY
+    # structured ORDER BY (only safe path)
     order = args.get("order_by")
-    if isinstance(order, str) and order.strip():
-        cleaned = order.strip()
-        _validate_sql_fragment(cleaned, "ORDER BY")
-        sql += f" ORDER BY {cleaned}"
+    if isinstance(order, dict):
+        clause = _build_order_clause(order, q)
+        if clause:
+            sql += f" ORDER BY {clause}"
+    elif isinstance(order, list) and order:
+        clauses = [_build_order_clause(o, q) for o in order]
+        clauses = [c for c in clauses if c]
+        if clauses:
+            sql += " ORDER BY " + ", ".join(clauses)
 
     sql += f" LIMIT {limit}"
     return sql
@@ -1318,6 +1287,21 @@ def _build_where_clause(where: dict[str, Any], quote: str) -> str | None:
         return f"{safe_col} {op} ({escaped})"
     escaped = str(value).replace("'", "''")
     return f"{safe_col} {op} '{escaped}'"
+
+
+def _build_order_clause(order: dict[str, Any], quote: str) -> str | None:
+    """Build a safe ORDER BY expression from a structured order dict.
+
+    Accepts: {"column": "id", "direction": "desc"} or {"column": "name"}
+    Returns: "`id` DESC" or None on invalid input.
+    """
+    col = str(order.get("column") or "").strip()
+    if not col:
+        return None
+    direction = str(order.get("direction") or "ASC").strip().upper()
+    if direction not in ("ASC", "DESC"):
+        direction = "ASC"
+    return f"{quote}{col}{quote} {direction}"
 
 
 def _column_summary_preview(col: SchemaColumn) -> dict[str, Any]:
