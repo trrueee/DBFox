@@ -1,17 +1,8 @@
 import { request } from "../../lib/api/client";
+import { datasourcesApi } from "../../lib/api/datasources";
+import type { DataSource } from "../../lib/api/types";
 
-export interface EngineDataSource {
-  id: string;
-  name: string;
-  db_type: string;
-  host: string;
-  port: number;
-  database_name: string;
-  status: string;
-  last_sync_status?: string | null;
-  last_test_status?: string | null;
-  last_test_latency_ms?: number | null;
-}
+export type EngineDataSource = DataSource;
 
 export interface EngineSchemaTable {
   id: string;
@@ -52,7 +43,7 @@ export interface EngineSqlResult {
 }
 
 export async function listDatasources() {
-  return request<EngineDataSource[]>("/datasources");
+  return datasourcesApi.listDatasources();
 }
 
 export async function listTables(datasourceId: string) {

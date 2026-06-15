@@ -89,6 +89,7 @@ export interface DataSourceActions {
   syncSchema: (id: string) => Promise<unknown>;
   checkHealth: (id: string) => Promise<unknown>;
 }
+export interface DataSourceHealthResult {
   ok: boolean;
   status: "success" | "failed";
   checkedAt?: string;

@@ -99,7 +99,7 @@ export const DataSourcesPage = ({
   const syncSchema = actions?.syncSchema;
   const checkHealth = actions?.checkHealth;
   const [selectedId, setSelectedId] = useState("");
-  const [mode, setMode] = useState<PageMode>("detail");
+  const [mode, setMode] = useState<PageMode>(initialShowAddForm ? "create" : "detail");
   const [form, setForm] = useState(emptyForm());
   const [search, setSearch] = useState("");
   const [formError, setFormError] = useState("");
@@ -110,6 +110,19 @@ export const DataSourcesPage = ({
     details?: { serverVersion?: string; readonly?: boolean; tablesCount?: number };
   }>({ status: "idle", message: "" });
   const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
+
+  const [prevInitialShowAddForm, setPrevInitialShowAddForm] = useState(initialShowAddForm);
+  if (initialShowAddForm !== prevInitialShowAddForm) {
+    setPrevInitialShowAddForm(initialShowAddForm);
+    if (initialShowAddForm) {
+      setMode("create");
+      setForm(emptyForm());
+      setFormError("");
+      setTestResult({ status: "idle", message: "" });
+    } else {
+      setMode("detail");
+    }
+  }
 
   const selected = datasources.find((d) => d.id === selectedId) || null;
 
@@ -126,12 +139,14 @@ export const DataSourcesPage = ({
   };
 
   useEffect(() => {
+    let preferredId: string | null = null;
+    if (preferredIdRef.current !== null) {
+      preferredId = preferredIdRef.current;
+      preferredIdRef.current = null;
+    }
     setSelectedId((current) => {
-      // Honour an explicit preferredId passed via loadDatasources first.
-      if (preferredIdRef.current !== null) {
-        const preferred = preferredIdRef.current;
-        preferredIdRef.current = null;
-        if (datasources.some((item) => item.id === preferred)) return preferred;
+      if (preferredId !== null) {
+        if (datasources.some((item) => item.id === preferredId)) return preferredId;
       }
       if (current && datasources.some((item) => item.id === current)) return current;
       if (activeDataSource && datasources.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
@@ -144,25 +159,19 @@ export const DataSourcesPage = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.id]);
 
-  useEffect(() => {
-    if (initialShowAddForm) startCreate();
-    else setMode("detail");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialShowAddForm]);
-
-  const startCreate = () => {
+  function startCreate() {
     setMode("create");
     setForm(emptyForm());
     setFormError("");
     setTestResult({ status: "idle", message: "" });
-  };
+  }
 
-  const startEdit = (ds: DataSource) => {
+  function startEdit(ds: DataSource) {
     setMode("edit");
     setForm(formFromDataSource(ds));
     setFormError("");
     setTestResult({ status: "idle", message: "" });
-  };
+  }
 
   const updateForm = (key: string, value: string | number | boolean) => {
     setForm((c) => ({ ...c, [key]: value }));
@@ -216,7 +225,7 @@ export const DataSourcesPage = ({
       setActionState("saving");
       setFormError("");
       const updateFn = updateDatasource || api.updateDatasource;
-      const updated = await updateFn(selected.id, buildDatasourceUpdatePayload(form as DatasourceFormShape));
+      await updateFn(selected.id, buildDatasourceUpdatePayload(form as DatasourceFormShape));
       setMode("detail");
       await loadDatasources(selected.id);
       await onRefreshDatasources();
@@ -329,106 +338,7 @@ export const DataSourcesPage = ({
 
   // ---- Render modes ----
 
-  const renderForm = (title: string, submitLabel: string, onSubmit: () => void) => (
-    <form onSubmit={(e) => e.preventDefault()} className="hifi-card hifi-datasource-form">
-      <h3 className="hifi-card-title">{title}</h3>
-      {/* DB type selector */}
-      <div style={{ marginBottom: 20 }}>
-        <label className="field-label">数据库类型</label>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 6 }}>
-          {[{ id: "mysql", label: "MySQL", icon: "🐬" }, { id: "postgresql", label: "PostgreSQL", icon: "🐘" }, { id: "sqlite", label: "SQLite", icon: "📁" }].map((item) => (
-            <button key={item.id} type="button" onClick={() => { updateForm("db_type", item.id); if (item.id === "mysql") updateForm("port", 3306); else if (item.id === "postgresql") updateForm("port", 5432); else updateForm("port", 0); }}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", borderRadius: 8,
-                border: form.db_type === item.id ? "2px solid var(--accent-indigo)" : "1px solid var(--border-light)",
-                background: form.db_type === item.id ? "rgba(79,70,229,0.08)" : "var(--bg-secondary)",
-                color: form.db_type === item.id ? "var(--accent-indigo)" : "var(--text-secondary)", fontWeight: form.db_type === item.id ? 600 : 500, cursor: "pointer" }}
-            ><span>{item.icon}</span><span>{item.label}</span></button>
-          ))}
-        </div>
-      </div>
-      {/* Basic fields */}
-      {form.db_type === "sqlite" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：本地 SQLite 数据库" /></div>
-          <div><label className="field-label">SQLite 数据库文件绝对路径</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} placeholder="C:\Users\...\mydb.sqlite" /></div>
-        </div>
-      ) : (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：生产只读库" /></div>
-            <div><label className="field-label">主机地址</label><input className="hifi-input" value={form.host} onChange={(e) => updateForm("host", e.target.value)} placeholder="db.example.com" /></div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 1fr", gap: 16, marginTop: 16 }}>
-            <div><label className="field-label">端口</label><input className="hifi-input" type="number" value={form.port} onChange={(e) => updateForm("port", Number(e.target.value) || 3306)} /></div>
-            <div><label className="field-label">数据库名</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} /></div>
-            <div><label className="field-label">用户名</label><input className="hifi-input" value={form.username} onChange={(e) => updateForm("username", e.target.value)} /></div>
-          </div>
-          <div style={{ marginTop: 16 }}><label className="field-label">密码</label><input className="hifi-input" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} placeholder="留空则不修改" /></div>
-        </>
-      )}
-      {/* Env + read-only */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
-        <div>
-          <label className="field-label">环境标签</label>
-          <select className="hifi-select" value={form.env} onChange={(e) => updateForm("env", e.target.value)}>
-            <option value="dev">💻 开发环境 (DEV)</option>
-            <option value="test">🔬 测试环境 (TEST)</option>
-            <option value="prod">🚨 生产环境 (PROD)</option>
-          </select>
-        </div>
-        <div><label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, height: 38, cursor: "pointer" }}><input type="checkbox" checked={form.is_read_only} onChange={(e) => updateForm("is_read_only", e.target.checked)} /> 启用只读模式</label></div>
-      </div>
-      {/* SSH */}
-      {form.db_type !== "sqlite" && (
-        <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-          <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssh_enabled} onChange={(e) => updateForm("ssh_enabled", e.target.checked)} /> 启用 SSH 隧道连接</label>
-        </div>
-      )}
-      {form.db_type !== "sqlite" && form.ssh_enabled && (
-        <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 1fr", gap: 14 }}>
-            <div><label className="field-label">SSH 主机</label><input className="hifi-input" value={form.ssh_host} onChange={(e) => updateForm("ssh_host", e.target.value)} /></div>
-            <div><label className="field-label">SSH 端口</label><input className="hifi-input" type="number" value={form.ssh_port} onChange={(e) => updateForm("ssh_port", Number(e.target.value) || 22)} /></div>
-            <div><label className="field-label">SSH 用户名</label><input className="hifi-input" value={form.ssh_username} onChange={(e) => updateForm("ssh_username", e.target.value)} /></div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div><label className="field-label">SSH 密码</label><input className="hifi-input" type="password" value={form.ssh_password} onChange={(e) => updateForm("ssh_password", e.target.value)} /></div>
-            <div><label className="field-label">SSH 私钥路径</label><input className="hifi-input" value={form.ssh_pkey_path} onChange={(e) => updateForm("ssh_pkey_path", e.target.value)} /></div>
-          </div>
-          {form.ssh_pkey_path && <div><label className="field-label">私钥密码</label><input className="hifi-input" type="password" value={form.ssh_pkey_passphrase} onChange={(e) => updateForm("ssh_pkey_passphrase", e.target.value)} /></div>}
-        </div>
-      )}
-      {/* SSL */}
-      {form.db_type === "mysql" && (
-        <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-          <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_enabled} onChange={(e) => updateForm("ssl_enabled", e.target.checked)} /> 启用 MySQL SSL/TLS</label>
-        </div>
-      )}
-      {form.db_type === "mysql" && form.ssl_enabled && (
-        <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div><label className="field-label">CA 证书路径</label><input className="hifi-input" value={form.ssl_ca_path} onChange={(e) => updateForm("ssl_ca_path", e.target.value)} /></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div><label className="field-label">客户端证书</label><input className="hifi-input" value={form.ssl_cert_path} onChange={(e) => updateForm("ssl_cert_path", e.target.value)} /></div>
-            <div><label className="field-label">客户端私钥</label><input className="hifi-input" value={form.ssl_key_path} onChange={(e) => updateForm("ssl_key_path", e.target.value)} /></div>
-          </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_verify_identity} onChange={(e) => updateForm("ssl_verify_identity", e.target.checked)} /> 校验证书主机名</label>
-        </div>
-      )}
-      {/* Error / Test result */}
-      {formError && <div style={{ marginTop: 12 }}><StatusIndicator type="error" label={formError} /></div>}
-      {testResult.status !== "idle" && (
-        <div style={{ marginTop: 16, padding: 14, borderRadius: 8, borderLeft: "3px solid", borderLeftColor: testResult.status === "success" ? "var(--accent-green)" : testResult.status === "error" ? "var(--accent-red)" : "var(--accent-amber)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: "0.88rem" }}>
-            {testResult.status === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}{testResult.message}
-          </div>
-        </div>
-      )}
-      <div className="hifi-form-actions">
-        <button type="button" className="hifi-btn hifi-btn-outline" onClick={handleTestConnection} disabled={actionState !== "idle"}>测试连接</button>
-        <button type="button" className="hifi-btn hifi-btn-primary" onClick={onSubmit} disabled={actionState !== "idle"}>{actionState === "saving" ? "保存中..." : submitLabel}</button>
-      </div>
-    </form>
-  );
+
 
   const renderDetail = () => {
     if (!selected) return <div className="hifi-empty-state"><Database size={28} /><p>选择一个数据源查看详情</p></div>;
@@ -513,8 +423,108 @@ export const DataSourcesPage = ({
           {/* Right panel */}
           <div className="hifi-datasource-detail" style={{ minHeight: 0 }}>
             {mode === "detail" && renderDetail()}
-            {mode === "create" && renderForm("新增数据源", "保存并同步 Schema", handleCreate)}
-            {mode === "edit" && renderForm("编辑数据源", "保存修改", handleUpdate)}
+            {(mode === "create" || mode === "edit") && (
+              <form onSubmit={(e) => e.preventDefault()} className="hifi-card hifi-datasource-form">
+                <h3 className="hifi-card-title">{mode === "create" ? "新增数据源" : "编辑数据源"}</h3>
+                {/* DB type selector */}
+                <div style={{ marginBottom: 20 }}>
+                  <label className="field-label">数据库类型</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 6 }}>
+                    {[{ id: "mysql", label: "MySQL", icon: "🐬" }, { id: "postgresql", label: "PostgreSQL", icon: "🐘" }, { id: "sqlite", label: "SQLite", icon: "📁" }].map((item) => (
+                      <button key={item.id} type="button" onClick={() => { updateForm("db_type", item.id); if (item.id === "mysql") updateForm("port", 3306); else if (item.id === "postgresql") updateForm("port", 5432); else updateForm("port", 0); }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", borderRadius: 8,
+                          border: form.db_type === item.id ? "2px solid var(--accent-indigo)" : "1px solid var(--border-light)",
+                          background: form.db_type === item.id ? "rgba(79,70,229,0.08)" : "var(--bg-secondary)",
+                          color: form.db_type === item.id ? "var(--accent-indigo)" : "var(--text-secondary)", fontWeight: form.db_type === item.id ? 600 : 500, cursor: "pointer" }}
+                      ><span>{item.icon}</span><span>{item.label}</span></button>
+                    ))}
+                  </div>
+                </div>
+                {/* Basic fields */}
+                {form.db_type === "sqlite" ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：本地 SQLite 数据库" /></div>
+                    <div><label className="field-label">SQLite 数据库文件绝对路径</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} placeholder="C:\Users\...\mydb.sqlite" /></div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                      <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：生产只读库" /></div>
+                      <div><label className="field-label">主机地址</label><input className="hifi-input" value={form.host} onChange={(e) => updateForm("host", e.target.value)} placeholder="db.example.com" /></div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 1fr", gap: 16, marginTop: 16 }}>
+                      <div><label className="field-label">端口</label><input className="hifi-input" type="number" value={form.port} onChange={(e) => updateForm("port", Number(e.target.value) || 3306)} /></div>
+                      <div><label className="field-label">数据库名</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} /></div>
+                      <div><label className="field-label">用户名</label><input className="hifi-input" value={form.username} onChange={(e) => updateForm("username", e.target.value)} /></div>
+                    </div>
+                    <div style={{ marginTop: 16 }}><label className="field-label">密码</label><input className="hifi-input" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} placeholder="留空则不修改" /></div>
+                  </>
+                )}
+                {/* Env + read-only */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
+                  <div>
+                    <label className="field-label">环境标签</label>
+                    <select className="hifi-select" value={form.env} onChange={(e) => updateForm("env", e.target.value)}>
+                      <option value="dev">💻 开发环境 (DEV)</option>
+                      <option value="test">🔬 测试环境 (TEST)</option>
+                      <option value="prod">🚨 生产环境 (PROD)</option>
+                    </select>
+                  </div>
+                  <div><label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, height: 38, cursor: "pointer" }}><input type="checkbox" checked={form.is_read_only} onChange={(e) => updateForm("is_read_only", e.target.checked)} /> 启用只读模式</label></div>
+                </div>
+                {/* SSH */}
+                {form.db_type !== "sqlite" && (
+                  <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssh_enabled} onChange={(e) => updateForm("ssh_enabled", e.target.checked)} /> 启用 SSH 隧道连接</label>
+                  </div>
+                )}
+                {form.db_type !== "sqlite" && form.ssh_enabled && (
+                  <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 1fr", gap: 14 }}>
+                      <div><label className="field-label">SSH 主机</label><input className="hifi-input" value={form.ssh_host} onChange={(e) => updateForm("ssh_host", e.target.value)} /></div>
+                      <div><label className="field-label">SSH 端口</label><input className="hifi-input" type="number" value={form.ssh_port} onChange={(e) => updateForm("ssh_port", Number(e.target.value) || 22)} /></div>
+                      <div><label className="field-label">SSH 用户名</label><input className="hifi-input" value={form.ssh_username} onChange={(e) => updateForm("ssh_username", e.target.value)} /></div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                      <div><label className="field-label">SSH 密码</label><input className="hifi-input" type="password" value={form.ssh_password} onChange={(e) => updateForm("ssh_password", e.target.value)} /></div>
+                      <div><label className="field-label">SSH 私钥路径</label><input className="hifi-input" value={form.ssh_pkey_path} onChange={(e) => updateForm("ssh_pkey_path", e.target.value)} /></div>
+                    </div>
+                    {form.ssh_pkey_path && <div><label className="field-label">私钥密码</label><input className="hifi-input" type="password" value={form.ssh_pkey_passphrase} onChange={(e) => updateForm("ssh_pkey_passphrase", e.target.value)} /></div>}
+                  </div>
+                )}
+                {/* SSL */}
+                {form.db_type === "mysql" && (
+                  <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_enabled} onChange={(e) => updateForm("ssl_enabled", e.target.checked)} /> 启用 MySQL SSL/TLS</label>
+                  </div>
+                )}
+                {form.db_type === "mysql" && form.ssl_enabled && (
+                  <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
+                    <div><label className="field-label">CA 证书路径</label><input className="hifi-input" value={form.ssl_ca_path} onChange={(e) => updateForm("ssl_ca_path", e.target.value)} /></div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                      <div><label className="field-label">客户端证书</label><input className="hifi-input" value={form.ssl_cert_path} onChange={(e) => updateForm("ssl_cert_path", e.target.value)} /></div>
+                      <div><label className="field-label">客户端私钥</label><input className="hifi-input" value={form.ssl_key_path} onChange={(e) => updateForm("ssl_key_path", e.target.value)} /></div>
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_verify_identity} onChange={(e) => updateForm("ssl_verify_identity", e.target.checked)} /> 校验证书主机名</label>
+                  </div>
+                )}
+                {/* Error / Test result */}
+                {formError && <div style={{ marginTop: 12 }}><StatusIndicator type="error" label={formError} /></div>}
+                {testResult.status !== "idle" && (
+                  <div style={{ marginTop: 16, padding: 14, borderRadius: 8, borderLeft: "3px solid", borderLeftColor: testResult.status === "success" ? "var(--accent-green)" : testResult.status === "error" ? "var(--accent-red)" : "var(--accent-amber)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: "0.88rem" }}>
+                      {testResult.status === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}{testResult.message}
+                    </div>
+                  </div>
+                )}
+                <div className="hifi-form-actions">
+                  <button type="button" className="hifi-btn hifi-btn-outline" onClick={handleTestConnection} disabled={actionState !== "idle"}>测试连接</button>
+                  <button type="button" className="hifi-btn hifi-btn-primary" onClick={mode === "create" ? handleCreate : handleUpdate} disabled={actionState !== "idle"}>
+                    {actionState === "saving" ? "保存中..." : (mode === "create" ? "保存并同步 Schema" : "保存修改")}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

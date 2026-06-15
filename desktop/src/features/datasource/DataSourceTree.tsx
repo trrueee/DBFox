@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
-import type { EngineDataSource, EngineSchemaTable } from "../engine/engineApi";
+import type { EngineSchemaTable } from "../engine/engineApi";
+import type { DataSource } from "../../lib/api/types";
 
 interface DataSourceTreeProps {
   treeSearch: string;
@@ -13,7 +14,7 @@ interface DataSourceTreeProps {
   onNodeContextMenu: (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => void;
   onRefresh: () => void;
   onNewConnection: () => void;
-  datasources: EngineDataSource[];
+  datasources: DataSource[];
   activeDatasourceId: string;
   setActiveDatasourceId: (id: string) => void;
   tables: EngineSchemaTable[];

@@ -5,7 +5,7 @@ import type { ContextMenuState } from "../../mock/databoxMock";
 interface DataSourceContextMenuProps {
   contextMenu: ContextMenuState;
   selectedTables: string[];
-  onOpenSqlConsole: () => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onOpenTable: (tableName: string, subTab?: string) => void;
   onOpenMultiTableWorkspace: (tables: string[]) => void;
   onAddContextTable: (tableName: string) => void;

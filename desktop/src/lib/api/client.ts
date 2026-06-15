@@ -2,6 +2,35 @@ export const ENGINE_PORT = import.meta.env.VITE_LOCAL_ENGINE_PORT || "18625";
 export const ENGINE_TOKEN = import.meta.env.VITE_LOCAL_ENGINE_TOKEN || "";
 export const BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
 
+export class ApiError extends Error {
+  status?: number;
+  code?: string;
+  checks: unknown[];
+  detail?: unknown;
+
+  constructor(message: string, status?: number, code?: string, checks: unknown[] = [], detail?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.checks = checks;
+    this.detail = detail;
+  }
+}
+
+export function getUserErrorMessage(error: unknown, fallback = "操作失败，请重试"): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return fallback;
+}
+
 type RequestPolicy = {
   retry?: "none" | "local-engine-startup";
   cacheKey?: string;
@@ -14,9 +43,9 @@ const _CACHE_MAX_ENTRIES = 100;
 // Deduplicate in-flight requests by cache key
 const _inflight = new Map<string, Promise<unknown>>();
 
-function _getCacheKey(path: string, options: RequestInit): string | null {
+function _getCacheKey(path: string, options: RequestInit, policy: RequestPolicy): string | null {
   if (options.method && options.method !== "GET") return null;
-  return options.cacheKey || path;
+  return policy.cacheKey || path;
 }
 
 function _getCached<T>(key: string): T | undefined {
@@ -86,12 +115,8 @@ async function _fetchWithRetry<T>(
           code = code || "VALIDATION_ERROR";
         }
 
-        const error = new Error(message) as Error & {
-          code?: string;
-          checks?: unknown[];
-        };
-        error.code = code;
-        error.checks = (detail && typeof detail === "object" && !Array.isArray(detail) ? detail.checks : payload?.checks) || [];
+        const checks = (detail && typeof detail === "object" && !Array.isArray(detail) ? detail.checks : payload?.checks) || [];
+        const error = new ApiError(message, response.status, code, checks, detail || payload);
         // Don't retry client errors (4xx)
         if (response.status >= 400 && response.status < 500) throw error;
         throw error;
@@ -115,7 +140,7 @@ export async function request<T>(
   options: RequestInit = {},
   policy: RequestPolicy = {},
 ): Promise<T> {
-  const cacheKey = _getCacheKey(path, options);
+  const cacheKey = _getCacheKey(path, options, policy);
   const isGet = !options.method || options.method === "GET";
 
   // Check cache
