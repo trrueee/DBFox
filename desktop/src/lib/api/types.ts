@@ -47,7 +47,48 @@ export interface DataSource {
   created_at: string;
 }
 
-export interface DataSourceHealthResult {
+export interface DataSourceCreateParams {
+  project_id?: string | null;
+  name: string;
+  db_type?: string;
+  host?: string | null;
+  port?: number | null;
+  database_name: string;
+  username?: string | null;
+  password?: string | null;
+  connection_mode?: string;
+  is_read_only?: boolean;
+  env?: string;
+  ssh_enabled?: boolean;
+  ssh_host?: string | null;
+  ssh_port?: number;
+  ssh_username?: string | null;
+  ssh_password?: string | null;
+  ssh_pkey_path?: string | null;
+  ssh_pkey_passphrase?: string | null;
+  ssl_enabled?: boolean;
+  ssl_ca_path?: string | null;
+  ssl_cert_path?: string | null;
+  ssl_key_path?: string | null;
+  ssl_verify_identity?: boolean;
+}
+
+export type DataSourceUpdateParams = DataSourceCreateParams;
+
+/** Second-step confirmation payload for dangerous delete operations. */
+export interface DeleteConfirm {
+  token: string;
+  text: string;
+}
+
+/** Consolidated CRUD actions for datasource management. */
+export interface DataSourceActions {
+  createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
+  updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
+  deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
+  syncSchema: (id: string) => Promise<unknown>;
+  checkHealth: (id: string) => Promise<unknown>;
+}
   ok: boolean;
   status: "success" | "failed";
   checkedAt?: string;

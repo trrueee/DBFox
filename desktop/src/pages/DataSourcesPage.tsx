@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,7 +10,7 @@ import {
   Activity,
 } from "lucide-react";
 import { api } from "../lib/api";
-import type { DataSource, Project } from "../lib/api";
+import type { DataSource, DataSourceActions, Project } from "../lib/api";
 import {
   buildDatasourceCreatePayload,
   buildDatasourceTestPayload,
@@ -30,6 +30,9 @@ interface DataSourcesPageProps {
   activeProject: Project | null;
   onRefreshDatasources: () => Promise<void>;
   initialShowAddForm?: boolean;
+  datasources: DataSource[];
+  /** Consolidated CRUD actions. Falls back to `api` module defaults when omitted. */
+  actions?: DataSourceActions;
 }
 
 const emptyForm = () => ({
@@ -86,9 +89,15 @@ export const DataSourcesPage = ({
   activeProject,
   onRefreshDatasources,
   initialShowAddForm,
+  datasources,
+  actions,
 }: DataSourcesPageProps) => {
   const toast = useToast();
-  const [datasources, setDatasources] = useState<DataSource[]>([]);
+  const createDatasource = actions?.createDatasource;
+  const updateDatasource = actions?.updateDatasource;
+  const deleteDatasource = actions?.deleteDatasource;
+  const syncSchema = actions?.syncSchema;
+  const checkHealth = actions?.checkHealth;
   const [selectedId, setSelectedId] = useState("");
   const [mode, setMode] = useState<PageMode>("detail");
   const [form, setForm] = useState(emptyForm());
@@ -104,20 +113,34 @@ export const DataSourcesPage = ({
 
   const selected = datasources.find((d) => d.id === selectedId) || null;
 
+  // Ref to carry preferredId from loadDatasources → useEffect, avoiding a
+  // race between the explicit setSelectedId call and the datasources-change
+  // effect that also updates selectedId.
+  const preferredIdRef = useRef<string | null>(null);
+
   const loadDatasources = async (preferredId?: string) => {
-    const next = await api.listDatasources(activeProject?.id);
-    setDatasources(next);
-    setSelectedId((current) => {
-      if (preferredId && next.some((item) => item.id === preferredId)) return preferredId;
-      if (current && next.some((item) => item.id === current)) return current;
-      if (activeDataSource && next.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
-      return next[0]?.id || "";
-    });
-    return next;
+    if (preferredId) {
+      preferredIdRef.current = preferredId;
+    }
+    await onRefreshDatasources();
   };
 
   useEffect(() => {
-    void loadDatasources();
+    setSelectedId((current) => {
+      // Honour an explicit preferredId passed via loadDatasources first.
+      if (preferredIdRef.current !== null) {
+        const preferred = preferredIdRef.current;
+        preferredIdRef.current = null;
+        if (datasources.some((item) => item.id === preferred)) return preferred;
+      }
+      if (current && datasources.some((item) => item.id === current)) return current;
+      if (activeDataSource && datasources.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
+      return datasources[0]?.id || "";
+    });
+  }, [datasources, activeDataSource]);
+
+  useEffect(() => {
+    void onRefreshDatasources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProject?.id]);
 
@@ -168,10 +191,12 @@ export const DataSourcesPage = ({
     try {
       setActionState("saving");
       setFormError("");
-      const created = await api.createDatasource(
+      const createFn = createDatasource || api.createDatasource;
+      const syncFn = syncSchema || api.syncSchema;
+      const created = await createFn(
         buildDatasourceCreatePayload(form as DatasourceFormShape, activeProject?.id),
       );
-      await api.syncSchema(created.id);
+      await syncFn(created.id);
       setMode("detail");
       await loadDatasources(created.id);
       await onRefreshDatasources();
@@ -190,9 +215,10 @@ export const DataSourcesPage = ({
     try {
       setActionState("saving");
       setFormError("");
-      const updated = await api.updateDatasource(selected.id, buildDatasourceUpdatePayload(form as DatasourceFormShape));
-      setDatasources((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      const updateFn = updateDatasource || api.updateDatasource;
+      const updated = await updateFn(selected.id, buildDatasourceUpdatePayload(form as DatasourceFormShape));
       setMode("detail");
+      await loadDatasources(selected.id);
       await onRefreshDatasources();
       toast.toast("数据源已更新", "success");
     } catch (error: unknown) {
@@ -215,7 +241,8 @@ export const DataSourcesPage = ({
     if (!selected) return;
     try {
       setActionState("syncing");
-      await api.syncSchema(selected.id);
+      const syncFn = syncSchema || api.syncSchema;
+      await syncFn(selected.id);
       await loadDatasources(selected.id);
       await onRefreshDatasources();
       toast.toast("Schema 同步完成", "success");
@@ -230,13 +257,15 @@ export const DataSourcesPage = ({
     if (!selected) return;
     try {
       setActionState("testing");
-      const result = await api.checkDatasourceHealth(selected.id);
+      const healthFn = checkHealth || api.checkDatasourceHealth;
+      const result = await healthFn(selected.id);
       if (!result.ok) {
         toast.toast(result.message || "连接健康检查失败", "error");
       } else {
         toast.toast("连接健康检查通过", "success");
       }
       await loadDatasources(selected.id);
+      await onRefreshDatasources();
     } finally {
       setActionState("idle");
     }
@@ -246,7 +275,8 @@ export const DataSourcesPage = ({
     if (!selected) return;
     try {
       setActionState("deleting");
-      const res = await api.deleteDatasource(selected.id);
+      const deleteFn = deleteDatasource || api.deleteDatasource;
+      const res = await deleteFn(selected.id);
       const raw = res as unknown as Record<string, unknown> | null;
       if (raw && raw.requires_confirmation) {
         const confirmation = raw;
@@ -255,7 +285,7 @@ export const DataSourcesPage = ({
           impact_summary: confirmation.impact_summary as string,
           expected_confirm_text: confirmation.expected_confirm_text as string,
           onConfirm: async (text: string) => {
-            await api.deleteDatasource(selected.id, { token: confirmation.confirm_token as string, text });
+            await deleteFn(selected.id, { token: confirmation.confirm_token as string, text });
             setConfirmDetails(null);
             await loadDatasources();
             await onRefreshDatasources();

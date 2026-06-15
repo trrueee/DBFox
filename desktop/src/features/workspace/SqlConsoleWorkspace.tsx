@@ -1,19 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { ImageCell, isImageUrl } from "../../components/ImageCell";
-import { executeSql, getDefaultDatasource, type EngineSqlResult } from "../engine/engineApi";
+import { executeSql, type EngineSqlResult } from "../engine/engineApi";
+import type { DataSource } from "../../lib/api/types";
 
-interface SqlConsoleWorkspaceProps {
-  sqlQuery: string;
-  onSqlQueryChange: (value: string) => void;
-  onToast: (message: string) => void;
-}
+export type SqlConsoleTabState = {
+  draftSql: string;
+  entries: ConsoleEntry[];
+  running: boolean;
+};
 
-type ConsoleEntry =
+export type ConsoleEntry =
   | { id: number; kind: "info"; text: string; time: string }
   | { id: number; kind: "sql"; sql: string; time: string }
   | { id: number; kind: "result"; result: EngineSqlResult; time: string }
   | { id: number; kind: "error"; message: string; time: string };
+
+interface SqlConsoleWorkspaceProps {
+  tabId: string;
+  state: SqlConsoleTabState;
+  onPatchState: (tabId: string, patch: Partial<SqlConsoleTabState>) => void;
+  onAppendEntries: (tabId: string, entries: ConsoleEntry[]) => void;
+  onToast: (message: string) => void;
+  datasources: DataSource[];
+  activeDatasourceId: string;
+}
 
 // Distributive omit: Omit over a discriminated union collapses variants,
 // so map each variant separately.
@@ -24,24 +35,33 @@ type ConsoleEntryDraft = ConsoleEntry extends infer T
   : never;
 
 let entrySeq = 0;
-const nextEntryId = () => ++entrySeq;
+export const nextEntryId = () => ++entrySeq;
 
-export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: SqlConsoleWorkspaceProps) {
-  const [entries, setEntries] = useState<ConsoleEntry[]>([
-    { id: nextEntryId(), kind: "info", text: "SQL Console 已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。", time: formatTime() },
-  ]);
-  const [running, setRunning] = useState(false);
+export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntries, onToast, datasources, activeDatasourceId }: SqlConsoleWorkspaceProps) {
+  const { draftSql, entries, running } = state;
   const [dbLabel, setDbLabel] = useState("local engine");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const initializedRef = useRef(false);
+
+  const resolvedDatasource = datasources.find(ds => ds.id === activeDatasourceId) || datasources[0] || null;
 
   useEffect(() => {
-    getDefaultDatasource()
-      .then((datasource) => {
-        if (datasource) setDbLabel(`${datasource.database_name} · ${datasource.db_type}`);
-      })
-      .catch(() => undefined);
-  }, []);
+    if (resolvedDatasource) {
+      setDbLabel(`${resolvedDatasource.database_name} · ${resolvedDatasource.db_type}`);
+    } else {
+      setDbLabel("local engine");
+    }
+  }, [resolvedDatasource]);
+
+  useEffect(() => {
+    if (!initializedRef.current && entries.length === 0) {
+      initializedRef.current = true;
+      onAppendEntries(tabId, [
+        { id: nextEntryId(), kind: "info", text: "SQL Console 已就绪，输入语句后按 F9 或 Ctrl+Enter 执行。", time: formatTime() },
+      ]);
+    }
+  }, [tabId, entries.length, onAppendEntries]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -50,26 +70,25 @@ export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: Sql
 
   const appendEntries = (items: ConsoleEntryDraft[]) => {
     const time = formatTime();
-    setEntries((prev) => [...prev, ...items.map((item) => ({ ...item, id: nextEntryId(), time }) as ConsoleEntry)]);
+    onAppendEntries(tabId, items.map((item) => ({ ...item, id: nextEntryId(), time }) as ConsoleEntry));
   };
 
   const runSql = async () => {
-    const sql = sqlQuery.trim();
+    const sql = draftSql.trim();
     if (!sql) {
       onToast("SQL 不能为空");
       return;
     }
     if (running) return;
-    setRunning(true);
+    onPatchState(tabId, { running: true });
     appendEntries([{ kind: "sql", sql }]);
-    onSqlQueryChange("");
+    onPatchState(tabId, { draftSql: "" });
     try {
-      const datasource = await getDefaultDatasource();
-      if (!datasource) {
+      if (!resolvedDatasource) {
         throw new Error("暂无可用数据源，请先创建并同步数据源。");
       }
-      setDbLabel(`${datasource.database_name} · ${datasource.db_type}`);
-      const result = await executeSql(datasource.id, sql, "SQL Console");
+      setDbLabel(`${resolvedDatasource.database_name} · ${resolvedDatasource.db_type}`);
+      const result = await executeSql(resolvedDatasource.id, sql, "SQL Console");
       const extras: ConsoleEntryDraft[] = [{ kind: "result", result }];
       for (const warning of result.warnings ?? []) {
         extras.push({ kind: "info", text: `[WARN] ${warning}` });
@@ -81,9 +100,9 @@ export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: Sql
     } catch (err) {
       const message = err instanceof Error ? err.message : "SQL 执行失败";
       appendEntries([{ kind: "error", message }]);
-      onSqlQueryChange(sql);
+      onPatchState(tabId, { draftSql: sql });
     } finally {
-      setRunning(false);
+      onPatchState(tabId, { running: false });
       window.setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
@@ -96,7 +115,7 @@ export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: Sql
   };
 
   const clearConsole = () => {
-    setEntries([{ id: nextEntryId(), kind: "info", text: "控制台已清屏。", time: formatTime() }]);
+    onPatchState(tabId, { entries: [{ id: nextEntryId(), kind: "info", text: "控制台已清屏。", time: formatTime() }] });
   };
 
   return (
@@ -125,10 +144,10 @@ export function SqlConsoleWorkspace({ sqlQuery, onSqlQueryChange, onToast }: Sql
             <textarea
               ref={inputRef}
               className="sql-console-input"
-              value={sqlQuery}
-              onChange={(event) => onSqlQueryChange(event.target.value)}
+              value={draftSql}
+              onChange={(event) => onPatchState(tabId, { draftSql: event.target.value })}
               onKeyDown={handleKeyDown}
-              rows={Math.min(12, Math.max(1, sqlQuery.split("\n").length))}
+              rows={Math.min(12, Math.max(1, draftSql.split("\n").length))}
               placeholder="输入 SQL，Ctrl+Enter 执行"
               spellCheck={false}
               autoCapitalize="off"

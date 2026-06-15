@@ -1,11 +1,20 @@
 import { request } from "./client";
-import type { DangerousOperationResult, DataSource, DataSourceHealthResult, DataSourceTestResult, SchemaSyncResult } from "./types";
+import type {
+  DangerousOperationResult,
+  DataSource,
+  DataSourceCreateParams,
+  DataSourceHealthResult,
+  DataSourceTestResult,
+  DataSourceUpdateParams,
+  DeleteConfirm,
+  SchemaSyncResult,
+} from "./types";
 
 export const datasourcesApi = {
-  testConnection: (params: unknown) =>
+  testConnection: (params: DataSourceCreateParams) =>
     request<DataSourceTestResult>("/datasources/test", { method: "POST", body: JSON.stringify(params) }),
 
-  createDatasource: (params: unknown) =>
+  createDatasource: (params: DataSourceCreateParams) =>
     request<DataSource>("/datasources", { method: "POST", body: JSON.stringify(params) }),
 
   listDatasources: (projectId?: string) =>
@@ -14,12 +23,12 @@ export const datasourcesApi = {
   checkDatasourceHealth: (id: string) =>
     request<DataSourceHealthResult>(`/datasources/${id}/health`, { method: "POST" }),
 
-  deleteDatasource: (id: string, confirm?: { token: string; text: string }) => {
+  deleteDatasource: (id: string, confirm?: DeleteConfirm) => {
     const query = confirm ? `?confirm_token=${encodeURIComponent(confirm.token)}&confirm_text=${encodeURIComponent(confirm.text)}` : "";
     return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}${query}`, { method: "DELETE" });
   },
 
-  updateDatasource: (id: string, params: unknown) =>
+  updateDatasource: (id: string, params: DataSourceUpdateParams) =>
     request<DataSource>(`/datasources/${id}`, { method: "PUT", body: JSON.stringify(params) }),
 
   syncSchema: (id: string) =>
