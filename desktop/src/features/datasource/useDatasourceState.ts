@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listColumns,
-  listDatasources,
   listTables,
   type EngineColumn,
-  type EngineDataSource,
   type EngineSchemaTable,
 } from "../engine/engineApi";
-import type { DataSource } from "../../lib/api/types";
+import { datasourcesApi } from "../../lib/api/datasources";
+import type { DataSource, DataSourceCreateParams, DataSourceUpdateParams, DeleteConfirm } from "../../lib/api/types";
+
+import { useToast } from "../../components/Toast";
 
 type UseDatasourceStateOptions = {
-  onToast: (message: string) => void;
+  onToast?: (message: string) => void;
 };
 
 const DATASOURCE_LOAD_RETRY_DELAYS_MS = [300, 900, 1500, 3000, 5000];
@@ -26,8 +27,10 @@ function isTransientEngineFetchError(error: unknown) {
   return message.includes("failed to fetch") || message.includes("networkerror") || message.includes("load failed");
 }
 
-export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
-  const [datasources, setDatasources] = useState<EngineDataSource[]>([]);
+export function useDatasourceState(options?: UseDatasourceStateOptions) {
+  const { toast } = useToast();
+  const onToast = options?.onToast || toast;
+  const [datasources, setDatasources] = useState<DataSource[]>([]);
   const [activeDatasourceId, setActiveDatasourceId] = useState("");
   const [tables, setTables] = useState<EngineSchemaTable[]>([]);
   const [loadingSchema, setLoadingSchema] = useState(false);
@@ -41,24 +44,7 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     () => datasources.find((item) => item.id === activeDatasourceId) || null,
     [activeDatasourceId, datasources],
   );
-  const activeDatasourceForSettings = useMemo<DataSource | null>(() => {
-    if (!activeDatasource) return null;
-    return {
-      id: activeDatasource.id,
-      name: activeDatasource.name,
-      db_type: activeDatasource.db_type,
-      host: activeDatasource.host,
-      port: activeDatasource.port,
-      database_name: activeDatasource.database_name,
-      username: "",
-      connection_mode: "direct",
-      status: activeDatasource.status,
-      last_test_status: activeDatasource.last_test_status ?? undefined,
-      last_test_latency_ms: activeDatasource.last_test_latency_ms ?? null,
-      last_sync_status: activeDatasource.last_sync_status ?? undefined,
-      created_at: "",
-    };
-  }, [activeDatasource]);
+  const activeDatasourceForSettings = activeDatasource;
 
   // ---- Initial load (mount once) ----
 
@@ -68,7 +54,7 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     try {
       for (let attempt = 0; ; attempt++) {
         try {
-          const nextDatasources = await listDatasources();
+          const nextDatasources = await datasourcesApi.listDatasources();
           setDatasources(nextDatasources);
           // Pick the first available datasource (or keep current if still valid)
           setActiveDatasourceId((prev) => {
@@ -169,6 +155,54 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     }
   }, [activeDatasourceId, loadDatasources, onToast]);
 
+  const refreshDatasources = loadDatasources;
+
+  const syncSchema = useCallback(async (id: string) => {
+    const result = await datasourcesApi.syncSchema(id);
+    await loadDatasources();
+    if (id === activeDatasourceId) {
+      setLoadingSchema(true);
+      try {
+        setTables(await listTables(id));
+      } catch (err) {
+        setSchemaError(err instanceof Error ? err.message : "读取表结构失败");
+      } finally {
+        setLoadingSchema(false);
+      }
+    }
+    return result;
+  }, [activeDatasourceId, loadDatasources]);
+
+  const checkHealth = useCallback(async (id: string) => {
+    const result = await datasourcesApi.checkDatasourceHealth(id);
+    await loadDatasources();
+    return result;
+  }, [loadDatasources]);
+
+  const createDatasource = useCallback(async (params: DataSourceCreateParams) => {
+    const result = await datasourcesApi.createDatasource(params);
+    await loadDatasources();
+    return result;
+  }, [loadDatasources]);
+
+  const updateDatasource = useCallback(async (id: string, params: DataSourceUpdateParams) => {
+    const result = await datasourcesApi.updateDatasource(id, params);
+    await loadDatasources();
+    return result;
+  }, [loadDatasources]);
+
+  const deleteDatasource = useCallback(async (id: string, confirm?: DeleteConfirm) => {
+    const result = await datasourcesApi.deleteDatasource(id, confirm);
+    const raw = result as unknown as Record<string, unknown> | null;
+    if (!raw || !raw.requires_confirmation) {
+      await loadDatasources();
+      if (activeDatasourceId === id) {
+        setActiveDatasourceId("");
+      }
+    }
+    return result;
+  }, [loadDatasources, activeDatasourceId]);
+
   return {
     datasources,
     activeDatasource,
@@ -181,5 +215,11 @@ export function useDatasourceState({ onToast }: UseDatasourceStateOptions) {
     tableColumns,
     loadDatasources,
     refreshSchema,
+    refreshDatasources,
+    syncSchema,
+    checkHealth,
+    createDatasource,
+    updateDatasource,
+    deleteDatasource,
   };
 }
