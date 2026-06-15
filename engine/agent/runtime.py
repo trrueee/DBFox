@@ -10,6 +10,8 @@ Dependency direction:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
@@ -17,6 +19,8 @@ from sqlalchemy.orm import Session
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
 from engine.errors import DataBoxError
+
+logger = logging.getLogger("databox.agent.runtime")
 
 
 class DataBoxAgentRuntime:
@@ -33,7 +37,18 @@ class DataBoxAgentRuntime:
         self.kernel = DataBoxAgentService(db)
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
-        return self._facade_response(self.kernel.run(req))
+        try:
+            return self._facade_response(self.kernel.run(req))
+        except DataBoxError:
+            raise
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Agent runtime failed unexpectedly")
+            raise DataBoxError(
+                "Agent 运行失败，请稍后重试或查看日志。",
+                code="AGENT_RUNTIME_ERROR",
+            )
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
         for event in self.kernel.run_iter(req):
@@ -45,7 +60,7 @@ class DataBoxAgentRuntime:
             if event.response is not None:
                 final_response = event.response
         if final_response is None:
-            raise RuntimeError("Agent resume completed without a final response.")
+            raise DataBoxError("Agent resume completed without a final response.", code="AGENT_RUNTIME_ERROR")
         return final_response
 
     def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:

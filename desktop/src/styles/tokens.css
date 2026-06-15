@@ -1,0 +1,224 @@
+/* ═══════════════════════════════════════════════════════
+   DataBox Design Tokens — Canonical Token Layer
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand Colors ── */
+  --color-primary: #7667F2;
+  --color-secondary: #55D4CF;
+  --color-info: #5E86F7;
+  --color-success: #28A987;
+  --color-warning: #7C6AF6;
+  --color-danger: #C84040;
+
+  /* ── Text Colors ── */
+  --color-text-primary: #162033;
+  --color-text-secondary: #5F6B7C;
+  --color-text-muted: #7C8798;
+
+  /* ── Surface Colors ── */
+  --color-border: #DDEAF8;
+  --color-border-hover: #CBD5E1;
+  --color-bg: #F6FBFF;
+  --color-panel: #FFFFFF;
+
+  /* ── Soft/Alpha Colors ── */
+  --color-primary-soft: rgba(118, 103, 242, 0.09);
+  --color-info-soft: rgba(94, 134, 247, 0.08);
+  --color-success-soft: rgba(85, 212, 207, 0.12);
+  --color-warning-soft: rgba(124, 106, 246, 0.1);
+  --color-danger-soft: rgba(200, 64, 64, 0.06);
+
+  /* ── Typography ── */
+  --font-family: 'Fira Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* ── Semantic Aliases (legacy compat) ── */
+  --accent-indigo: var(--color-primary);
+  --accent-teal: var(--color-secondary);
+  --accent-green: var(--color-success);
+  --accent-red: var(--color-danger);
+  --accent-amber: var(--color-warning);
+
+  --bg-primary: var(--color-bg);
+  --bg-secondary: var(--color-bg);
+  --bg-surface: var(--color-panel);
+  --bg-active: var(--color-primary-soft);
+  --bg-hover: var(--color-border-hover);
+
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+
+  --border-light: var(--color-border);
+  --border-medium: var(--color-border);
+  --border-subtle: var(--color-border);
+
+  /* ── Window Shell ── */
+  --app-bg: #eef3fa;
+  --app-bg-deep: #e6edf7;
+  --sidebar-bg: #f2f6fb;
+  --surface-glass: rgba(255, 255, 255, 0.78);
+  --surface-raised: #ffffff;
+
+  --hairline: rgba(15, 23, 42, 0.06);
+  --hairline-strong: rgba(15, 23, 42, 0.10);
+  --top-highlight: rgba(255, 255, 255, 0.7);
+
+  --radius-window: 12px;
+  --radius-panel: 12px;
+  --radius-card: 12px;
+  --radius-control: 8px;
+
+  --shadow-window: 0 14px 44px rgba(15, 23, 42, 0.10);
+  --shadow-panel: 0 2px 10px rgba(15, 23, 42, 0.04);
+
+  /* ── shadcn/Radix HSL Bridge ──
+     These exist only to satisfy imported UI primitives.
+     New feature CSS should use DataBox semantic tokens above. */
+  --primary: 247 84% 68%;
+  --destructive: 0 56% 52%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 247 84% 68%;
+  --accent-foreground: 210 40% 98%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 247 84% 68%;
+}
+
+.dark {
+  --color-text-primary: #F8FAFC;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  --color-border: #1E293B;
+  --color-border-hover: #334155;
+  --color-bg: #020617;
+  --color-panel: #0B1329;
+
+  --color-primary-soft: rgba(79, 70, 229, 0.15);
+  --color-info-soft: rgba(37, 99, 235, 0.15);
+  --color-success-soft: rgba(22, 163, 74, 0.15);
+  --color-warning-soft: rgba(249, 115, 22, 0.15);
+  --color-danger-soft: rgba(220, 38, 38, 0.15);
+
+  --bg-hover: #1E293B;
+
+  --app-bg: #0a1124;
+  --app-bg-deep: #060a18;
+  --sidebar-bg: #0c1530;
+  --surface-glass: rgba(20, 30, 56, 0.72);
+  --surface-raised: #0f1a38;
+
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.10);
+  --top-highlight: rgba(255, 255, 255, 0.05);
+
+  /* shadcn/Radix dark bridge */
+  --primary: 247 84% 68%;
+  --destructive: 0 56% 52%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 247 84% 68%;
+  --accent-foreground: 210 40% 98%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+  --border: 217 33% 17%;
+  --input: 217 33% 17%;
+  --ring: 247 84% 68%;
+}
+
+/* ── Shared Input Primitives ── */
+.hifi-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.hifi-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.hifi-input:hover {
+  border-color: var(--color-border-hover);
+}
+
+.hifi-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+  background: var(--color-panel);
+}
+
+.hifi-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+
+.hifi-select:hover {
+  border-color: var(--color-border-hover);
+}
+
+.hifi-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.hifi-textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-panel);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-family: var(--font-family);
+}
+
+.hifi-textarea:hover {
+  border-color: var(--color-border-hover);
+}
+
+.hifi-textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.field-label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-top: 10px;
+  margin-bottom: 5px;
+}
