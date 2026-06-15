@@ -48,10 +48,10 @@ HIDDEN_IMPORTS = [
     "sqlglot",
     "httpx",
     "cryptography",
-    "python_dotenv",
+    "dotenv",
     "python_multipart",
     "langgraph",
-    "langgraph_checkpoint_sqlite",
+    "langgraph.checkpoint.sqlite",
     "langchain_core",
 ]
 
