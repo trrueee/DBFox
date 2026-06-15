@@ -559,3 +559,34 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 temp_tunnel.stop()
             except Exception:
                 pass
+
+
+def datasource_connection_dict(ds: Any) -> dict[str, Any]:
+    """Build a plain dict from a DataSource row for connection helpers.
+
+    Shared by schema sync, PostgreSQL EXPLAIN, and other paths that need the
+    full datasource metadata (including SSL fields) as a dict.
+    """
+    return {
+        "id": ds.id,
+        "host": ds.host,
+        "port": ds.port,
+        "username": ds.username,
+        "database_name": ds.database_name,
+        "password_ciphertext": ds.password_ciphertext,
+        "password_nonce": ds.password_nonce,
+        "ssh_enabled": ds.ssh_enabled,
+        "ssh_host": ds.ssh_host,
+        "ssh_port": ds.ssh_port,
+        "ssh_username": ds.ssh_username,
+        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
+        "ssh_password_nonce": ds.ssh_password_nonce,
+        "ssh_pkey_path": ds.ssh_pkey_path,
+        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
+        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
+        "ssl_enabled": ds.ssl_enabled,
+        "ssl_ca_path": ds.ssl_ca_path,
+        "ssl_cert_path": ds.ssl_cert_path,
+        "ssl_key_path": ds.ssl_key_path,
+        "ssl_verify_identity": ds.ssl_verify_identity,
+    }

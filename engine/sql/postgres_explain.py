@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.datasource import get_postgres_connection_params
+from engine.datasource import datasource_connection_dict, get_postgres_connection_params
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource
 from engine.sql.executor import (
@@ -35,28 +35,7 @@ def explain_postgres_sql(db: Session, datasource_id: str, sql_str: str) -> dict[
         )
 
     safe_sql = str(decision.safe_sql or "").strip()
-    conn_params = get_postgres_connection_params({
-        "host": ds.host,
-        "port": ds.port,
-        "username": ds.username,
-        "database_name": ds.database_name,
-        "password_ciphertext": ds.password_ciphertext,
-        "password_nonce": ds.password_nonce,
-        "ssh_enabled": ds.ssh_enabled,
-        "ssh_host": ds.ssh_host,
-        "ssh_port": ds.ssh_port,
-        "ssh_username": ds.ssh_username,
-        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-        "ssh_password_nonce": ds.ssh_password_nonce,
-        "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-        "ssl_enabled": ds.ssl_enabled,
-        "ssl_ca_path": ds.ssl_ca_path,
-        "ssl_cert_path": ds.ssl_cert_path,
-        "ssl_key_path": ds.ssl_key_path,
-        "ssl_verify_identity": ds.ssl_verify_identity,
-    })
+    conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
 
     import psycopg2
 

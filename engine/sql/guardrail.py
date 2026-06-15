@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import NotRequired, TypedDict
 
 import sqlglot
@@ -18,7 +20,6 @@ class GuardrailResult(TypedDict):
     safeSql: str
     checks: list[GuardrailCheck]
     message: str
-    _parsed_ast: NotRequired[exp.Expression]
 
 # System schemas we must block access to
 BLOCKED_SCHEMAS = {
@@ -69,12 +70,13 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     - Appends warnings for SELECT *
     
     Returns:
-        dict: {
+        dict (GuardrailResult): {
             "result": "pass" | "warn" | "reject",
             "originalSql": str,
             "safeSql": str,
             "checks": list of dicts,
-            "message": str
+            "message": str,
+            # Internal-only (not in type signature): _parsed_ast: exp.Expression
         }
     """
     sql_str = sql_str.strip()
