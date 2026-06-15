@@ -16,7 +16,11 @@ from sqlglot import exp
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import QueuePool
 
-from engine.datasource import get_mysql_connection_params, get_postgres_connection_params
+from engine.datasource import (
+    datasource_connection_dict,
+    get_mysql_connection_params,
+    get_postgres_connection_params,
+)
 from engine.errors import (
     GuardrailValidationError,
     SQLExecutionError,
@@ -46,24 +50,34 @@ _POSTGRES_POOLS: dict[tuple[Any, ...], QueuePool] = {}
 def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
     """Creates or retrieves a connection pool for the datasource with requested timeout properties."""
     pool_params = params.copy()
+    # Normalise pool key so that SSL / SSH changes produce a new pool
     pool_key = (
         datasource_id,
         pool_params.get("host"),
         pool_params.get("port"),
         pool_params.get("user"),
         pool_params.get("database"),
+        pool_params.get("sslmode", ""),
+        pool_params.get("sslrootcert", ""),
+        pool_params.get("sslcert", ""),
+        pool_params.get("sslkey", ""),
     )
     if pool_key not in _POSTGRES_POOLS:
         def creator() -> Any:
             import psycopg2
-            return psycopg2.connect(
-                host=pool_params.get("host"),
-                port=pool_params.get("port"),
-                user=pool_params.get("user"),
-                password=pool_params.get("password"),
-                database=pool_params.get("database"),
-                connect_timeout=5,
-            )
+            connect_kwargs: dict[str, Any] = {
+                "host": pool_params.get("host"),
+                "port": pool_params.get("port"),
+                "user": pool_params.get("user"),
+                "password": pool_params.get("password"),
+                "database": pool_params.get("database"),
+                "connect_timeout": 5,
+            }
+            for ssl_key in ("sslmode", "sslrootcert", "sslcert", "sslkey"):
+                val = pool_params.get(ssl_key)
+                if val:
+                    connect_kwargs[ssl_key] = val
+            return psycopg2.connect(**connect_kwargs)
         from typing import cast
         _POSTGRES_POOLS[pool_key] = QueuePool(
             cast(Any, creator),
@@ -662,23 +676,7 @@ def execute_query(
                 sqlite_path=ds.database_name,  # type: ignore[arg-type]
             )
         elif db_type == "postgresql":
-            conn_params = get_postgres_connection_params({
-                "host": ds.host,
-                "port": ds.port,
-                "username": ds.username,
-                "database_name": ds.database_name,
-                "password_ciphertext": ds.password_ciphertext,
-                "password_nonce": ds.password_nonce,
-                "ssh_enabled": ds.ssh_enabled,
-                "ssh_host": ds.ssh_host,
-                "ssh_port": ds.ssh_port,
-                "ssh_username": ds.ssh_username,
-                "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-                "ssh_password_nonce": ds.ssh_password_nonce,
-                "ssh_pkey_path": ds.ssh_pkey_path,
-                "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-                "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-            })
+            conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
             rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_postgres_profiled(
                 datasource_id,
                 conn_params,
