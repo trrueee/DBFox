@@ -1,38 +1,34 @@
-# Architecture Review Specs Index
+# Architecture Review Corrected Specs
 
 Date: 2026-06-15
 
-This folder turns the architecture review findings into independent design specs. Each issue can later become its own implementation plan and development branch.
+This folder is the corrected spec set after reading the actual code and re-triaging the earlier architecture review. The old review mixed true product risks with already-fixed items, maintenance debt, and over-stated findings. These specs keep only actionable work, downgrade the rest, and cite the current code evidence behind each decision.
 
-## Backend
+## Phase 1: Correctness and Consistency
 
-1. [Key management fallback hardening](01-backend-key-management-fallback.md)
-2. [Global database connection pool limit](02-backend-connection-pool-global-limit.md)
-3. [Agent runtime error boundary](03-backend-agent-runtime-error-boundary.md)
-4. [Typed datasource API responses](04-backend-datasource-response-schema.md)
-5. [SQL executor profiling refactor](05-backend-sql-executor-profile-refactor.md)
-6. [Query history search performance](06-query-history-search-performance.md)
+1. [SQL Console tab state isolation](01-sql-console-tab-state-isolation.md) - P0/P1, real user-facing state leak.
+2. [Conversation storage single source](02-conversation-storage-single-source.md) - P0/P1, real local history consistency risk.
+3. [Datasource API and state unification](03-datasource-api-state-unification.md) - P1, real datasource truth split.
+4. [App shell state decomposition](04-app-shell-state-decomposition.md) - P1, architectural debt that amplifies feature risk.
+5. [Guardrail bypass and policy boundary](05-guardrail-bypass-policy-boundary.md) - P1, public executor boundary should not expose test bypass.
+6. [Backend duplicate cleanup](06-backend-duplicate-cleanup.md) - P1/P2, low-risk refactors with clear duplicated code.
 
-## Frontend
+## Phase 2: Lifecycle, UX, and Hardening
 
-1. [App state decomposition](07-frontend-app-state-decomposition.md)
-2. [CSS modularization](08-frontend-css-modularization.md)
-3. [Global state store evaluation](09-frontend-state-management-store.md)
-4. [API cache and retry layer](10-frontend-api-cache-retry.md)
-5. [Agent conversation persistence timing](11-frontend-agent-persist-timeout-documentation.md)
-6. [Design token unification](12-frontend-token-system-unification.md)
+7. [Database initialization lifecycle](07-db-initialization-lifecycle.md) - P1/P2, import-time SQLite side effect.
+8. [Toast and API error unification](08-toast-api-error-unification.md) - P2, two toast paths and loose API error typing.
+9. [SSH tunnel management consistency](09-ssh-tunnel-management-consistency.md) - P2/P3, not a leak, but two tunnel paths.
+10. [UX and accessibility polish](10-ux-accessibility-polish.md) - P2/P3, verified small UI gaps.
+11. [Query history search scaling](11-query-history-search-scaling.md) - P3, real but data-volume dependent.
+12. [Maintainability debt triage](12-maintainability-debt-triage.md) - P2/P3, large-file and boundary cleanup without treating everything as critical.
 
-## Security
+## Findings Closed or Downgraded
 
-1. [Dev token storage hardening](13-security-dev-token-storage.md)
-2. [Development CORS origin hardening](14-security-dev-cors-origin-hardening.md)
-3. [Guardrail bypass hardening](15-security-guardrail-bypass-hardening.md)
+See [downgraded and removed findings](99-downgraded-and-removed-findings.md) for items that should not remain as standalone high-priority specs. Important corrections:
 
-## Code Quality
-
-1. [ORM debug repr methods](16-models-debug-repr.md)
-2. [Remove design-demo CSS from production bundle](17-remove-design-demo-css.md)
-
-## Note on Deduplication
-
-The review mentioned query history `ILIKE %term%` twice: once as a backend performance issue and once as a Chinese fuzzy-search quality issue. Both are covered by one spec: [Query history search performance](06-query-history-search-performance.md).
+- Global SQL connection pool limits are already implemented through `engine/sql/pool_registry.py`.
+- Datasource API responses already use `DataSourceResponse` response models.
+- The frontend API client already has retry, in-flight deduplication, and TTL cache primitives.
+- Guardrail bypass already has a strong environment predicate; the remaining issue is the public `execute_query(..., bypass_guardrail=...)` boundary.
+- Many ORM models already have `__repr__`; this is no longer a standalone fix.
+- Native `<select>`, TitleBar `Ctrl+W`, and Header dead-code claims are product or cleanup questions, not architecture blockers.
