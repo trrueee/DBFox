@@ -54,7 +54,7 @@ class ExecutionSafetyDecision(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-def _public_guardrail_result(guardrail: GuardrailResult | dict[str, Any]) -> GuardrailResult:
+def _public_guardrail_result(guardrail: dict[str, Any]) -> GuardrailResult:
     """Strip internal-only parser artifacts from guardrail payloads.
 
     guardrail_check intentionally carries _parsed_ast for TrustGate's internal
@@ -64,7 +64,7 @@ def _public_guardrail_result(guardrail: GuardrailResult | dict[str, Any]) -> Gua
     """
     return {
         key: value
-        for key, value in dict(guardrail).items()
+        for key, value in guardrail.items()
         if not key.startswith("_")
     }  # type: ignore[return-value]
 

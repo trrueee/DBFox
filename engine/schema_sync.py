@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -7,7 +9,11 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session
 
 from engine.crypto import decrypt_password
-from engine.datasource import build_mysql_ssl_params
+from engine.datasource import (
+    build_mysql_ssl_params,
+    build_postgres_ssl_params,
+    datasource_connection_dict,
+)
 from engine.models import DataSource, SchemaColumn, SchemaTable
 
 SchemaSnapshot = tuple[list[SchemaTable], list[SchemaColumn], int]
@@ -23,35 +29,12 @@ def _build_real_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSna
     if ds.ssh_enabled:
         from engine.datasource import get_or_create_tunnel_for_dict
 
-        ds_dict = {
-            "id": ds.id,
-            "host": ds.host,
-            "port": ds.port,
-            "username": ds.username,
-            "database_name": ds.database_name,
-            "ssh_enabled": True,
-            "ssh_host": ds.ssh_host,
-            "ssh_port": ds.ssh_port,
-            "ssh_username": ds.ssh_username,
-            "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-            "ssh_password_nonce": ds.ssh_password_nonce,
-            "ssh_pkey_path": ds.ssh_pkey_path,
-            "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-            "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-        }
+        ds_dict = datasource_connection_dict(ds)
         tunnel = get_or_create_tunnel_for_dict(ds_dict)
         host = "127.0.0.1"
         port = tunnel.local_bind_port
 
-    ssl_params = build_mysql_ssl_params(
-        {
-            "ssl_enabled": ds.ssl_enabled,
-            "ssl_ca_path": ds.ssl_ca_path,
-            "ssl_cert_path": ds.ssl_cert_path,
-            "ssl_key_path": ds.ssl_key_path,
-            "ssl_verify_identity": ds.ssl_verify_identity,
-        }
-    )
+    ssl_params = build_mysql_ssl_params(datasource_connection_dict(ds))
 
     dsn = URL.create(
         drivername="mysql+pymysql",
@@ -299,26 +282,12 @@ def _build_postgresql_schema_snapshot(ds: DataSource, datasource_id: str) -> Sch
     if ds.ssh_enabled:
         from engine.datasource import get_or_create_tunnel_for_dict
 
-        ds_dict = {
-            "id": ds.id,
-            "host": ds.host,
-            "port": ds.port,
-            "username": ds.username,
-            "database_name": ds.database_name,
-            "ssh_enabled": True,
-            "ssh_host": ds.ssh_host,
-            "ssh_port": ds.ssh_port,
-            "ssh_username": ds.ssh_username,
-            "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-            "ssh_password_nonce": ds.ssh_password_nonce,
-            "ssh_pkey_path": ds.ssh_pkey_path,
-            "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-            "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-        }
+        ds_dict = datasource_connection_dict(ds)
         tunnel = get_or_create_tunnel_for_dict(ds_dict)
         host = "127.0.0.1"
         port = tunnel.local_bind_port
 
+    ssl_params = build_postgres_ssl_params(datasource_connection_dict(ds))
     dsn = URL.create(
         drivername="postgresql+psycopg2",
         username=user,
@@ -327,7 +296,7 @@ def _build_postgresql_schema_snapshot(ds: DataSource, datasource_id: str) -> Sch
         port=port,
         database=database_name,
     )
-    engine = create_engine(dsn, connect_args={"connect_timeout": 5})
+    engine = create_engine(dsn, connect_args={"connect_timeout": 5, **ssl_params})
 
     try:
         tables_to_insert: list[SchemaTable] = []
