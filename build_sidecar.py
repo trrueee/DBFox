@@ -5,7 +5,7 @@ This script:
   1. Generates a cryptographically random static token
   2. Writes it to engine/token_preset.py (frozen-mode auth)
   3. Writes it to desktop/.env.local (Tauri dev-mode env)
-  4. Builds the engine with PyInstaller
+  4. Builds the engine with PyInstaller inside the .build_venv virtualenv
   5. Copies the binary to desktop/src-tauri/binaries/ with the correct
      target-triplet filename that Tauri's externalBin expects
 
@@ -28,8 +28,51 @@ ROOT = Path(__file__).resolve().parent
 ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
+BUILD_VENV = ROOT / ".build_venv"
+ALEMBIC_DIR = ROOT / "alembic"
 
 SIDECAR_NAME = "databox-engine-x86_64-pc-windows-msvc.exe"
+
+# Must match the dependencies in requirements.txt that PyInstaller
+# cannot auto-detect (lazy imports, dynamic loaders, etc.)
+HIDDEN_IMPORTS = [
+    "uvicorn",
+    "sqlalchemy",
+    "pydantic",
+    "fastapi",
+    "watchfiles",
+    "alembic",
+    "psycopg2",
+    "pymysql",
+    "sshtunnel",
+    "keyring",
+    "sqlglot",
+    "httpx",
+    "cryptography",
+    "python_dotenv",
+    "python_multipart",
+    "langgraph",
+    "langgraph_checkpoint_sqlite",
+    "langchain_core",
+]
+
+
+def _venv_python() -> str:
+    """Return the python executable inside .build_venv, or fail."""
+    if sys.platform == "win32":
+        exe = str(BUILD_VENV / "Scripts" / "python.exe")
+    else:
+        exe = str(BUILD_VENV / "bin" / "python")
+    if not Path(exe).exists():
+        print(
+            f"  [FAIL] 构建虚拟环境未找到: {BUILD_VENV}\n"
+            f"  请先创建并安装依赖:\n"
+            f"    python -m venv {BUILD_VENV}\n"
+            f"    {BUILD_VENV / 'Scripts' / 'pip'} install -r requirements.txt",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return exe
 
 
 def generate_token() -> str:
@@ -59,7 +102,7 @@ def write_env_local(token: str) -> Path:
     return path
 
 
-def build_pyinstaller() -> Path:
+def build_pyinstaller(python_exe: str) -> Path:
     dist_dir = ROOT / "pyinstaller_dist"
     work_dir = ROOT / "pyinstaller_build"
     spec_path = ROOT / "databox_engine.spec"
@@ -69,30 +112,21 @@ def build_pyinstaller() -> Path:
     spec_path.unlink(missing_ok=True)
 
     cmd = [
-        sys.executable, "-m", "PyInstaller",
+        python_exe, "-m", "PyInstaller",
         "--onefile",
         "--noconsole",
         "--name", "databox-engine",
         "--distpath", str(dist_dir),
         "--workpath", str(work_dir),
         "--add-data", f"{ENGINE_DIR}{os.pathsep}engine",
+        "--add-data", f"{ALEMBIC_DIR}{os.pathsep}alembic",
         "--add-data", f"{ROOT / 'alembic.ini'}{os.pathsep}.",
-        "--hidden-import", "uvicorn",
-        "--hidden-import", "sqlalchemy",
-        "--hidden-import", "pydantic",
-        "--hidden-import", "fastapi",
-        "--hidden-import", "watchfiles",
-        "--hidden-import", "alembic",
-        "--hidden-import", "psycopg2",
-        "--hidden-import", "pymysql",
-        "--hidden-import", "duckdb",
-        "--hidden-import", "sshtunnel",
-        "--hidden-import", "keyring",
-        "--hidden-import", "langgraph",
-        "--hidden-import", "langchain_core",
-        str(ENGINE_DIR / "main.py"),
     ]
-    print("  -> Running PyInstaller...")
+    for mod in HIDDEN_IMPORTS:
+        cmd += ["--hidden-import", mod]
+    cmd.append(str(ENGINE_DIR / "main.py"))
+
+    print("  -> Running PyInstaller (venv: {})...".format(python_exe))
     result = subprocess.run(cmd, cwd=str(ROOT))
     if result.returncode != 0:
         print("  [FAIL] PyInstaller build failed", file=sys.stderr)
@@ -138,8 +172,9 @@ def main() -> None:
         print("\n  Done (token-only mode).")
         return
 
-    print("\n[2/3] PyInstaller build")
-    binary = build_pyinstaller()
+    python_exe = _venv_python()
+    print(f"\n[2/3] PyInstaller build")
+    binary = build_pyinstaller(python_exe)
 
     print("\n[3/3] Install to Tauri binaries")
     install_sidecar(binary)
