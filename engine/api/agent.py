@@ -124,6 +124,21 @@ def _format_sse_event(event: AgentRuntimeEvent) -> str:
     return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
 
 
+def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str:
+    """Build a formatted SSE error event string."""
+    payload = {
+        "event_id": event_id,
+        "run_id": run_id,
+        "sequence": 1,
+        "created_at_ms": 0,
+        "type": "agent.run.failed",
+        "error": message,
+        "response": None,
+        "code": code,
+    }
+    return f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+
+
 def _http_detail(exc: DataBoxError) -> dict[str, str]:
     return {"code": exc.code, "message": str(exc)}
 
@@ -296,44 +311,14 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
             for event in DataBoxAgentRuntime(db).run_iter(req):
                 yield _format_sse_event(event)
         except DataBoxError as exc:
-            payload = {
-                "event_id": "runtime_error_databox",
-                "run_id": "",
-                "sequence": 1,
-                "created_at_ms": 0,
-                "type": "agent.run.failed",
-                "error": str(exc),
-                "response": None,
-                "code": exc.code,
-            }
-            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+            yield sse_failed_event("runtime_error_databox", "", str(exc), exc.code)
         except Exception as exc:
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:
-                payload = {
-                    "event_id": "runtime_error_llm",
-                    "run_id": "",
-                    "sequence": 1,
-                    "created_at_ms": 0,
-                    "type": "agent.run.failed",
-                    "error": str(llm_error),
-                    "response": None,
-                    "code": llm_error.code,
-                }
-                yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+                yield sse_failed_event("runtime_error_llm", "", str(llm_error), llm_error.code)
                 return
             logger.exception("Agent runtime stream failed")
-            payload = {
-                "event_id": "runtime_error_unhandled",
-                "run_id": "",
-                "sequence": 1,
-                "created_at_ms": 0,
-                "type": "agent.run.failed",
-                "error": f"Agent runtime failed: {str(exc)}",
-                "response": None,
-                "code": "AGENT_RUNTIME_ERROR",
-            }
-            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+            yield sse_failed_event("runtime_error_unhandled", "", f"Agent runtime failed: {str(exc)}", "AGENT_RUNTIME_ERROR")
 
     return StreamingResponse(
         stream_events(),
@@ -356,44 +341,14 @@ def api_agent_run_resume_stream(
             for event in DataBoxAgentRuntime(db).resume_iter(run_id, req.approval_id):
                 yield _format_sse_event(event)
         except DataBoxError as exc:
-            payload = {
-                "event_id": "runtime_resume_error_databox",
-                "run_id": run_id,
-                "sequence": 1,
-                "created_at_ms": 0,
-                "type": "agent.run.failed",
-                "error": str(exc),
-                "response": None,
-                "code": exc.code,
-            }
-            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+            yield sse_failed_event("runtime_resume_error_databox", run_id, str(exc), exc.code)
         except Exception as exc:
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:
-                payload = {
-                    "event_id": "runtime_resume_error_llm",
-                    "run_id": run_id,
-                    "sequence": 1,
-                    "created_at_ms": 0,
-                    "type": "agent.run.failed",
-                    "error": str(llm_error),
-                    "response": None,
-                    "code": llm_error.code,
-                }
-                yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+                yield sse_failed_event("runtime_resume_error_llm", run_id, str(llm_error), llm_error.code)
                 return
             logger.exception("Agent runtime resume stream failed")
-            payload = {
-                "event_id": "runtime_resume_error_unhandled",
-                "run_id": run_id,
-                "sequence": 1,
-                "created_at_ms": 0,
-                "type": "agent.run.failed",
-                "error": f"Agent resume failed: {str(exc)}",
-                "response": None,
-                "code": "AGENT_RESUME_ERROR",
-            }
-            yield f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
+            yield sse_failed_event("runtime_resume_error_unhandled", run_id, f"Agent resume failed: {str(exc)}", "AGENT_RESUME_ERROR")
 
     return StreamingResponse(
         stream_events(),

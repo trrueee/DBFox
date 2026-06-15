@@ -56,16 +56,6 @@ def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
     }
 
 
-def _resolve_project_id(db: Session, project_id: str | None) -> str:
-    """
-    辅助函数：解析并校验项目 ID。
-    
-    为了避免循环引用，我们采用了在函数体内局部导入的技巧 `from engine.api.projects import ...`。
-    """
-    from engine.api.projects import _resolve_project_id as resolve
-    return resolve(db, project_id)
-
-
 # =========================================================================
 # 接口 1: 获取某个项目下的所有备份记录列表 (GET)
 # =========================================================================
@@ -91,7 +81,8 @@ def api_list_project_backups(
       - `.all()`：立即执行 SQL 查询并返回一个 Python 列表。
     """
     # 验证项目 ID 是否合法存在
-    _resolve_project_id(db, project_id)
+    from engine.projects.service import resolve_project_id
+    resolve_project_id(db, project_id)
     
     # 构造查询语句并追加过滤条件
     query = db.query(BackupRecord).filter(BackupRecord.project_id == project_id)
