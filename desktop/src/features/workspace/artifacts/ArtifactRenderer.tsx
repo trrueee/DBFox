@@ -7,12 +7,11 @@ import { TableArtifactView } from "./TableArtifactView";
 
 interface ArtifactRendererProps {
   artifacts: AgentArtifact[];
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
-export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, onToast }: ArtifactRendererProps) {
+export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onToast }: ArtifactRendererProps) {
   if (artifacts.length === 0) {
     return <EmptyArtifactsState />;
   }
@@ -24,7 +23,7 @@ export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onSetSqlQuery, o
           return <ChartArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;
         }
         if (artifact.type === "sql") {
-          return <SqlArtifactView key={artifact.id} artifact={artifact} onOpenSqlConsole={onOpenSqlConsole} onSetSqlQuery={onSetSqlQuery} onToast={onToast} />;
+          return <SqlArtifactView key={artifact.id} artifact={artifact} onOpenSqlConsole={onOpenSqlConsole} onToast={onToast} />;
         }
         if (artifact.type === "table") {
           return <TableArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;

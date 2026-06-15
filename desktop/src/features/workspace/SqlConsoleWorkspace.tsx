@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Play } from "lucide-react";
 import { ImageCell, isImageUrl } from "../../components/ImageCell";
 import { executeSql, type EngineSqlResult } from "../engine/engineApi";
@@ -39,20 +39,14 @@ export const nextEntryId = () => ++entrySeq;
 
 export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntries, onToast, datasources, activeDatasourceId }: SqlConsoleWorkspaceProps) {
   const { draftSql, entries, running } = state;
-  const [dbLabel, setDbLabel] = useState("local engine");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const initializedRef = useRef(false);
 
   const resolvedDatasource = datasources.find(ds => ds.id === activeDatasourceId) || datasources[0] || null;
-
-  useEffect(() => {
-    if (resolvedDatasource) {
-      setDbLabel(`${resolvedDatasource.database_name} · ${resolvedDatasource.db_type}`);
-    } else {
-      setDbLabel("local engine");
-    }
-  }, [resolvedDatasource]);
+  const dbLabel = resolvedDatasource
+    ? `${resolvedDatasource.database_name} · ${resolvedDatasource.db_type}`
+    : "local engine";
 
   useEffect(() => {
     if (!initializedRef.current && entries.length === 0) {

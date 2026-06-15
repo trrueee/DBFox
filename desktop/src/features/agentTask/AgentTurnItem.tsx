@@ -14,8 +14,7 @@ import { FinalAnswerCard } from "./FinalAnswerCard";
 interface AgentTurnItemProps {
   turn: ConversationTurn;
   isLast: boolean;
-  onOpenSqlConsole: () => void;
-  onSetSqlQuery: (sql: string) => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onSendFollowUp: (text: string) => void;
   onToast: (message: string) => void;
 }
@@ -28,7 +27,6 @@ export function AgentTurnItem({
   turn,
   isLast,
   onOpenSqlConsole,
-  onSetSqlQuery,
   onSendFollowUp,
   onToast,
 }: AgentTurnItemProps) {
@@ -161,7 +159,6 @@ export function AgentTurnItem({
             agentStatus={agentStatus}
             onSendFollowUp={onSendFollowUp}
             onOpenSqlConsole={onOpenSqlConsole}
-            onSetSqlQuery={onSetSqlQuery}
             onToast={onToast}
           />
         )}

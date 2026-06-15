@@ -6,7 +6,7 @@ interface TableWorkspaceProps {
   tableId: string;
   currentSubTab: string;
   onSubTabChange: (subTab: string) => void;
-  onOpenSqlConsole: () => void;
+  onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
 
