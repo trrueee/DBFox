@@ -4365,8 +4365,60 @@
   padding: 20px 22px 28px;
 }
 
-.hifi-datasource-list-section {
-  flex: 1;
+.hifi-datasource-console {
   min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-panel);
+}
+
+.hifi-datasource-list {
+  min-width: 0;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+}
+
+.hifi-datasource-list-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  padding: 10px;
+}
+
+.hifi-datasource-list-item.active {
+  background: var(--color-panel);
+  border-color: var(--color-primary-soft);
+  box-shadow: var(--shadow-panel);
+}
+
+.hifi-datasource-detail {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-panel);
+}
+
+.hifi-datasource-metrics,
+.hifi-datasource-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.hifi-datasource-config-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px 14px;
 }
 

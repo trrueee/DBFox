@@ -17,7 +17,7 @@ from engine.models import (
     DataSource,
     SchemaTable,
 )
-from engine.schemas import DataSourceTestRequest, DataSourceCreateRequest
+from engine.schemas import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
 from engine.schema_sync import build_er_diagram_data
 from engine.schema_sync_safe import sync_schema
 
@@ -242,6 +242,74 @@ def api_list_datasources(
     if project_id:
         query = query.filter(DataSource.project_id == project_id)
     return [_datasource_to_dict(ds) for ds in query.all()]
+
+
+def _replace_secret_if_present(obj: DataSource, value: str | None, cipher_attr: str, nonce_attr: str) -> None:
+    if value is None or value == "":
+        return
+    cipher, nonce = encrypt_password(value)
+    setattr(obj, cipher_attr, cipher)
+    setattr(obj, nonce_attr, nonce)
+
+
+@router.put("/datasources/{id}")
+def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+    datasource = db.query(DataSource).filter(DataSource.id == id).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
+
+    try:
+        config = req.model_dump()
+        if req.db_type == "mysql":
+            build_mysql_ssl_params(config)
+        elif req.db_type == "postgresql":
+            build_postgres_ssl_params(config)
+
+        datasource.name = req.name
+        datasource.db_type = req.db_type
+        datasource.host = req.host
+        datasource.port = req.port
+        datasource.database_name = req.database_name
+        datasource.username = req.username
+        datasource.connection_mode = req.connection_mode
+        datasource.is_read_only = req.is_read_only
+        datasource.env = req.env
+        datasource.ssh_enabled = req.ssh_enabled
+        datasource.ssh_host = req.ssh_host
+        datasource.ssh_port = req.ssh_port
+        datasource.ssh_username = req.ssh_username
+        datasource.ssh_pkey_path = req.ssh_pkey_path
+        datasource.ssl_enabled = req.ssl_enabled
+        datasource.ssl_ca_path = req.ssl_ca_path
+        datasource.ssl_cert_path = req.ssl_cert_path
+        datasource.ssl_key_path = req.ssl_key_path
+        datasource.ssl_verify_identity = req.ssl_verify_identity
+
+        _replace_secret_if_present(datasource, req.password, "password_ciphertext", "password_nonce")
+        _replace_secret_if_present(datasource, req.ssh_password, "ssh_password_ciphertext", "ssh_password_nonce")
+        _replace_secret_if_present(
+            datasource,
+            req.ssh_pkey_passphrase,
+            "ssh_pkey_passphrase_ciphertext",
+            "ssh_pkey_passphrase_nonce",
+        )
+
+        db.commit()
+        db.refresh(datasource)
+        return _datasource_to_dict(datasource)
+    except HTTPException:
+        db.rollback()
+        raise
+    except DataBoxError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to update datasource")
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "DATASOURCE_UPDATE_FAILED", "message": "更新数据源失败，请稍后重试。"},
+        )
 
 
 @router.post("/datasources/{id}/health")
