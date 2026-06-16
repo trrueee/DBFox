@@ -76,6 +76,28 @@ TOOL_AFFORDANCE: dict[str, str] = {
     "memory.summarize_session": (
         "Summarize the current session for future recall."
     ),
+    # Analysis tools
+    "result.profile": (
+        "Profile the result set from a successful db.query. Produces column-level "
+        "statistics, detected patterns (time_series, category_breakdown, top_k, single_metric), "
+        "notable facts, anomalies, and limitations. Call after db.query when the user asks for "
+        "analysis, trends, comparisons, rankings, anomalies, or any analytical question. "
+        "Skip for simple row lookups."
+    ),
+    "chart.suggest": (
+        "Suggest a chart type for the current query result. Analyzes column types "
+        "(numeric, temporal, category) and data shape to recommend line, bar, area, "
+        "scatter, or pie charts. Call after result.profile when the result would benefit "
+        "from visualization. Do not call for simple lookups or single-row results."
+    ),
+    "answer.synthesize": (
+        "Synthesize a structured analysis answer from the query result, result profile, "
+        "chart suggestion, and safety report. Produces an AgentAnswer with: answer text, "
+        "key findings, evidence references, caveats, recommendations, and follow-up questions. "
+        "Call this as the final analysis step after result.profile and optionally chart.suggest. "
+        "For simple lookups you may call this to produce a concise interpreted answer instead "
+        "of raw rows."
+    ),
 }
 
 

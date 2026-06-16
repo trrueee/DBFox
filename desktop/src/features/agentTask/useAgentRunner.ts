@@ -210,6 +210,9 @@ export function useAgentRunner({
       agentStatus: "running",
       agentApproval: null,
       agentTimeline: createInitialAgentTimeline(question),
+      agentAnswer: null,
+      agentSuggestions: null,
+      artifacts: [],
     });
 
     const artifactsBox: { list: ApiAgentArtifact[] } = { list: [] };
