@@ -365,7 +365,7 @@ class DataBoxAgentService:
             execution=None,
             schema_context=None,
             query_plan=None,
-            result_profile=None,
+            data_profile=None,
             chart_suggestion=None,
             answer=None,
             final_answer=None,
