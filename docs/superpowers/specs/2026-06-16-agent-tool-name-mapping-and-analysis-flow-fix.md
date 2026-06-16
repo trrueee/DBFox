@@ -62,7 +62,9 @@ def _tool_name_from_step(step_name: str) -> str:
     return _STEP_TO_INTERNAL.get(step_name, step_name)
 ```
 
-**Rationale:** The forward mapping (`_step_name`) and reverse mapping (`_tool_name_from_step`) should be derived from a single source of truth. A follow-up refactor can de-duplicate into a shared `STEP_NAME_MAP` in `tool_aliases.py` or similar.
+**Rationale:** The forward mapping (`_step_name`) and reverse mapping (`_tool_name_from_step`) should be derived from a single source of truth.
+
+**Implementation TODO:** In this implementation, extract the mapping table from `_step_name()` in `tool_node.py` into a shared constant (e.g., `STEP_NAME_MAP` in `engine/agent/tools/tool_aliases.py` or a new shared module). Both `_step_name()` and `_tool_name_from_step()` MUST reference the same dict so that adding a new tool requires only one change. This prevents future drift where a developer adds a step name in `tool_node.py` but forgets the reverse mapping in `observe_node.py`.
 
 ### Part 2: Merge result.profile + answer.synthesize → analyze_data
 
@@ -91,20 +93,24 @@ description: >
   patterns (time_series, category_breakdown, top_k, single_metric), notable
   facts, and anomalies. Use this when query results are too large or complex
   to analyze by inspection. Skip for simple lookups or single-value results.
+  Can be called with no arguments — it will auto-detect execution results from
+  the current session state.
 handler: analyze_data_handler
 input_schema:
   type: object
-  description: Profile execution results.
+  description: Profile execution results. All parameters are optional.
   properties:
     execution_result:
       type: object
-      description: The execution output from db.query (rows, columns, status).
+      description: >
+        Optional. The execution output from db.query (rows, columns, status).
+        If omitted, the tool auto-reads the latest execution result from state.
     question:
       type: string
       description: Original user question for context.
-  required: [execution_result]
+  required: []
 binding:
-  consumes_state_keys: []
+  consumes_state_keys: [execution]
   produces_state_keys: [data_profile]
 policy:
   side_effect: none
@@ -115,22 +121,27 @@ state_contract:
 ```
 
 **Key design decisions:**
-- Input accepts `execution_result` explicitly — does NOT depend on `state["execution"]`
+- `execution_result` is optional in args — if not provided, handler falls back to `ctx.state_view.get("execution")`. Since Part 1 fixes state writes, state IS reliable. This means the model can call `analyze_data()` with no arguments and it just works.
 - Output is `DataProfile` (pure statistics, no answer text)
-- `consumes_state_keys: []` — fully self-contained, data via args
+- `consumes_state_keys: [execution]` — reflects the implicit fallback path
 
 #### 2c. New handler
 
 ```python
 def _analyze_data_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    """Compute statistical profile from execution results."""
-    execution = args.get("execution_result")
+    """Compute statistical profile from execution results.
+
+    Dual-path data access:
+    1. Explicit: model passes execution_result in args (clean, self-contained)
+    2. Implicit: falls back to ctx.state_view.get("execution") (zero-arg convenience)
+    """
+    execution = args.get("execution_result") or ctx.state_view.get("execution")
     if not execution or not execution.get("success"):
         return ToolObservation(
             name="analyze_data",
             status="failed",
             input=args,
-            error="No successful execution result provided.",
+            error="No successful execution result available. Run db.query first.",
             latency_ms=0,
         )
     # ... pure Python computation: profile_result() ...
@@ -166,14 +177,46 @@ Scenario B (complex analysis):
   model → db.query → observe → model sees large result → analyze_data(execution_result=...) → observe → model writes analysis → progress → finalize
 ```
 
-### Part 4: Finalize Behavior
+### Part 4: Finalize Behavior & AgentAnswer Compatibility
 
-`finalize_node.py` simplified:
-- Extract `answer_text` from last AIMessage.content (model's natural language)
-- Merge with `state["data_profile"]` for evidence if available
-- Merge with `state["execution"]` for row count / SQL evidence
-- Remove `[answer.synthesize]` prefix cleanup (no longer needed)
-- `AgentAnswer` structure preserved for frontend compatibility
+**The problem:** Previously, `answer.synthesize` produced structured `AgentAnswer` fields (`key_findings`, `caveats`, `recommendations`, `follow_up_questions`) via template code. Now the model outputs free-text `AIMessage.content`. If the frontend strongly depends on these structured fields, we need a strategy to bridge the gap.
+
+**Primary strategy (preferred):** `finalize_node` puts the model's natural language text into `AgentAnswer.answer`. Other structured fields default to empty unless evidence is available from state:
+
+```
+AgentAnswer(
+    answer = <model's AIMessage.content>,   # natural language, model-authored
+    key_findings = [],                       # empty unless model output parseable
+    evidence = <auto-built from execution + data_profile>,  # code-computed
+    caveats = [],                            # empty unless model output parseable
+    recommendations = [],                    # empty unless model output parseable
+    follow_up_questions = [],                # empty unless model output parseable
+)
+```
+
+**Fallback strategy (if frontend demands structured fields):** The model is instructed (via system prompt) to end its final response with optional light markup sections that `finalize_node` can regex-extract:
+
+```
+[Final Answer text here...]
+
+### Key Findings
+- Finding 1
+- Finding 2
+
+### Caveats
+- Caveat 1
+
+### Recommendations
+- Rec 1
+```
+
+`finalize_node` attempts to parse these sections; any unparseable content stays in `answer` as-is.
+
+**Decision:** Start with the primary strategy. Only add regex parsing if frontend feedback demands structured fields.
+
+**State evidence (always populated):**
+- `evidence` is built from `state["execution"]` (row count, SQL) and `state["data_profile"]` (statistics) — code-computed, always correct.
+- Remove `[answer.synthesize]` prefix cleanup (no longer needed).
 
 ## Scope
 
@@ -204,10 +247,12 @@ Scenario B (complex analysis):
 | `engine/agent/tools/tool_aliases.py` | Add `analyze_data` alias, remove `answer_synthesize` |
 | `engine/agent/tools/tool_manifest.py` | Replace affordances |
 | `engine/agent/nodes/finalize_node.py` | Simplify answer extraction |
-| `engine/agent/progress/fast_path.py` | Update guard: `result_profile` → `data_profile` |
+| `engine/agent/progress/fast_path.py` | **Relax** the hard guard that forces "must profile after query". Since `analyze_data` is now optional (simple queries skip it), the guard must NOT block finalize when `execution` exists but `data_profile` doesn't. Change from "query succeeded + no profile → continue with hint" to "query succeeded + no profile → allow model to decide (proceed to finalize if model outputs text without tool_calls)". Only intervene when the model appears stuck (e.g., calls db.query repeatedly without ever producing text or calling analyze_data). |
 
 ## Risks
 
 - **Breaking change:** `answer.synthesize` and `result.profile` are removed from the tool set. Any saved prompts, eval cases, or LangSmith traces referencing them will break.
-- **AgentAnswer compatibility:** Frontend expects `AgentAnswer` structure; `finalize_node` must still produce it from model output + state evidence.
+- **AgentAnswer compatibility:** Frontend expects `AgentAnswer` structure; `finalize_node` must still produce it from model output + state evidence. Primary strategy: model's natural language goes into `answer` field; `evidence` auto-built from state; remaining structured fields default to empty. Fallback: light markdown parsing if frontend demands structured `key_findings`/`caveats`/`recommendations`. See Part 4 for details.
 - **State key changes:** `result_profile` state key replaced by `data_profile`; any downstream consumers (eval, persistence) need updating.
+- **Model hallucination in structured fields:** The model may produce incorrect claims in free-text answers. Mitigation: `evidence` field is always code-computed from execution/profile (never model-generated). Model-authored text lives in `answer` only.
+- **fast_path guard relaxation:** Removing the hard "must profile after query" guard means the model could finalize without profiling even for complex queries. Mitigation: the model's own judgment should drive this — if results are too large to inspect visually, it will call `analyze_data`. The guard should only intervene if the model loops without producing text.
