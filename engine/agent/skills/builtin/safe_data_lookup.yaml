@@ -36,14 +36,13 @@ steps:
   - sql.generate
   - sql.validate
   - sql.execute_readonly
-  - result.profile
-  - answer.synthesize
+  - analyze_data
 
 success_criteria:
   - SQL is generated and validated through TrustGate
   - SQL executes successfully (or blocked for valid safety reasons)
   - results are profiled and notable facts are identified
-  - answer is synthesized with evidence from execution results
+  - answer is finalized with evidence from execution results
   - user's data question is answered
 
 recovery:

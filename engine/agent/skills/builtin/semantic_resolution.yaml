@@ -17,7 +17,6 @@ allowed_tool_groups:
   - schema
   - semantic
   - memory
-  - answer
 
 forbidden_tool_groups:
   - sql_generation
@@ -31,7 +30,6 @@ steps:
   - memory.search
   - semantic.resolve
   - schema.build_context
-  - answer.synthesize
 
 success_criteria:
   - business terms are mapped to actual tables/columns
