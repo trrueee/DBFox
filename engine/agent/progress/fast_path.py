@@ -183,11 +183,11 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
     # ---- Analysis guard: db.query succeeded but no analysis step yet --------
     execution = state.get("execution")
     if (isinstance(execution, dict) and execution.get("success")
-            and not state.get("result_profile") and not state.get("answer")):
+            and not state.get("data_profile") and not state.get("answer")):
         decision = progress_decision_dict(
             status="continue",
             reason_summary="Query succeeded but result profiling not yet performed.",
-            next_action_hint="Call result.profile to analyze the query result before answering.",
+            next_action_hint="Call analyze_data to analyze the query result before answering.",
         )
         return {
             "progress_decision": decision,
@@ -346,11 +346,11 @@ def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
     elif answer and answer.get("answer"):
         decision = ProgressDecision(status="complete", reason_summary="Agent produced an answer.")
     elif (isinstance(execution, dict) and execution.get("success")
-            and not state.get("result_profile") and not state.get("answer")):
+            and not state.get("data_profile") and not state.get("answer")):
         decision = ProgressDecision(
             status="continue",
             reason_summary="Query succeeded but result profiling not yet performed.",
-            next_action_hint="Call result.profile to analyze the query result before answering.",
+            next_action_hint="Call analyze_data to analyze the query result before answering.",
         )
     elif step_count >= max_steps:
         max_steps_error = _max_steps_reason(state, max_steps)
