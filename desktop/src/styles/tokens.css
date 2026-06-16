@@ -8,7 +8,7 @@
   --color-secondary: #55D4CF;
   --color-info: #5E86F7;
   --color-success: #28A987;
-  --color-warning: #7C6AF6;
+  --color-warning: #D97706;
   --color-danger: #C84040;
 
   /* ── Text Colors ── */
@@ -26,7 +26,7 @@
   --color-primary-soft: rgba(118, 103, 242, 0.09);
   --color-info-soft: rgba(94, 134, 247, 0.08);
   --color-success-soft: rgba(85, 212, 207, 0.12);
-  --color-warning-soft: rgba(124, 106, 246, 0.1);
+  --color-warning-soft: rgba(217, 119, 6, 0.1);
   --color-danger-soft: rgba(200, 64, 64, 0.06);
 
   /* ── Typography ── */
@@ -91,6 +91,10 @@
 }
 
 .dark {
+  --color-primary: #DE6C49;
+  --color-secondary: #2B2926;
+  --color-warning: #F59E0B;
+
   --color-text-primary: #F8FAFC;
   --color-text-secondary: #94A3B8;
   --color-text-muted: #64748B;
@@ -100,7 +104,7 @@
   --color-bg: #020617;
   --color-panel: #0B1329;
 
-  --color-primary-soft: rgba(79, 70, 229, 0.15);
+  --color-primary-soft: rgba(222, 108, 73, 0.15);
   --color-info-soft: rgba(37, 99, 235, 0.15);
   --color-success-soft: rgba(22, 163, 74, 0.15);
   --color-warning-soft: rgba(249, 115, 22, 0.15);
@@ -119,19 +123,19 @@
   --top-highlight: rgba(255, 255, 255, 0.05);
 
   /* shadcn/Radix dark bridge */
-  --primary: 247 84% 68%;
+  --primary: 14 70% 58%;
   --destructive: 0 56% 52%;
   --muted: 217 33% 17%;
   --muted-foreground: 215 20% 65%;
-  --accent: 247 84% 68%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 14 60% 16%;
+  --accent-foreground: 14 60% 70%;
   --card: 222 47% 11%;
   --card-foreground: 210 40% 98%;
   --popover: 222 47% 11%;
   --popover-foreground: 210 40% 98%;
   --border: 217 33% 17%;
   --input: 217 33% 17%;
-  --ring: 247 84% 68%;
+  --ring: 14 70% 58%;
 }
 
 /* ── Shared Input Primitives ── */
