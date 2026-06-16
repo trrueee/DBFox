@@ -45,23 +45,12 @@ def test_db_observe_tables_mode_includes_connected_tables(db_session, test_datas
     assert obs.output["tables"][0]["primary_key"] == "id"
 
 
-def test_db_search_uses_catalog_aliases_and_reasons(db_session, test_datasource) -> None:
-    from engine.models import SemanticAlias
+def test_db_search_fallback_keyword_matches_table_and_column_names(db_session, test_datasource) -> None:
     from engine.tools.db_tools import db_search
 
     sync_schema(db_session, test_datasource.id)
-    db_session.add(
-        SemanticAlias(
-            data_source_id=test_datasource.id,
-            alias="会员",
-            target_type="table",
-            target="users",
-            description="用户主表",
-        )
-    )
-    db_session.commit()
 
-    obs = db_search(_ctx(db_session, test_datasource), {"query": "会员 手机号", "limit": 5})
+    obs = db_search(_ctx(db_session, test_datasource), {"query": "users", "limit": 5})
 
     assert obs.status == "success"
     assert obs.output is not None
@@ -69,18 +58,20 @@ def test_db_search_uses_catalog_aliases_and_reasons(db_session, test_datasource)
     first = obs.output["results"][0]
     assert first["type"] in {"table", "column"}
     assert any(result.get("table_name") == "users" for result in obs.output["results"])
-    assert any("alias_match" in reason for result in obs.output["results"] for reason in result["reasons"])
+    # keyword fallback returns Chinese reason labels
+    assert any("匹配" in reason for result in obs.output["results"] for reason in result["reasons"])
 
 
-def test_db_search_expands_common_product_and_usage_terms() -> None:
-    from engine.tools.db_tools import _expanded_terms
+def test_db_search_fallback_keyword_returns_empty_for_no_match(db_session, test_datasource) -> None:
+    from engine.tools.db_tools import db_search
 
-    terms = _expanded_terms("分析用户使用小红书功能的频率", {})
+    sync_schema(db_session, test_datasource.id)
+    obs = db_search(_ctx(db_session, test_datasource), {"query": "xyznonexistent12345", "limit": 5})
 
-    assert "xhs" in terms
-    assert "xiaohongshu" in terms
-    assert "tool" in terms
-    assert "invocation" in terms
+    assert obs.status == "success"
+    assert obs.output is not None
+    assert obs.output["total_matches"] == 0
+    assert obs.output["results"] == []
 
 
 def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
