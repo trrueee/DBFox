@@ -194,6 +194,17 @@ class SchemaTable(Base):  # type: ignore[misc,valid-type]
     table_type = Column(String, nullable=True)
     row_count_estimate = Column(Integer, nullable=True, default=0)
     engine_name = Column(String, nullable=True)
+    schema_hash = Column(String, nullable=True)
+
+    ai_description = Column(Text, nullable=True)
+    semantic_tags = Column(Text, nullable=True)
+    business_terms = Column(Text, nullable=True)
+    aliases = Column(Text, nullable=True)
+    table_role = Column(String, nullable=True)
+    grain = Column(String, nullable=True)
+    subject_area = Column(String, nullable=True)
+    ai_confidence = Column(Float, nullable=True)
+    ai_enriched_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
@@ -221,6 +232,15 @@ class SchemaColumn(Base):  # type: ignore[misc,valid-type]
     is_nullable = Column(Boolean, nullable=False, default=True)
     column_default = Column(String, nullable=True)
     column_comment = Column(String, nullable=True)
+    ai_description = Column(Text, nullable=True)
+    semantic_tags = Column(Text, nullable=True)
+    business_terms = Column(Text, nullable=True)
+    aliases = Column(Text, nullable=True)
+    column_role = Column(String, nullable=True)
+    metric_type = Column(String, nullable=True)
+    is_pii = Column(Boolean, nullable=False, default=False)
+    ai_confidence = Column(Float, nullable=True)
+    ai_enriched_at = Column(DateTime, nullable=True)
 
     is_primary_key = Column(Boolean, nullable=False, default=False)
     is_foreign_key = Column(Boolean, nullable=False, default=False)
@@ -237,6 +257,44 @@ class SchemaColumn(Base):  # type: ignore[misc,valid-type]
 
     def __repr__(self) -> str:
         return f"<SchemaColumn id={self.id!r} column_name={self.column_name!r} data_type={self.data_type!r}>"
+
+
+class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "schema_search_docs"
+    __table_args__ = (
+        Index("ix_schema_search_docs_datasource", "datasource_id"),
+        Index("ix_schema_search_docs_table", "datasource_id", "table_name"),
+        Index("ix_schema_search_docs_entity", "entity_type", "entity_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=False)
+    table_name = Column(String, nullable=False)
+    column_name = Column(String, nullable=True)
+    name = Column(String, nullable=False)
+
+    ai_description = Column(Text, nullable=True)
+    semantic_tags = Column(Text, nullable=True)
+    business_terms = Column(Text, nullable=True)
+    aliases = Column(Text, nullable=True)
+    table_role = Column(String, nullable=True)
+    grain = Column(String, nullable=True)
+    subject_area = Column(String, nullable=True)
+    column_role = Column(String, nullable=True)
+    metric_type = Column(String, nullable=True)
+    column_summary = Column(Text, nullable=True)
+    relation_summary = Column(Text, nullable=True)
+    search_text = Column(Text, nullable=False, default="")
+    ai_confidence = Column(Float, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+FTS5_DDL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS schema_search_fts
+USING fts5(search_text, content='schema_search_docs', content_rowid='id')
+"""
 
 
 class QueryHistory(Base):  # type: ignore[misc,valid-type]

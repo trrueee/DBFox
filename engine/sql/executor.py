@@ -942,6 +942,12 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
         else:
             parsed = sqlglot.parse_one(str(generated_sql), read="mysql")
 
+        projection_aliases = {
+            alias.alias.lower()
+            for alias in parsed.find_all(exp.Alias)
+            if alias.alias
+        }
+
         query_tables = []
         for table_node in parsed.find_all(exp.Table):
             t_name = table_node.name.lower()
@@ -954,6 +960,12 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
             if col_name == "*" or not col_name:
                 continue
             col_table_ref = col_node.text("table").lower()
+            if (
+                not col_table_ref
+                and col_name in projection_aliases
+                and _is_projection_alias_reference(col_node)
+            ):
+                continue
             target_table = None
             if col_table_ref:
                 for t_node in parsed.find_all(exp.Table):
@@ -975,3 +987,14 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
     except Exception as e:
         logger.warning("Schema validation error: %s", e)
     return warnings
+
+
+def _is_projection_alias_reference(col_node: exp.Column) -> bool:
+    parent = col_node.parent
+    while parent is not None:
+        if isinstance(parent, (exp.Order, exp.Ordered, exp.Group, exp.Having, exp.Qualify)):
+            return True
+        if isinstance(parent, exp.Select):
+            return False
+        parent = parent.parent
+    return False
