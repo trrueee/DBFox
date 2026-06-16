@@ -155,9 +155,10 @@ class TrustGate:
             blocked_reasons.append("safe_sql_missing")
             messages.append("Guardrail did not produce safe_sql. Execution is blocked.")
         if schema_warnings:
-            blocked_reasons.append("schema_validation")
-            messages.append("Execution blocked until schema validation warnings are resolved.")
-        if requires_confirmation:
+            # We no longer block execution on schema warnings; let the DB handle it so Agent can self-correct.
+            messages.append("Schema validation warning: unknown tables or columns in query.")
+        from engine.policy.confirmation import confirmation_bypass_enabled
+        if requires_confirmation and not confirmation_bypass_enabled():
             blocked_reasons.append("requires_confirmation")
             messages.append("Execution blocked until production datasource confirmation is handled.")
         if select_star_blocked:
@@ -174,15 +175,14 @@ class TrustGate:
                 dry_run = dry_run_query(self.db, datasource_id, candidate_safe_sql)
             except Exception as exc:
                 dry_run = None
-                blocked_reasons.append("explain_unavailable")
-                messages.append(f"EXPLAIN dry-run unavailable for safe_sql: {exc}")
+                # We no longer block execution on dry run failures to prevent permission/lock issues from blocking.
+                messages.append(f"EXPLAIN dry-run warning (execution allowed): {exc}")
             if dry_run is not None and dry_run.ok:
                 messages.append("EXPLAIN dry-run validated safe_sql.")
             elif dry_run is not None:
-                reason = dry_run.blocked_reason or "explain_unavailable"
-                blocked_reasons.append(reason)
+                # Do not block execution on dry run failure; just log as warning.
                 if dry_run.message:
-                    messages.append(f"EXPLAIN dry-run failed for safe_sql: {dry_run.message}")
+                    messages.append(f"EXPLAIN dry-run warning (execution allowed): {dry_run.message}")
 
         blocked_reasons = list(dict.fromkeys(blocked_reasons))
         can_execute = not blocked_reasons

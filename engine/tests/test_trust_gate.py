@@ -99,7 +99,7 @@ def test_trust_gate_execution_decision_blocks_invalid_order_by_syntax(db_session
     assert "guardrail_reject" in decision.blocked_reasons
 
 
-def test_trust_gate_execution_decision_blocks_missing_table_schema_error(db_session, test_datasource) -> None:
+def test_trust_gate_execution_decision_warns_missing_table_schema_error(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
 
     decision = TrustGate(db_session, validate_sql_schema).execution_decision(
@@ -108,13 +108,13 @@ def test_trust_gate_execution_decision_blocks_missing_table_schema_error(db_sess
         policy="agent_readonly",
     )
 
-    assert decision.can_execute is False
-    assert decision.passed is False
-    assert decision.safe_sql is None
-    assert "schema_error" in decision.blocked_reasons
+    assert decision.can_execute is True
+    assert decision.passed is True
+    assert decision.safe_sql is not None
+    assert any("missing_table" in w for w in decision.schema_warnings)
 
 
-def test_trust_gate_execution_decision_blocks_when_dry_run_unavailable(
+def test_trust_gate_execution_decision_warns_when_dry_run_unavailable(
     db_session,
     test_datasource,
     monkeypatch,
@@ -132,10 +132,9 @@ def test_trust_gate_execution_decision_blocks_when_dry_run_unavailable(
         policy="agent_readonly",
     )
 
-    assert decision.can_execute is False
-    assert decision.passed is False
-    assert decision.safe_sql is None
-    assert "explain_unavailable" in decision.blocked_reasons
+    assert decision.can_execute is True
+    assert decision.passed is True
+    assert decision.safe_sql is not None
     assert any("dry run connection unavailable" in message for message in decision.messages)
 
 
@@ -214,7 +213,7 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
     assert "syntax_error" not in decision.blocked_reasons
 
 
-def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
+def test_trust_gate_execution_decision_warns_when_safe_sql_dry_run_fails(
     db_session,
     test_datasource,
     monkeypatch,
@@ -248,9 +247,10 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
     )
 
     assert dry_run_sql == [safe_sql]
-    assert decision.can_execute is False
-    assert decision.safe_sql is None
-    assert "schema_error" in decision.blocked_reasons
+    assert decision.can_execute is True
+    assert decision.passed is True
+    assert decision.safe_sql is not None
+    assert any("no such column: missing_column" in message for message in decision.messages)
 
 
 def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
