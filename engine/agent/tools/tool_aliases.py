@@ -44,6 +44,45 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
 # Internal name → alias (reverse lookup, built once at import time)
 INTERNAL_TO_ALIAS: dict[str, str] = {v: k for k, v in ALIAS_TO_INTERNAL.items()}
 
+# Step-name ↔ internal-name bidirectional map.
+# _step_name() in tool_node.py and _tool_name_from_step() in observe_node.py
+# MUST both derive from this single source of truth.
+STEP_NAME_MAP: dict[str, str] = {
+    "schema.list_tables": "list_tables",
+    "schema.describe_table": "describe_table",
+    "schema.refresh_catalog": "refresh_catalog",
+    "db.observe": "observe_database",
+    "db.search": "search_database",
+    "db.inspect": "inspect_database",
+    "db.preview": "preview_table",
+    "db.query": "query_database",
+    "db.remember": "remember_database_semantics",
+    "memory.search": "memory_search",
+    "memory.write": "memory_write",
+    "memory.delete": "memory_delete",
+    "memory.summarize_session": "summarize_session",
+    "result.profile": "profile_result",
+    "chart.suggest": "suggest_chart",
+    "answer.synthesize": "synthesize_answer",
+    # New tool — step name equals internal name (identity mapping, but must
+    # be present so _step_name() and _tool_name_from_step() handle it).
+    "analyze_data": "analyze_data",
+}
+
+# Reverse lookup: step name → internal name.
+# IMPORTANT: computed once at import time. If STEP_NAME_MAP is mutated after
+# import, call _rebuild_step_name_reverse() to update this dict.
+STEP_NAME_TO_INTERNAL: dict[str, str] = {}
+
+
+def _rebuild_step_name_reverse() -> None:
+    """Rebuild STEP_NAME_TO_INTERNAL from STEP_NAME_MAP."""
+    STEP_NAME_TO_INTERNAL.clear()
+    STEP_NAME_TO_INTERNAL.update({v: k for k, v in STEP_NAME_MAP.items()})
+
+
+_rebuild_step_name_reverse()
+
 
 def to_alias(internal_name: str) -> str:
     """Return the model-facing alias for an internal tool name.
