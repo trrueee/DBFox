@@ -12,6 +12,7 @@ from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
+    build_recommendations_artifact,
     build_semantic_resolution_artifact,
     build_sql_suggestion_artifact,
     build_profile_artifact,
@@ -88,6 +89,46 @@ def emit_artifacts_from_observation(
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
+
+    if step_name == "result.profile" and state.get("result_profile") and observation.status == "success":
+        from engine.agent_core.types import ResultProfile as RP
+        profile_raw = state.get("result_profile")
+        if isinstance(profile_raw, dict):
+            try:
+                profile_obj = RP.model_validate(profile_raw)
+            except Exception:
+                profile_obj = None
+        elif isinstance(profile_raw, RP):
+            profile_obj = profile_raw
+        else:
+            profile_obj = None
+        if profile_obj is not None:
+            artifacts.append(build_profile_artifact(
+                profile_obj,
+                execution=state.get("execution"),
+                safety=state.get("safety"),
+                identity=identity,
+            ))
+
+    if step_name == "chart.suggest" and state.get("chart_suggestion") and observation.status == "success":
+        chart = state.get("chart_suggestion")
+        if isinstance(chart, dict) and chart.get("type") and chart.get("type") != "table":
+            artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), identity=identity))
+
+    if step_name == "answer.synthesize" and state.get("answer") and observation.status == "success":
+        from engine.agent_core.types import AgentAnswer as AA
+        answer_raw = state.get("answer")
+        if isinstance(answer_raw, dict):
+            try:
+                answer_obj = AA.model_validate(answer_raw)
+            except Exception:
+                answer_obj = None
+        elif isinstance(answer_raw, AA):
+            answer_obj = answer_raw
+        else:
+            answer_obj = None
+        if answer_obj is not None and answer_obj.recommendations:
+            artifacts.append(build_recommendations_artifact(answer_obj, identity=identity))
 
     # Bind dependencies
     existing_artifacts = state.get("artifacts") or []

@@ -1,0 +1,25 @@
+name: chart.suggest
+group: chart
+kind: code
+description: >
+  Suggest a chart type for the current query result. Analyzes column types
+  (numeric, temporal, category) and data shape to recommend line, bar, area,
+  scatter, or pie charts. Returns a deterministic suggestion with series data
+  ready for rendering. Call after result.profile when the result would benefit
+  from visualization. Do not call for simple lookups or single-row results.
+handler: chart_suggest_handler
+input_schema:
+  type: object
+  description: Suggest a chart for the current result set.
+  properties:
+    force:
+      type: boolean
+      description: If true, always suggest a chart even for small results.
+binding:
+  consumes_state_keys: [execution]
+  produces_state_keys: [chart_suggestion]
+policy:
+  side_effect: none
+  risk_level: safe
+metadata:
+  next_route: model

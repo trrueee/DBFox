@@ -35,6 +35,10 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "memory_write": "memory.write",
     "memory_delete": "memory.delete",
     "memory_summarize_session": "memory.summarize_session",
+    # Analysis tools
+    "result_profile": "result.profile",
+    "chart_suggest": "chart.suggest",
+    "answer_synthesize": "answer.synthesize",
 }
 
 # Internal name → alias (reverse lookup, built once at import time)
