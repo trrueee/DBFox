@@ -21,7 +21,7 @@ def test_model_completed_trace_streams_visible_model_text(db_session):
     }
 
 
-def test_model_completed_trace_does_not_stream_thought_prefix(db_session):
+def test_model_completed_trace_streams_sanitized_thought_prefix(db_session):
     emitter = EventEmitter("run-model")
 
     events = list(trace_to_events(emitter.emit, {
@@ -31,4 +31,4 @@ def test_model_completed_trace_does_not_stream_thought_prefix(db_session):
     }))
 
     assert len(events) == 1
-    assert events[0].step["summary"] == "准备调用工具：db.search"
+    assert events[0].step["summary"] == "I should inspect the schema."
