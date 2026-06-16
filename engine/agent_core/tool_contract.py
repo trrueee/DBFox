@@ -11,10 +11,10 @@ MergeStrategy = Literal["reuse", "new", "always_new"]
 @dataclass(frozen=True)
 class ToolStateContract:
     tool_name: str
-    on_success_clear: tuple[str, ...]   # keys set to None on success
-    on_success_reset: tuple[str, ...]   # keys reset via RESET_* constants
-    merge_strategy: MergeStrategy
-    emit_artifact: bool
+    on_success_clear: tuple[str, ...] = ()   # keys set to None on success
+    on_success_reset: tuple[str, ...] = ()   # keys reset via RESET_* constants
+    merge_strategy: MergeStrategy = "reuse"
+    emit_artifact: bool = False
 
 
 # ── Reusable reset groups ──
@@ -28,118 +28,55 @@ TOOL_CONTRACTS: dict[str, ToolStateContract] = {
     "db.query": ToolStateContract(
         tool_name="db.query",
         on_success_clear=RESET_ALL_ERROR_STATE,
-        on_success_reset=(),
-        merge_strategy="reuse",
         emit_artifact=True,
     ),
     "db.preview": ToolStateContract(
         tool_name="db.preview",
         on_success_clear=RESET_ALL_ERROR_STATE,
-        on_success_reset=(),
-        merge_strategy="reuse",
         emit_artifact=True,
     ),
     "db.inspect": ToolStateContract(
         tool_name="db.inspect",
         on_success_clear=RESET_ALL_ERROR_STATE,
-        on_success_reset=(),
         merge_strategy="new",
-        emit_artifact=False,
     ),
-    "db.search": ToolStateContract(
-        tool_name="db.search",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
-    "db.observe": ToolStateContract(
-        tool_name="db.observe",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
+    "db.search": ToolStateContract(tool_name="db.search"),
+    "db.observe": ToolStateContract(tool_name="db.observe"),
     "db.remember": ToolStateContract(
         tool_name="db.remember",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="new",
-        emit_artifact=False,
     ),
 
     # ── Schema operations ──
-    "schema.list_tables": ToolStateContract(
-        tool_name="schema.list_tables",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
-    "schema.describe_table": ToolStateContract(
-        tool_name="schema.describe_table",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
+    "schema.list_tables": ToolStateContract(tool_name="schema.list_tables"),
+    "schema.describe_table": ToolStateContract(tool_name="schema.describe_table"),
     "schema.refresh_catalog": ToolStateContract(
         tool_name="schema.refresh_catalog",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="new",
-        emit_artifact=False,
     ),
 
     # ── Semantic / memory ──
-    "semantic.resolve": ToolStateContract(
-        tool_name="semantic.resolve",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
-    "memory.search": ToolStateContract(
-        tool_name="memory.search",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
+    "semantic.resolve": ToolStateContract(tool_name="semantic.resolve"),
+    "memory.search": ToolStateContract(tool_name="memory.search"),
     "memory.write": ToolStateContract(
         tool_name="memory.write",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="new",
-        emit_artifact=False,
     ),
 
     # ── Analysis / synthesis ──
-    "environment.get_profile": ToolStateContract(
-        tool_name="environment.get_profile",
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    ),
+    "environment.get_profile": ToolStateContract(tool_name="environment.get_profile"),
     "result.profile": ToolStateContract(
         tool_name="result.profile",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="new",
         emit_artifact=True,
     ),
     "chart.suggest": ToolStateContract(
         tool_name="chart.suggest",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="new",
         emit_artifact=True,
     ),
     "answer.synthesize": ToolStateContract(
         tool_name="answer.synthesize",
-        on_success_clear=(),
-        on_success_reset=(),
         merge_strategy="always_new",
         emit_artifact=True,
     ),
@@ -153,15 +90,7 @@ def get_contract(tool_name: str) -> ToolStateContract:
     if tool_name.startswith("workspace."):
         return ToolStateContract(
             tool_name=tool_name,
-            on_success_clear=(),
-            on_success_reset=(),
             merge_strategy="new",
             emit_artifact=True,
         )
-    return ToolStateContract(
-        tool_name=tool_name,
-        on_success_clear=(),
-        on_success_reset=(),
-        merge_strategy="reuse",
-        emit_artifact=False,
-    )
+    return ToolStateContract(tool_name=tool_name)
