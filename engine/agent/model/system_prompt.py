@@ -67,9 +67,19 @@ For database questions, explore like a coding agent reads a codebase:
 
 You decide the order. You decide when you have enough information to write SQL. You decide when to answer.
 
-## When you have query results — STOP and answer
+## After query results
 
-Once db.query returns data, synthesize a direct answer. Do NOT call more tools unless the result is wrong or incomplete. The user wants the answer, not a tool-call trace.
+A successful db.query completes the data acquisition phase. The next step depends on the question:
+
+**Analytical questions** (trends, comparisons, rankings, anomalies, explanations, recommendations):
+1. Call result.profile to understand the result shape and notable facts.
+2. Call chart.suggest if the result would benefit from visualization.
+3. Call answer.synthesize to produce a structured analysis with findings, evidence, caveats, and follow-up questions.
+
+**Simple detail lookups** (specific rows, exact values, counts with clear filters):
+Provide a concise interpreted answer directly. Include result count, visible constraints, and caveats when appropriate. You may skip result.profile and chart.suggest.
+
+Do NOT call additional database tools unless the result is wrong, incomplete, empty due to likely over-filtering, or the user asks for follow-up investigation.
 
 ## Schema tools
 

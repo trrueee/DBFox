@@ -158,6 +158,164 @@ Add or update tests that prove:
 - An analytical data question cannot complete immediately after `db.query` without a profile or synthesized answer.
 - A simple detail lookup may skip chart/profile but still returns an interpreted answer.
 
+## Implementation Plan
+
+### Phase 1: Tool Specs and Handlers (foundation)
+
+No new Python modules required. All three tools wrap existing pure functions.
+
+**New files:**
+
+| File | Purpose |
+|------|---------|
+| `engine/tools/builtin/result_profile.yaml` | Builtin YAML spec for `result.profile` |
+| `engine/tools/builtin/chart_suggest.yaml` | Builtin YAML spec for `chart.suggest` |
+| `engine/tools/builtin/answer_synthesize.yaml` | Builtin YAML spec for `answer.synthesize` |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/tools/databox_tools.py` | Register handlers `result_profile_handler`, `chart_suggest_handler`, `answer_synthesize_handler` via `handlers.force_register`. Add `"result"`, `"chart"`, `"answer"` to `valid_groups` in `_escalate_tool_group`. |
+| `engine/agent_core/tool_registry.py` | Add `"result."`, `"chart."`, `"answer."` prefixes to `TOOL_GROUP_MAP`. |
+
+**Handler implementations** (all in `engine/tools/databox_tools.py` as thin wrappers):
+
+```python
+def _result_profile_handler(ctx, args):
+    # Reuse engine.agent_core.result_profiler.profile_result
+    # Consumes ctx.state_view["execution"]
+
+def _chart_suggest_handler(ctx, args):
+    # Reuse engine.agent_core.chart_builder.suggest_plotly_chart
+    # Consumes ctx.state_view["execution"]
+
+def _answer_synthesize_handler(ctx, args):
+    # Reuse engine.agent_core.answer.synthesize_agent_answer
+    # Consumes question, sql, safety, execution, result_profile from state
+```
+
+Each handler returns `ToolObservation` with the structured output.
+
+### Phase 2: State Binding
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/agent_core/databinding.py` | Add three appliers to `TOOL_STATE_APPLIERS`: `result.profile` -> `_apply_result_profile`, `chart.suggest` -> `_apply_chart_suggest`, `answer.synthesize` -> `_apply_answer_synthesize`. Add `"result.profile"`, `"chart.suggest"`, `"answer.synthesize"` to `_ARTIFACT_TOOLS`. |
+
+**Applier implementations:**
+
+```python
+def _apply_result_profile(state, output, obs):
+    return {"result_profile": output}
+
+def _apply_chart_suggest(state, output, obs):
+    return {"chart_suggestion": output}
+
+def _apply_answer_synthesize(state, output, obs):
+    return {"answer": output, "final_answer": output}
+```
+
+### Phase 3: Safe Tool Groups
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/agent/app/service.py` | Add `"result"`, `"chart"`, `"answer"` to `FULL_SAFE_TOOL_GROUPS` (line 48-50). |
+
+Result: `FULL_SAFE_TOOL_GROUPS = ["environment", "schema", "db", "semantic", "memory", "result", "chart", "answer"]`
+
+### Phase 4: Artifact Emission
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/agent/nodes/observe_node.py` | Extend `emit_artifacts_from_observation` to emit `build_profile_artifact` when `step_name == "result.profile"` and `state["result_profile"]` exists. Emit `build_chart_artifact` when `step_name == "chart.suggest"` and chart type is not `"table"`. Emit `build_recommendations_artifact` when `step_name == "answer.synthesize"` and answer has recommendations. |
+
+### Phase 5: Deterministic Guard
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/agent/progress/fast_path.py` | In `deterministic_progress_fastpath`, after the existing `answer`/`final_answer` check (line 173-183), add a guard: if the last successful tool was `db.query` and `result_profile` is not set and the question looks analytical, return `continue` instead of allowing finalization. This is a heuristic check based on presence of `execution` without `result_profile`. |
+
+The guard logic:
+
+```python
+execution = state.get("execution")
+if (execution and execution.get("success")
+    and not state.get("result_profile")
+    and not state.get("answer")):
+    # db.query succeeded but no analysis step ran yet — continue
+    return {
+        "progress_decision": progress_decision_dict(
+            status="continue",
+            reason_summary="Query succeeded but result profiling not yet performed.",
+            next_action_hint="Call result.profile to analyze the query result before answering.",
+        ),
+        "trace_events": [...],
+    }
+```
+
+This is conservative: it only fires when execution succeeded, no profile exists, and no answer is set yet. It does not generate SQL or make analytical judgments.
+
+### Phase 6: System Prompt Update
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `engine/agent/model/system_prompt.py` | Replace the "When you have query results — STOP and answer" section (line 70-72) with the new analysis-aware guidance. |
+
+New prompt section:
+
+```
+## After query results
+
+A successful db.query completes the data acquisition phase. The next step depends on the question:
+
+**Analytical questions** (trends, comparisons, rankings, anomalies, explanations, recommendations):
+1. Call result.profile to understand the result shape and notable facts.
+2. Call chart.suggest if the result would benefit from visualization.
+3. Call answer.synthesize to produce a structured analysis with findings, evidence, caveats, and follow-up questions.
+
+**Simple detail lookups** (specific rows, exact values, counts with clear filters):
+Provide a concise interpreted answer directly. Include result count, visible constraints, and caveats when appropriate. You may skip result.profile and chart.suggest.
+
+Do NOT call additional database tools unless the result is wrong, incomplete, empty due to likely over-filtering, or the user asks for follow-up investigation.
+```
+
+### Phase 7: Tests
+
+**New test files:**
+
+| File | Coverage |
+|------|----------|
+| `engine/tests/test_analysis_flow.py` | Integration tests for the full analysis flow |
+
+**Modified test files:**
+
+| File | Coverage |
+|------|----------|
+| `engine/agent/tests/test_react_graph.py` | Verify progress fast-path guards the analysis flow |
+
+**Test cases:**
+
+1. `test_safe_groups_include_analysis_tools` — `FULL_SAFE_TOOL_GROUPS` contains `"result"`, `"chart"`, `"answer"`.
+2. `test_escalate_accepts_analysis_groups` — `_escalate_tool_group` accepts `"result"`, `"chart"`, `"answer"` as valid groups.
+3. `test_builtin_registry_loads_analysis_tools` — `ToolRegistry` loads `result.profile`, `chart.suggest`, `answer.synthesize` from builtin YAML specs.
+4. `test_databinding_stores_result_profile` — `apply_tool_result_to_state` with `result.profile` sets `result_profile`.
+5. `test_databinding_stores_chart_suggestion` — `apply_tool_result_to_state` with `chart.suggest` sets `chart_suggestion`.
+6. `test_databinding_stores_answer` — `apply_tool_result_to_state` with `answer.synthesize` sets `answer` and `final_answer`.
+7. `test_tool_group_map_includes_analysis_groups` — `tool_to_group("result.profile")` returns `"result"`, etc.
+8. `test_progress_guard_continues_after_db_query_without_profile` — When execution succeeds but `result_profile` is absent and no answer exists, progress fast-path returns `continue`.
+9. `test_progress_guard_allows_finalize_with_answer` — When `answer` exists, progress fast-path returns `complete` regardless of profile state.
+
 ## Out of Scope
 
 - Building a full causal analysis engine.

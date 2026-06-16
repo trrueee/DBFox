@@ -73,8 +73,8 @@
 pip install -r requirements.txt
 cd desktop && npm install && cd ..
 
-# 2. 一键启动（引擎 + 前端）
-python start.py
+# 2. 启动开发模式（Tauri 会自动拉起引擎 sidecar）
+cd desktop && npm run tauri dev
 ```
 
 ### LLM 配置

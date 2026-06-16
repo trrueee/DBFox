@@ -132,7 +132,10 @@ def _format_result_preview(columns: list[str], rows: list[list[Any]]) -> str:
     lines.append("-" * len(header))
     # Rows (max 10)
     for row in rows[:10]:
-        cells = [str(cell)[:80] for cell in (row if isinstance(row, list) else [row])]
+        if isinstance(row, dict):
+            cells = [str(row.get(column, ""))[:80] for column in columns]
+        else:
+            cells = [str(cell)[:80] for cell in (row if isinstance(row, list) else [row])]
         # Pad to column count
         while len(cells) < len(columns):
             cells.append("")

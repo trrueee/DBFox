@@ -12,6 +12,9 @@ from engine.tools.db_tools import (
 from engine.tools.safe_preview import db_preview
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.tool_registry import ToolContext, ToolRegistry
+from engine.agent_core.result_profiler import profile_result
+from engine.agent_core.chart_builder import suggest_plotly_chart
+from engine.agent_core.answer import synthesize_agent_answer
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +65,11 @@ def register_databox_tools() -> ToolRegistry:
     handlers.force_register("memory_delete", memory_delete)
     handlers.force_register("memory_summarize_session", memory_summarize_session)
 
+    # -- Analysis tools ---------------------------------------------------
+    handlers.force_register("result_profile_handler", _result_profile_handler)
+    handlers.force_register("chart_suggest_handler", _chart_suggest_handler)
+    handlers.force_register("answer_synthesize_handler", _answer_synthesize_handler)
+
     # -- Build registry from YAML specs + handlers -------------------------
     registry = ToolRegistry()
     registry.add_builtin_source()
@@ -89,7 +97,7 @@ def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservat
 
     valid_groups = {
         "environment", "schema", "db", "semantic",
-        "memory", "execution",
+        "memory", "execution", "result", "chart", "answer",
     }
 
     if group not in valid_groups:
@@ -125,6 +133,141 @@ def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservat
         },
         latency_ms=0,
     )
+
+
+# ---- Analysis tool handlers ------------------------------------------------
+
+
+def _result_profile_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Profile the execution result set."""
+    execution = ctx.state_view.get("execution")
+    if not execution or not execution.get("success"):
+        return ToolObservation(
+            name="result.profile",
+            status="failed",
+            input=args,
+            error="No successful execution result available to profile.",
+            latency_ms=0,
+        )
+    import time
+    start = time.monotonic()
+    try:
+        question = args.get("question") or (ctx.request.question if ctx.request else "") or ""
+        columns = list(execution.get("columns") or [])
+        rows = list(execution.get("rows") or [])
+        result_profile = profile_result(
+            question=question,
+            columns=columns,
+            rows=rows,
+            execution_success=True,
+        )
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="result.profile",
+            status="success",
+            input=args,
+            output=result_profile.model_dump(mode="json"),
+            latency_ms=latency,
+        )
+    except Exception as exc:
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="result.profile",
+            status="failed",
+            input=args,
+            error=str(exc),
+            latency_ms=latency,
+        )
+
+
+def _chart_suggest_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Suggest a chart type for the current result set."""
+    execution = ctx.state_view.get("execution")
+    if not execution or not execution.get("success"):
+        return ToolObservation(
+            name="chart.suggest",
+            status="failed",
+            input=args,
+            error="No successful execution result available for chart suggestion.",
+            latency_ms=0,
+        )
+    import time
+    start = time.monotonic()
+    try:
+        suggestion = suggest_plotly_chart(execution)
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="chart.suggest",
+            status="success",
+            input=args,
+            output=suggestion,
+            latency_ms=latency,
+        )
+    except Exception as exc:
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="chart.suggest",
+            status="failed",
+            input=args,
+            error=str(exc),
+            latency_ms=latency,
+        )
+
+
+def _answer_synthesize_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Synthesize a structured answer from analysis artifacts."""
+    import time
+    start = time.monotonic()
+    try:
+        state = ctx.state_view
+        question = args.get("question") or (ctx.request.question if ctx.request else "") or state.get("question") or ""
+        sql = state.get("sql") or ""
+        if isinstance(sql, dict):
+            sql = sql.get("sql") or ""
+        safety = state.get("safety")
+        execution = state.get("execution")
+        result_profile_raw = state.get("result_profile")
+        chart_suggestion = state.get("chart_suggestion")
+        suggestions = state.get("suggestions")
+
+        from engine.agent_core.types import ResultProfile
+        result_profile = None
+        if result_profile_raw:
+            if isinstance(result_profile_raw, ResultProfile):
+                result_profile = result_profile_raw
+            elif isinstance(result_profile_raw, dict):
+                try:
+                    result_profile = ResultProfile.model_validate(result_profile_raw)
+                except Exception:
+                    pass
+
+        answer = synthesize_agent_answer(
+            question=question,
+            query_plan=state.get("query_plan"),
+            sql=sql or None,
+            safety=safety,
+            execution=execution,
+            result_profile=result_profile,
+            suggestions=suggestions,
+            error=state.get("error"),
+        )
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="answer.synthesize",
+            status="success",
+            input=args,
+            output=answer.model_dump(mode="json"),
+            latency_ms=latency,
+        )
+    except Exception as exc:
+        latency = int((time.monotonic() - start) * 1000)
+        return ToolObservation(
+            name="answer.synthesize",
+            status="failed",
+            input=args,
+            error=str(exc),
+            latency_ms=latency,
+        )
 
 
 # ---- helpers ----------------------------------------------------------------
