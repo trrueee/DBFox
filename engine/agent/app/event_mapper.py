@@ -69,16 +69,18 @@ def trace_to_events(
             },
         )
     elif trace_type == "agent.tool.completed":
+        payload = trace.get("payload", trace)
         yield emit(
             "agent.step.completed",
             step={
                 "name": mapped_name,
                 "tool_name": tool_name,
-                "status": trace.get("status"),
-                "latency_ms": trace.get("latency_ms"),
-                "input": trace.get("input"),
-                "output": trace.get("output"),
-                "error": trace.get("error"),
+                "status": payload.get("status") if isinstance(payload, dict) else trace.get("status"),
+                "latency_ms": payload.get("latency_ms") if isinstance(payload, dict) else trace.get("latency_ms"),
+                "input": payload.get("input") if isinstance(payload, dict) else trace.get("input"),
+                "output": payload.get("output") if isinstance(payload, dict) else trace.get("output"),
+                "error": payload.get("error") if isinstance(payload, dict) else trace.get("error"),
+                "merge_strategy": (payload.get("_merge_strategy") if isinstance(payload, dict) else None) or "reuse",
             },
         )
     elif trace_type == "agent.repair.prepared":
