@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
+from engine.agent_core.tool_contract import get_contract
 from engine.agent_core.types import ToolObservation
 
 _ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[str, Any]]
@@ -12,12 +13,6 @@ _ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[
 # ---------------------------------------------------------------------------
 # State reset namespaces
 # ---------------------------------------------------------------------------
-
-RESET_SELF_HEALING: dict[str, Any] = {
-    "last_error_telemetry": None,
-    "last_failed_tool_call": None,
-}
-
 
 # ---------------------------------------------------------------------------
 # State appliers
@@ -77,11 +72,7 @@ def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObs
     execution["success"] = output.get("status") == "success"
     execution["rowCount"] = output.get("rowCount", output.get("returned_rows", 0))
     execution["latencyMs"] = output.get("latencyMs", output.get("execution_time_ms", 0))
-    update: dict[str, Any] = {
-        "execution": execution,
-        "error": None,
-        **RESET_SELF_HEALING,
-    }
+    update: dict[str, Any] = {"execution": execution}
     if output.get("safe_sql"):
         update["sql"] = output.get("safe_sql")
     return update
@@ -161,7 +152,9 @@ def apply_tool_result_to_state(
     tool_name: str,
     observation: ToolObservation,
 ) -> dict[str, Any]:
+    contract = get_contract(tool_name)
     output = observation.output or {}
+
     update: dict[str, Any] = {
         "tool_results": [observation.model_dump(mode="json")],
         "trace_events": [
@@ -171,17 +164,24 @@ def apply_tool_result_to_state(
                     "tool_name": tool_name,
                     "observation_name": observation.name,
                     "status": observation.status,
+                    "_merge_strategy": contract.merge_strategy,
                 },
             }
         ],
     }
 
-    # ---- failed path (common) ----------------------------------------------
+    # ── Failed path ──
     if observation.status == "failed":
         _apply_failed_telemetry(state, tool_name, observation, output, update)
         return update
 
-    # ---- success path: dispatch via handler map -----------------------------
+    # ── Success path: contract-driven cleanup first ──
+    for key in contract.on_success_clear:
+        update[key] = None
+    for key in contract.on_success_reset:
+        update[key] = None
+
+    # ── Then tool-specific state handler ──
     handler = TOOL_STATE_APPLIERS.get(tool_name)
     if handler is not None:
         tool_update = handler(state, output, observation)
@@ -195,8 +195,8 @@ def apply_tool_result_to_state(
         update["trace_events"].extend(extra_trace)
     update.update(tool_update)
 
-    # ---- artifact emission --------------------------------------------------
-    if tool_name in _ARTIFACT_TOOLS or tool_name.startswith("workspace."):
+    # ── Artifact emission ──
+    if contract.emit_artifact:
         update["artifacts"] = [_artifact_event(tool_name, output)]
 
     return update
