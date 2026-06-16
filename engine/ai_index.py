@@ -24,6 +24,14 @@ def _ensure_jieba():
         _jieba_loaded = True
 
 
+def _lcut(text: str) -> list[str]:
+    """jieba lcut polyfill — works with both jieba and jieba3k."""
+    import jieba
+    if hasattr(jieba, "lcut"):
+        return _lcut(text)
+    return list(jieba.cut(text))
+
+
 def tokenize_query(query: str) -> list[str]:
     """Tokenize a user query into Chinese + English tokens."""
     _ensure_jieba()
@@ -36,7 +44,7 @@ def tokenize_query(query: str) -> list[str]:
 
     # Chinese via jieba
     chinese_part = re.sub(r"[A-Za-z0-9_]+", " ", query)
-    tokens.extend(t.strip() for t in jieba.lcut(chinese_part) if t.strip())
+    tokens.extend(t.strip() for t in _lcut(chinese_part) if t.strip())
 
     return list(dict.fromkeys(tokens))  # dedup, preserve order
 
@@ -52,7 +60,7 @@ def segment_for_fts(text: str) -> str:
     result: list[str] = []
     for part in parts:
         if re.search(r"[一-鿿]", part):
-            result.extend(jieba.lcut(part))
+            result.extend(_lcut(part))
         else:
             result.append(part)
     return " ".join(result)
