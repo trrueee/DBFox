@@ -90,14 +90,7 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "scatter, or pie charts. Call after result.profile when the result would benefit "
         "from visualization. Do not call for simple lookups or single-row results."
     ),
-    "answer.synthesize": (
-        "Synthesize a structured analysis answer from the query result, result profile, "
-        "chart suggestion, and safety report. Produces an AgentAnswer with: answer text, "
-        "key findings, evidence references, caveats, recommendations, and follow-up questions. "
-        "Call this as the final analysis step after result.profile and optionally chart.suggest. "
-        "For simple lookups you may call this to produce a concise interpreted answer instead "
-        "of raw rows."
-    ),
+
 }
 
 
