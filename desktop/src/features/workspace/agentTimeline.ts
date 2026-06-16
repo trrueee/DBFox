@@ -118,12 +118,16 @@ function appendAssistantProgress(current: AgentTimelineItem[], event: AgentRunti
 function upsertToolStep(current: AgentTimelineItem[], event: AgentRuntimeEvent): AgentTimelineItem[] {
   const step = event.step || {};
   const toolName = stringValue(step.tool_name) || stringValue(step.name) || "tool";
-  const id = `tool-${toolName}`;
+  const stepName = stringValue(step.name);
+  const isCompleted = event.type === "agent.step.completed";
+  const id = isCompleted
+    ? findLatestRunningToolId(current, toolName, stepName) || toolEventId(toolName, event.sequence)
+    : toolEventId(toolName, event.sequence);
   const previous = current.find((item) => item.id === id);
   const input = recordValue(step.input) ?? previous?.input ?? null;
   const output = recordValue(step.output) ?? previous?.output ?? null;
-  const error = stringValue(step.error) || previous?.error || null;
-  const content = event.type === "agent.step.completed"
+  const error = isCompleted ? stringValue(step.error) || null : stringValue(step.error) || previous?.error || null;
+  const content = isCompleted
     ? toolStepSummary(toolName, output, error)
     : previous?.content;
 
@@ -131,8 +135,8 @@ function upsertToolStep(current: AgentTimelineItem[], event: AgentRuntimeEvent):
     id,
     kind: "tool",
     title: toolName,
-    subtitle: stringValue(step.name),
-    status: event.type === "agent.step.started" ? "running" : statusValue(step.status, "success"),
+    subtitle: stepName,
+    status: isCompleted ? statusValue(step.status, "success") : "running",
     toolName,
     content,
     input,
@@ -140,6 +144,19 @@ function upsertToolStep(current: AgentTimelineItem[], event: AgentRuntimeEvent):
     error,
     latencyMs: numberValue(step.latency_ms) ?? previous?.latencyMs ?? null,
   });
+}
+
+function toolEventId(toolName: string, sequence: number): string {
+  return `tool-${toolName}-${sequence}`;
+}
+
+function findLatestRunningToolId(current: AgentTimelineItem[], toolName: string, stepName: string): string | null {
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    const item = current[index];
+    if (item.kind !== "tool" || item.status !== "running" || item.toolName !== toolName) continue;
+    if (!stepName || item.subtitle === stepName) return item.id;
+  }
+  return null;
 }
 
 function itemFromStep(step: AgentStep, current: AgentTimelineItem[]): AgentTimelineItem {

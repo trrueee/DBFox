@@ -18,13 +18,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from engine.runtime_env import load_runtime_env
 
-# Load .env before any other imports so LangSmith env vars are available
-# when langchain-core initializes its tracing subsystem.
-_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
-if _ENV_FILE.exists():
-    load_dotenv(_ENV_FILE)
+# Load env files before any LangChain imports so tracing configuration is active.
+load_runtime_env()
 
 import uvicorn
 from fastapi import FastAPI, Request

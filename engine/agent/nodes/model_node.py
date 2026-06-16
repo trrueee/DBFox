@@ -11,9 +11,29 @@ from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import first_user_text, message_content_text
+from engine.agent.progress.fast_path import _max_steps_reason
 
 import logging
 logger = logging.getLogger("databox.databox_agent.nodes.model_node")
+
+POST_QUERY_ANALYSIS_GRACE_STEPS = 4
+
+
+def _within_post_query_analysis_grace(
+    state: DataBoxAgentState,
+    *,
+    step_count: int,
+    max_steps: int,
+) -> bool:
+    execution = state.get("execution")
+    return (
+        isinstance(execution, dict)
+        and execution.get("success")
+        and not state.get("result_profile")
+        and not state.get("answer")
+        and not state.get("final_answer")
+        and step_count < max_steps + POST_QUERY_ANALYSIS_GRACE_STEPS
+    )
 
 
 def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
@@ -23,11 +43,12 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
     # ToolMessages for tools that will never execute.
     step_count = int(state.get("step_count", 0))
     max_steps = int(state.get("max_steps", 20))
-    if step_count >= max_steps:
-        if not state.get("safety"):
-            err = "Agent stopped before SQL validation because max_steps was reached."
-        else:
-            err = f"Agent exceeded max_steps ({max_steps})."
+    if step_count >= max_steps and not _within_post_query_analysis_grace(
+        state,
+        step_count=step_count,
+        max_steps=max_steps,
+    ):
+        err = _max_steps_reason(state, max_steps)
         return {
             "status": "failed",
             "error": err,

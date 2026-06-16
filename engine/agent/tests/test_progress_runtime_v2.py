@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
@@ -97,6 +97,55 @@ class TestStreamingContext:
         assert enriched.get("repair_mode") is True
         assert "sql_repair" in enriched.get("allowed_tool_groups", [])
         assert "schema" in enriched.get("allowed_tool_groups", [])
+
+
+class TestModelNodeStepLimit:
+    def test_allows_post_query_analysis_after_max_steps(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from engine.agent.nodes import model_node
+
+        calls: list[dict[str, object]] = []
+
+        class FakeModel:
+            def bind_tools(self, tools):
+                return self
+
+            def invoke(self, messages, config):
+                calls.append({"message_count": len(messages), "config": config})
+                return AIMessage(content="继续分析查询结果。")
+
+        monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
+        registry = MagicMock()
+        registry.get.return_value = None
+
+        result = model_node.call_model(
+            {
+                "messages": [HumanMessage(content="分析用户使用小红书工具的详率")],
+                "status": "running",
+                "step_count": 20,
+                "max_steps": 20,
+                "execution": {"success": True, "rowCount": 0},
+                "result_profile": None,
+                "answer": None,
+                "allowed_tool_groups": [],
+            },
+            {
+                "configurable": {
+                    "thread_id": "run-1",
+                    "model_name": "test-model",
+                    "api_key": "sk-test",
+                    "api_base": "http://example.test/v1",
+                    "registry": registry,
+                    "db": MagicMock(),
+                    "request": MagicMock(),
+                }
+            },
+        )
+
+        assert calls
+        assert result["trace_events"][0]["type"] == "agent.model.completed"
+        assert "error" not in result
 
 
 class TestContextSummaryMerge:

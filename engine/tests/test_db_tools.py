@@ -72,6 +72,17 @@ def test_db_search_uses_catalog_aliases_and_reasons(db_session, test_datasource)
     assert any("alias_match" in reason for result in obs.output["results"] for reason in result["reasons"])
 
 
+def test_db_search_expands_common_product_and_usage_terms() -> None:
+    from engine.tools.db_tools import _expanded_terms
+
+    terms = _expanded_terms("分析用户使用小红书功能的频率", {})
+
+    assert "xhs" in terms
+    assert "xiaohongshu" in terms
+    assert "tool" in terms
+    assert "invocation" in terms
+
+
 def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
     from engine.tools.db_tools import db_inspect
 

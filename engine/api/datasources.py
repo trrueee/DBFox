@@ -77,6 +77,22 @@ def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
     }
 
 
+def _load_schema_tables(db: Session, datasource_id: str) -> list[SchemaTable]:
+    return db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+
+
+def _schema_table_to_dict(table: SchemaTable) -> dict[str, Any]:
+    return {
+        "id": table.id,
+        "table_name": table.table_name,
+        "table_comment": table.table_comment or "",
+        "table_type": table.table_type,
+        "row_count_estimate": table.row_count_estimate,
+        "columns_count": len(table.columns),
+        "module_tag": table.table_schema or None,
+    }
+
+
 def _decrypt_optional(ciphertext: str | None, nonce: str | None) -> str | None:
     if not ciphertext or not nonce:
         return None
@@ -435,19 +451,16 @@ def api_sync_schema(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @router.get("/schema/tables")
 def api_list_tables(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
-    return [
-        {
-            "id": table.id,
-            "table_name": table.table_name,
-            "table_comment": table.table_comment or "",
-            "table_type": table.table_type,
-            "row_count_estimate": table.row_count_estimate,
-            "columns_count": len(table.columns),
-            "module_tag": table.table_schema or None,
-        }
-        for table in tables
-    ]
+    tables = _load_schema_tables(db, datasource_id)
+    if not tables:
+        try:
+            sync_schema(db, datasource_id)
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Auto schema sync before listing tables failed for %s: %s", datasource_id, exc)
+        else:
+            tables = _load_schema_tables(db, datasource_id)
+    return [_schema_table_to_dict(table) for table in tables]
 
 
 @router.get("/schema/tables/{table_id}/columns")
