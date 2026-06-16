@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -15,6 +16,8 @@ from engine.datasource import (
     datasource_connection_dict,
 )
 from engine.models import DataSource, SchemaColumn, SchemaTable
+
+logger = logging.getLogger("databox.schema_sync")
 
 SchemaSnapshot = tuple[list[SchemaTable], list[SchemaColumn], int]
 
@@ -406,7 +409,7 @@ def _replace_schema_snapshot(
     db.add_all(columns_to_insert)
 
 
-def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
+def sync_schema(db: Session, datasource_id: str, *, ai_enrich: bool = True) -> dict[str, Any]:
     """
     Synchronize metadata into local SQLite without deleting the previous snapshot
     until the new snapshot has been gathered successfully.
@@ -433,6 +436,11 @@ def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
             }
         )
         db.commit()
+
+        if ai_enrich:
+            from engine.ai_enrich import ai_enrich_catalog
+            enrich_result = ai_enrich_catalog(db, datasource_id)
+            logger.info("AI enrich: %s", enrich_result)
 
         return {
             "ok": True,

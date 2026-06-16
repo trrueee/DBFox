@@ -31,13 +31,13 @@ def utcnow() -> datetime:
 class SchemaCatalogSync:
     """Sync a SchemaInventory into DataBox's system catalog."""
 
-    def sync(self, db: Session, datasource_id: str) -> SyncResult:
+    def sync(self, db: Session, datasource_id: str, *, ai_enrich: bool = False) -> SyncResult:
         """Introspect and sync.  Returns counts of created/updated/removed."""
         inventory = introspect_datasource(db, datasource_id)
-        return self.sync_inventory(db, datasource_id, inventory)
+        return self.sync_inventory(db, datasource_id, inventory, ai_enrich=ai_enrich)
 
     def sync_inventory(
-        self, db: Session, datasource_id: str, inventory: SchemaInventory
+        self, db: Session, datasource_id: str, inventory: SchemaInventory, *, ai_enrich: bool = False
     ) -> SyncResult:
         result = SyncResult(datasource_id=datasource_id)
 
@@ -103,6 +103,12 @@ class SchemaCatalogSync:
             result.columns_updated,
             result.columns_removed,
         )
+
+        if ai_enrich:
+            from engine.ai_enrich import ai_enrich_catalog
+            enrich_result = ai_enrich_catalog(db, datasource_id)
+            logger.info("AI enrich: %s", enrich_result)
+
         return result
 
     def _sync_columns(
@@ -153,10 +159,10 @@ class SchemaCatalogSync:
             result.columns_removed += 1
 
 
-def ensure_catalog(db: Session, datasource_id: str) -> SyncResult:
+def ensure_catalog(db: Session, datasource_id: str, *, ai_enrich: bool = False) -> SyncResult:
     """Introspect and sync if the catalog is empty for this datasource.
 
     Safe to call before schema.build_context — if tables already exist
     it will still refresh (upsert).
     """
-    return SchemaCatalogSync().sync(db, datasource_id)
+    return SchemaCatalogSync().sync(db, datasource_id, ai_enrich=ai_enrich)
