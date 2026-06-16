@@ -10,9 +10,8 @@ from engine.agent.model.context_builder import build_context_message, build_prog
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.graph.message_utils import first_user_text, message_content_text, message_tool_calls
+from engine.agent.graph.message_utils import first_user_text, message_content_text
 from engine.agent.progress.fast_path import _max_steps_reason
-from engine.agent.tools.tool_aliases import to_internal
 
 import logging
 logger = logging.getLogger("databox.databox_agent.nodes.model_node")
@@ -125,71 +124,19 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
 
     messages.extend(history)
 
-    raw_msg = model_with_tools.invoke(messages, config)
-    ai_msg = _with_visible_tool_call_content(raw_msg)
-
-    # Dispatch custom event to LangSmith so the visible content is traceable
-    # even when the raw LLM response has empty content with tool_calls.
-    visible_content = message_content_text(ai_msg)
-    tool_calls = getattr(ai_msg, "tool_calls", []) or []
-    try:
-        from langchain_core.callbacks.manager import dispatch_custom_event
-        dispatch_custom_event(
-            name="agent.model.completed",
-            data={
-                "content": visible_content,
-                "tool_calls": [
-                    {"name": tc.get("name", "") if isinstance(tc, dict) else getattr(tc, "name", "")}
-                    for tc in tool_calls
-                ],
-                "raw_content_empty": not message_content_text(raw_msg),
-            },
-            config=config,
-        )
-    except Exception:
-        pass  # best-effort: LangSmith tracing is optional
+    ai_msg = model_with_tools.invoke(messages, config)
 
     return {
         "messages": [ai_msg],
         "trace_events": [
             {
                 "type": "agent.model.completed",
-                "content": visible_content,
-                "tool_calls": tool_calls,
+                "content": message_content_text(ai_msg),
+                "tool_calls": getattr(ai_msg, "tool_calls", []) or [],
             }
         ],
         "step_count": state.get("step_count", 0) + 1,
     }
-
-
-def _with_visible_tool_call_content(ai_msg: Any) -> Any:
-    """Add a concise visible plan when a provider returns tool_calls-only content."""
-    if message_content_text(ai_msg):
-        return ai_msg
-    tool_calls = message_tool_calls(ai_msg)
-    if not tool_calls:
-        return ai_msg
-
-    names: list[str] = []
-    for call in tool_calls[:3]:
-        if isinstance(call, dict):
-            raw_name = str(call.get("name") or "")
-        else:
-            raw_name = str(getattr(call, "name", "") or "")
-        if raw_name:
-            names.append(to_internal(raw_name))
-    if not names:
-        return ai_msg
-
-    visible_content = f"准备调用工具：{', '.join(names)}"
-    try:
-        return ai_msg.model_copy(update={"content": visible_content})
-    except Exception:
-        try:
-            ai_msg.content = visible_content
-        except Exception:
-            pass
-        return ai_msg
 
 
 def _build_escalate_tool(registry: Any) -> Any | None:
