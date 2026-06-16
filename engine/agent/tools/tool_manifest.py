@@ -77,12 +77,13 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "Summarize the current session for future recall."
     ),
     # Analysis tools
-    "result.profile": (
-        "Profile the result set from a successful db.query. Produces column-level "
-        "statistics, detected patterns (time_series, category_breakdown, top_k, single_metric), "
-        "notable facts, anomalies, and limitations. Call after db.query when the user asks for "
-        "analysis, trends, comparisons, rankings, anomalies, or any analytical question. "
-        "Skip for simple row lookups."
+    "analyze_data": (
+        "Compute a statistical profile of query execution results. Produces row count, "
+        "column-level statistics (type, null ratio, min/max/avg, top values), detected "
+        "patterns (time_series, category_breakdown, top_k, single_metric), notable "
+        "facts, and anomalies. Call after db.query when results are too large or complex "
+        "to analyze by inspection. Can be called with no arguments — auto-reads execution "
+        "from state. Skip for simple lookups or single-value results."
     ),
     "chart.suggest": (
         "Suggest a chart type for the current query result. Analyzes column types "
