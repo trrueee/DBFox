@@ -1,0 +1,36 @@
+name: analyze_data
+group: analysis
+kind: code
+description: >
+  Compute a statistical profile of query execution results. Returns row count,
+  column-level statistics (type, null ratio, min/max/avg, top values), detected
+  patterns (time_series, category_breakdown, top_k, single_metric), notable
+  facts, and anomalies. Use this when query results are too large or complex
+  to analyze by inspection. Skip for simple lookups or single-value results.
+  Can be called with no arguments — it will auto-detect execution results from
+  the current session state.
+handler: analyze_data_handler
+input_schema:
+  type: object
+  description: Profile execution results. All parameters are optional.
+  properties:
+    execution_result:
+      type: object
+      description: >
+        Optional. The execution output from db.query (rows, columns, status).
+        If omitted, the tool auto-reads the latest execution result from state.
+    question:
+      type: string
+      description: Original user question for context.
+  required: []
+binding:
+  consumes_state_keys: [execution]
+  produces_state_keys: [data_profile]
+policy:
+  side_effect: none
+  risk_level: safe
+metadata:
+  next_route: model
+state_contract:
+  merge_strategy: new
+  emit_artifact: true
