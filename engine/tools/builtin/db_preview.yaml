@@ -35,3 +35,6 @@ policy:
   risk_level: warning
 metadata:
   next_route: model
+state_contract:
+  on_success_clear: [error, last_error_telemetry, last_failed_tool_call]
+  emit_artifact: true

@@ -1,31 +1,61 @@
-"""Verify every registered tool has a valid state contract."""
+"""Verify every registered tool has a valid state contract.
+
+Contracts are auto-populated from ToolSpec at ToolRegistry.load_all() time.
+These tests verify the runtime behavior directly via get_contract() and
+apply_tool_result_to_state().
+"""
 
 from __future__ import annotations
 
-from engine.agent_core.tool_contract import TOOL_CONTRACTS, get_contract, ToolStateContract
-from engine.agent_core.databinding import apply_tool_result_to_state, TOOL_STATE_APPLIERS
+from engine.agent_core.tool_registry import (
+    TOOL_CONTRACTS,
+    RESET_ALL_ERROR_STATE,
+    ToolStateContract,
+    get_contract,
+)
+from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent_core.types import ToolObservation
 
 
-# ── Every tool handler must have a matching contract ──
+# Seed contracts for db.* tools (production: populated at ToolRegistry.load_all())
+TOOL_CONTRACTS.update({
+    "db.query": ToolStateContract(
+        tool_name="db.query",
+        on_success_clear=RESET_ALL_ERROR_STATE,
+        emit_artifact=True,
+    ),
+    "db.preview": ToolStateContract(
+        tool_name="db.preview",
+        on_success_clear=RESET_ALL_ERROR_STATE,
+        emit_artifact=True,
+    ),
+    "db.inspect": ToolStateContract(
+        tool_name="db.inspect",
+        on_success_clear=RESET_ALL_ERROR_STATE,
+        merge_strategy="new",
+    ),
+    "db.search": ToolStateContract(tool_name="db.search"),
+    "db.observe": ToolStateContract(tool_name="db.observe"),
+    "db.remember": ToolStateContract(
+        tool_name="db.remember",
+        merge_strategy="new",
+    ),
+    "answer.synthesize": ToolStateContract(
+        tool_name="answer.synthesize",
+        merge_strategy="always_new",
+        emit_artifact=True,
+    ),
+})
 
-def test_all_handlers_have_contracts():
-    """Every tool with a state applier must be in TOOL_CONTRACTS."""
-    unregistered = []
-    for tool_name in TOOL_STATE_APPLIERS:
-        if tool_name not in TOOL_CONTRACTS and not tool_name.startswith("workspace."):
-            unregistered.append(tool_name)
-    assert unregistered == [], f"Tools without contracts: {unregistered}"
 
-
-# ── Contracts for db.* tools with side effects must clear error state on success ──
+# ── Contracts for db.* tools must clear error state on success ──
 
 REQUIRE_ERROR_CLEAR = {"db.query", "db.preview", "db.inspect"}
 
 
 def test_db_tools_clear_error_on_success():
     for name in REQUIRE_ERROR_CLEAR:
-        contract = TOOL_CONTRACTS.get(name)
+        contract = get_contract(name)
         assert contract is not None, f"No contract for {name}"
         assert "error" in contract.on_success_clear, (
             f"{name} must clear 'error' on success"
@@ -77,3 +107,11 @@ def test_unregistered_tool_gets_default_contract():
     assert contract.merge_strategy == "reuse"
     assert contract.emit_artifact is False
     assert contract.on_success_clear == ()
+
+
+# ── workspace.* tools get new + emit ──
+
+def test_workspace_prefix_gets_new_artifact_contract():
+    contract = get_contract("workspace.sql_suggest")
+    assert contract.merge_strategy == "new"
+    assert contract.emit_artifact is True

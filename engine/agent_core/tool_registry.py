@@ -75,13 +75,64 @@ class ToolStateBinding:
 
 
 # ---------------------------------------------------------------------------
+# State contract — merged into ToolSpec (single source of truth)
+# ---------------------------------------------------------------------------
+
+MergeStrategy = Literal["reuse", "new", "always_new"]
+
+# Reusable reset groups
+RESET_ERROR = ("error",)
+RESET_SELF_HEALING = ("last_error_telemetry", "last_failed_tool_call")
+RESET_ALL_ERROR_STATE = RESET_ERROR + RESET_SELF_HEALING
+
+
+@dataclass(frozen=True)
+class ToolStateContract:
+    """Per-tool state cleanup contract — derived from ToolSpec at registration time."""
+
+    tool_name: str
+    on_success_clear: tuple[str, ...] = ()   # keys set to None on success
+    on_success_reset: tuple[str, ...] = ()   # keys reset via RESET_* constants
+    merge_strategy: MergeStrategy = "reuse"
+    emit_artifact: bool = False
+
+
+# Module-level registry (auto-populated from ToolSpec at load time)
+TOOL_CONTRACTS: dict[str, ToolStateContract] = {}
+
+
+def _sync_contract_from_spec(spec: "ToolSpec") -> None:
+    """Derive a ToolStateContract from a ToolSpec and write it to TOOL_CONTRACTS."""
+    TOOL_CONTRACTS[spec.name] = ToolStateContract(
+        tool_name=spec.name,
+        on_success_clear=spec.on_success_clear,
+        on_success_reset=spec.on_success_reset,
+        merge_strategy=spec.merge_strategy,
+        emit_artifact=spec.emit_artifact,
+    )
+
+
+def get_contract(tool_name: str) -> ToolStateContract:
+    """Return the state contract for a tool, or a safe default for unregistered tools."""
+    if tool_name in TOOL_CONTRACTS:
+        return TOOL_CONTRACTS[tool_name]
+    if tool_name.startswith("workspace."):
+        return ToolStateContract(
+            tool_name=tool_name,
+            merge_strategy="new",
+            emit_artifact=True,
+        )
+    return ToolStateContract(tool_name=tool_name)
+
+
+# ---------------------------------------------------------------------------
 # ToolSpec — single canonical definition
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class ToolSpec:
-    """Complete tool contract.
+    """Complete tool contract — the single source of truth for every tool.
 
     Schema is derived from input_model / output_model — never stored as
     a separate dict that can drift out of sync.
@@ -101,6 +152,12 @@ class ToolSpec:
     execution: ToolExecutionSpec = field(default_factory=ToolExecutionSpec)
     binding: ToolStateBinding = field(default_factory=ToolStateBinding)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    # ── State contract (was: separate ToolStateContract + TOOL_CONTRACTS dict) ──
+    on_success_clear: tuple[str, ...] = ()
+    on_success_reset: tuple[str, ...] = ()
+    merge_strategy: MergeStrategy = "reuse"
+    emit_artifact: bool = False
 
     @property
     def input_schema(self) -> dict[str, Any]:
@@ -267,6 +324,7 @@ class ToolRegistry:
                         base_tool = resolved_bt
 
                 rt = RegisteredTool(spec=spec, handler=handler_fn, base_tool=base_tool)
+                _sync_contract_from_spec(spec)
 
                 if spec.name in self._tools:
                     logger.info(
@@ -290,6 +348,7 @@ class ToolRegistry:
         if name in self._tools:
             logger.info("Tool '%s' overridden by manual register().", name)
         self._tools[name] = tool
+        _sync_contract_from_spec(tool.spec)
         return self
 
     def force_register(self, tool: RegisteredTool) -> "ToolRegistry":
