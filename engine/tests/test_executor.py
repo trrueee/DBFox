@@ -241,14 +241,13 @@ class TestPerformanceAndExplain:
         assert history.serialize_ms is not None
 
     def test_execute_query_blocks_schema_hallucination(self, db_session, test_datasource) -> None:
-        from engine.errors import GuardrailValidationError
-
         sync_schema(db_session, test_datasource.id)
 
-        with pytest.raises(GuardrailValidationError) as exc_info:
+        # Schema warnings are now non-blocking warnings; the query is sent to the database
+        # and raises a database-native exception (e.g., no such column) rather than a guardrail block.
+        with pytest.raises(Exception) as exc_info:
             execute_query(db_session, test_datasource.id, "SELECT imaginary_column FROM users LIMIT 3")
-
-        assert any(check["rule"] == "schema_validation" for check in exc_info.value.checks)
+        assert "no such column" in str(exc_info.value)
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session, test_datasource) -> None:
         from engine.sql.executor import validate_sql_schema
