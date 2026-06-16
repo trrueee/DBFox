@@ -93,9 +93,9 @@ def emit_artifacts_from_observation(
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
 
-    if step_name == "result.profile" and state.get("result_profile") and observation.status == "success":
+    if step_name == "analyze_data" and state.get("data_profile") and observation.status == "success":
         from engine.agent_core.types import ResultProfile as RP
-        profile_raw = state.get("result_profile")
+        profile_raw = state.get("data_profile")
         if isinstance(profile_raw, dict):
             try:
                 profile_obj = RP.model_validate(profile_raw)
@@ -117,21 +117,6 @@ def emit_artifacts_from_observation(
         chart = state.get("chart_suggestion")
         if isinstance(chart, dict) and chart.get("type") and chart.get("type") != "table":
             artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), identity=identity))
-
-    if step_name == "answer.synthesize" and state.get("answer") and observation.status == "success":
-        from engine.agent_core.types import AgentAnswer as AA
-        answer_raw = state.get("answer")
-        if isinstance(answer_raw, dict):
-            try:
-                answer_obj = AA.model_validate(answer_raw)
-            except Exception:
-                answer_obj = None
-        elif isinstance(answer_raw, AA):
-            answer_obj = answer_raw
-        else:
-            answer_obj = None
-        if answer_obj is not None and answer_obj.recommendations:
-            artifacts.append(build_recommendations_artifact(answer_obj, identity=identity))
 
     # Bind dependencies
     existing_artifacts = state.get("artifacts") or []
