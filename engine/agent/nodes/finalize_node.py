@@ -41,11 +41,43 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
 
     # Build answer payload for AgentRunResponse compatibility
     existing_answer = state.get("answer")
+    artifacts = state.get("artifacts") or []
+    evidence = []
+    for art in artifacts:
+        if isinstance(art, dict):
+            art_id = art.get("id")
+            art_type = art.get("type")
+            art_title = art.get("title") or ""
+        else:
+            art_id = getattr(art, "id", None)
+            art_type = getattr(art, "type", None)
+            art_title = getattr(art, "title", None) or ""
+
+        if art_id and art_type:
+            if art_type == "table":
+                evidence.append({
+                    "artifact_id": art_id,
+                    "label": "数据详情",
+                    "value": f"表格数据 ({art_title})",
+                })
+            elif art_type == "chart":
+                evidence.append({
+                    "artifact_id": art_id,
+                    "label": "图表展示",
+                    "value": f"图表 ({art_title})",
+                })
+            elif art_type == "profile":
+                evidence.append({
+                    "artifact_id": art_id,
+                    "label": "数据特征分析",
+                    "value": f"数据概览 ({art_title})",
+                })
+
     if isinstance(existing_answer, dict):
         answer_payload = {
             "answer": answer_text or existing_answer.get("answer") or "",
             "key_findings": existing_answer.get("key_findings") or [],
-            "evidence": existing_answer.get("evidence") or [],
+            "evidence": evidence or existing_answer.get("evidence") or [],
             "caveats": existing_answer.get("caveats") or [],
             "recommendations": existing_answer.get("recommendations") or [],
             "follow_up_questions": existing_answer.get("follow_up_questions") or [],
@@ -54,7 +86,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         answer_payload = {
             "answer": answer_text,
             "key_findings": [],
-            "evidence": [],
+            "evidence": evidence,
             "caveats": [],
             "recommendations": [],
             "follow_up_questions": [],
