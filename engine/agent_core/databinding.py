@@ -79,6 +79,7 @@ def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObs
     execution["latencyMs"] = output.get("latencyMs", output.get("execution_time_ms", 0))
     update: dict[str, Any] = {
         "execution": execution,
+        "error": None,
         **RESET_SELF_HEALING,
     }
     if output.get("safe_sql"):

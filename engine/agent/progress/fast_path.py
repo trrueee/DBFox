@@ -10,6 +10,22 @@ from engine.agent.graph.message_utils import first_user_text
 logger = logging.getLogger("databox.databox_agent.progress.fast_path")
 
 
+def _max_steps_reason(state: DataBoxAgentState, max_steps: int) -> str:
+    execution = state.get("execution")
+    if isinstance(execution, dict):
+        if execution.get("success"):
+            return f"Agent reached max_steps ({max_steps}) after query execution."
+        return f"Agent reached max_steps ({max_steps}) after query execution failed."
+
+    if state.get("sql"):
+        return f"Agent reached max_steps ({max_steps}) after SQL generation."
+
+    if not state.get("safety"):
+        return "Agent stopped before SQL validation because max_steps was reached."
+
+    return f"Agent exceeded max_steps ({max_steps})."
+
+
 def check_escalate(state: DataBoxAgentState) -> dict[str, Any] | None:
     """Fast-path: detect escalate.tool_group and expand allowed_tool_groups.
 
@@ -152,24 +168,6 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
             "trace_events": [progress_trace(decision, fastpath=True)],
         }
 
-    if step_count >= max_steps:
-        reason = f"Agent exceeded max_steps ({max_steps})."
-        if not state.get("safety"):
-            reason = "Agent stopped before SQL validation because max_steps was reached."
-        decision = progress_decision_dict(
-            status="failed",
-            reason_summary="Max steps reached without an answer.",
-            root_cause=reason,
-            should_finalize=True,
-            completion_reason="max_steps_reached",
-        )
-        return {
-            "status": "failed",
-            "error": reason,
-            "progress_decision": decision,
-            "trace_events": [progress_trace(decision, fastpath=True)],
-        }
-
     answer = state.get("answer") or state.get("final_answer")
     if isinstance(answer, dict) and answer.get("answer"):
         decision = progress_decision_dict(
@@ -211,6 +209,22 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
                     "progress_decision": decision,
                     "trace_events": [progress_trace(decision, fastpath=True)],
                 }
+
+    if step_count >= max_steps:
+        reason = _max_steps_reason(state, max_steps)
+        decision = progress_decision_dict(
+            status="failed",
+            reason_summary="Max steps reached without an answer.",
+            root_cause=reason,
+            should_finalize=True,
+            completion_reason="max_steps_reached",
+        )
+        return {
+            "status": "failed",
+            "error": reason,
+            "progress_decision": decision,
+            "trace_events": [progress_trace(decision, fastpath=True)],
+        }
 
     if state.get("last_tool_results"):
         decision = progress_decision_dict(
@@ -316,6 +330,7 @@ def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
     max_steps = int(state.get("max_steps", 20))
     error = state.get("error")
     answer = state.get("answer") or state.get("final_answer")
+    execution = state.get("execution")
 
     if error and status == "failed":
         decision = ProgressDecision(
@@ -330,11 +345,15 @@ def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
         decision = ProgressDecision(status="clarify", reason_summary="Agent is waiting for user input.")
     elif answer and answer.get("answer"):
         decision = ProgressDecision(status="complete", reason_summary="Agent produced an answer.")
+    elif (isinstance(execution, dict) and execution.get("success")
+            and not state.get("result_profile") and not state.get("answer")):
+        decision = ProgressDecision(
+            status="continue",
+            reason_summary="Query succeeded but result profiling not yet performed.",
+            next_action_hint="Call result.profile to analyze the query result before answering.",
+        )
     elif step_count >= max_steps:
-        if not state.get("safety"):
-            max_steps_error = "Agent stopped before SQL validation because max_steps was reached."
-        else:
-            max_steps_error = f"Agent exceeded max_steps ({max_steps})."
+        max_steps_error = _max_steps_reason(state, max_steps)
         decision = ProgressDecision(
             status="failed", reason_summary="Max steps reached without an answer.",
             root_cause=max_steps_error,

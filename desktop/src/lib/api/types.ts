@@ -87,7 +87,7 @@ export interface DataSourceActions {
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
   syncSchema: (id: string) => Promise<unknown>;
-  checkHealth: (id: string) => Promise<unknown>;
+  checkHealth: (id: string) => Promise<DataSourceHealthResult>;
 }
 export interface DataSourceHealthResult {
   ok: boolean;

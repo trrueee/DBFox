@@ -24,8 +24,10 @@ const datasource: DataSource = {
   port: 3306,
   database_name: "demo",
   username: "admin",
+  connection_mode: "direct",
   is_read_only: false,
   status: "active",
+  created_at: "2026-01-01T00:00:00Z",
 };
 
 describe("useDatasourceState", () => {

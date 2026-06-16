@@ -54,6 +54,12 @@ _BOOTSTRAP_SYNONYMS: dict[str, list[str]] = {
     "地址": ["address", "shipping_address"],
     "时间": ["created_at", "updated_at", "date", "time"],
     "渠道": ["channel", "source", "utm"],
+    "小红书": ["xhs", "xiaohongshu", "redbook"],
+    "功能": ["feature", "tool", "tools", "invocation", "permission"],
+    "工具": ["tool", "tools", "invocation"],
+    "使用": ["usage", "use", "used", "invocation", "invocations", "activity"],
+    "调用": ["call", "calls", "invocation", "invocations"],
+    "频率": ["frequency", "count", "daily", "monthly"],
 }
 
 # Default sensitive-column patterns.  Also bootstrapped into the database,
@@ -505,10 +511,16 @@ def _fk_summary(col: SchemaColumn) -> dict[str, Any]:
 
 def _expanded_terms(query: str, synonyms: dict[str, list[str]]) -> list[str]:
     terms: list[str] = []
-    for token in TOKEN_RE.findall(query.lower()):
+    normalized_query = query.lower()
+    for token in TOKEN_RE.findall(normalized_query):
         terms.append(token)
         for syn in synonyms.get(token, []):
             terms.append(syn)
+    for phrase, defaults in _BOOTSTRAP_SYNONYMS.items():
+        phrase_key = phrase.lower()
+        if phrase_key in normalized_query:
+            terms.append(phrase_key)
+            terms.extend(synonyms.get(phrase_key) or defaults)
     # dedup preserving order
     seen: set[str] = set()
     deduped: list[str] = []

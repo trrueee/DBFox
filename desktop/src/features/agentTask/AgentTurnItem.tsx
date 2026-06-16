@@ -43,6 +43,7 @@ export function AgentTurnItem({
     isRunning || (isFailed && isLast),
   );
   const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasRunningRef = useRef(isRunning);
 
   // Per-turn summary
   const summary: AgentTaskSummary = useMemo(() => {
@@ -65,9 +66,11 @@ export function AgentTurnItem({
     return computeSummary(steps);
   }, [hasAgent, timeline]);
 
-  // Auto-collapse on completion (only for the last turn)
+  // Auto-collapse once when the active last turn finishes.
   useEffect(() => {
-    if (isLast && isDone && hasAnswer && traceExpanded) {
+    const justFinishedRunning = wasRunningRef.current && !isRunning;
+
+    if (isLast && justFinishedRunning && isDone && hasAnswer && traceExpanded) {
       collapseTimerRef.current = setTimeout(() => {
         setTraceExpanded(false);
       }, 600);
@@ -76,6 +79,7 @@ export function AgentTurnItem({
     if (isLast && isRunning && !traceExpanded) {
       setTraceExpanded(true);
     }
+    wasRunningRef.current = isRunning;
     return () => {
       if (collapseTimerRef.current) {
         clearTimeout(collapseTimerRef.current);

@@ -81,7 +81,6 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
       if (!resolvedDatasource) {
         throw new Error("暂无可用数据源，请先创建并同步数据源。");
       }
-      setDbLabel(`${resolvedDatasource.database_name} · ${resolvedDatasource.db_type}`);
       const result = await executeSql(resolvedDatasource.id, sql, "SQL Console");
       const extras: ConsoleEntryDraft[] = [{ kind: "result", result }];
       for (const warning of result.warnings ?? []) {

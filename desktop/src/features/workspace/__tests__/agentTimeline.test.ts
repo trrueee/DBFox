@@ -36,7 +36,7 @@ describe("agentTimeline", () => {
 
     expect(timeline).toHaveLength(2);
     expect(timeline[1]).toMatchObject({
-      id: "tool-db.search",
+      id: "tool-db.search-2",
       kind: "tool",
       title: "db.search",
       subtitle: "search_database",
@@ -44,6 +44,47 @@ describe("agentTimeline", () => {
       input: { query: "用户 使用 平台" },
       output: { total_matches: 20 },
       latencyMs: 42,
+    });
+  });
+
+  it("keeps repeated tool invocations separate so stale errors do not pollute later successes", () => {
+    let timeline = createInitialAgentTimeline("analyze feature usage");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 2,
+      type: "agent.step.completed",
+      step: {
+        name: "query_database",
+        tool_name: "db.query",
+        status: "failed",
+        input: { sql: "SELECT bad_column FROM audit_logs" },
+        error: "TrustGate blocked execution because schema validation found unknown tables or columns.",
+        latency_ms: 11,
+      },
+    }));
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 3,
+      type: "agent.step.completed",
+      step: {
+        name: "query_database",
+        tool_name: "db.query",
+        status: "success",
+        input: { sql: "SELECT COUNT(*) AS total_logs FROM audit_logs" },
+        output: { rows: [{ total_logs: "3024" }] },
+        latency_ms: 12,
+      },
+    }));
+
+    const toolItems = timeline.filter((item) => item.kind === "tool");
+    expect(toolItems).toHaveLength(2);
+    expect(toolItems[0]).toMatchObject({
+      status: "failed",
+      error: "TrustGate blocked execution because schema validation found unknown tables or columns.",
+    });
+    expect(toolItems[1]).toMatchObject({
+      status: "success",
+      output: { rows: [{ total_logs: "3024" }] },
+      error: null,
     });
   });
 
@@ -108,7 +149,7 @@ describe("agentTimeline", () => {
 
     expect(timeline.filter((item) => item.kind === "tool")).toHaveLength(1);
     expect(timeline[1]).toMatchObject({
-      id: "tool-db.search",
+      id: "tool-db.search-2",
       title: "db.search",
       subtitle: "search_database",
       output: { total_matches: 3 },

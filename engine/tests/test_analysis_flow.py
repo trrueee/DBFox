@@ -125,6 +125,32 @@ class TestDatabinding:
         assert "chart.suggest" in _ARTIFACT_TOOLS
         assert "answer.synthesize" in _ARTIFACT_TOOLS
 
+    def test_successful_db_query_clears_stale_error_state(self):
+        from engine.agent_core.databinding import apply_tool_result_to_state
+
+        state = {
+            "error": "TrustGate blocked execution because schema validation found unknown tables or columns.",
+            "last_error_telemetry": {"error_type": "GuardrailValidationError"},
+            "last_failed_tool_call": {"tool_name": "db.query", "args": {"sql": "SELECT bad FROM audit_logs"}},
+        }
+        obs = ToolObservation(
+            name="db.query",
+            status="success",
+            output={
+                "status": "success",
+                "returned_rows": 1,
+                "rows": [{"total_logs": "3024"}],
+                "safe_sql": "SELECT COUNT(*) AS total_logs FROM audit_logs LIMIT 1000",
+            },
+            latency_ms=1,
+        )
+
+        result = apply_tool_result_to_state(state=state, tool_name="db.query", observation=obs)
+
+        assert result["error"] is None
+        assert result["last_error_telemetry"] is None
+        assert result["last_failed_tool_call"] is None
+
 
 class TestAnalysisHandlers:
     def test_answer_synthesize_uses_request_question_when_arg_missing(self):
@@ -198,6 +224,46 @@ class TestProgressGuard:
         result = deterministic_progress_fastpath(state)
         assert result is not None
         assert result["progress_decision"]["status"] == "complete"
+
+    def test_guard_still_profiles_query_result_when_max_steps_reached(self):
+        from engine.agent.progress.fast_path import deterministic_progress_fastpath
+        state = {
+            "status": "running",
+            "step_count": 20,
+            "max_steps": 20,
+            "execution": {"success": True, "rowCount": 0},
+            "result_profile": None,
+            "answer": None,
+            "messages": [],
+            "last_tool_results": [],
+        }
+
+        result = deterministic_progress_fastpath(state)
+
+        assert result is not None
+        assert result["progress_decision"]["status"] == "continue"
+        assert "profiling" in result["progress_decision"]["reason_summary"].lower()
+        assert "error" not in result
+
+    def test_guard_final_text_wins_over_max_steps_without_error(self):
+        from langchain_core.messages import AIMessage, HumanMessage
+        from engine.agent.progress.fast_path import deterministic_progress_fastpath
+
+        state = {
+            "status": "running",
+            "step_count": 20,
+            "max_steps": 20,
+            "messages": [
+                HumanMessage(content="How many orders?"),
+                AIMessage(content="There are 42 orders."),
+            ],
+        }
+
+        result = deterministic_progress_fastpath(state)
+
+        assert result is not None
+        assert result["progress_decision"]["status"] == "complete"
+        assert "error" not in result
 
     def test_guard_allows_finalize_with_profile_no_answer(self):
         """With profile but no answer, guard does not block — model decides."""
