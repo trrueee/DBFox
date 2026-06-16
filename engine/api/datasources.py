@@ -52,6 +52,7 @@ def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
         "is_read_only": bool(ds.is_read_only),
         "env": ds.env or "dev",
         "status": ds.status,
+        "enable_embedding_recall": bool(ds.enable_embedding_recall),
         "ssh_enabled": bool(ds.ssh_enabled),
         "ssh_host": ds.ssh_host or "",
         "ssh_port": ds.ssh_port or 22,
@@ -219,6 +220,7 @@ def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(ge
             is_read_only=req.is_read_only,
             env=req.env,
             status="active",
+            enable_embedding_recall=req.enable_embedding_recall,
         )
         db.add(datasource)
         db.commit()
@@ -284,6 +286,7 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
         datasource.connection_mode = req.connection_mode
         datasource.is_read_only = req.is_read_only
         datasource.env = req.env
+        datasource.enable_embedding_recall = req.enable_embedding_recall
         datasource.ssh_enabled = req.ssh_enabled
         datasource.ssh_host = req.ssh_host
         datasource.ssh_port = req.ssh_port

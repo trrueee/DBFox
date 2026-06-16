@@ -112,14 +112,30 @@ class SchemaLinkingResult:
 class SchemaLinker:
     """Rule-based schema linker for the first lightweight semantic layer."""
 
-    def __init__(self, db: Session, alias_resolver: SemanticAliasResolver | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        alias_resolver: SemanticAliasResolver | None = None,
+        api_key: str | None = None,
+        api_base: str | None = None,
+        model_name: str | None = None,
+    ) -> None:
         self.db = db
         self.alias_resolver = alias_resolver
+        self.api_key = api_key
+        self.api_base = api_base
+        self.model_name = model_name
 
     def _get_alias_resolver(self, datasource_id: str) -> SemanticAliasResolver:
         if self.alias_resolver is not None:
             return self.alias_resolver
-        return SemanticAliasResolver.from_db(self.db, datasource_id)
+        return SemanticAliasResolver.from_db(
+            self.db,
+            datasource_id,
+            api_key=self.api_key,
+            api_base=self.api_base,
+            model_name=self.model_name,
+        )
 
     def _resolve_workspace_table_ids(
         self,
