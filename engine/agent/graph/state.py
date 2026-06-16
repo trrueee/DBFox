@@ -96,7 +96,7 @@ class DataBoxAgentState(TypedDict, total=False):
     """Output from the Policy/Trust gate (can_execute, risks, reasons)."""
     execution: dict[str, Any] | None
     """Results of SQL execution (success status, row count, error info)."""
-    result_profile: dict[str, Any] | None
+    data_profile: dict[str, Any] | None
     """Descriptive profiling and analysis of the SQL query results."""
     chart_suggestion: dict[str, Any] | None
     """Auto-generated suggestion for rendering result charts."""
