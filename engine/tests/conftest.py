@@ -35,6 +35,19 @@ SPIDER_SQLITE_DBS = {
 }
 
 
+def _ensure_test_fts5(engine) -> None:
+    """Create FTS5 virtual table in test database if it doesn't exist."""
+    from sqlalchemy import text as sa_text
+    from engine.models import FTS5_DDL
+    try:
+        with engine.connect() as conn:
+            conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
+    except Exception:
+        with engine.connect() as conn:
+            conn.execute(sa_text(FTS5_DDL))
+            conn.commit()
+
+
 @pytest.fixture
 def db_session():
     """In-memory SQLite session — isolated from production databox_local.db.
@@ -48,6 +61,7 @@ def db_session():
         poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
+    _ensure_test_fts5(engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
     yield session

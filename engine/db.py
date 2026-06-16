@@ -181,6 +181,17 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _ensure_fts5(conn) -> None:
+    """Create FTS5 virtual table if it doesn't exist."""
+    from sqlalchemy import text as sa_text
+    from engine.models import FTS5_DDL
+    try:
+        conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
+    except Exception:
+        conn.execute(sa_text(FTS5_DDL))
+        conn.commit()
+
+
 def init_db() -> None:
     """
     数据库初始化与版本自动迁移迁移引擎
@@ -275,6 +286,7 @@ def init_db() -> None:
             if not tables:
                 logger.info("Alembic migration: no tables found, creating schema and stamping head")
                 Base.metadata.create_all(bind=conn)
+                _ensure_fts5(conn)
                 command.stamp(alembic_cfg, "head")
             else:
                 logger.info("Alembic migration: upgrading to head")
