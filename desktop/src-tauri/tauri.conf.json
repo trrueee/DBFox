@@ -20,7 +20,6 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
-        "icon": "icons/icon.ico",
         "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server"
       }
     ],

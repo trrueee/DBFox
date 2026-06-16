@@ -218,7 +218,11 @@ def _safe_model_progress_text(value: Any) -> str:
     if not text:
         return ""
     lowered = text.lower()
-    if lowered.startswith(("thought:", "reasoning:", "chain of thought:", "思考:", "推理:")):
+    for prefix in ("thought:", "reasoning:", "chain of thought:", "思考:", "思考：", "推理:", "推理："):
+        if lowered.startswith(prefix):
+            text = text[len(prefix):].lstrip()
+            break
+    if not text:
         return ""
     if len(text) > 1200:
         return text[:1200].rstrip() + "..."
