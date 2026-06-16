@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, LargeBinary
 from sqlalchemy.orm import relationship
 
 from engine.db import Base
@@ -121,6 +121,7 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     is_read_only = Column(Boolean, nullable=False, default=False)
     env = Column(String, nullable=False, default="dev")
     status = Column(String, nullable=False, default="active")
+    enable_embedding_recall = Column(Boolean, nullable=False, default=False)
 
     last_test_at = Column(DateTime, nullable=True)
     last_test_status = Column(String, nullable=True)
@@ -592,6 +593,8 @@ class SemanticAlias(Base):  # type: ignore[misc,valid-type]
     target_type = Column(String, nullable=False)
     target = Column(String, nullable=False)
     description = Column(Text, nullable=True)
+    embedding_blob = Column(LargeBinary, nullable=True)
+    embedding_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 

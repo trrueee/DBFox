@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.models import ChatConversation
+from engine.models import ChatConversation, AgentSession
+from engine.agent_core.persistence import sync_chat_conversation_from_session
 
+logger = logging.getLogger("databox.api.conversations")
 router = APIRouter()
 
 
@@ -22,6 +25,23 @@ class ConversationRecordPayload(BaseModel):
 
 @router.get("/conversations", response_model=list[ConversationRecordPayload])
 def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecordPayload]:
+    # Self-healing: ensure all AgentSessions have a ChatConversation row.
+    # Use a single outerjoin query to avoid N+1 per-session lookups.
+    try:
+        missing_sessions = (
+            db.query(AgentSession)
+            .outerjoin(ChatConversation, AgentSession.id == ChatConversation.id)
+            .filter(ChatConversation.id == None)
+            .all()
+        )
+        for s in missing_sessions:
+            try:
+                sync_chat_conversation_from_session(db, s.id)
+            except Exception:
+                logger.exception("Failed to sync legacy/missing session %s to ChatConversation", s.id)
+    except Exception:
+        logger.exception("Failed to query AgentSessions for self-healing sync")
+
     rows = (
         db.query(ChatConversation)
         .order_by(ChatConversation.updated_at.desc())
@@ -64,14 +84,24 @@ def save_conversation(
     row.context_tables_json = payload.context_tables_json
     row.messages_json = payload.messages_json
     row.artifacts_json = payload.artifacts_json
+
+    session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
+    if session is not None:
+        session.title = payload.title
+
     db.commit()
     return {"status": "ok"}
 
 
 @router.delete("/conversations/{conversation_id}")
 def delete_conversation(conversation_id: str, db: Session = Depends(get_db)) -> dict[str, str]:
+    session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
+    if session is not None:
+        db.delete(session)
+
     row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
     if row is not None:
         db.delete(row)
-        db.commit()
+        
+    db.commit()
     return {"status": "ok"}
