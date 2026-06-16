@@ -26,8 +26,11 @@ from engine.agent_core.types import ResultProfile
 logger = logging.getLogger("databox.databox_agent.nodes.observe_node")
 
 
+from engine.agent.tools.tool_aliases import STEP_NAME_TO_INTERNAL
+
+
 def _tool_name_from_step(step_name: str) -> str:
-    return step_name
+    return STEP_NAME_TO_INTERNAL.get(step_name, step_name)
 
 
 def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> dict[str, Any] | None:
