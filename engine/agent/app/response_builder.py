@@ -99,16 +99,7 @@ def build_response(
         ),
     )
 
-    tool_to_step_name = {
-        "db.observe": "observe_database",
-        "db.search": "search_database",
-        "db.inspect": "inspect_database",
-        "db.preview": "preview_table",
-        "db.query": "query_database",
-        "db.remember": "remember_database_semantics",
-        "analyze_data": "analyze_data",
-        "chart.suggest": "suggest_chart",
-    }
+    from engine.agent.tools.tool_aliases import STEP_NAME_MAP
 
     raw_traces = state.get("trace_events") or []
     ordered_step_names = []
@@ -119,7 +110,7 @@ def build_response(
         te_type = te.get("type")
         tool_name = te.get("tool_name")
         if te_type in ("agent.tool.started", "agent.tool.completed") and tool_name:
-            step_name = tool_to_step_name.get(tool_name, tool_name)
+            step_name = STEP_NAME_MAP.get(tool_name, tool_name)
             if step_name not in step_details:
                 ordered_step_names.append(step_name)
                 step_details[step_name] = {

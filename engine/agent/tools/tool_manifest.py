@@ -88,7 +88,7 @@ TOOL_AFFORDANCE: dict[str, str] = {
     "chart.suggest": (
         "Suggest a chart type for the current query result. Analyzes column types "
         "(numeric, temporal, category) and data shape to recommend line, bar, area, "
-        "scatter, or pie charts. Call after result.profile when the result would benefit "
+        "scatter, or pie charts. Call after analyze_data when the result would benefit "
         "from visualization. Do not call for simple lookups or single-row results."
     ),
 

@@ -49,18 +49,8 @@ def trace_to_events(
     trace_type = trace.get("type", "")
     tool_name = trace.get("tool_name", "")
 
-    tool_to_step_name = {
-        "db.observe": "observe_database",
-        "db.search": "search_database",
-        "db.inspect": "inspect_database",
-        "db.preview": "preview_table",
-        "db.query": "query_database",
-        "db.remember": "remember_database_semantics",
-        "analyze_data": "analyze_data",
-        "chart.suggest": "suggest_chart",
-
-    }
-    mapped_name = tool_to_step_name.get(tool_name, tool_name)
+    from engine.agent.tools.tool_aliases import STEP_NAME_MAP
+    mapped_name = STEP_NAME_MAP.get(tool_name, tool_name)
 
     if trace_type == "agent.tool.started":
         yield emit(

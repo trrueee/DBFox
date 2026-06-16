@@ -12,7 +12,6 @@ from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
-    build_recommendations_artifact,
     build_semantic_resolution_artifact,
     build_sql_suggestion_artifact,
     build_profile_artifact,
@@ -94,14 +93,13 @@ def emit_artifacts_from_observation(
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
 
     if step_name == "analyze_data" and state.get("data_profile") and observation.status == "success":
-        from engine.agent_core.types import ResultProfile as RP
         profile_raw = state.get("data_profile")
         if isinstance(profile_raw, dict):
             try:
-                profile_obj = RP.model_validate(profile_raw)
+                profile_obj = ResultProfile.model_validate(profile_raw)
             except Exception:
                 profile_obj = None
-        elif isinstance(profile_raw, RP):
+        elif isinstance(profile_raw, ResultProfile):
             profile_obj = profile_raw
         else:
             profile_obj = None

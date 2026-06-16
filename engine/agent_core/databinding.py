@@ -90,6 +90,7 @@ def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObs
 def _apply_analyze_data(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
     return {"data_profile": output}
 
+
 def _apply_chart_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
     return {"chart_suggestion": output}
 
