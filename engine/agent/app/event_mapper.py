@@ -56,9 +56,9 @@ def trace_to_events(
         "db.preview": "preview_table",
         "db.query": "query_database",
         "db.remember": "remember_database_semantics",
-        "result.profile": "profile_result",
+        "analyze_data": "analyze_data",
         "chart.suggest": "suggest_chart",
-        "answer.synthesize": "synthesize_answer",
+
     }
     mapped_name = tool_to_step_name.get(tool_name, tool_name)
 
