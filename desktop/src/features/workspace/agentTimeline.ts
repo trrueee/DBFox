@@ -120,13 +120,35 @@ function upsertToolStep(current: AgentTimelineItem[], event: AgentRuntimeEvent):
   const toolName = stringValue(step.tool_name) || stringValue(step.name) || "tool";
   const stepName = stringValue(step.name);
   const isCompleted = event.type === "agent.step.completed";
-  const id = isCompleted
-    ? findLatestRunningToolId(current, toolName, stepName) || toolEventId(toolName, event.sequence)
-    : toolEventId(toolName, event.sequence);
+  const strategy = (step.merge_strategy as string) || "";
+
+  // Id strategy: "new" and "always_new" always create fresh cards
+  let id: string;
+  if (strategy === "always_new" || strategy === "new") {
+    id = toolEventId(toolName, event.sequence);
+  } else if (strategy === "reuse") {
+    // reuse: match the latest card of same tool name (any status)
+    id = isCompleted
+      ? findLatestToolId(current, toolName, stepName) || toolEventId(toolName, event.sequence)
+      : toolEventId(toolName, event.sequence);
+  } else {
+    // default / no strategy: match only running cards (original behaviour)
+    id = isCompleted
+      ? findLatestRunningToolId(current, toolName, stepName) || toolEventId(toolName, event.sequence)
+      : toolEventId(toolName, event.sequence);
+  }
+
   const previous = current.find((item) => item.id === id);
   const input = recordValue(step.input) ?? previous?.input ?? null;
   const output = recordValue(step.output) ?? previous?.output ?? null;
-  const error = isCompleted ? stringValue(step.error) || null : stringValue(step.error) || previous?.error || null;
+
+  // Core fix: on success + reuse, force clear error (old error from retry must not persist)
+  const stepStatus = isCompleted ? statusValue(step.status, "success") : "running";
+  const error =
+    isCompleted && strategy === "reuse" && stepStatus === "success"
+      ? null
+      : stringValue(step.error) || previous?.error || null;
+
   const content = isCompleted
     ? toolStepSummary(toolName, output, error)
     : previous?.content;
@@ -136,7 +158,7 @@ function upsertToolStep(current: AgentTimelineItem[], event: AgentRuntimeEvent):
     kind: "tool",
     title: toolName,
     subtitle: stepName,
-    status: isCompleted ? statusValue(step.status, "success") : "running",
+    status: stepStatus,
     toolName,
     content,
     input,
@@ -154,6 +176,15 @@ function findLatestRunningToolId(current: AgentTimelineItem[], toolName: string,
   for (let index = current.length - 1; index >= 0; index -= 1) {
     const item = current[index];
     if (item.kind !== "tool" || item.status !== "running" || item.toolName !== toolName) continue;
+    if (!stepName || item.subtitle === stepName) return item.id;
+  }
+  return null;
+}
+
+function findLatestToolId(current: AgentTimelineItem[], toolName: string, stepName: string): string | null {
+  for (let index = current.length - 1; index >= 0; index -= 1) {
+    const item = current[index];
+    if (item.kind !== "tool" || item.toolName !== toolName) continue;
     if (!stepName || item.subtitle === stepName) return item.id;
   }
   return null;
