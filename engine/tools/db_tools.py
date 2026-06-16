@@ -38,31 +38,6 @@ DEFAULT_PREVIEW_ROWS = 10
 DEFAULT_SEARCH_LIMIT = 20
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[一-鿿]+")
 
-# Minimal bootstrap — real synonyms live in the SemanticAlias table.
-# These defaults are written into the database on first access and never
-# used directly.
-_BOOTSTRAP_SYNONYMS: dict[str, list[str]] = {
-    "用户": ["user", "users", "customer", "member", "account"],
-    "会员": ["user", "users", "customer", "member", "account"],
-    "客户": ["user", "users", "customer", "member"],
-    "手机号": ["phone", "mobile", "tel", "telephone", "msisdn"],
-    "手机": ["phone", "mobile", "tel", "telephone", "msisdn"],
-    "电话": ["phone", "mobile", "tel", "telephone"],
-    "邮箱": ["email", "mail"],
-    "邮件": ["email", "mail"],
-    "订单": ["order", "orders", "purchase"],
-    "商品": ["product", "products", "sku"],
-    "支付": ["payment", "payments", "pay"],
-    "地址": ["address", "shipping_address"],
-    "时间": ["created_at", "updated_at", "date", "time"],
-    "渠道": ["channel", "source", "utm"],
-    "小红书": ["xhs", "xiaohongshu", "redbook"],
-    "功能": ["feature", "tool", "tools", "invocation", "permission"],
-    "工具": ["tool", "tools", "invocation"],
-    "使用": ["usage", "use", "used", "invocation", "invocations", "activity"],
-    "调用": ["call", "calls", "invocation", "invocations"],
-    "频率": ["frequency", "count", "daily", "monthly"],
-}
 
 # Default sensitive-column patterns.  Also bootstrapped into the database,
 # but we keep a compiled fallback for the case where the DB store is empty.
@@ -1611,12 +1586,7 @@ def _remember_business_def(
 
 
 def _load_synonyms(db: Session, datasource_id: str) -> dict[str, list[str]]:
-    """Return synonym map for a datasource.
-
-    First call bootstraps the hardcoded defaults into the SemanticAlias
-    table.  Subsequent calls read from the database.  User-added aliases
-    (via ``db.remember``) are merged in automatically.
-    """
+    """Return synonym map from SemanticAlias (no bootstrap fallback)."""
     rows = (
         db.query(SemanticAlias)
         .filter(
@@ -1625,42 +1595,16 @@ def _load_synonyms(db: Session, datasource_id: str) -> dict[str, list[str]]:
         )
         .all()
     )
-    if not rows:
-        _bootstrap_synonyms(db, datasource_id)
-        rows = (
-            db.query(SemanticAlias)
-            .filter(
-                SemanticAlias.data_source_id == datasource_id,
-                SemanticAlias.target_type.in_(("synonym", "table", "column")),
-            )
-            .all()
-        )
-
     result: dict[str, list[str]] = defaultdict(list)
     for r in rows:
         alias = str(r.alias).strip().lower()
         target = str(r.target).strip().lower()
         if r.target_type == "synonym":
-            # synonym entries map a Chinese term → English term
             result[alias].append(target)
         elif r.target_type in ("table", "column"):
-            # table/column aliases map English name → alias
             result[target].append(alias)
     return dict(result)
 
-
-def _bootstrap_synonyms(db: Session, datasource_id: str) -> None:
-    """Write built-in synonym defaults into the database."""
-    for chinese_term, english_terms in _BOOTSTRAP_SYNONYMS.items():
-        for eng in english_terms:
-            db.add(SemanticAlias(
-                data_source_id=datasource_id,
-                alias=chinese_term.strip().lower(),
-                target_type="synonym",
-                target=eng.strip().lower(),
-                description="Bootstrapped default",
-            ))
-    db.commit()
 
 
 def _load_aliases(db: Session, datasource_id: str) -> list[SemanticAlias]:
