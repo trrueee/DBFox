@@ -36,7 +36,7 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "memory_delete": "memory.delete",
     "memory_summarize_session": "memory.summarize_session",
     # Analysis tools
-    "result_profile": "result.profile",
+    "analyze_data": "analyze_data",
     "chart_suggest": "chart.suggest",
 }
 
@@ -60,7 +60,7 @@ STEP_NAME_MAP: dict[str, str] = {
     "memory.write": "memory_write",
     "memory.delete": "memory_delete",
     "memory.summarize_session": "summarize_session",
-    "result.profile": "profile_result",
+
     "chart.suggest": "suggest_chart",
 
     # New tool — step name equals internal name (identity mapping, but must
