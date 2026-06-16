@@ -33,6 +33,28 @@ class TestFinalizeNode:
         assert result["status"] == "failed"
         assert result["error"] == "Something went wrong"
 
+    def test_finalize_with_existing_structured_answer(self):
+        state: DataBoxAgentState = {
+            "messages": [HumanMessage(content="调研小红书工具使用情况")],
+            "status": "running",
+            "error": None,
+            "pending_approval": None,
+            "answer": {
+                "answer": "广告文案生成使用最多。",
+                "key_findings": ["广告文案生成有 33 次使用。"],
+                "evidence": [{"artifact_id": "result", "label": "rows", "value": 19}],
+                "caveats": [],
+                "recommendations": [],
+                "follow_up_questions": [],
+            },
+        }
+
+        result = finalize_answer(state, {})
+
+        assert result["status"] == "completed"
+        assert result["answer"]["answer"] == "广告文案生成使用最多。"
+        assert result["error"] is None
+
     def test_finalize_with_answer_and_stale_error_completes_with_caveat(self):
         state: DataBoxAgentState = {
             "messages": [
