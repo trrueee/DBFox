@@ -4,7 +4,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
-from engine.agent.progress.fast_path import check_sql_repair_fastpath as _check_sql_repair_fastpath
+from engine.agent.progress.fast_path import (
+    check_sql_repair_fastpath as _check_sql_repair_fastpath,
+    deterministic_progress_fastpath as _deterministic_progress_fastpath,
+)
 from engine.agent.progress.lens_formatter import enrich_progress_result as _enrich_progress_result
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.progress.clarification_policy import (
@@ -69,6 +72,38 @@ class TestSqlRepairModule:
         assert plan is not None
         assert plan.error_class == "permission_denied"
         assert plan.retry_budget == 0
+
+
+class TestPostQueryProgress:
+    def test_profiled_result_prompts_answer_synthesis(self):
+        result = _deterministic_progress_fastpath({
+            "messages": [HumanMessage(content="调研小红书工具使用情况")],
+            "status": "running",
+            "step_count": 5,
+            "max_steps": 20,
+            "execution": {
+                "success": True,
+                "rowCount": 19,
+                "columns": ["tool_name", "category", "usage_count"],
+            },
+            "result_profile": {
+                "row_count": 19,
+                "notable_facts": ["usage_count ranges from 1.0 to 33.0."],
+            },
+            "answer": None,
+            "last_tool_results": [
+                {
+                    "name": "result.profile",
+                    "status": "success",
+                    "output": {"row_count": 19},
+                }
+            ],
+        })
+
+        assert result is not None
+        decision = result["progress_decision"]
+        assert decision["status"] == "continue"
+        assert "answer.synthesize" in decision["next_action_hint"]
 
 
 class TestStreamingContext:
@@ -146,6 +181,56 @@ class TestModelNodeStepLimit:
         assert calls
         assert result["trace_events"][0]["type"] == "agent.model.completed"
         assert "error" not in result
+
+    def test_tool_call_only_message_gets_visible_content(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from engine.agent.nodes import model_node
+
+        class FakeModel:
+            def bind_tools(self, tools):
+                return self
+
+            def invoke(self, messages, config):
+                return AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "db_query",
+                            "args": {"sql": "SELECT 1"},
+                            "id": "call-1",
+                        }
+                    ],
+                )
+
+        monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
+        registry = MagicMock()
+        registry.get.return_value = None
+
+        result = model_node.call_model(
+            {
+                "messages": [HumanMessage(content="查一下数据")],
+                "status": "running",
+                "step_count": 0,
+                "max_steps": 20,
+                "allowed_tool_groups": [],
+            },
+            {
+                "configurable": {
+                    "thread_id": "run-1",
+                    "model_name": "test-model",
+                    "api_key": "sk-test",
+                    "api_base": "http://example.test/v1",
+                    "registry": registry,
+                    "db": MagicMock(),
+                    "request": MagicMock(),
+                }
+            },
+        )
+
+        ai_msg = result["messages"][0]
+        assert "准备调用工具" in ai_msg.content
+        assert result["trace_events"][0]["content"] == ai_msg.content
 
 
 class TestContextSummaryMerge:
