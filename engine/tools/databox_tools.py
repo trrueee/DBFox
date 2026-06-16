@@ -66,9 +66,9 @@ def register_databox_tools() -> ToolRegistry:
     handlers.force_register("memory_summarize_session", memory_summarize_session)
 
     # -- Analysis tools ---------------------------------------------------
-    handlers.force_register("result_profile_handler", _result_profile_handler)
+    handlers.force_register("analyze_data_handler", _analyze_data_handler)
     handlers.force_register("chart_suggest_handler", _chart_suggest_handler)
-    handlers.force_register("answer_synthesize_handler", _answer_synthesize_handler)
+
 
     # -- Build registry from YAML specs + handlers -------------------------
     registry = ToolRegistry()
@@ -138,15 +138,20 @@ def _escalate_tool_group(ctx: ToolContext, args: dict[str, Any]) -> ToolObservat
 # ---- Analysis tool handlers ------------------------------------------------
 
 
-def _result_profile_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    """Profile the execution result set."""
-    execution = ctx.state_view.get("execution")
+def _analyze_data_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+    """Compute statistical profile from execution results.
+
+    Dual-path data access:
+    1. Explicit: model passes execution_result in args (clean, self-contained)
+    2. Implicit: falls back to ctx.state_view.get("execution") (zero-arg convenience)
+    """
+    execution = args.get("execution_result") or ctx.state_view.get("execution")
     if not execution or not execution.get("success"):
         return ToolObservation(
-            name="result.profile",
+            name="analyze_data",
             status="failed",
             input=args,
-            error="No successful execution result available to profile.",
+            error="No successful execution result available. Run db.query first.",
             latency_ms=0,
         )
     import time
@@ -155,7 +160,8 @@ def _result_profile_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObser
         question = args.get("question") or (ctx.request.question if ctx.request else "") or ""
         columns = list(execution.get("columns") or [])
         rows = list(execution.get("rows") or [])
-        result_profile = profile_result(
+        from engine.agent_core.result_profiler import profile_result
+        data_profile = profile_result(
             question=question,
             columns=columns,
             rows=rows,
@@ -163,22 +169,21 @@ def _result_profile_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObser
         )
         latency = int((time.monotonic() - start) * 1000)
         return ToolObservation(
-            name="result.profile",
+            name="analyze_data",
             status="success",
             input=args,
-            output=result_profile.model_dump(mode="json"),
+            output=data_profile.model_dump(mode="json"),
             latency_ms=latency,
         )
     except Exception as exc:
         latency = int((time.monotonic() - start) * 1000)
         return ToolObservation(
-            name="result.profile",
+            name="analyze_data",
             status="failed",
             input=args,
             error=str(exc),
             latency_ms=latency,
         )
-
 
 def _chart_suggest_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     """Suggest a chart type for the current result set."""
@@ -207,62 +212,6 @@ def _chart_suggest_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObserv
         latency = int((time.monotonic() - start) * 1000)
         return ToolObservation(
             name="chart.suggest",
-            status="failed",
-            input=args,
-            error=str(exc),
-            latency_ms=latency,
-        )
-
-
-def _answer_synthesize_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    """Synthesize a structured answer from analysis artifacts."""
-    import time
-    start = time.monotonic()
-    try:
-        state = ctx.state_view
-        question = args.get("question") or (ctx.request.question if ctx.request else "") or state.get("question") or ""
-        sql = state.get("sql") or ""
-        if isinstance(sql, dict):
-            sql = sql.get("sql") or ""
-        safety = state.get("safety")
-        execution = state.get("execution")
-        result_profile_raw = state.get("result_profile")
-        chart_suggestion = state.get("chart_suggestion")
-        suggestions = state.get("suggestions")
-
-        from engine.agent_core.types import ResultProfile
-        result_profile = None
-        if result_profile_raw:
-            if isinstance(result_profile_raw, ResultProfile):
-                result_profile = result_profile_raw
-            elif isinstance(result_profile_raw, dict):
-                try:
-                    result_profile = ResultProfile.model_validate(result_profile_raw)
-                except Exception:
-                    pass
-
-        answer = synthesize_agent_answer(
-            question=question,
-            query_plan=state.get("query_plan"),
-            sql=sql or None,
-            safety=safety,
-            execution=execution,
-            result_profile=result_profile,
-            suggestions=suggestions,
-            error=state.get("error"),
-        )
-        latency = int((time.monotonic() - start) * 1000)
-        return ToolObservation(
-            name="answer.synthesize",
-            status="success",
-            input=args,
-            output=answer.model_dump(mode="json"),
-            latency_ms=latency,
-        )
-    except Exception as exc:
-        latency = int((time.monotonic() - start) * 1000)
-        return ToolObservation(
-            name="answer.synthesize",
             status="failed",
             input=args,
             error=str(exc),
