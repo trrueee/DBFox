@@ -188,4 +188,111 @@ describe("agentTimeline", () => {
       "正在查找相近字段并修正查询。",
     ]);
   });
+
+  it("clears error when a reuse-strategy tool succeeds after failure (merge_strategy=reuse)", () => {
+    let timeline = createInitialAgentTimeline("test retry");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 2,
+      type: "agent.step.completed",
+      step: {
+        name: "query_database",
+        tool_name: "db.query",
+        status: "failed",
+        error: "TrustGate Error",
+        merge_strategy: "reuse",
+        latency_ms: 10,
+      },
+    }));
+    expect(timeline[1].error).toBe("TrustGate Error");
+    expect(timeline[1].status).toBe("failed");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 3,
+      type: "agent.step.completed",
+      step: {
+        name: "query_database",
+        tool_name: "db.query",
+        status: "success",
+        output: { rows: [{ cnt: 42 }] },
+        merge_strategy: "reuse",
+        latency_ms: 15,
+      },
+    }));
+
+    const toolItems = timeline.filter((item) => item.kind === "tool");
+    expect(toolItems).toHaveLength(1);
+    expect(toolItems[0].status).toBe("success");
+    expect(toolItems[0].error).toBeNull();
+    expect(toolItems[0].output).toEqual({ rows: [{ cnt: 42 }] });
+  });
+
+  it("does not clear error for new-strategy tools (each invocation separate)", () => {
+    let timeline = createInitialAgentTimeline("test");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 2,
+      type: "agent.step.completed",
+      step: {
+        name: "remember_database_semantics",
+        tool_name: "db.remember",
+        status: "failed",
+        error: "type and target are required",
+        merge_strategy: "new",
+        latency_ms: 5,
+      },
+    }));
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 3,
+      type: "agent.step.completed",
+      step: {
+        name: "remember_database_semantics",
+        tool_name: "db.remember",
+        status: "success",
+        output: { status: "remembered" },
+        merge_strategy: "new",
+        latency_ms: 8,
+      },
+    }));
+
+    const toolItems = timeline.filter((item) => item.kind === "tool");
+    expect(toolItems).toHaveLength(2);
+    expect(toolItems[0].status).toBe("failed");
+    expect(toolItems[0].error).toBe("type and target are required");
+    expect(toolItems[1].status).toBe("success");
+    expect(toolItems[1].error).toBeNull();
+  });
+
+  it("always_new strategy never reuses cards", () => {
+    let timeline = createInitialAgentTimeline("test");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 2,
+      type: "agent.step.completed",
+      step: {
+        name: "answer_synthesize",
+        tool_name: "answer.synthesize",
+        status: "success",
+        output: { answer: "first" },
+        merge_strategy: "always_new",
+        latency_ms: 5,
+      },
+    }));
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 3,
+      type: "agent.step.completed",
+      step: {
+        name: "answer_synthesize",
+        tool_name: "answer.synthesize",
+        status: "success",
+        output: { answer: "second" },
+        merge_strategy: "always_new",
+        latency_ms: 5,
+      },
+    }));
+
+    const toolItems = timeline.filter((item) => item.kind === "tool");
+    expect(toolItems).toHaveLength(2);
+    expect(toolItems[0].id).not.toBe(toolItems[1].id);
+  });
 });

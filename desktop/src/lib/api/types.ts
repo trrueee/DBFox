@@ -287,6 +287,7 @@ export interface AgentStep {
   output?: Record<string, unknown> | null;
   error?: string | null;
   latency_ms: number;
+  merge_strategy?: "reuse" | "new" | "always_new";
 }
 
 export interface AgentQueryPlan {
