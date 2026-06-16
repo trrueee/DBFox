@@ -11,6 +11,16 @@ _ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[
 
 
 # ---------------------------------------------------------------------------
+# State reset namespaces
+# ---------------------------------------------------------------------------
+
+RESET_SELF_HEALING: dict[str, Any] = {
+    "last_error_telemetry": None,
+    "last_failed_tool_call": None,
+}
+
+
+# ---------------------------------------------------------------------------
 # State appliers
 # ---------------------------------------------------------------------------
 
@@ -68,7 +78,10 @@ def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObs
     execution["success"] = output.get("status") == "success"
     execution["rowCount"] = output.get("rowCount", output.get("returned_rows", 0))
     execution["latencyMs"] = output.get("latencyMs", output.get("execution_time_ms", 0))
-    update: dict[str, Any] = {"execution": execution}
+    update: dict[str, Any] = {
+        "execution": execution,
+        **RESET_SELF_HEALING,
+    }
     if output.get("safe_sql"):
         update["sql"] = output.get("safe_sql")
     return update

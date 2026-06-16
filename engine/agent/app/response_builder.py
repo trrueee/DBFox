@@ -107,6 +107,9 @@ def build_response(
         "db.preview": "preview_table",
         "db.query": "query_database",
         "db.remember": "remember_database_semantics",
+        "result.profile": "profile_result",
+        "chart.suggest": "suggest_chart",
+        "answer.synthesize": "synthesize_answer",
     }
 
     raw_traces = state.get("trace_events") or []
