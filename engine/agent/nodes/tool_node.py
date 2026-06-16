@@ -13,32 +13,14 @@ from engine.tools.tool_runtime_gateway import ToolRuntimeGateway
 from engine.agent_core.tool_registry import ToolContext
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.tools.tool_aliases import to_internal, to_alias
+from engine.agent.tools.tool_aliases import STEP_NAME_MAP, to_internal, to_alias
 from engine.environment.dialect_resolver import resolve_datasource_dialect
 
 logger = logging.getLogger("databox.databox_agent.nodes.tool_node")
 
 
 def _step_name(tool_name: str) -> str:
-    step_names = {
-        "schema.list_tables": "list_tables",
-        "schema.describe_table": "describe_table",
-        "schema.refresh_catalog": "refresh_catalog",
-        "db.observe": "observe_database",
-        "db.search": "search_database",
-        "db.inspect": "inspect_database",
-        "db.preview": "preview_table",
-        "db.query": "query_database",
-        "db.remember": "remember_database_semantics",
-        "memory.search": "memory_search",
-        "memory.write": "memory_write",
-        "memory.delete": "memory_delete",
-        "memory.summarize_session": "summarize_session",
-        "result.profile": "profile_result",
-        "chart.suggest": "suggest_chart",
-        "answer.synthesize": "synthesize_answer",
-    }
-    return step_names.get(tool_name, tool_name)
+    return STEP_NAME_MAP.get(tool_name, tool_name)
 
 
 def execute_allowed_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
