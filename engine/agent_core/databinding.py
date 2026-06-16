@@ -87,16 +87,11 @@ def _apply_db_query(state: dict[str, Any], output: dict[str, Any], _obs: ToolObs
     return update
 
 
-def _apply_result_profile(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"result_profile": output}
-
+def _apply_analyze_data(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
+    return {"data_profile": output}
 
 def _apply_chart_suggest(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
     return {"chart_suggestion": output}
-
-
-def _apply_answer_synthesize(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
-    return {"answer": output, "final_answer": output}
 
 
 def _apply_workspace_prefix(_state: dict[str, Any], output: dict[str, Any], _obs: ToolObservation) -> dict[str, Any]:
@@ -136,17 +131,15 @@ TOOL_STATE_APPLIERS: dict[str, _ToolApplyFn] = {
     "db.inspect": _apply_db_inspect,
     "db.preview": _apply_db_preview,
     "db.query": _apply_db_query,
-    "result.profile": _apply_result_profile,
+    "analyze_data": _apply_analyze_data,
     "chart.suggest": _apply_chart_suggest,
-    "answer.synthesize": _apply_answer_synthesize,
 }
 
 _ARTIFACT_TOOLS: frozenset[str] = frozenset({
     "db.preview",
     "db.query",
-    "result.profile",
+    "analyze_data",
     "chart.suggest",
-    "answer.synthesize",
 })
 
 
