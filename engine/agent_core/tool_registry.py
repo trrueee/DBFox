@@ -400,6 +400,7 @@ TOOL_GROUP_MAP: dict[str, str] = {
     "result.": "result",
     "chart.": "chart",
     "answer.": "answer",
+    "analyze_data": "result",
 }
 
 
