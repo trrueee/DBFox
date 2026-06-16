@@ -1,4 +1,4 @@
-"""Tests for the analysis agent flow — result.profile, chart.suggest, answer.synthesize.
+"""Tests for the analysis agent flow — analyze_data, chart.suggest.
 
 Covers:
 - Safe tool groups include analysis tools
@@ -170,7 +170,9 @@ class TestAnalysisHandlers:
 # ---------------------------------------------------------------------------
 
 class TestProgressGuard:
-    def test_guard_continues_after_query_without_profile(self):
+    def test_guard_does_not_block_single_query_without_profile(self):
+        """With relaxed guard, a single db.query without profile does NOT trigger
+        the analysis guard. The model is free to answer directly or call analyze_data."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
             "status": "running",
@@ -183,9 +185,31 @@ class TestProgressGuard:
             "last_tool_results": [],
         }
         result = deterministic_progress_fastpath(state)
+        # Guard should not fire for single query at low step count
+        if result is not None:
+            assert "profiling" not in result["progress_decision"].get("reason_summary", "").lower()
+
+    def test_guard_blocks_cycling_queries_without_profile(self):
+        """Relaxed guard fires when model calls db.query >=2 times without
+        analysis or answer, AND step_count > 4."""
+        from engine.agent.progress.fast_path import deterministic_progress_fastpath
+        state = {
+            "status": "running",
+            "step_count": 6,
+            "max_steps": 20,
+            "execution": {"success": True, "rowCount": 10},
+            "data_profile": None,
+            "answer": None,
+            "messages": [],
+            "last_tool_results": [
+                {"name": "query_database", "status": "success"},
+                {"name": "query_database", "status": "success"},
+            ],
+        }
+        result = deterministic_progress_fastpath(state)
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "profiling" in result["progress_decision"]["reason_summary"].lower()
+        assert "analyze_data" in result["progress_decision"]["next_action_hint"]
 
     def test_guard_allows_finalize_with_answer(self):
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
@@ -203,7 +227,9 @@ class TestProgressGuard:
         assert result is not None
         assert result["progress_decision"]["status"] == "complete"
 
-    def test_guard_still_profiles_query_result_when_max_steps_reached(self):
+    def test_guard_blocks_cycling_queries_even_at_max_steps(self):
+        """Relaxed guard still fires at max_steps when model is cycling queries
+        without analysis — the analysis guard check precedes the max_steps check."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
             "status": "running",
@@ -213,14 +239,17 @@ class TestProgressGuard:
             "data_profile": None,
             "answer": None,
             "messages": [],
-            "last_tool_results": [],
+            "last_tool_results": [
+                {"name": "query_database", "status": "success"},
+                {"name": "query_database", "status": "success"},
+            ],
         }
 
         result = deterministic_progress_fastpath(state)
 
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "profiling" in result["progress_decision"]["reason_summary"].lower()
+        assert "analyze_data" in result["progress_decision"]["next_action_hint"]
         assert "error" not in result
 
     def test_guard_final_text_wins_over_max_steps_without_error(self):

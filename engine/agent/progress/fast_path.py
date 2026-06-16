@@ -180,19 +180,31 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
             "trace_events": [progress_trace(decision, fastpath=True)],
         }
 
-    # ---- Analysis guard: db.query succeeded but no analysis step yet --------
+    # ---- Analysis hint: db.query succeeded but no analysis step yet --------
+    # Since analyze_data is optional (simple queries skip it), we no longer
+    # force a "continue" here. The model can choose to answer directly.
+    # We only emit a gentle hint when the model appears stuck (cycling).
     execution = state.get("execution")
     if (isinstance(execution, dict) and execution.get("success")
-            and not state.get("data_profile") and not state.get("answer")):
-        decision = progress_decision_dict(
-            status="continue",
-            reason_summary="Query succeeded but result profiling not yet performed.",
-            next_action_hint="Call analyze_data to analyze the query result before answering.",
+            and not state.get("data_profile") and not state.get("answer")
+            and not state.get("final_answer")):
+        # Only intervene if model has been cycling (called db.query multiple times
+        # without producing text or calling analyze_data)
+        last_tool_results = state.get("last_tool_results") or []
+        query_call_count = sum(
+            1 for r in last_tool_results
+            if isinstance(r, dict) and r.get("name") == "query_database"
         )
-        return {
-            "progress_decision": decision,
-            "trace_events": [progress_trace(decision, fastpath=True)],
-        }
+        if query_call_count >= 2 and step_count > 4:
+            decision = progress_decision_dict(
+                status="continue",
+                reason_summary="Multiple db.query calls without analysis or answer — consider calling analyze_data or answering the user.",
+                next_action_hint="You have query results. Consider calling analyze_data for complex data, or answer the user directly if the results are simple.",
+            )
+            return {
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
 
     messages = state.get("messages") or []
     if messages:
@@ -349,8 +361,8 @@ def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
             and not state.get("data_profile") and not state.get("answer")):
         decision = ProgressDecision(
             status="continue",
-            reason_summary="Query succeeded but result profiling not yet performed.",
-            next_action_hint="Call analyze_data to analyze the query result before answering.",
+            reason_summary="Query succeeded. You may call analyze_data for complex results, or answer directly.",
+            next_action_hint="Consider calling analyze_data for complex data, or answer the user directly if the results are simple.",
         )
     elif step_count >= max_steps:
         max_steps_error = _max_steps_reason(state, max_steps)

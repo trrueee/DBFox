@@ -99,14 +99,6 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
             if caveat not in caveats:
                 caveats.append(caveat)
 
-    # Clean up any raw tool node prefix from answer if present
-    if isinstance(answer_payload.get("answer"), str):
-        ans_str = answer_payload["answer"]
-        if ans_str.startswith("[") and "]" in ans_str:
-            parts = ans_str.split("]", 1)
-            if len(parts) > 1:
-                answer_payload["answer"] = parts[1].strip()
-
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
         "status": status,
