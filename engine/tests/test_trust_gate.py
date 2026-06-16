@@ -19,6 +19,25 @@ def test_trust_gate_safe_select(db_session, test_datasource) -> None:
     assert result["guardrail"]["result"] == "pass"
 
 
+def test_trust_gate_allows_order_by_projection_alias(db_session, test_datasource) -> None:
+    sync_schema(db_session, test_datasource.id)
+
+    result = TrustGate(db_session, validate_sql_schema).evaluate(
+        test_datasource.id,
+        """
+        SELECT username, COUNT(*) AS invocation_count
+        FROM users
+        GROUP BY username
+        ORDER BY invocation_count DESC
+        LIMIT 10
+        """,
+        policy="agent_readonly",
+    )
+
+    assert result["schemaWarnings"] == []
+    assert result["riskLevel"] == "safe"
+
+
 def test_trust_gate_schema_warning_requires_confirmation(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
 
