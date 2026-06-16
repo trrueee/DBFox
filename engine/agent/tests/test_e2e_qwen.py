@@ -109,9 +109,8 @@ class TestRealModelToolCalling:
             "sql_execute_readonly",
             "sql_skip_execution",
             "sql_revise",
-            "result_profile",
+            "analyze_data",
             "chart_suggest",
-            "answer_synthesize",
         }
         missing = expected - tool_names
         assert not missing, f"Missing alias tools: {missing}"
@@ -218,14 +217,12 @@ class TestExecuteFalse:
                 f"Steps: {step_names}"
             )
 
-        # sql.skip_execution SHOULD appear (or answer.synthesize directly)
+        # sql.skip_execution SHOULD appear
         allowed_skip = {
             "skip_execution",
             "sql.skip_execution",
             "sql_skip_execution",
-            "answer_synthesizer",
-            "answer.synthesize",
-            "answer_synthesize",
+            "analyze_data",
             "generate_sql_candidate",
             "sql.generate",
             "sql_generate",

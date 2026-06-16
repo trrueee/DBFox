@@ -40,9 +40,9 @@ TOOL_CONTRACTS.update({
         tool_name="db.remember",
         merge_strategy="new",
     ),
-    "answer.synthesize": ToolStateContract(
-        tool_name="answer.synthesize",
-        merge_strategy="always_new",
+    "analyze_data": ToolStateContract(
+        tool_name="analyze_data",
+        merge_strategy="new",
         emit_artifact=True,
     ),
 })

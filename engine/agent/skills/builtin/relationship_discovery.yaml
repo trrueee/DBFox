@@ -17,7 +17,6 @@ allowed_tool_groups:
   - schema
   - semantic
   - memory
-  - answer
 
 forbidden_tool_groups:
   - sql_generation
@@ -32,7 +31,6 @@ steps:
   - schema.describe_table
   - schema.build_context
   - semantic.resolve
-  - answer.synthesize
 
 success_criteria:
   - related tables are listed

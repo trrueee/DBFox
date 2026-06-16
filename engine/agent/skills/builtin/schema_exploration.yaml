@@ -16,7 +16,6 @@ use_when:
 allowed_tool_groups:
   - environment
   - schema
-  - answer
 
 forbidden_tool_groups:
   - sql_generation
@@ -30,7 +29,6 @@ steps:
   - schema.list_tables
   - schema.describe_table
   - schema.build_context
-  - answer.synthesize
 
 success_criteria:
   - relevant tables are listed with column details
