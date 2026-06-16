@@ -10,8 +10,7 @@ from engine.agent.model.context_builder import build_context_message, build_prog
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DataBoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.graph.message_utils import first_user_text, message_content_text, message_tool_calls
-from engine.agent.tools.tool_aliases import to_internal
+from engine.agent.graph.message_utils import first_user_text, message_content_text
 from engine.agent.progress.fast_path import _max_steps_reason
 
 import logging
@@ -125,8 +124,7 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
 
     messages.extend(history)
 
-    raw_msg = model_with_tools.invoke(messages, config)
-    ai_msg = _with_visible_tool_call_content(raw_msg)
+    ai_msg = model_with_tools.invoke(messages, config)
 
     return {
         "messages": [ai_msg],
@@ -139,38 +137,6 @@ def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, An
         ],
         "step_count": state.get("step_count", 0) + 1,
     }
-
-
-def _with_visible_tool_call_content(ai_msg: Any) -> Any:
-    """Inject a concise visible plan when the provider returns empty content
-    with tool_calls (common with Qwen and other providers that omit the
-    text field when tool_calls are present)."""
-    if message_content_text(ai_msg):
-        return ai_msg
-    tool_calls = message_tool_calls(ai_msg)
-    if not tool_calls:
-        return ai_msg
-
-    names: list[str] = []
-    for call in tool_calls[:3]:
-        if isinstance(call, dict):
-            raw_name = str(call.get("name") or "")
-        else:
-            raw_name = str(getattr(call, "name", "") or "")
-        if raw_name:
-            names.append(to_internal(raw_name))
-    if not names:
-        return ai_msg
-
-    visible_content = f"准备调用工具：{', '.join(names)}"
-    try:
-        return ai_msg.model_copy(update={"content": visible_content})
-    except Exception:
-        try:
-            ai_msg.content = visible_content
-        except Exception:
-            pass
-        return ai_msg
 
 
 def _build_escalate_tool(registry: Any) -> Any | None:
