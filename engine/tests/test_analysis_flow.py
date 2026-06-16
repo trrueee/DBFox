@@ -296,3 +296,10 @@ class TestSystemPrompt:
         assert "result.profile" in SYSTEM_PROMPT
         assert "chart.suggest" in SYSTEM_PROMPT
         assert "answer.synthesize" in SYSTEM_PROMPT
+
+    def test_prompt_requires_text_with_tool_calls(self):
+        """The prompt must instruct the model to include Chinese text alongside tool calls.
+        Without this, Qwen returns empty content when tools are bound."""
+        from engine.agent.model.system_prompt import SYSTEM_PROMPT
+        assert "Always speak" in SYSTEM_PROMPT
+        assert "Never send an empty message" in SYSTEM_PROMPT
