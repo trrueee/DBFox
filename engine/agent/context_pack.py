@@ -306,7 +306,7 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
     )
 
     # -- Result --------------------------------------------------------------
-    result_raw = state.get("result_profile") or {}
+    result_raw = state.get("data_profile") or {}
     result = ResultSection(
         row_count=int(result_raw.get("row_count") or 0),
         notable_facts=_normalize_str_list(result_raw.get("notable_facts") or [])[:5],
