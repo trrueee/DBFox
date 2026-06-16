@@ -5,7 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DataBoxAgentState
-from engine.agent.graph.message_utils import first_user_text, is_ai_message, message_content_text
+from engine.agent.graph.message_utils import first_user_text, message_content_text
 
 logger = logging.getLogger("databox.databox_agent.nodes.finalize_node")
 
@@ -25,18 +25,11 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
     answer_text = ""
     if messages:
         last = messages[-1]
-        if is_ai_message(last):
-            answer_text = message_content_text(last)
-
-    existing_answer = state.get("answer")
-    existing_answer_text = ""
-    if isinstance(existing_answer, dict):
-        existing_answer_text = str(existing_answer.get("answer") or "").strip()
-    final_answer_text = existing_answer_text or answer_text
+        answer_text = message_content_text(last)
 
     if pending_approval:
         status = "waiting_approval"
-    elif final_answer_text:
+    elif answer_text:
         status = "completed"
         error = None
     elif error:
@@ -47,9 +40,10 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
             error = "Agent completed without producing an answer."
 
     # Build answer payload for AgentRunResponse compatibility
+    existing_answer = state.get("answer")
     if isinstance(existing_answer, dict):
         answer_payload = {
-            "answer": final_answer_text,
+            "answer": answer_text or existing_answer.get("answer") or "",
             "key_findings": existing_answer.get("key_findings") or [],
             "evidence": existing_answer.get("evidence") or [],
             "caveats": existing_answer.get("caveats") or [],
@@ -58,7 +52,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         }
     else:
         answer_payload = {
-            "answer": final_answer_text,
+            "answer": answer_text,
             "key_findings": [],
             "evidence": [],
             "caveats": [],
@@ -66,7 +60,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
             "follow_up_questions": [],
         }
 
-    if final_answer_text and original_error:
+    if answer_text and original_error:
         caveats = answer_payload.setdefault("caveats", [])
         if isinstance(caveats, list):
             caveat = f"部分后续检查未完成：{original_error}"
@@ -84,7 +78,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
         "status": status,
-        "has_answer": bool(final_answer_text),
+        "has_answer": bool(answer_text),
         "has_error": bool(original_error),
     }
     if original_error and status == "completed":
@@ -93,7 +87,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
         trace_event["pending_approval"] = True
 
     # ---- Auto-write trajectory to memory (Agent v2) -----------------------
-    _auto_write_trajectory(state, status, final_answer_text)
+    _auto_write_trajectory(state, status, answer_text)
 
     result: dict[str, Any] = {
         "status": status,
