@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Minus, Square, X } from "lucide-react";
 import { FoxIcon } from "./brand/FoxIcon";
+import { ThemeToggle } from "./ThemeToggle";
 import "./TitleBar.css";
 
 function isTauriRuntime(): boolean {
@@ -48,8 +49,6 @@ export default function TitleBar() {
     };
   }, []);
 
-  if (!isTauriRuntime()) return null;
-
   const handleMinimize = async () => {
     try {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -81,28 +80,33 @@ export default function TitleBar() {
         </span>
         <span className="titlebar-title">DataBox</span>
       </span>
-      <div className="titlebar-controls">
-        <button
-          className="titlebar-btn"
-          onClick={handleMinimize}
-          title="最小化"
-        >
-          <Minus size={14} />
-        </button>
-        <button
-          className="titlebar-btn"
-          onClick={handleToggleMaximize}
-          title={maximized ? "还原" : "最大化"}
-        >
-          <Square size={12} />
-        </button>
-        <button
-          className="titlebar-btn titlebar-btn-close"
-          onClick={handleClose}
-          title="关闭"
-        >
-          <X size={14} />
-        </button>
+      <div className="titlebar-controls" style={{ gap: "8px" }}>
+        <ThemeToggle />
+        {isTauriRuntime() && (
+          <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+            <button
+              className="titlebar-btn"
+              onClick={handleMinimize}
+              title="最小化"
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              className="titlebar-btn"
+              onClick={handleToggleMaximize}
+              title={maximized ? "还原" : "最大化"}
+            >
+              <Square size={12} />
+            </button>
+            <button
+              className="titlebar-btn titlebar-btn-close"
+              onClick={handleClose}
+              title="关闭"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

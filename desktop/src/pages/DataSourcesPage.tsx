@@ -428,14 +428,14 @@ export const DataSourcesPage = ({
     v ? new Date(v).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
 
   const dbBadge = (ds: DataSource) =>
-    ds.db_type === "postgresql" ? { label: "PG", color: "#818CF8" }
-    : ds.db_type === "sqlite" ? { label: "Lite", color: "#94A3B8" }
-    : { label: "MySQL", color: "#60A5FA" };
+    ds.db_type === "postgresql" ? { label: "PG", color: "var(--color-primary)", bg: "var(--color-primary-soft)" }
+    : ds.db_type === "sqlite" ? { label: "Lite", color: "var(--color-text-muted)", bg: "var(--color-border)" }
+    : { label: "MySQL", color: "var(--color-info)", bg: "var(--color-info-soft)" };
 
   const envBadge = (env?: string) =>
-    env === "prod" ? { label: "生产", color: "var(--accent-red)" }
-    : env === "test" ? { label: "测试", color: "var(--accent-amber)" }
-    : { label: "开发", color: "var(--text-secondary)" };
+    env === "prod" ? { label: "生产", color: "var(--color-danger)", bg: "var(--color-danger-soft)" }
+    : env === "test" ? { label: "测试", color: "var(--color-warning)", bg: "var(--color-warning-soft)" }
+    : { label: "开发", color: "var(--color-text-secondary)", bg: "var(--color-border)" };
 
   // ---- Render modes ----
 
@@ -458,15 +458,15 @@ export const DataSourcesPage = ({
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => startEdit(selected)}>编辑</button>
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleSync} disabled={actionState === "syncing"}><RefreshCw size={12} className={actionState === "syncing" ? "animate-spin" : ""} /> 同步</button>
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleHealthCheck} disabled={actionState === "testing"}><Activity size={12} /> 检测</button>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--accent-red)" }} onClick={handleDelete} disabled={actionState === "deleting"}><Trash2 size={12} /> 删除</button>
+            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={actionState === "deleting"}><Trash2 size={12} /> 删除</button>
           </div>
         </div>
         
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: dbBadge(selected).color, background: "rgba(59,130,246,0.08)", padding: "2px 8px", borderRadius: 4 }}>{dbBadge(selected).label}</span>
-          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: envBadge(selected.env).color, background: "rgba(100,116,139,0.06)", padding: "2px 8px", borderRadius: 4 }}>{envBadge(selected.env).label}</span>
-          {selected.is_read_only && <span style={{ fontSize: "0.7rem", color: "var(--accent-indigo)", background: "rgba(91,92,240,0.06)", padding: "2px 8px", borderRadius: 4 }}>只读</span>}
-          {selected.enable_embedding_recall && <span style={{ fontSize: "0.7rem", color: "var(--accent-green)", background: "rgba(16,185,129,0.06)", padding: "2px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 3 }}><Sparkles size={10} /> 语义召回</span>}
+          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: dbBadge(selected).color, background: dbBadge(selected).bg, padding: "2px 8px", borderRadius: 4 }}>{dbBadge(selected).label}</span>
+          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: envBadge(selected.env).color, background: envBadge(selected.env).bg, padding: "2px 8px", borderRadius: 4 }}>{envBadge(selected.env).label}</span>
+          {selected.is_read_only && <span style={{ fontSize: "0.7rem", color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "2px 8px", borderRadius: 4 }}>只读</span>}
+          {selected.enable_embedding_recall && <span style={{ fontSize: "0.7rem", color: "var(--color-success)", background: "var(--color-success-soft)", padding: "2px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 3 }}><Sparkles size={10} /> 语义召回</span>}
         </div>
 
         {/* Tab switcher */}
@@ -477,8 +477,8 @@ export const DataSourcesPage = ({
             style={{ 
               padding: "8px 4px", 
               fontSize: "0.85rem", 
-              borderBottom: activeTab === "info" ? "2px solid var(--accent-indigo)" : "2px solid transparent", 
-              color: activeTab === "info" ? "var(--text-primary)" : "var(--text-muted)", 
+              borderBottom: activeTab === "info" ? "2px solid var(--color-primary)" : "2px solid transparent", 
+              color: activeTab === "info" ? "var(--color-text-primary)" : "var(--color-text-muted)", 
               background: "none", 
               borderTop: "none",
               borderLeft: "none",
@@ -493,8 +493,8 @@ export const DataSourcesPage = ({
             style={{ 
               padding: "8px 4px", 
               fontSize: "0.85rem", 
-              borderBottom: activeTab === "aliases" ? "2px solid var(--accent-indigo)" : "2px solid transparent", 
-              color: activeTab === "aliases" ? "var(--text-primary)" : "var(--text-muted)", 
+              borderBottom: activeTab === "aliases" ? "2px solid var(--color-primary)" : "2px solid transparent", 
+              color: activeTab === "aliases" ? "var(--color-text-primary)" : "var(--color-text-muted)", 
               background: "none", 
               borderTop: "none",
               borderLeft: "none",
@@ -515,22 +515,22 @@ export const DataSourcesPage = ({
               <div><span className="field-label">用户名</span><div style={{ fontSize: "0.82rem" }}>{selected.username || "-"}</div></div>
               <div><span className="field-label">环境</span><div style={{ fontSize: "0.82rem" }}>{envBadge(selected.env).label}</div></div>
               <div><span className="field-label">只读</span><div style={{ fontSize: "0.82rem" }}>{selected.is_read_only ? "是" : "否"}</div></div>
-              <div><span className="field-label">语义召回</span><div style={{ fontSize: "0.82rem", color: selected.enable_embedding_recall ? "var(--accent-green)" : "var(--text-muted)", fontWeight: 600 }}>{selected.enable_embedding_recall ? "已启用" : "已禁用"}</div></div>
+              <div><span className="field-label">语义召回</span><div style={{ fontSize: "0.82rem", color: selected.enable_embedding_recall ? "var(--color-success)" : "var(--color-text-muted)", fontWeight: 600 }}>{selected.enable_embedding_recall ? "已启用" : "已禁用"}</div></div>
             </div>
             <h4 className="field-label" style={{ marginBottom: 8 }}>状态</h4>
             <div className="hifi-datasource-metrics">
-              <div><span className="field-label">连接</span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: h === "success" ? "var(--accent-green)" : h === "error" ? "var(--accent-red)" : "#cbd5e1", marginRight: 4 }} />{h === "success" ? "正常" : h === "error" ? "失败" : "未检测"}{selected.last_test_latency_ms ? <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}> {selected.last_test_latency_ms}ms</span> : null}</div>
+              <div><span className="field-label">连接</span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: h === "success" ? "var(--color-success)" : h === "error" ? "var(--color-danger)" : "var(--color-border-hover)", marginRight: 4 }} />{h === "success" ? "正常" : h === "error" ? "失败" : "未检测"}{selected.last_test_latency_ms ? <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}> {selected.last_test_latency_ms}ms</span> : null}</div>
               <div><span className="field-label">上次同步</span><div style={{ fontSize: "0.82rem" }}>{fmtDate(selected.last_sync_at)}</div></div>
               <div><span className="field-label">表数量</span><div style={{ fontSize: "0.82rem" }}>{selected.last_test_tables_count ?? "-"}</div></div>
             </div>
-            {selected.last_test_error && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--accent-red)" }}>{selected.last_test_error}</div>}
+            {selected.last_test_error && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-danger)" }}>{selected.last_test_error}</div>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 0 }}>
             {/* Warning if semantic recall is disabled */}
             {!selected.enable_embedding_recall && (
-              <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 8, padding: 12, display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <AlertTriangle size={16} style={{ color: "var(--accent-amber)", flexShrink: 0, marginTop: 1 }} />
+              <div style={{ background: "var(--color-warning-soft)", border: "1px solid var(--color-warning)", borderRadius: 8, padding: 12, display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <AlertTriangle size={16} style={{ color: "var(--color-warning)", flexShrink: 0, marginTop: 1 }} />
                 <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)" }}>
                   当前数据源未启用 <strong>向量语义召回</strong>。添加别名后，系统会退化为纯关键词匹配，无法利用 DashScope 向量模型实现模糊语义理解。请在编辑数据源时勾选并保存 “启用向量语义召回” 配置。
                 </div>
@@ -541,7 +541,7 @@ export const DataSourcesPage = ({
             <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 16, border: "1px solid var(--border-light)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Sparkles size={14} style={{ color: "var(--accent-indigo)" }} />
+                  <Sparkles size={14} style={{ color: "var(--color-primary)" }} />
                   <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>向量特征同步状态</span>
                 </div>
                 {selected.enable_embedding_recall && (
@@ -639,7 +639,7 @@ export const DataSourcesPage = ({
                   </button>
                 </div>
               </div>
-              {aliasError && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--accent-red)" }}>{aliasError}</div>}
+              {aliasError && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-danger)" }}>{aliasError}</div>}
             </div>
 
             {/* List of aliases */}
@@ -672,7 +672,7 @@ export const DataSourcesPage = ({
                           <tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
                             <td style={{ padding: "8px 12px", fontWeight: 600 }}><Tag size={12} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4, color: "var(--text-muted)" }} />{a.alias}</td>
                             <td style={{ padding: "8px 12px" }}>
-                              <span style={{ fontSize: "0.7rem", color: a.target_type === "table" ? "var(--accent-indigo)" : "var(--accent-amber)", background: a.target_type === "table" ? "rgba(91,92,240,0.06)" : "rgba(245,158,11,0.06)", padding: "2px 6px", borderRadius: 4 }}>
+                              <span style={{ fontSize: "0.7rem", color: a.target_type === "table" ? "var(--color-primary)" : "var(--color-warning)", background: a.target_type === "table" ? "var(--color-primary-soft)" : "var(--color-warning-soft)", padding: "2px 6px", borderRadius: 4 }}>
                                 {a.target_type === "table" ? "表" : "列"}
                               </span>
                             </td>
@@ -682,15 +682,15 @@ export const DataSourcesPage = ({
                               {!selected.enable_embedding_recall ? (
                                 <span style={{ color: "var(--text-muted)" }}>未启用语义召回</span>
                               ) : isStale ? (
-                                <span style={{ fontSize: "0.7rem", color: "var(--accent-amber)", background: "rgba(245,158,11,0.08)", padding: "2px 6px", borderRadius: 4 }}>待同步</span>
+                                <span style={{ fontSize: "0.7rem", color: "var(--color-warning)", background: "var(--color-warning-soft)", padding: "2px 6px", borderRadius: 4 }}>待同步</span>
                               ) : (
-                                <span style={{ fontSize: "0.7rem", color: "var(--accent-green)", background: "rgba(16,185,129,0.08)", padding: "2px 6px", borderRadius: 4 }}>已同步</span>
+                                <span style={{ fontSize: "0.7rem", color: "var(--color-success)", background: "var(--color-success-soft)", padding: "2px 6px", borderRadius: 4 }}>已同步</span>
                               )}
                             </td>
                             <td style={{ padding: "8px 12px", textAlign: "right" }}>
                               <button 
                                 type="button"
-                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent-red)", padding: 4 }} 
+                                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)", padding: 4 }} 
                                 onClick={() => handleDeleteAlias(a.id)}
                               >
                                 <Trash2 size={12} />
@@ -733,13 +733,13 @@ export const DataSourcesPage = ({
               {filtered.map((ds) => (
                 <button key={ds.id} className={`hifi-datasource-list-item${ds.id === selectedId ? " active" : ""}`} onClick={() => { setMode("detail"); setSelectedId(ds.id); }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Database size={12} style={{ color: ds.id === selectedId ? "var(--accent-indigo)" : "var(--text-muted)", flexShrink: 0 }} />
+                    <Database size={12} style={{ color: ds.id === selectedId ? "var(--color-primary)" : "var(--text-muted)", flexShrink: 0 }} />
                     <span style={{ fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.name}</span>
                   </div>
                   <div style={{ display: "flex", gap: 4, marginTop: 2 }}>
                     <span style={{ fontSize: "0.6rem", color: dbBadge(ds).color }}>{dbBadge(ds).label}</span>
                     <span style={{ fontSize: "0.6rem", color: envBadge(ds.env).color }}>{envBadge(ds.env).label}</span>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: healthType(ds) === "success" ? "var(--accent-green)" : healthType(ds) === "error" ? "var(--accent-red)" : "#cbd5e1", marginLeft: "auto" }} />
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: healthType(ds) === "success" ? "var(--color-success)" : healthType(ds) === "error" ? "var(--color-danger)" : "var(--color-border-hover)", marginLeft: "auto" }} />
                   </div>
                 </button>
               ))}
@@ -758,9 +758,9 @@ export const DataSourcesPage = ({
                     {[{ id: "mysql", label: "MySQL", icon: "🐬" }, { id: "postgresql", label: "PostgreSQL", icon: "🐘" }, { id: "sqlite", label: "SQLite", icon: "📁" }].map((item) => (
                       <button key={item.id} type="button" onClick={() => { updateForm("db_type", item.id); if (item.id === "mysql") updateForm("port", 3306); else if (item.id === "postgresql") updateForm("port", 5432); else updateForm("port", 0); }}
                         style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", borderRadius: 8,
-                          border: form.db_type === item.id ? "2px solid var(--accent-indigo)" : "1px solid var(--border-light)",
-                          background: form.db_type === item.id ? "rgba(79,70,229,0.08)" : "var(--bg-secondary)",
-                          color: form.db_type === item.id ? "var(--accent-indigo)" : "var(--text-secondary)", fontWeight: form.db_type === item.id ? 600 : 500, cursor: "pointer" }}
+                          border: form.db_type === item.id ? "2px solid var(--color-primary)" : "1px solid var(--border-light)",
+                          background: form.db_type === item.id ? "var(--color-primary-soft)" : "var(--bg-secondary)",
+                          color: form.db_type === item.id ? "var(--color-primary)" : "var(--text-secondary)", fontWeight: form.db_type === item.id ? 600 : 500, cursor: "pointer" }}
                       ><span>{item.icon}</span><span>{item.label}</span></button>
                     ))}
                   </div>
@@ -837,7 +837,7 @@ export const DataSourcesPage = ({
                 {/* Error / Test result */}
                 {formError && <div style={{ marginTop: 12 }}><StatusIndicator type="error" label={formError} /></div>}
                 {testResult.status !== "idle" && (
-                  <div style={{ marginTop: 16, padding: 14, borderRadius: 8, borderLeft: "3px solid", borderLeftColor: testResult.status === "success" ? "var(--accent-green)" : testResult.status === "error" ? "var(--accent-red)" : "var(--accent-amber)" }}>
+                  <div style={{ marginTop: 16, padding: 14, borderRadius: 8, borderLeft: "3px solid", borderLeftColor: testResult.status === "success" ? "var(--color-success)" : testResult.status === "error" ? "var(--color-danger)" : "var(--color-warning)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: "0.88rem" }}>
                       {testResult.status === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}{testResult.message}
                     </div>
