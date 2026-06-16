@@ -150,14 +150,23 @@ def api_update_alias(id: str, req: SemanticAliasUpdateRequest, db: Session = Dep
     item = db.query(SemanticAlias).filter(SemanticAlias.id == id).first()
     if not item:
         raise HTTPException(status_code=404, detail={"code": "ALIAS_NOT_FOUND", "message": f"Alias {id} not found."})
+    alias_changed = False
+    description_changed = False
     if req.alias is not None:
-        item.alias = req.alias  # type: ignore[assignment]
+        if req.alias != item.alias:
+            item.alias = req.alias  # type: ignore[assignment]
+            alias_changed = True
     if req.target_type is not None:
         item.target_type = req.target_type  # type: ignore[assignment]
     if req.target is not None:
         item.target = req.target  # type: ignore[assignment]
     if req.description is not None:
-        item.description = req.description  # type: ignore[assignment]
+        if req.description != item.description:
+            item.description = req.description  # type: ignore[assignment]
+            description_changed = True
+    if alias_changed or description_changed:
+        item.embedding_blob = None
+        item.embedding_synced_at = None
     db.commit()
     db.refresh(item)
     return _alias_to_dict(item)
