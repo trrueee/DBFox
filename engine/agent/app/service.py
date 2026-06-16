@@ -47,6 +47,7 @@ logger = logging.getLogger("databox.databox_agent.service")
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
     "environment", "schema", "db", "semantic", "memory",
+    "result", "chart", "answer",
 ]
 
 

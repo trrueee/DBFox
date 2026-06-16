@@ -338,6 +338,9 @@ TOOL_GROUP_MAP: dict[str, str] = {
     "db.": "db",
     "semantic.": "semantic",
     "memory.": "memory",
+    "result.": "result",
+    "chart.": "chart",
+    "answer.": "answer",
 }
 
 

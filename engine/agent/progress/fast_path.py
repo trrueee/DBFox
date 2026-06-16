@@ -182,6 +182,20 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
             "trace_events": [progress_trace(decision, fastpath=True)],
         }
 
+    # ---- Analysis guard: db.query succeeded but no analysis step yet --------
+    execution = state.get("execution")
+    if (isinstance(execution, dict) and execution.get("success")
+            and not state.get("result_profile") and not state.get("answer")):
+        decision = progress_decision_dict(
+            status="continue",
+            reason_summary="Query succeeded but result profiling not yet performed.",
+            next_action_hint="Call result.profile to analyze the query result before answering.",
+        )
+        return {
+            "progress_decision": decision,
+            "trace_events": [progress_trace(decision, fastpath=True)],
+        }
+
     messages = state.get("messages") or []
     if messages:
         last = messages[-1]
