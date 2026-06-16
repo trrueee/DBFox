@@ -99,7 +99,6 @@ def build_response(
         ),
     )
 
-    # Map raw trace events in state to AgentStep and AgentTraceEvent
     tool_to_step_name = {
         "db.observe": "observe_database",
         "db.search": "search_database",
@@ -107,9 +106,8 @@ def build_response(
         "db.preview": "preview_table",
         "db.query": "query_database",
         "db.remember": "remember_database_semantics",
-        "result.profile": "profile_result",
+        "analyze_data": "analyze_data",
         "chart.suggest": "suggest_chart",
-        "answer.synthesize": "synthesize_answer",
     }
 
     raw_traces = state.get("trace_events") or []
@@ -281,7 +279,7 @@ def build_response(
         execution=state.get("execution") if isinstance(state.get("execution"), dict) else None,
         explanation=explanation,
         chart_suggestion=state.get("chart_suggestion") if isinstance(state.get("chart_suggestion"), dict) else None,
-        result_profile=state.get("result_profile") if isinstance(state.get("result_profile"), dict) else None,
+        result_profile=state.get("data_profile") if isinstance(state.get("data_profile"), dict) else None,
         answer=answer,
         suggestions=suggestions,
         artifacts=artifacts or [],
