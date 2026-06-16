@@ -188,6 +188,25 @@ def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] 
             status="continue",
             reason_summary="Query succeeded but result profiling not yet performed.",
             next_action_hint="Call result.profile to analyze the query result before answering.",
+            user_visible_update="查询完成，正在分析结果。",
+        )
+        return {
+            "progress_decision": decision,
+            "trace_events": [progress_trace(decision, fastpath=True)],
+        }
+
+    if (isinstance(execution, dict) and execution.get("success")
+            and state.get("result_profile")
+            and not state.get("answer")
+            and not state.get("final_answer")):
+        decision = progress_decision_dict(
+            status="continue",
+            reason_summary="Query result has been profiled but no synthesized answer exists yet.",
+            next_action_hint=(
+                "Call answer.synthesize now to produce the final answer. "
+                "Do not call result.profile again unless the result changed."
+            ),
+            user_visible_update="结果画像完成，正在生成回答。",
         )
         return {
             "progress_decision": decision,
@@ -351,6 +370,20 @@ def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
             status="continue",
             reason_summary="Query succeeded but result profiling not yet performed.",
             next_action_hint="Call result.profile to analyze the query result before answering.",
+            user_visible_update="查询完成，正在分析结果。",
+        )
+    elif (isinstance(execution, dict) and execution.get("success")
+            and state.get("result_profile")
+            and not state.get("answer")
+            and not state.get("final_answer")):
+        decision = ProgressDecision(
+            status="continue",
+            reason_summary="Query result has been profiled but no synthesized answer exists yet.",
+            next_action_hint=(
+                "Call answer.synthesize now to produce the final answer. "
+                "Do not call result.profile again unless the result changed."
+            ),
+            user_visible_update="结果画像完成，正在生成回答。",
         )
     elif step_count >= max_steps:
         max_steps_error = _max_steps_reason(state, max_steps)
