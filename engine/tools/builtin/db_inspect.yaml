@@ -23,3 +23,6 @@ binding:
   produces_state_keys: [table_inspect]
 metadata:
   next_route: model
+state_contract:
+  on_success_clear: [error, last_error_telemetry, last_failed_tool_call]
+  merge_strategy: new

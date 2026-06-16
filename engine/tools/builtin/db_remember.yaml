@@ -36,3 +36,5 @@ policy:
   requires_approval: true
 metadata:
   next_route: model
+state_contract:
+  merge_strategy: new

@@ -14,3 +14,5 @@ input_schema:
       description: Why the catalog needs refreshing.
 metadata:
   next_route: answer
+state_contract:
+  merge_strategy: new

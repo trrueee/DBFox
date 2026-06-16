@@ -24,3 +24,6 @@ policy:
   risk_level: safe
 metadata:
   next_route: finalize
+state_contract:
+  merge_strategy: always_new
+  emit_artifact: true

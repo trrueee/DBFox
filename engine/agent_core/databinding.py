@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from engine.agent_core.tool_contract import get_contract
+from engine.agent_core.tool_registry import get_contract
 from engine.agent_core.types import ToolObservation
 
 _ToolApplyFn = Callable[[dict[str, Any], dict[str, Any], ToolObservation], dict[str, Any]]

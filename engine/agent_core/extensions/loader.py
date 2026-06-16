@@ -67,6 +67,7 @@ def load_tool_spec_from_dict(raw: dict[str, Any]) -> ToolSpec | None:
             artifact_types=binding_raw.get("artifact_types", []),
         )
 
+        contract_raw = raw.get("state_contract") or {}
         return ToolSpec(
             name=raw["name"],
             group=raw.get("group", ""),
@@ -80,6 +81,10 @@ def load_tool_spec_from_dict(raw: dict[str, Any]) -> ToolSpec | None:
             execution=execution,
             binding=binding,
             metadata=raw.get("metadata") or {},
+            on_success_clear=tuple(contract_raw.get("on_success_clear", ())),
+            on_success_reset=tuple(contract_raw.get("on_success_reset", ())),
+            merge_strategy=contract_raw.get("merge_strategy", "reuse"),
+            emit_artifact=contract_raw.get("emit_artifact", False),
         )
     except Exception as exc:
         logger.error("Failed to validate tool spec '%s': %s", raw.get("name", "?"), exc)

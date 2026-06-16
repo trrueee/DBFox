@@ -23,3 +23,6 @@ policy:
   risk_level: safe
 metadata:
   next_route: model
+state_contract:
+  merge_strategy: new
+  emit_artifact: true
