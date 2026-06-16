@@ -120,8 +120,9 @@ class SemanticAliasResolver:
                 ).scalar()
 
                 cached = cls._vector_cache.get(datasource_id)
-                # Use > to avoid false positives from μs-precision mismatch
-                if not cached or (max_updated is not None and max_updated > cached.get("max_updated")):
+                cached_updated = cached.get("max_updated") if cached else None
+                # Use > to avoid false positives from μs-precision mismatch; handle None comparison safely
+                if not cached or (max_updated is not None and (cached_updated is None or max_updated > cached_updated)):
                     # Rebuild vector matrix cache
                     embeddings = []
                     cached_aliases = []
