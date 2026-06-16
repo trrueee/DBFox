@@ -29,7 +29,7 @@ def _within_post_query_analysis_grace(
     return (
         isinstance(execution, dict)
         and execution.get("success")
-        and not state.get("result_profile")
+        and not state.get("data_profile")
         and not state.get("answer")
         and not state.get("final_answer")
         and step_count < max_steps + POST_QUERY_ANALYSIS_GRACE_STEPS

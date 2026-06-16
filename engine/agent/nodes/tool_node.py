@@ -105,8 +105,8 @@ def _execute_tool(
             merged_args["safety"] = state.get("safety")
         if "execution" not in merged_args:
             merged_args["execution"] = state.get("execution")
-        if "result_profile" not in merged_args:
-            merged_args["result_profile"] = state.get("result_profile")
+        if "data_profile" not in merged_args:
+            merged_args["data_profile"] = state.get("data_profile")
         if "chart_suggestion" not in merged_args:
             merged_args["chart_suggestion"] = state.get("chart_suggestion")
         if "suggestions" not in merged_args:
@@ -242,12 +242,12 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         preview = fixed[:200] + ("..." if len(fixed) > 200 else "") if fixed else ""
         return f"[sql.revise] can_fix=True, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
 
-    if tool_name == "result.profile":
+    if tool_name == "analyze_data":
         row_count = output.get("row_count", 0)
         facts = output.get("notable_facts") or []
         anomalies = output.get("anomalies") or []
         return (
-            f"[result.profile] OK. rows={row_count}, "
+            f"[analyze_data] OK. rows={row_count}, "
             f"notable_facts={facts[:5]}, anomalies={anomalies[:3]}"
         )
 
@@ -257,10 +257,6 @@ def _summarize_for_model(tool_name: str, obs: Any) -> str:
         y_col = output.get("y", "")
         reason = output.get("reason", "")
         return f"[chart.suggest] type={chart_type}, x={x_col}, y={y_col}, reason={reason}"
-
-    if tool_name == "answer.synthesize":
-        answer_text = output.get("answer", "")
-        return f"[answer.synthesize] {answer_text[:500]}"
 
     if tool_name == "followup.suggest":
         suggestions = output.get("suggestions") or []
