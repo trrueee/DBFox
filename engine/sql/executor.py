@@ -948,9 +948,16 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
             if alias.alias
         }
 
+        # Collect CTE names and subquery aliases to avoid false positive warnings
+        ctes = {cte.alias.lower() for cte in parsed.find_all(exp.CTE) if cte.alias}
+        subquery_aliases = {sub.alias.lower() for sub in parsed.find_all(exp.Subquery) if sub.alias}
+        temp_sources = ctes | subquery_aliases
+
         query_tables = []
         for table_node in parsed.find_all(exp.Table):
             t_name = table_node.name.lower()
+            if t_name in temp_sources:
+                continue
             query_tables.append(t_name)
             if t_name not in valid_schema:
                 warnings.append(f"生成 SQL 包含不存在的表: `{table_node.name}`")
@@ -974,10 +981,14 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
                         target_table = t_node.name.lower()
                         break
             if target_table:
+                if target_table in temp_sources:
+                    continue
                 if target_table in valid_schema:
                     if col_name not in valid_schema[target_table]:
                         warnings.append(f"生成 SQL 包含表 `{target_table}` 中不存在的字段: `{col_node.name}`")
             else:
+                if temp_sources:
+                    continue
                 queried_valid_tables = [t for t in query_tables if t in valid_schema]
                 if queried_valid_tables:
                     exists_in_any = any(col_name in valid_schema[t] for t in queried_valid_tables)
