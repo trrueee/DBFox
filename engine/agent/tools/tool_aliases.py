@@ -38,7 +38,6 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     # Analysis tools
     "result_profile": "result.profile",
     "chart_suggest": "chart.suggest",
-    "answer_synthesize": "answer.synthesize",
 }
 
 # Internal name → alias (reverse lookup, built once at import time)
@@ -63,7 +62,7 @@ STEP_NAME_MAP: dict[str, str] = {
     "memory.summarize_session": "summarize_session",
     "result.profile": "profile_result",
     "chart.suggest": "suggest_chart",
-    "answer.synthesize": "synthesize_answer",
+
     # New tool — step name equals internal name (identity mapping, but must
     # be present so _step_name() and _tool_name_from_step() handle it).
     "analyze_data": "analyze_data",
