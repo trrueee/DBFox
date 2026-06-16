@@ -23,6 +23,7 @@ export interface DatasourceFormShape {
   ssl_key_path?: string;
   ssl_verify_identity?: boolean;
   project_id?: string;
+  enable_embedding_recall?: boolean;
 }
 
 export function buildDatasourceTestPayload(form: DatasourceFormShape) {
@@ -57,6 +58,7 @@ export function buildDatasourceCreatePayload(form: DatasourceFormShape, projectI
     connection_mode: "direct",
     is_read_only: Boolean(form.is_read_only),
     env: form.env || "dev",
+    enable_embedding_recall: Boolean(form.enable_embedding_recall),
   };
 }
 
@@ -67,5 +69,6 @@ export function buildDatasourceUpdatePayload(form: DatasourceFormShape) {
     connection_mode: "direct",
     is_read_only: Boolean(form.is_read_only),
     env: form.env || "dev",
+    enable_embedding_recall: Boolean(form.enable_embedding_recall),
   };
 }

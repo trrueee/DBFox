@@ -113,7 +113,9 @@ def _schema_linking_payload(
     selected_tables: list[SchemaTable],
 ) -> dict[str, Any]:
     question = _linking_question(req, workspace)
-    linker = SchemaLinker(db)
+    linker = SchemaLinker(
+        db, api_key=req.api_key, api_base=req.api_base, model_name=req.model_name
+    )
     workspace_ids = [str(table.id) for table in selected_tables] or workspace.selected_table_ids
     try:
         if selected_tables:

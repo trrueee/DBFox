@@ -44,6 +44,7 @@ def _alias_to_dict(a: SemanticAlias) -> dict[str, Any]:
         "target_type": a.target_type,
         "target": a.target,
         "description": a.description,
+        "embedding_synced_at": a.embedding_synced_at.isoformat() if a.embedding_synced_at else None,
         "created_at": a.created_at.isoformat() if a.created_at else None,
         "updated_at": a.updated_at.isoformat() if a.updated_at else None,
     }
@@ -344,3 +345,54 @@ def api_update_table_scope(req: WorkspaceTableScopeUpdateRequest, db: Session = 
 
     db.commit()
     return {"success": True, "message": f"Table scope updated ({len(req.enabled_table_ids)} tables enabled)."}
+
+
+@router.post("/semantic/aliases/sync-embeddings")
+def api_sync_embeddings(
+    datasource_id: str = Query(...),
+    api_key: str | None = Query(None),
+    api_base: str | None = Query(None),
+    model_name: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    _check_datasource(db, datasource_id)
+    from engine.semantic.embeddings import EmbeddingService
+    service = EmbeddingService(api_key=api_key, api_base=api_base, model_name=model_name)
+    res = service.sync_aliases(db, datasource_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res)
+    return res
+
+
+@router.get("/semantic/aliases/sync-status")
+def api_sync_status(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
+    _check_datasource(db, datasource_id)
+    aliases = db.query(SemanticAlias).filter(SemanticAlias.data_source_id == datasource_id).all()
+    
+    total_count = len(aliases)
+    synced_count = 0
+    stale_count = 0
+    last_sync_at = None
+    
+    for a in aliases:
+        if a.embedding_blob:
+            if a.embedding_synced_at:
+                if a.updated_at and a.updated_at > a.embedding_synced_at:
+                    stale_count += 1
+                else:
+                    synced_count += 1
+                
+                if last_sync_at is None or a.embedding_synced_at > last_sync_at:
+                    last_sync_at = a.embedding_synced_at
+            else:
+                stale_count += 1
+        else:
+            stale_count += 1
+            
+    return {
+        "total_count": total_count,
+        "synced_count": synced_count,
+        "stale_count": stale_count,
+        "last_sync_at": last_sync_at.isoformat() if last_sync_at else None,
+    }
+

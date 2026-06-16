@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import patch
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -475,4 +477,133 @@ class TestAgentSemanticIntegration:
         assert "semanticAliasesUsed" in metadata
         assert any(a["alias"] == "GMV" for a in metadata["semanticAliasesUsed"])
         assert "orders" in str(context)
+
+
+# ---------------------------------------------------------------------------
+# New Semantic Recall & Formula Resolution Tests
+# ---------------------------------------------------------------------------
+
+class TestSemanticEmbeddingRecall:
+    @property
+    def mock_embedding(self):
+        # A simple unit length vector of 1024 dims
+        v = [0.0] * 1024
+        v[0] = 1.0
+        return v
+
+    def test_formula_decompounding_and_cycles(self, db_session):
+        """Test that compound aliases resolve recursively and handle cyclic dependencies gracefully."""
+        from engine.semantic.alias import SemanticAliasResolver, AliasMatch
+
+        resolver = SemanticAliasResolver()
+        resolver.aliases = {
+            "销售额": "销量 * 价格",
+            "销量": "orders.quantity",
+            "价格": "orders.price",
+            "循环A": "循环B",
+            "循环B": "循环A",
+        }
+
+        # Test simple resolution
+        match = resolver._parse_target("销售额", "销量 * 价格")
+        resolved = resolver._resolve_compound_targets(match)
+        assert len(resolved) == 2
+        aliases = {r.alias for r in resolved}
+        targets = {r.target for r in resolved}
+        assert aliases == {"销量", "价格"}
+        assert targets == {"orders.quantity", "orders.price"}
+
+        # Test cyclic resolution
+        cycle_match = resolver._parse_target("循环A", "循环B")
+        resolved_cycle = resolver._resolve_compound_targets(cycle_match)
+        # Should not crash/infinite loop, should return leaf or stop
+        assert len(resolved_cycle) > 0
+
+    @patch("engine.semantic.embeddings.EmbeddingService.embed")
+    def test_vector_recall_and_deduplication(self, mock_embed, db_session):
+        """Test that vector recall works, queries embeddings, and prioritizes exact match."""
+        from engine.semantic.alias import SemanticAliasResolver
+        from engine.models import DataSource, SemanticAlias
+        import numpy as np
+
+        ds = _make_datasource(db_session, "vector_test")
+        ds.enable_embedding_recall = True
+        
+        # Add an alias with embedding
+        alias_vec = [0.0] * 1024
+        alias_vec[0] = 1.0 # query will match this exactly
+        
+        alias = SemanticAlias(
+            id=str(uuid.uuid4()), data_source_id=ds.id,
+            alias="营业额", target_type="column", target="orders.total_amount",
+            embedding_blob=np.array(alias_vec, dtype=np.float32).tobytes(),
+            embedding_synced_at=datetime.utcnow(),
+        )
+        db_session.add(alias)
+        db_session.commit()
+
+        # Mock embedding response for the query (similarity will be 1.0)
+        mock_embed.return_value = [alias_vec]
+
+        resolver = SemanticAliasResolver.from_db(db_session, ds.id)
+        assert resolver.enable_embedding_recall is True
+        assert resolver.cache is not None
+
+        # Query "我们的营业额是多少" which should trigger vector recall for "营业额"
+        # Since "营业额" is not in the text exactly (substring is "营业额"), wait,
+        # "营业额" IS in "我们的营业额是多少". Let's query "收入" (which won't exact-match "营业额").
+        matches = resolver.resolve("收入")
+        assert len(matches) == 1
+        assert matches[0].alias == "营业额"
+        assert matches[0].source == "vector_recall"
+
+        # Now query "营业额" which is an exact match.
+        # It should prioritize exact match and not return a duplicate vector match.
+        matches_exact = resolver.resolve("营业额")
+        assert len(matches_exact) == 1
+        assert matches_exact[0].alias == "营业额"
+        assert matches_exact[0].source == "db" # exact match source
+
+    @patch("engine.semantic.embeddings.EmbeddingService.embed")
+    def test_sync_embeddings_api(self, mock_embed, client, db_session):
+        """Test synchronization API and status retrieval."""
+        from engine.models import DataSource, SemanticAlias
+        from datetime import datetime, UTC, timedelta
+
+        ds = _make_datasource(db_session, "api_test")
+        # Set updated_at to a known past time so the stale-detection
+        # comparison (updated_at > embedding_synced_at) is deterministic.
+        past = datetime.now(UTC) - timedelta(minutes=5)
+        alias = SemanticAlias(
+            id=str(uuid.uuid4()), data_source_id=ds.id,
+            alias="成交量", target_type="column", target="orders.qty",
+            updated_at=past,
+        )
+        db_session.add(alias)
+        db_session.commit()
+
+        # Check status initially
+        resp = client.get(f"/api/v1/semantic/aliases/sync-status?datasource_id={ds.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_count"] == 1
+        assert data["stale_count"] == 1
+        assert data["synced_count"] == 0
+
+        # Mock embedding return
+        mock_embed.return_value = [[0.1] * 1024]
+
+        # Trigger sync
+        resp_sync = client.post(f"/api/v1/semantic/aliases/sync-embeddings?datasource_id={ds.id}")
+        assert resp_sync.status_code == 200
+        assert resp_sync.json()["success"] is True
+
+        # Check status again
+        resp = client.get(f"/api/v1/semantic/aliases/sync-status?datasource_id={ds.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["stale_count"] == 0
+        assert data["synced_count"] == 1
+        assert data["last_sync_at"] is not None
+
 
