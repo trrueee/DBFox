@@ -30,7 +30,8 @@ from fastapi.responses import JSONResponse
 
 from engine.api import router
 from engine.db import init_db
-from engine.errors import DBFoxError
+from engine.errors import DBFoxError, NotFoundError
+from engine.schemas import ErrorResponse
 from engine.runtime_paths import private_runtime_file, write_private_text
 
 # 创建当前模块的日志记录器
@@ -41,8 +42,6 @@ ENGINE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = ENGINE_DIR.parent
 
 # 1. 本地引擎安全性：生成或读取本地安全访问令牌 (Local Secure Token)
-# 遗留的旧 Token 路径以及新标准运行时 Token 路径
-LEGACY_TOKEN_FILE = ENGINE_DIR / ".local_token"
 TOKEN_FILE = private_runtime_file("auth", ".local_token")
 
 
@@ -69,10 +68,6 @@ def get_or_create_local_token() -> str:
                 return token_preset.STATIC_TOKEN
         except ImportError:
             pass
-
-    # 兼容过渡：如果存在旧 of Token 文件，移动到新的安全目录下
-    if not TOKEN_FILE.exists() and LEGACY_TOKEN_FILE.exists():
-        write_private_text(TOKEN_FILE, LEGACY_TOKEN_FILE.read_text("utf-8").strip())
 
     # 如果安全 Token 文件存在，直接读取并返回它
     if TOKEN_FILE.exists():
@@ -295,10 +290,11 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
       - `@app.exception_handler(异常类型)` 使得每当接口运行期间抛出此类型异常时，FastAPI 就会直接跳过默认报错行为，
         调用这个装饰的函数来生成自定义 HTTP 响应给客户端。
     """
+    from engine.policy.error_sanitizer import sanitize_error_message
     logger.warning("DBFoxError at %s %s: [%s] %s", request.method, request.url.path, exc.code, exc.message)
     return JSONResponse(
-        status_code=400,
-        content={"detail": {"code": exc.code, "message": exc.message}},
+        status_code=404 if isinstance(exc, NotFoundError) else 400,
+        content={"detail": ErrorResponse(code=exc.code, message=sanitize_error_message(exc.message), checks=getattr(exc, "checks", [])).model_dump()},
     )
 
 

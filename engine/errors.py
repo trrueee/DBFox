@@ -115,3 +115,22 @@ class ToolInputError(DBFoxError):
     def __init__(self, message: str) -> None:
         super().__init__(message, code="TOOL_INPUT_ERROR")
 
+
+class NotFoundError(DBFoxError):
+    """
+    资源不存在异常
+    """
+
+    def __init__(self, message: str, code: str = "NOT_FOUND") -> None:
+        super().__init__(message, code=code)
+
+
+class ValidationException(DBFoxError):
+    """
+    请求参数/数据校验异常
+    """
+
+    def __init__(self, message: str, checks: list[dict[str, str]] | None = None) -> None:
+        super().__init__(message, code="VALIDATION_FAILED")
+        self.checks = checks or []
+
