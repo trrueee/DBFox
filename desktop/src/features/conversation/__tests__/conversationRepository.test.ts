@@ -6,12 +6,6 @@ import {
   migrateLegacyConversations,
 } from "../conversationRepository";
 import type { Conversation } from "../../../types/conversation";
-import { invoke } from "@tauri-apps/api/core";
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
-
 describe("conversationRepository", () => {
   let fetchMock: Mock;
 
@@ -66,48 +60,15 @@ describe("conversationRepository", () => {
     expect(options.method).toBe("DELETE");
   });
 
-  it("migrateLegacyConversations does nothing if not in Tauri", async () => {
+  it("migrateLegacyConversations sets migrated flag and is idempotent", async () => {
     vi.stubGlobal("window", {});
-    await migrateLegacyConversations();
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it("migrateLegacyConversations reads from Tauri and upserts to Engine if in Tauri", async () => {
-    // Simulate Tauri environment
-    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
-
-    // Mock tauri list_conversations returning 1 conversation
-    const mockRecord = {
-      id: "legacy-1",
-      title: "Legacy title",
-      created_at: 1000,
-      updated_at: 2000,
-      context_tables_json: '["users"]',
-      messages_json: "[]",
-      artifacts_json: "[]",
-    };
-    vi.mocked(invoke).mockResolvedValueOnce([mockRecord]);
-
-    // Mock successful put request
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+    localStorage.removeItem("dbfox_legacy_conversations_migrated");
 
     await migrateLegacyConversations();
-
-    // Verify it invoked list_conversations Tauri command
-    expect(invoke).toHaveBeenCalledWith("list_conversations");
-
-    // Verify it sent PUT to engine
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(url).toContain("/conversations/legacy-1");
-    expect(options.method).toBe("PUT");
-
-    // Verify migration marker is set
     expect(localStorage.getItem("dbfox_legacy_conversations_migrated")).toBe("true");
 
-    // Running it again should not invoke Tauri command
-    vi.mocked(invoke).mockClear();
+    // Second call is a no-op — flag already set
     await migrateLegacyConversations();
-    expect(invoke).not.toHaveBeenCalled();
+    expect(localStorage.getItem("dbfox_legacy_conversations_migrated")).toBe("true");
   });
 });

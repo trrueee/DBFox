@@ -34,23 +34,11 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 }
 
 export async function migrateLegacyConversations(): Promise<void> {
-  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
-    return;
-  }
-  if (localStorage.getItem("dbfox_legacy_conversations_migrated") === "true") {
-    return;
-  }
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const records = await invoke<ConversationRecord[]>("list_conversations");
-    if (records && records.length > 0) {
-      for (const record of records) {
-        const conversation = recordToConversation(record);
-        await saveConversation(conversation);
-      }
-    }
+  // Legacy Tauri-side rusqlite conversation storage was removed.
+  // Migration ran once for existing users before the Tauri commands
+  // were deleted; the flag prevents re-execution.
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem("dbfox_legacy_conversations_migrated") !== "true") {
     localStorage.setItem("dbfox_legacy_conversations_migrated", "true");
-  } catch (err) {
-    console.error("Failed to migrate legacy conversations:", err);
   }
 }
