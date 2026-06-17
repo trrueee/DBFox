@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
-from engine.errors import DBFoxError, DataSourceConnectionError
+from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
 from engine.models import (
     DEFAULT_PROJECT_ID,
     DataSource,
@@ -115,9 +115,10 @@ def _persist_health_success(ds: DataSource, result: dict[str, Any], latency_ms: 
 
 
 def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, checked_at: datetime) -> None:
+    from engine.policy.error_sanitizer import sanitize_error_message
     setattr(ds, "last_test_at", checked_at)
     setattr(ds, "last_test_status", "failed")
-    setattr(ds, "last_test_error", message)
+    setattr(ds, "last_test_error", sanitize_error_message(message))
     setattr(ds, "last_test_latency_ms", latency_ms)
     setattr(ds, "last_test_readonly", None)
     setattr(ds, "last_test_server_version", None)
@@ -226,7 +227,7 @@ def _replace_secret_if_present(obj: DataSource, value: str | None, cipher_attr: 
 def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
+        raise NotFoundError("数据源不存在")
 
     try:
         config = req.model_dump()
@@ -277,7 +278,7 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
 def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
+        raise NotFoundError("数据源不存在")
 
     started = time.perf_counter()
     checked_at = datetime.now(UTC)
@@ -339,7 +340,7 @@ def api_delete_datasource(
 ) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "数据源不存在"})
+        raise NotFoundError("数据源不存在")
 
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
@@ -367,7 +368,7 @@ def api_delete_datasource(
                 expected_details=expected_details
             )
             if not is_valid:
-                raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
+                raise DBFoxError(err_msg, "CONFIRMATION_FAILED")
 
     try:
         from engine.datasource import close_active_tunnel
@@ -420,7 +421,7 @@ def api_list_tables(datasource_id: str = Query(...), db: Session = Depends(get_d
 def api_list_columns(table_id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     table = db.query(SchemaTable).filter(SchemaTable.id == table_id).first()
     if not table:
-        raise HTTPException(status_code=404, detail={"code": "NOT_FOUND", "message": "表结构记录不存在"})
+        raise NotFoundError("表结构记录不存在")
 
     return [
         {
@@ -447,3 +448,65 @@ def api_get_er_diagram(datasource_id: str = Query(...), db: Session = Depends(ge
     except Exception:
         logger.exception("ER diagram build failed")
         raise
+
+
+from pydantic import BaseModel
+
+class DomainTagRuleSchema(BaseModel):
+    pattern: str
+    tag: str
+    priority: int
+
+@router.get("/datasources/{id}/domain-tags")
+def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    from engine.models import DomainTagRule
+    rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
+    if not rules:
+        default_patterns = [
+            ("user", ["user", "member", "customer", "account"]),
+            ("order", ["order", "cart", "coupon"]),
+            ("product", ["product", "category", "sku", "inventory", "item"]),
+            ("payment", ["payment", "pay", "refund", "transaction"]),
+            ("shipping", ["shipping", "address", "carrier", "logistics"]),
+            ("analytics", ["analytics", "click", "recommendation", "event", "log"]),
+            ("system", ["system", "admin", "setting", "config"]),
+            ("content", ["article", "post", "comment", "review", "tag"]),
+        ]
+        for tag, needles in default_patterns:
+            for needle in needles:
+                db.add(
+                    DomainTagRule(
+                        data_source_id=id,
+                        pattern=needle,
+                        tag=tag,
+                        priority=10,
+                    )
+                )
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+        rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
+        
+    return [{"id": r.id, "pattern": r.pattern, "tag": r.tag, "priority": r.priority} for r in rules]
+
+@router.post("/datasources/{id}/domain-tags")
+def api_save_domain_tags(id: str, rules: list[DomainTagRuleSchema], db: Session = Depends(get_db)) -> dict[str, Any]:
+    from engine.models import DomainTagRule
+    try:
+        db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).delete()
+        for r in rules:
+            db.add(
+                DomainTagRule(
+                    data_source_id=id,
+                    pattern=r.pattern,
+                    tag=r.tag,
+                    priority=r.priority
+                )
+            )
+        db.commit()
+        return {"success": True, "message": "Domain tag rules saved successfully"}
+    except Exception as exc:
+        db.rollback()
+        from engine.policy.error_sanitizer import sanitize_error_message
+        raise HTTPException(status_code=400, detail=sanitize_error_message(str(exc)))

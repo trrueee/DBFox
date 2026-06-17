@@ -65,6 +65,8 @@ def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecord
     ]
 
 
+from engine.errors import DBFoxError
+
 @router.put("/conversations/{conversation_id}")
 def save_conversation(
     conversation_id: str,
@@ -72,10 +74,7 @@ def save_conversation(
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     if payload.id != conversation_id:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "CONVERSATION_ID_MISMATCH", "message": "Conversation id mismatch."},
-        )
+        raise DBFoxError("Conversation id mismatch.", "CONVERSATION_ID_MISMATCH")
 
     try:
         row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()

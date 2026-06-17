@@ -186,7 +186,8 @@ def api_import_benchmark(req: AgentBenchmarkImportRequest, db: Session = Depends
         raise
     except Exception as exc:
         logger.exception("Benchmark import failed")
-        raise HTTPException(status_code=500, detail={"code": "IMPORT_ERROR", "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitize_error_message
+        raise HTTPException(status_code=500, detail={"code": "IMPORT_ERROR", "message": sanitize_error_message(str(exc))})
 
 
 @router.post("/agent-eval/run", response_model=AgentEvalRunResponse)
@@ -195,10 +196,12 @@ def api_run_eval(req: AgentEvalRunRequest, db: Session = Depends(get_db)) -> Any
         runner = AgentEvalRunner(db)
         return runner.run(req)
     except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitized_http_detail
+        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
     except Exception as exc:
         logger.exception("Agent eval run failed")
-        raise HTTPException(status_code=500, detail={"code": "EVAL_RUN_ERROR", "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitize_error_message
+        raise HTTPException(status_code=500, detail={"code": "EVAL_RUN_ERROR", "message": sanitize_error_message(str(exc))})
 
 
 @router.get("/agent-eval/runs", response_model=list[AgentEvalRunResponse])

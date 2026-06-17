@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.errors import DBFoxError
+from engine.errors import DBFoxError, NotFoundError
 from engine.sql.executor import execute_query
 from engine.sql.guardrail import guardrail_check
 from engine.models import DataSource, QueryHistory
@@ -38,10 +38,7 @@ def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> 
     if req.datasource_id:
         ds = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
         if not ds:
-            raise HTTPException(
-                status_code=404,
-                detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found"},
-            )
+            raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
         dialect = str(ds.db_type or "mysql")
     result = guardrail_check(req.sql, dialect=dialect)
     return _public_guardrail_result(dict(result))
@@ -51,30 +48,24 @@ def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> 
 def api_execute_sql(req: SQLExecuteRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found"})
+        raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
 
-    try:
-        PolicyEngine.enforce_query_policy(datasource, req.sql)
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    PolicyEngine.enforce_query_policy(datasource, req.sql)
 
     try:
         return execute_query(db, req.datasource_id, req.sql, req.question, req.execution_id)
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    except DBFoxError:
+        raise
     except Exception as exc:
         logger.exception("SQL execution failed")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "EXECUTION_ERROR", "message": f"SQL execution failed: {str(exc)}"},
-        )
+        raise DBFoxError(f"SQL execution failed: {str(exc)}", "EXECUTION_ERROR")
 
 
 @router.post("/query/explain")
 def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found"})
+        raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
 
     try:
         if str(datasource.db_type or "").lower() == "postgresql":
@@ -85,14 +76,11 @@ def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> di
         from engine.sql.executor import explain_sql
 
         return explain_sql(db, req.datasource_id, req.sql)
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    except DBFoxError:
+        raise
     except Exception as exc:
         logger.exception("SQL explain failed")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "EXPLAIN_ERROR", "message": f"SQL EXPLAIN failed: {str(exc)}"},
-        )
+        raise DBFoxError(f"SQL EXPLAIN failed: {str(exc)}", "EXPLAIN_ERROR")
 
 
 @router.post("/query/cancel")
@@ -117,10 +105,7 @@ def api_query_history(
     if status_filter and status_filter != "all":
         allowed_statuses = {"success", "failed", "timeout", "cancelled"}
         if status_filter not in allowed_statuses:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": "INVALID_HISTORY_STATUS", "message": "Unsupported query history status filter"},
-            )
+            raise DBFoxError("Unsupported query history status filter", "INVALID_HISTORY_STATUS")
         history_query = history_query.filter(QueryHistory.execution_status == status_filter)
 
     search_term = (search or "").strip()
@@ -145,10 +130,7 @@ def api_query_history(
 def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     item = db.query(QueryHistory).filter(QueryHistory.id == history_id).first()
     if not item:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "QUERY_HISTORY_NOT_FOUND", "message": "Query history record not found"},
-        )
+        raise NotFoundError("Query history record not found", "QUERY_HISTORY_NOT_FOUND")
 
     db.delete(item)
     db.commit()
@@ -159,7 +141,7 @@ def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> 
 def api_clear_query_history(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found"})
+        raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
 
     deleted = (
         db.query(QueryHistory)

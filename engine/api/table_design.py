@@ -23,7 +23,8 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
     try:
         PolicyEngine.enforce_test_data_policy(datasource)
     except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitized_http_detail
+        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
 
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
@@ -63,9 +64,11 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
             language=req.language
         )
     except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitized_http_detail
+        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
     except Exception as exc:
         logger.exception("Test data generation failed")
+        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
             detail={"code": "TEST_DATA_FAILED", "message": f"测试数据生成失败: {str(exc)}"}

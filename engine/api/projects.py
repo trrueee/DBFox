@@ -58,7 +58,7 @@ def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
 def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     name = req.name.strip()
     if not name:
-        raise HTTPException(status_code=400, detail={"code": "PROJECT_NAME_REQUIRED", "message": "Project name is required"})
+        raise DBFoxError("Project name is required", "PROJECT_NAME_REQUIRED")
 
     try:
         project = Project(
