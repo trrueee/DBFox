@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
-from engine.sql.guardrail import GuardrailResult, guardrail_check
+from engine.sql.guardrail import GuardrailResult, guardrail_check, guardrail_parsed_ast
 from engine.models import DataSource
 from engine.sql.dry_run import dry_run_query
 
@@ -57,10 +57,8 @@ class ExecutionSafetyDecision(BaseModel):
 def _public_guardrail_result(guardrail: dict[str, Any]) -> GuardrailResult:
     """Strip internal-only parser artifacts from guardrail payloads.
 
-    guardrail_check intentionally carries _parsed_ast for TrustGate's internal
-    schema validation path. Once schema validation has consumed it, every value
-    stored in ExecutionSafetyDecision may be persisted or returned by FastAPI,
-    so it must be JSON serializable.
+    Every value stored in ExecutionSafetyDecision may be persisted or returned
+    by FastAPI, so it must be JSON serializable.
     """
     return {
         key: value
@@ -82,7 +80,9 @@ class TrustGate:
         env = str(datasource.env or "dev").lower() if datasource else "dev"
 
         guardrail = guardrail_check(sql, dialect=dialect)
-        parsed_ast = guardrail.get("_parsed_ast")
+        parsed_ast = None
+        if guardrail.get("result") != "reject":
+            parsed_ast = guardrail_parsed_ast(sql, dialect=dialect)
         schema_warnings = self.schema_validator(parsed_ast if isinstance(parsed_ast, exp.Expression) else sql, self.db, datasource_id)
         public_guardrail = _public_guardrail_result(guardrail)
         messages: list[str] = []
