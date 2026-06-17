@@ -648,6 +648,22 @@ class WorkspaceTableScope(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
+class DomainTagRule(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "domain_tag_rules"
+    __table_args__ = (
+        Index("ix_domain_tag_rules_datasource", "data_source_id"),
+        UniqueConstraint("data_source_id", "pattern", "tag", name="uq_domain_tag_rules_ds_pattern_tag"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    pattern = Column(String, nullable=False)
+    tag = Column(String, nullable=False)
+    priority = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
 
 # ─────────────────────────────────────────────
 # Agent Eval models
