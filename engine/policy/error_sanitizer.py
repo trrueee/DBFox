@@ -35,8 +35,9 @@ _SENSITIVE_PATTERNS = [
     re.compile(r"(?i)/home/\w+/\.\w+"),
     re.compile(r"(?i)C:\\Users\\\w+\\"),
 
-    # ── Token-like strings (long alphanumeric) ──
-    re.compile(r"\b[A-Za-z0-9+/=]{32,}\b"),
+    # ── Token-like strings (base64 secrets: require =, +, or /) ──
+    # Avoids matching UUIDs (only hex + hyphens) and SHA hashes (only hex)
+    re.compile(r"(?=[A-Za-z0-9+/=]*[+/=])[A-Za-z0-9+/=]{32,}"),
 
     # ── IP:port with embedded credentials ──
     re.compile(r"(?i)\S+:\S+@\d+\.\d+\.\d+\.\d+"),

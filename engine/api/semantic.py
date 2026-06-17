@@ -324,16 +324,25 @@ def api_update_table_scope(req: WorkspaceTableScopeUpdateRequest, db: Session = 
     return {"success": True, "message": f"Table scope updated ({len(req.enabled_table_ids)} tables enabled)."}
 
 
+from pydantic import BaseModel
+
+class SyncEmbeddingsRequest(BaseModel):
+    api_key: str | None = None
+    api_base: str | None = None
+    model_name: str | None = None
+
+
 @router.post("/semantic/aliases/sync-embeddings")
 def api_sync_embeddings(
     datasource_id: str = Query(...),
-    api_key: str | None = Query(None),
-    api_base: str | None = Query(None),
-    model_name: str | None = Query(None),
+    req: SyncEmbeddingsRequest | None = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     _check_datasource(db, datasource_id)
     from engine.semantic.embeddings import EmbeddingService
+    api_key = req.api_key if req else None
+    api_base = req.api_base if req else None
+    model_name = req.model_name if req else None
     service = EmbeddingService(api_key=api_key, api_base=api_base, model_name=model_name)
     res = service.sync_aliases(db, datasource_id)
     if not res.get("success"):
