@@ -93,6 +93,25 @@ export default function App() {
     checkHealth,
   } = useDatasourceState();
 
+  // Keep ref in sync synchronously — avoids stale reads in callbacks
+  // that fire before useEffect runs.
+  const activeDatasourceIdRef = useRef(activeDatasourceId);
+  activeDatasourceIdRef.current = activeDatasourceId;
+
+  // Release the previous datasource's connection pool when switching
+  const prevDatasourceIdRef = useRef(activeDatasourceId);
+  useEffect(() => {
+    const prev = prevDatasourceIdRef.current;
+    prevDatasourceIdRef.current = activeDatasourceId;
+    if (prev && prev !== activeDatasourceId) {
+      import("./lib/api/datasources").then(({ datasourcesApi }) => {
+        datasourcesApi.releaseDatasource(prev).catch((err) => {
+          console.warn("Failed to release datasource pool on switch:", err);
+        });
+      });
+    }
+  }, [activeDatasourceId]);
+
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const { collapsed: sidebarCollapsed, width: sidebarWidth, handleResizeStart, toggleCollapse: toggleSidebarCollapse } = useSidebarLayout();

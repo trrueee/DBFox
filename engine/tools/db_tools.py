@@ -136,7 +136,14 @@ def db_inspect(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     if not target:
         return _failed("db.inspect", args, "target is required (table or table.column).", start)
 
-    ds = _datasource(ctx.db, ctx.request.datasource_id)
+    ds_id = ctx.request.datasource_id
+    cache_key = (ds_id, target)
+    cached_output = _INSPECT_CACHE.get(cache_key)
+    if cached_output is not None:
+        logger.info("db.inspect cache hit for %s", target)
+        return _success("db.inspect", args, cached_output, start)
+
+    ds = _datasource(ctx.db, ds_id)
     dialect = (ds.db_type or "mysql").lower()
 
     try:
@@ -146,6 +153,7 @@ def db_inspect(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
             output = _pg_inspect_detail(ctx.db, ds, target)
         else:
             output = _mysql_inspect_detail(ctx.db, ds, target)
+        _INSPECT_CACHE.set(cache_key, output)
     except ValueError as exc:
         return _failed("db.inspect", args, str(exc), start)
     except Exception as exc:
@@ -721,6 +729,49 @@ def _ds_to_dict(ds: DataSource) -> dict[str, Any]:
     }
 
 
+from threading import Lock
+
+class TTLMemoryCache:
+    def __init__(self, ttl_seconds: float = 10.0):
+        self.ttl = ttl_seconds
+        self._cache: dict[tuple, Any] = {}
+        self._lock = Lock()
+
+    def get(self, key: tuple) -> Any:
+        with self._lock:
+            entry = self._cache.get(key)
+            if entry is not None:
+                val, expiry = entry
+                now = time.time()
+                if now < expiry:
+                    return val
+                # Lazy eviction: only delete the expired key being accessed
+                del self._cache[key]
+            return None
+
+    def set(self, key: tuple, value: Any) -> None:
+        with self._lock:
+            self._cache[key] = (value, time.time() + self.ttl)
+
+_INSPECT_CACHE = TTLMemoryCache(ttl_seconds=10.0)
+
+
+def escape_identifier(name: str, dialect: str) -> str:
+    """
+    Safely escape a SQL identifier (table, schema, column name)
+    using sqlglot.exp.to_identifier.
+    """
+    from sqlglot import exp
+    dialect_lower = dialect.lower() if dialect else "mysql"
+    if "postgres" in dialect_lower or "pg" in dialect_lower:
+        sqlglot_dialect = "postgres"
+    elif "sqlite" in dialect_lower:
+        sqlglot_dialect = "sqlite"
+    else:
+        sqlglot_dialect = "mysql"
+    return exp.to_identifier(name).sql(sqlglot_dialect, identify=True)
+
+
 # ---- SQLite live introspection ---------------------------------------
 
 
@@ -757,7 +808,7 @@ def _sqlite_table_payload(
     columns: list[dict[str, Any]] = []
     pk_cols: list[str] = []
 
-    for row in conn.execute(f"PRAGMA table_info('{_sqlite_escape(table_name)}')"):
+    for row in conn.execute(f"PRAGMA table_info({escape_identifier(table_name, 'sqlite')})"):
         name = str(row["name"])
         is_pk = bool(row["pk"])
         if is_pk:
@@ -811,18 +862,22 @@ def _sqlite_table_type(conn: sqlite3.Connection, name: str) -> str:
 
 def _sqlite_fk_map(conn: sqlite3.Connection, table_name: str) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
-    for row in conn.execute(f"PRAGMA foreign_key_list('{_sqlite_escape(table_name)}')"):
+    for row in conn.execute(f"PRAGMA foreign_key_list({escape_identifier(table_name, 'sqlite')})"):
         result[str(row["from"])] = {"table": str(row["table"]), "column": str(row["to"])}
     return result
 
 
 def _sqlite_reverse_fks(conn: sqlite3.Connection, table_name: str) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
-    tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
+    # Optimize: pre-filter candidate tables by checking if referenced table name exists in their creation DDL
+    tables = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE ? ORDER BY name",
+        (f"%{table_name}%",)
+    ).fetchall()
     for t in tables:
         src = str(t["name"])
-        for fk in conn.execute(f"PRAGMA foreign_key_list('{_sqlite_escape(src)}')"):
-            if str(fk["table"]) == table_name:
+        for fk in conn.execute(f"PRAGMA foreign_key_list({escape_identifier(src, 'sqlite')})"):
+            if str(fk["table"]).lower() == table_name.lower():
                 result.append({
                     "table": src,
                     "column": str(fk["from"]),
@@ -837,11 +892,11 @@ def _sqlite_indexes(
     indexes: list[dict[str, Any]] = []
     if pk_cols:
         indexes.append({"name": "PRIMARY", "columns": pk_cols, "unique": True})
-    for row in conn.execute(f"PRAGMA index_list('{_sqlite_escape(table_name)}')"):
+    for row in conn.execute(f"PRAGMA index_list({escape_identifier(table_name, 'sqlite')})"):
         iname = str(row["name"])
         cols = [
             str(ci["name"])
-            for ci in conn.execute(f"PRAGMA index_info('{_sqlite_escape(iname)}')")
+            for ci in conn.execute(f"PRAGMA index_info({escape_identifier(iname, 'sqlite')})")
             if ci["name"] is not None
         ]
         indexes.append({
@@ -854,14 +909,10 @@ def _sqlite_indexes(
 
 def _sqlite_row_count(conn: sqlite3.Connection, table_name: str) -> int | None:
     try:
-        row = conn.execute(f'SELECT COUNT(*) FROM "{_sqlite_escape(table_name)}"').fetchone()
+        row = conn.execute(f"SELECT COUNT(*) FROM {escape_identifier(table_name, 'sqlite')}").fetchone()
         return int(row[0]) if row else None
     except sqlite3.Error:
         return None
-
-
-def _sqlite_escape(s: str) -> str:
-    return s.replace("'", "''")
 
 
 # ---- MySQL live introspection ----------------------------------------
@@ -973,7 +1024,7 @@ def _mysql_table_payload(
     # indexes
     indexes: list[dict[str, Any]] = []
     try:
-        cur.execute(f"SHOW INDEX FROM `{table_name}` FROM `{database}`")
+        cur.execute(f"SHOW INDEX FROM {escape_identifier(table_name, 'mysql')} FROM {escape_identifier(database, 'mysql')}")
         index_groups: dict[str, dict[str, Any]] = {}
         for row in cur.fetchall():
             iname = str(_row_value(row, 2, "Key_name"))

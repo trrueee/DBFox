@@ -84,6 +84,26 @@ class PoolRegistry:
                 lru_key, entry.capacity,
             )
 
+    def dispose_datasource(self, datasource_id: str) -> int:
+        """Dispose all pools whose key starts with the given datasource_id.
+
+        Returns the number of pools that were disposed.
+        """
+        keys_to_dispose = [k for k in self._pools if k[0] == datasource_id]
+        for k in keys_to_dispose:
+            entry = self._pools.pop(k, None)
+            if entry is not None:
+                try:
+                    entry.pool.dispose()
+                except Exception:
+                    pass
+        if keys_to_dispose:
+            logger.info(
+                "PoolRegistry: disposed %d pool(s) for datasource %s",
+                len(keys_to_dispose), datasource_id,
+            )
+        return len(keys_to_dispose)
+
     def dispose_all(self) -> None:
         for entry in self._pools.values():
             try:
