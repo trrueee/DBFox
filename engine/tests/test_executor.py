@@ -243,11 +243,11 @@ class TestPerformanceAndExplain:
     def test_execute_query_blocks_schema_hallucination(self, db_session, test_datasource) -> None:
         sync_schema(db_session, test_datasource.id)
 
-        # Schema warnings are now non-blocking warnings; the query is sent to the database
-        # and raises a database-native exception (e.g., no such column) rather than a guardrail block.
-        with pytest.raises(Exception) as exc_info:
+        # Schema errors (no such column/table) now block execution via TrustGate dry-run.
+        from engine.errors import GuardrailValidationError
+        with pytest.raises(GuardrailValidationError) as exc_info:
             execute_query(db_session, test_datasource.id, "SELECT imaginary_column FROM users LIMIT 3")
-        assert "no such column" in str(exc_info.value)
+        assert "schema validation" in str(exc_info.value).lower() or "unknown" in str(exc_info.value).lower()
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session, test_datasource) -> None:
         from engine.sql.executor import validate_sql_schema
@@ -307,6 +307,21 @@ class TestPerformanceAndExplain:
         with pytest.raises(GuardrailValidationError) as exc_info:
             explain_sql(db_session, test_datasource.id, "DELETE FROM users")
         assert any(check["rule"] in {"select_only", "blocked_command_type"} for check in exc_info.value.checks)
+
+    def test_explain_sql_secondary_validation(self, db_session, test_datasource) -> None:
+        from engine.errors import GuardrailValidationError
+        from engine.sql.executor import _validate_explain_sql
+
+        # Valid select passes
+        _validate_explain_sql("SELECT id FROM users", "sqlite")
+        
+        # Multi-statement rejected
+        with pytest.raises(GuardrailValidationError):
+            _validate_explain_sql("SELECT id FROM users; SELECT username FROM users", "sqlite")
+            
+        # Non-select rejected
+        with pytest.raises(GuardrailValidationError):
+            _validate_explain_sql("DROP TABLE users", "sqlite")
 
 
 class TestExecuteQueryBoundary:
