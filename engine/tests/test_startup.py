@@ -1,10 +1,10 @@
-import runpy
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
+from engine.main import _write_frontend_env_file_if_owned
 
 def test_fastapi_app_startup_and_health() -> None:
     """
@@ -68,37 +68,42 @@ def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> N
     assert response.status_code != 401
 
 
-def test_dev_frontend_env_writer_skips_user_owned_env_file(monkeypatch) -> None:
-    writes: list[str] = []
+def test_dev_frontend_env_writer_skips_user_owned_env_file(tmp_path: Path) -> None:
+    """A .env.local containing custom user keys must never be overwritten."""
+    env_file = tmp_path / ".env.local"
     user_owned_content = "VITE_CUSTOM_FLAG=1\n"
-    original_exists = Path.exists
-    original_read_text = Path.read_text
-    original_write_text = Path.write_text
+    env_file.write_text(user_owned_content, encoding="utf-8")
 
-    def is_frontend_env_file(path: Path) -> bool:
-        return path.name == ".env.local" and path.parent.name == "desktop"
+    _write_frontend_env_file_if_owned(env_file, "test-token")
 
-    def fake_exists(path: Path) -> bool:
-        if is_frontend_env_file(path):
-            return True
-        return original_exists(path)
+    # File is untouched because it contains non-DBFox keys.
+    assert env_file.read_text("utf-8") == user_owned_content
 
-    def fake_read_text(path: Path, *args, **kwargs) -> str:
-        if is_frontend_env_file(path):
-            return user_owned_content
-        return original_read_text(path, *args, **kwargs)
 
-    def fake_write_text(path: Path, data: str, *args, **kwargs) -> int:
-        if is_frontend_env_file(path):
-            writes.append(data)
-            return len(data)
-        return original_write_text(path, data, *args, **kwargs)
+def test_dev_frontend_env_writer_updates_dbfox_owned_env_file(tmp_path: Path) -> None:
+    """A DBFox-owned .env.local is refreshed when the token changes."""
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(_frontend_env_content_with("old-token"), encoding="utf-8")
 
-    monkeypatch.setenv("DBFOX_ENGINE_TOKEN", "test-token")
-    monkeypatch.setattr(Path, "exists", fake_exists)
-    monkeypatch.setattr(Path, "read_text", fake_read_text)
-    monkeypatch.setattr(Path, "write_text", fake_write_text)
+    _write_frontend_env_file_if_owned(env_file, "new-token")
 
-    runpy.run_path(str(Path(main_module.__file__)), run_name="__dbfox_main_env_test__")
+    content = env_file.read_text("utf-8")
+    assert "new-token" in content
+    assert "old-token" not in content
 
-    assert writes == []
+
+def test_dev_frontend_env_writer_creates_missing_env_file(tmp_path: Path) -> None:
+    """A missing .env.local is created fresh with the current token."""
+    env_file = tmp_path / ".env.local"
+    assert not env_file.exists()
+
+    _write_frontend_env_file_if_owned(env_file, "fresh-token")
+
+    content = env_file.read_text("utf-8")
+    assert "VITE_LOCAL_ENGINE_PORT" in content
+    assert "fresh-token" in content
+
+
+def _frontend_env_content_with(token: str) -> str:
+    """Helper mirroring engine.main._frontend_env_content layout."""
+    return f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={token}\n"

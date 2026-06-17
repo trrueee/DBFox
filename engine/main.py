@@ -120,24 +120,13 @@ def _write_frontend_env_file_if_owned(env_file: Path, token: str) -> None:
     env_file.write_text(expected_content, "utf-8")
 
 
-# Only write the frontend dev env file in source-mode local development.
-if not is_frozen:
-    FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
-    try:
-        _write_frontend_env_file_if_owned(FRONTEND_ENV_FILE, LOCAL_SECURE_TOKEN)
-    except OSError:
-        logger.warning(
-            "无法自动将 Token 写入前端 .env.local 配置文件，前端可能需要手动配置环境变量。"
-        )
-
-
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> Any:
     """
     异步生命周期管理器 (Lifespan Context Manager)
-    
+
     FastAPI 推荐使用这种方式来执行应用“启动前（Startup）”和“关闭后（Shutdown）”的勾子任务。
-    
+
     Python & FastAPI 知识点:
       - `@asynccontextmanager`：装饰器，用于将一个生成器函数转为异步上下文管理器。
       - `async def`：定义一个异步协程函数。
@@ -146,6 +135,19 @@ async def lifespan(application: FastAPI) -> Any:
         - `yield` 之后的代码会在 FastAPI 接收到关闭信号、退出**停机时**执行（比如清理释放资源）。
     """
     # --- 【启动时任务】 ---
+
+    # Write the frontend dev env file (source-mode local development only).
+    # Moved here from module level so that importing engine.main no longer
+    # performs filesystem writes — improves test isolation.
+    if not is_frozen:
+        FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
+        try:
+            _write_frontend_env_file_if_owned(FRONTEND_ENV_FILE, LOCAL_SECURE_TOKEN)
+        except OSError:
+            logger.warning(
+                "无法自动将 Token 写入前端 .env.local 配置文件，前端可能需要手动配置环境变量。"
+            )
+
     init_db()  # 初始化本地 SQLite 数据库（自动检查并运行表结构迁移）
 
     # Self-healing: ensure all AgentSessions have a ChatConversation row (runs once at startup)
