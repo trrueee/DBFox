@@ -1,6 +1,6 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useDatasourceState } from "../useDatasourceState";
+import { useDatasourceStore } from "../../../stores/datasourceStore";
 import { listTables } from "../../engine/engineApi";
 import { datasourcesApi } from "../../../lib/api/datasources";
 import type { DataSource } from "../../../lib/api/types";
@@ -13,6 +13,12 @@ vi.mock("../../engine/engineApi", () => ({
 vi.mock("../../../lib/api/datasources", () => ({
   datasourcesApi: {
     listDatasources: vi.fn(),
+    releaseDatasource: vi.fn(),
+    createDatasource: vi.fn(),
+    updateDatasource: vi.fn(),
+    deleteDatasource: vi.fn(),
+    syncSchema: vi.fn(),
+    checkDatasourceHealth: vi.fn(),
   },
 }));
 
@@ -30,12 +36,21 @@ const datasource: DataSource = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
-describe("useDatasourceState", () => {
+describe("datasourceStore", () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.mocked(datasourcesApi.listDatasources).mockReset();
     vi.mocked(listTables).mockReset();
     vi.mocked(listTables).mockResolvedValue([]);
+    useDatasourceStore.setState({
+      datasources: [],
+      activeDatasourceId: "",
+      activeDatasourceForSettings: null,
+      tables: [],
+      loadingSchema: false,
+      schemaError: "",
+      tableColumns: {},
+    });
   });
 
   it("retries an initial transient engine fetch failure", async () => {
@@ -44,7 +59,7 @@ describe("useDatasourceState", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce([datasource]);
 
-    const { result } = renderHook(() => useDatasourceState({ onToast: vi.fn() }));
+    const promise = useDatasourceStore.getState().loadDatasources();
 
     await act(async () => {
       await Promise.resolve();
@@ -55,27 +70,30 @@ describe("useDatasourceState", () => {
       await vi.advanceTimersByTimeAsync(300);
     });
 
+    await promise;
+    const state = useDatasourceStore.getState();
     expect(vi.mocked(datasourcesApi.listDatasources)).toHaveBeenCalledTimes(2);
-    expect(result.current.datasources).toEqual([datasource]);
-    expect(result.current.schemaError).toBe("");
+    expect(state.datasources).toEqual([datasource]);
+    expect(state.schemaError).toBe("");
   });
 
   it("reloads datasources when refreshing without an active datasource", async () => {
     vi.mocked(datasourcesApi.listDatasources)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([datasource]);
-    const onToast = vi.fn();
-
-    const { result } = renderHook(() => useDatasourceState({ onToast }));
-
-    await waitFor(() => expect(vi.mocked(datasourcesApi.listDatasources)).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      await result.current.refreshSchema();
+      await useDatasourceStore.getState().loadDatasources();
     });
 
+    expect(vi.mocked(datasourcesApi.listDatasources)).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await useDatasourceStore.getState().refreshSchema();
+    });
+
+    // refreshSchema calls loadDatasources when no active datasource
     expect(vi.mocked(datasourcesApi.listDatasources)).toHaveBeenCalledTimes(2);
-    expect(result.current.datasources).toEqual([datasource]);
-    expect(onToast).not.toHaveBeenCalledWith(expect.stringContaining("没有活动数据源"));
+    expect(useDatasourceStore.getState().datasources).toEqual([datasource]);
   });
 });

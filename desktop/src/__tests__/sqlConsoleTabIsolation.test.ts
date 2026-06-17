@@ -12,7 +12,7 @@ function read(relativePath: string) {
 
 describe("SQL Console tab state isolation", () => {
   it("stores sqlConsoleState as Record<string, SqlConsoleTabState> keyed by tab ID", () => {
-    const tabsHook = read("features/appShell/useWorkspaceTabs.ts");
+    const tabsHook = read("stores/workspaceStore.ts");
 
     expect(tabsHook).toMatch(/sqlConsoleState.*Record<string,\s*SqlConsoleTabState>/);
     expect(tabsHook).toContain("Record<string, SqlConsoleTabState>");
@@ -26,18 +26,18 @@ describe("SQL Console tab state isolation", () => {
   });
 
   it("initializes per-tab state in openSqlConsole with defaultSql draft", () => {
-    const tabsHook = read("features/appShell/useWorkspaceTabs.ts");
+    const tabsHook = read("stores/workspaceStore.ts");
 
     expect(tabsHook).toMatch(/openSqlConsole.*initialSql/);
-    expect(tabsHook).toContain("setSqlConsoleState");
+    expect(tabsHook).toContain("sqlConsoleState");
     expect(tabsHook).toMatch(/draftSql:\s*initialSql \?\? defaultSql/);
   });
 
   it("cleans up sqlConsoleState entry when closing a SQL tab", () => {
-    const tabsHook = read("features/appShell/useWorkspaceTabs.ts");
+    const tabsHook = read("stores/workspaceStore.ts");
 
-    expect(tabsHook).toMatch(/closeTab[\s\S]*setSqlConsoleState/);
-    expect(tabsHook).toContain("const { [tabId]: _, ...rest } = prev");
+    expect(tabsHook).toMatch(/closeTab[\s\S]*sqlConsoleState/);
+    expect(tabsHook).toContain("const { [tabId]: _, ...rest }");
   });
 
   it("passes tabId and tab-scoped state to SqlConsoleWorkspace", () => {
@@ -100,9 +100,9 @@ describe("SQL Console tab state isolation", () => {
   });
 
   it("openSqlConsole accepts optional initialSql parameter", () => {
-    const tabsHook = read("features/appShell/useWorkspaceTabs.ts");
+    const tabsHook = read("stores/workspaceStore.ts");
 
-    expect(tabsHook).toMatch(/openSqlConsole\s*=\s*useCallback\(\(initialSql\?:\s*string\)/);
+    expect(tabsHook).toMatch(/openSqlConsole:\s*\(initialSql/);
   });
 
   it("ContextDrawer onGenerateIndexSql passes SQL directly to openSqlConsole", () => {

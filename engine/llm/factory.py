@@ -49,19 +49,20 @@ def get_chat_model(
 
     This is the single entry point for ALL LLM access in the DBFox engine.
     """
-    key = (
+    raw_key = (
         api_key
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("QWEN_API_KEY")
         or os.environ.get("DBFOX_LLM_API_KEY")
         or ""
-    ).strip()
-    base = (
-        api_base or os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
-    ).strip()
-    model = (
-        model_name or os.environ.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
-    ).strip()
+    )
+    key = raw_key.strip()
+
+    raw_base = api_base or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
+    base = raw_base.strip()
+
+    raw_model = model_name or os.environ.get("OPENAI_MODEL_NAME") or "gpt-4o-mini"
+    model = raw_model.strip()
 
     return create_openai_client(
         model_name=model,
