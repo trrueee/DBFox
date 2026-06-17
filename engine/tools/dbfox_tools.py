@@ -160,7 +160,6 @@ def _analyze_data_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
         question = args.get("question") or (ctx.request.question if ctx.request else "") or ""
         columns = list(execution.get("columns") or [])
         rows = list(execution.get("rows") or [])
-        from engine.agent_core.result_profiler import profile_result
         data_profile = profile_result(
             question=question,
             columns=columns,

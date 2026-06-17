@@ -68,7 +68,7 @@ def request_from_run(db: Session, run_id: str) -> AgentRunRequest:
         session_id=str(run.session_id),
         parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
         execute=True,
-        max_steps=run.max_steps if run.max_steps else 20,
+        max_steps=20,
     )
 
 
