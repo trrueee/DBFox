@@ -203,8 +203,10 @@ def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentR
         _check_llm_credentials(req)
         return DBFoxAgentRuntime(db).run(req)
     except DBFoxError as exc:
+        db.rollback()
         raise HTTPException(status_code=400, detail=_http_detail(exc))
     except Exception as exc:
+        db.rollback()
         llm_error = llm_error_from_exception(exc)
         if llm_error is not None:
             raise HTTPException(status_code=400, detail=_http_detail(llm_error))
@@ -311,8 +313,10 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
             for event in DBFoxAgentRuntime(db).run_iter(req):
                 yield _format_sse_event(event)
         except DBFoxError as exc:
+            db.rollback()
             yield sse_failed_event("runtime_error_dbfox", "", str(exc), exc.code)
         except Exception as exc:
+            db.rollback()
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:
                 yield sse_failed_event("runtime_error_llm", "", str(llm_error), llm_error.code)
@@ -341,8 +345,10 @@ def api_agent_run_resume_stream(
             for event in DBFoxAgentRuntime(db).resume_iter(run_id, req.approval_id):
                 yield _format_sse_event(event)
         except DBFoxError as exc:
+            db.rollback()
             yield sse_failed_event("runtime_resume_error_dbfox", run_id, str(exc), exc.code)
         except Exception as exc:
+            db.rollback()
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:
                 yield sse_failed_event("runtime_resume_error_llm", run_id, str(llm_error), llm_error.code)
