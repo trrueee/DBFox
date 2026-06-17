@@ -79,3 +79,25 @@ Introduce Zustand only if, after these extractions, callback plumbing remains ex
 - Hook tests for conversation load/save/delete failure toasts.
 - Existing app shell rendering tests.
 - Manual smoke: open SQL, table, datasource, LLM config, Agent eval, and conversation history tabs.
+
+## Verification (2026-06-17)
+
+**Status: ✅ RESOLVED**
+
+Decomposition complete:
+
+| Concern | Extracted To |
+|---------|-------------|
+| Datasource state | `stores/datasourceStore.ts` (Zustand) |
+| Tab/workspace state | `stores/workspaceStore.ts` (Zustand) |
+| Agent runtime state | `stores/agentStore.ts` (Zustand) |
+| Sidebar layout | `features/appShell/useSidebarLayout.ts` |
+| Command palette items | `features/appShell/useAppCommands.ts` |
+| Active tab routing | `features/appShell/WorkspaceRouter.tsx` |
+| Toast system | `components/Toast.tsx` (`useToast()`) |
+
+App.tsx is now 244 lines (down from ~580), acting as a pure composition shell:
+- Provider setup (Dialog container, Toast root)
+- Store initialization (`loadDatasources()`, `initConversations()`)
+- Cross-domain wiring (keyboard shortcuts, context menu, command palette)
+- Layout assembly (sidebar + main + drawer)
