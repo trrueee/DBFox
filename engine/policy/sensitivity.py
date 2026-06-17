@@ -27,7 +27,10 @@ def _bootstrap_sensitivity(db: Session, datasource_id: str) -> None:
             target="*",
             description="Bootstrapped default",
         ))
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
 def load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:
     """Return a compiled regex of sensitive column patterns.

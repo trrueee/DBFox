@@ -22,7 +22,31 @@ from engine.errors import (
 )
 from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
+from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.query_registry import QUERY_REGISTRY
+
+
+def _write_query_history(db: Session, history: QueryHistory) -> str | None:
+    """Persist a QueryHistory record in an isolated audit session.
+
+    Returns the history record ID on success, or ``None`` if the write fails.
+    The independent session prevents the audit log from participating in the
+    caller's transaction (history must survive a caller rollback).
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    engine = db.get_bind()
+    audit_db = sessionmaker(bind=engine)()
+    try:
+        audit_db.add(history)
+        audit_db.commit()
+        return history.id
+    except Exception:
+        audit_db.rollback()
+        logger.exception("Failed to write query history to database")
+        return None
+    finally:
+        audit_db.close()
 from engine.sql.pool_manager import get_mysql_pool, get_postgres_pool, _ping_mysql_connection
 from engine.sql.dialect.sqlite import _execute_on_sqlite, _execute_on_sqlite_profiled
 from engine.sql.dialect.postgres import _execute_on_postgres_profiled
@@ -145,21 +169,7 @@ def _run_approved_query(
             error_message=error_message,
         )
         
-        # Isolate audit logging transaction using an independent Session
-        from sqlalchemy.orm import sessionmaker
-        engine = db.get_bind()
-        AuditSession = sessionmaker(bind=engine)
-        audit_db = AuditSession()
-        try:
-            audit_db.add(history)
-            audit_db.commit()
-            history_id = history.id
-        except Exception:
-            audit_db.rollback()
-            logger.exception("Failed to write query history to database")
-            history_id = None
-        finally:
-            audit_db.close()
+        history_id = _write_query_history(db, history)
 
     # Apply redaction pipeline at the executor level if requested
     if redact:
@@ -169,7 +179,6 @@ def _run_approved_query(
             rows = [redact_row(row, sensitivity) for row in rows]
         except Exception:
             logger.exception("Failed to load sensitivity configurations; falling back to default redaction")
-            from engine.policy.sensitivity import _SENSITIVE_FALLBACK
             rows = [redact_row(row, _SENSITIVE_FALLBACK) for row in rows]
 
     # Detect cell truncation precisely: _process_rows cuts long strings to exactly
@@ -274,19 +283,7 @@ def execute_query(
             serialize_ms=0,
         )
         
-        # Isolate audit logging transaction using an independent Session
-        from sqlalchemy.orm import sessionmaker
-        engine = db.get_bind()
-        AuditSession = sessionmaker(bind=engine)
-        audit_db = AuditSession()
-        try:
-            audit_db.add(history)
-            audit_db.commit()
-        except Exception:
-            audit_db.rollback()
-            logger.exception("Failed to write query history to database")
-        finally:
-            audit_db.close()
+        _write_query_history(db, history)
 
         raise GuardrailValidationError(
             message, checks=_decision_checks_for_error(decision)
@@ -314,18 +311,13 @@ def _validate_explain_sql(sql: str, dialect: str) -> None:
     import sqlglot
     from sqlglot import exp
     from engine.errors import GuardrailValidationError
+    from engine.sql.parser import normalize_dialect
 
     sql_stripped = sql.strip()
     while sql_stripped.endswith(";"):
         sql_stripped = sql_stripped[:-1].strip()
 
-    dialect_lower = dialect.lower() if dialect else "mysql"
-    if "postgres" in dialect_lower or "pg" in dialect_lower:
-        sqlglot_dialect = "postgres"
-    elif "sqlite" in dialect_lower:
-        sqlglot_dialect = "sqlite"
-    else:
-        sqlglot_dialect = "mysql"
+    sqlglot_dialect = normalize_dialect(dialect)
 
     try:
         exprs = sqlglot.parse(sql_stripped, read=sqlglot_dialect)
