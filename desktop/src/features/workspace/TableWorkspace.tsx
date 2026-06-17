@@ -4,6 +4,7 @@ import { TableSchemaPane } from "./table/TableSchemaPane";
 
 interface TableWorkspaceProps {
   tableId: string;
+  datasourceId: string;
   currentSubTab: string;
   onSubTabChange: (subTab: string) => void;
   onOpenSqlConsole: (initialSql?: string) => void;
@@ -16,7 +17,7 @@ const subTabs = [
   ["er", "关系图"],
 ] as const;
 
-export function TableWorkspace({ tableId, currentSubTab, onSubTabChange, onOpenSqlConsole, onToast }: TableWorkspaceProps) {
+export function TableWorkspace({ tableId, datasourceId, currentSubTab, onSubTabChange, onOpenSqlConsole, onToast }: TableWorkspaceProps) {
   return (
     <div className="hifi-table-workspace hifi-tab-pane">
       <div className="hifi-workspace-subtabs">
@@ -29,8 +30,8 @@ export function TableWorkspace({ tableId, currentSubTab, onSubTabChange, onOpenS
 
       <div className="hifi-subtab-content flex-1 overflow-auto">
         {currentSubTab === "preview" && <TablePreviewPane tableId={tableId} onOpenSqlConsole={onOpenSqlConsole} onToast={onToast} />}
-        {currentSubTab === "schema" && <TableSchemaPane tableId={tableId} />}
-        {currentSubTab === "er" && <TableErPane tableId={tableId} />}
+        {currentSubTab === "schema" && <TableSchemaPane tableId={tableId} datasourceId={datasourceId} />}
+        {currentSubTab === "er" && <TableErPane tableId={tableId} datasourceId={datasourceId} />}
       </div>
     </div>
   );

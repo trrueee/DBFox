@@ -48,8 +48,8 @@ export function DataSourceContextMenu({
       {contextMenu.type === "schema" && (
         <>
           <Item icon={<Terminal size={11} className="text-slate-500" />} label="新建 SQL Console" onClick={() => run(onOpenSqlConsole)} />
-          <Item icon={<FileText size={11} className="text-slate-500" />} label="查看所有表结构" onClick={() => run(() => onOpenTable("id_users", "schema"))} />
-          <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成库级 ER 图" onClick={() => run(() => onOpenTable("id_users", "er"))} />
+          <Item icon={<FileText size={11} className="text-slate-500" />} label="查看所有表结构" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "schema"))} />
+          <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成库级 ER 图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<RefreshCw size={11} className="text-slate-500" />} label="刷新 Schema" onClick={() => run(() => onToast("架构缓存已刷新"))} />
         </>
@@ -63,7 +63,7 @@ export function DataSourceContextMenu({
           <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成表级 ER 关系图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<Copy size={11} className="text-slate-500" />} label="复制物理表名" onClick={() => run(() => { navigator.clipboard.writeText(contextMenu.targetNode); onToast(`已成功复制表名: ${contextMenu.targetNode}`); })} />
-          <Item danger icon={<Trash2 size={11} />} label="物理删除表" onClick={() => run(() => onToast(`已成功物理删除表 ${contextMenu.targetNode}`))} />
+          <Item danger icon={<Trash2 size={11} />} label="删除表（不可逆）" onClick={() => run(() => onToast(`删除表功能需通过 SQL 控制台执行 DROP TABLE ${contextMenu.targetNode} 完成`))} />
         </>
       )}
 

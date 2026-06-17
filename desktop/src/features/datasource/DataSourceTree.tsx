@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import "./DataSourceTree.css";
 
 interface DataSourceTreeProps {
   treeSearch: string;
@@ -62,10 +63,6 @@ export function DataSourceTree({
     });
   };
 
-  const handleRefresh = () => {
-    onRefresh();
-  };
-
   const groupedTables = typeof tables === "object" && Array.isArray(tables) ? tables.reduce<Record<string, EngineSchemaTable[]>>((acc, table) => {
     const keyword = treeSearch.trim().toLowerCase();
     const matches = !keyword || table.table_name.toLowerCase().includes(keyword) || (table.table_comment || "").toLowerCase().includes(keyword);
@@ -79,84 +76,60 @@ export function DataSourceTree({
 
   if (collapsed) {
     return (
-      <section className="hifi-col hifi-sidebar-col" style={{ width: 36, flexShrink: 0, background: "var(--sidebar-bg)", borderRight: "1px solid var(--hairline)", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 8 }}>
-        <button
-          onClick={onToggleCollapse}
-          title="展开侧栏"
-          style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", padding: 4, display: "flex" }}
-        >
-          <ChevronDown size={14} style={{ transform: "rotate(-90deg)" }} />
+      <section className="hifi-col hifi-sidebar-col ds-tree-collapsed">
+        <button onClick={onToggleCollapse} title="展开侧栏" className="ds-tree-expand-btn">
+          <ChevronDown size={14} className="ds-tree-chevron-left" />
         </button>
       </section>
     );
   }
 
   return (
-    <section className="hifi-col hifi-sidebar-col" style={{ width: sidebarWidth, flexShrink: 0, minWidth: 180, maxWidth: 480, background: "var(--sidebar-bg)" }}>
+    <section className="hifi-col hifi-sidebar-col ds-tree-main" style={{ width: sidebarWidth, "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
       <div className="hifi-sidebar-panel">
-        <div className="hifi-sidebar-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span className="hifi-sidebar-title" style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-text-primary)" }}>数据源</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={onNewConnection}
-              title="新建连接"
-              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}
-            >
+        <div className="hifi-sidebar-header ds-tree-header-row">
+          <span className="ds-tree-title">数据源</span>
+          <div className="ds-tree-actions">
+            <button onClick={onNewConnection} title="新建连接" className="ds-tree-icon-btn">
               <Plus size={15} strokeWidth={1.5} />
             </button>
-            <span title="刷新" onClick={handleRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
+            <span title="刷新" onClick={onRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
               <RefreshCw size={13} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
             </span>
-            <button
-              onClick={onToggleCollapse}
-              title="收起侧栏"
-              style={{ border: "none", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", padding: 2, display: "flex", alignItems: "center" }}
-            >
-              <ChevronDown size={14} style={{ transform: "rotate(90deg)" }} />
+            <button onClick={onToggleCollapse} title="收起侧栏" className="ds-tree-icon-btn">
+              <ChevronDown size={14} className="ds-tree-chevron-right" />
             </button>
           </div>
         </div>
 
         {activeDatasource ? (
-          <div ref={dbDropdownRef} style={{ position: "relative" }}>
+          <div ref={dbDropdownRef} className="ds-db-select-wrapper">
             <div
-              className="hifi-db-select"
+              className="hifi-db-select ds-db-select-clickable"
               onClick={() => setDbDropdownOpen((v) => !v)}
               onContextMenu={(event) => onNodeContextMenu(event, "database", activeDatasource.name)}
-              style={{ cursor: "pointer" }}
             >
               <Database size={16} className="text-blue-600" />
               <div className="hifi-db-info">
                 <span className="hifi-db-name">{activeDatasource.name}</span>
                 <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
               </div>
-              <ChevronDown size={14} className="text-gray-400" style={{ transform: dbDropdownOpen ? "rotate(180deg)" : undefined, transition: "transform 0.15s" }} />
+              <ChevronDown size={14} className={`text-gray-400 ds-db-chevron ${dbDropdownOpen ? "ds-db-chevron-open" : ""}`} />
             </div>
             {dbDropdownOpen && datasources.length > 0 && (
-              <div
-                style={{
-                  position: "absolute", top: "100%", left: 4, right: 4, zIndex: 50,
-                  background: "var(--bg-surface, #fff)", border: "1px solid var(--border-medium, #e5e7eb)",
-                  borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", marginTop: 4, overflow: "hidden",
-                }}
-              >
+              <div className="ds-db-dropdown">
                 {datasources.map((ds) => (
                   <div
                     key={ds.id}
                     onClick={() => { setActiveDatasourceId(ds.id); setDbDropdownOpen(false); }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-                      cursor: "pointer", fontSize: 12,
-                      background: ds.id === activeDatasourceId ? "var(--color-accent, #f0f4ff)" : "transparent",
-                      color: ds.id === activeDatasourceId ? "var(--color-primary, #1e3a5f)" : "var(--color-text-primary, #111827)",
-                    }}
+                    className={`ds-db-dropdown-item ${ds.id === activeDatasourceId ? "active" : ""}`}
                   >
                     <Database size={12} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{ds.name}</div>
-                      <div style={{ fontSize: 10, color: "var(--color-text-secondary, #6b7280)" }}>{ds.db_type}</div>
+                    <div className="ds-db-item-info">
+                      <div className="ds-db-item-name">{ds.name}</div>
+                      <div className="ds-db-item-type">{ds.db_type}</div>
                     </div>
-                    {ds.id === activeDatasourceId && <Check size={14} style={{ color: "var(--color-primary, #1e3a5f)" }} />}
+                    {ds.id === activeDatasourceId && <Check size={14} className="ds-db-item-check" />}
                   </div>
                 ))}
               </div>
@@ -196,8 +169,7 @@ export function DataSourceTree({
             >
               <ChevronDown
                 size={12}
-                className="mr-1 text-slate-500"
-                style={{ transform: schemaCollapsed ? "rotate(-90deg)" : undefined, transition: "transform 0.15s" }}
+                className={`mr-1 text-slate-500 ds-group-chevron ${schemaCollapsed ? "ds-group-chevron-collapsed" : ""}`}
               />
               <Database size={12} className="mr-1 text-blue-600" />
               <span>{activeDatasource.database_name || activeDatasource.name}</span>
@@ -207,16 +179,11 @@ export function DataSourceTree({
           {!schemaCollapsed && Object.entries(groupedTables).map(([moduleName, moduleTables]) => {
             const groupCollapsed = collapsedGroups.has(moduleName);
             return (
-            <div key={moduleName} style={{ marginLeft: "12px" }}>
-              <div
-                className="hifi-tree-node"
-                style={{ cursor: "pointer" }}
-                onClick={() => toggleGroup(moduleName)}
-              >
+            <div key={moduleName} className="ds-tree-group">
+              <div className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)}>
                 <ChevronDown
                   size={10}
-                  className="mr-1 text-gray-400"
-                  style={{ transform: groupCollapsed ? "rotate(-90deg)" : undefined, transition: "transform 0.15s" }}
+                  className={`mr-1 text-gray-400 ds-group-chevron ${groupCollapsed ? "ds-group-chevron-collapsed" : ""}`}
                 />
                 <span className="text-gray-500 font-medium">{moduleName}</span>
               </div>
@@ -226,8 +193,7 @@ export function DataSourceTree({
                 return (
                   <div
                     key={table.id}
-                    className={`hifi-tree-node ${isSelected ? "active" : ""}`}
-                    style={{ marginLeft: "12px", cursor: "grab" }}
+                    className={`hifi-tree-node ds-tree-table-row ${isSelected ? "active" : ""}`}
                     draggable
                     onDragStart={(event) => {
                       event.dataTransfer.setData("text/plain", table.table_name);

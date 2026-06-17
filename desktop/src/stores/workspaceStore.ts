@@ -83,21 +83,24 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const { tabs, activeTabId } = get();
     const nextTabs = tabs.filter((t) => t.id !== tabId);
     if (nextTabs.length === 0) {
-      set({
-        tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" }],
-        activeTabId: "smart-query",
-      });
       set((s) => {
         const { [tabId]: _, ...rest } = s.sqlConsoleState;
-        return { sqlConsoleState: rest };
+        return {
+          tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" }],
+          activeTabId: "smart-query",
+          sqlConsoleState: rest,
+        };
       });
       return;
     }
-    set({ tabs: nextTabs });
-    if (activeTabId === tabId) set({ activeTabId: nextTabs[nextTabs.length - 1].id });
     set((s) => {
       const { [tabId]: _, ...rest } = s.sqlConsoleState;
-      return { sqlConsoleState: rest };
+      const nextActiveId = activeTabId === tabId ? nextTabs[nextTabs.length - 1].id : activeTabId;
+      return {
+        tabs: nextTabs,
+        activeTabId: nextActiveId,
+        sqlConsoleState: rest,
+      };
     });
   },
 

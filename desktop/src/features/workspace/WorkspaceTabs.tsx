@@ -30,7 +30,7 @@ export function WorkspaceTabs({ onOpenSqlConsole }: WorkspaceTabsProps) {
               {tab.type === "llm-config" && <Cpu size={11} className="text-pink-500" />}
               {tab.type === "datasource-settings" && <Database size={11} className="text-blue-500" />}
               <span className="truncate max-w-[100px]">{tab.title}</span>
-              <X size={10} className="hifi-tab-close ml-1.5 opacity-60 hover:opacity-100" onClick={(event) => closeTab(tab.id, event as unknown as { stopPropagation: () => void })} />
+              <X size={10} className="hifi-tab-close ml-1.5 opacity-60 hover:opacity-100" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} />
             </div>
           );
         })}

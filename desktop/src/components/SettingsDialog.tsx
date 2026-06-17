@@ -6,12 +6,8 @@ import {
 import { Button } from "./ui/button";
 import { LlmConfigPanel } from "./LlmConfigPanel";
 import { DEFAULT_LLM_API_BASE } from "../lib/llmPresets";
-
-export interface ApiConfig {
-  apiKey: string;
-  apiBase: string;
-  modelName: string;
-}
+import { validateApiConfig } from "../lib/api/types";
+import type { ApiConfig } from "../lib/api/types";
 
 const DEFAULT_CONFIG: ApiConfig = {
   apiKey: "",
@@ -25,12 +21,8 @@ function loadConfig(): ApiConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as Partial<ApiConfig>;
-      const merged = { ...DEFAULT_CONFIG, ...parsed };
-      if (merged.apiBase.includes("127.0.0.1:18625")) {
-        merged.apiBase = DEFAULT_LLM_API_BASE;
-      }
-      return merged;
+      const parsed = JSON.parse(raw);
+      if (validateApiConfig(parsed)) return parsed;
     }
   } catch { /* ignore */ }
   return { ...DEFAULT_CONFIG };

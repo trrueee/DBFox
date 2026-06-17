@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 
 export interface SchemaColumnMeta {
@@ -49,6 +49,19 @@ type CompletionSuggestion = {
 export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps) {
   const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
   const providerRef = useRef<Disposable | null>(null);
+
+  // Precompute escaped table names and regex patterns once when schemaTables changes
+  const tablePatterns = useMemo(() =>
+    schemaTables.map((t) => {
+      const escaped = t.label.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+      return {
+        table: t,
+        escaped,
+        nameRegex: new RegExp(`\\b${escaped}\\b`, "i"),
+        aliasRegex: new RegExp(`\\b${escaped}\\b\\s+(?:AS\\s+)?([a-zA-Z0-9_-]+)\\b`, "i"),
+      };
+    }),
+  [schemaTables]);
 
   const handleMount: OnMount = (editor, monaco) => {
     editor.focus();
@@ -117,20 +130,13 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
 
           const escapedAlias = cleanAlias.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
 
-          for (const t of schemaTables) {
-            const tableLabel = t.label;
-            const escapedTable = tableLabel.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-
-            // Regex patterns for alias bindings like "FROM table_name [AS] alias"
-            const pattern = new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO|MERGE)\\s+[\`"]?${escapedTable}[\`"]?\\s+(?:AS\\s+)?${escapedAlias}\\b`, "i");
-            const patternSimple = new RegExp(`[\`"]?${escapedTable}[\`"]?\\s+(?:AS\\s+)?${escapedAlias}\\b`, "i");
-
+          for (const tp of tablePatterns) {
+            const pattern = new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO|MERGE)\\s+[\`"]?${tp.escaped}[\`"]?\\s+(?:AS\\s+)?${escapedAlias}\\b`, "i");
+            const patternSimple = new RegExp(`[\`"]?${tp.escaped}[\`"]?\\s+(?:AS\\s+)?${escapedAlias}\\b`, "i");
             if (pattern.test(sql) || patternSimple.test(sql)) {
-              return t;
+              return tp.table;
             }
           }
-
-          // Fallback to table name direct matching
           return schemaTables.find((t) => t.label.toLowerCase() === cleanAlias) || null;
         };
 
@@ -174,15 +180,11 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
             // Find all tables that appear in the SQL before the cursor
             const activeTablesInQuery: Array<{ table: SchemaTableMeta; alias?: string }> = [];
 
-            for (const t of schemaTables) {
-              const escapedTable = t.label.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
-              const tableInSqlRegex = new RegExp(`\\b${escapedTable}\\b`, "i");
-              if (tableInSqlRegex.test(textUntilCursor)) {
-                // Find if there is an alias for this table in the query
-                const aliasRegex = new RegExp(`\\b${escapedTable}\\b\\s+(?:AS\\s+)?([a-zA-Z0-9_-]+)\\b`, "i");
-                const aliasMatch = textUntilCursor.match(aliasRegex);
+            for (const tp of tablePatterns) {
+              if (tp.nameRegex.test(textUntilCursor)) {
+                const aliasMatch = textUntilCursor.match(tp.aliasRegex);
                 const alias = aliasMatch ? aliasMatch[1] : undefined;
-                activeTablesInQuery.push({ table: t, alias });
+                activeTablesInQuery.push({ table: tp.table, alias });
               }
             }
 
