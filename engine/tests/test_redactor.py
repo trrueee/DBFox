@@ -10,16 +10,31 @@ def test_data_redactor_pii_and_credentials() -> None:
     assert "john_doe" in redacted
 
     # Test phone numbers and credit cards
-    sql_pii = "INSERT INTO customers (phone, card) VALUES ('13812345678', '4321-1234-5678-9876');"
+    sql_pii = "INSERT INTO customers (phone, card) VALUES ('13812345678', '4111-1111-1111-1111');"
     redacted_pii = DataRedactor.redact_sql(sql_pii)
     assert "13812345678" not in redacted_pii
-    assert "4321-1234-5678-9876" not in redacted_pii
+    assert "4111-1111-1111-1111" not in redacted_pii
     assert "[REDACTED_PHONE]" in redacted_pii
     assert "[REDACTED_CARD]" in redacted_pii
 
     # Test standard queries are not affected
     sql_normal = "SELECT id, name FROM products WHERE price > 10.0 LIMIT 5;"
     assert DataRedactor.redact_sql(sql_normal) == sql_normal
+
+
+def test_data_redactor_masks_common_phone_formats_without_card_false_positives() -> None:
+    sql = (
+        "INSERT INTO contacts (mobile, support_line, reference_no) VALUES "
+        "('+1 (415) 555-2671', '415.555.0134', '2024-0000-0000-0001');"
+    )
+
+    redacted = DataRedactor.redact_sql(sql)
+
+    assert "+1 (415) 555-2671" not in redacted
+    assert "415.555.0134" not in redacted
+    assert redacted.count("[REDACTED_PHONE]") == 2
+    assert "2024-0000-0000-0001" in redacted
+    assert "[REDACTED_CARD]" not in redacted
 
 
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
