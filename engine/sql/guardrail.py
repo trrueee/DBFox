@@ -7,7 +7,7 @@ import re
 
 import sqlglot
 from sqlglot import exp
-from engine.sql.parser import parse_sql
+from engine.sql.parser import normalize_dialect as _sqlglot_dialect, parse_sql
 
 from engine.errors import GuardrailValidationError
 
@@ -69,15 +69,6 @@ BLOCKED_COMMAND_TYPES = (
     exp.LoadData,
     exp.Copy,
 )
-
-
-def _sqlglot_dialect(dialect: str) -> str:
-    dialect_lower = dialect.lower() if dialect else "mysql"
-    if "postgres" in dialect_lower:
-        return "postgres"
-    if "sqlite" in dialect_lower:
-        return "sqlite"
-    return "mysql"
 
 
 def guardrail_parsed_ast(sql_str: str, dialect: str = "mysql") -> exp.Expression | None:

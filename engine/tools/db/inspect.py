@@ -87,29 +87,7 @@ def _parse_target(target: str) -> tuple[str, str | None, str | None]:
 
 def _ds_to_dict(ds: DataSource) -> dict[str, Any]:
     """Convert ORM object to the dict expected by connection-param helpers."""
-    return {
-        "host": ds.host,
-        "port": ds.port,
-        "database_name": ds.database_name,
-        "username": ds.username,
-        "password_ciphertext": ds.password_ciphertext,
-        "password_nonce": ds.password_nonce,
-        "password_key_version": ds.password_key_version,
-        "ssh_enabled": ds.ssh_enabled,
-        "ssh_host": ds.ssh_host,
-        "ssh_port": ds.ssh_port,
-        "ssh_username": ds.ssh_username,
-        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-        "ssh_password_nonce": ds.ssh_password_nonce,
-        "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-        "ssl_enabled": ds.ssl_enabled,
-        "ssl_ca_path": ds.ssl_ca_path,
-        "ssl_cert_path": ds.ssl_cert_path,
-        "ssl_key_path": ds.ssl_key_path,
-        "ssl_verify_identity": ds.ssl_verify_identity,
-    }
+    return datasource_connection_dict(ds)
 
 
 class TTLMemoryCache:

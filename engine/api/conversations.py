@@ -23,10 +23,11 @@ class ConversationRecordPayload(BaseModel):
     artifacts_json: str = "[]"
 
 
-@router.get("/conversations", response_model=list[ConversationRecordPayload])
-def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecordPayload]:
-    # Self-healing: ensure all AgentSessions have a ChatConversation row.
-    # Use a single outerjoin query to avoid N+1 per-session lookups.
+def heal_missing_conversations(db: Session) -> None:
+    """Ensure every AgentSession has a corresponding ChatConversation row.
+
+    Runs once at startup — not per-request.
+    """
     try:
         missing_sessions = (
             db.query(AgentSession)
@@ -43,9 +44,14 @@ def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecord
                 logger.exception("Failed to sync legacy/missing session %s to ChatConversation", s.id)
         if failed_count > 0:
             logger.warning("Self-healing: %d/%d sessions could not be synced", failed_count, len(missing_sessions))
+        elif missing_sessions:
+            logger.info("Self-healing: synced %d missing ChatConversation rows", len(missing_sessions))
     except Exception:
         logger.exception("Failed to query AgentSessions for self-healing sync")
 
+
+@router.get("/conversations", response_model=list[ConversationRecordPayload])
+def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecordPayload]:
     rows = (
         db.query(ChatConversation)
         .order_by(ChatConversation.updated_at.desc())

@@ -74,8 +74,10 @@ class TrustGate:
         self.db = db
         self.schema_validator = schema_validator
 
-    def evaluate(self, datasource_id: str, sql: str, policy: ExecutionPolicy = "readonly") -> TrustGateResult:
-        datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    def evaluate(self, datasource_id: str, sql: str, policy: ExecutionPolicy = "readonly",
+                 datasource: DataSource | None = None) -> TrustGateResult:
+        if datasource is None:
+            datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
         dialect = str(datasource.db_type or "mysql") if datasource else "mysql"
         env = str(datasource.env or "dev").lower() if datasource else "dev"
 
@@ -129,7 +131,7 @@ class TrustGate:
         policy: ExecutionPolicy = "readonly",
     ) -> ExecutionSafetyDecision:
         datasource = self.db.query(DataSource).filter(DataSource.id == datasource_id).first()
-        trust_gate = self.evaluate(datasource_id, sql, policy=policy)
+        trust_gate = self.evaluate(datasource_id, sql, policy=policy, datasource=datasource)
         guardrail = trust_gate["guardrail"]
         schema_warnings = list(trust_gate.get("schemaWarnings", []))
         messages = list(trust_gate.get("messages", []))
