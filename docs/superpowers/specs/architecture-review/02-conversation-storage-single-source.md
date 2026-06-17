@@ -11,16 +11,16 @@ This is a real consistency risk. The production Tauri path and the browser/dev f
 ## Code Evidence
 
 - `desktop/src/features/conversation/conversationRepository.ts:44-65` routes to Tauri commands when `__TAURI_INTERNALS__` exists, otherwise to engine HTTP APIs.
-- `desktop/src-tauri/src/lib.rs:58-148` stores conversations in an app-data `databox.sqlite3` through `rusqlite`.
+- `desktop/src-tauri/src/lib.rs:58-148` stores conversations in an app-data `dbfox.sqlite3` through `rusqlite`.
 - `engine/api/conversations.py:23-77` stores the same logical records through FastAPI and SQLAlchemy `ChatConversation`.
-- `engine/db.py:36-39` uses the engine metastore database path, currently `databox_local.db` in development.
+- `engine/db.py:36-39` uses the engine metastore database path, currently `dbfox_local.db` in development.
 
 ## Problem
 
 The app has two conversation storage authorities:
 
-- Tauri production runtime: `databox.sqlite3`.
-- Engine/browser fallback: `databox_local.db` table `chat_conversations`.
+- Tauri production runtime: `dbfox.sqlite3`.
+- Engine/browser fallback: `dbfox_local.db` table `chat_conversations`.
 
 This creates different histories depending on entry point, duplicates schema evolution work in Rust and Python, and makes migration/backup semantics unclear.
 
@@ -49,7 +49,7 @@ Use the Python engine API as the single source of truth:
 
 Migration path:
 
-1. On startup, detect whether the old Tauri `databox.sqlite3` contains conversations.
+1. On startup, detect whether the old Tauri `dbfox.sqlite3` contains conversations.
 2. If present, read records once through a migration command and upsert them through `/api/v1/conversations`.
 3. Write a local migration marker after successful import.
 4. Stop writing new conversations to the Tauri-side database.

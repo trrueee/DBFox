@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from engine.db import DB_PATH
 
-logger = logging.getLogger("databox.agent_core.checkpointer")
+logger = logging.getLogger("dbfox.agent_core.checkpointer")
 
 _CHECKPOINTER_STACK = ExitStack()
 _SHARED_MEMORY_SAVER = None
@@ -21,8 +21,8 @@ def build_agent_core_checkpointer(
     *,
     stack: ExitStack | None = None,
 ) -> Any:
-    mode = os.environ.get("DATABOX_AGENT_CORE_CHECKPOINTER", "").strip().lower()
-    if mode == "memory" or (os.environ.get("DATABOX_TESTING") == "1" and path is None):
+    mode = os.environ.get("DBFOX_AGENT_CORE_CHECKPOINTER", "").strip().lower()
+    if mode == "memory" or (os.environ.get("DBFOX_TESTING") == "1" and path is None):
         global _SHARED_MEMORY_SAVER
         if _SHARED_MEMORY_SAVER is None:
             _SHARED_MEMORY_SAVER = InMemorySaver()
@@ -35,7 +35,7 @@ def build_agent_core_checkpointer(
         return InMemorySaver()
 
     os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK", "true")
-    checkpoint_path = Path(path) if path is not None else DB_PATH.with_name("databox_agent_core_checkpoints.sqlite")
+    checkpoint_path = Path(path) if path is not None else DB_PATH.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     active_stack = stack or _CHECKPOINTER_STACK

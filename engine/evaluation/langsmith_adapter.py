@@ -1,6 +1,6 @@
-"""LangSmith adapter for DataBox Agent Eval.
+"""LangSmith adapter for DBFox Agent Eval.
 
-Provides bidirectional sync between DataBox eval cases and LangSmith datasets,
+Provides bidirectional sync between DBFox eval cases and LangSmith datasets,
 experiments, and feedback.  LangSmith is optional — all eval functionality
 works without it.
 """
@@ -12,16 +12,16 @@ from typing import Any, Callable
 
 from engine.evaluation.schemas import AgentEvalCase, AgentEvalCaseResult
 
-logger = logging.getLogger("databox.eval.langsmith_adapter")
+logger = logging.getLogger("dbfox.eval.langsmith_adapter")
 
 
 class LangSmithAdapter:
-    """Bridges DataBox eval cases to LangSmith datasets and experiments.
+    """Bridges DBFox eval cases to LangSmith datasets and experiments.
 
     Usage:
         adapter = LangSmithAdapter()
-        adapter.sync_dataset("databox-regression", cases)
-        adapter.run_experiment("databox-regression", my_agent_runner)
+        adapter.sync_dataset("dbfox-regression", cases)
+        adapter.run_experiment("dbfox-regression", my_agent_runner)
     """
 
     def __init__(self) -> None:
@@ -47,7 +47,7 @@ class LangSmithAdapter:
         dataset_name: str,
         cases: list[AgentEvalCase],
     ) -> None:
-        """Sync DataBox eval cases to a LangSmith dataset.
+        """Sync DBFox eval cases to a LangSmith dataset.
 
         Creates the dataset if it doesn't exist; upserts examples.
         """
@@ -119,7 +119,7 @@ class LangSmithAdapter:
                 inputs = example.inputs
                 outputs = agent_runner(inputs)
                 client.create_run(
-                    name=experiment_name or "databox-agent-eval",
+                    name=experiment_name or "dbfox-agent-eval",
                     inputs=inputs,
                     outputs=outputs,
                     reference_example_id=example.id,

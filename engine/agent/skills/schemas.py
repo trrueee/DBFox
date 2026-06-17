@@ -1,4 +1,4 @@
-"""Skill contract schemas — Pydantic models for DataBox Agent v2 Skill layer.
+"""Skill contract schemas — Pydantic models for DBFox Agent v2 Skill layer.
 
 A Skill is a curated execution pattern that bundles:
 - Tool-group boundaries (what's allowed, what's forbidden)
@@ -62,7 +62,7 @@ class SkillWritebackRule(BaseModel):
 # ── Skill specification ───────────────────────────────────────────────────────
 
 class SkillSpec(BaseModel):
-    """A curated execution pattern for a specific DataBox task type.
+    """A curated execution pattern for a specific DBFox task type.
 
     Skills bridge the gap between "flat tool list" and "reliable execution":
     they give the ReAct model a tested tool sequence, safety boundaries,

@@ -35,7 +35,7 @@ class TestSafeToolGroups:
 
 class TestEscalateGroups:
     def test_escalate_accepts_result_group(self):
-        from engine.tools.databox_tools import _escalate_tool_group
+        from engine.tools.dbfox_tools import _escalate_tool_group
         ctx = MagicMock()
         ctx.state_view = {"allowed_tool_groups": ["db"]}
         result = _escalate_tool_group(ctx, {"group": "result", "reason": "test"})
@@ -43,14 +43,14 @@ class TestEscalateGroups:
         assert result.output["escalated"] is True
 
     def test_escalate_accepts_chart_group(self):
-        from engine.tools.databox_tools import _escalate_tool_group
+        from engine.tools.dbfox_tools import _escalate_tool_group
         ctx = MagicMock()
         ctx.state_view = {"allowed_tool_groups": ["db"]}
         result = _escalate_tool_group(ctx, {"group": "chart", "reason": "test"})
         assert result.status == "success"
 
     def test_escalate_accepts_answer_group(self):
-        from engine.tools.databox_tools import _escalate_tool_group
+        from engine.tools.dbfox_tools import _escalate_tool_group
         ctx = MagicMock()
         ctx.state_view = {"allowed_tool_groups": ["db"]}
         result = _escalate_tool_group(ctx, {"group": "answer", "reason": "test"})
@@ -59,8 +59,8 @@ class TestEscalateGroups:
 
 class TestBuiltinRegistry:
     def test_registry_loads_analysis_tools(self):
-        from engine.tools.databox_tools import register_databox_tools
-        registry = register_databox_tools()
+        from engine.tools.dbfox_tools import register_dbfox_tools
+        registry = register_dbfox_tools()
         for name in ["analyze_data", "chart.suggest"]:
             tool = registry.get(name)
             assert tool is not None, f"{name} not found in registry"
@@ -68,9 +68,9 @@ class TestBuiltinRegistry:
 
     def test_analysis_tools_are_exposed_with_model_safe_aliases(self):
         from engine.agent.tools.registry_bridge import build_langchain_tools
-        from engine.tools.databox_tools import register_databox_tools
+        from engine.tools.dbfox_tools import register_dbfox_tools
 
-        registry = register_databox_tools()
+        registry = register_dbfox_tools()
         tools = build_langchain_tools(registry, allowed_groups=["result", "chart", "answer"])
         tool_names = {tool.name for tool in tools}
 
@@ -141,7 +141,7 @@ class TestDatabinding:
 class TestAnalysisHandlers:
     def test_analyze_data_uses_request_question_when_arg_missing(self):
         from engine.agent_core.tool_registry import ToolContext
-        from engine.tools.databox_tools import _analyze_data_handler
+        from engine.tools.dbfox_tools import _analyze_data_handler
 
         request = MagicMock()
         request.question = "How many orders are there?"

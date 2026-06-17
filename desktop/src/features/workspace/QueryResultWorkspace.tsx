@@ -1,4 +1,4 @@
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { AgentTaskView } from "../agentTask/AgentTaskView";
 
 interface QueryResultWorkspaceProps {

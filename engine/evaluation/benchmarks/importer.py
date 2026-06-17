@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from engine.evaluation.benchmarks.base import BenchmarkCase
 from engine.models import AgentGoldenTask
 
-logger = logging.getLogger("databox.benchmarks.importer")
+logger = logging.getLogger("dbfox.benchmarks.importer")
 
 _DEFAULT_EXPECTED_TOOLS = [
     "schema.build_context",

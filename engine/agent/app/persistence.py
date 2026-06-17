@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import AgentRun
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import (
@@ -17,7 +17,7 @@ from engine.agent_core.types import (
 )
 from engine.agent.app.response_builder import build_response
 
-logger = logging.getLogger("databox.databox_agent.app.persistence")
+logger = logging.getLogger("dbfox.dbfox_agent.app.persistence")
 
 
 def resolve_session_id(db: Session, req: AgentRunRequest) -> str:
@@ -61,7 +61,7 @@ def request_from_run(db: Session, run_id: str) -> AgentRunRequest:
     """Reconstruct an AgentRunRequest from an existing run record in the database."""
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if run is None:
-        raise DataBoxError("Agent run not found.", code="RUN_NOT_FOUND")
+        raise DBFoxError("Agent run not found.", code="RUN_NOT_FOUND")
     return AgentRunRequest(
         datasource_id=str(run.datasource_id),
         question=str(run.question),

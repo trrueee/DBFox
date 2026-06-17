@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
 from engine.sql.test_executor import execute_query_for_test
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 
-logger = logging.getLogger("databox.test_data")
+logger = logging.getLogger("dbfox.test_data")
 
 # High fidelity preset data lists for generating premium realistic test data
 CHINESE_SURNAMES = ["赵", "钱", "孙", "李", "周", "吴", "郑", "王", "冯", "陈", "褚", "卫", "蒋", "沈", "韩", "杨", "朱", "秦", "尤", "许", "何", "吕", "施", "张", "孔", "曹", "严", "华", "金", "魏", "陶", "姜"]
@@ -109,7 +109,7 @@ def generate_smart_test_data(
     # 1. Fetch source datasource and schema table
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not datasource:
-        raise DataBoxError("DATASOURCE_NOT_FOUND", "数据源不存在")
+        raise DBFoxError("DATASOURCE_NOT_FOUND", "数据源不存在")
         
     table = db.query(SchemaTable).filter(
         SchemaTable.data_source_id == datasource_id,
@@ -117,11 +117,11 @@ def generate_smart_test_data(
     ).first()
     
     if not table:
-        raise DataBoxError("TABLE_NOT_FOUND", f"表 `{table_name}` 尚未同步，请先同步 Schema")
+        raise DBFoxError("TABLE_NOT_FOUND", f"表 `{table_name}` 尚未同步，请先同步 Schema")
 
     columns: List[SchemaColumn] = table.columns
     if not columns:
-        raise DataBoxError("NO_COLUMNS", f"表 `{table_name}` 没有定义字段，请重新检查表结构")
+        raise DBFoxError("NO_COLUMNS", f"表 `{table_name}` 没有定义字段，请重新检查表结构")
 
     # 2. Analyze FK dependencies and preload parent values
     fk_mappings: Dict[str, List[Any]] = {}  # col_name -> list of values
@@ -150,11 +150,11 @@ def generate_smart_test_data(
                     fk_mappings[str(col.column_name)] = parent_ids
                 else:
                     # If parent is empty, warn and enforce user action
-                    raise DataBoxError(
+                    raise DBFoxError(
                         "REFERENTIAL_INTEGRITY_VIOLATION",
                         f"关联的外键主表 `{parent_table.table_name}` 尚无数据！请先为其生成或录入数据，再为此子表造数据。"
                     )
-            except DataBoxError:
+            except DBFoxError:
                 raise
             except Exception as e:
                 logger.error(f"Failed to query parent keys: {e}")
@@ -299,7 +299,7 @@ def generate_smart_test_data(
         for sql in sql_statements:
             res = execute_query_for_test(db, datasource_id, sql)
             if not res["success"]:
-                raise DataBoxError(
+                raise DBFoxError(
                     "BATCH_INSERT_FAILED",
                     f"批量插入测试数据失败，SQL: {sql}, 错误: {res.get('error_message', '未知错误')}"
                 )
@@ -321,9 +321,9 @@ def generate_smart_test_data(
     except Exception as e:
         db.rollback()
         logger.exception("Failed to insert mockup test data")
-        if isinstance(e, DataBoxError):
+        if isinstance(e, DBFoxError):
             raise
-        raise DataBoxError(
+        raise DBFoxError(
             "TEST_DATA_GENERATION_FAILED",
             f"智能测试数据生成或写入失败: {str(e)}"
         )

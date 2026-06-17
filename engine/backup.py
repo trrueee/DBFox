@@ -13,12 +13,12 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.datasource import get_mysql_connection_params
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID
 from engine.runtime_paths import private_runtime_dir
 
 
-class BackupError(DataBoxError):
+class BackupError(DBFoxError):
     def __init__(self, message: str, code: str = "BACKUP_FAILED") -> None:
         super().__init__(message, code=code)
 
@@ -111,7 +111,7 @@ def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
 def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
     import pymysql
     import logging
-    logger = logging.getLogger("databox.backup")
+    logger = logging.getLogger("dbfox.backup")
     params = get_mysql_connection_params(_datasource_connection_dict(ds))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -127,7 +127,7 @@ def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
     
     try:
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("-- DataBox Simple SQL Export (Pure-Python)\n")
+            f.write("-- DBFox Simple SQL Export (Pure-Python)\n")
             f.write("-- Warning: This simple export is only suited for simple table structures and data backups.\n")
             f.write("-- Stored procedures, triggers, views, or complex physical properties are not supported.\n")
             f.write(f"-- Dump Date: {datetime.now(UTC).isoformat()}\n")
@@ -228,7 +228,7 @@ def _pymysql_simple_sql_import(ds: DataSource, sql_file_path: Path) -> None:
 
 def create_backup(db: Session, datasource_id: str, label: str | None = None, allow_fallback: bool = True) -> BackupRecord:
     import logging
-    logger = logging.getLogger("databox.backup")
+    logger = logging.getLogger("dbfox.backup")
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
@@ -381,7 +381,7 @@ def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
 
 def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) -> dict[str, Any]:
     import logging
-    logger = logging.getLogger("databox.backup")
+    logger = logging.getLogger("dbfox.backup")
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
         raise BackupError("Backup record not found.", code="BACKUP_NOT_FOUND")

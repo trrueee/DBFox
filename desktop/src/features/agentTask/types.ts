@@ -1,6 +1,6 @@
 import type { AgentTimelineItem } from "../workspace/agentTimeline";
 import type { AgentAnswer, FollowUpSuggestion } from "../../lib/api/types";
-import type { AgentTabStatus, AgentApprovalInfo, WorkspaceTab } from "../../mock/databoxMock";
+import type { AgentTabStatus, AgentApprovalInfo, WorkspaceTab } from "../../mock/dbfoxMock";
 import type { AgentArtifact } from "../../types/agentArtifact";
 
 // ---------------------------------------------------------------------------

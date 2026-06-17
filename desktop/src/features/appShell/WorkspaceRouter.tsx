@@ -1,5 +1,5 @@
 import React from "react";
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import type { Conversation } from "../../types/conversation";
 import type { DataSource, DataSourceActions } from "../../lib/api/types";
 import type { SqlConsoleTabState } from "../workspace/SqlConsoleWorkspace";
@@ -14,7 +14,7 @@ import { QueryResultWorkspace } from "../workspace/QueryResultWorkspace";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { testLlmConnection } from "../../lib/api/agent";
-import { defaultSql } from "../../mock/databoxMock";
+import { defaultSql } from "../../mock/dbfoxMock";
 
 interface WorkspaceRouterProps {
   activeTab: WorkspaceTab;

@@ -1,4 +1,4 @@
-"""DataBox LLM Infrastructure — provider-agnostic model access.
+"""DBFox LLM Infrastructure — provider-agnostic model access.
 
 Dependency rule:
     engine.llm has NO internal project dependencies.

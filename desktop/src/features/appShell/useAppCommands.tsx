@@ -3,7 +3,7 @@ import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical }
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable, EngineColumn } from "../engine/engineApi";
 
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 
 interface UseAppCommandsProps {
   tables: EngineSchemaTable[];

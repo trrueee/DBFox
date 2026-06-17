@@ -173,7 +173,7 @@ export function DataSourceTree({
             <Database size={16} className="text-slate-400" />
             <div className="hifi-db-info">
               <span className="hifi-db-name">未连接数据源</span>
-              <span className="hifi-db-version">DataBox</span>
+              <span className="hifi-db-version">DBFox</span>
             </div>
           </div>
         )}

@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.nodes.finalize_node import finalize_answer
 
 
 class TestFinalizeNode:
     def test_finalize_with_answer_content(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [
                 HumanMessage(content="What is 1+1?"),
                 AIMessage(content="1+1 equals 2."),
@@ -23,7 +23,7 @@ class TestFinalizeNode:
         assert result["error"] is None
 
     def test_finalize_with_error(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [],
             "status": "running",
             "error": "Something went wrong",
@@ -34,7 +34,7 @@ class TestFinalizeNode:
         assert result["error"] == "Something went wrong"
 
     def test_finalize_with_answer_and_stale_error_completes_with_caveat(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [
                 HumanMessage(content="Inspect users"),
                 AIMessage(content="Found the users table and sample rows."),
@@ -54,7 +54,7 @@ class TestFinalizeNode:
         assert any("部分后续检查未完成" in item for item in result["answer"]["caveats"])
 
     def test_finalize_with_pending_approval(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [AIMessage(content="Approval needed.")],
             "status": "running",
             "error": None,
@@ -64,7 +64,7 @@ class TestFinalizeNode:
         assert result["status"] == "waiting_approval"
 
     def test_finalize_empty_no_error_marks_failed(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [],
             "status": "running",
             "error": None,
@@ -75,7 +75,7 @@ class TestFinalizeNode:
         assert result["error"]
 
     def test_finalize_output_has_answer_payload(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "messages": [AIMessage(content="Analysis complete.")],
             "status": "running",
             "error": None,

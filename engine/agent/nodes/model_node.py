@@ -8,19 +8,19 @@ from engine.llm import get_chat_model
 from engine.agent.model.system_prompt import build_system_prompt
 from engine.agent.model.context_builder import build_context_message, build_progress_guidance_message
 from engine.agent.tools.langchain_tools import build_langchain_tools
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import first_user_text, message_content_text
 from engine.agent.progress.fast_path import _max_steps_reason
 
 import logging
-logger = logging.getLogger("databox.databox_agent.nodes.model_node")
+logger = logging.getLogger("dbfox.dbfox_agent.nodes.model_node")
 
 POST_QUERY_ANALYSIS_GRACE_STEPS = 4
 
 
 def _within_post_query_analysis_grace(
-    state: DataBoxAgentState,
+    state: DBFoxAgentState,
     *,
     step_count: int,
     max_steps: int,
@@ -36,7 +36,7 @@ def _within_post_query_analysis_grace(
     )
 
 
-def call_model(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     # Hard block: do not invoke the model if we have already reached max_steps.
     # Without this check the model would emit one more set of tool_calls after
     # the step limit was hit, which wastes tokens and can produce confusing
@@ -177,7 +177,7 @@ def _build_escalate_tool(registry: Any) -> Any | None:
     )
 
 
-def _get_memory_context(state: DataBoxAgentState) -> str:
+def _get_memory_context(state: DBFoxAgentState) -> str:
     """Auto-inject relevant long-term memory into the first model turn.
 
     Migrated from the deleted planner_node.  Searches for user preferences,

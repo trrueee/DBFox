@@ -7,7 +7,7 @@ import hashlib
 import threading
 from typing import Any
 
-logger = logging.getLogger("databox.security.confirmation")
+logger = logging.getLogger("dbfox.security.confirmation")
 
 def confirmation_bypass_enabled() -> bool:
     """
@@ -15,8 +15,8 @@ def confirmation_bypass_enabled() -> bool:
     Only permitted in a local testing environment, never in production/frozen desktop applications.
     """
     return (
-        os.environ.get("DATABOX_BYPASS_CONFIRMATION") == "1"
-        and os.environ.get("DATABOX_TESTING") == "1"
+        os.environ.get("DBFOX_BYPASS_CONFIRMATION") == "1"
+        and os.environ.get("DBFOX_TESTING") == "1"
         and not getattr(sys, "frozen", False)
     )
 

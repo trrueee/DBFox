@@ -25,7 +25,7 @@ export function FoxIcon({
   size = 24,
   variant = "tight",
   assetBasePath,
-  alt = "DataBox fox icon",
+  alt = "DBFox fox icon",
   style,
   ...props
 }: FoxIconProps) {

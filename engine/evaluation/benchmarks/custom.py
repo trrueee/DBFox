@@ -7,7 +7,7 @@ from typing import Any
 
 from engine.evaluation.benchmarks.base import BenchmarkCase
 
-logger = logging.getLogger("databox.benchmarks.custom")
+logger = logging.getLogger("dbfox.benchmarks.custom")
 
 
 class CustomAdapter:

@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.progress.fast_path import (
     check_escalate,
@@ -15,10 +15,10 @@ from engine.agent.progress.fast_path import (
 from engine.agent.progress.llm_judge import call_llm_judge
 from engine.agent.progress.lens_formatter import enrich_progress_result
 
-logger = logging.getLogger("databox.databox_agent.nodes.progress_node")
+logger = logging.getLogger("dbfox.dbfox_agent.nodes.progress_node")
 
 
-def judge_progress(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def judge_progress(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM Progress Judge — decides whether the task is complete after each observe.
 
     This node coordinates fast-paths (escalation, SQL repair, ReAct routing) and

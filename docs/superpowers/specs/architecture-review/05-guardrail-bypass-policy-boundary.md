@@ -6,7 +6,7 @@ Area: SQL execution safety
 
 ## Corrected Judgment
 
-The previous spec overstated part of the issue. Current code already has a strong `guardrail_bypass_allowed()` predicate requiring both `DATABOX_TESTING=1` and `DATABOX_ALLOW_GUARDRAIL_BYPASS=1`, and it denies frozen builds. The remaining real issue is API shape: a general-purpose executor still exposes `bypass_guardrail` as a normal parameter.
+The previous spec overstated part of the issue. Current code already has a strong `guardrail_bypass_allowed()` predicate requiring both `DBFOX_TESTING=1` and `DBFOX_ALLOW_GUARDRAIL_BYPASS=1`, and it denies frozen builds. The remaining real issue is API shape: a general-purpose executor still exposes `bypass_guardrail` as a normal parameter.
 
 ## Code Evidence
 

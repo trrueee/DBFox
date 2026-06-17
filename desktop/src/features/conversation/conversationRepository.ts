@@ -37,7 +37,7 @@ export async function migrateLegacyConversations(): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
     return;
   }
-  if (localStorage.getItem("databox_legacy_conversations_migrated") === "true") {
+  if (localStorage.getItem("dbfox_legacy_conversations_migrated") === "true") {
     return;
   }
   try {
@@ -49,7 +49,7 @@ export async function migrateLegacyConversations(): Promise<void> {
         await saveConversation(conversation);
       }
     }
-    localStorage.setItem("databox_legacy_conversations_migrated", "true");
+    localStorage.setItem("dbfox_legacy_conversations_migrated", "true");
   } catch (err) {
     console.error("Failed to migrate legacy conversations:", err);
   }

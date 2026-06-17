@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from engine.agent import DataBoxAgentRuntime
+from engine.agent import DBFoxAgentRuntime
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import (
     AgentApprovalDecisionRequest,
@@ -30,11 +30,11 @@ from engine.agent_core.types import (
 )
 from engine.agent_core.events import EventEmitter
 from engine.db import get_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.llm.errors import llm_error_from_exception
 from engine.llm.providers.openai import create_openai_client
 
-logger = logging.getLogger("databox.api.agent")
+logger = logging.getLogger("dbfox.api.agent")
 router = APIRouter()
 
 
@@ -112,12 +112,12 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
 # ---------------------------------------------------------------------------
 
 def _check_llm_credentials(req: AgentRunRequest) -> None:
-    if os.environ.get("DATABOX_TESTING") == "1":
+    if os.environ.get("DBFOX_TESTING") == "1":
         # Test environment runs the agent against mocked LLM nodes.
         return
     key = (req.api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
     if not key:
-        raise DataBoxError("请先在设置中配置 LLM API Key。", code="NO_LLM_KEY")
+        raise DBFoxError("请先在设置中配置 LLM API Key。", code="NO_LLM_KEY")
 
 
 def _format_sse_event(event: AgentRuntimeEvent) -> str:
@@ -139,7 +139,7 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
     return f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
 
 
-def _http_detail(exc: DataBoxError) -> dict[str, str]:
+def _http_detail(exc: DBFoxError) -> dict[str, str]:
     return {"code": exc.code, "message": str(exc)}
 
 
@@ -201,8 +201,8 @@ def api_get_run_checkpoints(run_id: str, db: Session = Depends(get_db)) -> list[
 def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentRunResponse:
     try:
         _check_llm_credentials(req)
-        return DataBoxAgentRuntime(db).run(req)
-    except DataBoxError as exc:
+        return DBFoxAgentRuntime(db).run(req)
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail=_http_detail(exc))
     except Exception as exc:
         llm_error = llm_error_from_exception(exc)
@@ -222,8 +222,8 @@ def api_agent_run_resume(
     db: Session = Depends(get_db),
 ) -> AgentRunResponse:
     try:
-        return DataBoxAgentRuntime(db).resume(run_id, req.approval_id)
-    except DataBoxError as exc:
+        return DBFoxAgentRuntime(db).resume(run_id, req.approval_id)
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
@@ -287,7 +287,7 @@ def api_resolve_agent_approval(
             emitter.emit("agent.run.failed", error="Approval rejected")
         db.commit()
         return approval
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
@@ -308,10 +308,10 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
     def stream_events() -> Any:  # noqa
         try:
             _check_llm_credentials(req)
-            for event in DataBoxAgentRuntime(db).run_iter(req):
+            for event in DBFoxAgentRuntime(db).run_iter(req):
                 yield _format_sse_event(event)
-        except DataBoxError as exc:
-            yield sse_failed_event("runtime_error_databox", "", str(exc), exc.code)
+        except DBFoxError as exc:
+            yield sse_failed_event("runtime_error_dbfox", "", str(exc), exc.code)
         except Exception as exc:
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:
@@ -338,10 +338,10 @@ def api_agent_run_resume_stream(
 ) -> StreamingResponse:
     def stream_events() -> Any:  # noqa
         try:
-            for event in DataBoxAgentRuntime(db).resume_iter(run_id, req.approval_id):
+            for event in DBFoxAgentRuntime(db).resume_iter(run_id, req.approval_id):
                 yield _format_sse_event(event)
-        except DataBoxError as exc:
-            yield sse_failed_event("runtime_resume_error_databox", run_id, str(exc), exc.code)
+        except DBFoxError as exc:
+            yield sse_failed_event("runtime_resume_error_dbfox", run_id, str(exc), exc.code)
         except Exception as exc:
             llm_error = llm_error_from_exception(exc)
             if llm_error is not None:

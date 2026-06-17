@@ -103,7 +103,7 @@ describe("conversationRepository", () => {
     expect(options.method).toBe("PUT");
 
     // Verify migration marker is set
-    expect(localStorage.getItem("databox_legacy_conversations_migrated")).toBe("true");
+    expect(localStorage.getItem("dbfox_legacy_conversations_migrated")).toBe("true");
 
     // Running it again should not invoke Tauri command
     vi.mocked(invoke).mockClear();

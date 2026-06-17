@@ -14,7 +14,7 @@ def test_write_env_local_uses_frontend_engine_env_names(tmp_path, monkeypatch) -
     env_text = path.read_text(encoding="utf-8")
     assert "VITE_LOCAL_ENGINE_PORT=18625\n" in env_text
     assert 'VITE_LOCAL_ENGINE_TOKEN="test-token"\n' in env_text
-    assert "VITE_DATABOX_STATIC_TOKEN" not in env_text
+    assert "VITE_DBFOX_STATIC_TOKEN" not in env_text
 
 
 def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
@@ -32,7 +32,7 @@ def test_export_langsmith_runtime_env_copies_only_tracing_keys(tmp_path, monkeyp
     env_file.write_text(
         "LANGCHAIN_TRACING_V2=true\n"
         "LANGCHAIN_API_KEY=lsv2-test\n"
-        "LANGCHAIN_PROJECT=DataBox\n"
+        "LANGCHAIN_PROJECT=DBFox\n"
         "OPENAI_API_KEY=sk-should-not-copy\n",
         encoding="utf-8",
     )
@@ -45,5 +45,5 @@ def test_export_langsmith_runtime_env_copies_only_tracing_keys(tmp_path, monkeyp
     text = target.read_text(encoding="utf-8")
     assert "LANGCHAIN_TRACING_V2=true\n" in text
     assert "LANGCHAIN_API_KEY=lsv2-test\n" in text
-    assert "LANGCHAIN_PROJECT=DataBox\n" in text
+    assert "LANGCHAIN_PROJECT=DBFox\n" in text
     assert "OPENAI_API_KEY" not in text

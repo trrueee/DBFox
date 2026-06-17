@@ -1,13 +1,13 @@
 
 [package]
-name = "databox"
+name = "dbfox"
 version = "1.0.0"
-description = "DataBox - AI-powered Database Client"
-authors = ["DataBox"]
+description = "DBFox - AI-powered Database Client"
+authors = ["DBFox"]
 edition = "2021"
 
 [lib]
-name = "databox_lib"
+name = "dbfox_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

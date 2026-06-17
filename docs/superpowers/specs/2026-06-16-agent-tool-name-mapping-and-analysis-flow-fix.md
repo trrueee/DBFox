@@ -72,7 +72,7 @@ def _tool_name_from_step(step_name: str) -> str:
 
 Delete or deprecate:
 - `engine/tools/builtin/answer_synthesize.yaml`
-- `_answer_synthesize_handler` in `engine/tools/databox_tools.py`
+- `_answer_synthesize_handler` in `engine/tools/dbfox_tools.py`
 - `_apply_answer_synthesize` in `engine/agent_core/databinding.py`
 - `"answer.synthesize"` entry in `TOOL_STATE_APPLIERS`
 - `"answer_synthesize"` alias in `engine/agent/tools/tool_aliases.py`
@@ -239,7 +239,7 @@ AgentAnswer(
 | File | Change |
 |------|--------|
 | `engine/agent/nodes/observe_node.py` | `_tool_name_from_step` reverse mapping; update `emit_artifacts_from_observation` |
-| `engine/tools/databox_tools.py` | Replace `_result_profile_handler` + `_answer_synthesize_handler` with `_analyze_data_handler` |
+| `engine/tools/dbfox_tools.py` | Replace `_result_profile_handler` + `_answer_synthesize_handler` with `_analyze_data_handler` |
 | `engine/tools/builtin/analyze_data.yaml` | New YAML spec |
 | `engine/tools/builtin/result_profile.yaml` | Delete or repurpose |
 | `engine/tools/builtin/answer_synthesize.yaml` | Delete |

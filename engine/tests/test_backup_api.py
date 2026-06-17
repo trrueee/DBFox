@@ -11,7 +11,7 @@ from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import DEFAULT_PROJECT_ID, DataSource
 
 
-TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".databox_runtime" / "tests"
+TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".dbfox_runtime" / "tests"
 
 
 def _headers():
@@ -56,7 +56,7 @@ def _create_mysql_datasource(db_session) -> DataSource:
 
 def test_create_list_and_precheck_backup(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_backup_runtime")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
     def fake_dump(ds: DataSource, output_path) -> None:
@@ -93,7 +93,7 @@ def test_create_list_and_precheck_backup(client, db_session, monkeypatch) -> Non
 
 def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_runtime")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
     # 1. Mock mysqldump
@@ -141,7 +141,7 @@ def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
 
 def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_anti_tamper")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
     # 1. Mock mysqldump
@@ -174,7 +174,7 @@ def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -
 
 def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_backup_strict")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
     # Mock _run_mysqldump to raise FileNotFoundError to simulate missing binary
@@ -196,7 +196,7 @@ def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> Non
 
 def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_strict")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
 
     def fake_dump(ds: DataSource, output_path) -> None:
@@ -229,7 +229,7 @@ def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> No
 
 def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_env_mismatch")
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     
     # 1. Create a dev datasource and backup
     datasource = _create_mysql_datasource(db_session)

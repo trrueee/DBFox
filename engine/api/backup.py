@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-DataBox 备份与恢复 API 路由模块 (Backup & Restore Router)
+DBFox 备份与恢复 API 路由模块 (Backup & Restore Router)
 ------------------------------------------------------
 这个模块定义了所有与数据库备份、覆盖恢复相关的 RESTful Web API 接口。
 它演示了如何与 SQLAlchemy 数据库会话 (Session) 交互，利用 Pydantic 模型进行请求体校验，
@@ -15,14 +15,14 @@ from sqlalchemy.orm import Session
 
 from engine.backup import create_backup, execute_restore, precheck_restore
 from engine.db import get_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import BackupRecord, DataSource
 from engine.schemas import BackupCreateRequest
 from engine.schema_sync import sync_schema
 from engine.policy.engine import PolicyEngine
 
 # 获取当前模块的日志记录器
-logger = logging.getLogger("databox.api.backup")
+logger = logging.getLogger("dbfox.api.backup")
 
 # 创建一个 API 路由组 (APIRouter)
 # 在 FastAPI 中，我们将不同业务模块的接口拆分到各个路由文件中，然后使用 APIRouter 独立配置，最后统一挂载到主应用上。
@@ -119,7 +119,7 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
         db.commit()      # 提交事务
         db.refresh(record)  # 刷新模型
         return _backup_to_dict(record)
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()    # 发生业务错误，回滚事务
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
@@ -193,7 +193,7 @@ def api_restore_backup(
     # 3. 🔒 强制安全合规校验：例如禁止在生产环境中执行数据库恢复还原
     try:
         PolicyEngine.enforce_restore_policy(datasource)
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
     # 4. 🔒 检查是否跳过二次确认（通常开发测试环境或自动化集成中可以配置绕过）
@@ -233,7 +233,7 @@ def api_restore_backup(
         res = execute_restore(db, backup_id, allow_fallback=allow_fallback)
         db.commit()  # 物理恢复完成，更新本地备份记录的状态为已成功，并提交本地事务
         
-        # 恢复完成后，在后台异步触发一次表结构元数据同步，使 DataBox 里的元数据与实际数据库保持一致
+        # 恢复完成后，在后台异步触发一次表结构元数据同步，使 DBFox 里的元数据与实际数据库保持一致
         try:
             sync_schema(db, res["datasource_id"])
             db.commit()
@@ -241,7 +241,7 @@ def api_restore_backup(
             logger.exception("还原数据库后尝试刷新同步元数据时失败")
             
         return res
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:

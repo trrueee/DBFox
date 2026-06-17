@@ -15,14 +15,14 @@ from engine.agent_core.types import (
     AgentRuntimeEvent,
     AgentRuntimeEventType,
 )
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.agent_core.checkpointer import build_agent_core_checkpointer
-from engine.tools.databox_tools import register_databox_tools
+from engine.tools.dbfox_tools import register_dbfox_tools
 from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.events import EventEmitter
 
-from engine.agent.graph.react_graph import build_databox_react_graph
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.react_graph import build_dbfox_react_graph
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.app.request_context import RequestContext
 from engine.agent.app.response_builder import build_response
 
@@ -41,7 +41,7 @@ from engine.agent.app.event_mapper import (
     artifacts_from_state,
 )
 
-logger = logging.getLogger("databox.databox_agent.service")
+logger = logging.getLogger("dbfox.dbfox_agent.service")
 
 # Full set of safe tool groups available to the model on every run.
 # The policy gate and execution_mode control what actually executes.
@@ -51,15 +51,15 @@ FULL_SAFE_TOOL_GROUPS = [
 ]
 
 
-class DataBoxAgentService:
-    """Next-generation DataBox agent service built on a pure ReAct graph.
+class DBFoxAgentService:
+    """Next-generation DBFox agent service built on a pure ReAct graph.
 
     Replaces engine.agent_kernel.service.AgentKernelService.
     """
 
     def __init__(self, db: Session):
         self.db = db
-        self.registry = register_databox_tools()
+        self.registry = register_dbfox_tools()
         self._checkpointer = build_agent_core_checkpointer()
         _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
         _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
@@ -75,7 +75,7 @@ class DataBoxAgentService:
             if event.response is not None:
                 final_response = event.response
         if final_response is None:
-            raise RuntimeError("DataBoxAgentService completed without a final response.")
+            raise RuntimeError("DBFoxAgentService completed without a final response.")
         return final_response
 
     def run_iter(self, req: AgentRunRequest) -> Iterator[AgentRuntimeEvent]:
@@ -114,7 +114,7 @@ class DataBoxAgentService:
 
         # Build and run graph. The LangGraph checkpoint thread is keyed by
         # run_id (not session_id).
-        app = build_databox_react_graph(checkpointer=self._checkpointer)
+        app = build_dbfox_react_graph(checkpointer=self._checkpointer)
         config = ctx.graph_config(run_id)
 
         agent_state = self._new_agent_state(run_id, session_id, req)
@@ -216,9 +216,9 @@ class DataBoxAgentService:
 
         existing_approval = agent_persistence.get_approval(self.db, approval_id)
         if existing_approval is None:
-            raise DataBoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+            raise DBFoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
         if existing_approval.run_id != run_id:
-            raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
+            raise DBFoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
 
         # Resolve the approval in DB.
         resolved_here = existing_approval.status == "pending"
@@ -257,7 +257,7 @@ class DataBoxAgentService:
             agent_persistence.mark_run_resumed(self.db, run_id=run_id)
             yield emit("agent.run.resumed", step={"name": approval.step_name}, approval=approval)
 
-        app = build_databox_react_graph(checkpointer=self._checkpointer)
+        app = build_dbfox_react_graph(checkpointer=self._checkpointer)
         config = ctx.graph_config(run_id)
         artifact_identity = AgentArtifactIdentity(run_id)
         agent_state = self._new_agent_state(run_id, session_id, req)
@@ -317,13 +317,13 @@ class DataBoxAgentService:
 
     def _initial_state(
         self, req: AgentRunRequest, run_id: str, session_id: str
-    ) -> DataBoxAgentState:
+    ) -> DBFoxAgentState:
         pending_approval = pending_approval_from_workspace(self.db, req)
         if req.execution_mode:
             execution_mode = req.execution_mode
         else:
             execution_mode = "user_requested_read" if req.execute else "suggest_only"
-        return DataBoxAgentState(
+        return DBFoxAgentState(
             run_id=run_id,
             thread_id=session_id,
             datasource_id=req.datasource_id,

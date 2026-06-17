@@ -9,7 +9,7 @@
     "execution_accuracy": 0.4,
     "avg_latency_ms": 1035.4,
     "runner_mode": "qwen-baseline",
-    "is_databox_score": false
+    "is_dbfox_score": false
   },
   "cases": [
     {

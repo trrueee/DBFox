@@ -1,4 +1,4 @@
-"""ContextPack — structured, multi-view context container for DataBox Agent v2.
+"""ContextPack — structured, multi-view context container for DBFox Agent v2.
 
 Instead of each node (Planner, Model, Progress Judge) independently building
 context from raw state, the ContextPack is assembled once after each observe
@@ -439,7 +439,7 @@ def render_for_planner(pack: ContextPack) -> str:
 
 def render_for_model(pack: ContextPack) -> str:
     """Model view: full context with all factual state for ReAct reasoning."""
-    parts = ["### DataBox Current State"]
+    parts = ["### DBFox Current State"]
 
     if pack.intent.original_question:
         parts.append(f"- **User Goal**: {pack.intent.original_question[:500]}")

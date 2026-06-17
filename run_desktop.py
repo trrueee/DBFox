@@ -1,7 +1,7 @@
 """
 ⚠️ DEPRECATED — pywebview 原生窗口启动器已废弃。
 
-DataBox 的主要桌面交付路径是 Tauri:
+DBFox 的主要桌面交付路径是 Tauri:
     cd desktop && npm run tauri dev
 
 此脚本仅保留用于快速体验，不会自动安装依赖。
@@ -35,7 +35,7 @@ def main():
     os.chdir(root_dir)
     
     print("=================================================================")
-    print("   DataBox — Native 窗口渲染启动器 (遗留)")
+    print("   DBFox — Native 窗口渲染启动器 (遗留)")
     print("   推荐使用: cd desktop && npm run tauri dev")
     print("=================================================================")
 
@@ -50,7 +50,7 @@ def main():
     
     # Check if FastAPI backend (Port 18625) is running
     if not is_port_open(18625):
-        print(">>> 检测到 DataBox 审计及 AI 引擎后台未启动，正在拉起 (热更新已开启)...")
+        print(">>> 检测到 DBFox 审计及 AI 引擎后台未启动，正在拉起 (热更新已开启)...")
         backend_proc = subprocess.Popen(
             [sys.executable, "-m", "engine.main", "--reload"],
             cwd=root_dir,
@@ -100,14 +100,14 @@ def main():
         sys.exit(1)
         
     url = f"http://localhost:{front_port}"
-    print(f"\n[★] DataBox 桌面服务就绪，正在激活 native Windows WebView2 渲染框架...")
+    print(f"\n[★] DBFox 桌面服务就绪，正在激活 native Windows WebView2 渲染框架...")
     print(f"  - 交互视图地址: {url}")
     print("=================================================================\n")
     
     try:
         # Create a premium, hardware-accelerated desktop client view frame
         webview.create_window(
-            title="DataBox 智能安全数据探索桌面客户端",
+            title="DBFox 智能安全数据探索桌面客户端",
             url=url,
             width=1440,
             height=900,
@@ -118,7 +118,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        print("\n>>> 正在安全退出 DataBox 桌面应用，回收底层服务进程...")
+        print("\n>>> 正在安全退出 DBFox 桌面应用，回收底层服务进程...")
         if backend_proc:
             backend_proc.terminate()
         if frontend_proc:
@@ -126,7 +126,7 @@ def main():
                 subprocess.call(f"taskkill /F /T /PID {frontend_proc.pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 frontend_proc.terminate()
-        print("[+] 感谢使用 DataBox 客户端！")
+        print("[+] 感谢使用 DBFox 客户端！")
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,7 @@
-"""DataBoxAgentRuntime — public Agent runtime facade.
+"""DBFoxAgentRuntime — public Agent runtime facade.
 
 This is the primary entry point for agent execution.  It delegates to
-DataBoxAgentService (the LangGraph ReAct engine) while providing a
+DBFoxAgentService (the LangGraph ReAct engine) while providing a
 stable API for API routes, tests, and evaluation.
 
 Dependency direction:
@@ -18,34 +18,34 @@ from sqlalchemy.orm import Session
 
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 
-logger = logging.getLogger("databox.agent.runtime")
+logger = logging.getLogger("dbfox.agent.runtime")
 
 
-class DataBoxAgentRuntime:
-    """Public Agent runtime facade backed by the DataBox ReAct agent.
+class DBFoxAgentRuntime:
+    """Public Agent runtime facade backed by the DBFox ReAct agent.
 
     The legacy engine.agent_kernel runtime has been removed. All public callers
-    use this facade, with execution delegated to DataBoxAgentService.
+    use this facade, with execution delegated to DBFoxAgentService.
     """
 
     def __init__(self, db: Session):
         self.db = db
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
 
-        self.kernel = DataBoxAgentService(db)
+        self.kernel = DBFoxAgentService(db)
 
     def run(self, req: AgentRunRequest) -> AgentRunResponse:
         try:
             return self._facade_response(self.kernel.run(req))
-        except DataBoxError:
+        except DBFoxError:
             raise
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Agent runtime failed unexpectedly")
-            raise DataBoxError(
+            raise DBFoxError(
                 "Agent 运行失败，请稍后重试或查看日志。",
                 code="AGENT_RUNTIME_ERROR",
             )
@@ -60,7 +60,7 @@ class DataBoxAgentRuntime:
             if event.response is not None:
                 final_response = event.response
         if final_response is None:
-            raise DataBoxError("Agent resume completed without a final response.", code="AGENT_RUNTIME_ERROR")
+            raise DBFoxError("Agent resume completed without a final response.", code="AGENT_RUNTIME_ERROR")
         return final_response
 
     def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
@@ -69,15 +69,15 @@ class DataBoxAgentRuntime:
             pending = agent_persistence.get_pending_approval_for_run(self.db, run_id)
             resolved_approval_id = pending.id if pending is not None else ""
         if not resolved_approval_id:
-            raise DataBoxError("No approval id was supplied for resume.", code="APPROVAL_NOT_FOUND")
+            raise DBFoxError("No approval id was supplied for resume.", code="APPROVAL_NOT_FOUND")
 
         approval = agent_persistence.get_approval(self.db, resolved_approval_id)
         if approval is None:
-            raise DataBoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+            raise DBFoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
         if approval.run_id != run_id:
-            raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
+            raise DBFoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
         if approval.status == "pending":
-            raise DataBoxError("Approval is still pending.", code="APPROVAL_PENDING")
+            raise DBFoxError("Approval is still pending.", code="APPROVAL_PENDING")
 
         for event in self.kernel.resume_approval_iter(
             run_id=run_id,

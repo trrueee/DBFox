@@ -1,4 +1,4 @@
-"""Pytest fixtures for databox_agent tests."""
+"""Pytest fixtures for dbfox_agent tests."""
 from engine.tests.conftest import (
     db_session,
     test_datasource,

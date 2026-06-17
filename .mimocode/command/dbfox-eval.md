@@ -1,10 +1,10 @@
 ---
-description: Run DataBox agent evaluation suite with optional backend restart
+description: Run DBFox agent evaluation suite with optional backend restart
 ---
 
 # Agent Eval Runner
 
-Run the DataBox agent evaluation framework.
+Run the DBFox agent evaluation framework.
 
 ## Usage
 
@@ -18,19 +18,19 @@ Run the DataBox agent evaluation framework.
 ## Default Command
 
 ```bash
-cd "D:/Project/DataBox" && python .agent_eval/run_agent_eval.py --config .agent_eval/eval_config.yaml 2>&1
+cd "D:/Project/DBFox" && python .agent_eval/run_agent_eval.py --config .agent_eval/eval_config.yaml 2>&1
 ```
 
 ## With LangSmith Tracing
 
 ```bash
-export LANGCHAIN_TRACING_V2=true; export LANGCHAIN_API_KEY="<key>"; export LANGCHAIN_PROJECT="databox-agent-e2e"; python -m pytest engine/ -q 2>&1
+export LANGCHAIN_TRACING_V2=true; export LANGCHAIN_API_KEY="<key>"; export LANGCHAIN_PROJECT="dbfox-agent-e2e"; python -m pytest engine/ -q 2>&1
 ```
 
 ## With Backend Restart
 
 ```bash
-cd "D:/Project/DataBox" && python .agent_eval/run_agent_eval.py --config .agent_eval/eval_config.yaml -q 2>&1 | tail -2 && python .agent_eval/start_eval_backend.py &
+cd "D:/Project/DBFox" && python .agent_eval/run_agent_eval.py --config .agent_eval/eval_config.yaml -q 2>&1 | tail -2 && python .agent_eval/start_eval_backend.py &
 ```
 
 ## Notes

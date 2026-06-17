@@ -11,7 +11,7 @@ from sshtunnel import SSHTunnelForwarder
 from engine.crypto import decrypt_password
 from engine.errors import DataSourceConnectionError
 
-logger = logging.getLogger("databox.tunnel")
+logger = logging.getLogger("dbfox.tunnel")
 
 
 class TunnelState:

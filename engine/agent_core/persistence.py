@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.agent_core.types import (
     AgentArtifact,
     AgentAnswer,
@@ -38,7 +38,7 @@ from engine.models import (
     ChatConversation,
 )
 
-logger = logging.getLogger("databox.agent.persistence")
+logger = logging.getLogger("dbfox.agent.persistence")
 
 
 def _safe_json(payload: Any | None) -> str:
@@ -373,15 +373,15 @@ def resolve_approval(
     decided_by: str | None = "local-user",
 ) -> AgentApprovalRecord:
     if decision not in {"approved", "rejected"}:
-        raise DataBoxError("Invalid approval decision.", code="INVALID_APPROVAL_DECISION")
+        raise DBFoxError("Invalid approval decision.", code="INVALID_APPROVAL_DECISION")
 
     approval = db.query(AgentApproval).filter(AgentApproval.id == approval_id).first()
     if approval is None:
-        raise DataBoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+        raise DBFoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
     if approval.run_id != run_id:
-        raise DataBoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
+        raise DBFoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
     if approval.status != "pending":
-        raise DataBoxError("Approval has already been resolved.", code="APPROVAL_ALREADY_RESOLVED")
+        raise DBFoxError("Approval has already been resolved.", code="APPROVAL_ALREADY_RESOLVED")
 
     approval.status = decision  # type: ignore[assignment]
     approval.decided_by = decided_by  # type: ignore[assignment]
@@ -509,7 +509,7 @@ def mark_run_waiting_approval(
 ) -> None:
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if run is None:
-        raise DataBoxError("Agent run not found.", code="RUN_NOT_FOUND")
+        raise DBFoxError("Agent run not found.", code="RUN_NOT_FOUND")
     run.status = "waiting_approval"  # type: ignore[assignment]
     run.current_step_name = current_step_name  # type: ignore[assignment]
     run.waiting_approval_id = approval_id  # type: ignore[assignment]
@@ -526,7 +526,7 @@ def mark_run_waiting_approval(
 def mark_run_resumed(db: Session, *, run_id: str, current_step_name: str | None = "query_database") -> None:
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if run is None:
-        raise DataBoxError("Agent run not found.", code="RUN_NOT_FOUND")
+        raise DBFoxError("Agent run not found.", code="RUN_NOT_FOUND")
     run.status = "running"  # type: ignore[assignment]
     run.current_step_name = current_step_name  # type: ignore[assignment]
     run.waiting_approval_id = None  # type: ignore[assignment]

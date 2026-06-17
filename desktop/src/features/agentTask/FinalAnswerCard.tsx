@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Lightbulb, AlertTriangle, CheckCircle2, FileText, ChevronRight, Terminal, Database } from "lucide-react";
 import type { AgentAnswer, FollowUpSuggestion } from "../../lib/api/types";
 import type { AgentArtifact } from "../../types/agentArtifact";
-import type { AgentTabStatus } from "../../mock/databoxMock";
+import type { AgentTabStatus } from "../../mock/dbfoxMock";
 import { MarkdownContent } from "../workspace/queryResult/MarkdownContent";
 
 interface FinalAnswerCardProps {

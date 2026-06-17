@@ -23,7 +23,7 @@ from engine.memory.memory_schema import (
     FailureLearningContent,
 )
 
-logger = logging.getLogger("databox.databox_agent.memory_bridge")
+logger = logging.getLogger("dbfox.dbfox_agent.memory_bridge")
 
 # ── Memory types relevant for auto-search ──────────────────────────────────────
 

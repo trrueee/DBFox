@@ -17,11 +17,11 @@ class RequestContext:
         request: AgentRunRequest,
         registry: ToolRegistry | None = None,
     ):
-        from engine.tools.databox_tools import register_databox_tools
+        from engine.tools.dbfox_tools import register_dbfox_tools
 
         self.db = db
         self.request = request
-        self.registry = registry or register_databox_tools()
+        self.registry = registry or register_dbfox_tools()
 
         # Resolved model config (request overrides env)
         self.model_name = request.model_name

@@ -32,7 +32,7 @@ from engine.memory.memory_schema import (
     MemorySource,
 )
 
-logger = logging.getLogger("databox.memory.long_term")
+logger = logging.getLogger("dbfox.memory.long_term")
 
 # ---------------------------------------------------------------------------
 # Namespace helpers
@@ -680,7 +680,7 @@ _store: LongTermMemoryStore | SQLiteLongTermMemoryStore | None = None
 def get_long_term_store() -> LongTermMemoryStore | SQLiteLongTermMemoryStore:
     global _store
     if _store is None:
-        if os.environ.get("DATABOX_MEMORY_STORE", "").lower() == "memory":
+        if os.environ.get("DBFOX_MEMORY_STORE", "").lower() == "memory":
             _store = LongTermMemoryStore()
         else:
             _store = SQLiteLongTermMemoryStore(

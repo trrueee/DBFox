@@ -3,7 +3,7 @@ from __future__ import annotations
 """Model-facing tool-name aliases.
 
 OpenAI-compatible function-calling providers often restrict function/tool names
-to [a-zA-Z0-9_-] and may reject names containing dots (.).  DataBox internal
+to [a-zA-Z0-9_-] and may reject names containing dots (.).  DBFox internal
 tool names use dots as namespace separators (``schema.build_context``,
 ``sql.generate``, etc.).
 

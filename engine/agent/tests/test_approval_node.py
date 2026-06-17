@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from unittest.mock import patch, MagicMock
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.nodes.approval_node import approval_interrupt
 
 
 class TestApprovalNode:
     def test_approval_interrupt_approved(self):
         """When interrupt returns approved, allowed_tool_calls should be populated."""
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "pending_approval": {
                 "id": "approval-1",
                 "tool_name": "sql.execute_readonly",
@@ -36,7 +36,7 @@ class TestApprovalNode:
 
     def test_approval_interrupt_rejected(self):
         """When interrupt returns rejected, allowed_tool_calls should be empty."""
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "pending_approval": {
                 "id": "approval-2",
                 "tool_name": "sql.execute_readonly",
@@ -62,7 +62,7 @@ class TestApprovalNode:
 
     def test_approval_interrupt_unknown_decision(self):
         """Unknown decision is treated as rejected."""
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "pending_approval": {
                 "id": "approval-3",
                 "tool_name": "sql.execute_readonly",
@@ -86,7 +86,7 @@ class TestApprovalNode:
 
     def test_approval_interrupt_string_decision(self):
         """If interrupt returns a string instead of dict, treat as rejected."""
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "pending_approval": {
                 "id": "approval-4",
                 "tool_name": "sql.execute_readonly",

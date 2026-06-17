@@ -55,7 +55,7 @@ def build_progress_guidance_message(state: dict[str, Any]) -> SystemMessage | No
 
 
 def build_context_message(state: dict[str, Any]) -> SystemMessage:
-    """Format the factual DataBox business state variables into a SystemMessage context block.
+    """Format the factual DBFox business state variables into a SystemMessage context block.
 
     This ensures the LLM stays grounded in actual tool output and execution history.
 
@@ -73,7 +73,7 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
         except Exception:
             pass  # Fall through to legacy path
 
-    parts = ["### DataBox Current State Context"]
+    parts = ["### DBFox Current State Context"]
 
     # 1. Follow-up Context
     follow_up = state.get("follow_up_context")

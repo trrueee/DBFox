@@ -15,10 +15,10 @@ from typing import Any
 
 from sqlalchemy.pool import QueuePool
 
-logger = logging.getLogger("databox.sql.pool_registry")
+logger = logging.getLogger("dbfox.sql.pool_registry")
 
-MAX_POOLS = int(os.environ.get("DATABOX_SQL_MAX_POOLS", "16"))
-MAX_CONNECTIONS = int(os.environ.get("DATABOX_SQL_MAX_CONNECTIONS", "64"))
+MAX_POOLS = int(os.environ.get("DBFOX_SQL_MAX_POOLS", "16"))
+MAX_CONNECTIONS = int(os.environ.get("DBFOX_SQL_MAX_CONNECTIONS", "64"))
 
 
 @dataclass

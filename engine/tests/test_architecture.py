@@ -122,7 +122,7 @@ def test_engine_agent_init_exports_runtime_only() -> None:
     agent = importlib.import_module("engine.agent")
     public = [n for n in dir(agent) if not n.startswith("_")]
     # Allowed public API
-    allowed = {"DataBoxAgentRuntime", "DataBoxAgentService", "build_databox_react_graph"}
+    allowed = {"DBFoxAgentRuntime", "DBFoxAgentService", "build_dbfox_react_graph"}
     unexpected = set(public) - allowed
     # Filter out subpackages and module internals
     unexpected = {u for u in unexpected
@@ -144,7 +144,7 @@ def test_agent_core_exports_public_contracts() -> None:
     assert hasattr(agent_core, "ToolPolicy"), "agent_core must export ToolPolicy"
     assert hasattr(agent_core, "AgentRunRequest"), "agent_core must export AgentRunRequest"
     assert hasattr(agent_core, "persistence"), "agent_core must export persistence"
-    # CRITICAL: agent_core must NOT export DataBoxAgentRuntime
-    assert not hasattr(agent_core, "DataBoxAgentRuntime"), (
-        "agent_core must NOT export DataBoxAgentRuntime (it belongs in engine.agent)"
+    # CRITICAL: agent_core must NOT export DBFoxAgentRuntime
+    assert not hasattr(agent_core, "DBFoxAgentRuntime"), (
+        "agent_core must NOT export DBFoxAgentRuntime (it belongs in engine.agent)"
     )

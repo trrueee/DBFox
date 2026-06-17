@@ -50,5 +50,5 @@ export function AIAssistantEntry() {
 
 1. 裁剪成正方形小图标；
 2. 标准化为 `viewBox="0 0 128 128"`；
-3. 不带 DataBox 盒子；
+3. 不带 DBFox 盒子；
 4. 生成 SVG / PNG / React wrapper。

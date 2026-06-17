@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Conversation, ConversationMessage } from "../../types/conversation";
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import type { AgentArtifact as ApiAgentArtifact, AgentRunResponse, AgentRuntimeEvent } from "../../lib/api/types";
 import { BASE_URL, ENGINE_TOKEN } from "../../lib/api/client";
 import { agentApi, mergeArtifactDelta, resolveAgentApproval, streamResumeAgentRun } from "../../lib/api/agent";
@@ -273,7 +273,7 @@ export function useAgentRunner({
         approval.runId,
         approval.approvalId,
         approve ? "approved" : "rejected",
-        approve ? "Approved in DataBox UI" : "Rejected in DataBox UI",
+        approve ? "Approved in DBFox UI" : "Rejected in DBFox UI",
       );
       if (!approve) {
         persistTabConversation(tabId);

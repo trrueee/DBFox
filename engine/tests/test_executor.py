@@ -273,7 +273,7 @@ class TestPerformanceAndExplain:
         from engine.errors import GuardrailValidationError
         from engine.sql.test_executor import execute_query_for_test
 
-        monkeypatch.delenv("DATABOX_TESTING", raising=False)
+        monkeypatch.delenv("DBFOX_TESTING", raising=False)
 
         with pytest.raises(GuardrailValidationError) as exc_info:
             execute_query_for_test(

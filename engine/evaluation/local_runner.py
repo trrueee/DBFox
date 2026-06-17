@@ -20,7 +20,7 @@ from engine.evaluation.evaluators.sql_eval import evaluate_sql
 from engine.evaluation.evaluators.artifact_eval import evaluate_artifacts
 from engine.evaluation.evaluators.answer_eval import evaluate_answer
 
-logger = logging.getLogger("databox.eval.local_runner")
+logger = logging.getLogger("dbfox.eval.local_runner")
 
 
 class LocalEvalRunner:

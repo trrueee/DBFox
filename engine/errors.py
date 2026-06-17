@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-DataBox 异常处理模块 (Errors Module)
+DBFox 异常处理模块 (Errors Module)
 --------------------------------------
-这个模块定义了 DataBox 后端所有的自定义异常类。
+这个模块定义了 DBFox 后端所有的自定义异常类。
 在 Python 中，自定义异常是通过继承基类 `Exception` 来实现的。
 """
 
-class DataBoxError(Exception):
+class DBFoxError(Exception):
     """
-    DataBox 异常基类 (Base Error)
+    DBFox 异常基类 (Base Error)
     
-    所有 DataBox 自定义的业务异常都会继承这个类，这样在外部捕获异常时，
-    可以通过 `except DataBoxError:` 一并捕获所有相关的错误。
+    所有 DBFox 自定义的业务异常都会继承这个类，这样在外部捕获异常时，
+    可以通过 `except DBFoxError:` 一并捕获所有相关的错误。
     
     Python 知识点:
-      - `class DataBoxError(Exception):` 表示创建一个名叫 DataBoxError 的类，它继承自 Python 的内置异常类 `Exception`。
+      - `class DBFoxError(Exception):` 表示创建一个名叫 DBFoxError 的类，它继承自 Python 的内置异常类 `Exception`。
       - `__init__` 是类的构造函数（初始化方法），在创建类的实例对象时会自动执行。
       - `self` 代表类实例化后的对象自身，用于绑定属性。
       - `message: str` 和 `code: str` 是类型注解（Type Hints），说明 message 应该是字符串类型，code 也应该是字符串类型。
@@ -28,14 +28,14 @@ class DataBoxError(Exception):
         self.code = code           # 将业务错误码（如 CONNECTION_FAILED）绑定到实例属性 self.code
 
 
-class DataSourceConnectionError(DataBoxError):
+class DataSourceConnectionError(DBFoxError):
     """
     数据源连接异常
     
     当连接目标数据库失败时抛出此异常。
     
     Python 知识点:
-      - 继承自 `DataBoxError`，因此它本身也是一个 DataBoxError。
+      - 继承自 `DBFoxError`，因此它本身也是一个 DBFoxError。
       - 覆写了父类的构造函数 `__init__`，但默认传入了具体的错误码 "CONNECTION_FAILED"。
     """
 
@@ -43,7 +43,7 @@ class DataSourceConnectionError(DataBoxError):
         super().__init__(message, code="CONNECTION_FAILED")
 
 
-class GuardrailValidationError(DataBoxError):
+class GuardrailValidationError(DBFoxError):
     """
     SQL 安全卫士 (Guardrail) 校验失败异常
     
@@ -59,7 +59,7 @@ class GuardrailValidationError(DataBoxError):
         self.checks = checks or []  # 记录详细的检查条目，比如具体哪一项安全规则没通过
 
 
-class SQLExecutionError(DataBoxError):
+class SQLExecutionError(DBFoxError):
     """
     SQL 执行异常
     
@@ -70,7 +70,7 @@ class SQLExecutionError(DataBoxError):
         super().__init__(message, code="SQL_EXECUTION_FAILED")
 
 
-class SQLQueryTimeoutError(DataBoxError):
+class SQLQueryTimeoutError(DBFoxError):
     """
     SQL 查询超时异常
     
@@ -81,7 +81,7 @@ class SQLQueryTimeoutError(DataBoxError):
         super().__init__(message, code="SQL_QUERY_TIMEOUT")
 
 
-class SQLQueryCancelledError(DataBoxError):
+class SQLQueryCancelledError(DBFoxError):
     """
     SQL 查询取消异常
     
@@ -92,7 +92,7 @@ class SQLQueryCancelledError(DataBoxError):
         super().__init__(message, code="SQL_QUERY_CANCELLED")
 
 
-class AIServiceError(DataBoxError):
+class AIServiceError(DBFoxError):
     """
     AI 服务异常
     

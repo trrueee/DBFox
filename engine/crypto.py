@@ -7,13 +7,13 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from engine.runtime_paths import private_runtime_file, write_private_bytes, _chmod_private
 
-logger = logging.getLogger("databox.crypto")
+logger = logging.getLogger("dbfox.crypto")
 
 ENGINE_DIR = Path(__file__).resolve().parent
 LEGACY_KEY_FILE = ENGINE_DIR / ".secret_key"
 KEY_FILE = private_runtime_file("secrets", ".secret_key")
 
-KEYRING_SERVICE = "DataBox"
+KEYRING_SERVICE = "DBFox"
 KEYRING_USERNAME = "DatabaseClientSecretKey"
 
 

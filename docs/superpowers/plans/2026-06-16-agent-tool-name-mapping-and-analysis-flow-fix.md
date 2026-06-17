@@ -184,14 +184,14 @@ git commit -m "feat: add analyze_data YAML tool spec"
 
 ---
 
-### Task 4: Create analyze_data handler in databox_tools.py
+### Task 4: Create analyze_data handler in dbfox_tools.py
 
 **Files:**
-- Modify: `engine/tools/databox_tools.py`
+- Modify: `engine/tools/dbfox_tools.py`
 
 - [ ] **Step 1: Add import for STEP_NAME_MAP at top**
 
-Add after existing imports in `engine/tools/databox_tools.py`:
+Add after existing imports in `engine/tools/dbfox_tools.py`:
 
 ```python
 from engine.agent.tools.tool_aliases import STEP_NAME_MAP
@@ -199,7 +199,7 @@ from engine.agent.tools.tool_aliases import STEP_NAME_MAP
 
 - [ ] **Step 2: Register and write the handler (no STEP_NAME_MAP change needed)**
 
-In `engine/tools/databox_tools.py`, in `register_databox_tools()`, replace the existing `result_profile_handler` and `answer_synthesize_handler` registration lines (lines 69-71) with:
+In `engine/tools/dbfox_tools.py`, in `register_dbfox_tools()`, replace the existing `result_profile_handler` and `answer_synthesize_handler` registration lines (lines 69-71) with:
 
 ```python
     # -- Analysis tools ---------------------------------------------------
@@ -264,13 +264,13 @@ In `STEP_NAME_MAP` in `engine/agent/tools/tool_aliases.py` (already done in step
 
 - [ ] **Step 5: Verify handler import works**
 
-Run: `python -c "from engine.tools.databox_tools import _analyze_data_handler; print('OK')"`
+Run: `python -c "from engine.tools.dbfox_tools import _analyze_data_handler; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add engine/tools/databox_tools.py engine/agent/tools/tool_aliases.py
+git add engine/tools/dbfox_tools.py engine/agent/tools/tool_aliases.py
 git commit -m "feat: add analyze_data handler replacing result.profile and answer.synthesize"
 ```
 
@@ -465,7 +465,7 @@ In `engine/agent/graph/state.py`, line 99, replace:
 
 - [ ] **Step 2: Verify the TypedDict still loads**
 
-Run: `python -c "from engine.agent.graph.state import DataBoxAgentState; print('OK')"`
+Run: `python -c "from engine.agent.graph.state import DBFoxAgentState; print('OK')"`
 Expected: `OK`
 
 - [ ] **Step 3: Commit**
@@ -714,7 +714,7 @@ In `engine/agent/nodes/finalize_node.py`, update the `finalize_answer` function:
 4. Add `_build_evidence_from_state` helper function at module level:
 
 ```python
-def _build_evidence_from_state(state: DataBoxAgentState) -> list[dict[str, Any]]:
+def _build_evidence_from_state(state: DBFoxAgentState) -> list[dict[str, Any]]:
     """Build evidence list from code-computed state — never from model output."""
     evidence: list[dict[str, Any]] = []
     execution = state.get("execution")
@@ -878,13 +878,13 @@ git commit -m "test: update tests for analyze_data and data_profile rename"
 - [ ] **Step 1: Verify tool registry loads without errors**
 
 ```bash
-python -c "from engine.tools.databox_tools import register_databox_tools; r = register_databox_tools(); print('Tools:', len(r.list_specs())); assert r.get('analyze_data') is not None; print('analyze_data registered OK')"
+python -c "from engine.tools.dbfox_tools import register_dbfox_tools; r = register_dbfox_tools(); print('Tools:', len(r.list_specs())); assert r.get('analyze_data') is not None; print('analyze_data registered OK')"
 ```
 
 - [ ] **Step 2: Verify graph can be built**
 
 ```bash
-python -c "from engine.agent.graph.react_graph import build_databox_react_graph; g = build_databox_react_graph(); print('Graph built OK')"
+python -c "from engine.agent.graph.react_graph import build_dbfox_react_graph; g = build_dbfox_react_graph(); print('Graph built OK')"
 ```
 
 - [ ] **Step 3: Run full test suite**

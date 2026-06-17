@@ -1,5 +1,5 @@
 """Lightweight agent run state tracker — carries steps and artifacts across
-the ReAct loop lifecycle.  The authoritative graph state is DataBoxAgentState
+the ReAct loop lifecycle.  The authoritative graph state is DBFoxAgentState
 (TypedDict); this model exists only for the service layer to accumulate
 results for the final AgentRunResponse.
 """

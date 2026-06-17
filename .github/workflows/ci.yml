@@ -36,10 +36,10 @@ jobs:
 
       - name: Verify Alembic migrations apply cleanly on empty database
         env:
-          DATABOX_MIGRATE_ONLY: "1"
+          DBFOX_MIGRATE_ONLY: "1"
         run: |
-          rm -f "$RUNNER_TEMP/databox_migration_test.db"
-          export DATABOX_DB_PATH="$RUNNER_TEMP/databox_migration_test.db"
+          rm -f "$RUNNER_TEMP/dbfox_migration_test.db"
+          export DBFOX_DB_PATH="$RUNNER_TEMP/dbfox_migration_test.db"
           python << 'EOF'
           from alembic.config import Config
           from alembic import command
@@ -51,10 +51,10 @@ jobs:
 
       - name: FastAPI startup smoke test
         run: |
-          rm -f /tmp/databox_smoke_test.db
+          rm -f /tmp/dbfox_smoke_test.db
           python -c "
           import os
-          os.environ['DATABOX_DB_PATH'] = '/tmp/databox_smoke_test.db'
+          os.environ['DBFOX_DB_PATH'] = '/tmp/dbfox_smoke_test.db'
           from engine.main import app
           from fastapi.testclient import TestClient
           client = TestClient(app)

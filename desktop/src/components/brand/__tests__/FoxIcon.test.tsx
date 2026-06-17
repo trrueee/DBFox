@@ -7,7 +7,7 @@ describe("FoxIcon", () => {
   it("renders the tight fox asset from the public asset pack by default", () => {
     render(<FoxIcon />);
 
-    const icon = screen.getByRole("img", { name: "DataBox fox icon" });
+    const icon = screen.getByRole("img", { name: "DBFox fox icon" });
 
     expect(icon).toHaveAttribute("src", "/assets/fox/svg/fox-icon-tight.svg");
     expect(icon).toHaveAttribute("width", "24");
@@ -15,9 +15,9 @@ describe("FoxIcon", () => {
   });
 
   it("supports the AI tight variant and custom sizing", () => {
-    render(<FoxIcon variant="ai-tight" size={32} alt="Ask DataBox" />);
+    render(<FoxIcon variant="ai-tight" size={32} alt="Ask DBFox" />);
 
-    const icon = screen.getByRole("img", { name: "Ask DataBox" });
+    const icon = screen.getByRole("img", { name: "Ask DBFox" });
 
     expect(icon).toHaveAttribute("src", "/assets/fox/svg/fox-icon-ai-tight.svg");
     expect(icon).toHaveAttribute("width", "32");
@@ -25,9 +25,9 @@ describe("FoxIcon", () => {
   });
 
   it("renders the transparent app mark for shell and workspace chrome", () => {
-    render(<FoxIcon variant="app" size={20} alt="DataBox app" />);
+    render(<FoxIcon variant="app" size={20} alt="DBFox app" />);
 
-    const icon = screen.getByRole("img", { name: "DataBox app" });
+    const icon = screen.getByRole("img", { name: "DBFox app" });
 
     expect(icon).toHaveAttribute(
       "src",

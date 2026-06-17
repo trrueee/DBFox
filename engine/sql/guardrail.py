@@ -301,7 +301,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     for token in _BROKEN_TOKENS:
         if token in _SAFE_SQL_UPPER:
             import logging
-            logging.getLogger("databox.guardrail").warning(
+            logging.getLogger("dbfox.guardrail").warning(
                 "guardrail_check: detected broken MySQL syntax token=%r in safe_sql=%r",
                 token, safe_sql,
             )

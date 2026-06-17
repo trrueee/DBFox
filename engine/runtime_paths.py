@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-DataBox 运行期路径配置模块 (Runtime Paths Module)
+DBFox 运行期路径配置模块 (Runtime Paths Module)
 --------------------------------------
-这个模块负责动态计算、创建和管理 DataBox 在运行期间所需的各种数据目录和文件。
+这个模块负责动态计算、创建和管理 DBFox 在运行期间所需的各种数据目录和文件。
 例如，本地 SQLite 数据库、临时缓存、敏感密钥文件等。它保证了跨平台 (Windows, macOS, Linux) 的完美兼容。
 """
 
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 # 定义应用目录名
-APP_DIR_NAME = "DataBox"
+APP_DIR_NAME = "DBFox"
 
 # 获取当前项目的根目录
 # Python 知识点:
@@ -36,7 +36,7 @@ def _default_runtime_root() -> Path:
       - `Path("...") / "..."` 使用 `/` 运算符拼接路径，这是 pathlib 的核心特性，跨平台时会自动使用正确的路径分隔符（Windows 上是 \，Unix/Mac 上是 /）。
     """
     # 1. 检查是否有用户强制指定的系统环境变量
-    override = os.environ.get("DATABOX_RUNTIME_DIR")
+    override = os.environ.get("DBFOX_RUNTIME_DIR")
     if override:
         return Path(override).expanduser()  # .expanduser() 可以把路径里的 ~ 替换为用户家目录
 
@@ -44,7 +44,7 @@ def _default_runtime_root() -> Path:
     if os.name == "nt":
         appdata = os.environ.get("APPDATA")  # 获取 Windows 的 AppData\Roaming 目录
         if appdata:
-            return Path(appdata) / APP_DIR_NAME  # 例如 C:\Users\Username\AppData\Roaming\DataBox
+            return Path(appdata) / APP_DIR_NAME  # 例如 C:\Users\Username\AppData\Roaming\DBFox
             
     # 3. macOS 平台
     elif sys.platform == "darwin":
@@ -54,11 +54,11 @@ def _default_runtime_root() -> Path:
     else:
         xdg_data_home = os.environ.get("XDG_DATA_HOME")
         if xdg_data_home:
-            return Path(xdg_data_home) / "databox"
-        return Path.home() / ".local" / "share" / "databox"
+            return Path(xdg_data_home) / "dbfox"
+        return Path.home() / ".local" / "share" / "dbfox"
 
     # 如果以上系统变量都读取失败（极少见），则退化使用项目根目录下的临时运行目录
-    return PROJECT_DIR / ".databox_runtime"
+    return PROJECT_DIR / ".dbfox_runtime"
 
 
 def _chmod_private(path: Path, *, is_dir: bool) -> None:
@@ -93,7 +93,7 @@ def private_runtime_dir(name: str) -> Path:
       - `probe.unlink(missing_ok=True)` 删除文件，`missing_ok=True` 表示如果文件不存在也不报错。
     """
     # 备选目录：首选系统应用数据区，次选项目根目录
-    candidates = [_default_runtime_root(), PROJECT_DIR / ".databox_runtime"]
+    candidates = [_default_runtime_root(), PROJECT_DIR / ".dbfox_runtime"]
     last_error: OSError | None = None
 
     for root in candidates:
@@ -113,7 +113,7 @@ def private_runtime_dir(name: str) -> Path:
     # 如果所有备选目录都无法创建或写入，则对外抛出最后一个捕获到的操作系统错误
     if last_error:
         raise last_error
-    raise OSError("Unable to create DataBox runtime directory")
+    raise OSError("Unable to create DBFox runtime directory")
 
 
 def private_runtime_file(name: str, filename: str) -> Path:

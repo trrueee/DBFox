@@ -1,4 +1,4 @@
-"""DataBox Memory Layer — three-tier memory architecture.
+"""DBFox Memory Layer — three-tier memory architecture.
 
   ShortTermMemory  — LangGraph thread state (checkpointer-backed)
   SessionMemory    — within-session runs, artifacts, SQL context

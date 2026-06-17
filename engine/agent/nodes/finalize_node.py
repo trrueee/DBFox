@@ -4,13 +4,13 @@ import logging
 from typing import Any
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.message_utils import first_user_text, message_content_text
 
-logger = logging.getLogger("databox.databox_agent.nodes.finalize_node")
+logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 
 
-def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """Finalize the agent run: extract answer from last AIMessage and set terminal status.
 
     This node is reached when the model produces a response without tool_calls,
@@ -131,7 +131,7 @@ def finalize_answer(state: DataBoxAgentState, config: RunnableConfig) -> dict[st
 
 
 def _build_and_persist_error_artifact(
-    state: DataBoxAgentState,
+    state: DBFoxAgentState,
     config: RunnableConfig,
     error: str,
 ) -> dict[str, Any] | None:
@@ -180,7 +180,7 @@ def _build_and_persist_error_artifact(
 
 
 def _auto_write_trajectory(
-    state: DataBoxAgentState,
+    state: DBFoxAgentState,
     status: str,
     answer_text: str,
 ) -> None:
@@ -189,7 +189,7 @@ def _auto_write_trajectory(
     Best-effort — failures are logged but never block finalization.
     """
     import logging
-    _logger = logging.getLogger("databox.databox_agent.nodes.finalize_node")
+    _logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 
     try:
         from engine.agent.memory_bridge import write_trajectory

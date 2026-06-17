@@ -7,7 +7,7 @@ from typing import Any
 
 from engine.evaluation.benchmarks.base import BenchmarkCase
 
-logger = logging.getLogger("databox.benchmarks.spider")
+logger = logging.getLogger("dbfox.benchmarks.spider")
 
 
 class SpiderAdapter:
