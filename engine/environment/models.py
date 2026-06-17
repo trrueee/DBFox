@@ -67,6 +67,7 @@ class ColumnSnapshot(BaseModel):
 class ForeignKeySnapshot(BaseModel):
     """Foreign key relationship discovered from the live datasource."""
 
+    source_table: str
     column_name: str
     referenced_table: str
     referenced_column: str

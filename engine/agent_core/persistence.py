@@ -286,9 +286,8 @@ def fail_run(
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         db.flush()
         sync_chat_conversation_from_session(db, session_id)
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to record failure for run %s", run_id)
-        raise exc
 
 
 def cancel_run(db: Session, *, run_id: str) -> None:
