@@ -30,30 +30,8 @@ router = APIRouter()
 
 
 def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
-    """
-    辅助函数：将 SQLAlchemy 数据库模型对象 (BackupRecord) 转换为标准的字典格式，以便 FastAPI 序列化为 JSON 返回给前端。
-    
-    Python & Pydantic 知识点:
-      - `record.started_at.isoformat()`：在 Python 中，`datetime` 对象需要被转换为符合 ISO-8601 标准的字符串（如 "2026-05-26T21:30:00"），才能通过 JSON 传输。
-      - `dict[str, Any]`：表示这是一个字典，其键是字符串，值可以是任意类型。
-    """
-    return {
-        "id": record.id,
-        "project_id": record.project_id,
-        "datasource_id": record.datasource_id,
-        "environment_id": record.environment_id,
-        "label": record.label or "",
-        "backup_type": record.backup_type,
-        "status": record.status,
-        "file_path": record.file_path,
-        "file_size_bytes": record.file_size_bytes,
-        "checksum_sha256": record.checksum_sha256,
-        "started_at": record.started_at.isoformat() if record.started_at else None,
-        "completed_at": record.completed_at.isoformat() if record.completed_at else None,
-        "duration_ms": record.duration_ms,
-        "error_message": record.error_message,
-        "created_at": record.created_at.isoformat() if record.created_at else None,
-    }
+    from engine.schemas.backup import BackupResponse
+    return BackupResponse.model_validate(record).model_dump(mode="json")
 
 
 # =========================================================================

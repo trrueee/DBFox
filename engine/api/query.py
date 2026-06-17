@@ -28,22 +28,8 @@ def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
-    return {
-        "id": item.id,
-        "question": item.question or "",
-        "submitted_sql": item.submitted_sql or "",
-        "generated_sql": item.generated_sql or "",
-        "safe_sql": item.safe_sql or "",
-        "executed_sql": item.executed_sql or "",
-        "guardrail_result": item.guardrail_result,
-        "guardrail_checks": item.guardrail_checks or "",
-        "execution_status": item.execution_status or "",
-        "execution_time_ms": item.execution_time_ms or 0,
-        "rows_returned": item.rows_returned or 0,
-        "columns_returned": item.columns_returned or 0,
-        "error_message": item.error_message or "",
-        "created_at": item.created_at.isoformat() if item.created_at else None,
-    }
+    from engine.schemas.query import QueryHistoryResponse
+    return QueryHistoryResponse.model_validate(item).model_dump(mode="json")
 
 
 @router.post("/query/validate")
