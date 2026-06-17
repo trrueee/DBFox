@@ -34,11 +34,15 @@ def list_conversations(db: Session = Depends(get_db)) -> list[ConversationRecord
             .filter(ChatConversation.id == None)
             .all()
         )
+        failed_count = 0
         for s in missing_sessions:
             try:
                 sync_chat_conversation_from_session(db, s.id)
             except Exception:
+                failed_count += 1
                 logger.exception("Failed to sync legacy/missing session %s to ChatConversation", s.id)
+        if failed_count > 0:
+            logger.warning("Self-healing: %d/%d sessions could not be synced", failed_count, len(missing_sessions))
     except Exception:
         logger.exception("Failed to query AgentSessions for self-healing sync")
 
@@ -73,35 +77,43 @@ def save_conversation(
             detail={"code": "CONVERSATION_ID_MISMATCH", "message": "Conversation id mismatch."},
         )
 
-    row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
-    if row is None:
-        row = ChatConversation(id=conversation_id)
-        db.add(row)
+    try:
+        row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
+        if row is None:
+            row = ChatConversation(id=conversation_id)
+            db.add(row)
 
-    row.title = payload.title
-    row.created_at = payload.created_at
-    row.updated_at = payload.updated_at
-    row.context_tables_json = payload.context_tables_json
-    row.messages_json = payload.messages_json
-    row.artifacts_json = payload.artifacts_json
+        row.title = payload.title
+        row.created_at = payload.created_at
+        row.updated_at = payload.updated_at
+        row.context_tables_json = payload.context_tables_json
+        row.messages_json = payload.messages_json
+        row.artifacts_json = payload.artifacts_json
 
-    session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if session is not None:
-        session.title = payload.title
+        session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
+        if session is not None:
+            session.title = payload.title
 
-    db.commit()
-    return {"status": "ok"}
+        db.commit()
+        return {"status": "ok"}
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.delete("/conversations/{conversation_id}")
 def delete_conversation(conversation_id: str, db: Session = Depends(get_db)) -> dict[str, str]:
-    session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if session is not None:
-        db.delete(session)
+    try:
+        session = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
+        if session is not None:
+            db.delete(session)
 
-    row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
-    if row is not None:
-        db.delete(row)
-        
-    db.commit()
-    return {"status": "ok"}
+        row = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
+        if row is not None:
+            db.delete(row)
+            
+        db.commit()
+        return {"status": "ok"}
+    except Exception:
+        db.rollback()
+        raise

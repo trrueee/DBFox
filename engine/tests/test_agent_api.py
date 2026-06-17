@@ -1,7 +1,12 @@
 import json
+import asyncio
 import pytest
 from unittest.mock import MagicMock
 
+import engine.api.agent as agent_module
+from fastapi import HTTPException
+
+from engine.agent_core.types import AgentResumeRequest, AgentRunRequest
 from engine.api.agent import sse_failed_event
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
@@ -24,6 +29,100 @@ def test_sse_failed_event() -> None:
     assert payload["error"] == "Test error message"
     assert payload["code"] == "ERR_CODE"
     assert payload["type"] == "agent.run.failed"
+
+
+def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
+    class FakeDb:
+        def __init__(self) -> None:
+            self.rollback_calls = 0
+
+        def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run(self, _req: AgentRunRequest) -> None:
+            raise RuntimeError("boom")
+
+    fake_db = FakeDb()
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_run(
+            AgentRunRequest(datasource_id="ds-1", question="hello", api_key="test-key"),
+            fake_db,  # type: ignore[arg-type]
+        )
+
+    assert fake_db.rollback_calls == 1
+    assert exc_info.value.status_code == 500
+
+
+async def _streaming_response_text(response) -> str:
+    chunks: list[str] = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
+    return "".join(chunks)
+
+
+def test_api_agent_run_stream_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
+    class FakeDb:
+        def __init__(self) -> None:
+            self.rollback_calls = 0
+
+        def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run_iter(self, _req: AgentRunRequest):
+            raise RuntimeError("stream boom")
+            yield  # pragma: no cover
+
+    fake_db = FakeDb()
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    response = agent_module.api_agent_run_stream(
+        AgentRunRequest(datasource_id="ds-1", question="hello", api_key="test-key"),
+        fake_db,  # type: ignore[arg-type]
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert fake_db.rollback_calls == 1
+    assert "AGENT_RUNTIME_ERROR" in body
+
+
+def test_api_agent_resume_stream_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
+    class FakeDb:
+        def __init__(self) -> None:
+            self.rollback_calls = 0
+
+        def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def resume_iter(self, _run_id: str, _approval_id: str | None = None):
+            raise RuntimeError("resume boom")
+            yield  # pragma: no cover
+
+    fake_db = FakeDb()
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    response = agent_module.api_agent_run_resume_stream(
+        "run-1",
+        AgentResumeRequest(approval_id="approval-1"),
+        fake_db,  # type: ignore[arg-type]
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert fake_db.rollback_calls == 1
+    assert "AGENT_RESUME_ERROR" in body
 
 
 def test_datasource_connection_dict() -> None:

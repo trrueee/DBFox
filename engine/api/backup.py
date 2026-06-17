@@ -119,13 +119,9 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
         db.commit()      # 提交事务
         db.refresh(record)  # 刷新模型
         return _backup_to_dict(record)
-    except DBFoxError as exc:
-        db.rollback()    # 发生业务错误，回滚事务
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
-    except Exception as exc:
-        db.rollback()    # 发生未知错误，回滚事务
-        logger.exception("创建备份失败")
-        raise HTTPException(status_code=500, detail={"code": "BACKUP_FAILED", "message": f"创建备份失败: {exc}"})
+    except Exception:
+        db.rollback()
+        raise
 
 
 # =========================================================================
@@ -238,14 +234,11 @@ def api_restore_backup(
             sync_schema(db, res["datasource_id"])
             db.commit()
         except Exception:
+            db.rollback()
             logger.exception("还原数据库后尝试刷新同步元数据时失败")
             
         return res
-    except DBFoxError as exc:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
-    except Exception as exc:
-        db.rollback()
-        logger.exception("数据库覆盖还原失败")
-        raise HTTPException(status_code=500, detail={"code": "RESTORE_FAILED", "message": f"数据库覆写恢复失败: {exc}"})
+        raise
 

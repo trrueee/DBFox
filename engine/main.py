@@ -92,19 +92,45 @@ ALLOWED_TAURI_ORIGINS = {
     "https://tauri.localhost",
 }
 
-# 仅在“非冷冻”（即本地源码开发模式）下，把 Token 自动写给 React 前端本地方便直接调试连接
+# Frontend dev env file helpers.
+FRONTEND_ENV_KEYS = {"VITE_LOCAL_ENGINE_PORT", "VITE_LOCAL_ENGINE_TOKEN"}
+
+
+def _frontend_env_content(token: str) -> str:
+    return f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={token}\n"
+
+
+def _is_dbfox_owned_frontend_env(content: str) -> bool:
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, _value = line.partition("=")
+        if separator != "=" or key not in FRONTEND_ENV_KEYS:
+            return False
+    return True
+
+
+def _write_frontend_env_file_if_owned(env_file: Path, token: str) -> None:
+    expected_content = _frontend_env_content(token)
+    existing_content = ""
+    if env_file.exists():
+        existing_content = env_file.read_text("utf-8")
+        if existing_content == expected_content:
+            return
+        if not _is_dbfox_owned_frontend_env(existing_content):
+            logger.info("Skipping automatic desktop/.env.local write; custom content is present.")
+            return
+
+    env_file.write_text(expected_content, "utf-8")
+
+
+# Only write the frontend dev env file in source-mode local development.
 is_frozen = getattr(sys, "frozen", False)
 if not is_frozen:
     FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
     try:
-        expected_content = f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={LOCAL_SECURE_TOKEN}\n"
-        existing_content = ""
-        if FRONTEND_ENV_FILE.exists():
-            existing_content = FRONTEND_ENV_FILE.read_text("utf-8")
-
-        # 仅在内容有变化时才执行写入，防止频繁触发 Vite 的热更新监听
-        if existing_content != expected_content:
-            FRONTEND_ENV_FILE.write_text(expected_content, "utf-8")
+        _write_frontend_env_file_if_owned(FRONTEND_ENV_FILE, LOCAL_SECURE_TOKEN)
     except OSError:
         logger.warning(
             "无法自动将 Token 写入前端 .env.local 配置文件，前端可能需要手动配置环境变量。"
@@ -220,8 +246,8 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
         return await call_next(request)
 
     # 🔒 核心 Token 令牌安全校验
-    token_header = request.headers.get("X-Local-Token")
-    if not token_header or token_header != LOCAL_SECURE_TOKEN:
+    token_header = request.headers.get("X-Local-Token", "")
+    if not secrets.compare_digest(token_header, LOCAL_SECURE_TOKEN):
         return JSONResponse(
             status_code=401,
             content={
@@ -264,14 +290,35 @@ app.add_middleware(
 async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse:
     """
     全局自定义异常捕获
-    
+
     FastAPI 知识点:
       - `@app.exception_handler(异常类型)` 使得每当接口运行期间抛出此类型异常时，FastAPI 就会直接跳过默认报错行为，
         调用这个装饰的函数来生成自定义 HTTP 响应给客户端。
     """
+    logger.warning("DBFoxError at %s %s: [%s] %s", request.method, request.url.path, exc.code, exc.message)
     return JSONResponse(
         status_code=400,
-        content={"code": exc.code, "message": exc.message},
+        content={"detail": {"code": exc.code, "message": exc.message}},
+    )
+
+
+@app.exception_handler(Exception)
+async def global_unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """兜底全局异常处理器 — 防止未预期的内部错误暴露敏感调用栈。
+
+    所有未被 @app.exception_handler(DBFoxError) 或 FastAPI 默认 HTTPException
+    拦截 of 异常最终都会落到这里，统一返回 500 Internal Server Error。
+    API 路由层只需 ``db.rollback(); raise``，不再需要逐个构造 HTTPException(status_code=500)。
+    """
+    logger.exception("Unhandled exception at %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "code": "INTERNAL_ERROR",
+                "message": "服务器内部错误，请稍后重试。如果问题持续出现，请检查引擎日志。",
+            }
+        },
     )
 
 

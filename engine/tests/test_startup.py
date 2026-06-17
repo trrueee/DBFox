@@ -1,3 +1,6 @@
+import runpy
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
@@ -44,3 +47,58 @@ def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
 
             assert response.status_code != 403
             assert response.headers.get("access-control-allow-origin") == origin
+
+
+def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_compare_digest(left: str, right: str) -> bool:
+        calls.append((left, right))
+        return True
+
+    monkeypatch.setattr(main_module.secrets, "compare_digest", fake_compare_digest)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/datasources",
+            headers={"X-Local-Token": "token-from-request"},
+        )
+
+    assert calls == [("token-from-request", LOCAL_SECURE_TOKEN)]
+    assert response.status_code != 401
+
+
+def test_dev_frontend_env_writer_skips_user_owned_env_file(monkeypatch) -> None:
+    writes: list[str] = []
+    user_owned_content = "VITE_CUSTOM_FLAG=1\n"
+    original_exists = Path.exists
+    original_read_text = Path.read_text
+    original_write_text = Path.write_text
+
+    def is_frontend_env_file(path: Path) -> bool:
+        return path.name == ".env.local" and path.parent.name == "desktop"
+
+    def fake_exists(path: Path) -> bool:
+        if is_frontend_env_file(path):
+            return True
+        return original_exists(path)
+
+    def fake_read_text(path: Path, *args, **kwargs) -> str:
+        if is_frontend_env_file(path):
+            return user_owned_content
+        return original_read_text(path, *args, **kwargs)
+
+    def fake_write_text(path: Path, data: str, *args, **kwargs) -> int:
+        if is_frontend_env_file(path):
+            writes.append(data)
+            return len(data)
+        return original_write_text(path, data, *args, **kwargs)
+
+    monkeypatch.setenv("DBFOX_ENGINE_TOKEN", "test-token")
+    monkeypatch.setattr(Path, "exists", fake_exists)
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+    monkeypatch.setattr(Path, "write_text", fake_write_text)
+
+    runpy.run_path(str(Path(main_module.__file__)), run_name="__dbfox_main_env_test__")
+
+    assert writes == []

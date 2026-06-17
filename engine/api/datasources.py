@@ -160,13 +160,14 @@ def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, check
 
 @router.post("/datasources/test")
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
+    """测试连接 — 任何失败都转为 DataSourceConnectionError，确保返回 400。"""
     try:
         return test_connection(req.model_dump())
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    except DBFoxError:
+        raise
     except Exception as exc:
         logger.exception("Connection test failed")
-        raise HTTPException(status_code=400, detail={"code": "CONNECTION_FAILED", "message": "数据库连接测试失败，请检查连接配置。"})
+        raise DataSourceConnectionError(f"数据库连接测试失败: {str(exc)}") from exc
 
 
 @router.post("/datasources", response_model=DataSourceResponse)
@@ -226,19 +227,9 @@ def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(ge
         db.commit()
         db.refresh(datasource)
         return _datasource_to_dict(datasource)
-    except HTTPException:
+    except Exception:
         db.rollback()
         raise
-    except DBFoxError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
-    except Exception as exc:
-        db.rollback()
-        logger.exception("Failed to create datasource")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "DATASOURCE_CREATE_FAILED", "message": "创建数据源失败，请稍后重试。"},
-        )
 
 
 @router.get("/datasources", response_model=list[DataSourceResponse])
@@ -310,19 +301,9 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
         db.commit()
         db.refresh(datasource)
         return _datasource_to_dict(datasource)
-    except HTTPException:
-        db.rollback()
-        raise
-    except DBFoxError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception:
         db.rollback()
-        logger.exception("Failed to update datasource")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "DATASOURCE_UPDATE_FAILED", "message": "更新数据源失败，请稍后重试。"},
-        )
+        raise
 
 
 @router.post("/datasources/{id}/health")
@@ -365,11 +346,10 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "message": str(exc),
             "datasource": _datasource_to_dict(datasource),
         }
-    except Exception as exc:
+    except Exception:
         logger.exception("Datasource health check failed")
         latency_ms = int((time.perf_counter() - started) * 1000)
-        message = "数据库连接健康检查失败，请检查连接配置。"
-        _persist_health_failure(datasource, message, latency_ms, checked_at)
+        _persist_health_failure(datasource, "数据库连接健康检查失败，请检查连接配置。", latency_ms, checked_at)
         db.commit()
         db.refresh(datasource)
         return {
@@ -378,7 +358,7 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
             "latencyMs": latency_ms,
             "warnings": [],
-            "message": message,
+            "message": "数据库连接健康检查失败，请检查连接配置。",
             "datasource": _datasource_to_dict(datasource),
         }
 
@@ -425,21 +405,15 @@ def api_delete_datasource(
     try:
         from engine.datasource import close_active_tunnel
         close_active_tunnel(id)
-
-        # Also dispose of the connection pool associated with this datasource
         from engine.sql.pool_registry import get_pool_registry
         get_pool_registry().dispose_datasource(id)
 
         db.delete(datasource)
         db.commit()
         return {"success": True, "message": "数据源已删除"}
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        logger.exception("Failed to delete datasource")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "DATASOURCE_DELETE_FAILED", "message": "删除数据源失败，请稍后重试。"},
-        )
+        raise
 
 
 @router.post("/datasources/{id}/release")
@@ -448,12 +422,9 @@ def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, 
         from engine.sql.pool_registry import get_pool_registry
         get_pool_registry().dispose_datasource(id)
         return {"success": True, "message": "数据源连接池已成功释放"}
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to release datasource connection pool")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "RELEASE_FAILED", "message": f"释放连接池失败: {exc}"}
-        )
+        raise
 
 
 @router.post("/datasources/{id}/sync")
@@ -461,13 +432,7 @@ def api_sync_schema(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         return sync_schema(db, id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail={"code": "SYNC_FAILED", "message": str(exc)})
-    except Exception as exc:
-        logger.exception("Schema sync failed")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "SYNC_FAILED", "message": "元数据结构同步失败，请检查数据库连接后重试。"},
-        )
+        raise DBFoxError(code="SYNC_FAILED", message=str(exc))
 
 
 @router.get("/schema/tables")
@@ -476,9 +441,9 @@ def api_list_tables(datasource_id: str = Query(...), db: Session = Depends(get_d
     if not tables:
         try:
             sync_schema(db, datasource_id)
-        except Exception as exc:
+        except Exception:
             db.rollback()
-            logger.warning("Auto schema sync before listing tables failed for %s: %s", datasource_id, exc)
+            logger.warning("Auto schema sync before listing tables failed for %s", datasource_id)
         else:
             tables = _load_schema_tables(db, datasource_id)
     return [_schema_table_to_dict(table) for table in tables]
@@ -512,9 +477,6 @@ def api_list_columns(table_id: str, db: Session = Depends(get_db)) -> list[dict[
 def api_get_er_diagram(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
         return build_er_diagram_data(db, datasource_id)
-    except Exception as exc:
+    except Exception:
         logger.exception("ER diagram build failed")
-        raise HTTPException(
-            status_code=500,
-            detail={"code": "DIAGRAM_FAILED", "message": "生成 ER 图失败，请确认已完成 Schema 同步。"},
-        )
+        raise
