@@ -143,8 +143,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
 
     def record_artifact(self, session_id: str, run_id: str, artifact: Any, index: int) -> None:
         from engine.agent_core import persistence as ap
-        # record_artifact is idempotent; we call it once
-        pass  # artifacts are written via _artifact_events; skip for now
+        self._write(lambda db: ap.record_artifact(db, session_id, run_id, artifact, index))
 
     def complete_run(self, response: Any) -> None:
         from engine.agent_core import persistence as ap

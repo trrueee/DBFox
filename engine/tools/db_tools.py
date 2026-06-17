@@ -16,6 +16,7 @@ import re
 import sqlite3
 import time
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -416,12 +417,19 @@ def _table_card(db: Session, datasource_id: str, table: SchemaTable) -> dict[str
 
 
 def _query_stats_for_table(db: Session, datasource_id: str, table_name: str) -> dict[str, Any]:
-    """Approximate query-hit count and last-queried timestamp for a table."""
+    """Approximate query-hit count and last-queried timestamp for a table (last 90 days).
+
+    The time window prevents unbounded full-table scans on query_history as the
+    table grows — the ``created_at`` index is used to narrow rows before the
+    LIKE filter is applied.
+    """
+    since = datetime.now(UTC) - timedelta(days=90)
     count = (
         db.query(QueryHistory)
         .filter(
             QueryHistory.data_source_id == datasource_id,
             QueryHistory.executed_sql.contains(table_name),
+            QueryHistory.created_at >= since,
         )
         .count()
     )
@@ -430,6 +438,7 @@ def _query_stats_for_table(db: Session, datasource_id: str, table_name: str) -> 
         .filter(
             QueryHistory.data_source_id == datasource_id,
             QueryHistory.executed_sql.contains(table_name),
+            QueryHistory.created_at >= since,
         )
         .order_by(QueryHistory.created_at.desc())
         .first()
