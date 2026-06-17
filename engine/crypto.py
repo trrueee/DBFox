@@ -9,8 +9,6 @@ from engine.runtime_paths import private_runtime_file, write_private_bytes, _chm
 
 logger = logging.getLogger("dbfox.crypto")
 
-ENGINE_DIR = Path(__file__).resolve().parent
-LEGACY_KEY_FILE = ENGINE_DIR / ".secret_key"
 KEY_FILE = private_runtime_file("secrets", ".secret_key")
 
 KEYRING_SERVICE = "DBFox"
@@ -34,40 +32,17 @@ def get_or_create_key() -> bytes:
     if keyring_key is not None:
         return keyring_key
 
-    # 2. Secondary: Fallback & Migration of legacy file key
-    legacy_key = None
-    if not KEY_FILE.exists() and LEGACY_KEY_FILE.exists():
-        try:
-            write_private_bytes(KEY_FILE, LEGACY_KEY_FILE.read_bytes())
-        except Exception as e:
-            logger.error(f"Failed to migrate legacy key file to private runtime directory: {e}")
-
+    # 2. Fallback: read key from private runtime file
     if KEY_FILE.exists():
         try:
-            legacy_key = KEY_FILE.read_bytes()
+            key = KEY_FILE.read_bytes()
             _chmod_private(KEY_FILE, is_dir=False)
+            return key
         except Exception as e:
             logger.critical(f"Key file exists but failed to read: {e}. Aborting to prevent credential loss.")
             raise RuntimeError(f"Could not read existing secret key file: {e}") from e
 
-    # 3. If we have a legacy file key, migrate it into the OS Keychain and prune the file
-    if legacy_key is not None:
-        try:
-            import keyring
-            b64_key = base64.b64encode(legacy_key).decode("utf-8")
-            keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, b64_key)
-            try:
-                KEY_FILE.unlink(missing_ok=True)
-                LEGACY_KEY_FILE.unlink(missing_ok=True)
-                logger.info("Successfully migrated symmetric key to OS Keychain and removed local files.")
-            except Exception as e:
-                logger.warning(f"Failed to clean up legacy key files after migration: {e}")
-            return legacy_key
-        except Exception as e:
-            logger.warning(f"Failed to migrate legacy key to OS Keychain: {e}")
-            return legacy_key
-
-    # 4. Generate new symmetric key if none exists
+    # 3. Generate new symmetric key if none exists
     new_key = AESGCM.generate_key(bit_length=256)  # type: ignore[call-arg]
     
     # Try storing it in the OS Keychain
@@ -84,7 +59,7 @@ def get_or_create_key() -> bytes:
     if saved_in_keyring:
         return new_key
 
-    # 5. File system fallback if keychain is completely unavailable
+    # 4. File system fallback if keychain is completely unavailable
     try:
         write_private_bytes(KEY_FILE, new_key)
         _chmod_private(KEY_FILE, is_dir=False)

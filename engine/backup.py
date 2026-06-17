@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.datasource import get_mysql_connection_params
+from engine.datasource import datasource_connection_dict, get_mysql_connection_params
 from engine.errors import DBFoxError
 from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID
 from engine.runtime_paths import private_runtime_dir
@@ -26,32 +26,6 @@ class BackupError(DBFoxError):
 def _safe_filename(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
     return cleaned.strip("._") or "backup"
-
-
-def _datasource_connection_dict(ds: DataSource) -> dict[str, Any]:
-    return {
-        "id": ds.id,
-        "host": ds.host,
-        "port": ds.port,
-        "username": ds.username,
-        "database_name": ds.database_name,
-        "password_ciphertext": ds.password_ciphertext,
-        "password_nonce": ds.password_nonce,
-        "ssh_enabled": ds.ssh_enabled,
-        "ssh_host": ds.ssh_host,
-        "ssh_port": ds.ssh_port,
-        "ssh_username": ds.ssh_username,
-        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-        "ssh_password_nonce": ds.ssh_password_nonce,
-        "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
-        "ssl_enabled": ds.ssl_enabled,
-        "ssl_ca_path": ds.ssl_ca_path,
-        "ssl_cert_path": ds.ssl_cert_path,
-        "ssl_key_path": ds.ssl_key_path,
-        "ssl_verify_identity": ds.ssl_verify_identity,
-    }
 
 
 def _backup_path(ds: DataSource, backup_id: str) -> Path:
@@ -70,7 +44,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
-    params = get_mysql_connection_params(_datasource_connection_dict(ds))
+    params = get_mysql_connection_params(datasource_connection_dict(ds))
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
@@ -112,7 +86,7 @@ def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
     import pymysql
     import logging
     logger = logging.getLogger("dbfox.backup")
-    params = get_mysql_connection_params(_datasource_connection_dict(ds))
+    params = get_mysql_connection_params(datasource_connection_dict(ds))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     conn = pymysql.connect(
@@ -186,7 +160,7 @@ def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
 
 def _pymysql_simple_sql_import(ds: DataSource, sql_file_path: Path) -> None:
     import pymysql
-    params = get_mysql_connection_params(_datasource_connection_dict(ds))
+    params = get_mysql_connection_params(datasource_connection_dict(ds))
     
     conn = pymysql.connect(
         host=params["host"],
@@ -347,7 +321,7 @@ def precheck_restore(record: BackupRecord) -> dict[str, Any]:
 
 
 def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
-    params = get_mysql_connection_params(_datasource_connection_dict(ds))
+    params = get_mysql_connection_params(datasource_connection_dict(ds))
     cmd = [
         "mysql",
         f"--host={params['host']}",

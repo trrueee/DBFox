@@ -118,30 +118,40 @@ class TunnelManager:
         """Validate that the tunnel object and local bind socket are alive."""
         with self._lock:
             instance = self._tunnels.get(datasource_id)
+            if not instance:
+                return False
 
-        if not instance:
-            return False
+            if not instance.tunnel.is_active:
+                instance.state = TunnelState.STALE
+                return False
 
-        if not instance.tunnel.is_active:
-            instance.state = TunnelState.STALE
-            return False
-
-        try:
             port = instance.tunnel.local_bind_port
+
+        # Connect socket outside the lock to prevent blocking other requests
+        is_ok = False
+        try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1.0)
                 s.connect(("127.0.0.1", port))
-            instance.state = TunnelState.CONNECTED
-            return True
+            is_ok = True
         except Exception as e:
             logger.warning(
                 "Tunnel health probe failed on port %s for %s: %s",
-                instance.tunnel.local_bind_port,
+                port,
                 datasource_id,
                 e,
             )
-            instance.state = TunnelState.STALE
-            return False
+
+        with self._lock:
+            instance = self._tunnels.get(datasource_id)
+            if not instance:
+                return False
+            if is_ok:
+                instance.state = TunnelState.CONNECTED
+                return True
+            else:
+                instance.state = TunnelState.STALE
+                return False
 
     def get_or_reconnect(self, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
         """Get an active tunnel or self-heal a stale one."""

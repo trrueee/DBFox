@@ -120,14 +120,16 @@ class SyncPersistenceSink(AgentPersistenceSink):
         _log = logging.getLogger("dbfox.persistence")
         def _do(db: Session) -> None:
             from engine.agent_core import persistence as ap
-            ap.create_or_get_session(db, type("Req", (), {
-                "datasource_id": datasource_id, "question": question,
-                "session_id": session_id, "parent_run_id": None,
-            })(), run_id)
-            ap.start_run(db, type("Req2", (), {
-                "datasource_id": datasource_id, "question": question,
-                "session_id": session_id, "max_steps": 20,
-            })(), run_id, session_id)
+            from engine.agent_core.types import AgentRunRequest
+            req = AgentRunRequest(
+                datasource_id=datasource_id,
+                question=question,
+                session_id=session_id,
+                parent_run_id=None,
+                max_steps=20,
+            )
+            ap.create_or_get_session(db, req, run_id)
+            ap.start_run(db, req, run_id, session_id)
         self._write(_do)
 
     def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:

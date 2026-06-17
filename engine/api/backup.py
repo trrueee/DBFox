@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from engine.backup import create_backup, execute_restore, precheck_restore
 from engine.db import get_db
-from engine.errors import DBFoxError
+from engine.errors import DBFoxError, NotFoundError
 from engine.models import BackupRecord, DataSource
 from engine.schemas import BackupCreateRequest
 from engine.schema_sync import sync_schema
@@ -115,7 +115,7 @@ def api_get_backup(backup_id: str, db: Session = Depends(get_db)) -> dict[str, A
     """
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
-        raise HTTPException(status_code=404, detail={"code": "BACKUP_NOT_FOUND", "message": "未找到指定的备份记录"})
+        raise NotFoundError("未找到指定的备份记录", "BACKUP_NOT_FOUND")
     return _backup_to_dict(record)
 
 
@@ -131,7 +131,7 @@ def api_restore_precheck(backup_id: str, db: Session = Depends(get_db)) -> dict[
     """
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
-        raise HTTPException(status_code=404, detail={"code": "BACKUP_NOT_FOUND", "message": "备份不存在"})
+        raise NotFoundError("备份不存在", "BACKUP_NOT_FOUND")
     return precheck_restore(record)
 
 
@@ -157,18 +157,15 @@ def api_restore_backup(
     # 1. 查找备份记录
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
-        raise HTTPException(status_code=404, detail={"code": "BACKUP_NOT_FOUND", "message": "备份记录不存在"})
+        raise NotFoundError("备份记录不存在", "BACKUP_NOT_FOUND")
 
     # 2. 查找关联的数据源信息
     datasource = db.query(DataSource).filter(DataSource.id == record.datasource_id).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail={"code": "DATASOURCE_NOT_FOUND", "message": "关联的数据源不存在"})
+        raise NotFoundError("关联的数据源不存在", "DATASOURCE_NOT_FOUND")
 
     # 3. 🔒 强制安全合规校验：例如禁止在生产环境中执行数据库恢复还原
-    try:
-        PolicyEngine.enforce_restore_policy(datasource)
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+    PolicyEngine.enforce_restore_policy(datasource)
 
     # 4. 🔒 检查是否跳过二次确认（通常开发测试环境或自动化集成中可以配置绕过）
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
@@ -200,7 +197,7 @@ def api_restore_backup(
                 expected_details=expected_details
             )
             if not is_valid:
-                raise HTTPException(status_code=400, detail={"code": "CONFIRMATION_FAILED", "message": err_msg})
+                raise DBFoxError(err_msg, "CONFIRMATION_FAILED")
 
     # 5. 二次确认通过，执行底层真实的恢复逻辑
     try:
