@@ -95,10 +95,23 @@ class SQLQueryCancelledError(DBFoxError):
 class AIServiceError(DBFoxError):
     """
     AI 服务异常
-    
+
     当 Text-to-SQL 智能大模型服务调用出错、返回格式非法或超时时抛出。
     """
 
     def __init__(self, message: str) -> None:
         super().__init__(message, code="AI_TRANSLATION_FAILED")
+
+
+class ToolInputError(DBFoxError):
+    """
+    工具输入参数校验异常
+
+    当 Agent 调用工具时传入了无效参数（缺少必填字段、值非法等）时抛出。
+    由 @tool_handler 装饰器统一转换为 ToolObservation(status="failed")。
+    不应包含敏感信息，错误消息会直接展示给前端。
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="TOOL_INPUT_ERROR")
 
