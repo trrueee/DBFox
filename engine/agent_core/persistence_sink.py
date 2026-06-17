@@ -8,6 +8,7 @@ Three modes:
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from typing import Any
@@ -15,6 +16,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.db import SessionLocal
+
+logger = logging.getLogger("dbfox.persistence_sink")
 
 
 class AgentPersistenceSink:
@@ -100,16 +103,17 @@ class SyncPersistenceSink(AgentPersistenceSink):
         try:
             fn(db)
             db.commit()
-        except Exception:
+        except Exception as exc:
+            logger.exception("Persistence write failed in SyncPersistenceSink")
             try:
                 db.rollback()
-            except Exception:
-                pass
+            except Exception as roll_exc:
+                logger.exception("Persistence rollback failed: %s", roll_exc)
         finally:
             try:
                 db.close()
-            except Exception:
-                pass
+            except Exception as close_exc:
+                logger.exception("Persistence close failed: %s", close_exc)
 
     def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
         import logging

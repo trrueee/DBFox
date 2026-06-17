@@ -324,8 +324,8 @@ def _execute_on_postgres_profiled(
             # Set postgres statement timeout
             try:
                 cursor.execute(f"SET statement_timeout = {timeout_ms}")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to set Postgres statement timeout: %s", exc)
 
             t_exec_start = time.perf_counter()
             try:
@@ -379,8 +379,8 @@ def _execute_on_mysql_profiled(
         with conn_proxy.cursor() as cursor:
             try:
                 cursor.execute("SET SESSION MAX_EXECUTION_TIME=%s", (timeout_ms,))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to set MySQL MAX_EXECUTION_TIME: %s", exc)
 
             t_exec_start = time.perf_counter()
             try:
