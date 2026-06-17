@@ -17,7 +17,7 @@ from engine.models import (
     DataSource,
     SchemaTable,
 )
-from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceResponse
+from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceResponse, _json_list_or_empty
 from engine.schema_sync import build_er_diagram_data
 from engine.schema_sync_safe import sync_schema
 
@@ -25,57 +25,24 @@ logger = logging.getLogger("dbfox.api.datasources")
 router = APIRouter()
 
 
-def _json_list_or_empty(value: Any) -> list[str]:
-    if not value:
-        return []
-    try:
-        decoded = json.loads(str(value))
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(decoded, list):
-        return []
-    return [str(item) for item in decoded]
-
-
 def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
-    return {
-        "id": ds.id,
-        "project_id": ds.project_id or DEFAULT_PROJECT_ID,
-        "environment_id": ds.environment_id,
-        "name": ds.name,
-        "db_type": ds.db_type or "mysql",
-        "host": ds.host,
-        "port": ds.port,
-        "database_name": ds.database_name,
-        "username": ds.username,
-        "connection_mode": ds.connection_mode,
-        "is_read_only": bool(ds.is_read_only),
-        "env": ds.env or "dev",
-        "status": ds.status,
-        "enable_embedding_recall": bool(ds.enable_embedding_recall),
-        "ssh_enabled": bool(ds.ssh_enabled),
-        "ssh_host": ds.ssh_host or "",
-        "ssh_port": ds.ssh_port or 22,
-        "ssh_username": ds.ssh_username or "",
-        "ssh_pkey_path": ds.ssh_pkey_path or "",
-        "ssl_enabled": bool(ds.ssl_enabled),
-        "ssl_ca_path": ds.ssl_ca_path or "",
-        "ssl_cert_path": ds.ssl_cert_path or "",
-        "ssl_key_path": ds.ssl_key_path or "",
-        "ssl_verify_identity": bool(ds.ssl_verify_identity),
-        "last_test_at": ds.last_test_at.isoformat() if ds.last_test_at else None,
-        "last_test_status": ds.last_test_status,
-        "last_test_error": ds.last_test_error,
-        "last_test_latency_ms": ds.last_test_latency_ms,
-        "last_test_readonly": ds.last_test_readonly,
-        "last_test_server_version": ds.last_test_server_version,
-        "last_test_tables_count": ds.last_test_tables_count,
-        "last_test_warnings": _json_list_or_empty(ds.last_test_warnings),
-        "last_sync_at": ds.last_sync_at.isoformat() if ds.last_sync_at else None,
-        "last_sync_status": ds.last_sync_status,
-        "last_sync_error": ds.last_sync_error,
-        "created_at": ds.created_at.isoformat() if ds.created_at else None,
-    }
+    result = DataSourceResponse.model_validate(ds).model_dump(mode="json")
+    # Apply defaults matching the old manual serialization contract
+    result.setdefault("db_type", "mysql")
+    result.setdefault("env", "dev")
+    for field in ("ssh_host", "ssh_username", "ssh_pkey_path", "ssl_ca_path", "ssl_cert_path", "ssl_key_path"):
+        if result.get(field) is None:
+            result[field] = ""
+    result.setdefault("ssh_port", 22)
+    result.setdefault("is_read_only", False)
+    result.setdefault("ssl_verify_identity", False)
+    result.setdefault("connection_mode", "direct")
+    result.setdefault("status", "active")
+    result.setdefault("enable_embedding_recall", False)
+    result.setdefault("ssh_enabled", False)
+    result.setdefault("ssl_enabled", False)
+    result.setdefault("project_id", DEFAULT_PROJECT_ID)
+    return result
 
 
 def _load_schema_tables(db: Session, datasource_id: str) -> list[SchemaTable]:

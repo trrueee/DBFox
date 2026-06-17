@@ -37,55 +37,23 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 def _alias_to_dict(a: SemanticAlias) -> dict[str, Any]:
-    return {
-        "id": a.id,
-        "data_source_id": a.data_source_id,
-        "alias": a.alias,
-        "target_type": a.target_type,
-        "target": a.target,
-        "description": a.description,
-        "embedding_synced_at": a.embedding_synced_at.isoformat() if a.embedding_synced_at else None,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
-        "updated_at": a.updated_at.isoformat() if a.updated_at else None,
-    }
+    from engine.schemas.semantic import SemanticAliasResponse
+    return SemanticAliasResponse.model_validate(a).model_dump(mode="json")
 
 
 def _metric_to_dict(m: SemanticMetric) -> dict[str, Any]:
-    return {
-        "id": m.id,
-        "data_source_id": m.data_source_id,
-        "name": m.name,
-        "expression": m.expression,
-        "source_columns_json": m.source_columns_json,
-        "description": m.description,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
-        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
-    }
+    from engine.schemas.semantic import SemanticMetricResponse
+    return SemanticMetricResponse.model_validate(m).model_dump(mode="json")
 
 
 def _dimension_to_dict(d: SemanticDimension) -> dict[str, Any]:
-    return {
-        "id": d.id,
-        "data_source_id": d.data_source_id,
-        "name": d.name,
-        "column_ref": d.column_ref,
-        "transform": d.transform,
-        "description": d.description,
-        "created_at": d.created_at.isoformat() if d.created_at else None,
-        "updated_at": d.updated_at.isoformat() if d.updated_at else None,
-    }
+    from engine.schemas.semantic import SemanticDimensionResponse
+    return SemanticDimensionResponse.model_validate(d).model_dump(mode="json")
 
 
 def _scope_to_dict(s: WorkspaceTableScope) -> dict[str, Any]:
-    return {
-        "id": s.id,
-        "project_id": s.project_id,
-        "data_source_id": s.data_source_id,
-        "table_id": s.table_id,
-        "enabled": s.enabled,
-        "created_at": s.created_at.isoformat() if s.created_at else None,
-        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
-    }
+    from engine.schemas.semantic import WorkspaceTableScopeResponse
+    return WorkspaceTableScopeResponse.model_validate(s).model_dump(mode="json")
 
 
 def _check_datasource(db: Session, datasource_id: str) -> DataSource:

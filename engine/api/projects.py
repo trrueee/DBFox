@@ -22,15 +22,10 @@ router = APIRouter()
 
 
 def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, Any]:
-    return {
-        "id": project.id,
-        "name": project.name,
-        "description": project.description or "",
-        "status": project.status,
-        "datasource_count": datasource_count,
-        "created_at": project.created_at.isoformat() if project.created_at else None,
-        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
-    }
+    from engine.schemas.project import ProjectResponse
+    result = ProjectResponse.model_validate(project).model_dump(mode="json")
+    result["datasource_count"] = datasource_count
+    return result
 
 
 from engine.projects.service import get_or_create_default_project
