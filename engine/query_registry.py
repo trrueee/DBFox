@@ -165,7 +165,7 @@ class QueryRegistry:
         killer = pymysql.connect(**params)
         try:
             with killer.cursor() as cursor:
-                cursor.execute(f"KILL QUERY {int(thread_id)}")
+                cursor.execute("KILL QUERY %s", (thread_id,))
         finally:
             killer.close()
 
