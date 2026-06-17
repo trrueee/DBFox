@@ -13,6 +13,31 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 struct PythonEngine(Mutex<Option<Child>>);
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EngineConfig {
+    port: u16,
+    token: String,
+}
+
+#[tauri::command]
+fn get_engine_config(config: tauri::State<'_, EngineConfig>) -> EngineConfig {
+    config.inner().clone()
+}
+
+fn get_free_port() -> Option<u16> {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .ok()
+}
+
+fn generate_random_token() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
 // DEPRECATED: ConversationRecord and all conversation commands below are
 // migration-only dead code. The Python engine API is the single source of
 // truth for conversation storage. These remain temporarily to support a
@@ -37,11 +62,14 @@ impl Drop for PythonEngine {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let python_child = spawn_python_engine();
+    let port = get_free_port().unwrap_or(18625);
+    let token = generate_random_token();
+    let python_child = spawn_python_engine(port, &token);
 
     tauri::Builder::default()
+        .manage(EngineConfig { port, token })
         .manage(PythonEngine(Mutex::new(python_child)))
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![get_engine_config])
         .on_window_event(|window, event| {
             if matches!(
                 event,
@@ -193,27 +221,42 @@ fn stop_engine_child(mut child: Child) {
     let _ = child.wait();
 }
 
-#[cfg(target_os = "windows")]
-const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "dbfox-engine.exe",
-    "dbfox-engine-x86_64-pc-windows-msvc.exe",
-];
-
-#[cfg(target_os = "macos")]
-const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "dbfox-engine",
-    "dbfox-engine-x86_64-apple-darwin",
-];
-
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "dbfox-engine",
-    "dbfox-engine-x86_64-unknown-linux-gnu",
-];
+/// Build the Rust target triplet for the current platform at compile time.
+/// This must match the naming convention in `build_sidecar.py:get_target_triplet()`.
+fn current_target_triplet() -> &'static str {
+    match std::env::consts::OS {
+        "windows" => match std::env::consts::ARCH {
+            "aarch64" => "aarch64-pc-windows-msvc",
+            _ => "x86_64-pc-windows-msvc",
+        },
+        "macos" => match std::env::consts::ARCH {
+            "aarch64" => "aarch64-apple-darwin",
+            _ => "x86_64-apple-darwin",
+        },
+        _ => match std::env::consts::ARCH {
+            "aarch64" => "aarch64-unknown-linux-gnu",
+            _ => "x86_64-unknown-linux-gnu",
+        },
+    }
+}
 
 fn sidecar_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    for name in SIDECAR_BINARY_NAMES {
+    let triplet = current_target_triplet();
+
+    let names: Vec<String> = if cfg!(target_os = "windows") {
+        vec![
+            "dbfox-engine.exe".into(),
+            format!("dbfox-engine-{}.exe", triplet),
+        ]
+    } else {
+        vec![
+            "dbfox-engine".into(),
+            format!("dbfox-engine-{}", triplet),
+        ]
+    };
+
+    for name in &names {
         candidates.push(exe_dir.join(name));
         candidates.push(exe_dir.join("resources").join(name));
         candidates.push(exe_dir.join("_up_").join("binaries").join(name));
@@ -223,7 +266,7 @@ fn sidecar_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
     candidates
 }
 
-fn spawn_python_engine() -> Option<Child> {
+fn spawn_python_engine(port: u16, token: &str) -> Option<Child> {
     if cfg!(debug_assertions) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -236,6 +279,8 @@ fn spawn_python_engine() -> Option<Child> {
         match Command::new("python")
             .arg(&engine_path)
             .env("PYTHONPATH", &root)
+            .env("DBFOX_ENGINE_PORT", port.to_string())
+            .env("DBFOX_ENGINE_TOKEN", token)
             .current_dir(&root)
             .spawn()
         {
@@ -270,7 +315,12 @@ fn spawn_python_engine() -> Option<Child> {
 
         let final_path = sidecar_path.unwrap_or_else(|| candidates[0].clone());
 
-        match Command::new(&final_path).current_dir(exe_dir).spawn() {
+        match Command::new(&final_path)
+            .env("DBFOX_ENGINE_PORT", port.to_string())
+            .env("DBFOX_ENGINE_TOKEN", token)
+            .current_dir(exe_dir)
+            .spawn()
+        {
             Ok(child) => {
                 println!("DBFox Sidecar Engine (Prod) started (pid: {})", child.id());
                 Some(child)
@@ -298,14 +348,21 @@ mod tests {
         assert!(candidates.contains(&exe_dir.join("dbfox-engine.exe")));
     }
 
-    #[cfg(target_os = "windows")]
     #[test]
-    fn sidecar_candidates_keep_triplet_binary_compatibility() {
+    fn sidecar_candidates_include_current_target_triplet() {
         let exe_dir = PathBuf::from(r"C:\DBFox");
         let candidates = sidecar_candidate_paths(&exe_dir);
+        let triplet = current_target_triplet();
+        let expected_name = if cfg!(target_os = "windows") {
+            format!("dbfox-engine-{}.exe", triplet)
+        } else {
+            format!("dbfox-engine-{}", triplet)
+        };
 
-        assert!(candidates.contains(
-            &exe_dir.join("dbfox-engine-x86_64-pc-windows-msvc.exe")
-        ));
+        assert!(
+            candidates.contains(&exe_dir.join(&expected_name)),
+            "Missing triplet binary: {}",
+            expected_name
+        );
     }
 }

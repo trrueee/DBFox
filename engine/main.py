@@ -55,6 +55,11 @@ def get_or_create_local_token() -> str:
         如果是打包后的独立程序，该值为 True，否则为 False。
       - `secrets.token_hex(32)`：利用 Python 的密码学安全随机数生成器生成一个 32 字节（64 个字符）的十六进制随机字符串，极其难被暴力破解。
     """
+    # 优先使用 Rust/Tauri 动态传入的 Token
+    env_token = os.environ.get("DBFOX_ENGINE_TOKEN")
+    if env_token:
+        return env_token.strip()
+
     # 如果是在 Tauri 打包后的“冷冻（frozen）”环境下运行，尝试读取打包时预设的静态 Token
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
@@ -65,7 +70,7 @@ def get_or_create_local_token() -> str:
         except ImportError:
             pass
 
-    # 兼容过渡：如果存在旧的 Token 文件，移动到新的安全目录下
+    # 兼容过渡：如果存在旧 of Token 文件，移动到新的安全目录下
     if not TOKEN_FILE.exists() and LEGACY_TOKEN_FILE.exists():
         write_private_text(TOKEN_FILE, LEGACY_TOKEN_FILE.read_text("utf-8").strip())
 
@@ -123,9 +128,10 @@ async def lifespan(application: FastAPI) -> Any:
     # --- 【启动时任务】 ---
     init_db()  # 初始化本地 SQLite 数据库（自动检查并运行表结构迁移）
     
+    port = os.environ.get("DBFOX_ENGINE_PORT", "18625")
     print("===========================================================")
     print("DBFox Local Engine 成功初始化并启动。")
-    print("服务监听地址: http://127.0.0.1:18625")
+    print(f"服务监听地址: http://127.0.0.1:{port}")
     print(f"安全令牌路径: {TOKEN_FILE}")
     print("===========================================================")
     
@@ -165,15 +171,42 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
         return await call_next(request)
 
     # 🔒 在生产环境（Tauri 容器内）强制检查请求的 Origin 来源头部
-    origin = request.headers.get("origin")
-    if is_frozen and origin:
-        if origin not in ALLOWED_TAURI_ORIGINS:
+    if is_frozen:
+        origin = request.headers.get("origin")
+        if not origin:
+            # 某些 WebView 请求可能不发送 Origin 头（如 redirect、no-cors），
+            # 此时检查 Referer 是否为已知合法来源，避免误杀合理请求。
+            referer = request.headers.get("referer", "")
+            is_local_referer = any(
+                referer.startswith(prefix)
+                for prefix in (
+                    "http://127.0.0.1",
+                    "http://localhost",
+                    "https://127.0.0.1",
+                    "https://localhost",
+                    "tauri://localhost",
+                    "http://tauri.localhost",
+                    "https://tauri.localhost",
+                )
+            )
+            if not is_local_referer:
+                logger.warning(
+                    "拦截到缺失 Origin 且 Referer 非本地的请求，Referer: %s", referer
+                )
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "code": "FORBIDDEN_ORIGIN",
+                        "message": "拒绝访问：必须从合法的 Origin 发起请求！"
+                    }
+                )
+        elif origin not in ALLOWED_TAURI_ORIGINS:
             logger.warning("拦截到非法的跨域恶意连接请求，尝试来源: %s", origin)
             return JSONResponse(
                 status_code=403,
                 content={
                     "code": "FORBIDDEN_ORIGIN",
-                    "message": "拒绝访问：严禁从此外部 Web Origin 发起请求！"
+                    "message": "拒绝访问：必须从合法的 Origin 发起请求！"
                 }
             )
 

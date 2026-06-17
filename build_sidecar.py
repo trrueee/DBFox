@@ -33,7 +33,39 @@ DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
 
-SIDECAR_NAME = "dbfox-engine-x86_64-pc-windows-msvc.exe"
+
+def get_target_triplet() -> str:
+    """Gets the target triplet for the current platform from rustc, falling back to OS detection."""
+    try:
+        output = subprocess.check_output(["rustc", "-vV"], text=True)
+        for line in output.splitlines():
+            if line.startswith("host:"):
+                return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    
+    # Fallback to standard OS and arch mapping
+    import platform
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+
+    arch = "x86_64"
+    if "arm" in machine or "aarch64" in machine:
+        arch = "aarch64"
+    elif "386" in machine or "686" in machine or "i386" in machine or "i686" in machine:
+        arch = "i686"
+    elif "x86_64" not in machine and "amd64" not in machine:
+        print(
+            f"  [WARN] Unknown architecture '{machine}' — falling back to x86_64 triplet",
+            file=sys.stderr,
+        )
+
+    if system == "windows":
+        return f"{arch}-pc-windows-msvc"
+    elif system == "darwin":
+        return f"{arch}-apple-darwin"
+    else:
+        return f"{arch}-unknown-linux-gnu"
 
 # Must match the dependencies in requirements.txt that PyInstaller
 # cannot auto-detect (lazy imports, dynamic loaders, etc.)
@@ -166,7 +198,8 @@ def build_pyinstaller(python_exe: str) -> Path:
         print("  [FAIL] PyInstaller build failed", file=sys.stderr)
         sys.exit(result.returncode)
 
-    built = dist_dir / "dbfox-engine.exe"
+    built_name = "dbfox-engine.exe" if sys.platform == "win32" else "dbfox-engine"
+    built = dist_dir / built_name
     if not built.exists():
         print(f"  [FAIL] Expected binary not found: {built}", file=sys.stderr)
         sys.exit(1)
@@ -178,7 +211,11 @@ def build_pyinstaller(python_exe: str) -> Path:
 
 def install_sidecar(binary: Path) -> Path:
     BINARIES_DIR.mkdir(parents=True, exist_ok=True)
-    dest = BINARIES_DIR / SIDECAR_NAME
+    triplet = get_target_triplet()
+    name = f"dbfox-engine-{triplet}"
+    if sys.platform == "win32":
+        name += ".exe"
+    dest = BINARIES_DIR / name
     shutil.copy2(binary, dest)
     print(f"  [OK] Sidecar -> {dest}")
     return dest
@@ -212,7 +249,7 @@ def main() -> None:
     binary = build_pyinstaller(python_exe)
 
     print("\n[3/3] Install to Tauri binaries")
-    install_sidecar(binary)
+    dest = install_sidecar(binary)
 
     shutil.rmtree(ROOT / "pyinstaller_dist", ignore_errors=True)
     shutil.rmtree(ROOT / "pyinstaller_build", ignore_errors=True)
@@ -220,7 +257,7 @@ def main() -> None:
 
     print("\n" + "=" * 55)
     print("Sidecar build complete.")
-    print(f"  {BINARIES_DIR / SIDECAR_NAME}")
+    print(f"  {dest}")
     print("  Next: cd desktop && npm run tauri -- build")
     print("=" * 55)
 
