@@ -297,6 +297,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS schema_search_fts
 USING fts5(search_text, content='schema_search_docs', content_rowid='id')
 """
 
+QUERY_HISTORY_FTS_DDL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS query_history_fts
+USING fts5(
+    history_id UNINDEXED,
+    question,
+    submitted_sql,
+    generated_sql,
+    safe_sql,
+    executed_sql,
+    error_message
+)
+"""
+
 
 class QueryHistory(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "query_history"

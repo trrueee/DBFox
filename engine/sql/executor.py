@@ -32,14 +32,36 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
     Returns the history record ID on success, or ``None`` if the write fails.
     The independent session prevents the audit log from participating in the
     caller's transaction (history must survive a caller rollback).
+    Also populates the FTS5 index for query history search.
     """
     from sqlalchemy.orm import sessionmaker
 
-    engine = db.get_bind()
-    audit_db = sessionmaker(bind=engine)()
+    audit_db = sessionmaker(bind=db.get_bind())()
     try:
         audit_db.add(history)
         audit_db.commit()
+        # Populate FTS5 index (best-effort — failures are logged, not raised)
+        try:
+            audit_db.execute(
+                __import__("sqlalchemy").text(
+                    "INSERT OR REPLACE INTO query_history_fts"
+                    " (history_id, question, submitted_sql, generated_sql, safe_sql, executed_sql, error_message)"
+                    " VALUES (:id, :q, :ss, :gs, :sf, :es, :em)"
+                ),
+                {
+                    "id": history.id,
+                    "q": history.question or "",
+                    "ss": history.submitted_sql or "",
+                    "gs": history.generated_sql or "",
+                    "sf": history.safe_sql or "",
+                    "es": history.executed_sql or "",
+                    "em": history.error_message or "",
+                },
+            )
+            audit_db.commit()
+        except Exception:
+            audit_db.rollback()
+            logger.debug("FTS5 index population skipped (table may not exist yet)")
         return history.id
     except Exception:
         audit_db.rollback()
@@ -54,7 +76,7 @@ from engine.sql.dialect.mysql import _execute_on_mysql, _execute_on_mysql_profil
 from engine.sql.row_serializer import (
     _fetch_and_serialize, _serialize_value, _process_rows,
     JSON_OVERHEAD_BYTES, MAX_ROWS, MAX_COLUMNS, MAX_CELL_CHARS, MAX_RESPONSE_BYTES,
-    QUERY_TIMEOUT_MS, ProcessedRows,
+    QUERY_TIMEOUT_MS, TRUNCATION_LEN, TRUNCATION_SUFFIX, ProcessedRows,
 )
 from engine.sql.safety_gate import (
     guardrail_bypass_allowed,
@@ -184,7 +206,6 @@ def _run_approved_query(
     # Detect cell truncation precisely: _process_rows cuts long strings to exactly
     # MAX_CELL_CHARS chars + TRUNCATION_SUFFIX, so only that shape indicates a truncated cell.
     # (Checking just endswith(TRUNCATION_SUFFIX) false-positives on legitimate data.)
-    from engine.sql.row_serializer import TRUNCATION_LEN, TRUNCATION_SUFFIX
     cell_truncated = any(
         isinstance(v, str) and len(v) == MAX_CELL_CHARS + TRUNCATION_LEN and v.endswith(TRUNCATION_SUFFIX)
         for r in rows
