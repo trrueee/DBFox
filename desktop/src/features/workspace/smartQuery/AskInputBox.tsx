@@ -13,7 +13,7 @@ export function AskInputBox({ value, onChange, onSubmit }: AskInputBoxProps) {
         className="hifi-ask-input"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="用自然语言提问，例如：帮我查一下“市场运营部”上个月发布了多少资产？"
+        placeholder="用自然语言提问，例如：查询用户表中最近一周的新注册用户数量"
       />
       <button
         className="hifi-ask-send-btn animate-pulse"

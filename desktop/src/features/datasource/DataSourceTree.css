@@ -1,0 +1,130 @@
+/* DataSourceTree — sidebar component styles */
+
+.ds-tree-collapsed {
+  width: 36px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.ds-tree-expand-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+}
+
+.ds-tree-chevron-left { transform: rotate(-90deg); }
+.ds-tree-chevron-right { transform: rotate(90deg); }
+
+.ds-tree-main {
+  width: var(--sidebar-width, 260px);
+  flex-shrink: 0;
+  min-width: 180px;
+  max-width: 480px;
+  background: var(--sidebar-bg);
+}
+
+.ds-tree-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ds-tree-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ds-tree-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ds-tree-icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.ds-db-select-wrapper { position: relative; }
+
+.ds-db-select-clickable { cursor: pointer; }
+
+.ds-db-chevron {
+  transition: transform 0.15s;
+}
+.ds-db-chevron-open {
+  transform: rotate(180deg);
+}
+
+.ds-db-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 4px;
+  right: 4px;
+  z-index: 50;
+  background: var(--bg-surface, #fff);
+  border: 1px solid var(--border-medium, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.ds-db-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ds-db-dropdown-item.active {
+  background: var(--color-accent, #f0f4ff);
+  color: var(--color-primary, #1e3a5f);
+}
+
+.ds-db-dropdown-item:not(.active) {
+  background: transparent;
+  color: var(--color-text-primary, #111827);
+}
+
+.ds-db-item-info { flex: 1; }
+.ds-db-item-name { font-weight: 500; }
+.ds-db-item-type { font-size: 10px; color: var(--color-text-secondary, #6b7280); }
+.ds-db-item-check { color: var(--color-primary, #1e3a5f); }
+
+.ds-tree-group {
+  margin-left: 12px;
+}
+
+.ds-tree-group-header {
+  cursor: pointer;
+}
+
+.ds-tree-table-row {
+  margin-left: 12px;
+  cursor: grab;
+}
+
+.ds-group-chevron {
+  transition: transform 0.15s;
+}
+.ds-group-chevron-collapsed {
+  transform: rotate(-90deg);
+}

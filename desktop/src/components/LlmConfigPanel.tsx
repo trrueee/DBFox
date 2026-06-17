@@ -5,7 +5,7 @@ import {
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
-import type { ApiConfig } from "./SettingsDialog";
+import type { ApiConfig } from "../lib/api/types";
 import {
   DEFAULT_LLM_API_BASE,
   LLM_MODEL_PRESETS,

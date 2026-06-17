@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
-import { listColumns, resolveTableByName, type EngineColumn } from "../../engine/engineApi";
+import { request } from "../../../lib/api/client";
+import type { EngineColumn } from "../../engine/engineApi";
 
-export function TableSchemaPane({ tableId }: { tableId: string }) {
+interface TableSchemaPaneProps {
+  tableId: string;
+  datasourceId: string;
+}
+
+export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps) {
   const [columns, setColumns] = useState<EngineColumn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -13,12 +19,18 @@ export function TableSchemaPane({ tableId }: { tableId: string }) {
       setLoading(true);
       setError("");
       try {
-        const resolved = await resolveTableByName(tableId);
-        if (!resolved) {
+        // Resolve table by name within the correct datasource
+        const tables = await request<Array<{ id: string; table_name: string }>>(
+          `/schema/tables?datasource_id=${encodeURIComponent(datasourceId)}`
+        );
+        const table = tables.find((t) => t.table_name === tableId);
+        if (!table) {
           if (!cancelled) setError("未找到该表的 Schema 元数据，请先同步 Schema。");
           return;
         }
-        const nextColumns = await listColumns(resolved.table.id);
+        const nextColumns = await request<EngineColumn[]>(
+          `/schema/tables/${encodeURIComponent(table.id)}/columns`
+        );
         if (!cancelled) setColumns(nextColumns);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "读取字段结构失败");
@@ -31,7 +43,7 @@ export function TableSchemaPane({ tableId }: { tableId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [tableId]);
+  }, [tableId, datasourceId]);
 
   return (
     <div className="flex flex-col p-3 h-full overflow-auto">

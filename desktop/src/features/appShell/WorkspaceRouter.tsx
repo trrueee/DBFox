@@ -51,7 +51,7 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
 
 // ── SmartQueryHome tab ──
 function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
-  const [askInputValue, setAskInputValue] = useState("帮我查一下"市场运营部"上个月发布了多少资产？");
+  const [askInputValue, setAskInputValue] = useState("");
   const contextTables = useWorkspaceStore((s) => s.contextTables);
   const addContextTable = useWorkspaceStore((s) => s.addContextTable);
   const removeContextTable = useWorkspaceStore((s) => s.removeContextTable);
@@ -96,14 +96,16 @@ function ConversationHistoryTab({ activeTab }: { activeTab: WorkspaceTab }) {
 
 // ── TableWorkspace tab ──
 function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
-  const tableId = activeTab.tableId || "id_users";
+  const tableId = activeTab.tableId || "";
   const tableSubTabs = useWorkspaceStore((s) => s.tableSubTabs);
   const setTableSubTabs = useWorkspaceStore((s) => s.setTableSubTabs);
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
+  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
 
   return (
     <TableWorkspace
       tableId={tableId}
+      datasourceId={activeDatasourceId || ""}
       currentSubTab={tableSubTabs[tableId] || "preview"}
       onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [tableId]: subTab }))}
       onOpenSqlConsole={openSqlConsole}

@@ -1,8 +1,21 @@
 import { useState, useEffect, useRef, type MouseEvent, useCallback } from "react";
 
+const STORAGE_KEY = "dbfox-sidebar-width";
+
+function loadWidth(): number {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const w = parseInt(raw, 10);
+      if (w >= 180 && w <= 480) return w;
+    }
+  } catch { /* ignore */ }
+  return 240;
+}
+
 export function useSidebarLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const [width, setWidth] = useState(240);
+  const [width, setWidth] = useState(loadWidth);
   const resizingRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const handleResizeStart = useCallback((e: MouseEvent) => {
@@ -20,6 +33,9 @@ export function useSidebarLayout() {
       setWidth(next);
     };
     const handleMouseUp = () => {
+      if (resizingRef.current) {
+        try { localStorage.setItem(STORAGE_KEY, String(width)); } catch { /* ignore */ }
+      }
       resizingRef.current = null;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
@@ -30,7 +46,7 @@ export function useSidebarLayout() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, []);
+  }, [width]);
 
   const toggleCollapse = useCallback(() => setCollapsed((v) => !v), []);
 

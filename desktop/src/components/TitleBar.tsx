@@ -8,69 +8,48 @@ function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-type Win = {
-  minimize(): Promise<void>;
-  toggleMaximize(): Promise<void>;
-  close(): Promise<void>;
-  isMaximized(): Promise<boolean>;
-};
+let _tauriWindow: (() => Promise<Win>) | null = null;
+
+async function getTauriWindow(): Promise<Win | null> {
+  if (!isTauriRuntime()) return null;
+  if (!_tauriWindow) {
+    try {
+      const mod = await import("@tauri-apps/api/window");
+      _tauriWindow = () => mod.getCurrentWindow() as unknown as Win;
+    } catch {
+      return null;
+    }
+  }
+  return _tauriWindow();
+}
 
 export default function TitleBar() {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return;
-
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
     (async () => {
+      const win = await getTauriWindow();
+      if (!win || cancelled) return;
+      setMaximized(await win.isMaximized());
+
       try {
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        const win = getCurrentWindow() as unknown as Win;
-
-        if (cancelled) return;
-        setMaximized(await win.isMaximized());
-
-        unlisten = await (
-          await import("@tauri-apps/api/window")
-        ).getCurrentWindow().onResized(async () => {
+        const mod = await import("@tauri-apps/api/window");
+        unlisten = await mod.getCurrentWindow().onResized(async () => {
           if (cancelled) return;
           setMaximized(await win.isMaximized());
         });
-      } catch {
-        // not in Tauri — silently ignore
-      }
+      } catch { /* ignore */ }
     })();
 
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
+    return () => { cancelled = true; unlisten?.(); };
   }, []);
 
-  const handleMinimize = async () => {
-    try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      await (getCurrentWindow() as unknown as Win).minimize();
-    } catch { /* ignore */ }
-  };
-
-  const handleToggleMaximize = async () => {
-    try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const win = getCurrentWindow() as unknown as Win;
-      await win.toggleMaximize();
-      setMaximized(await win.isMaximized());
-    } catch { /* ignore */ }
-  };
-
-  const handleClose = async () => {
-    try {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      await (getCurrentWindow() as unknown as Win).close();
-    } catch { /* ignore */ }
-  };
+  const handleMinimize = async () => { try { (await getTauriWindow())?.minimize(); } catch { /* ignore */ } };
+  const handleToggleMaximize = async () => { try { const w = await getTauriWindow(); if (w) { await w.toggleMaximize(); setMaximized(await w.isMaximized()); } } catch { /* ignore */ } };
+  const handleClose = async () => { try { (await getTauriWindow())?.close(); } catch { /* ignore */ } };
 
   return (
     <div className="titlebar" data-tauri-drag-region>

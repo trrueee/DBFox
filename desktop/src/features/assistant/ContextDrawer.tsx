@@ -51,7 +51,7 @@ function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
 
 function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; contextTables: string[] }) {
   if (activeTab.type === "table") {
-    const tableId = activeTab.tableId || "id_users";
+    const tableId = activeTab.tableId || "";
     return <InfoList rows={[["物理表名:", tableId], ["预估行数:", "12,345 Rows"], ["物理大小:", "2.48 MB"], ["存储引擎:", "InnoDB"], ["创建时间:", "2024-11-16"]]} />;
   }
   if (activeTab.type === "sql") {

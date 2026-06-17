@@ -18,15 +18,12 @@ import { useAgentStore } from "./stores/agentStore";
 
 export default function App() {
   const [treeSearch, setTreeSearch] = useState("");
-  const [askInputValue, setAskInputValue] = useState("帮我查一下“市场运营部”上个月发布了多少资产？");
+  const [askInputValue, setAskInputValue] = useState(“”);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [rightDrawerType, setRightDrawerType] = useState<"ai-suggest" | "props">("props");
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, type: "database", targetNode: "" });
 
   const { toast } = useToast();
-  const showToast = useCallback((message: string, type?: "success" | "error" | "warning" | "info") => {
-    toast(message, type);
-  }, [toast]);
 
   // ── Store initialization (mount once) ──
   useEffect(() => {
@@ -209,7 +206,7 @@ export default function App() {
             <div className="app-main-scroll">
               <WorkspaceRouter
                 activeTab={activeTab}
-                showToast={showToast}
+                showToast={toast}
               />
             </div>
           </section>
