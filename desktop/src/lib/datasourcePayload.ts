@@ -28,7 +28,6 @@ export interface DatasourceFormShape {
 
 export function buildDatasourceTestPayload(form: DatasourceFormShape) {
   return {
-    name: form.name || form.database_name || "",
     db_type: form.db_type || "mysql",
     host: form.host || null,
     port: form.port ?? null,

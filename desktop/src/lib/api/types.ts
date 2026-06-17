@@ -48,18 +48,13 @@ export interface DataSource {
   created_at: string;
 }
 
-export interface DataSourceCreateParams {
-  project_id?: string | null;
-  name: string;
+export interface DataSourceTestParams {
   db_type?: string;
   host?: string | null;
   port?: number | null;
   database_name: string;
   username?: string | null;
   password?: string | null;
-  connection_mode?: string;
-  is_read_only?: boolean;
-  env?: string;
   ssh_enabled?: boolean;
   ssh_host?: string | null;
   ssh_port?: number;
@@ -72,6 +67,14 @@ export interface DataSourceCreateParams {
   ssl_cert_path?: string | null;
   ssl_key_path?: string | null;
   ssl_verify_identity?: boolean;
+}
+
+export interface DataSourceCreateParams extends DataSourceTestParams {
+  project_id?: string | null;
+  name: string;
+  connection_mode?: string;
+  is_read_only?: boolean;
+  env?: string;
   enable_embedding_recall?: boolean;
 }
 
