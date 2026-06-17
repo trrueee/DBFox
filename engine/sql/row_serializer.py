@@ -6,6 +6,9 @@ import json
 import time
 from typing import Any
 
+JSON_OVERHEAD_BYTES = 2  # Represents the brackets '[' and ']' of the JSON array wrapper
+TRUNCATION_SUFFIX = "..."
+TRUNCATION_LEN = len(TRUNCATION_SUFFIX)
 MAX_ROWS = 1000
 MAX_COLUMNS = 100
 MAX_CELL_CHARS = 5000
@@ -27,7 +30,7 @@ def _fetch_and_serialize(cursor: Any, max_rows: int = MAX_ROWS, *, row_mapper: A
     columns: list[str] = []
     rows: list[dict[str, Any]] = []
     truncated = False
-    response_bytes = 2
+    response_bytes = JSON_OVERHEAD_BYTES
     fetch_ms = 0
     serialize_ms = 0
 
@@ -71,7 +74,7 @@ def _process_rows(
         columns = columns[:max_columns]
 
     rows = []
-    response_bytes = 2  # JSON array brackets
+    response_bytes = JSON_OVERHEAD_BYTES  # JSON array brackets
     truncated = False
 
     for r in raw_rows:
@@ -79,7 +82,7 @@ def _process_rows(
         for col in columns:
             val = r[col]
             if isinstance(val, str) and len(val) > max_cell_chars:
-                val = val[:max_cell_chars] + "..."
+                val = val[:max_cell_chars] + TRUNCATION_SUFFIX
             row_dict[col] = _serialize_value(val)
 
         row_bytes = len(json.dumps(row_dict, ensure_ascii=False, default=str).encode("utf-8")) + 1

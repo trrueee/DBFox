@@ -34,12 +34,15 @@ def dry_run_query(db: Session, datasource_id: str, sql: str) -> DryRunResult:
             return _dry_run_postgres(datasource, sql)
         return _dry_run_mysql(datasource, sql)
     except Exception as exc:
-        return DryRunResult(False, _classify_dry_run_error(exc), str(exc))
+        from engine.policy.error_sanitizer import sanitize_error_message
+        return DryRunResult(False, _classify_dry_run_error(exc), sanitize_error_message(str(exc)))
 
 
 def _dry_run_sqlite(database_name: str, sql: str) -> DryRunResult:
+    import pathlib
     path = database_name
-    conn = sqlite3.connect(path)
+    db_uri = pathlib.Path(path).resolve().as_uri() + "?mode=ro"
+    conn = sqlite3.connect(db_uri, uri=True)
     try:
         conn.execute(f"EXPLAIN QUERY PLAN {sql}")
         return DryRunResult(True)

@@ -7,6 +7,7 @@ import re
 
 import sqlglot
 from sqlglot import exp
+from engine.sql.parser import parse_sql
 
 from engine.errors import GuardrailValidationError
 
@@ -86,7 +87,7 @@ def guardrail_parsed_ast(sql_str: str, dialect: str = "mysql") -> exp.Expression
         return None
 
     try:
-        expressions = sqlglot.parse(sql_str, read=_sqlglot_dialect(dialect))
+        expressions = parse_sql(sql_str, dialect)
     except Exception:
         return None
     if len(expressions) != 1 or not expressions[0]:
@@ -204,7 +205,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     # 1. Parse and check multiple statements
     try:
         # sqlglot.parse parses multi-statement strings separated by semicolon
-        expressions = sqlglot.parse(sql_str, read=sqlglot_dialect)
+        expressions = parse_sql(sql_str, dialect)
         if len(expressions) > 1:
             checks.append({
                 "rule": "multi_statement",

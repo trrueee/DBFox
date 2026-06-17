@@ -29,7 +29,7 @@ from engine.sql.dialect.postgres import _execute_on_postgres_profiled
 from engine.sql.dialect.mysql import _execute_on_mysql, _execute_on_mysql_profiled
 from engine.sql.row_serializer import (
     _fetch_and_serialize, _serialize_value, _process_rows,
-    MAX_ROWS, MAX_COLUMNS, MAX_CELL_CHARS, MAX_RESPONSE_BYTES,
+    JSON_OVERHEAD_BYTES, MAX_ROWS, MAX_COLUMNS, MAX_CELL_CHARS, MAX_RESPONSE_BYTES,
     QUERY_TIMEOUT_MS, ProcessedRows,
 )
 from engine.sql.safety_gate import (
@@ -60,6 +60,7 @@ def _run_approved_query(
     guard_res: dict,
     guardrail_ms: int,
     guard_checks_json: str,
+    redact: bool = True,
 ) -> dict[str, Any]:
     """Execute safety-approved SQL on the target datasource and record history.
 
@@ -72,7 +73,7 @@ def _run_approved_query(
     rows: list[dict[str, Any]] = []
     columns: list[str] = []
     truncated = False
-    response_bytes = 2
+    response_bytes = JSON_OVERHEAD_BYTES
     error_message: str | None = None
     execution_status = "success"
 
@@ -89,6 +90,7 @@ def _run_approved_query(
                 execution_id=execution_id,
                 datasource_id=datasource_id,
                 sqlite_path=ds.database_name,  # type: ignore[arg-type]
+                read_only=ds.is_read_only,
             )
         elif db_type == "postgresql":
             conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
@@ -142,14 +144,40 @@ def _run_approved_query(
             columns_returned=len(columns) if execution_status == "success" else 0,
             error_message=error_message,
         )
-        db.add(history)
-        db.commit()
+        
+        # Isolate audit logging transaction using an independent Session
+        from sqlalchemy.orm import sessionmaker
+        engine = db.get_bind()
+        AuditSession = sessionmaker(bind=engine)
+        audit_db = AuditSession()
+        try:
+            audit_db.add(history)
+            audit_db.commit()
+            history_id = history.id
+        except Exception:
+            audit_db.rollback()
+            logger.exception("Failed to write query history to database")
+            history_id = None
+        finally:
+            audit_db.close()
+
+    # Apply redaction pipeline at the executor level if requested
+    if redact:
+        from engine.policy.sensitivity import load_sensitivity, redact_row
+        try:
+            sensitivity = load_sensitivity(db, datasource_id)
+            rows = [redact_row(row, sensitivity) for row in rows]
+        except Exception:
+            logger.exception("Failed to load sensitivity configurations; falling back to default redaction")
+            from engine.policy.sensitivity import _SENSITIVE_FALLBACK
+            rows = [redact_row(row, _SENSITIVE_FALLBACK) for row in rows]
 
     # Detect cell truncation precisely: _process_rows cuts long strings to exactly
-    # MAX_CELL_CHARS chars + "...", so only that shape indicates a truncated cell.
-    # (Checking just endswith("...") false-positives on legitimate data.)
+    # MAX_CELL_CHARS chars + TRUNCATION_SUFFIX, so only that shape indicates a truncated cell.
+    # (Checking just endswith(TRUNCATION_SUFFIX) false-positives on legitimate data.)
+    from engine.sql.row_serializer import TRUNCATION_LEN, TRUNCATION_SUFFIX
     cell_truncated = any(
-        isinstance(v, str) and len(v) == MAX_CELL_CHARS + 3 and v.endswith("...")
+        isinstance(v, str) and len(v) == MAX_CELL_CHARS + TRUNCATION_LEN and v.endswith(TRUNCATION_SUFFIX)
         for r in rows
         for v in r.values()
     )
@@ -172,7 +200,7 @@ def _run_approved_query(
         "latencyMs": latency_ms,
         "guardrail": guard_res,
         "safetyDecision": None,  # filled by caller
-        "historyId": history.id,
+        "historyId": history_id,
         "executionId": execution_id,
         "truncated": truncated,
         "cellTruncated": cell_truncated,
@@ -197,6 +225,7 @@ def execute_query(
     execution_id: str | None = None,
     safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
     safety_policy: ExecutionPolicy = "readonly",
+    redact: bool = True,
 ) -> dict[str, Any]:
     """
     Safely executes a SQL query:
@@ -244,8 +273,21 @@ def execute_query(
             fetch_ms=0,
             serialize_ms=0,
         )
-        db.add(history)
-        db.commit()
+        
+        # Isolate audit logging transaction using an independent Session
+        from sqlalchemy.orm import sessionmaker
+        engine = db.get_bind()
+        AuditSession = sessionmaker(bind=engine)
+        audit_db = AuditSession()
+        try:
+            audit_db.add(history)
+            audit_db.commit()
+        except Exception:
+            audit_db.rollback()
+            logger.exception("Failed to write query history to database")
+        finally:
+            audit_db.close()
+
         raise GuardrailValidationError(
             message, checks=_decision_checks_for_error(decision)
         )
@@ -262,9 +304,44 @@ def execute_query(
         guard_res=guard_res,
         guardrail_ms=guardrail_ms,
         guard_checks_json=guard_checks_json,
+        redact=redact,
     )
     result["safetyDecision"] = decision.model_dump(mode="json")
     return result
+
+def _validate_explain_sql(sql: str, dialect: str) -> None:
+    """Secondary safety check for EXPLAIN inputs to prevent SQL injection in f-strings."""
+    import sqlglot
+    from sqlglot import exp
+    from engine.errors import GuardrailValidationError
+
+    sql_stripped = sql.strip()
+    while sql_stripped.endswith(";"):
+        sql_stripped = sql_stripped[:-1].strip()
+
+    dialect_lower = dialect.lower() if dialect else "mysql"
+    if "postgres" in dialect_lower or "pg" in dialect_lower:
+        sqlglot_dialect = "postgres"
+    elif "sqlite" in dialect_lower:
+        sqlglot_dialect = "sqlite"
+    else:
+        sqlglot_dialect = "mysql"
+
+    try:
+        exprs = sqlglot.parse(sql_stripped, read=sqlglot_dialect)
+    except Exception as exc:
+        raise GuardrailValidationError(f"SQL syntax error in EXPLAIN query: {exc}")
+
+    if len(exprs) != 1 or not exprs[0]:
+        raise GuardrailValidationError("EXPLAIN query must contain exactly one SQL statement.")
+
+    expr = exprs[0]
+    if not isinstance(expr, (exp.Select, exp.Union)):
+        raise GuardrailValidationError("EXPLAIN query must be a SELECT or UNION statement.")
+
+    for node in expr.walk():
+        if isinstance(node, (exp.Command, exp.Execute)):
+            raise GuardrailValidationError("EXPLAIN query contains blocked command types.")
 
 
 def explain_sql(
@@ -296,81 +373,21 @@ def explain_sql(
             checks=_decision_checks_for_error(decision),
         )
     safe_sql = str(decision.safe_sql or "").strip()
+    _validate_explain_sql(safe_sql, ds.db_type)
         
     warnings = []
     records = []
 
     if ds.db_type == "sqlite":
-        # SQLite Explain Query Plan
-        conn = sqlite3.connect(str(ds.database_name))
-        conn.row_factory = sqlite3.Row
-        try:
-            cursor = conn.cursor()
-            cursor.execute(f"EXPLAIN QUERY PLAN {safe_sql}")
-            raw_rows = cursor.fetchall()
-            for r in raw_rows:
-                detail = str(r["detail"])
-                is_scan = "SCAN" in detail.upper()
-                is_search = "SEARCH" in detail.upper()
-                
-                q_type = "ALL" if is_scan else "RANGE" if is_search else "INDEX"
-                q_key = None
-                if "USING INDEX" in detail.upper():
-                    parts = detail.split("USING INDEX")
-                    if len(parts) > 1:
-                        q_key = parts[1].strip().split()[0]
-                        
-                records.append({
-                    "type": q_type,
-                    "key": q_key,
-                    "rows": None,
-                    "Extra": detail
-                })
-                
-                if q_type == "ALL":
-                    warnings.append("检测到全表扫描 (Type=ALL)，建议在过滤字段上建立索引")
-                if q_key is None or q_key == "NULL":
-                    warnings.append("未命中任何索引 (Key=NULL)，查询性能可能受限")
-        finally:
-            conn.close()
+        from engine.sql.dialect.sqlite import explain as explain_sqlite
+        records, warnings = explain_sqlite(str(ds.database_name or ""), safe_sql)
     elif ds.db_type in ("postgresql", "postgres"):
-        # PostgreSQL Explain — delegate to dedicated module
         from engine.sql.postgres_explain import explain_postgres_sql
-
         return explain_postgres_sql(db, datasource_id, sql_str)
     else:
-        # Real MySQL Explain
         conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
-        
-        pool = get_mysql_pool(datasource_id, conn_params)
-        conn_proxy: Any = pool.connect()
-        try:
-            _ping_mysql_connection(conn_proxy)
-            with conn_proxy.cursor() as cursor:
-                cursor.execute(f"EXPLAIN {safe_sql}")
-                raw_rows = cursor.fetchall()
-                for r in raw_rows:
-                    q_type = r.get("type") or r.get("Type")
-                    q_key = r.get("key") or r.get("Key")
-                    q_rows = r.get("rows") or r.get("Rows")
-                    q_extra = r.get("Extra") or r.get("extra") or ""
-                    
-                    records.append({
-                        "type": q_type,
-                        "key": q_key,
-                        "rows": q_rows,
-                        "Extra": q_extra
-                    })
-                    
-                    type_str = str(q_type).upper() if q_type is not None else ""
-                    key_str = str(q_key).upper() if q_key is not None else ""
-                    
-                    if type_str == "ALL":
-                        warnings.append(f"表 {r.get('table') or ''} 检测到全表扫描 (Type=ALL)，建议针对过滤/连接字段创建索引。")
-                    if not q_key or key_str == "NULL":
-                        warnings.append(f"表 {r.get('table') or ''} 未命中任何索引 (Key=NULL)，查询性能可能受限。")
-        finally:
-            conn_proxy.close()
+        from engine.sql.dialect.mysql import explain as explain_mysql
+        records, warnings = explain_mysql(datasource_id, conn_params, safe_sql)
             
     return {
         "success": True,

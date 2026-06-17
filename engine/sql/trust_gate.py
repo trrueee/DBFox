@@ -175,14 +175,17 @@ class TrustGate:
                 dry_run = dry_run_query(self.db, datasource_id, candidate_safe_sql)
             except Exception as exc:
                 dry_run = None
-                # We no longer block execution on dry run failures to prevent permission/lock issues from blocking.
                 messages.append(f"EXPLAIN dry-run warning (execution allowed): {exc}")
-            if dry_run is not None and dry_run.ok:
-                messages.append("EXPLAIN dry-run validated safe_sql.")
-            elif dry_run is not None:
-                # Do not block execution on dry run failure; just log as warning.
-                if dry_run.message:
-                    messages.append(f"EXPLAIN dry-run warning (execution allowed): {dry_run.message}")
+            
+            if dry_run is not None:
+                if dry_run.ok:
+                    messages.append("EXPLAIN dry-run validated safe_sql.")
+                else:
+                    if dry_run.blocked_reason in ("syntax_error", "schema_error"):
+                        blocked_reasons.append(dry_run.blocked_reason)
+                        messages.append(f"EXPLAIN dry-run failed ({dry_run.blocked_reason}): {dry_run.message}")
+                    else:
+                        messages.append(f"EXPLAIN dry-run warning (execution allowed): {dry_run.message}")
 
         blocked_reasons = list(dict.fromkeys(blocked_reasons))
         can_execute = not blocked_reasons

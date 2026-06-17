@@ -35,6 +35,8 @@ def explain_postgres_sql(db: Session, datasource_id: str, sql_str: str) -> dict[
         )
 
     safe_sql = str(decision.safe_sql or "").strip()
+    from engine.sql.executor import _validate_explain_sql
+    _validate_explain_sql(safe_sql, "postgres")
     conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
 
     import psycopg2
