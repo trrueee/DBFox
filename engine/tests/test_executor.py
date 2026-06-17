@@ -84,7 +84,7 @@ class TestProcessRows:
 
 class TestMySQLPool:
     def test_queue_pool_checkout_does_not_require_sqlalchemy_dialect(self, monkeypatch) -> None:
-        from engine.sql import executor
+        import engine.sql.dialect.mysql as mysql_dialect
         from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
         from engine.sql.pool_registry import get_pool_registry
 
@@ -101,7 +101,7 @@ class TestMySQLPool:
                 pass
 
         get_pool_registry().dispose_all()
-        monkeypatch.setattr(executor.pymysql, "connect", lambda **_params: FakeConnection())
+        monkeypatch.setattr(mysql_dialect.pymysql, "connect", lambda **_params: FakeConnection())
 
         pool = get_mysql_pool("ds-mysql", {
             "host": "127.0.0.1",
