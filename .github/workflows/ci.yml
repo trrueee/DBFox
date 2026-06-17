@@ -43,7 +43,7 @@ jobs:
           python << 'EOF'
           from alembic.config import Config
           from alembic import command
-          cfg = Config('engine/migrations/alembic.ini')
+          cfg = Config('alembic.ini')
           cfg.set_main_option('script_location', 'engine/migrations')
           command.upgrade(cfg, 'head')
           print('Alembic upgrade head: OK')
