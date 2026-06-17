@@ -240,7 +240,10 @@ def test_fail_run_syncs_error(db_session):
     assert "执行未完成：Table not found: orders" in messages[1]["content"]
 
 
-def test_conversations_api_self_healing(client, db_session):
+def test_conversations_self_healing(db_session):
+    """Self-healing is now a startup function, not part of the GET endpoint."""
+    from engine.api.conversations import heal_missing_conversations
+
     # Pre-seed session and runs, but DO NOT create ChatConversation
     session_id = "session-legacy"
     run_id = "run-legacy"
@@ -253,7 +256,7 @@ def test_conversations_api_self_healing(client, db_session):
         updated_at=datetime.now(UTC),
     )
     db_session.add(session)
-    
+
     run = AgentRun(
         id=run_id,
         session_id=session_id,
@@ -267,14 +270,8 @@ def test_conversations_api_self_healing(client, db_session):
     db_session.add(run)
     db_session.commit()
 
-    # Call conversations list API
-    resp = client.get("/api/v1/conversations", headers=_hdrs())
-    assert resp.status_code == 200
-    
-    data = resp.json()
-    assert len(data) == 1
-    assert data[0]["id"] == session_id
-    assert data[0]["title"] == "Legacy Conversation"
+    # Run self-healing directly
+    heal_missing_conversations(db_session)
 
     # Verify that the self-healing actually wrote to the database
     conv = db_session.query(ChatConversation).filter(ChatConversation.id == session_id).first()
@@ -283,3 +280,26 @@ def test_conversations_api_self_healing(client, db_session):
     assert len(messages) == 2
     assert messages[0]["content"] == "What database table is this?"
     assert "This is a mysql table." in messages[1]["content"]
+
+
+def test_conversations_list_api(client, db_session):
+    """GET /conversations returns existing ChatConversation rows."""
+    session_id = "session-list"
+
+    conv = ChatConversation(
+        id=session_id,
+        title="Test Conversation",
+        created_at=int(datetime.now(UTC).timestamp() * 1000),
+        updated_at=int(datetime.now(UTC).timestamp() * 1000),
+        context_tables_json="[]",
+        messages_json="[]",
+        artifacts_json="[]",
+    )
+    db_session.add(conv)
+    db_session.commit()
+
+    resp = client.get("/api/v1/conversations", headers=_hdrs())
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) >= 1
+    assert any(c["id"] == session_id for c in data)

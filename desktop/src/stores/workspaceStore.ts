@@ -6,7 +6,6 @@ import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspa
 import {
   deleteConversation,
   listConversations,
-  migrateLegacyConversations,
   saveConversation,
 } from "../features/conversation/conversationRepository";
 
@@ -294,7 +293,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   },
 
   initConversations: async () => {
-    await migrateLegacyConversations();
+    // Legacy Tauri rusqlite conversation migration has been removed.
+    // Set the flag so any residual migration check is a no-op.
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dbfox_legacy_conversations_migrated", "true");
+    }
     try {
       const history = await listConversations();
       set({ conversations: history });

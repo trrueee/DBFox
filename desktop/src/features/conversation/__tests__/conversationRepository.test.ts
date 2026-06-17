@@ -3,7 +3,6 @@ import {
   listConversations,
   saveConversation,
   deleteConversation,
-  migrateLegacyConversations,
 } from "../conversationRepository";
 import type { Conversation } from "../../../types/conversation";
 describe("conversationRepository", () => {
@@ -60,15 +59,4 @@ describe("conversationRepository", () => {
     expect(options.method).toBe("DELETE");
   });
 
-  it("migrateLegacyConversations sets migrated flag and is idempotent", async () => {
-    vi.stubGlobal("window", {});
-    localStorage.removeItem("dbfox_legacy_conversations_migrated");
-
-    await migrateLegacyConversations();
-    expect(localStorage.getItem("dbfox_legacy_conversations_migrated")).toBe("true");
-
-    // Second call is a no-op — flag already set
-    await migrateLegacyConversations();
-    expect(localStorage.getItem("dbfox_legacy_conversations_migrated")).toBe("true");
-  });
 });

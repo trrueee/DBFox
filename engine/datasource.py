@@ -133,6 +133,35 @@ def get_postgres_connection_params(datasource_dict: dict[str, Any]) -> dict[str,
     return params
 
 
+def _setup_test_tunnel(config: dict[str, Any]) -> tuple[str, int, Any | None]:
+    """Resolve SSH tunnel for a connection test. Returns (host, port, tunnel).
+
+    When SSH is enabled, the returned host/port point to the local tunnel
+    endpoint.  When SSH is disabled or not configured, the original host/port
+    are returned unchanged and *tunnel* is ``None``.
+    """
+    if not config.get("ssh_enabled"):
+        return config.get("host", ""), config.get("port", 3306), None
+
+    try:
+        if config.get("is_managed"):
+            tunnel = get_or_create_tunnel_for_dict(config)
+        else:
+            tunnel = open_temporary_tunnel(config)
+        return "127.0.0.1", tunnel.local_bind_port, tunnel
+    except Exception as e:
+        raise DataSourceConnectionError(f"无法建立 SSH 隧道，请检查跳板机配置。错误: {str(e)}")
+
+
+def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
+    """Stop a temporary test tunnel unless it is managed."""
+    if tunnel is not None and not config.get("is_managed"):
+        try:
+            tunnel.stop()
+        except Exception:
+            pass
+
+
 def test_connection(config: dict[str, Any]) -> dict[str, Any]:
     """
     Test connectivity to a database (MySQL, PostgreSQL, or SQLite).
@@ -186,19 +215,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
 
         temp_tunnel = None
         try:
-            test_host = host
-            test_port = port
-
-            if config.get("ssh_enabled"):
-                try:
-                    if config.get("is_managed"):
-                        temp_tunnel = get_or_create_tunnel_for_dict(config)
-                    else:
-                        temp_tunnel = open_temporary_tunnel(config)
-                    test_host = "127.0.0.1"
-                    test_port = temp_tunnel.local_bind_port
-                except Exception as se:
-                    raise DataSourceConnectionError(f"无法建立 SSH 隧道，请检查跳板机配置。错误: {str(se)}")
+            test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
 
             import psycopg2
 
@@ -248,12 +265,9 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 raise e
             raise DataSourceConnectionError(f"无法建立 PostgreSQL 数据库连接，请检查配置信息。错误详情: {str(e)}")
         finally:
-            if temp_tunnel and not config.get("is_managed"):
-                try:
-                    temp_tunnel.stop()
-                except Exception:
-                    pass
+            _cleanup_test_tunnel(temp_tunnel, config)
 
+    # ── MySQL ────────────────────────────────────────────────────────
     host = config.get("host", "")
     port = config.get("port", 3306)
     database_name = config.get("database_name", "")
@@ -265,19 +279,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
 
     temp_tunnel = None
     try:
-        test_host = host
-        test_port = port
-
-        if config.get("ssh_enabled"):
-            try:
-                if config.get("is_managed"):
-                    temp_tunnel = get_or_create_tunnel_for_dict(config)
-                else:
-                    temp_tunnel = open_temporary_tunnel(config)
-                test_host = "127.0.0.1"
-                test_port = temp_tunnel.local_bind_port
-            except Exception as se:
-                raise DataSourceConnectionError(f"无法建立 SSH 隧道，请检查跳板机配置。错误: {str(se)}")
+        test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
 
         conn = pymysql.connect(  # type: ignore[assignment]
             host=test_host,
@@ -341,11 +343,7 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
             raise e
         raise DataSourceConnectionError(f"无法建立数据库连接，请检查配置信息。错误详情: {str(e)}")
     finally:
-        if temp_tunnel and not config.get("is_managed"):
-            try:
-                temp_tunnel.stop()
-            except Exception:
-                pass
+        _cleanup_test_tunnel(temp_tunnel, config)
 
 
 def datasource_connection_dict(ds: Any) -> dict[str, Any]:

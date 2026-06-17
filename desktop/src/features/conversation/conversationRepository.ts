@@ -32,13 +32,3 @@ export async function saveConversation(conversation: Conversation): Promise<void
 export async function deleteConversation(conversationId: string): Promise<void> {
   await deleteViaEngine(conversationId);
 }
-
-export async function migrateLegacyConversations(): Promise<void> {
-  // Legacy Tauri-side rusqlite conversation storage was removed.
-  // Migration ran once for existing users before the Tauri commands
-  // were deleted; the flag prevents re-execution.
-  if (typeof window === "undefined") return;
-  if (localStorage.getItem("dbfox_legacy_conversations_migrated") !== "true") {
-    localStorage.setItem("dbfox_legacy_conversations_migrated", "true");
-  }
-}
