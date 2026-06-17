@@ -93,10 +93,6 @@ export default function App() {
     checkHealth,
   } = useDatasourceState();
 
-  // Keep ref in sync synchronously — avoids stale reads in callbacks
-  // that fire before useEffect runs.
-  const activeDatasourceIdRef = useRef(activeDatasourceId);
-  activeDatasourceIdRef.current = activeDatasourceId;
 
   // Release the previous datasource's connection pool when switching
   const prevDatasourceIdRef = useRef(activeDatasourceId);

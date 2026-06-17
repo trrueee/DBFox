@@ -112,7 +112,12 @@ export const useQueryExecution = (datasource: DataSource, onExecuteSuccess?: () 
   const requestServerCancel = useCallback((executionId?: string) => {
     if (!executionId) return;
     void api.cancelQuery(executionId).catch((error) => {
-      console.error("Failed to cancel server-side query:", error);
+      console.warn(
+        "Server-side query cancellation may have failed (best-effort). "
+        + "The query was aborted locally but may still be running on the database. "
+        + `executionId=${executionId}`,
+        error,
+      );
     });
   }, []);
 

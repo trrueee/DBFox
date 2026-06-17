@@ -4,6 +4,7 @@ import type {
   DataSource,
   DataSourceCreateParams,
   DataSourceHealthResult,
+  DataSourceTestParams,
   DataSourceTestResult,
   DataSourceUpdateParams,
   DeleteConfirm,
@@ -11,7 +12,7 @@ import type {
 } from "./types";
 
 export const datasourcesApi = {
-  testConnection: (params: DataSourceCreateParams) =>
+  testConnection: (params: DataSourceTestParams) =>
     request<DataSourceTestResult>("/datasources/test", { method: "POST", body: JSON.stringify(params) }),
 
   createDatasource: (params: DataSourceCreateParams) =>
