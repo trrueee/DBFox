@@ -1,18 +1,20 @@
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
-def _to_iso(v: Any) -> str | None:
-    if v is None: return None
-    if isinstance(v, datetime): return v.isoformat()
-    return str(v)
+from engine.schemas import _to_iso
 
 
 class BackupCreateRequest(BaseModel):
     datasource_id: str
     label: str | None = None
+    allow_fallback: bool = True
+
+
+class RestoreConfirmRequest(BaseModel):
+    """Confirmation payload for backup restore (body, not query string)."""
+    confirm_token: str | None = None
+    confirm_text: str | None = None
     allow_fallback: bool = True
 
 

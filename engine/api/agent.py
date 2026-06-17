@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time as _time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -65,8 +66,6 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
     can actually reach the target LLM service before the user attempts a full
     agent run.
     """
-    import time as _time
-
     t0 = _time.monotonic()
     try:
         client = create_openai_client(

@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_
+from sqlalchemy import func, or_, text as sa_text
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
@@ -27,8 +27,10 @@ def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in result.items() if not key.startswith("_")}
 
 
+from engine.schemas.query import QueryHistoryResponse
+
+
 def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
-    from engine.schemas.query import QueryHistoryResponse
     return QueryHistoryResponse.model_validate(item).model_dump(mode="json")
 
 
@@ -110,17 +112,34 @@ def api_query_history(
 
     search_term = (search or "").strip()
     if search_term:
-        pattern = f"%{search_term}%"
-        history_query = history_query.filter(
-            or_(
-                QueryHistory.question.ilike(pattern),
-                QueryHistory.submitted_sql.ilike(pattern),
-                QueryHistory.generated_sql.ilike(pattern),
-                QueryHistory.safe_sql.ilike(pattern),
-                QueryHistory.executed_sql.ilike(pattern),
-                QueryHistory.error_message.ilike(pattern),
+        # Try FTS5 search; fall back to LIKE if table not ready
+        try:
+            safe_term = search_term.replace('"', '""')
+            fts_rows = db.execute(
+                sa_text("""
+                    SELECT history_id FROM query_history_fts
+                    WHERE query_history_fts MATCH :q
+                    ORDER BY rank
+                    LIMIT :lim
+                """),
+                {"q": f'"{safe_term}"', "lim": limit * 2}
+            ).fetchall()
+            if fts_rows:
+                fts_ids = [row[0] for row in fts_rows]
+                history_query = history_query.filter(QueryHistory.id.in_(fts_ids))
+        except Exception:
+            # FTS5 unavailable — fall back to LIKE
+            pattern = f"%{search_term}%"
+            history_query = history_query.filter(
+                or_(
+                    QueryHistory.question.ilike(pattern),
+                    QueryHistory.submitted_sql.ilike(pattern),
+                    QueryHistory.generated_sql.ilike(pattern),
+                    QueryHistory.safe_sql.ilike(pattern),
+                    QueryHistory.executed_sql.ilike(pattern),
+                    QueryHistory.error_message.ilike(pattern),
+                )
             )
-        )
 
     history = history_query.order_by(QueryHistory.created_at.desc()).limit(limit).all()
     return [_query_history_to_dict(item) for item in history]
@@ -132,8 +151,12 @@ def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> 
     if not item:
         raise NotFoundError("Query history record not found", "QUERY_HISTORY_NOT_FOUND")
 
-    db.delete(item)
-    db.commit()
+    try:
+        db.delete(item)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"success": True, "deleted": 1}
 
 
@@ -143,10 +166,14 @@ def api_clear_query_history(datasource_id: str = Query(...), db: Session = Depen
     if not datasource:
         raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
 
-    deleted = (
-        db.query(QueryHistory)
-        .filter(QueryHistory.data_source_id == datasource_id)
-        .delete(synchronize_session=False)
-    )
-    db.commit()
+    try:
+        deleted = (
+            db.query(QueryHistory)
+            .filter(QueryHistory.data_source_id == datasource_id)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"success": True, "deleted": deleted}
