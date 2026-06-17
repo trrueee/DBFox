@@ -76,7 +76,9 @@ def test_key_persistence() -> None:
 
 def test_key_file_not_stored_in_engine_directory() -> None:
     """New key material should live outside the importable engine package."""
-    assert crypto.KEY_FILE.parent != crypto.ENGINE_DIR
+    from pathlib import Path
+    engine_dir = Path(__file__).resolve().parent.parent
+    assert crypto.KEY_FILE.parent != engine_dir
 
 
 def test_keyring_lifecycle_and_migration(monkeypatch) -> None:

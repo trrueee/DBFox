@@ -1,5 +1,6 @@
 from engine.schemas.project import ProjectCreateRequest
 from engine.schemas.backup import BackupCreateRequest
+from engine.schemas.error import ErrorResponse
 from engine.schemas.table_design import (
     TableDesignColumnRequest,
     TableDesignIndexRequest,
@@ -25,6 +26,7 @@ from engine.schemas.semantic import (
 __all__ = [
     "ProjectCreateRequest",
     "BackupCreateRequest",
+    "ErrorResponse",
     "TableDesignColumnRequest",
     "TableDesignIndexRequest",
     "TableDesignDDLRequest",
