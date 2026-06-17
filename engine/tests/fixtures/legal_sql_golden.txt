@@ -1,0 +1,6 @@
+SELECT 1
+SELECT * FROM users LIMIT 10
+SELECT COUNT(*) FROM orders
+SELECT u.name, COUNT(o.id) FROM users u LEFT JOIN orders o ON o.user_id=u.id GROUP BY u.name
+WITH recent AS (SELECT * FROM orders WHERE created_at > '2026-01-01') SELECT * FROM recent
+SELECT 'literal with ; semicolon' FROM users
