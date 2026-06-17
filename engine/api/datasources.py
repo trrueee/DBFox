@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
-from engine.errors import DBFoxError
+from engine.errors import DBFoxError, DataSourceConnectionError
 from engine.models import (
     DEFAULT_PROJECT_ID,
     DataSource,

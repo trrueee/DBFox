@@ -333,6 +333,11 @@ def explain_sql(
                     warnings.append("未命中任何索引 (Key=NULL)，查询性能可能受限")
         finally:
             conn.close()
+    elif ds.db_type in ("postgresql", "postgres"):
+        # PostgreSQL Explain — delegate to dedicated module
+        from engine.sql.postgres_explain import explain_postgres_sql
+
+        return explain_postgres_sql(db, datasource_id, sql_str)
     else:
         # Real MySQL Explain
         conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
