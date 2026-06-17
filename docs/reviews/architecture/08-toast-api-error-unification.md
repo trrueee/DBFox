@@ -18,6 +18,18 @@ The API client is not just a thin fetch wrapper anymore; it already injects toke
 - `desktop/src/pages/DataSourcesPage.tsx:90` uses `useToast`.
 - `desktop/src/pages/AgentEvalPage.tsx:14-17` still receives an `onToast` callback.
 
+## Verification (2026-06-17)
+
+**Status: 📐 NARROWED → P3**
+
+- App.tsx inline `toastMsg` state and `.hifi-toast` rendering already removed — unified to `useToast()`
+- No `toastMsg` or `.hifi-toast` references remain in the codebase
+- `Toast.tsx` is the single toast system with GSAP animation, portal, `role="status"`/`aria-live`
+- **Residual**: `DataTable.tsx:50` has a local `useState<string | null>` CSS toast for clipboard copy feedback — a deliberate lightweight choice, not a duplicated system
+- `AgentEvalPage` `onToast` callback is a page-level prop, not a separate toast implementation
+
+**Residual action**: Replace DataTable clipboard toast with `useToast()` for consistency (P3).
+
 ## Problem
 
 Users can see differently styled feedback depending on which feature emits it. Accessibility and lifecycle behavior must be fixed twice. API error handling also depends on callers casting `Error`, so code/checks/status handling is not standardized.

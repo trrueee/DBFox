@@ -17,6 +17,15 @@ The original "two API clients" framing is too broad. The actual code now shares 
 - `desktop/src/features/datasource/useDatasourceState.ts:44-61` maps `EngineDataSource` into a partial `DataSource`, dropping fields.
 - `desktop/src/pages/DataSourcesPage.tsx:90-109` keeps its own datasource list in local component state.
 
+## Verification (2026-06-17)
+
+**Status: ✅ MOSTLY RESOLVED**
+
+- `useDatasourceState.ts` no longer exists (only stale test imports reference old path)
+- `EngineDataSource` is now just a type alias for `DataSource` (`engineApi.ts:5`)
+- Frontend uses single Zustand store (`datasourceStore.ts`) for all datasource state
+- **Residual**: `engineApi.listDatasources()` is a passthrough wrapper around `datasourcesApi.listDatasources()` — harmless but redundant (P3 cleanup)
+
 ## Problem
 
 The sidebar, SQL workspace, and datasource management page do not share a single datasource truth. Creation/update/delete flows call `onRefreshDatasources`, but the page still owns a separate list and type surface. This can cause stale active datasource labels, mismatched health/sync fields, and duplicate refresh logic.

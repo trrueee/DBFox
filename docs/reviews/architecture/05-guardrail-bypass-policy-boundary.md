@@ -69,3 +69,18 @@ Clarify policy order in code comments or docs:
 - Add a unit test proving normal `execute_query` has no bypass parameter.
 - Add tests for bypass denied by default, denied in frozen mode, and denied on prod datasource env.
 - Run existing SQL guardrail, TrustGate, and executor tests.
+
+## Verification (2026-06-17)
+
+**Status: ✅ RESOLVED**
+
+All acceptance criteria already met:
+
+- `execute_query` signature has **no** `bypass_guardrail` parameter (`executor.py:220-229`)
+- `engine/sql/test_executor.py` is the **only** module that exposes bypass (`execute_query_for_test`)
+- `test_executor.py` checks `guardrail_bypass_allowed()` before bypass
+- `test_executor.py:328-340` asserts `execute_query` has no `bypass_guardrail` parameter
+- Bypass is denied without `DBFOX_TESTING=1` + `DBFOX_ALLOW_GUARDRAIL_BYPASS=1`
+- Bypass is denied in frozen builds
+- Policy order documented in `_run_approved_query` docstring (executor.py:65-70)
+- 491 tests pass

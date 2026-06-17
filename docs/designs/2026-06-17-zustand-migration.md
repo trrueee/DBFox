@@ -1,7 +1,7 @@
 # Design Doc: App.tsx 状态管理重构 — Zustand
 
 **日期:** 2026-06-17  
-**状态:** 待评审  
+**状态:** ✅ 已完成  
 **关联:** `docs/软件重构和测试.md` — C3/Phase 2
 
 ## 目标
@@ -285,3 +285,39 @@ export default function App() {
 | Zustand 新增依赖 | ~1KB，MIT license，React 社区标准 |
 | selector 用法错误导致渲染循环 | 每个 store 提供 `s => s.field` selector，组件只需订阅自己用的字段 |
 | 跨 store 时序问题 | agentStore 通过 `getState()` 同步读取 workspaceStore，确保拿到最新值 |
+
+---
+
+## 完成情况
+
+**完成日期:** 2026-06-17  
+**测试状态:** 96 tests passing
+
+### 实施步骤完成度
+
+| 步骤 | 状态 | 说明 |
+|------|------|------|
+| 1. 安装 `zustand` | ✅ | `a637366e` chore: add zustand dependency |
+| 2. 创建 `datasourceStore.ts` | ✅ | `eee84fa1` feat: add datasourceStore (Zustand) |
+| 3. 创建 `workspaceStore.ts` | ✅ | `fd80353c` feat: add workspaceStore (Zustand) |
+| 4. 创建 `agentStore.ts` | ✅ | `332877f8` feat: add agentStore (Zustand) |
+| 5. 重构 App.tsx | ✅ | `0e461c1b` refactor: migrate App + child components to Zustand stores, drop 80% props |
+| 6. 逐个改造子组件 | ✅ | 同上 |
+| 7. 删除旧 hook 文件 | ✅ | `e45683ee` refactor: remove old hooks, replaced by Zustand stores |
+| 8. 全量回归测试 | ✅ | `01689397` fix: update tests for Zustand store migration, all 96 pass |
+
+### Hook 迁移验证
+
+| 旧 hook | 迁移目标 | 删除 |
+|---------|---------|------|
+| `useDatasourceState` | datasourceStore | ✅ 已删除 |
+| `useWorkspaceTabs` | workspaceStore | ✅ 已删除 |
+| `useWorkspaceSelection` | workspaceStore | ✅ 已删除 |
+| `useConversationHistory` | workspaceStore | ✅ 已删除 |
+| `useAgentRunner` | agentStore | ✅ 已删除 |
+
+### 创建文件
+
+- `desktop/src/stores/datasourceStore.ts` (209 行)
+- `desktop/src/stores/workspaceStore.ts`
+- `desktop/src/stores/agentStore.ts`

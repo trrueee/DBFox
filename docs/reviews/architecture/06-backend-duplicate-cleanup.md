@@ -81,3 +81,18 @@ def sse_failed_event(
 - Existing datasource health/sync tests pass.
 - Agent streaming error tests, if present, continue to pass; otherwise add a small unit test for the failed SSE helper.
 - Run backend tests that cover datasource and Agent API routes.
+
+## Verification (2026-06-17)
+
+**Status: ✅ RESOLVED**
+
+Three of four items were already done; the fourth fixed now:
+
+| Item | Status | Detail |
+|------|--------|--------|
+| Datasource connection dict | ✅ Fixed | `backup.py` local `_datasource_connection_dict` removed; now imports canonical `datasource_connection_dict` from `engine.datasource` |
+| Project ID resolution | ✅ Already | Both `datasources.py` and `backup.py` use `from engine.projects.service import resolve_project_id` |
+| SSE failure event | ✅ Already | `sse_failed_event()` at `agent.py:127` used uniformly for run and resume streams |
+| Manual MySQL dicts | ✅ Already | No manual dict construction remains in `executor.py`; all paths use `datasource_connection_dict(ds)` |
+
+491 tests pass.

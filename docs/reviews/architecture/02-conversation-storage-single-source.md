@@ -13,6 +13,15 @@ This is a real consistency risk. The production Tauri path and the browser/dev f
 - `desktop/src/features/conversation/conversationRepository.ts:44-65` routes to Tauri commands when `__TAURI_INTERNALS__` exists, otherwise to engine HTTP APIs.
 - `desktop/src-tauri/src/lib.rs:58-148` stores conversations in an app-data `dbfox.sqlite3` through `rusqlite`.
 - `engine/api/conversations.py:23-77` stores the same logical records through FastAPI and SQLAlchemy `ChatConversation`.
+
+## Verification (2026-06-17)
+
+**Status: ✅ RESOLVED**
+
+- `lib.rs` conversation commands are marked `#[allow(dead_code)]` with comment "DEPRECATED: migration-only dead code"
+- `conversationRepository.ts` routes entirely to engine HTTP API, not Tauri commands
+- `migrateLegacyConversations()` only runs on first launch for one-time migration
+- Core issue is fixed; residuals: remove `rusqlite` dependency and dead Tauri commands (P3 cleanup)
 - `engine/db.py:36-39` uses the engine metastore database path, currently `dbfox_local.db` in development.
 
 ## Problem
