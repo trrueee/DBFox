@@ -4,6 +4,7 @@ import sys
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
@@ -37,15 +38,25 @@ from engine.projects.service import get_or_create_default_project
 
 @router.get("/projects")
 def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    get_or_create_default_project(db)
-    db.commit()
+    try:
+        get_or_create_default_project(db)
+        db.commit()
 
-    projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()
-    datasource_counts: dict[str, int] = {}
-    for ds in db.query(DataSource).filter(DataSource.project_id.isnot(None)).all():
-        datasource_counts[str(ds.project_id)] = datasource_counts.get(str(ds.project_id), 0) + 1
+        projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()
+        datasource_counts = {
+            str(project_id): int(count)
+            for project_id, count in (
+                db.query(DataSource.project_id, func.count(DataSource.id))
+                .filter(DataSource.project_id.isnot(None))
+                .group_by(DataSource.project_id)
+                .all()
+            )
+        }
 
-    return [_project_to_dict(project, datasource_counts.get(str(project.id), 0)) for project in projects]
+        return [_project_to_dict(project, datasource_counts.get(str(project.id), 0)) for project in projects]
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.post("/projects")
@@ -54,15 +65,19 @@ def api_create_project(req: ProjectCreateRequest, db: Session = Depends(get_db))
     if not name:
         raise HTTPException(status_code=400, detail={"code": "PROJECT_NAME_REQUIRED", "message": "Project name is required"})
 
-    project = Project(
-        id=str(uuid.uuid4()),
-        name=name,
-        description=(req.description or "").strip() or None,
-        status="active",
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return _project_to_dict(project, 0)
+    try:
+        project = Project(
+            id=str(uuid.uuid4()),
+            name=name,
+            description=(req.description or "").strip() or None,
+            status="active",
+        )
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        return _project_to_dict(project, 0)
+    except Exception:
+        db.rollback()
+        raise
 
 
