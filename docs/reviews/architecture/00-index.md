@@ -79,3 +79,13 @@ All 6 original Phase 1 findings are resolved. Remaining work is P3 cleanup or ne
 - **09** — SSH tunnel design is valid; no action needed
 - **10** — Deferred until manual UI audit
 - **11** — Deferred until real-data benchmark
+
+---
+
+## CodeGraph Review (2026-06-18)
+
+A deep code-level review using CodeGraph identified 86 issues across 14 exploration rounds.
+See [codegraph/50-issues.md](../codegraph/50-issues.md) for the full breakdown.
+
+- 23 fixed, 1 intentionally kept, 1 test gap, 61 open
+- 3 high, 14 medium, 44 low severity among open issues
