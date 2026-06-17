@@ -451,15 +451,16 @@ def sync_schema(db: Session, datasource_id: str, *, ai_enrich: bool = True) -> d
     except Exception as e:
         db.rollback()
         now = datetime.now(UTC)
+        from engine.policy.error_sanitizer import sanitize_error_message
         db.query(DataSource).filter(DataSource.id == datasource_id).update(
             {
                 "last_sync_at": now,
                 "last_sync_status": "failed",
-                "last_sync_error": str(e),
+                "last_sync_error": sanitize_error_message(str(e)),
             }
         )
         db.commit()
-        raise ValueError(f"Schema sync failed: {str(e)}")
+        raise ValueError(f"Schema sync failed: {sanitize_error_message(str(e))}")
 
 
 def _guess_module_tag(table_name: str) -> str | None:

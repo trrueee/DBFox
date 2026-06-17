@@ -337,7 +337,9 @@ def api_sync_embeddings(
     service = EmbeddingService(api_key=api_key, api_base=api_base, model_name=model_name)
     res = service.sync_aliases(db, datasource_id)
     if not res.get("success"):
-        raise HTTPException(status_code=500, detail=res)
+        from engine.policy.error_sanitizer import sanitize_error_message
+        safe_res = {**res, "error": sanitize_error_message(str(res.get("error", "")))}
+        raise HTTPException(status_code=500, detail=safe_res)
     return res
 
 

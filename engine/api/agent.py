@@ -140,7 +140,8 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
 
 
 def _http_detail(exc: DBFoxError) -> dict[str, str]:
-    return {"code": exc.code, "message": str(exc)}
+    from engine.policy.error_sanitizer import sanitize_error_message
+    return {"code": exc.code, "message": sanitize_error_message(str(exc))}
 
 
 # ---------------------------------------------------------------------------
@@ -227,16 +228,18 @@ def api_agent_run_resume(
         return DBFoxAgentRuntime(db).resume(run_id, req.approval_id)
     except DBFoxError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitized_http_detail
+        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
     except Exception as exc:
         db.rollback()
         llm_error = llm_error_from_exception(exc)
         if llm_error is not None:
             raise HTTPException(status_code=400, detail=_http_detail(llm_error))
         logger.exception("Agent runtime resume failed")
+        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "AGENT_RESUME_ERROR", "message": f"Agent resume failed: {str(exc)}"},
+            detail={"code": "AGENT_RESUME_ERROR", "message": sanitize_error_message(f"Agent resume failed: {str(exc)}")},
         )
 
 
@@ -291,13 +294,15 @@ def api_resolve_agent_approval(
         return approval
     except DBFoxError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
+        from engine.policy.error_sanitizer import sanitized_http_detail
+        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
     except Exception as exc:
         db.rollback()
         logger.exception("Failed to resolve agent approval")
+        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "APPROVAL_RESOLVE_ERROR", "message": f"Failed to resolve approval: {str(exc)}"},
+            detail={"code": "APPROVAL_RESOLVE_ERROR", "message": sanitize_error_message(f"Failed to resolve approval: {str(exc)}")},
         )
 
 
