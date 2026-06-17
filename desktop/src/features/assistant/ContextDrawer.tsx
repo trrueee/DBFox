@@ -1,16 +1,18 @@
 import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/dbfoxMock";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 interface ContextDrawerProps {
   open: boolean;
   type: "ai-suggest" | "props";
   activeTab: WorkspaceTab;
-  contextTables: string[];
   onClose: () => void;
   onGenerateIndexSql: () => void;
 }
 
-export function ContextDrawer({ open, type, activeTab, contextTables, onClose, onGenerateIndexSql }: ContextDrawerProps) {
+export function ContextDrawer({ open, type, activeTab, onClose, onGenerateIndexSql }: ContextDrawerProps) {
+  const contextTables = useWorkspaceStore((s) => s.contextTables);
+
   return (
     <section className={`hifi-right-drawer ${open ? "open" : "closed"}`}>
       <div className="h-full flex flex-col overflow-auto">

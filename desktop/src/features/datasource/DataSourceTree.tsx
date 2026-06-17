@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
-import type { EngineSchemaTable } from "../engine/engineApi";
-import type { DataSource } from "../../lib/api/types";
+import { useDatasourceStore } from "../../stores/datasourceStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 interface DataSourceTreeProps {
   treeSearch: string;
-  selectedTables: string[];
   collapsed: boolean;
   onToggleCollapse: () => void;
   onTreeSearchChange: (value: string) => void;
@@ -14,18 +13,11 @@ interface DataSourceTreeProps {
   onNodeContextMenu: (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => void;
   onRefresh: () => void;
   onNewConnection: () => void;
-  datasources: DataSource[];
-  activeDatasourceId: string;
-  setActiveDatasourceId: (id: string) => void;
-  tables: EngineSchemaTable[];
-  loading: boolean;
-  error: string;
   sidebarWidth: number;
 }
 
 export function DataSourceTree({
   treeSearch,
-  selectedTables,
   collapsed,
   onToggleCollapse,
   onTreeSearchChange,
@@ -34,14 +26,16 @@ export function DataSourceTree({
   onNodeContextMenu,
   onRefresh,
   onNewConnection,
-  datasources,
-  activeDatasourceId,
-  setActiveDatasourceId,
-  tables,
-  loading,
-  error,
   sidebarWidth,
 }: DataSourceTreeProps) {
+  const datasources = useDatasourceStore((s) => s.datasources);
+  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
+  const setActiveDatasourceId = useDatasourceStore((s) => s.setActiveDatasourceId);
+  const tables = useDatasourceStore((s) => s.tables);
+  const loading = useDatasourceStore((s) => s.loadingSchema);
+  const error = useDatasourceStore((s) => s.schemaError);
+  const selectedTables = useWorkspaceStore((s) => s.selectedTables);
+
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
   const [dbDropdownOpen, setDbDropdownOpen] = useState(false);
   const dbDropdownRef = useRef<HTMLDivElement>(null);
