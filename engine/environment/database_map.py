@@ -16,6 +16,7 @@ Layers:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -218,11 +219,8 @@ class DatabaseMapBuilder:
     """Assembles a DatabaseMap from catalog + memory + heuristics."""
 
     def __init__(self) -> None:
-        self._sensitive_patterns: list[str] = [
-            "password", "secret", "token", "key", "credential",
-            "ssn", "credit_card", "salary", "phone", "email",
-            "address", "ip_address", "api_key",
-        ]
+        from engine.policy.sensitivity import _SENSITIVE_FALLBACK
+        self._sensitive_re = _SENSITIVE_FALLBACK
         self._large_table_threshold: int = 1_000_000
 
     # ── Public API ─────────────────────────────────────────────────────────
@@ -235,9 +233,6 @@ class DatabaseMapBuilder:
         profiles: dict[str, Any] | None = None,
     ) -> DatabaseMap:
         """Build a DatabaseMap from a catalog snapshot + optional enrichments."""
-        import json
-        from datetime import datetime, timezone
-
         tables = self._build_tables(catalog)
         relationships = self._build_relationships(catalog, tables)
         semantic_index = self._build_semantic_index(memory_store)
@@ -300,9 +295,8 @@ class DatabaseMapBuilder:
             is_sensitive = self._is_sensitive(cs.column_name)
 
             fk_target: str | None = None
-            if cs.is_foreign_key:
-                # Try to resolve FK target from relationships
-                pass
+            # FK target resolution happens in _build_relationships via
+            # ForeignKeySnapshot — ColumnSnapshot does not carry target IDs.
 
             columns.append(ColumnProfile(
                 column_name=cs.column_name,
@@ -331,16 +325,10 @@ class DatabaseMapBuilder:
         for t in tables:
             col_map[t.table_name.lower()] = t
 
-        for ts in catalog.tables:
-            for cs in ts.columns:
-                if cs.is_foreign_key:
-                    # FK resolution requires FK target info
-                    pass
-
-        # 2. FK from explicit catalog relationships
+        # FK from explicit catalog relationships (ForeignKeySnapshot)
         for fk in catalog.relationships:
             relationships.append(Relationship(
-                from_table=ts.table_name if 'ts' in dir() else "",
+                from_table=ts.table_name,
                 from_column=fk.column_name,
                 to_table=fk.referenced_table,
                 to_column=fk.referenced_column,
@@ -348,7 +336,7 @@ class DatabaseMapBuilder:
                 confidence=1.0,
             ))
 
-        # 3. Inferred joins by naming convention (col_id → table.col)
+        # 2. Inferred joins by naming convention (col_id → table.col)
         for t in tables:
             for col in t.columns:
                 if col.column_name.endswith("_id") and not col.is_foreign_key:
@@ -519,8 +507,7 @@ class DatabaseMapBuilder:
         return "unknown"
 
     def _is_sensitive(self, name: str) -> bool:
-        nl = name.lower()
-        return any(pat in nl for pat in self._sensitive_patterns)
+        return bool(self._sensitive_re.search(name))
 
     def _guess_module(self, table_name: str) -> str:
         """Guess a business module from table name prefix."""

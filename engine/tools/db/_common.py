@@ -12,6 +12,7 @@ from engine.agent_core.tool_registry import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.errors import DBFoxError, GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError, ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
+from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 
 logger = logging.getLogger("dbfox.tools.db")
 
@@ -19,18 +20,6 @@ MAX_PREVIEW_ROWS = 20
 DEFAULT_PREVIEW_ROWS = 10
 DEFAULT_SEARCH_LIMIT = 20
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[一-鿿]+")
-
-_SENSITIVE_PATTERN_STRINGS = [
-    r"\b(password|passwd|secret|token|credential|api_key)\b",
-    r"\b(email|mail)\b",
-    r"\b(phone|mobile|tel|telephone|msisdn)\b",
-    r"\b(address|addr|postal|zip_code)\b",
-    r"\b(ip_address|ipaddr|client_ip|server_ip)\b",
-    r"\b(card|credit_card|debit_card)\b",
-    r"\b(ssn|social_security|tax_id|national_id)\b",
-    r"\b(passport|driver_license)\b",
-]
-_SENSITIVE_FALLBACK = re.compile("|".join(_SENSITIVE_PATTERN_STRINGS), re.IGNORECASE)
 
 
 def tool_handler(name: str):
