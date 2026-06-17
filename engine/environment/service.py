@@ -162,6 +162,7 @@ class EnvironmentService:
                                 ref_col_name = ref_col.column_name
                         relationships.append(
                             ForeignKeySnapshot(
+                                source_table=table.table_name,
                                 column_name=col.column_name,
                                 referenced_table=ref_table.table_name,
                                 referenced_column=ref_col_name,

@@ -27,6 +27,12 @@ from engine.schemas import (
     SemanticMetricUpdateRequest,
     WorkspaceTableScopeUpdateRequest,
 )
+from engine.schemas.semantic import (
+    SemanticAliasResponse,
+    SemanticMetricResponse,
+    SemanticDimensionResponse,
+    WorkspaceTableScopeResponse,
+)
 
 logger = logging.getLogger("dbfox.api.semantic")
 router = APIRouter()
@@ -37,22 +43,18 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 def _alias_to_dict(a: SemanticAlias) -> dict[str, Any]:
-    from engine.schemas.semantic import SemanticAliasResponse
     return SemanticAliasResponse.model_validate(a).model_dump(mode="json")
 
 
 def _metric_to_dict(m: SemanticMetric) -> dict[str, Any]:
-    from engine.schemas.semantic import SemanticMetricResponse
     return SemanticMetricResponse.model_validate(m).model_dump(mode="json")
 
 
 def _dimension_to_dict(d: SemanticDimension) -> dict[str, Any]:
-    from engine.schemas.semantic import SemanticDimensionResponse
     return SemanticDimensionResponse.model_validate(d).model_dump(mode="json")
 
 
 def _scope_to_dict(s: WorkspaceTableScope) -> dict[str, Any]:
-    from engine.schemas.semantic import WorkspaceTableScopeResponse
     return WorkspaceTableScopeResponse.model_validate(s).model_dump(mode="json")
 
 

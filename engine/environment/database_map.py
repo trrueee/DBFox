@@ -328,7 +328,7 @@ class DatabaseMapBuilder:
         # FK from explicit catalog relationships (ForeignKeySnapshot)
         for fk in catalog.relationships:
             relationships.append(Relationship(
-                from_table=ts.table_name,
+                from_table=fk.source_table,
                 from_column=fk.column_name,
                 to_table=fk.referenced_table,
                 to_column=fk.referenced_column,
