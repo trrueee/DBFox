@@ -192,6 +192,19 @@ describe("agent approval api", () => {
       note: null,
     });
   });
+
+  it("posts cancellation to the Agent Kernel endpoint via the shared request layer", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await agentApi.cancelAgentRun("run_42");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/agent/runs/run_42/cancel");
+    expect(options?.method).toBe("POST");
+    expect(options?.headers).toMatchObject({ "X-Local-Token": expect.any(String) });
+  });
 });
 
 function event(type: AgentRuntimeEvent["type"], patch: Partial<AgentRuntimeEvent>): AgentRuntimeEvent {
