@@ -73,7 +73,6 @@ from engine.tools.db.search import (
     _row_to_search_result,
 )
 from engine.tools.db.inspect import (
-    _ds_to_dict,
     _INSPECT_CACHE,
     _mysql_inspect_detail,
     _mysql_table_exists,
