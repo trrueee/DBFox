@@ -52,7 +52,7 @@ DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DBFOX_DB_POOL_RECYCLE_SECONDS", "1
 DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DBFOX_DB_POOL_TIMEOUT_SECONDS", "30"))
 DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DBFOX_SQLITE_TIMEOUT_SECONDS", "30"))
 
-def configure_sqlite_pragmas(database_url: str = None) -> None:
+def configure_sqlite_pragmas(database_url: str | None = None) -> None:
     """Apply WAL / busy_timeout / synchronous PRAGMAs for SQLite databases.
 
     Safe to call multiple times; no-op for non-SQLite URLs.
@@ -168,7 +168,7 @@ def get_db() -> Generator[Session, None, None]:
     获取数据库会话连接 (Database Session Generator)
     
     FastAPI 极其经典的依赖注入管道方法：
-    Python 知识点:
+    Python ：
       - `Generator[Session, None, None]`：类型注解，表示这是一个生成器，产生（yield）Session 对象，不接收输入，也没有最终返回值。
       - `yield` 关键字：在此处会暂停执行，将创建好的 `db` 会话交给 FastAPI 具体的 API 接口使用。
       - `finally` 块：无论接口执行成功还是中途抛出任何崩溃异常，FastAPI 结束请求时都会再次回到这里，

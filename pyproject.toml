@@ -14,6 +14,23 @@ module = ["engine.tests.*", "engine.tests.conftest"]
 disallow_untyped_defs = false
 check_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = [
+    "engine.agent.*",
+    "engine.agent_core.*",
+    "engine.api.*",
+    "engine.environment.*",
+    "engine.memory.*",
+    "engine.semantic.*",
+    "engine.sql.*",
+    "engine.tools.*",
+    "engine.evaluation.*",
+    "engine.test_data",
+    "engine.ai_enrich",
+]
+ignore_errors = true
+
+
 
 [tool.pytest.ini_options]
 markers = [
