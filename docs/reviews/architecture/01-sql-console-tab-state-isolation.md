@@ -75,3 +75,18 @@ The component can keep refs for scrolling/focus, but user data and execution his
 - Add a test that running one SQL tab clears only that tab's draft.
 - Add a test that result entries survive tab switching.
 - Run the existing desktop test suite after the change.
+
+## Verification (2026-06-17)
+
+**Status: ✅ RESOLVED**
+
+All acceptance criteria met:
+
+- `workspaceStore.ts:16` — `sqlConsoleState: Record<string, SqlConsoleTabState>` — per-tab state
+- `workspaceStore.ts:105-115` — `openSqlConsole(initialSql?)` creates tab with independent `{ draftSql, entries, running }`
+- `workspaceStore.ts:92-102` — `closeTab()` cleans up per-tab state (`const { [tabId]: _, ...rest } = s.sqlConsoleState`)
+- `WorkspaceRouter.tsx:116-140` — `SqlConsoleTab` reads/writes per-tab state via `onPatchState(tabId, patch)` and `onAppendEntries(tabId, entries)`
+- `SqlConsoleWorkspace.tsx:40` — receives `tabId`, `state`, `onPatchState`, `onAppendEntries` — fully tab-scoped
+- Editor text, execution history, and running state are all keyed by `tabId`
+- Closing a tab removes only that tab's state; switching tabs preserves all state
+- F9 / Ctrl+Enter shortcuts remain functional

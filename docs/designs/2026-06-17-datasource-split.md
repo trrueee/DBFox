@@ -1,7 +1,7 @@
 # Design Doc: executor.py / datasource.py 模块拆分
 
 **日期:** 2026-06-17  
-**状态:** 待评审  
+**状态:** ✅ 已完成  
 **关联:** `docs/软件重构和测试.md` — H1/H2/Phase 3
 
 ## 目标
@@ -205,3 +205,41 @@ engine/
 | 测试中直接 import 私有符号 | 通过 executor.py re-export 保持原路径可用 |
 | tunnel.py 全局单例 TUNNEL_MANAGER | 保持模块级单例不变，engine/main.py 的 close_all_tunnels 调用路径不变 |
 | LF/CRLF 警告 | 无影响 |
+
+---
+
+## 完成情况
+
+**完成日期:** 2026-06-17  
+**测试状态:** 491 passed, 2 skipped
+
+### 实施步骤完成度
+
+| 步骤 | 状态 | 说明 |
+|------|------|------|
+| Step 1: `engine/sql/pool_manager.py` | ✅ | `3c644f00` refactor: extract pool_manager.py from executor.py |
+| Step 2: `engine/sql/row_serializer.py` | ✅ | `4665db24` refactor: extract row_serializer.py from executor.py |
+| Step 3: `engine/sql/safety_gate.py` | ✅ | `ad774a76` refactor: extract safety_gate.py from executor.py |
+| Step 4: `engine/sql/dialect/` 包 | ✅ | `add37166` / `1759f2d1` / `5b5b7a29` |
+| Step 5: `engine/tunnel.py` | ✅ | `140eb0ab` refactor: extract tunnel.py from datasource.py |
+| Step 6: 验证 | ✅ | 491 tests pass, re-exports verified |
+
+### 创建文件
+
+| 文件 | 行数 | 功能 |
+|------|------|------|
+| `engine/sql/pool_manager.py` | 91 | get_postgres_pool, get_mysql_pool, _ping_mysql_connection |
+| `engine/sql/row_serializer.py` | 96 | _fetch_and_serialize, _serialize_value, _process_rows, 常量 |
+| `engine/sql/safety_gate.py` | 298 | guardrail_bypass_allowed, validate_sql_schema, _resolve_execution_safety_decision |
+| `engine/sql/dialect/__init__.py` | 1 | dialect package |
+| `engine/sql/dialect/sqlite.py` | - | _execute_on_sqlite_profiled, _execute_on_sqlite |
+| `engine/sql/dialect/postgres.py` | - | _execute_on_postgres_profiled |
+| `engine/sql/dialect/mysql.py` | - | _execute_on_mysql_profiled, _execute_on_mysql |
+| `engine/tunnel.py` | 231 | TunnelManager, TUNNEL_MANAGER 全局单例, tunnel 管理 |
+
+### 向后兼容验证
+
+- `executor.py` 通过 `from .pool_manager import ...` 等语句 re-export 所有原符号
+- `datasource.py` 通过 `from engine.tunnel import TUNNEL_MANAGER, ...` re-export
+- 7 个外部消费点 import 路径无需改动
+- `test_executor.py` 中 `from engine.sql.executor import _serialize_value, _process_rows, MAX_ROWS` 正常工作

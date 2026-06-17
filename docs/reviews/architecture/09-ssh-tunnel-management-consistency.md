@@ -13,6 +13,18 @@ The earlier "MySQL SSH tunnel leak" framing is inaccurate. `test_connection` sto
 - `engine/datasource.py:374-455` creates and stops a temporary PostgreSQL SSH tunnel for `test_connection`.
 - `engine/datasource.py:466-561` creates and stops a temporary MySQL SSH tunnel for `test_connection`.
 - `engine/datasource.py:40-188` defines `TunnelManager` with health checks, reconnect, and cleanup.
+
+## Verification (2026-06-17)
+
+**Status: ❌ CLOSED — valid design pattern**
+
+- `engine/tunnel.py` (231 lines) is the single centralized tunnel implementation
+- `TunnelManager` (managed) and `open_temporary_tunnel()` (temporary) both call `_create_physical_tunnel_forwarder()` — same underlying logic
+- `is_managed=True` → persistent tunnel with health checks and reconnect
+- `is_managed=False` → temporary tunnel for unsaved connection tests, stopped in `finally`
+- This is a deliberate, well-documented design pattern: two lifecycle strategies sharing one implementation, not "two code paths"
+
+No action needed.
 - `engine/datasource.py:201-203` exposes `get_or_create_tunnel_for_dict()` using `TunnelManager`.
 - `engine/schema_sync.py:29-37` and `engine/schema_sync.py:282-290` use the managed tunnel path for schema sync.
 

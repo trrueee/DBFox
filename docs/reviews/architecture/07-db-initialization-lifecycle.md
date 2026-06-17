@@ -14,6 +14,22 @@ This is a real lifecycle smell, not an immediate security issue. `engine/db.py` 
 - `engine/db.py:67-78` creates the SQLAlchemy engine immediately after that.
 - `engine/db.py:174-279` already has `init_db()`, the intended startup lifecycle function.
 
+## Verification (2026-06-17)
+
+**Status: 📐 NARROWED → P3**
+
+Original claim was partially outdated. Current state:
+
+- `configure_sqlite_pragmas()` is now called inside `init_db()`, not at import time — this part is fixed
+- `engine = create_engine(...)` still runs at module level (db.py:77-88) — creates connection pool at import
+- `AGENT_DB_WRITE_TRACE` env var triggers import-time event listeners (db.py:97-100)
+- `main.py:89` generates security token file at import time
+- `main.py:131-138` writes `.env.local` at import time
+
+**Impact**: Not a blocker. SQLAlchemy `create_engine()` at module level is a common FastAPI pattern (the engine is lazy, no actual connection until first query). Token generation and `.env.local` write are the real import-time side effects worth cleaning up.
+
+**Residual action**: Move token generation + `.env.local` write into a startup function (P3).
+
 ## Problem
 
 Import-time database work can make tests harder to isolate, can fail before logging/lifespan setup is ready, and can surprise CLI scripts that only need metadata or configuration. It also spreads database lifecycle responsibilities across import and startup.
