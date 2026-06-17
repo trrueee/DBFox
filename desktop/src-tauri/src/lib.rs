@@ -72,7 +72,11 @@ fn log_sidecar_error(message: &str) {
         .map(|d| d.as_secs().to_string())
         .unwrap_or_default();
     let entry = format!("[{}] {}\n", ts, message);
-    let _ = std::fs::write(&log_path, entry);
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
     eprintln!("{}", message);
 }
 

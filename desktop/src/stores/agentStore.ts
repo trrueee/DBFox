@@ -48,6 +48,9 @@ interface AgentActions {
 
 export type AgentStore = AgentState & AgentActions;
 
+/** Maximum wall-clock time for a single Agent run before the AbortController fires. */
+const AGENT_RUN_TIMEOUT_MS = 300_000;
+
 export const useAgentStore = create<AgentStore>()((set, get) => ({
   _abortControllers: new Map(),
   _runIds: new Map(),
@@ -106,7 +109,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     const timelineBox = { list: createInitialAgentTimeline(question) };
     const abortController = new AbortController();
     get()._abortControllers.set(tabId, abortController);
-    const timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
+    const timeoutId = window.setTimeout(() => abortController.abort(), AGENT_RUN_TIMEOUT_MS);
 
     try {
       const response = await agentApi.streamAgentQuery(
@@ -133,9 +136,8 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     } catch (err) {
       const cancelled = get()._cancelledTabs.has(tabId);
       get()._cancelledTabs.delete(tabId);
-      const ws2 = useWorkspaceStore.getState();
-      ws2.updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err, cancelled)}`);
-      ws2.patchTab(tabId, { agentStatus: "failed", agentApproval: null });
+      ws.updateTabMessage(tabId, progressId, `执行失败：${formatAgentError(err, cancelled)}`);
+      ws.patchTab(tabId, { agentStatus: "failed", agentApproval: null });
     } finally {
       window.clearTimeout(timeoutId);
       get()._abortControllers.delete(tabId);
@@ -175,7 +177,7 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
       const timelineBox = { list: tab.agentTimeline || [] };
       const abortController = new AbortController();
       get()._abortControllers.set(tabId, abortController);
-      timeoutId = window.setTimeout(() => abortController.abort(), 300_000);
+      timeoutId = window.setTimeout(() => abortController.abort(), AGENT_RUN_TIMEOUT_MS);
       const response = await streamResumeAgentRun(approval.runId, approval.approvalId, {
         signal: abortController.signal,
         onEvent: makeAgentEventHandler(tabId, progressId, artifactsBox, timelineBox),
