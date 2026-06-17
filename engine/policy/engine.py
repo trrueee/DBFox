@@ -1,6 +1,7 @@
 import logging
 import sqlglot
 from sqlglot import exp
+from engine.sql.parser import parse_sql
 
 from engine.models import DataSource
 from engine.errors import DBFoxError
@@ -28,14 +29,8 @@ class PolicyEngine:
         # Resolve dialect so that MySQL backtick-quoted identifiers
         # (e.g. `orders`) are correctly parsed instead of triggering
         # POLICY_PARSE_ERROR.
-        sqlglot_dialect: str = "mysql"
-        db_type = (ds.db_type or "mysql").lower()
-        if "postgres" in db_type:
-            sqlglot_dialect = "postgres"
-        elif "sqlite" in db_type:
-            sqlglot_dialect = "sqlite"
         try:
-            expressions = sqlglot.parse(sql_str, read=sqlglot_dialect)
+            expressions = parse_sql(sql_str, ds.db_type)
         except Exception as exc:
             logger.warning("SQL parsing failed in PolicyEngine; blocking query: %s", exc)
             raise DBFoxError(
