@@ -7,6 +7,7 @@ without the agent rediscovering the full schema.
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -21,11 +22,13 @@ class SessionMemoryService:
 
     def __init__(self) -> None:
         self._cache: dict[str, SessionMemory] = {}
+        self._lock = threading.Lock()
 
     def get(self, session_id: str) -> SessionMemory:
-        if session_id not in self._cache:
-            self._cache[session_id] = SessionMemory(session_id=session_id)
-        return self._cache[session_id]
+        with self._lock:
+            if session_id not in self._cache:
+                self._cache[session_id] = SessionMemory(session_id=session_id)
+            return self._cache[session_id]
 
     def update_from_run(
         self,
@@ -70,7 +73,8 @@ class SessionMemoryService:
 
         mem.updated_at = SessionMemory.model_fields["updated_at"].default_factory()  # type: ignore[attr-defined]
 
-        self._cache[session_id] = mem
+        with self._lock:
+            self._cache[session_id] = mem
         logger.debug("SessionMemory updated: session=%s run=%s", session_id, run_id)
         return mem
 

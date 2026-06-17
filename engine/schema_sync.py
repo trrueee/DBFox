@@ -173,104 +173,105 @@ def _build_real_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSna
                 ref_col_id = column_name_to_id.get((ref_t_name, ref_c_name))
 
                 if fk_column and ref_table_id and ref_col_id:
-                    setattr(fk_column, "is_foreign_key", True)
-                    setattr(fk_column, "foreign_table_id", ref_table_id)
-                    setattr(fk_column, "foreign_column_id", ref_col_id)
+                    fk_column.is_foreign_key = True  # type: ignore[assignment]
+                    fk_column.foreign_table_id = ref_table_id  # type: ignore[assignment]
+                    fk_column.foreign_column_id = ref_col_id  # type: ignore[assignment]
 
         return tables_to_insert, columns_to_insert, len(tables_to_insert)
     finally:
         engine.dispose()
 
 
-def _build_sqlite_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSnapshot:
-    db_path = str(ds.database_name)
-    engine = create_engine(f"sqlite:///{db_path}")
-    try:
-        tables_to_insert: list[SchemaTable] = []
-        columns_to_insert: list[SchemaColumn] = []
-        table_name_to_id: dict[str, str] = {}
-        column_name_to_id: dict[tuple[str, str], str] = {}
-        column_objects: dict[tuple[str, str], SchemaColumn] = {}
+def _build_inspector_snapshot(
+    engine: Any, datasource_id: str, *, schema: str | None = None
+) -> SchemaSnapshot:
+    """Build a SchemaSnapshot using SQLAlchemy's inspector API.
 
-        inspector = inspect(engine)
-        table_names = inspector.get_table_names()
-        view_names = inspector.get_view_names()
+    Shared by SQLite and PostgreSQL schema sync paths.  MySQL uses a
+    separate raw-SQL path because it queries ``information_schema``
+    directly for extra metadata (row counts, engine, table comments).
+    """
+    tables_to_insert: list[SchemaTable] = []
+    columns_to_insert: list[SchemaColumn] = []
+    table_name_to_id: dict[str, str] = {}
+    column_name_to_id: dict[tuple[str, str], str] = {}
+    column_objects: dict[tuple[str, str], SchemaColumn] = {}
 
-        for t_name in table_names + view_names:
-            table_id = str(uuid.uuid4())
-            table_name_to_id[t_name] = table_id
-            
-            is_view = t_name in view_names
-            t_type = "VIEW" if is_view else "BASE TABLE"
-            
-            tables_to_insert.append(
-                SchemaTable(
-                    id=table_id,
-                    data_source_id=datasource_id,
-                    table_schema="main",
-                    table_name=t_name,
-                    table_comment=None,
-                    table_type=t_type,
-                    row_count_estimate=0,
-                    engine_name=None,
-                )
+    inspector = inspect(engine)
+    resolved_schema = schema or "main"
+
+    table_names = inspector.get_table_names(schema=schema) if schema else inspector.get_table_names()
+    view_names = inspector.get_view_names(schema=schema) if schema else inspector.get_view_names()
+
+    for t_name in table_names + view_names:
+        table_id = str(uuid.uuid4())
+        table_name_to_id[t_name] = table_id
+        t_type = "VIEW" if t_name in view_names else "BASE TABLE"
+        tables_to_insert.append(
+            SchemaTable(
+                id=table_id,
+                data_source_id=datasource_id,
+                table_schema=resolved_schema,
+                table_name=t_name,
+                table_comment=None,
+                table_type=t_type,
+                row_count_estimate=0,
+                engine_name=None,
             )
+        )
 
-        # Build columns and PKs
-        for t_name in table_names + view_names:
-            table_id = table_name_to_id[t_name]
-            cols = inspector.get_columns(t_name)
-            pk_constraint = inspector.get_pk_constraint(t_name)
-            pk_cols = pk_constraint.get("constrained_columns", []) or []
+    for t_name in table_names + view_names:
+        table_id = table_name_to_id[t_name]
+        cols = inspector.get_columns(t_name, schema=schema) if schema else inspector.get_columns(t_name)
+        pk_constraint = inspector.get_pk_constraint(t_name, schema=schema) if schema else inspector.get_pk_constraint(t_name)
+        pk_cols = pk_constraint.get("constrained_columns", []) or []
 
-            for i, col in enumerate(cols):
-                c_name = col["name"]
-                col_id = str(uuid.uuid4())
-                column_name_to_id[(t_name, c_name)] = col_id
-                
-                is_nullable = col.get("nullable", True)
-                col_default = col.get("default")
-                
-                column = SchemaColumn(
-                    id=col_id,
-                    table_id=table_id,
-                    column_name=c_name,
-                    data_type=str(col["type"]).lower(),
-                    column_type=str(col["type"]),
-                    is_nullable=is_nullable,
-                    column_default=str(col_default) if col_default is not None else None,
-                    column_comment=col.get("comment"),
-                    is_primary_key=(c_name in pk_cols),
-                    is_foreign_key=False,
-                    ordinal_position=i + 1,
-                )
-                column_objects[(t_name, c_name)] = column
-                columns_to_insert.append(column)
+        for i, col in enumerate(cols):
+            c_name = col["name"]
+            col_id = str(uuid.uuid4())
+            column_name_to_id[(t_name, c_name)] = col_id
+            column = SchemaColumn(
+                id=col_id,
+                table_id=table_id,
+                column_name=c_name,
+                data_type=str(col["type"]).lower(),
+                column_type=str(col["type"]),
+                is_nullable=col.get("nullable", True),
+                column_default=str(col.get("default")) if col.get("default") is not None else None,
+                column_comment=col.get("comment"),
+                is_primary_key=(c_name in pk_cols),
+                is_foreign_key=False,
+                ordinal_position=i + 1,
+            )
+            column_objects[(t_name, c_name)] = column
+            columns_to_insert.append(column)
 
-        # Build foreign keys
-        for t_name in table_names:
-            fkeys = inspector.get_foreign_keys(t_name)
-            for fk in fkeys:
-                constrained_cols = fk.get("constrained_columns", [])
-                referred_table = fk.get("referred_table")
-                referred_cols = fk.get("referred_columns", [])
-                
-                if not referred_table or not constrained_cols or not referred_cols:
-                    continue
-                
-                ref_table_id = table_name_to_id.get(referred_table)
-                if not ref_table_id:
-                    continue
-                
-                for c_col, r_col in zip(constrained_cols, referred_cols):
-                    fk_column = column_objects.get((t_name, c_col))
-                    ref_col_id = column_name_to_id.get((referred_table, r_col))
-                    if fk_column and ref_col_id:
-                        fk_column.is_foreign_key = True  # type: ignore[assignment]
-                        fk_column.foreign_table_id = ref_table_id  # type: ignore[assignment]
-                        fk_column.foreign_column_id = ref_col_id  # type: ignore[assignment]
+    for t_name in table_names:
+        fkeys = inspector.get_foreign_keys(t_name, schema=schema) if schema else inspector.get_foreign_keys(t_name)
+        for fk in fkeys:
+            constrained_cols = fk.get("constrained_columns", [])
+            referred_table = fk.get("referred_table")
+            referred_cols = fk.get("referred_columns", [])
+            if not referred_table or not constrained_cols or not referred_cols:
+                continue
+            ref_table_id = table_name_to_id.get(referred_table)
+            if not ref_table_id:
+                continue
+            for c_col, r_col in zip(constrained_cols, referred_cols):
+                fk_column = column_objects.get((t_name, c_col))
+                ref_col_id = column_name_to_id.get((referred_table, r_col))
+                if fk_column and ref_col_id:
+                    fk_column.is_foreign_key = True  # type: ignore[assignment]
+                    fk_column.foreign_table_id = ref_table_id  # type: ignore[assignment]
+                    fk_column.foreign_column_id = ref_col_id  # type: ignore[assignment]
 
-        return tables_to_insert, columns_to_insert, len(tables_to_insert)
+    return tables_to_insert, columns_to_insert, len(tables_to_insert)
+
+
+def _build_sqlite_schema_snapshot(ds: DataSource, datasource_id: str) -> SchemaSnapshot:
+    engine = create_engine(f"sqlite:///{str(ds.database_name)}")
+    try:
+        return _build_inspector_snapshot(engine, datasource_id)
     finally:
         engine.dispose()
 
@@ -284,7 +285,6 @@ def _build_postgresql_schema_snapshot(ds: DataSource, datasource_id: str) -> Sch
 
     if ds.ssh_enabled:
         from engine.datasource import get_or_create_tunnel_for_dict
-
         ds_dict = datasource_connection_dict(ds)
         tunnel = get_or_create_tunnel_for_dict(ds_dict)
         host = "127.0.0.1"
@@ -300,94 +300,10 @@ def _build_postgresql_schema_snapshot(ds: DataSource, datasource_id: str) -> Sch
         database=database_name,
     )
     engine = create_engine(dsn, connect_args={"connect_timeout": 5, **ssl_params})
-
     try:
-        tables_to_insert: list[SchemaTable] = []
-        columns_to_insert: list[SchemaColumn] = []
-        
-        table_name_to_id: dict[str, str] = {}
-        column_name_to_id: dict[tuple[str, str], str] = {}
-        column_objects: dict[tuple[str, str], SchemaColumn] = {}
-
         inspector = inspect(engine)
         schema = inspector.default_schema_name or "public"
-        
-        table_names = inspector.get_table_names(schema=schema)
-        view_names = inspector.get_view_names(schema=schema)
-
-        for t_name in table_names + view_names:
-            table_id = str(uuid.uuid4())
-            table_name_to_id[t_name] = table_id
-            
-            is_view = t_name in view_names
-            t_type = "VIEW" if is_view else "BASE TABLE"
-            
-            tables_to_insert.append(
-                SchemaTable(
-                    id=table_id,
-                    data_source_id=datasource_id,
-                    table_schema=schema,
-                    table_name=t_name,
-                    table_comment=None,
-                    table_type=t_type,
-                    row_count_estimate=0,
-                    engine_name=None,
-                )
-            )
-
-        for t_name in table_names + view_names:
-            table_id = table_name_to_id[t_name]
-            cols = inspector.get_columns(t_name, schema=schema)
-            pk_constraint = inspector.get_pk_constraint(t_name, schema=schema)
-            pk_cols = pk_constraint.get("constrained_columns", []) or []
-
-            for i, col in enumerate(cols):
-                c_name = col["name"]
-                col_id = str(uuid.uuid4())
-                column_name_to_id[(t_name, c_name)] = col_id
-                
-                is_nullable = col.get("nullable", True)
-                col_default = col.get("default")
-                
-                column = SchemaColumn(
-                    id=col_id,
-                    table_id=table_id,
-                    column_name=c_name,
-                    data_type=str(col["type"]).lower(),
-                    column_type=str(col["type"]),
-                    is_nullable=is_nullable,
-                    column_default=str(col_default) if col_default is not None else None,
-                    column_comment=col.get("comment"),
-                    is_primary_key=(c_name in pk_cols),
-                    is_foreign_key=False,
-                    ordinal_position=i + 1,
-                )
-                column_objects[(t_name, c_name)] = column
-                columns_to_insert.append(column)
-
-        for t_name in table_names:
-            fkeys = inspector.get_foreign_keys(t_name, schema=schema)
-            for fk in fkeys:
-                constrained_cols = fk.get("constrained_columns", [])
-                referred_table = fk.get("referred_table")
-                referred_cols = fk.get("referred_columns", [])
-                
-                if not referred_table or not constrained_cols or not referred_cols:
-                    continue
-                
-                ref_table_id = table_name_to_id.get(referred_table)
-                if not ref_table_id:
-                    continue
-                
-                for c_col, r_col in zip(constrained_cols, referred_cols):
-                    fk_column = column_objects.get((t_name, c_col))
-                    ref_col_id = column_name_to_id.get((referred_table, r_col))
-                    if fk_column and ref_col_id:
-                        fk_column.is_foreign_key = True  # type: ignore[assignment]
-                        fk_column.foreign_table_id = ref_table_id  # type: ignore[assignment]
-                        fk_column.foreign_column_id = ref_col_id  # type: ignore[assignment]
-
-        return tables_to_insert, columns_to_insert, len(tables_to_insert)
+        return _build_inspector_snapshot(engine, datasource_id, schema=schema)
     finally:
         engine.dispose()
 

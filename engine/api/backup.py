@@ -18,6 +18,7 @@ from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
 from engine.models import BackupRecord, DataSource
 from engine.schemas import BackupCreateRequest
+from engine.schemas.backup import BackupResponse, RestoreConfirmRequest
 from engine.schema_sync import sync_schema
 from engine.policy.engine import PolicyEngine
 
@@ -30,7 +31,6 @@ router = APIRouter()
 
 
 def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
-    from engine.schemas.backup import BackupResponse
     return BackupResponse.model_validate(record).model_dump(mode="json")
 
 
@@ -141,19 +141,14 @@ def api_restore_precheck(backup_id: str, db: Session = Depends(get_db)) -> dict[
 @router.post("/backups/{backup_id}/restore")
 def api_restore_backup(
     backup_id: str,
+    req: RestoreConfirmRequest | None = None,
     allow_fallback: bool = Query(default=True),
-    confirm_token: str | None = Query(default=None),
-    confirm_text: str | None = Query(default=None),
     db: Session = Depends(get_db)
 ) -> dict[str, Any]:
-    """
-    执行备份恢复 (高风险覆写操作)
-    
-    为了绝对防范误操作，该接口实现了双因子令牌验证 (Two-Phase Confirmation)：
-    1. 第一次调用：不带 `confirm_token`。接口拦截并自动生成一个一次性确认令牌 `confirm_token` 返回给前端，
-       并提示警告语，要求用户必须手动输入“数据源名称”以表确认。
-    2. 第二次调用：带上 `confirm_token` 和用户输入的 `confirm_text`。后端验证比对通过后才真正执行物理恢复。
-    """
+    """Execute backup restore (high-risk overwrite)."""
+    confirm_token = req.confirm_token if req else None
+    confirm_text = req.confirm_text if req else None
+
     # 1. 查找备份记录
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
@@ -164,21 +159,20 @@ def api_restore_backup(
     if not datasource:
         raise NotFoundError("关联的数据源不存在", "DATASOURCE_NOT_FOUND")
 
-    # 3. 🔒 强制安全合规校验：例如禁止在生产环境中执行数据库恢复还原
+    # 3. 🔒 强制安全合规校验
     PolicyEngine.enforce_restore_policy(datasource)
 
-    # 4. 🔒 检查是否跳过二次确认（通常开发测试环境或自动化集成中可以配置绕过）
+    # 4. 🔒 双因子令牌验证
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
         expected_details = {"backup_id": backup_id}
-        
-        # 4.1 阶段一：尚未发起确认令牌。生成令牌并拦截返回
+
         if not confirm_token:
             token = confirmation_manager.create_confirmation(
                 datasource_id=str(record.datasource_id),
                 action="restore_backup",
                 details=expected_details,
-                expected_confirm_text=str(datasource.name)  # 期望用户输入的文本是该数据源的真实名称
+                expected_confirm_text=str(datasource.name)
             )
             return {
                 "success": False,
@@ -187,7 +181,6 @@ def api_restore_backup(
                 "impact_summary": f"⚠️ 警告：您即将对数据源 '{datasource.name}' 执行备份恢复（覆盖还原）！\n\n该操作会覆盖目标数据库的所有当前数据，并可能导致现有修改被覆盖丢失！请输入数据源名称以确认执行。",
                 "expected_confirm_text": datasource.name
             }
-        # 4.2 阶段二：用户带上了确认令牌与输入文本。进行一致性及有效性核对
         else:
             is_valid, err_msg = confirmation_manager.validate_and_consume(
                 confirm_token,
