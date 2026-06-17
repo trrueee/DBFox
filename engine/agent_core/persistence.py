@@ -640,6 +640,24 @@ def build_followup_context_from_run(
     )
 
 
+def _artifact_to_dict(r: AgentArtifactRecord) -> dict[str, Any]:
+    """Convert an AgentArtifactRecord to a plain dict (shared by list + restore)."""
+    return {
+        "id": r.id,
+        "run_id": r.run_id,
+        "semantic_id": r.semantic_id,
+        "type": r.type,
+        "title": r.title,
+        "produced_by_step": r.produced_by_step,
+        "depends_on": (_parse_json(r.depends_on_json) or {}).get("depends_on", []),  # type: ignore[arg-type]
+        "payload": _parse_json(r.payload_json) or {},  # type: ignore[arg-type]
+        "presentation": _parse_json(r.presentation_json) or {},  # type: ignore[arg-type]
+        "refs": _parse_json(r.refs_json) or {},  # type: ignore[arg-type]
+        "sequence": r.sequence,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
 def list_run_artifacts(db: Session, run_id: str) -> list[dict[str, Any]]:
     records = (
         db.query(AgentArtifactRecord)
@@ -647,23 +665,7 @@ def list_run_artifacts(db: Session, run_id: str) -> list[dict[str, Any]]:
         .order_by(AgentArtifactRecord.sequence)
         .all()
     )
-    return [
-        {
-            "id": r.id,
-            "run_id": r.run_id,
-            "semantic_id": r.semantic_id,
-            "type": r.type,
-            "title": r.title,
-            "produced_by_step": r.produced_by_step,
-            "depends_on": (_parse_json(r.depends_on_json) or {}).get("depends_on", []),  # type: ignore[arg-type]
-            "payload": _parse_json(r.payload_json) or {},  # type: ignore[arg-type]
-            "presentation": _parse_json(r.presentation_json) or {},  # type: ignore[arg-type]
-            "refs": _parse_json(r.refs_json) or {},  # type: ignore[arg-type]
-            "sequence": r.sequence,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in records
-    ]
+    return [_artifact_to_dict(r) for r in records]
 
 
 def list_run_events(db: Session, run_id: str) -> list[dict[str, Any]]:
@@ -703,19 +705,9 @@ def restore_artifact(db: Session, artifact_id: str) -> dict[str, Any] | None:
     record = db.query(AgentArtifactRecord).filter(AgentArtifactRecord.id == artifact_id).first()
     if record is None:
         return None
-    return {
-        "id": record.id,
-        "run_id": record.run_id,
-        "semantic_id": record.semantic_id,
-        "type": record.type,
-        "title": record.title,
-        "produced_by_step": record.produced_by_step,
-        "depends_on": (_parse_json(record.depends_on_json) or {}).get("depends_on", []),  # type: ignore[arg-type]
-        "payload": _parse_json(record.payload_json) or {},  # type: ignore[arg-type]
-        "presentation": _parse_json(record.presentation_json) or {},  # type: ignore[arg-type]
-        "refs": _parse_json(record.refs_json) or {},  # type: ignore[arg-type]
-        "sequence": record.sequence,
-    }
+    d = _artifact_to_dict(record)
+    d.pop("created_at", None)  # restore payload omits created_at
+    return d
 
 
 def restore_runtime_event(db: Session, event_id: str) -> dict[str, Any] | None:

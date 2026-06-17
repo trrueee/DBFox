@@ -27,10 +27,6 @@ def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("sslkey", ""),
     )
 
-    registry = get_pool_registry()
-    if registry.has(pool_key):
-        return cast(QueuePool, registry.get_or_create(pool_key, lambda: None))
-
     def creator() -> Any:
         import psycopg2
         connect_kwargs: dict[str, Any] = {
@@ -47,7 +43,7 @@ def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
                 connect_kwargs[ssl_key] = val
         return psycopg2.connect(**connect_kwargs)
 
-    return registry.get_or_create(
+    return get_pool_registry().get_or_create(
         pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
     )
 
@@ -69,14 +65,10 @@ def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("ssl_cert")
     )
 
-    registry = get_pool_registry()
-    if registry.has(pool_key):
-        return cast(QueuePool, registry.get_or_create(pool_key, lambda: None))
-
     def creator() -> pymysql.Connection:
         return pymysql.connect(**pool_params)
 
-    return registry.get_or_create(
+    return get_pool_registry().get_or_create(
         pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
     )
 
@@ -84,8 +76,5 @@ def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
 def _ping_mysql_connection(conn_proxy: Any) -> Any:
     """Validate a raw PyMySQL connection checked out from QueuePool."""
     raw_conn: Any = getattr(conn_proxy, "dbapi_connection", None) or getattr(conn_proxy, "connection", None) or conn_proxy
-    try:
-        raw_conn.ping(reconnect=True)
-    except TypeError:
-        raw_conn.ping(True)
+    raw_conn.ping(reconnect=True)
     return raw_conn

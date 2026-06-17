@@ -85,11 +85,6 @@ def _parse_target(target: str) -> tuple[str, str | None, str | None]:
     raise ValueError(f"Invalid target: {target}")
 
 
-def _ds_to_dict(ds: DataSource) -> dict[str, Any]:
-    """Convert ORM object to the dict expected by connection-param helpers."""
-    return datasource_connection_dict(ds)
-
-
 class TTLMemoryCache:
     def __init__(self, ttl_seconds: float = 10.0, maxsize: int = 500):
         self.ttl = ttl_seconds
@@ -284,7 +279,7 @@ def _sqlite_row_count(conn: sqlite3.Connection, table_name: str) -> int | None:
 
 def _mysql_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, Any]:
     table_name, column_name, _schema = _parse_target(target)
-    ds_dict = _ds_to_dict(ds)
+    ds_dict = datasource_connection_dict(ds)
 
     params = get_mysql_connection_params(ds_dict)
     pool = get_mysql_pool(ds.id, params)
@@ -459,7 +454,7 @@ def _row_value(row: Any, index: int, key: str) -> Any:
 
 def _pg_inspect_detail(db: Session, ds: DataSource, target: str) -> dict[str, Any]:
     table_name, column_name, schema_name = _parse_target(target)
-    ds_dict = _ds_to_dict(ds)
+    ds_dict = datasource_connection_dict(ds)
 
     params = get_postgres_connection_params(ds_dict)
     pool = get_postgres_pool(ds.id, params)

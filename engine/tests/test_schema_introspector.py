@@ -113,7 +113,7 @@ def test_postgres_introspection_returns_tables_columns_fks_and_samples(db_sessio
     monkeypatch.setattr(
         introspector,
         "_connect_postgres",
-        lambda db, resolved: fake_conn,
+        lambda db, resolved, tunnel=None: fake_conn,
         raising=False,
     )
 

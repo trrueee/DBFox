@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from engine.tools.db_tools import (
@@ -154,7 +155,6 @@ def _analyze_data_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
             error="No successful execution result available. Run db.query first.",
             latency_ms=0,
         )
-    import time
     start = time.monotonic()
     try:
         question = args.get("question") or (ctx.request.question if ctx.request else "") or ""
@@ -196,7 +196,6 @@ def _chart_suggest_handler(ctx: ToolContext, args: dict[str, Any]) -> ToolObserv
             error="No successful execution result available for chart suggestion.",
             latency_ms=0,
         )
-    import time
     start = time.monotonic()
     try:
         suggestion = suggest_plotly_chart(execution)

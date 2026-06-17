@@ -182,20 +182,25 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def _ensure_fts5(conn) -> None:
-    """Create FTS5 virtual table if it doesn't exist."""
+    """Create FTS5 virtual tables if they don't exist."""
     from sqlalchemy import text as sa_text
     from sqlalchemy.exc import OperationalError
-    from engine.models import FTS5_DDL
-    try:
-        conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
-    except OperationalError as e:
-        if "no such table" in str(e).lower():
-            conn.execute(sa_text(FTS5_DDL))
-            conn.commit()
-        else:
+    from engine.models import FTS5_DDL, QUERY_HISTORY_FTS_DDL
+
+    for ddl, probe in [
+        (FTS5_DDL, "schema_search_fts"),
+        (QUERY_HISTORY_FTS_DDL, "query_history_fts"),
+    ]:
+        try:
+            conn.execute(sa_text(f"SELECT 1 FROM {probe} LIMIT 0"))
+        except OperationalError as e:
+            if "no such table" in str(e).lower():
+                conn.execute(sa_text(ddl))
+                conn.commit()
+            else:
+                raise
+        except Exception:
             raise
-    except Exception:
-        raise
 
 
 def init_db() -> None:

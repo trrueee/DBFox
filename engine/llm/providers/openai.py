@@ -16,8 +16,8 @@ def create_openai_client(
     max_tokens: int | None = None,
     timeout: float = 120.0,
 ) -> "ChatOpenAI":
-    from langchain_openai import ChatOpenAI
     """Build a ChatOpenAI client with reasoning-model awareness."""
+    from langchain_openai import ChatOpenAI
     model_lower = model_name.lower()
     is_reasoning = any(
         term in model_lower
