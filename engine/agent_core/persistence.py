@@ -166,8 +166,9 @@ def record_runtime_event(
         )
         db.add(record)
         db.flush()
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to record runtime event %s", event.event_id)
+        raise exc
 
 
 def record_artifact(
@@ -197,8 +198,9 @@ def record_artifact(
         )
         db.add(record)
         db.flush()
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to record artifact %s", artifact.id)
+        raise exc
 
 
 def complete_run(db: Session, response: AgentRunResponse) -> None:
@@ -218,8 +220,9 @@ def complete_run(db: Session, response: AgentRunResponse) -> None:
         db.flush()
         _save_trace_events(db, response)
         sync_chat_conversation_from_session(db, run.session_id)
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to complete run %s", response.run_id)
+        raise exc
 
 
 def _save_trace_events(db: Session, response: AgentRunResponse) -> None:
@@ -283,8 +286,9 @@ def fail_run(
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         db.flush()
         sync_chat_conversation_from_session(db, session_id)
-    except Exception:
+    except Exception as exc:
         logger.exception("Failed to record failure for run %s", run_id)
+        raise exc
 
 
 def cancel_run(db: Session, *, run_id: str) -> None:

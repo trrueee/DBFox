@@ -39,15 +39,16 @@ def get_or_create_key() -> bytes:
     if not KEY_FILE.exists() and LEGACY_KEY_FILE.exists():
         try:
             write_private_bytes(KEY_FILE, LEGACY_KEY_FILE.read_bytes())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to migrate legacy key file to private runtime directory: {e}")
 
     if KEY_FILE.exists():
         try:
             legacy_key = KEY_FILE.read_bytes()
             _chmod_private(KEY_FILE, is_dir=False)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.critical(f"Key file exists but failed to read: {e}. Aborting to prevent credential loss.")
+            raise RuntimeError(f"Could not read existing secret key file: {e}") from e
 
     # 3. If we have a legacy file key, migrate it into the OS Keychain and prune the file
     if legacy_key is not None:
@@ -59,8 +60,8 @@ def get_or_create_key() -> bytes:
                 KEY_FILE.unlink(missing_ok=True)
                 LEGACY_KEY_FILE.unlink(missing_ok=True)
                 logger.info("Successfully migrated symmetric key to OS Keychain and removed local files.")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to clean up legacy key files after migration: {e}")
             return legacy_key
         except Exception as e:
             logger.warning(f"Failed to migrate legacy key to OS Keychain: {e}")
@@ -129,5 +130,6 @@ def decrypt_password(ciphertext_b64: str, nonce_b64: str) -> str:
         nonce = base64.b64decode(nonce_b64.encode("utf-8"))
         data = aesgcm.decrypt(nonce, ciphertext, None)
         return data.decode("utf-8")
-    except Exception:
-        raise ValueError("Failed to decrypt database credentials") from None
+    except Exception as exc:
+        logger.exception("Failed to decrypt database credentials")
+        raise ValueError("Failed to decrypt database credentials") from exc
