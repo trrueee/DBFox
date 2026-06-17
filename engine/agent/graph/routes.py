@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.message_utils import message_tool_calls
 
 
-def _last_tool_calls(state: DataBoxAgentState) -> list[Any]:
+def _last_tool_calls(state: DBFoxAgentState) -> list[Any]:
     messages = state.get("messages", [])
     if not messages:
         return []
     return message_tool_calls(messages[-1])
 
 
-def route_model_output(state: DataBoxAgentState) -> Literal["policy", "progress"]:
+def route_model_output(state: DBFoxAgentState) -> Literal["policy", "progress"]:
     """After model node: tool_calls → policy gate; otherwise → progress judge."""
     if state.get("status") in ("completed", "failed", "waiting_approval", "waiting_user"):
         return "progress"
@@ -22,7 +22,7 @@ def route_model_output(state: DataBoxAgentState) -> Literal["policy", "progress"
     return "progress"
 
 
-def route_policy_output(state: DataBoxAgentState) -> Literal["tools", "approval", "model", "progress"]:
+def route_policy_output(state: DBFoxAgentState) -> Literal["tools", "approval", "model", "progress"]:
     """After policy node: route to tools, approval, model, or progress on denial."""
     if state.get("status") in ("completed", "failed", "waiting_user"):
         return "progress"
@@ -36,7 +36,7 @@ def route_policy_output(state: DataBoxAgentState) -> Literal["tools", "approval"
     return "model"
 
 
-def route_approval_output(state: DataBoxAgentState) -> Literal["tools", "model", "progress"]:
+def route_approval_output(state: DBFoxAgentState) -> Literal["tools", "model", "progress"]:
     """After approval interrupt: approved + calls → tools; rejected → model; else → progress."""
     approval = state.get("approval_result") or {}
     if approval.get("status") == "approved" and state.get("allowed_tool_calls"):
@@ -46,7 +46,7 @@ def route_approval_output(state: DataBoxAgentState) -> Literal["tools", "model",
     return "progress"
 
 
-def route_progress_output(state: DataBoxAgentState) -> Literal["model", "finalize", "repair"]:
+def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize", "repair"]:
     """After progress judge: complete/clarify → finalize; continue → model
     (model receives progress guidance); replan → model with anti-loop check;
     repair → repair."""

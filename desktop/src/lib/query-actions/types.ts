@@ -1,5 +1,5 @@
 /**
- * DataBox SQL Action Engine — Type Declarations (v2)
+ * DBFox SQL Action Engine — Type Declarations (v2)
  */
 
 /** Processor execution phases */

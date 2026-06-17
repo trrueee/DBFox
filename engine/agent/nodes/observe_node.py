@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.databinding import apply_tool_result_to_state
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
@@ -22,7 +22,7 @@ from engine.agent_core.artifacts import (
 )
 from engine.agent_core.types import ResultProfile
 
-logger = logging.getLogger("databox.databox_agent.nodes.observe_node")
+logger = logging.getLogger("dbfox.dbfox_agent.nodes.observe_node")
 
 
 from engine.agent.tools.tool_aliases import STEP_NAME_TO_INTERNAL
@@ -135,7 +135,7 @@ def emit_artifacts_from_observation(
     return artifacts
 
 
-def observe_tools(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     ctx = graph_context(config)
     db = ctx.db
     run_id = state.get("run_id") or ""

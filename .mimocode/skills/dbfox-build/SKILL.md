@@ -1,11 +1,11 @@
 ---
-name: databox-build
-description: Build and package the DataBox desktop application — cleans old artifacts, rebuilds the Python engine sidecar with PyInstaller, then runs Tauri build. Covers all known gotchas.
+name: dbfox-build
+description: Build and package the DBFox desktop application — cleans old artifacts, rebuilds the Python engine sidecar with PyInstaller, then runs Tauri build. Covers all known gotchas.
 ---
 
-# DataBox Build & Package
+# DBFox Build & Package
 
-End-to-end build workflow for the DataBox desktop app (Tauri 2 + Python sidecar).
+End-to-end build workflow for the DBFox desktop app (Tauri 2 + Python sidecar).
 
 ## Prerequisites
 
@@ -18,7 +18,7 @@ End-to-end build workflow for the DataBox desktop app (Tauri 2 + Python sidecar)
 ### Step 1: Clean old artifacts
 
 ```bash
-rm -rf pyinstaller_dist pyinstaller_build databox-engine.spec databox_engine.spec desktop/src-tauri/target
+rm -rf pyinstaller_dist pyinstaller_build dbfox-engine.spec dbfox_engine.spec desktop/src-tauri/target
 ```
 
 ### Step 2: Rebuild Python sidecar
@@ -48,7 +48,7 @@ cd desktop && npm run tauri build
 
 3. **Use `.build_venv`, not conda**: Conda has ML packages (torch, pandas, h5py) that conflict with NumPy 2.x. Always use the clean `.build_venv`.
 
-4. **Token variable naming**: `build_sidecar.py` writes `VITE_LOCAL_ENGINE_TOKEN` (not `VITE_DATABOX_STATIC_TOKEN`). Frontend reads `VITE_LOCAL_ENGINE_TOKEN` + `VITE_LOCAL_ENGINE_PORT`.
+4. **Token variable naming**: `build_sidecar.py` writes `VITE_LOCAL_ENGINE_TOKEN` (not `VITE_DBFOX_STATIC_TOKEN`). Frontend reads `VITE_LOCAL_ENGINE_TOKEN` + `VITE_LOCAL_ENGINE_PORT`.
 
 5. **Hidden imports**: `sshtunnel`, `keyring`, `langgraph`, `langchain_core` must be installed in `.build_venv` and added as hidden imports in the PyInstaller spec.
 
@@ -71,5 +71,5 @@ python -m pytest engine/tests/ -q
 ## Quick Reference (single command)
 
 ```bash
-rm -rf pyinstaller_dist pyinstaller_build databox-engine.spec desktop/src-tauri/target 2>/dev/null; "./.build_venv/Scripts/python.exe" build_sidecar.py && cd desktop && npm run tauri build
+rm -rf pyinstaller_dist pyinstaller_build dbfox-engine.spec desktop/src-tauri/target 2>/dev/null; "./.build_venv/Scripts/python.exe" build_sidecar.py && cd desktop && npm run tauri build
 ```

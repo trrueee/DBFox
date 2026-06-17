@@ -1,17 +1,17 @@
-# DataBox Analysis Agent Flow Design
+# DBFox Analysis Agent Flow Design
 
 Date: 2026-06-16
 Status: approved for implementation planning
 
 ## Context
 
-DataBox is positioned as an autonomous data analysis agent, but the current runtime behaves more like a database query assistant. For database questions, the agent usually explores schema, writes SQL through `db.query`, then returns a direct answer from the raw result. Existing skill specs such as `safe_data_lookup` and `result_analysis` describe a richer flow with result profiling, chart suggestion, and answer synthesis, but that path is not wired into the active default flow.
+DBFox is positioned as an autonomous data analysis agent, but the current runtime behaves more like a database query assistant. For database questions, the agent usually explores schema, writes SQL through `db.query`, then returns a direct answer from the raw result. Existing skill specs such as `safe_data_lookup` and `result_analysis` describe a richer flow with result profiling, chart suggestion, and answer synthesis, but that path is not wired into the active default flow.
 
 Observed implementation gaps:
 
 - `engine/agent/model/system_prompt.py` tells the model: "Once db.query returns data, synthesize a direct answer" and explicitly says not to call more tools unless the result is wrong or incomplete.
 - `engine/agent/app/service.py` initializes `FULL_SAFE_TOOL_GROUPS` with only `environment`, `schema`, `db`, `semantic`, and `memory`.
-- `engine/tools/databox_tools.py` only lets `escalate.tool_group` request `environment`, `schema`, `db`, `semantic`, `memory`, and `execution`.
+- `engine/tools/dbfox_tools.py` only lets `escalate.tool_group` request `environment`, `schema`, `db`, `semantic`, `memory`, and `execution`.
 - Built-in tool specs under `engine/tools/builtin` do not currently expose `result.profile`, `chart.suggest`, or `answer.synthesize`.
 - `engine/agent_core/databinding.py` binds `db.query` into `execution`, but does not bind `result.profile`, `chart.suggest`, or `answer.synthesize` into `result_profile`, `chart_suggestion`, and `answer`.
 
@@ -23,7 +23,7 @@ The agent should not treat a successful database query as the finish line. Every
 
 This balances product positioning and ergonomics:
 
-- It makes DataBox feel like an analysis agent by default.
+- It makes DBFox feel like an analysis agent by default.
 - It avoids turning simple detail lookups into long reports.
 - It keeps chart generation useful rather than noisy.
 - It gives the runtime deterministic hooks that tests can verify.
@@ -176,10 +176,10 @@ No new Python modules required. All three tools wrap existing pure functions.
 
 | File | Change |
 |------|--------|
-| `engine/tools/databox_tools.py` | Register handlers `result_profile_handler`, `chart_suggest_handler`, `answer_synthesize_handler` via `handlers.force_register`. Add `"result"`, `"chart"`, `"answer"` to `valid_groups` in `_escalate_tool_group`. |
+| `engine/tools/dbfox_tools.py` | Register handlers `result_profile_handler`, `chart_suggest_handler`, `answer_synthesize_handler` via `handlers.force_register`. Add `"result"`, `"chart"`, `"answer"` to `valid_groups` in `_escalate_tool_group`. |
 | `engine/agent_core/tool_registry.py` | Add `"result."`, `"chart."`, `"answer."` prefixes to `TOOL_GROUP_MAP`. |
 
-**Handler implementations** (all in `engine/tools/databox_tools.py` as thin wrappers):
+**Handler implementations** (all in `engine/tools/dbfox_tools.py` as thin wrappers):
 
 ```python
 def _result_profile_handler(ctx, args):

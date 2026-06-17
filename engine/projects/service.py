@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 from engine.models import DEFAULT_PROJECT_ID, DEFAULT_PROJECT_NAME, Project
 
-logger = logging.getLogger("databox.projects.service")
+logger = logging.getLogger("dbfox.projects.service")
 
 
 def get_or_create_default_project(db: Session) -> Project:
@@ -16,7 +16,7 @@ def get_or_create_default_project(db: Session) -> Project:
     project = Project(
         id=DEFAULT_PROJECT_ID,
         name=DEFAULT_PROJECT_NAME,
-        description="Auto-created workspace for existing DataBox assets.",
+        description="Auto-created workspace for existing DBFox assets.",
         status="active",
     )
     db.add(project)

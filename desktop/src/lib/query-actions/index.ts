@@ -1,5 +1,5 @@
 /**
- * DataBox SQL Action Engine (DSL & Pipeline Runtime)
+ * DBFox SQL Action Engine (DSL & Pipeline Runtime)
  */
 
 import { actionRegistry } from "./registry";

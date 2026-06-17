@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import type { SqlConsoleTabState } from "../workspace/SqlConsoleWorkspace";
-import { defaultSql } from "../../mock/databoxMock";
+import { defaultSql } from "../../mock/dbfoxMock";
 import type { Conversation, ConversationMessage } from "../../types/conversation";
 import { useToast } from "../../components/Toast";
 

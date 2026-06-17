@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from engine.memory.memory_schema import SessionMemory
 
-logger = logging.getLogger("databox.memory.session")
+logger = logging.getLogger("dbfox.memory.session")
 
 
 class SessionMemoryService:

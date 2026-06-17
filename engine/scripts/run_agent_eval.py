@@ -24,7 +24,7 @@ from engine.models import AgentGoldenTask
 from engine.evaluation.agent_eval import AgentEvalRunner
 from engine.evaluation.benchmarks.importer import load_and_import_benchmark
 from engine.schemas.agent_eval import AgentEvalRunRequest
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("run_agent_eval")
@@ -175,7 +175,7 @@ def main() -> None:
                             print(f"      {cr.failure_reasons_json}")
             print()
 
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         logger.error("Eval error: %s (code=%s)", exc, exc.code)
         sys.exit(1)
     except Exception:

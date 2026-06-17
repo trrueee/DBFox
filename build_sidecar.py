@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Build the DataBox Python engine into a standalone sidecar binary.
+"""Build the DBFox Python engine into a standalone sidecar binary.
 
 This script:
   1. Generates a cryptographically random static token
@@ -33,7 +33,7 @@ DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
 
-SIDECAR_NAME = "databox-engine-x86_64-pc-windows-msvc.exe"
+SIDECAR_NAME = "dbfox-engine-x86_64-pc-windows-msvc.exe"
 
 # Must match the dependencies in requirements.txt that PyInstaller
 # cannot auto-detect (lazy imports, dynamic loaders, etc.)
@@ -140,7 +140,7 @@ def export_langsmith_runtime_env(env_file: Path = ROOT / ".env") -> Path | None:
 def build_pyinstaller(python_exe: str) -> Path:
     dist_dir = ROOT / "pyinstaller_dist"
     work_dir = ROOT / "pyinstaller_build"
-    spec_path = ROOT / "databox_engine.spec"
+    spec_path = ROOT / "dbfox_engine.spec"
 
     shutil.rmtree(dist_dir, ignore_errors=True)
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -150,7 +150,7 @@ def build_pyinstaller(python_exe: str) -> Path:
         python_exe, "-m", "PyInstaller",
         "--onefile",
         "--noconsole",
-        "--name", "databox-engine",
+        "--name", "dbfox-engine",
         "--distpath", str(dist_dir),
         "--workpath", str(work_dir),
         "--add-data", f"{ENGINE_DIR}{os.pathsep}engine",
@@ -166,7 +166,7 @@ def build_pyinstaller(python_exe: str) -> Path:
         print("  [FAIL] PyInstaller build failed", file=sys.stderr)
         sys.exit(result.returncode)
 
-    built = dist_dir / "databox-engine.exe"
+    built = dist_dir / "dbfox-engine.exe"
     if not built.exists():
         print(f"  [FAIL] Expected binary not found: {built}", file=sys.stderr)
         sys.exit(1)
@@ -185,7 +185,7 @@ def install_sidecar(binary: Path) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build DataBox engine sidecar")
+    parser = argparse.ArgumentParser(description="Build DBFox engine sidecar")
     parser.add_argument(
         "--token-only",
         action="store_true",
@@ -194,7 +194,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print("=" * 55)
-    print("DataBox Sidecar Builder")
+    print("DBFox Sidecar Builder")
     print("=" * 55)
 
     token = generate_token()
@@ -216,7 +216,7 @@ def main() -> None:
 
     shutil.rmtree(ROOT / "pyinstaller_dist", ignore_errors=True)
     shutil.rmtree(ROOT / "pyinstaller_build", ignore_errors=True)
-    (ROOT / "databox_engine.spec").unlink(missing_ok=True)
+    (ROOT / "dbfox_engine.spec").unlink(missing_ok=True)
 
     print("\n" + "=" * 55)
     print("Sidecar build complete.")

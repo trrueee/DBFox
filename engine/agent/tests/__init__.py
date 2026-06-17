@@ -1,2 +1,2 @@
-# DataBox AgentNext Tests subpackage
+# DBFox AgentNext Tests subpackage
 from __future__ import annotations

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 
 
-def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
+def llm_error_from_exception(exc: Exception) -> DBFoxError | None:
     """Map provider/client exceptions to stable UI-facing LLM errors."""
     text = str(exc)
     lower_text = text.lower()
@@ -18,7 +18,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "error code: 401",
         "status code: 401",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "LLM API Key 校验失败，请检查 API Key、API Base 与模型服务权限。",
             code="LLM_AUTH_ERROR",
         )
@@ -30,7 +30,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "error code: 429",
         "status code: 429",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "LLM 服务触发限流，请稍后重试或检查模型服务配额。",
             code="LLM_RATE_LIMIT",
         )
@@ -41,7 +41,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "readtimeout",
         "apitimeouterror",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "LLM 响应超时，请检查模型服务网络、API Base 与模型可用性后重试。",
             code="LLM_TIMEOUT",
         )
@@ -54,7 +54,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "name resolution",
         "dns",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "无法连接到 LLM 服务，请检查网络、API Base 或代理配置。",
             code="LLM_CONNECTION_ERROR",
         )
@@ -65,7 +65,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "error code: 404",
         "status code: 404",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "LLM 模型不可用，请检查模型名称是否正确并确认账号有访问权限。",
             code="LLM_MODEL_ERROR",
         )
@@ -76,7 +76,7 @@ def llm_error_from_exception(exc: Exception) -> DataBoxError | None:
         "error code: 400",
         "status code: 400",
     )):
-        return DataBoxError(
+        return DBFoxError(
             "LLM 请求参数不被模型服务接受，请检查模型名称、API Base 与请求配置。",
             code="LLM_REQUEST_ERROR",
         )

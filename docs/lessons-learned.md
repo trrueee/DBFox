@@ -1,4 +1,4 @@
-# DataBox Agent 经验教训
+# DBFox Agent 经验教训
 
 ## 1. LangGraph checkpoint thread 只能用 run_id，不能用 session_id
 
@@ -74,7 +74,7 @@ clarification suppression 职责。删除它后这些职责必须显式地转移
 3. `schema_linking_question()` 会将 `question` 与 `follow_up_context` 中的旧问题及旧 artifacts 扁平化拼接成一个检索词（变成 `"用户数据 cookie表 SQL candidate SELECT..."`），导致 Schema Linker 的关键词打分完全被上一轮的长文本及强特征词支配，过滤掉了本轮真正相关的表。
 
 **修复：** 
-修改 `engine/tools/databox_tools.py` 中的 `_request()` 方法。当工具调用显式传入 `question` 参数时，在临时 Request 拷贝中清空 `follow_up_context`，只将当前纯净的工具检索关键词传给 Schema Linker。同时由于不改变 LangGraph 里的 `messages` 对话历史，主 LLM 的 Thread 记忆依然完整保留。
+修改 `engine/tools/dbfox_tools.py` 中的 `_request()` 方法。当工具调用显式传入 `question` 参数时，在临时 Request 拷贝中清空 `follow_up_context`，只将当前纯净的工具检索关键词传给 Schema Linker。同时由于不改变 LangGraph 里的 `messages` 对话历史，主 LLM 的 Thread 记忆依然完整保留。
 
 **教训：** 
 在多轮检索增强（RAG）设计中，会话上下文（History）应用在 LLM 层面进行意图理解和指代消解。而对于下游的规则型/关键词检索工具（如 SchemaLinker），应该接收 LLM 消解并提炼后纯净的检索参数，而不应在工具层直接将历史上下文与检索词强行拼接，否则长历史极易造成严重的检索污染。

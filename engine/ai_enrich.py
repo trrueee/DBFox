@@ -18,7 +18,7 @@ from engine.ai_index import (
 )
 from engine.models import SchemaColumn, SchemaSearchDoc, SchemaTable
 
-logger = logging.getLogger("databox.ai_enrich")
+logger = logging.getLogger("dbfox.ai_enrich")
 
 AI_LLM_TABLE_BATCH = 50
 AI_LLM_BATCH_INTERVAL_MS = 200

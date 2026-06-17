@@ -5,12 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import DataSource
 from engine.schemas import TestDataGenerateRequest
 from engine.policy.engine import PolicyEngine
 
-logger = logging.getLogger("databox.api.table_design")
+logger = logging.getLogger("dbfox.api.table_design")
 router = APIRouter()
 
 
@@ -22,7 +22,7 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
 
     try:
         PolicyEngine.enforce_test_data_policy(datasource)
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
 
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
@@ -62,7 +62,7 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
             row_count=req.row_count,
             language=req.language
         )
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
         logger.exception("Test data generation failed")

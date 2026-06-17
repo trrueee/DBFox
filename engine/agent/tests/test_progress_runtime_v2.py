@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
 from engine.agent.progress.fast_path import check_sql_repair_fastpath as _check_sql_repair_fastpath
 from engine.agent.progress.lens_formatter import enrich_progress_result as _enrich_progress_result
@@ -163,8 +163,8 @@ class TestContextSummaryMerge:
 
 
 class TestSqlRepairFastpath:
-    def _state(self, **kwargs) -> DataBoxAgentState:
-        base: DataBoxAgentState = {
+    def _state(self, **kwargs) -> DBFoxAgentState:
+        base: DBFoxAgentState = {
             "messages": [HumanMessage(content="Why did sales drop?")],
             "revision_count": 0,
             "plan_directive": {"reasoning_summary": "Analyze sales drop"},
@@ -291,7 +291,7 @@ class TestAdaptiveReplan:
 
 class TestPrepareRepairNode:
     def test_prepares_repair_stats_and_trace(self):
-        state: DataBoxAgentState = {
+        state: DBFoxAgentState = {
             "progress_decision": {
                 "status": "continue",
                 "recovery_strategy": "lookup_schema_then_revise_sql",

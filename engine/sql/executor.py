@@ -33,7 +33,7 @@ from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
 
-logger = logging.getLogger("databox.sql.executor")
+logger = logging.getLogger("dbfox.sql.executor")
 
 MAX_ROWS = 1000
 MAX_COLUMNS = 100
@@ -79,19 +79,19 @@ def _fetch_and_serialize(cursor: Any, max_rows: int = MAX_ROWS, *, row_mapper: A
 def guardrail_bypass_allowed() -> bool:
     """Centralized check for guardrail bypass availability.
     
-    Requires both DATABOX_TESTING=1 and DATABOX_ALLOW_GUARDRAIL_BYPASS=1.
+    Requires both DBFOX_TESTING=1 and DBFOX_ALLOW_GUARDRAIL_BYPASS=1.
     Always denied in frozen (packaged) builds.
     """
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
-        if os.environ.get("DATABOX_TESTING") == "1" or os.environ.get("DATABOX_ALLOW_GUARDRAIL_BYPASS") == "1":
+        if os.environ.get("DBFOX_TESTING") == "1" or os.environ.get("DBFOX_ALLOW_GUARDRAIL_BYPASS") == "1":
             logger.critical(
                 "Guardrail bypass env vars detected in frozen build — ignoring."
             )
         return False
-    if os.environ.get("DATABOX_TESTING") != "1":
+    if os.environ.get("DBFOX_TESTING") != "1":
         return False
-    if os.environ.get("DATABOX_ALLOW_GUARDRAIL_BYPASS") != "1":
+    if os.environ.get("DBFOX_ALLOW_GUARDRAIL_BYPASS") != "1":
         return False
     return True
 
@@ -462,11 +462,11 @@ def _resolve_execution_safety_decision(
                 checks=[{
                     "rule": "trust_gate_bypass_disabled",
                     "level": "reject",
-                    "message": "bypass_guardrail requires DATABOX_TESTING=1 and DATABOX_ALLOW_GUARDRAIL_BYPASS=1.",
+                    "message": "bypass_guardrail requires DBFOX_TESTING=1 and DBFOX_ALLOW_GUARDRAIL_BYPASS=1.",
                 }],
             )
         # Double-gate: bypass is only allowed on dev/test datasources.
-        # Prevents DATABOX_TESTING=1 from being inadvertently set in staging/prod.
+        # Prevents DBFOX_TESTING=1 from being inadvertently set in staging/prod.
         ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
         ds_env = (ds.env or "").lower() if ds else ""
         if ds_env not in ("", "dev", "test", "unknown"):
@@ -487,7 +487,7 @@ def _resolve_execution_safety_decision(
             "originalSql": sql_str,
             "safeSql": sql_str,
             "checks": [],
-            "message": "Bypassed via system request (DATABOX_TESTING=1 + DATABOX_ALLOW_GUARDRAIL_BYPASS=1 + dev/test env)",
+            "message": "Bypassed via system request (DBFOX_TESTING=1 + DBFOX_ALLOW_GUARDRAIL_BYPASS=1 + dev/test env)",
         }
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
@@ -502,7 +502,7 @@ def _resolve_execution_safety_decision(
             scope_state={
                 "datasource_id": datasource_id,
                 "bypass_guardrail": True,
-                "testing": os.environ.get("DATABOX_TESTING") == "1",
+                "testing": os.environ.get("DBFOX_TESTING") == "1",
             },
             messages=["Guardrail bypass was used; prefer explicit non-query execution helpers."],
         )

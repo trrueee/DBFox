@@ -1,4 +1,4 @@
-"""DataBox Policy Layer — safety guardrails and policy enforcement.
+"""DBFox Policy Layer — safety guardrails and policy enforcement.
 
 Modules:
   engine         — PolicyEngine (rule-based policy enforcement)

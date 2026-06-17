@@ -16,7 +16,7 @@ struct PythonEngine(Mutex<Option<Child>>);
 // DEPRECATED: ConversationRecord and all conversation commands below are
 // migration-only dead code. The Python engine API is the single source of
 // truth for conversation storage. These remain temporarily to support a
-// one-time migration from the legacy Tauri-side databox.sqlite3 database.
+// one-time migration from the legacy Tauri-side dbfox.sqlite3 database.
 // See Spec 02: Conversation Storage Single Source.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ConversationRecord {
@@ -53,7 +53,7 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running DataBox");
+        .expect("error while running DBFox");
 }
 
 // DEPRECATED: Migration-only. Use engine HTTP API /api/v1/conversations instead.
@@ -151,11 +151,11 @@ fn open_conversation_db(app: &AppHandle) -> Result<Connection, String> {
 fn conversation_db_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|err| err.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    Ok(dir.join("databox.sqlite3"))
+    Ok(dir.join("dbfox.sqlite3"))
 }
 
 fn log_sidecar_error(message: &str) {
-    let log_path = std::env::temp_dir().join("databox-sidecar.log");
+    let log_path = std::env::temp_dir().join("dbfox-sidecar.log");
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
@@ -195,20 +195,20 @@ fn stop_engine_child(mut child: Child) {
 
 #[cfg(target_os = "windows")]
 const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "databox-engine.exe",
-    "databox-engine-x86_64-pc-windows-msvc.exe",
+    "dbfox-engine.exe",
+    "dbfox-engine-x86_64-pc-windows-msvc.exe",
 ];
 
 #[cfg(target_os = "macos")]
 const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "databox-engine",
-    "databox-engine-x86_64-apple-darwin",
+    "dbfox-engine",
+    "dbfox-engine-x86_64-apple-darwin",
 ];
 
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 const SIDECAR_BINARY_NAMES: &[&str] = &[
-    "databox-engine",
-    "databox-engine-x86_64-unknown-linux-gnu",
+    "dbfox-engine",
+    "dbfox-engine-x86_64-unknown-linux-gnu",
 ];
 
 fn sidecar_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
@@ -240,7 +240,7 @@ fn spawn_python_engine() -> Option<Child> {
             .spawn()
         {
             Ok(child) => {
-                println!("DataBox Python Engine (Dev) started (pid: {})", child.id());
+                println!("DBFox Python Engine (Dev) started (pid: {})", child.id());
                 Some(child)
             }
             Err(e) => {
@@ -272,7 +272,7 @@ fn spawn_python_engine() -> Option<Child> {
 
         match Command::new(&final_path).current_dir(exe_dir).spawn() {
             Ok(child) => {
-                println!("DataBox Sidecar Engine (Prod) started (pid: {})", child.id());
+                println!("DBFox Sidecar Engine (Prod) started (pid: {})", child.id());
                 Some(child)
             }
             Err(e) => {
@@ -292,20 +292,20 @@ mod tests {
 
     #[test]
     fn sidecar_candidates_include_generic_binary_next_to_app() {
-        let exe_dir = PathBuf::from(r"C:\DataBox");
+        let exe_dir = PathBuf::from(r"C:\DBFox");
         let candidates = sidecar_candidate_paths(&exe_dir);
 
-        assert!(candidates.contains(&exe_dir.join("databox-engine.exe")));
+        assert!(candidates.contains(&exe_dir.join("dbfox-engine.exe")));
     }
 
     #[cfg(target_os = "windows")]
     #[test]
     fn sidecar_candidates_keep_triplet_binary_compatibility() {
-        let exe_dir = PathBuf::from(r"C:\DataBox");
+        let exe_dir = PathBuf::from(r"C:\DBFox");
         let candidates = sidecar_candidate_paths(&exe_dir);
 
         assert!(candidates.contains(
-            &exe_dir.join("databox-engine-x86_64-pc-windows-msvc.exe")
+            &exe_dir.join("dbfox-engine-x86_64-pc-windows-msvc.exe")
         ));
     }
 }

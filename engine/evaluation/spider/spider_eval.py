@@ -11,7 +11,7 @@ from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_ex
 from engine.evaluation.spider.sql_prediction_extractor import extract_final_sql
 from engine.evaluation.spider.sql_result_comparator import compare_sqlite_execution
 
-logger = logging.getLogger("databox.spider_eval")
+logger = logging.getLogger("dbfox.spider_eval")
 
 
 @dataclass
@@ -44,7 +44,7 @@ class SpiderEvalSummary:
     execution_accuracy: float
     avg_latency_ms: float | None
     runner_mode: str = "unknown"
-    is_databox_score: bool = False
+    is_dbfox_score: bool = False
 
 
 def _extract_tool_sequence(events: list[dict[str, Any]]) -> list[str]:
@@ -92,7 +92,7 @@ def summarize_spider_results(
     results: list[SpiderCaseResult],
     *,
     runner_mode: str = "unknown",
-    is_databox_score: bool = False,
+    is_dbfox_score: bool = False,
 ) -> SpiderEvalSummary:
     total = len(results)
     generated = sum(1 for r in results if r.generated_sql)
@@ -110,7 +110,7 @@ def summarize_spider_results(
         execution_accuracy=round(execution_match / max(total, 1), 4),
         avg_latency_ms=round(total_latency / total, 2) if total else None,
         runner_mode=runner_mode,
-        is_databox_score=is_databox_score,
+        is_dbfox_score=is_dbfox_score,
     )
 
 
@@ -119,7 +119,7 @@ class SpiderEvalRunner:
 
     The *run_fn* callable takes a SpiderExample and returns
     ``(response, events_payload, latency_ms)``.  This keeps the runner
-    agnostic to whether DataBox is wired or a fake is used for testing.
+    agnostic to whether DBFox is wired or a fake is used for testing.
     """
 
     def __init__(
@@ -226,15 +226,15 @@ class SpiderEvalRunner:
     ) -> tuple[list[SpiderCaseResult], SpiderEvalSummary]:
         examples = load_spider_examples(spider_root, split=split, limit=limit, db_ids=db_ids)
         results = [self.run_example(ex) for ex in examples]
-        is_databox = self._runner_mode == "databox"
-        summary = summarize_spider_results(results, runner_mode=self._runner_mode, is_databox_score=is_databox)
+        is_dbfox = self._runner_mode == "dbfox"
+        summary = summarize_spider_results(results, runner_mode=self._runner_mode, is_dbfox_score=is_dbfox)
         return results, summary
 
 
-# -- DataBox runtime integration ---------------------------------------------
+# -- DBFox runtime integration ---------------------------------------------
 
 
-def create_databox_sqlite_run_fn(
+def create_dbfox_sqlite_run_fn(
     *,
     db_session: Any,
     api_key: str | None = None,
@@ -243,9 +243,9 @@ def create_databox_sqlite_run_fn(
     execute: bool = True,
     max_steps: int = 20,
 ) -> Any:
-    """Return a run_fn backed by DataBoxAgentRuntime for Spider SQLite DBs.
+    """Return a run_fn backed by DBFoxAgentRuntime for Spider SQLite DBs.
 
-    *db_session* must be an active SQLAlchemy Session pointing to DataBox's
+    *db_session* must be an active SQLAlchemy Session pointing to DBFox's
     own metadata database (the one holding data_sources, schema_tables, etc.).
 
     Returns a 5-tuple: (response, events, latency_ms, datasource_id, synced_table_names).
@@ -257,10 +257,10 @@ def create_databox_sqlite_run_fn(
 
         datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
 
-        from engine.agent import DataBoxAgentRuntime
+        from engine.agent import DBFoxAgentRuntime
         from engine.agent_core.types import AgentRunRequest
 
-        runtime = DataBoxAgentRuntime(db_session)
+        runtime = DBFoxAgentRuntime(db_session)
         events_payload: list[dict[str, Any]] = []
         response = None
 
@@ -368,10 +368,10 @@ def create_qwen_text_to_sql_baseline_run_fn(
 ) -> Any:
     """Return a run_fn that calls Qwen directly for Text-to-SQL.
 
-    This bypasses DataBox runtime — it sends the question directly to the
+    This bypasses DBFox runtime — it sends the question directly to the
     LLM and returns the generated SQL.  Execution comparison still goes
     through Spider's SQLite comparator.
-    Only use this as a baseline, NOT as a DataBox score.
+    Only use this as a baseline, NOT as a DBFox score.
     """
     import httpx
 
@@ -442,7 +442,7 @@ def _cli() -> None:
     import argparse
     import os
 
-    parser = argparse.ArgumentParser(description="DataBox Spider Eval Runner")
+    parser = argparse.ArgumentParser(description="DBFox Spider Eval Runner")
     parser.add_argument("--spider-root", required=True, help="Path to Spider dataset root")
     parser.add_argument("--split", default="dev")
     parser.add_argument("--limit", type=int, default=None)
@@ -455,15 +455,15 @@ def _cli() -> None:
     parser.add_argument(
         "--mode",
         default="fake",
-        choices=["fake", "databox", "qwen-baseline"],
+        choices=["fake", "dbfox", "qwen-baseline"],
         help="Runner mode (default: fake for testing)",
     )
     args = parser.parse_args()
 
     db_ids = {args.db_id} if args.db_id else None
 
-    if args.mode == "databox":
-        _run_databox_cli(args, db_ids)
+    if args.mode == "dbfox":
+        _run_dbfox_cli(args, db_ids)
     elif args.mode == "qwen-baseline":
         _run_qwen_baseline_cli(args, db_ids)
     else:
@@ -478,7 +478,7 @@ def _run_fake_cli(args: Any, db_ids: set[str] | None) -> None:
 
 def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
     import os as _os
-    api_key = args.api_key or _os.environ.get("DATABOX_LLM_API_KEY")
+    api_key = args.api_key or _os.environ.get("DBFOX_LLM_API_KEY")
     if not api_key:
         raise RuntimeError("--api-key required for qwen-baseline mode")
     run_fn = create_qwen_text_to_sql_baseline_run_fn(
@@ -491,7 +491,7 @@ def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
     _write_output(results, summary, args.output)
 
 
-def _run_databox_cli(args: Any, db_ids: set[str] | None) -> None:
+def _run_dbfox_cli(args: Any, db_ids: set[str] | None) -> None:
     import os as _os
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -499,11 +499,11 @@ def _run_databox_cli(args: Any, db_ids: set[str] | None) -> None:
     from engine.db import Base
     from engine import models  # noqa: F401  # register models
 
-    api_key = args.api_key or _os.environ.get("DATABOX_LLM_API_KEY")
+    api_key = args.api_key or _os.environ.get("DBFOX_LLM_API_KEY")
     if not api_key:
-        raise RuntimeError("--api-key or DATABOX_LLM_API_KEY required for databox mode")
+        raise RuntimeError("--api-key or DBFOX_LLM_API_KEY required for dbfox mode")
 
-    # In-memory metadata DB (isolated from production databox_local.db)
+    # In-memory metadata DB (isolated from production dbfox_local.db)
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -514,14 +514,14 @@ def _run_databox_cli(args: Any, db_ids: set[str] | None) -> None:
     db_session = SessionLocal()
 
     try:
-        run_fn = create_databox_sqlite_run_fn(
+        run_fn = create_dbfox_sqlite_run_fn(
             db_session=db_session,
             api_key=api_key,
             api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
             model_name=args.model_name or "qwen-plus",
             execute=args.execute,
         )
-        runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="databox")
+        runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="dbfox")
         results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
         _write_output(results, summary, args.output)
     finally:
@@ -550,7 +550,7 @@ def _write_output(
         f"exec_success={summary.execution_success_rate:.2%} "
         f"exec_acc={summary.execution_accuracy:.2%} "
         f"mode={summary.runner_mode} "
-        f"is_databox={summary.is_databox_score}"
+        f"is_dbfox={summary.is_dbfox_score}"
     )
 
 

@@ -1,4 +1,4 @@
-"""Sync introspection results (SchemaInventory) into the DataBox system catalog.
+"""Sync introspection results (SchemaInventory) into the DBFox system catalog.
 
 Writes to SchemaTable / SchemaColumn so that SchemaLinker and downstream
 tools can discover tables without re-introspecting the live datasource
@@ -21,7 +21,7 @@ from engine.environment.inventory import (
 )
 from engine.environment.schema_introspector import introspect_datasource
 
-logger = logging.getLogger("databox.environment.schema_catalog_sync")
+logger = logging.getLogger("dbfox.environment.schema_catalog_sync")
 
 
 def utcnow() -> datetime:
@@ -29,7 +29,7 @@ def utcnow() -> datetime:
 
 
 class SchemaCatalogSync:
-    """Sync a SchemaInventory into DataBox's system catalog."""
+    """Sync a SchemaInventory into DBFox's system catalog."""
 
     def sync(self, db: Session, datasource_id: str, *, ai_enrich: bool = False) -> SyncResult:
         """Introspect and sync.  Returns counts of created/updated/removed."""

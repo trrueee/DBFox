@@ -121,7 +121,7 @@ def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, tes
                 response=response,
             )
 
-    monkeypatch.setattr("engine.evaluation.agent_eval.DataBoxAgentRuntime", FakeRuntime)
+    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FakeRuntime)
 
     result = AgentEvalRunner(db_session).run(
         AgentEvalRunRequest(datasource_id=test_datasource.id, task_ids=[task.id], execute=False)

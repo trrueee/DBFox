@@ -22,8 +22,8 @@ from engine.agent_core.answer import synthesize_agent_answer
 # ---------------------------------------------------------------------------
 
 
-def register_databox_tools() -> ToolRegistry:
-    """Create and populate the ToolRegistry for DataBox Agent.
+def register_dbfox_tools() -> ToolRegistry:
+    """Create and populate the ToolRegistry for DBFox Agent.
 
     Handlers registered here bridge YAML specs to Python code.
     """
@@ -75,9 +75,9 @@ def register_databox_tools() -> ToolRegistry:
     registry.add_builtin_source()
     try:
         from pathlib import Path
-        registry.add_user_source(Path.home() / ".databox" / "tools", priority=10)
+        registry.add_user_source(Path.home() / ".dbfox" / "tools", priority=10)
         cwd = Path.cwd()
-        project_dir = cwd / ".databox" / "tools"
+        project_dir = cwd / ".dbfox" / "tools"
         if project_dir.is_dir():
             registry.add_user_source(project_dir, priority=20)
     except Exception:

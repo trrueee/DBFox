@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   DataBox Design System
+   DBFox Design System
    Palette: Gallery White + Warm Copper
    Typography: Fira Sans (UI) + Fira Code (data)
    Feel: warm, airy, type-forward, Japanese-tool restraint
@@ -100,25 +100,25 @@
    ═══════════════════════════════════════════════════════ */
 
 @layer components {
-  .databox-table {
+  .dbfox-table {
     @apply w-full border-collapse;
     font-family: "Fira Code", "JetBrains Mono", monospace;
     font-variant-numeric: tabular-nums;
     font-size: 0.78rem;
   }
-  .databox-table thead { @apply sticky top-0 z-10; }
-  .databox-table th {
+  .dbfox-table thead { @apply sticky top-0 z-10; }
+  .dbfox-table th {
     @apply bg-[hsl(var(--secondary))] border-b-2 border-[hsl(var(--border))]
            px-3 py-1.5 text-left font-semibold text-[0.72rem]
            text-[hsl(var(--muted-foreground))] whitespace-nowrap select-none;
   }
-  .databox-table td {
+  .dbfox-table td {
     @apply px-3 py-1 border-b border-[hsl(var(--border)/0.7)]
            text-[hsl(var(--foreground))];
   }
-  .databox-table tbody tr:hover td { @apply bg-[hsl(var(--primary)/0.04)]; }
-  .databox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic text-[0.7rem]; }
-  .databox-table .cell-number { @apply text-right; }
+  .dbfox-table tbody tr:hover td { @apply bg-[hsl(var(--primary)/0.04)]; }
+  .dbfox-table .cell-null { @apply text-[hsl(var(--muted-foreground))] italic text-[0.7rem]; }
+  .dbfox-table .cell-number { @apply text-right; }
 
   /* ── Status badges ── */
   .badge-safe    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[0.66rem] font-semibold bg-[hsl(var(--success)/0.12)] text-[hsl(var(--success))]; }

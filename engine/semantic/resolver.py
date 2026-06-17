@@ -17,7 +17,7 @@ from engine.semantic.models import SemanticResolution
 from engine.semantic.prompts import SEMANTIC_RESOLVER_PROMPT
 from engine.semantic.verifier import SemanticVerifier
 
-logger = logging.getLogger("databox.semantic.resolver")
+logger = logging.getLogger("dbfox.semantic.resolver")
 
 
 class SemanticResolver:

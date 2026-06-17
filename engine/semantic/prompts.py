@@ -7,7 +7,7 @@ CRITICAL: This is a semantic understanding task — NOT a keyword classifier.
 Infer meaning from business context, not individual words.
 """
 
-SEMANTIC_RESOLVER_PROMPT = """You are the semantic resolver for DataBox Agent.
+SEMANTIC_RESOLVER_PROMPT = """You are the semantic resolver for DBFox Agent.
 
 Your job is to understand the BUSINESS MEANING of the user's question and
 map it to database concepts.

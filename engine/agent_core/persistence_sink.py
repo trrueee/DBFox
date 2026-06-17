@@ -113,7 +113,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
 
     def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
         import logging
-        _log = logging.getLogger("databox.persistence")
+        _log = logging.getLogger("dbfox.persistence")
         def _do(db: Session) -> None:
             from engine.agent_core import persistence as ap
             ap.create_or_get_session(db, type("Req", (), {
@@ -154,7 +154,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
 def create_persistence_sink(db: Session) -> AgentPersistenceSink:
     """Factory: create the appropriate sink based on AGENT_PERSISTENCE_MODE."""
     mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync").lower()
-    if os.environ.get("DATABOX_TESTING") == "1":
+    if os.environ.get("DBFOX_TESTING") == "1":
         return SessionPersistenceSink(db)
     if mode == "disabled":
         return NoopPersistenceSink()

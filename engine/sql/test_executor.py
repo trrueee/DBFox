@@ -29,7 +29,7 @@ from engine.errors import GuardrailValidationError
 from engine.models import DataSource
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
-logger = logging.getLogger("databox.sql.executor.test")
+logger = logging.getLogger("dbfox.sql.executor.test")
 
 
 def execute_query_for_test(
@@ -46,8 +46,8 @@ def execute_query_for_test(
     This is the **only** sanctioned way to bypass guardrails and is intended
     exclusively for test code.  It:
 
-    1. Checks ``guardrail_bypass_allowed()`` (requires ``DATABOX_TESTING=1``
-       and ``DATABOX_ALLOW_GUARDRAIL_BYPASS=1``; always denied in frozen
+    1. Checks ``guardrail_bypass_allowed()`` (requires ``DBFOX_TESTING=1``
+       and ``DBFOX_ALLOW_GUARDRAIL_BYPASS=1``; always denied in frozen
        builds).
     2. Logs a warning when bypass is used.
     3. Resolves the safety decision with ``bypass_guardrail=True``.
@@ -63,7 +63,7 @@ def execute_query_for_test(
             checks=[{
                 "rule": "trust_gate_bypass_disabled",
                 "level": "reject",
-                "message": "bypass_guardrail requires DATABOX_TESTING=1 and DATABOX_ALLOW_GUARDRAIL_BYPASS=1.",
+                "message": "bypass_guardrail requires DBFOX_TESTING=1 and DBFOX_ALLOW_GUARDRAIL_BYPASS=1.",
             }],
         )
 

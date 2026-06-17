@@ -45,7 +45,7 @@ export const ExportProcessor: ActionProcessor = {
 
   apply(action, plan) {
     const format = (action.args.type || "csv").toLowerCase() as "csv" | "json";
-    const path = action.args.path ?? action.args.filename ?? `databox_export.${format}`;
+    const path = action.args.path ?? action.args.filename ?? `dbfox_export.${format}`;
     plan.context.exportConfig = {
       enabled: true,
       format,

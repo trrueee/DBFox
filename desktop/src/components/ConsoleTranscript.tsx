@@ -256,7 +256,7 @@ export const ConsoleTranscript: React.FC<ConsoleTranscriptProps> = ({
       <button
         onClick={() =>
           downloadText(
-            `databox_export_${new Date().toISOString().slice(0, 10)}.csv`,
+            `dbfox_export_${new Date().toISOString().slice(0, 10)}.csv`,
             csvFromResult(block.result),
             "text/csv;charset=utf-8",
           )

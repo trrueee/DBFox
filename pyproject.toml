@@ -14,7 +14,7 @@ check_untyped_defs = false
 
 [tool.pytest.ini_options]
 markers = [
-    "e2e: end-to-end tests that require a real DataBox runtime and external services",
+    "e2e: end-to-end tests that require a real DBFox runtime and external services",
     "integration: tests that require external services (real API calls, etc.)",
     "slow: tests that take longer to run",
     "real_llm: tests that require real LLM API access (API key, etc.)",

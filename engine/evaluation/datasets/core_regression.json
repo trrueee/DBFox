@@ -1,5 +1,5 @@
 {
-  "description": "20 core regression cases for DataBox Agent. Covers chat, schema, semantic, sql_generation, data_lookup, policy, replan, artifact, answer categories.",
+  "description": "20 core regression cases for DBFox Agent. Covers chat, schema, semantic, sql_generation, data_lookup, policy, replan, artifact, answer categories.",
   "cases": [
     {
       "id": "chat_left_join_no_tools",
@@ -52,7 +52,7 @@
       "category": "chat",
       "description": "Product help questions must not call SQL execution.",
       "input": {
-        "question": "DataBox 怎么用？怎么连接数据库？",
+        "question": "DBFox 怎么用？怎么连接数据库？",
         "workspace_context": {}
       },
       "expected": {

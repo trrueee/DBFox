@@ -8,7 +8,7 @@ import re
 import time
 from typing import Any
 
-logger = logging.getLogger("databox.ai_index")
+logger = logging.getLogger("dbfox.ai_index")
 
 # ── Tokenization ────────────────────────────────────────────────────────────────
 

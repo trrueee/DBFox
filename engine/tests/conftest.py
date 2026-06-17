@@ -1,8 +1,8 @@
-"""Shared pytest fixtures for DataBox engine tests."""
+"""Shared pytest fixtures for DBFox engine tests."""
 import os
-os.environ["DATABOX_BYPASS_CONFIRMATION"] = "1"
-os.environ["DATABOX_TESTING"] = "1"
-os.environ["DATABOX_ALLOW_GUARDRAIL_BYPASS"] = "1"
+os.environ["DBFOX_BYPASS_CONFIRMATION"] = "1"
+os.environ["DBFOX_TESTING"] = "1"
+os.environ["DBFOX_ALLOW_GUARDRAIL_BYPASS"] = "1"
 
 # ---- LLM provider defaults for testing --------------------------------------
 # When a QWEN_API_KEY is set, auto-configure the OpenAI-compatible endpoint.
@@ -50,7 +50,7 @@ def _ensure_test_fts5(engine) -> None:
 
 @pytest.fixture
 def db_session():
-    """In-memory SQLite session — isolated from production databox_local.db.
+    """In-memory SQLite session — isolated from production dbfox_local.db.
 
     StaticPool ensures a single connection is reused so that tables created
     via Base.metadata.create_all are visible to the yielded session.
@@ -385,7 +385,7 @@ def mock_agent_progress_judge(monkeypatch):
     """Progress Judge requires LLM credentials; without real keys use the
     module's rule-based fallback (mirrors the legacy routing logic)."""
     import os
-    if os.environ.get("DATABOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
+    if os.environ.get("DBFOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
         return
 
     from engine.agent.nodes import progress_node

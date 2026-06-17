@@ -8,13 +8,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent import DataBoxAgentRuntime
+from engine.agent import DBFoxAgentRuntime
 from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
 from engine.evaluation.agent_case_evaluator import AgentCaseEvaluator
 from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
 from engine.schemas.agent_eval import AgentEvalRunRequest, AgentEvalRunResponse, AgentEvalCaseResultResponse
 
-logger = logging.getLogger("databox.agent_eval")
+logger = logging.getLogger("dbfox.agent_eval")
 
 
 class AgentEvalRunner:
@@ -71,7 +71,7 @@ class AgentEvalRunner:
         failed = 0
         total_latency = 0
         case_responses: list[AgentEvalCaseResultResponse] = []
-        runtime = DataBoxAgentRuntime(self.db)
+        runtime = DBFoxAgentRuntime(self.db)
 
         for task in tasks:
             try:

@@ -121,14 +121,14 @@ def test_windows_installer_uses_bundled_icon_for_distribution_shortcuts() -> Non
     wix = windows["wix"]
 
     assert bundle["targets"] == "all"
-    assert bundle["resources"]["icons/icon.ico"] == "databox-icon.ico"
+    assert bundle["resources"]["icons/icon.ico"] == "dbfox-icon.ico"
     assert nsis["installerIcon"] == "icons/icon.ico"
     assert nsis["uninstallerIcon"] == "icons/icon.ico"
     assert nsis["installerHooks"] == "nsis-hooks.nsh"
     assert wix["template"] == "wix-template.wxs"
 
     hooks = NSIS_HOOKS.read_text(encoding="utf-8")
-    assert "$INSTDIR\\databox-icon.ico" in hooks
+    assert "$INSTDIR\\dbfox-icon.ico" in hooks
     assert "$DESKTOP\\${PRODUCTNAME}.lnk" in hooks
     assert "$SMPROGRAMS\\${PRODUCTNAME}.lnk" in hooks
     assert "CreateShortcut" in hooks

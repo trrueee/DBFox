@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠</div>
           <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 8px" }}>
-            DataBox 启动异常
+            DBFox 启动异常
           </h1>
           <p style={{ fontSize: 14, color: "#888", maxWidth: 480, lineHeight: 1.6 }}>
             应用初始化时发生了未预期的错误。请尝试重启应用。

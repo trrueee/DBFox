@@ -7,12 +7,12 @@ from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 
 from engine.policy.gate import PolicyGate
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import message_tool_calls
 from engine.agent.tools.tool_aliases import to_internal
 
-logger = logging.getLogger("databox.databox_agent.nodes.policy_node")
+logger = logging.getLogger("dbfox.dbfox_agent.nodes.policy_node")
 
 
 def _step_name(tool_name: str) -> str:
@@ -34,7 +34,7 @@ def _step_name(tool_name: str) -> str:
     return step_names.get(tool_name, tool_name)
 
 
-def apply_policy(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     ctx = graph_context(config)
     registry = ctx.registry
     db = ctx.db

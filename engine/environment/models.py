@@ -1,4 +1,4 @@
-"""Environment data models for DataBox Agent.
+"""Environment data models for DBFox Agent.
 
 These models represent deterministic facts about the datasource environment.
 They do NOT contain business semantics, user intent, or LLM output.
@@ -73,7 +73,7 @@ class ForeignKeySnapshot(BaseModel):
 
 
 class CatalogSnapshot(BaseModel):
-    """Snapshot of the DataBox catalog for a datasource.
+    """Snapshot of the DBFox catalog for a datasource.
 
     Produced by EnvironmentService.get_catalog_snapshot().
     """

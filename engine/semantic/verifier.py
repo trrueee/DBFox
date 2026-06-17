@@ -25,7 +25,7 @@ from engine.semantic.models import (
     SemanticSource,
 )
 
-logger = logging.getLogger("databox.semantic.verifier")
+logger = logging.getLogger("dbfox.semantic.verifier")
 
 
 class VerificationIssue(BaseModel):

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-DataBox 数据库连接与迁移管理模块 (Database Connection & Migration Manager)
+DBFox 数据库连接与迁移管理模块 (Database Connection & Migration Manager)
 ------------------------------------------------------------------------
 这个模块负责：
-1. 配置和初始化 DataBox 本地 SQLite 元数据库。
+1. 配置和初始化 DBFox 本地 SQLite 元数据库。
 2. 建立与配置 SQLAlchemy ORM 引擎与会话工厂。
 3. 实现连接获取的生成器函数（供 FastAPI 依赖注入使用）。
 4. 在服务启动时，安全地执行数据库版本控制与结构平滑迁移（兼容老版本的手写 SQL 迁移并过渡到 Alembic 管理）。
@@ -17,7 +17,7 @@ import threading
 import traceback
 from pathlib import Path
 
-logger = logging.getLogger("databox.db")
+logger = logging.getLogger("dbfox.db")
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import Connection
@@ -25,17 +25,17 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from typing import Generator
 
 # 1. 动态持久化路径解析
-# 环境变量 DATABOX_DATABASE_URL 允许 eval farm 隔离每个 worker 的 SQLite DB
-_env_db_url = os.environ.get("DATABOX_DATABASE_URL", "")
+# 环境变量 DBFOX_DATABASE_URL 允许 eval farm 隔离每个 worker 的 SQLite DB
+_env_db_url = os.environ.get("DBFOX_DATABASE_URL", "")
 if _env_db_url:
     DATABASE_URL = _env_db_url
 else:
     is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
         from engine.runtime_paths import private_runtime_dir
-        DB_PATH = private_runtime_dir("data") / "databox_local.db"
+        DB_PATH = private_runtime_dir("data") / "dbfox_local.db"
     else:
-        DB_PATH = Path(__file__).resolve().parent.parent / "databox_local.db"
+        DB_PATH = Path(__file__).resolve().parent.parent / "dbfox_local.db"
     DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Ensure DB_PATH is available for backward compat (checkpointer imports it)
@@ -46,11 +46,11 @@ if "DB_PATH" not in dir():
 # semantics used by Agent tool execution: stale connections should be detected
 # before use, long-lived pooled connections should be recycled, and pool waits
 # should fail fast enough for the graph to route/retry instead of hanging.
-DB_POOL_SIZE = int(os.environ.get("DATABOX_DB_POOL_SIZE", "20"))
-DB_MAX_OVERFLOW = int(os.environ.get("DATABOX_DB_MAX_OVERFLOW", "20"))
-DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DATABOX_DB_POOL_RECYCLE_SECONDS", "1800"))
-DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DATABOX_DB_POOL_TIMEOUT_SECONDS", "30"))
-DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DATABOX_SQLITE_TIMEOUT_SECONDS", "30"))
+DB_POOL_SIZE = int(os.environ.get("DBFOX_DB_POOL_SIZE", "20"))
+DB_MAX_OVERFLOW = int(os.environ.get("DBFOX_DB_MAX_OVERFLOW", "20"))
+DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DBFOX_DB_POOL_RECYCLE_SECONDS", "1800"))
+DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DBFOX_DB_POOL_TIMEOUT_SECONDS", "30"))
+DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DBFOX_SQLITE_TIMEOUT_SECONDS", "30"))
 
 def configure_sqlite_pragmas(database_url: str = None) -> None:
     """Apply WAL / busy_timeout / synchronous PRAGMAs for SQLite databases.
@@ -198,7 +198,7 @@ def init_db() -> None:
     
     在 main.py 的 lifespan 启动勾子中调用。
     它负责：
-    1. 物理备份：修改表结构前，完整复制一份 `databox_local.db` 备用，防止迁移失败导致数据库损毁。
+    1. 物理备份：修改表结构前，完整复制一份 `dbfox_local.db` 备用，防止迁移失败导致数据库损毁。
     2. 兼容清理：若检测到极早期开发时手写的 `schema_migrations` 老旧迁移记录，则自动执行 v1~v10 的 SQL 平滑迁移。
     3. 移交 Alembic：利用 stamp 标记为 baseline，完成对主流数据库迁移工具 Alembic 的平滑过渡。
     4. 执行 Alembic：自动升级（upgrade head）到当前代码对应的最新表结构。

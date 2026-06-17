@@ -12,7 +12,7 @@ from typing import Any
 
 from engine.agent.skills.schemas import SkillSpec
 
-logger = logging.getLogger("databox.databox_agent.skills.loader")
+logger = logging.getLogger("dbfox.dbfox_agent.skills.loader")
 
 
 def load_skill_from_dict(raw: dict[str, Any]) -> SkillSpec | None:

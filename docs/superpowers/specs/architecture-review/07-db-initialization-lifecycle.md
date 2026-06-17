@@ -23,7 +23,7 @@ Import-time database work can make tests harder to isolate, can fail before logg
 - Move SQLite PRAGMA initialization into explicit startup lifecycle.
 - Keep WAL, busy timeout, and synchronous settings.
 - Preserve current behavior for FastAPI startup.
-- Make tests able to set `DATABOX_DATABASE_URL` before initialization.
+- Make tests able to set `DBFOX_DATABASE_URL` before initialization.
 
 ## Non-Goals
 
@@ -53,6 +53,6 @@ If the existing `engine` must still be module-level, ensure PRAGMA configuration
 
 ## Test Plan
 
-- Unit test importing `engine.db` with a temporary `DATABOX_DATABASE_URL` does not create the file until `init_db()` or the helper runs.
+- Unit test importing `engine.db` with a temporary `DBFOX_DATABASE_URL` does not create the file until `init_db()` or the helper runs.
 - Unit test `configure_sqlite_pragmas` applies WAL/busy timeout for SQLite.
 - Existing migration/startup tests pass.

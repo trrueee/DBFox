@@ -1,11 +1,11 @@
-# DataBox
+# DBFox
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![Node.js 20.19+](https://img.shields.io/badge/node-20.19+-green.svg)](https://nodejs.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2.x-24C8DB.svg)](https://tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-**DataBox — 本地优先、AI 原生的数据库工作台。**
+**DBFox — 本地优先、AI 原生的数据库工作台。**
 
 数据源管理、Schema 浏览、SQL 控制台、对话式问数 Agent 和执行安全策略，集成在同一个桌面应用里。
 
@@ -101,7 +101,7 @@ cd desktop && npm run tauri -- build
 
 产物：`desktop/src-tauri/target/release/bundle/msi/` 和 `nsis/`
 
-安装后若出现白屏，检查 `%TEMP%/databox-sidecar.log`。
+安装后若出现白屏，检查 `%TEMP%/dbfox-sidecar.log`。
 
 ---
 
@@ -140,7 +140,7 @@ cd desktop && npm run tauri -- build
 
 ## Agent 工具链
 
-当前 Agent 使用以下工具（注册于 `engine/tools/databox_tools.py`）：
+当前 Agent 使用以下工具（注册于 `engine/tools/dbfox_tools.py`）：
 
 | 工具组 | 工具 | 作用 |
 |--------|------|------|

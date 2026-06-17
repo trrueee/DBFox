@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from langgraph.graph import END, START, StateGraph
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.routes import (
     route_model_output,
     route_policy_output,
@@ -12,8 +12,8 @@ from engine.agent.graph.routes import (
 )
 
 
-def build_databox_react_graph(*, checkpointer=None) -> Any:
-    """Build the DataBox Agent ReAct graph — pure ReAct loop with state-machine guarantees.
+def build_dbfox_react_graph(*, checkpointer=None) -> Any:
+    """Build the DBFox Agent ReAct graph — pure ReAct loop with state-machine guarantees.
 
     Flow:
         START → model → policy → tools → observe → progress → model/repair/finalize
@@ -36,7 +36,7 @@ def build_databox_react_graph(*, checkpointer=None) -> Any:
     from engine.agent.nodes.finalize_node import finalize_answer
     from engine.agent.nodes.approval_node import approval_interrupt
 
-    graph = StateGraph(DataBoxAgentState)
+    graph = StateGraph(DBFoxAgentState)
 
     # ---- Nodes -----------------------------------------------------------
     graph.add_node("model", call_model)

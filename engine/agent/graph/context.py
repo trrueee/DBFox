@@ -38,13 +38,13 @@ class GraphRuntimeContext:
     def has_llm_credentials(self) -> bool:
         """True when an LLM API key is available (env or config)."""
         import os
-        if os.environ.get("DATABOX_TESTING") == "1":
+        if os.environ.get("DBFOX_TESTING") == "1":
             return True
         return bool(
             (self.api_key
              or os.environ.get("OPENAI_API_KEY")
              or os.environ.get("QWEN_API_KEY")
-             or os.environ.get("DATABOX_LLM_API_KEY")
+             or os.environ.get("DBFOX_LLM_API_KEY")
              or "").strip()
         )
 

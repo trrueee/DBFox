@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import (
     DEFAULT_PROJECT_ID,
     DataSource,
@@ -21,7 +21,7 @@ from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateReq
 from engine.schema_sync import build_er_diagram_data
 from engine.schema_sync_safe import sync_schema
 
-logger = logging.getLogger("databox.api.datasources")
+logger = logging.getLogger("dbfox.api.datasources")
 router = APIRouter()
 
 
@@ -162,7 +162,7 @@ def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, check
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     try:
         return test_connection(req.model_dump())
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
         logger.exception("Connection test failed")
@@ -229,7 +229,7 @@ def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(ge
     except HTTPException:
         db.rollback()
         raise
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
@@ -313,7 +313,7 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
     except HTTPException:
         db.rollback()
         raise
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception:
@@ -351,7 +351,7 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "message": result.get("message", "连接健康检查通过。"),
             "datasource": _datasource_to_dict(datasource),
         }
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         latency_ms = int((time.perf_counter() - started) * 1000)
         _persist_health_failure(datasource, str(exc), latency_ms, checked_at)
         db.commit()

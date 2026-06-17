@@ -9,7 +9,7 @@ from engine.db import get_db
 from engine.models import ChatConversation, AgentSession
 from engine.agent_core.persistence import sync_chat_conversation_from_session
 
-logger = logging.getLogger("databox.api.conversations")
+logger = logging.getLogger("dbfox.api.conversations")
 router = APIRouter()
 
 

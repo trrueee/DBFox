@@ -1,7 +1,7 @@
 """
 ⚠️ DEPRECATED — 此启动器已废弃。
 
-DataBox 推荐的启动方式:
+DBFox 推荐的启动方式:
 
   浏览器开发模式:
     pip install -r requirements.txt
@@ -52,7 +52,7 @@ def _check_frontend_deps():
 
 def run_backend():
     """Launch the FastAPI server engine with hot reload in dev."""
-    print(">>> 正在启动 DataBox 安全审计及 AI 引擎后台 (热更新: engine/*.py)...")
+    print(">>> 正在启动 DBFox 安全审计及 AI 引擎后台 (热更新: engine/*.py)...")
     backend_path = os.path.dirname(os.path.abspath(__file__))
     return subprocess.Popen(
         [sys.executable, "-m", "engine.main", "--reload"],
@@ -77,7 +77,7 @@ def main():
     os.chdir(root_dir)
     
     print("=================================================================")
-    print("   DataBox — 浏览器开发模式启动器 (遗留)")
+    print("   DBFox — 浏览器开发模式启动器 (遗留)")
     print("   推荐使用: cd desktop && npm run tauri dev")
     print("=================================================================")
 
@@ -110,7 +110,7 @@ def main():
         webbrowser.open("http://localhost:5173")
         
         print("\n=================================================================")
-        print("[★] DataBox 服务集群已全数启动成功！")
+        print("[★] DBFox 服务集群已全数启动成功！")
         print("  - 安全后端核心: http://127.0.0.1:18625")
         print("  - 前端开发页面: http://localhost:5173 (浏览器已为您自动打开)")
         print("  - 退出程序: 请在此终端按下 Ctrl+C 键，系统将安全地回收全部进程。")
@@ -121,7 +121,7 @@ def main():
             time.sleep(1)
             
     except KeyboardInterrupt:
-        print("\n>>> 正在安全回收和终止 DataBox 后端及前端进程...")
+        print("\n>>> 正在安全回收和终止 DBFox 后端及前端进程...")
     finally:
         if backend_proc:
             backend_proc.terminate()
@@ -131,7 +131,7 @@ def main():
                 subprocess.call(f"taskkill /F /T /PID {frontend_proc.pid}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 frontend_proc.terminate()
-        print("[+] 所有服务进程已回收。谢谢使用 DataBox！")
+        print("[+] 所有服务进程已回收。谢谢使用 DBFox！")
 
 if __name__ == "__main__":
     main()

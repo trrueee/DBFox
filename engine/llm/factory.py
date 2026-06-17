@@ -47,13 +47,13 @@ def get_chat_model(
 ) -> "ChatOpenAI":
     """Build a ChatOpenAI client from explicit args, falling back to env vars.
 
-    This is the single entry point for ALL LLM access in the DataBox engine.
+    This is the single entry point for ALL LLM access in the DBFox engine.
     """
     key = (
         api_key
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("QWEN_API_KEY")
-        or os.environ.get("DATABOX_LLM_API_KEY")
+        or os.environ.get("DBFOX_LLM_API_KEY")
         or ""
     ).strip()
     base = (

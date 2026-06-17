@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the approved DataBox-style data source management console with create, edit, delete, health check, Schema sync, and active-source switching.
+**Goal:** Build the approved DBFox-style data source management console with create, edit, delete, health check, Schema sync, and active-source switching.
 
 **Architecture:** Add a minimal backend update endpoint, extend the frontend API/payload layer, then rebuild `DataSourcesPage` around an explicit `detail | create | edit` mode. Keep the selected management row separate from the active workbench data source so browsing management details does not accidentally change workspace context.
 
-**Tech Stack:** FastAPI, SQLAlchemy, Pydantic, pytest, React 19, TypeScript, Vitest, Testing Library, existing DataBox CSS tokens.
+**Tech Stack:** FastAPI, SQLAlchemy, Pydantic, pytest, React 19, TypeScript, Vitest, Testing Library, existing DBFox CSS tokens.
 
 ---
 
@@ -20,7 +20,7 @@
 - `desktop/src/lib/api/datasources.ts`: Exposes `updateDatasource`.
 - `desktop/src/pages/DataSourcesPage.tsx`: Renders the management console and handles page state/actions.
 - `desktop/src/pages/__tests__/DataSourcesPage.test.tsx`: Covers management view behavior, create/edit/delete flows, and reused tab mode switching.
-- `desktop/src/App.css`: Adds focused DataBox-style management console layout classes.
+- `desktop/src/App.css`: Adds focused DBFox-style management console layout classes.
 - `desktop/src/__tests__/datasourceTabs.test.ts`: Keeps the reused settings tab behavior covered with stable UTF-8 assertions.
 
 ## Task 1: Backend Update Endpoint
@@ -316,7 +316,7 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
     except HTTPException:
         db.rollback()
         raise
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception:
@@ -683,7 +683,7 @@ Run: `cd desktop; npm test -- src/pages/__tests__/DataSourcesPage.test.tsx`
 
 Expected: PASS.
 
-## Task 5: DataBox Styling
+## Task 5: DBFox Styling
 
 **Files:**
 - Modify: `desktop/src/App.css`

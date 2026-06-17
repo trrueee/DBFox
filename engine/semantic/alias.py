@@ -12,7 +12,7 @@ import numpy as np
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-logger = logging.getLogger("databox.semantic.alias")
+logger = logging.getLogger("dbfox.semantic.alias")
 
 DEFAULT_ALIASES: dict[str, str] = {
     "销售额": "orders.total_amount",

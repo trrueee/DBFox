@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickknapton88/tauri-docs/v2.11.2/src/content/docs/reference/config/schema.json",
-  "productName": "DataBox",
+  "productName": "DBFox",
   "version": "1.0.0",
-  "identifier": "com.databox.desktop",
+  "identifier": "com.dbfox.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "DataBox - AI 问数数据库客户端",
+        "title": "DBFox - AI 问数数据库客户端",
         "width": 1400,
         "height": 900,
         "minWidth": 1024,
@@ -40,10 +40,10 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "icons/icon.ico": "databox-icon.ico"
+      "icons/icon.ico": "dbfox-icon.ico"
     },
     "externalBin": [
-      "binaries/databox-engine"
+      "binaries/dbfox-engine"
     ],
     "windows": {
       "wix": {

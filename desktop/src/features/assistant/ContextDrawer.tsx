@@ -1,5 +1,5 @@
 import { Info, Sparkles, X } from "lucide-react";
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 
 interface ContextDrawerProps {
   open: boolean;

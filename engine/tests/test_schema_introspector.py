@@ -96,7 +96,7 @@ def _add_datasource(db_session, db_type: str) -> DataSource:
         host="127.0.0.1",
         port=5432 if db_type == "postgres" else 0,
         database_name="analytics",
-        username="databox",
+        username="dbfox",
         password_ciphertext="",
         password_nonce="",
         status="active",

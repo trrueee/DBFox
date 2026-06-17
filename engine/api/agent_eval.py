@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.evaluation.agent_eval import AgentEvalRunner
 from engine.evaluation.benchmarks.importer import import_benchmark_cases, load_and_import_benchmark, _get_adapter
 from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
@@ -23,7 +23,7 @@ from engine.schemas.agent_eval import (
     AgentGoldenTaskUpdateRequest,
 )
 
-logger = logging.getLogger("databox.api.agent_eval")
+logger = logging.getLogger("dbfox.api.agent_eval")
 router = APIRouter()
 
 
@@ -182,7 +182,7 @@ def api_import_benchmark(req: AgentBenchmarkImportRequest, db: Session = Depends
             total_imported=len(tasks),
             task_ids=[str(t.id) for t in tasks],
         )
-    except DataBoxError:
+    except DBFoxError:
         raise
     except Exception as exc:
         logger.exception("Benchmark import failed")
@@ -194,7 +194,7 @@ def api_run_eval(req: AgentEvalRunRequest, db: Session = Depends(get_db)) -> Any
     try:
         runner = AgentEvalRunner(db)
         return runner.run(req)
-    except DataBoxError as exc:
+    except DBFoxError as exc:
         raise HTTPException(status_code=400, detail={"code": exc.code, "message": str(exc)})
     except Exception as exc:
         logger.exception("Agent eval run failed")

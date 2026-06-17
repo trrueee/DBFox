@@ -26,7 +26,7 @@ def default_reload_enabled() -> bool:
 
 
 def run_engine_server(*, reload: bool | None = None) -> None:
-    """Start the local DataBox engine. Dev mode watches engine/*.py for changes."""
+    """Start the local DBFox engine. Dev mode watches engine/*.py for changes."""
     # When built with --noconsole (Windows GUI subsystem), sys.stdout / sys.stderr
     # are None and uvicorn's logging layer crashes.  Give them a harmless fallback.
     if sys.stdout is None:

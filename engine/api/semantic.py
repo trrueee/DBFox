@@ -28,7 +28,7 @@ from engine.schemas import (
     WorkspaceTableScopeUpdateRequest,
 )
 
-logger = logging.getLogger("databox.api.semantic")
+logger = logging.getLogger("dbfox.api.semantic")
 router = APIRouter()
 
 

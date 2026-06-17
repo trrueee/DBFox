@@ -7,7 +7,7 @@ import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMe
 import { DataSourceTree } from "./features/datasource/DataSourceTree";
 import { useAgentRunner } from "./features/agentTask/useAgentRunner";
 import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
-import { type ContextMenuState } from "./mock/databoxMock";
+import { type ContextMenuState } from "./mock/dbfoxMock";
 import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { CommandPalette } from "./components/CommandPalette";
 import TitleBar from "./components/TitleBar";

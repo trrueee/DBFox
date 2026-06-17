@@ -38,9 +38,9 @@ class TestConfigureSqlitePragmas:
         assert db_path.exists()
 
     def test_import_db_does_not_create_file(self, tmp_path: Path, monkeypatch) -> None:
-        """Importing engine.db with a temp DATABOX_DATABASE_URL must not create the file."""
+        """Importing engine.db with a temp DBFOX_DATABASE_URL must not create the file."""
         db_path = tmp_path / "import_test.db"
-        monkeypatch.setenv("DATABOX_DATABASE_URL", f"sqlite:///{db_path}")
+        monkeypatch.setenv("DBFOX_DATABASE_URL", f"sqlite:///{db_path}")
         # Remove cached module so it re-imports with the new env var
         mod_name = "engine.db"
         saved = sys.modules.pop(mod_name, None)

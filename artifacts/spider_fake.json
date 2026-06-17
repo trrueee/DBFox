@@ -9,7 +9,7 @@
     "execution_accuracy": 0.0,
     "avg_latency_ms": 0.0,
     "runner_mode": "fake",
-    "is_databox_score": false
+    "is_dbfox_score": false
   },
   "cases": [
     {
