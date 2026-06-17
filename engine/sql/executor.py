@@ -726,19 +726,12 @@ def _run_approved_query(
         "maxResponseBytes": MAX_RESPONSE_BYTES,
         "warnings": warnings,
         "notices": notices,
-        # Timing latency breakdown properties (camelCase for frontend TS, snake_case for Python tests)
         "connectMs": connect_ms,
         "guardrailMs": guardrail_ms,
         "executeMs": execute_ms,
         "fetchMs": fetch_ms,
         "serializeMs": serialize_ms,
         "totalMs": latency_ms,
-        "connect_ms": connect_ms,
-        "guardrail_ms": guardrail_ms,
-        "execute_ms": execute_ms,
-        "fetch_ms": fetch_ms,
-        "serialize_ms": serialize_ms,
-        "total_ms": latency_ms,
     }
 
 
