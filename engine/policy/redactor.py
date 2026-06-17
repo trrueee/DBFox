@@ -9,14 +9,35 @@ class DataRedactor:
 
     # Regular expressions for PII detection
     EMAIL_REGEX = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
-    PHONE_REGEX = re.compile(r"\b(?:\+?\d{1,3}[- ]?)?1[3-9]\d{9}\b|\b(?:\+?\d{1,3}[- ]?)?\d{3,4}[- ]\d{7,8}\b")
-    CREDIT_CARD_REGEX = re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b")
+    PHONE_REGEX = re.compile(
+        r"(?<!\d)(?:\+?86[-.\s]?)?1[3-9]\d{9}(?!\d)"
+        r"|(?<!\d)(?:\+?86[-.\s]?)?\d{3,4}[-\s]\d{7,8}(?!\d)"
+        r"|(?<![\d-])(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}(?![\d-])"
+    )
+    CREDIT_CARD_REGEX = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
     
     # Matches assignment of credential values in SQL (e.g. password = 'value' or SET PASSWORD = 'value')
     # It dynamically captures typical credential keyword names and masks the string literals.
     CREDENTIAL_ASSIGN_REGEX = re.compile(
         r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b\s*=\s*'[^']+'"
     )
+
+    @staticmethod
+    def _luhn_valid(digits: str) -> bool:
+        if not (13 <= len(digits) <= 19) or len(set(digits)) == 1:
+            return False
+
+        total = 0
+        double = False
+        for char in reversed(digits):
+            value = int(char)
+            if double:
+                value *= 2
+                if value > 9:
+                    value -= 9
+            total += value
+            double = not double
+        return total % 10 == 0
 
     @classmethod
     def redact_sql(cls, sql_str: str) -> str:
@@ -39,7 +60,12 @@ class DataRedactor:
         # 3. Redact Phone Numbers
         scrubbed = cls.PHONE_REGEX.sub("[REDACTED_PHONE]", scrubbed)
 
-        # 4. Redact Credit Cards
-        scrubbed = cls.CREDIT_CARD_REGEX.sub("[REDACTED_CARD]", scrubbed)
+        # 4. Redact Luhn-valid Credit Cards
+        def replace_card(match: re.Match[str]) -> str:
+            candidate = match.group(0)
+            digits = re.sub(r"\D", "", candidate)
+            return "[REDACTED_CARD]" if cls._luhn_valid(digits) else candidate
+
+        scrubbed = cls.CREDIT_CARD_REGEX.sub(replace_card, scrubbed)
 
         return scrubbed
