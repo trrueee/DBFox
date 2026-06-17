@@ -9,6 +9,7 @@ Design principles:
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from engine.agent_core.tool_registry import ToolContext
 from engine.agent_core.types import ToolObservation
-from engine.errors import GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError
+from engine.errors import DBFoxError, GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError, ToolInputError
 from engine.models import DataSource, QueryHistory, SchemaColumn, SchemaTable, SchemaSearchDoc, SemanticAlias
 from engine.ai_index import tokenize_query
 from engine.policy.redactor import DataRedactor
@@ -55,11 +56,50 @@ _SENSITIVE_FALLBACK = re.compile("|".join(_SENSITIVE_PATTERN_STRINGS), re.IGNORE
 
 
 # ===================================================================
+# tool handler decorator — unified error → ToolObservation mapping
+# ===================================================================
+
+
+def tool_handler(name: str):
+    """Decorator: wraps a tool handler so exceptions become ToolObservation.
+
+    The decorated function returns a plain ``dict`` on success or raises:
+      - ``ToolInputError``     → ``status="failed"`` (user-facing message)
+      - ``ValueError``         → ``status="failed"`` (legacy compat)
+      - ``DBFoxError``         → ``status="failed"`` with structured error
+      - ``Exception``          → ``status="failed"`` with log
+    """
+
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+            start = time.perf_counter()
+            try:
+                output = fn(ctx, args)
+                return _success(name, args, output, start)
+            except ToolInputError as exc:
+                return _failed(name, args, str(exc), start)
+            except ValueError as exc:
+                return _failed(name, args, str(exc), start)
+            except DBFoxError as exc:
+                logger.exception("Tool %s failed", name)
+                return _execution_failed(name, args, exc, start)
+            except Exception as exc:
+                logger.exception("Tool %s failed unexpectedly", name)
+                return _execution_failed(name, args, exc, start)
+
+        return wrapper
+
+    return decorator
+
+
+# ===================================================================
 # public tool handlers
 # ===================================================================
 
 
-def db_observe(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+@tool_handler("db.observe")
+def db_observe(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Return the database map — tables, domains, counts, query stats.
 
     Modes
@@ -68,7 +108,6 @@ def db_observe(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     - ``"schema"``:  like overview but scoped to one schema.
     - ``"tables"``:  detailed cards for a specific list of tables.
     """
-    start = time.perf_counter()
     mode = _validate_mode(args.get("mode"))
     table_names = _string_list(args.get("table_names"))
 
@@ -94,12 +133,12 @@ def db_observe(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
         output["tables"] = [_table_card(ctx.db, ds.id, table) for table in selected]
         output["missing_tables"] = _missing_table_names(tables, table_names)
 
-    return _success("db.observe", args, output, start)
+    return output
 
 
-def db_search(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+@tool_handler("db.search")
+def db_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Search tables and columns via FTS5 when AI-enriched; fallback to keyword otherwise."""
-    start = time.perf_counter()
     query = str(args.get("query") or ctx.request.question or "").strip()
     limit = _clamp(int(args.get("limit", DEFAULT_SEARCH_LIMIT) or DEFAULT_SEARCH_LIMIT), 1, 50)
 
@@ -116,51 +155,43 @@ def db_search(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     else:
         results = _fallback_keyword_search(ctx, query, limit)
 
-    output = {
+    return {
         "query": query,
         "results": results,
         "total_matches": len(results),
     }
-    return _success("db.search", args, output, start)
 
 
-def db_inspect(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+@tool_handler("db.inspect")
+def db_inspect(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Live introspection of a table or column from the real database.
 
     Connects to the live database and runs system introspection queries
     (``information_schema``, ``pg_catalog``, ``PRAGMA``) to return the
     current structure — not a stale catalog snapshot.
     """
-    start = time.perf_counter()
     target = str(args.get("target") or "").strip()
     if not target:
-        return _failed("db.inspect", args, "target is required (table or table.column).", start)
+        raise ToolInputError("target is required (table or table.column).")
 
     ds_id = ctx.request.datasource_id
     cache_key = (ds_id, target)
     cached_output = _INSPECT_CACHE.get(cache_key)
     if cached_output is not None:
         logger.info("db.inspect cache hit for %s", target)
-        return _success("db.inspect", args, cached_output, start)
+        return cached_output
 
     ds = _datasource(ctx.db, ds_id)
     dialect = (ds.db_type or "mysql").lower()
 
-    try:
-        if dialect == "sqlite":
-            output = _sqlite_inspect_detail(ctx.db, ds, target)
-        elif dialect == "postgres" or dialect == "postgresql":
-            output = _pg_inspect_detail(ctx.db, ds, target)
-        else:
-            output = _mysql_inspect_detail(ctx.db, ds, target)
-        _INSPECT_CACHE.set(cache_key, output)
-    except ValueError as exc:
-        return _failed("db.inspect", args, str(exc), start)
-    except Exception as exc:
-        logger.exception("db.inspect failed for %s", target)
-        return _failed("db.inspect", args, f"Inspect error: {exc}", start)
-
-    return _success("db.inspect", args, output, start)
+    if dialect == "sqlite":
+        output = _sqlite_inspect_detail(ctx.db, ds, target)
+    elif dialect == "postgres" or dialect == "postgresql":
+        output = _pg_inspect_detail(ctx.db, ds, target)
+    else:
+        output = _mysql_inspect_detail(ctx.db, ds, target)
+    _INSPECT_CACHE.set(cache_key, output)
+    return output
 
 
 def db_preview(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
@@ -289,30 +320,35 @@ def db_remember(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
     - ``business_definition`` — a named business metric with SQL + description
     """
     start = time.perf_counter()
-    memory_type = str(args.get("type") or "").strip()
-    target = str(args.get("target") or "").strip()
-    evidence = str(args.get("evidence") or args.get("description") or "").strip()
+    try:
+        memory_type = str(args.get("type") or "").strip()
+        target = str(args.get("target") or "").strip()
+        evidence = str(args.get("evidence") or args.get("description") or "").strip()
 
-    if not memory_type or not target:
-        return _failed("db.remember", args, "type and target are required.", start)
+        if not memory_type or not target:
+            raise ToolInputError("type and target are required.")
 
-    ds = _datasource(ctx.db, ctx.request.datasource_id)
-    # Determine whether user confirmation is required
-    needs_approval = _remember_needs_approval(ds, memory_type)
+        ds = _datasource(ctx.db, ctx.request.datasource_id)
+        needs_approval = _remember_needs_approval(ds, memory_type)
 
-    if memory_type in ("table_alias", "column_alias"):
-        return _remember_alias(ctx, args, target, memory_type, evidence, start)
+        if memory_type in ("table_alias", "column_alias"):
+            return _remember_alias(ctx, args, target, memory_type, evidence, start)
+        if memory_type == "column_values":
+            return _remember_column_values(ctx, args, target, evidence, needs_approval, start)
+        if memory_type == "join_path":
+            return _remember_join_path(ctx, args, target, evidence, needs_approval, start)
+        if memory_type == "business_definition":
+            return _remember_business_def(ctx, args, target, evidence, needs_approval, start)
 
-    if memory_type == "column_values":
-        return _remember_column_values(ctx, args, target, evidence, needs_approval, start)
-
-    if memory_type == "join_path":
-        return _remember_join_path(ctx, args, target, evidence, needs_approval, start)
-
-    if memory_type == "business_definition":
-        return _remember_business_def(ctx, args, target, evidence, needs_approval, start)
-
-    return _failed("db.remember", args, f"Unknown memory type: {memory_type}", start)
+        raise ToolInputError(f"Unknown memory type: {memory_type}")
+    except ToolInputError:
+        raise
+    except DBFoxError as exc:
+        logger.exception("db.remember failed")
+        return _execution_failed("db.remember", args, exc, start)
+    except Exception as exc:
+        logger.exception("db.remember failed unexpectedly")
+        return _execution_failed("db.remember", args, exc, start)
 
 
 # ===================================================================
