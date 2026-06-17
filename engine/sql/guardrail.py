@@ -33,8 +33,14 @@ BLOCKED_SCHEMAS = {
     "sqlite_temp_master",
 }
 
+import re
+
 # Dangerous functions we must block
-DANGEROUS_FUNCTIONS = {"sleep", "benchmark", "load_file", "database", "user", "current_user", "version"}
+DANGEROUS_FUNCTIONS = {
+    "sleep", "benchmark", "load_file", "database", "user", "current_user", "version",
+    "pg_sleep", "pg_read_file", "pg_write_file", "lo_import", "lo_export", "query_to_xml",
+    "sys_eval", "sys_exec", "xp_cmdshell"
+}
 
 # sqlglot normalizes some MySQL functions into dedicated expression types, so
 # string-based function-name checks are not enough for these security rules.
@@ -54,7 +60,44 @@ BLOCKED_COMMAND_TYPES = (
     exp.Alter,
     exp.Command,
     exp.Merge,
+    exp.Execute,
+    exp.TruncateTable,
+    exp.LoadData,
+    exp.Copy,
 )
+
+def count_statement_delimiters(sql: str) -> int:
+    """Counts the number of semicolons that are not inside string literals or comments."""
+    # Remove single line comments. MySQL requires a whitespace (space/tab/newline
+    # etc.) after `--` for the rest of the line to be treated as a comment.
+    # `--word` is NOT a comment in MySQL.
+    sql = re.sub(r"--(?:[ \t]+.*|$)", "", sql, flags=re.MULTILINE)
+    # Remove multi-line comments
+    sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    
+    in_single_quote = False
+    in_double_quote = False
+    in_backtick = False
+    escaped = False
+    semicolons = 0
+    
+    for char in sql:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "'" and not in_double_quote and not in_backtick:
+            in_single_quote = not in_single_quote
+        elif char == '"' and not in_single_quote and not in_backtick:
+            in_double_quote = not in_double_quote
+        elif char == '`' and not in_single_quote and not in_double_quote:
+            in_backtick = not in_backtick
+        elif char == ';' and not in_single_quote and not in_double_quote and not in_backtick:
+            semicolons += 1
+            
+    return semicolons
 
 def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     """
@@ -97,6 +140,21 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             "safeSql": "",
             "checks": [{"rule": "sql_too_long", "level": "reject", "message": "SQL 语句长度不能超过 20000 字符"}],
             "message": "拒绝执行：SQL 语句过长"
+        }
+
+    # Pre-parse multi-statement check using our custom delimiter counter
+    semicolons = count_statement_delimiters(sql_str)
+    if semicolons > 1 or (semicolons == 1 and not sql_str.strip().endswith(";")):
+        return {
+            "result": "reject",
+            "originalSql": sql_str,
+            "safeSql": "",
+            "checks": [{
+                "rule": "multi_statement",
+                "level": "reject",
+                "message": "检测到多条 SQL 语句。出于安全策略，每次仅允许执行单条 SELECT 语句。"
+            }],
+            "message": "拒绝执行：检测到多语句注入"
         }
 
     # Map input dialect to standard sqlglot dialect name
@@ -145,9 +203,11 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             return is_select_node(node.left) and is_select_node(node.right)  # type: ignore[arg-type]
         if isinstance(node, exp.Subquery):
             return is_select_node(node.this)
+        if isinstance(node, exp.With):
+            return is_select_node(node.this)
         return False
 
-    if not is_select_node(expression):
+    if not isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With)) or not is_select_node(expression):
         checks.append({
             "rule": "select_only",
             "level": "reject",

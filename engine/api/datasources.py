@@ -426,6 +426,10 @@ def api_delete_datasource(
         from engine.datasource import close_active_tunnel
         close_active_tunnel(id)
 
+        # Also dispose of the connection pool associated with this datasource
+        from engine.sql.pool_registry import get_pool_registry
+        get_pool_registry().dispose_datasource(id)
+
         db.delete(datasource)
         db.commit()
         return {"success": True, "message": "数据源已删除"}
@@ -435,6 +439,20 @@ def api_delete_datasource(
         raise HTTPException(
             status_code=500,
             detail={"code": "DATASOURCE_DELETE_FAILED", "message": "删除数据源失败，请稍后重试。"},
+        )
+
+
+@router.post("/datasources/{id}/release")
+def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+    try:
+        from engine.sql.pool_registry import get_pool_registry
+        get_pool_registry().dispose_datasource(id)
+        return {"success": True, "message": "数据源连接池已成功释放"}
+    except Exception as exc:
+        logger.exception("Failed to release datasource connection pool")
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "RELEASE_FAILED", "message": f"释放连接池失败: {exc}"}
         )
 
 

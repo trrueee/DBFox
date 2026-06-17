@@ -34,9 +34,42 @@ def build_agent_core_checkpointer(
         logger.warning("langgraph-checkpoint-sqlite is not installed; falling back to in-memory LangGraph checkpoints.")
         return InMemorySaver()
 
-    os.environ.setdefault("LANGGRAPH_STRICT_MSGPACK", "true")
     checkpoint_path = Path(path) if path is not None else DB_PATH.with_name("dbfox_agent_core_checkpoints.sqlite")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    current_version = "v1"
+    version_file = checkpoint_path.with_name(f"{checkpoint_path.name}.version")
+    should_reset = False
+    
+    if checkpoint_path.exists():
+        if version_file.exists():
+            try:
+                saved_version = version_file.read_text(encoding="utf-8").strip()
+                if saved_version != current_version:
+                    logger.warning("Checkpointer version mismatch: expected %s, got %s. Resetting checkpoint database.", current_version, saved_version)
+                    should_reset = True
+            except Exception as e:
+                logger.error("Failed to read checkpointer version: %s. Resetting.", e)
+                should_reset = True
+        else:
+            logger.warning("Checkpointer version file missing. Resetting checkpoint database to ensure compatibility.")
+            should_reset = True
+
+    if should_reset:
+        try:
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                p = checkpoint_path.with_name(f"{checkpoint_path.name}{suffix}")
+                if p.exists():
+                    p.unlink()
+            if version_file.exists():
+                version_file.unlink()
+        except Exception as e:
+            logger.error("Failed to delete stale checkpoint database: %s", e)
+
+    try:
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        version_file.write_text(current_version, encoding="utf-8")
+    except Exception as e:
+        logger.error("Failed to write checkpointer version: %s", e)
 
     active_stack = stack or _CHECKPOINTER_STACK
     checkpointer = active_stack.enter_context(SqliteSaver.from_conn_string(str(checkpoint_path)))

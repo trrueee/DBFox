@@ -33,4 +33,7 @@ export const datasourcesApi = {
 
   syncSchema: (id: string) =>
     request<SchemaSyncResult>(`/datasources/${id}/sync`, { method: "POST" }),
+
+  releaseDatasource: (id: string) =>
+    request<{ success: boolean; message: string }>(`/datasources/${id}/release`, { method: "POST" }),
 };
