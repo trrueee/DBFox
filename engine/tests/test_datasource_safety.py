@@ -40,7 +40,7 @@ def test_postgres_ssl_params_map_shared_fields() -> None:
 from unittest.mock import MagicMock, patch
 from engine.datasource import TUNNEL_MANAGER, get_or_create_tunnel_for_dict, open_temporary_tunnel
 
-@patch("engine.datasource.SSHTunnelForwarder")
+@patch("engine.tunnel.SSHTunnelForwarder")
 def test_temporary_tunnel_stops_on_success_and_failure(mock_tunnel_class) -> None:
     mock_tunnel = MagicMock()
     mock_tunnel.local_bind_port = 12345
@@ -94,7 +94,7 @@ def test_temporary_tunnel_stops_on_success_and_failure(mock_tunnel_class) -> Non
         mock_tunnel.stop.assert_called_once()
 
 
-@patch("engine.datasource.SSHTunnelForwarder")
+@patch("engine.tunnel.SSHTunnelForwarder")
 def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> None:
     mock_tunnel = MagicMock()
     mock_tunnel.local_bind_port = 12345
@@ -125,7 +125,7 @@ def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> N
             "ssh_password_nonce": "nonce",
         }
 
-        with patch("engine.datasource.decrypt_password", return_value="plain"):
+        with patch("engine.tunnel.decrypt_password", return_value="plain"):
             res = run_test_connection(config)
             assert res["ok"] is True
             mock_tunnel.start.assert_called_once()
@@ -135,7 +135,7 @@ def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> N
             mock_tunnel.stop.assert_called_once()
 
 
-@patch("engine.datasource.TUNNEL_MANAGER")
+@patch("engine.tunnel.TUNNEL_MANAGER")
 def test_close_active_tunnel_calls_manager(mock_manager) -> None:
     from engine.datasource import close_active_tunnel
     close_active_tunnel("some_id")
