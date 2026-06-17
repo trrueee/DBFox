@@ -21,9 +21,8 @@ router = APIRouter()
 def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
     """Return the JSON-safe guardrail payload exposed by public APIs.
 
-    guardrail_check keeps internal parser artifacts such as _parsed_ast so
-    TrustGate can validate schema against the SQL AST. Those objects are not
-    JSON serializable and must never be returned to the browser.
+    Defensive filtering keeps internal-only fields out of browser responses if
+    future guardrail helpers add private artifacts.
     """
     return {key: value for key, value in result.items() if not key.startswith("_")}
 

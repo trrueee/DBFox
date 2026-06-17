@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from typing import NotRequired, TypedDict
 
+import logging
+import re
+
 import sqlglot
 from sqlglot import exp
 
 from engine.errors import GuardrailValidationError
+
+logger = logging.getLogger("dbfox.guardrail")
 
 
 class GuardrailCheck(TypedDict):
@@ -32,8 +37,6 @@ BLOCKED_SCHEMAS = {
     "sqlite_master",
     "sqlite_temp_master",
 }
-
-import re
 
 # Dangerous functions we must block
 DANGEROUS_FUNCTIONS = {
@@ -65,6 +68,42 @@ BLOCKED_COMMAND_TYPES = (
     exp.LoadData,
     exp.Copy,
 )
+
+
+def _sqlglot_dialect(dialect: str) -> str:
+    dialect_lower = dialect.lower() if dialect else "mysql"
+    if "postgres" in dialect_lower:
+        return "postgres"
+    if "sqlite" in dialect_lower:
+        return "sqlite"
+    return "mysql"
+
+
+def guardrail_parsed_ast(sql_str: str, dialect: str = "mysql") -> exp.Expression | None:
+    """Return a parsed AST for trusted internal consumers, or None if unavailable."""
+    sql_str = sql_str.strip()
+    if not sql_str:
+        return None
+
+    try:
+        expressions = sqlglot.parse(sql_str, read=_sqlglot_dialect(dialect))
+    except Exception:
+        return None
+    if len(expressions) != 1 or not expressions[0]:
+        return None
+    return expressions[0]  # type: ignore[return-value]
+
+
+def guardrail_check_with_ast(
+    sql_str: str,
+    dialect: str = "mysql",
+) -> tuple[GuardrailResult, exp.Expression | None]:
+    result = guardrail_check(sql_str, dialect=dialect)
+    parsed_ast = None
+    if result["result"] != "reject":
+        parsed_ast = guardrail_parsed_ast(sql_str, dialect=dialect)
+    return result, parsed_ast
+
 
 def count_statement_delimiters(sql: str) -> int:
     """Counts the number of semicolons that are not inside string literals or comments."""
@@ -119,7 +158,6 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             "safeSql": str,
             "checks": list of dicts,
             "message": str,
-            # Internal-only (not in type signature): _parsed_ast: exp.Expression
         }
     """
     sql_str = sql_str.strip()
@@ -158,13 +196,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         }
 
     # Map input dialect to standard sqlglot dialect name
-    dialect_lower = dialect.lower() if dialect else "mysql"
-    if "postgres" in dialect_lower:
-        sqlglot_dialect = "postgres"
-    elif "sqlite" in dialect_lower:
-        sqlglot_dialect = "sqlite"
-    else:
-        sqlglot_dialect = "mysql"
+    sqlglot_dialect = _sqlglot_dialect(dialect)
 
     checks: list[GuardrailCheck] = []
     has_errors = False
@@ -346,8 +378,12 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
                     "message": "未检测到 LIMIT 约束，系统已自动追加 LIMIT 1000 以防大表全表扫描挂起连接。"
                 })
         except Exception:
-            # Fallback to string concatenation if AST manipulation fails
-            pass
+            logger.warning("LIMIT injection via AST failed; query will run without auto-LIMIT")
+            checks.append({
+                "rule": "auto_limit_failed",
+                "level": "warn",
+                "message": "系统未能自动追加 LIMIT 约束，查询将以原始形式执行。"
+            })
             
     safe_sql = safe_expression.sql(dialect=sqlglot_dialect)
 
@@ -360,8 +396,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     )
     for token in _BROKEN_TOKENS:
         if token in _SAFE_SQL_UPPER:
-            import logging
-            logging.getLogger("dbfox.guardrail").warning(
+            logger.warning(
                 "guardrail_check: detected broken MySQL syntax token=%r in safe_sql=%r",
                 token, safe_sql,
             )
@@ -395,5 +430,4 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         "safeSql": safe_sql,
         "checks": checks,
         "message": message_summary,
-        "_parsed_ast": expression
     }

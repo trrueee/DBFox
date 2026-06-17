@@ -1,4 +1,6 @@
 """Guardrail test suite — 对应第一版.md Section 18.1"""
+import inspect
+
 import pytest
 from engine.sql.guardrail import guardrail_check, GuardrailResult
 
@@ -10,6 +12,12 @@ def _check(result: GuardrailResult, expected_result: str) -> None:
     assert "safeSql" in result
     assert "checks" in result
     assert "message" in result
+
+
+def test_guardrail_check_uses_module_logger_without_function_local_logging_import() -> None:
+    source = inspect.getsource(guardrail_check)
+
+    assert "import logging" not in source
 
 
 # ============================================================
