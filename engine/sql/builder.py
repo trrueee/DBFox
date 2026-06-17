@@ -3,19 +3,14 @@ import re
 from typing import Any
 from sqlglot import exp
 from engine.errors import ToolInputError
+from engine.sql.parser import normalize_dialect
 
 # Whitelist regex for standard safe SQL identifiers (tables, schemas, columns)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 def escape_identifier(name: str, dialect: str) -> str:
     """Safely escape a SQL identifier (table, schema, column name) using sqlglot."""
-    dialect_lower = dialect.lower() if dialect else "mysql"
-    if "postgres" in dialect_lower or "pg" in dialect_lower:
-        sqlglot_dialect = "postgres"
-    elif "sqlite" in dialect_lower:
-        sqlglot_dialect = "sqlite"
-    else:
-        sqlglot_dialect = "mysql"
+    sqlglot_dialect = normalize_dialect(dialect)
     return exp.to_identifier(name).sql(sqlglot_dialect, identify=True)
 
 def safe_identifier(name: str, dialect: str) -> str:

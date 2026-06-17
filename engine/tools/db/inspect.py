@@ -153,13 +153,8 @@ def escape_identifier(name: str, dialect: str) -> str:
     Safely escape a SQL identifier (table, schema, column name)
     using sqlglot.exp.to_identifier.
     """
-    dialect_lower = dialect.lower() if dialect else "mysql"
-    if "postgres" in dialect_lower or "pg" in dialect_lower:
-        sqlglot_dialect = "postgres"
-    elif "sqlite" in dialect_lower:
-        sqlglot_dialect = "sqlite"
-    else:
-        sqlglot_dialect = "mysql"
+    from engine.sql.parser import normalize_dialect
+    sqlglot_dialect = normalize_dialect(dialect)
     return exp.to_identifier(name).sql(sqlglot_dialect, identify=True)
 
 
