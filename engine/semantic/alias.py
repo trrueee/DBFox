@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping
@@ -44,6 +45,7 @@ class SemanticAliasResolver:
     # Class-level cache mapping datasource_id -> dict with:
     # {"max_updated": datetime, "alias_matrix": np.ndarray, "aliases": list[SemanticAlias]}
     _vector_cache: dict[str, dict] = {}
+    _vector_cache_lock = threading.Lock()
 
     def __init__(
         self,
@@ -56,6 +58,7 @@ class SemanticAliasResolver:
         if json_path:
             merged.update(self._load_json_aliases(Path(json_path)))
         self.aliases = merged
+        self.db_alias_keys: set[str] = set()
         self.enable_embedding_recall = False
         self.datasource_id = None
         self.cache = None
@@ -119,45 +122,46 @@ class SemanticAliasResolver:
                     SemanticAlias.data_source_id == datasource_id
                 ).scalar()
 
-                cached = cls._vector_cache.get(datasource_id)
-                cached_updated = cached.get("max_updated") if cached else None
-                # Use > to avoid false positives from μs-precision mismatch; handle None comparison safely
-                if not cached or (max_updated is not None and (cached_updated is None or max_updated > cached_updated)):
-                    # Rebuild vector matrix cache
-                    embeddings = []
-                    cached_aliases = []
-                    expected_dim = None
-                    for row in rows:
-                        if row.embedding_blob:
-                            vec = np.frombuffer(row.embedding_blob, dtype=np.float32)
-                            if len(vec) > 0:
-                                if expected_dim is None:
-                                    expected_dim = len(vec)
-                                if len(vec) == expected_dim:
-                                    embeddings.append(vec)
-                                    cached_aliases.append(row)
-                                else:
-                                    logger.warning(
-                                        "Skipping embedding for alias %s (dim=%d, expected=%d) — "
-                                        "model may have changed. Re-sync embeddings.",
-                                        row.alias, len(vec), expected_dim,
-                                    )
+                with cls._vector_cache_lock:
+                    cached = cls._vector_cache.get(datasource_id)
+                    cached_updated = cached.get("max_updated") if cached else None
+                    # Use > to avoid false positives from μs-precision mismatch; handle None comparison safely
+                    if not cached or (max_updated is not None and (cached_updated is None or max_updated > cached_updated)):
+                        # Rebuild vector matrix cache
+                        embeddings = []
+                        cached_aliases = []
+                        expected_dim = None
+                        for row in rows:
+                            if row.embedding_blob:
+                                vec = np.frombuffer(row.embedding_blob, dtype=np.float32)
+                                if len(vec) > 0:
+                                    if expected_dim is None:
+                                        expected_dim = len(vec)
+                                    if len(vec) == expected_dim:
+                                        embeddings.append(vec)
+                                        cached_aliases.append(row)
+                                    else:
+                                        logger.warning(
+                                            "Skipping embedding for alias %s (dim=%d, expected=%d) — "
+                                            "model may have changed. Re-sync embeddings.",
+                                            row.alias, len(vec), expected_dim,
+                                        )
 
-                    if embeddings:
-                        alias_matrix = np.vstack(embeddings)
-                        cls._vector_cache[datasource_id] = {
-                            "max_updated": max_updated,
-                            "alias_matrix": alias_matrix,
-                            "aliases": cached_aliases,
-                        }
-                    else:
-                        cls._vector_cache[datasource_id] = {
-                            "max_updated": max_updated,
-                            "alias_matrix": None,
-                            "aliases": [],
-                        }
+                        if embeddings:
+                            alias_matrix = np.vstack(embeddings)
+                            cls._vector_cache[datasource_id] = {
+                                "max_updated": max_updated,
+                                "alias_matrix": alias_matrix,
+                                "aliases": cached_aliases,
+                            }
+                        else:
+                            cls._vector_cache[datasource_id] = {
+                                "max_updated": max_updated,
+                                "alias_matrix": None,
+                                "aliases": [],
+                            }
 
-                resolver.cache = cls._vector_cache.get(datasource_id)
+                    resolver.cache = cls._vector_cache.get(datasource_id)
             except Exception as e:
                 logger.warning("Failed to load or construct embedding cache: %s", e)
                 resolver.cache = None
@@ -180,7 +184,7 @@ class SemanticAliasResolver:
             if alias.lower() not in normalized_text:
                 continue
             parsed = self._parse_target(alias, target)
-            parsed.source = "db" if hasattr(self, "db_alias_keys") and alias in self.db_alias_keys else "builtin"
+            parsed.source = "db" if alias in self.db_alias_keys else "builtin"
             parsed.reason = f"exact_match:{parsed.alias}->{parsed.target}[source={parsed.source}]"
             matches.append(parsed)
             exact_targets.add(parsed.target.lower())
@@ -283,7 +287,7 @@ class SemanticAliasResolver:
         return sub_matches
 
     def _parse_target(self, alias: str, target: str) -> AliasMatch:
-        source = "db" if hasattr(self, "db_alias_keys") and alias in self.db_alias_keys else "builtin"
+        source = "db" if alias in self.db_alias_keys else "builtin"
         normalized_target = target.strip()
         if "." in normalized_target:
             table_name, column_name = normalized_target.split(".", 1)

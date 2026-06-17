@@ -3,6 +3,8 @@ import uuid
 import sys
 from typing import Any
 
+from engine.schemas.project import ProjectResponse
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -22,7 +24,6 @@ router = APIRouter()
 
 
 def _project_to_dict(project: Project, datasource_count: int = 0) -> dict[str, Any]:
-    from engine.schemas.project import ProjectResponse
     result = ProjectResponse.model_validate(project).model_dump(mode="json")
     result["datasource_count"] = datasource_count
     return result
@@ -34,8 +35,9 @@ from engine.projects.service import get_or_create_default_project
 @router.get("/projects")
 def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     try:
-        get_or_create_default_project(db)
-        db.commit()
+        if not db.query(Project).filter(Project.id == DEFAULT_PROJECT_ID).first():
+            get_or_create_default_project(db)
+            db.commit()
 
         projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()
         datasource_counts = {

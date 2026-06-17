@@ -39,8 +39,8 @@ class DataRedactor:
             double = not double
         return total % 10 == 0
 
-    @classmethod
-    def redact_sql(cls, sql_str: str) -> str:
+    @staticmethod
+    def redact_sql(sql_str: str) -> str:
         """
         Redacts sensitive PII and database credential assignments in the given SQL string.
         """
@@ -52,20 +52,20 @@ class DataRedactor:
             keyword = match.group(1)
             return f"{keyword} = '[REDACTED_SECURE]'"
 
-        scrubbed = cls.CREDENTIAL_ASSIGN_REGEX.sub(replace_cred_assign, sql_str)
+        scrubbed = DataRedactor.CREDENTIAL_ASSIGN_REGEX.sub(replace_cred_assign, sql_str)
 
         # 2. Redact Emails
-        scrubbed = cls.EMAIL_REGEX.sub("[REDACTED_EMAIL]", scrubbed)
+        scrubbed = DataRedactor.EMAIL_REGEX.sub("[REDACTED_EMAIL]", scrubbed)
 
         # 3. Redact Phone Numbers
-        scrubbed = cls.PHONE_REGEX.sub("[REDACTED_PHONE]", scrubbed)
+        scrubbed = DataRedactor.PHONE_REGEX.sub("[REDACTED_PHONE]", scrubbed)
 
         # 4. Redact Luhn-valid Credit Cards
         def replace_card(match: re.Match[str]) -> str:
             candidate = match.group(0)
             digits = re.sub(r"\D", "", candidate)
-            return "[REDACTED_CARD]" if cls._luhn_valid(digits) else candidate
+            return "[REDACTED_CARD]" if DataRedactor._luhn_valid(digits) else candidate
 
-        scrubbed = cls.CREDIT_CARD_REGEX.sub(replace_card, scrubbed)
+        scrubbed = DataRedactor.CREDIT_CARD_REGEX.sub(replace_card, scrubbed)
 
         return scrubbed

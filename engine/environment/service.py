@@ -271,8 +271,12 @@ class EnvironmentService:
         return "unknown"
 
     @staticmethod
+    @staticmethod
     def _catalog_status(table_count: int) -> str:
-        if table_count == 0:
-            return "empty"
-        # Freshness is tracked separately; for now, non-empty = fresh
-        return "fresh"
+        """Derive initial catalog status from table count only.
+
+        Staleness is tracked separately via ``DataSource.last_sync_status``
+        and ``last_sync_at`` — this helper only distinguishes empty from
+        non-empty catalogs.
+        """
+        return "empty" if table_count == 0 else "fresh"

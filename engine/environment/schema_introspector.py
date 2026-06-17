@@ -29,16 +29,57 @@ class SchemaIntrospector:
     """Introspect a live datasource and return a SchemaInventory."""
 
     def inspect(self, db: Session, datasource_id: str) -> SchemaInventory:
+        from engine.models import DataSource
+        from engine.datasource import datasource_connection_dict
+
         resolved = resolve_datasource(db, datasource_id)
+        ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+
+        # Resolve SSH tunnel if enabled
+        tunnel = None
+        if ds and ds.ssh_enabled and resolved.dialect in ("mysql", "postgres"):
+            try:
+                from engine.datasource import get_or_create_tunnel_for_dict
+                tunnel = get_or_create_tunnel_for_dict(datasource_connection_dict(ds))
+            except Exception as exc:
+                logger.warning("SSH tunnel setup failed for %s: %s", datasource_id, exc)
+
         if resolved.dialect == "sqlite":
             return self._inspect_sqlite(resolved)
         if resolved.dialect == "mysql":
-            return self._inspect_mysql(db, resolved)
+            return self._inspect_mysql(db, resolved, tunnel)
         if resolved.dialect == "postgres":
-            return self._inspect_postgres(db, resolved)
+            return self._inspect_postgres(db, resolved, tunnel)
         if resolved.dialect == "duckdb":
             return self._inspect_duckdb(resolved)
         raise ValueError(f"Unsupported datasource dialect: {resolved.dialect}")
+
+    # ------------------------------------------------------------------
+    # Shared template
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_inventory(
+        resolved: ResolvedDataSource,
+        tables: list[TableInventory],
+        database_name: str,
+    ) -> SchemaInventory:
+        return SchemaInventory(
+            datasource_id=resolved.datasource_id,
+            dialect=resolved.dialect,
+            database_name=database_name,
+            tables=tables,
+            table_count=len(tables),
+            column_count=sum(len(t.columns) for t in tables),
+        )
+
+    @staticmethod
+    def _empty_inventory(resolved: ResolvedDataSource, database_name: str) -> SchemaInventory:
+        return SchemaInventory(
+            datasource_id=resolved.datasource_id,
+            dialect=resolved.dialect,
+            database_name=database_name,
+        )
 
     # ------------------------------------------------------------------
     # SQLite
@@ -49,26 +90,12 @@ class SchemaIntrospector:
 
         db_path = resolved.database_path or ""
         if not db_path or not Path(db_path).exists():
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="sqlite",
-                database_name=db_path,
-            )
+            return self._empty_inventory(resolved, db_path)
 
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
         try:
-            tables = self._sqlite_tables(conn)
-            table_count = len(tables)
-            column_count = sum(len(t.columns) for t in tables)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="sqlite",
-                database_name=db_path,
-                tables=tables,
-                table_count=table_count,
-                column_count=column_count,
-            )
+            return self._build_inventory(resolved, self._sqlite_tables(conn), db_path)
         finally:
             conn.close()
 
@@ -145,40 +172,31 @@ class SchemaIntrospector:
     # MySQL
     # ------------------------------------------------------------------
 
-    def _inspect_mysql(self, db: Session, resolved: ResolvedDataSource) -> SchemaInventory:
+    def _inspect_mysql(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> SchemaInventory:
         import pymysql
 
-        datasource = resolved
+        host = "127.0.0.1" if tunnel else (resolved.host or "127.0.0.1")
+        port = tunnel.local_bind_port if tunnel else (resolved.port or 3306)
         pw = self._decrypt_datasource_password(db, resolved.datasource_id)
         try:
             conn = pymysql.connect(
-                host=datasource.host or "127.0.0.1",
-                port=datasource.port or 3306,
-                user=datasource.username or "root",
+                host=host,
+                port=port,
+                user=resolved.username or "root",
                 password=pw,
-                database=datasource.database,
+                database=resolved.database,
                 charset="utf8mb4",
                 connect_timeout=10,
             )
         except Exception as exc:
             logger.warning("MySQL connect failed for %s: %s", resolved.datasource_id, exc)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="mysql",
-                database_name=resolved.safe_display_name,
-            )
+            return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:
-            tables = self._mysql_tables(conn, datasource.database or "")
-            table_count = len(tables)
-            column_count = sum(len(t.columns) for t in tables)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="mysql",
-                database_name=datasource.database or "",
-                tables=tables,
-                table_count=table_count,
-                column_count=column_count,
+            return self._build_inventory(
+                resolved,
+                self._mysql_tables(conn, resolved.database or ""),
+                resolved.database or "",
             )
         finally:
             conn.close()
@@ -187,18 +205,17 @@ class SchemaIntrospector:
         tables: list[TableInventory] = []
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT TABLE_NAME, TABLE_TYPE, TABLE_COMMENT "
+            "SELECT TABLE_NAME, TABLE_TYPE, TABLE_COMMENT, TABLE_ROWS "
             "FROM information_schema.TABLES "
             "WHERE TABLE_SCHEMA = %s AND TABLE_TYPE IN ('BASE TABLE', 'VIEW') "
             "ORDER BY TABLE_NAME",
             (database,),
         )
-        for table_name, table_type, comment in cursor.fetchall():
+        for table_name, table_type, comment, table_rows in cursor.fetchall():
             columns = self._mysql_columns(cursor, database, table_name)
             fks = self._mysql_foreign_keys(cursor, database, table_name)
             sample = self._mysql_sample(conn, table_name)
-            cursor.execute(f"SELECT COUNT(*) FROM {_quote_sql_identifier(table_name, '`')}")
-            row_count = cursor.fetchone()[0]
+            row_count = int(table_rows) if table_rows is not None else 0
             tables.append(
                 TableInventory(
                     table_name=table_name,
@@ -271,38 +288,30 @@ class SchemaIntrospector:
     # PostgreSQL
     # ------------------------------------------------------------------
 
-    def _inspect_postgres(self, db: Session, resolved: ResolvedDataSource) -> SchemaInventory:
+    def _inspect_postgres(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> SchemaInventory:
         try:
-            conn = self._connect_postgres(db, resolved)
+            conn = self._connect_postgres(db, resolved, tunnel)
         except Exception as exc:
             logger.warning("PostgreSQL connect failed for %s: %s", resolved.datasource_id, exc)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="postgres",
-                database_name=resolved.safe_display_name,
-            )
+            return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:
-            tables = self._postgres_tables(conn)
-            table_count = len(tables)
-            column_count = sum(len(t.columns) for t in tables)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="postgres",
-                database_name=resolved.database or resolved.safe_display_name,
-                tables=tables,
-                table_count=table_count,
-                column_count=column_count,
+            return self._build_inventory(
+                resolved,
+                self._postgres_tables(conn),
+                resolved.database or resolved.safe_display_name,
             )
         finally:
             conn.close()
 
-    def _connect_postgres(self, db: Session, resolved: ResolvedDataSource) -> Any:
+    def _connect_postgres(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> Any:
         import psycopg2
 
+        host = "127.0.0.1" if tunnel else (resolved.host or "127.0.0.1")
+        port = tunnel.local_bind_port if tunnel else (resolved.port or 5432)
         return psycopg2.connect(
-            host=resolved.host or "127.0.0.1",
-            port=resolved.port or 5432,
+            host=host,
+            port=port,
             user=resolved.username or "postgres",
             password=self._decrypt_datasource_password(db, resolved.datasource_id),
             dbname=resolved.database or "postgres",
@@ -439,23 +448,13 @@ class SchemaIntrospector:
             conn = self._connect_duckdb(resolved)
         except Exception as exc:
             logger.warning("DuckDB connect failed for %s: %s", resolved.datasource_id, exc)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="duckdb",
-                database_name=resolved.safe_display_name,
-            )
+            return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:
-            tables = self._duckdb_tables(conn)
-            table_count = len(tables)
-            column_count = sum(len(t.columns) for t in tables)
-            return SchemaInventory(
-                datasource_id=resolved.datasource_id,
-                dialect="duckdb",
-                database_name=resolved.database or resolved.safe_display_name,
-                tables=tables,
-                table_count=table_count,
-                column_count=column_count,
+            return self._build_inventory(
+                resolved,
+                self._duckdb_tables(conn),
+                resolved.database or resolved.safe_display_name,
             )
         finally:
             conn.close()

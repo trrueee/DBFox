@@ -1,14 +1,9 @@
 import json
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
-def _to_iso(v: Any) -> str | None:
-    if v is None: return None
-    if isinstance(v, datetime): return v.isoformat()
-    return str(v)
+from engine.schemas import _to_iso
 
 
 def _json_list_or_empty(raw: Any) -> list[str]:
