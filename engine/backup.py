@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 import subprocess
@@ -13,6 +14,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params
+
+logger = logging.getLogger("dbfox.backup")
 from engine.errors import DBFoxError
 from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID
 from engine.runtime_paths import private_runtime_dir
@@ -84,8 +87,6 @@ def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
 
 def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
     import pymysql
-    import logging
-    logger = logging.getLogger("dbfox.backup")
     params = get_mysql_connection_params(datasource_connection_dict(ds))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -201,8 +202,6 @@ def _pymysql_simple_sql_import(ds: DataSource, sql_file_path: Path) -> None:
 
 
 def create_backup(db: Session, datasource_id: str, label: str | None = None, allow_fallback: bool = True) -> BackupRecord:
-    import logging
-    logger = logging.getLogger("dbfox.backup")
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
@@ -255,19 +254,19 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
             raise BackupError("Backup file was not created or is empty.")
 
         completed = datetime.now(UTC)
-        setattr(record, "status", "success")
-        setattr(record, "backup_type", backup_mode)
-        setattr(record, "completed_at", completed)
-        setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
-        setattr(record, "file_size_bytes", output_path.stat().st_size)
-        setattr(record, "checksum_sha256", _sha256_file(output_path))
-        setattr(record, "error_message", None)
+        record.status = "success"
+        record.backup_type = backup_mode
+        record.completed_at = completed
+        record.duration_ms = int((time.monotonic() - start_time) * 1000)
+        record.file_size_bytes = output_path.stat().st_size
+        record.checksum_sha256 = _sha256_file(output_path)
+        record.error_message = None
     except Exception as exc:
         completed = datetime.now(UTC)
-        setattr(record, "status", "failed")
-        setattr(record, "completed_at", completed)
-        setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
-        setattr(record, "error_message", str(exc))
+        record.status = "failed"
+        record.completed_at = completed
+        record.duration_ms = int((time.monotonic() - start_time) * 1000)
+        record.error_message = str(exc)
         raise
 
     return record
@@ -354,8 +353,6 @@ def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
 
 
 def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) -> dict[str, Any]:
-    import logging
-    logger = logging.getLogger("dbfox.backup")
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
     if not record:
         raise BackupError("Backup record not found.", code="BACKUP_NOT_FOUND")

@@ -191,14 +191,20 @@ useDatasourceStore.subscribe((state, prev) => {
   }
   let cancelled = false;
   const fetchColumns = async () => {
+    const results = await Promise.all(
+      state.tables.map(async (table) => {
+        try {
+          const columns = await listColumns(table.id);
+          return { name: table.table_name, columns };
+        } catch {
+          return { name: table.table_name, columns: [] as EngineColumn[] };
+        }
+      }),
+    );
+    if (cancelled) return;
     const cols: Record<string, EngineColumn[]> = {};
-    for (const table of state.tables) {
-      if (cancelled) return;
-      try {
-        cols[table.table_name] = await listColumns(table.id);
-      } catch {
-        // Best-effort
-      }
+    for (const { name, columns } of results) {
+      cols[name] = columns;
     }
     if (!cancelled) useDatasourceStore.setState({ tableColumns: cols });
   };

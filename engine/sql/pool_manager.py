@@ -8,7 +8,7 @@ from sqlalchemy.pool import QueuePool
 
 from engine.sql.pool_registry import get_pool_registry
 
-logger = logging.getLogger("dbfox.sql.executor")
+logger = logging.getLogger("dbfox.sql.pool_manager")
 
 
 def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:

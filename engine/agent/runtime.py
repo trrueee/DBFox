@@ -64,16 +64,14 @@ class DBFoxAgentRuntime:
         return final_response
 
     def resume_iter(self, run_id: str, approval_id: str | None = None) -> Iterator[AgentRuntimeEvent]:
-        resolved_approval_id = approval_id
-        if not resolved_approval_id:
-            pending = agent_persistence.get_pending_approval_for_run(self.db, run_id)
-            resolved_approval_id = pending.id if pending is not None else ""
-        if not resolved_approval_id:
-            raise DBFoxError("No approval id was supplied for resume.", code="APPROVAL_NOT_FOUND")
-
-        approval = agent_persistence.get_approval(self.db, resolved_approval_id)
+        if approval_id:
+            # Explicit approval_id — look up by ID
+            approval = agent_persistence.get_approval(self.db, approval_id)
+        else:
+            # Auto-resolve the pending approval for this run
+            approval = agent_persistence.get_pending_approval_for_run(self.db, run_id)
         if approval is None:
-            raise DBFoxError("Approval not found.", code="APPROVAL_NOT_FOUND")
+            raise DBFoxError("No pending approval found for this run.", code="APPROVAL_NOT_FOUND")
         if approval.run_id != run_id:
             raise DBFoxError("Approval does not belong to this run.", code="APPROVAL_RUN_MISMATCH")
         if approval.status == "pending":
