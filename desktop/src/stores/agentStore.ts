@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { useWorkspaceStore } from "./workspaceStore";
 import { useDatasourceStore } from "./datasourceStore";
-import { BASE_URL, ENGINE_TOKEN } from "../lib/api/client";
 import {
   agentApi,
   mergeArtifactDelta,
@@ -218,14 +217,11 @@ export const useAgentStore = create<AgentStore>()((set, get) => ({
     }
     const runId = get()._runIds.get(tabId);
     if (runId) {
-      get()._runIds.delete(tabId);
       try {
-        await fetch(`${BASE_URL}/agent/runs/${encodeURIComponent(runId)}/cancel`, {
-          method: "POST",
-          headers: { "X-Local-Token": ENGINE_TOKEN },
-        });
+        await agentApi.cancelAgentRun(runId);
+        get()._runIds.delete(tabId);
       } catch {
-        // best-effort
+        // best-effort — keep runId so retry is possible
       }
     }
     const ws = useWorkspaceStore.getState();

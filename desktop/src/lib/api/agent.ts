@@ -357,6 +357,9 @@ export const rejectAgentApproval = (
     body: JSON.stringify({ run_id: runId, approval_id: approvalId, approved: false, note }),
   });
 
+export const cancelAgentRun = (runId: string) =>
+  request<void>(`/agent/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
+
 export const agentApi = {
   runAgentQuery: (datasourceId: string, question: string, config?: AgentRunConfig, signal?: AbortSignal) =>
     request<AgentRunResponse>("/agent/run", {
@@ -402,6 +405,8 @@ export const agentApi = {
   resumeAgentRun,
 
   rejectAgentApproval,
+
+  cancelAgentRun,
 
   streamResumeAgentRun,
 };
