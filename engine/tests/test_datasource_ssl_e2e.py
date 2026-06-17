@@ -27,8 +27,8 @@ def test_mysql_ssl_connection_e2e() -> None:
     config_no_ssl = {
         "host": "127.0.0.1",
         "port": 3308,
-        "database_name": "databox_ssl",
-        "username": "databox_readonly",
+        "database_name": "dbfox_ssl",
+        "username": "dbfox_readonly",
         "password": "readonly_pass",
         "ssl_enabled": False,
     }
@@ -38,12 +38,12 @@ def test_mysql_ssl_connection_e2e() -> None:
     assert "无法建立数据库连接" in str(exc_info.value) or "Access denied" in str(exc_info.value)
 
     # 2. Verify CA-enabled connection establishes successfully, registers tables count, and marks user as readonly
-    ca_path = os.path.abspath(r"d:\Project\DataBox\databox-mysql-ssl-test\certs\ca.pem")
+    ca_path = os.path.abspath(r"d:\Project\DBFox\dbfox-mysql-ssl-test\certs\ca.pem")
     config_ssl = {
         "host": "127.0.0.1",
         "port": 3308,
-        "database_name": "databox_ssl",
-        "username": "databox_readonly",
+        "database_name": "dbfox_ssl",
+        "username": "dbfox_readonly",
         "password": "readonly_pass",
         "ssl_enabled": True,
         "ssl_ca_path": ca_path,

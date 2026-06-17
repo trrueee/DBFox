@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.message_utils import first_user_text
 
 
-def enrich_progress_result(result: dict[str, Any], state: DataBoxAgentState) -> dict[str, Any]:
+def enrich_progress_result(result: dict[str, Any], state: DBFoxAgentState) -> dict[str, Any]:
     """Attach visible_plan (Task Lens) and bump revision_count on repair continue."""
     decision_raw = result.get("progress_decision") or {}
     if not isinstance(decision_raw, dict):

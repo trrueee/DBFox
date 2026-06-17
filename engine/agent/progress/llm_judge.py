@@ -12,17 +12,17 @@ from engine.agent.progress.clarification_policy import should_progress_clarify
 from engine.agent.skills.registry import get_skill_registry
 from engine.agent.skills.renderer import render_recovery_for_progress
 from engine.llm import get_chat_model
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import (
     first_user_text,
     message_content_text,
 )
 
-logger = logging.getLogger("databox.databox_agent.progress.llm_judge")
+logger = logging.getLogger("dbfox.dbfox_agent.progress.llm_judge")
 
 
-def call_llm_judge(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM progress judge — evaluates execution context semantically to determine progress."""
     ctx = graph_context(config)
     model_name = ctx.model_name

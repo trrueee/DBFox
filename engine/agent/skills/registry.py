@@ -1,9 +1,9 @@
-"""Skill registry — loads, validates, and queries DataBox Agent Skills.
+"""Skill registry — loads, validates, and queries DBFox Agent Skills.
 
 Skills can come from multiple sources:
 - Builtin: engine/agent/skills/builtin/*.yaml  (priority 0)
-- User global: ~/.databox/skills/*.yaml       (priority 10)
-- Project: .databox/skills/*.yaml              (priority 20)
+- User global: ~/.dbfox/skills/*.yaml       (priority 10)
+- Project: .dbfox/skills/*.yaml              (priority 20)
 - Programmatic: registry.register(spec)         (highest priority)
 
 Higher-priority sources override lower-priority skills with the same id.
@@ -24,13 +24,13 @@ from engine.agent_core.extensions.discovery import (
 )
 from engine.agent.skills.loader import load_skills_from_source
 
-logger = logging.getLogger("databox.databox_agent.skills.registry")
+logger = logging.getLogger("dbfox.dbfox_agent.skills.registry")
 
 _BUILTIN_DIR = Path(__file__).resolve().parent / "builtin"
 
 
 class SkillRegistry:
-    """In-memory registry of all available DataBox Agent Skills.
+    """In-memory registry of all available DBFox Agent Skills.
 
     Skills are loaded from multiple configurable sources.  Sources with higher
     priority override lower-priority skills with the same id — a user skill
@@ -199,19 +199,19 @@ def get_skill_registry() -> SkillRegistry:
 
     On first call, auto-configures sources:
     1. Builtin (priority 0)
-    2. User global ~/.databox/skills/ (priority 10)
-    3. Project .databox/skills/ (priority 20)
+    2. User global ~/.dbfox/skills/ (priority 10)
+    3. Project .dbfox/skills/ (priority 20)
     """
     global _registry
     if _registry is None:
         _registry = SkillRegistry()
         _registry.add_builtin_source()
         # User global skills
-        _registry.add_user_source(Path.home() / ".databox" / "skills", priority=10)
+        _registry.add_user_source(Path.home() / ".dbfox" / "skills", priority=10)
         # Project-local skills (only if cwd is accessible)
         try:
             cwd = Path.cwd()
-            project_dir = cwd / ".databox" / "skills"
+            project_dir = cwd / ".dbfox" / "skills"
             if project_dir.is_dir():
                 _registry.add_user_source(project_dir, priority=20)
         except Exception:

@@ -6,10 +6,10 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 
 
-def prepare_repair(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def prepare_repair(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """Repair subgraph entry: consolidate tool scope and record repair attempt metrics.
 
     Lightweight — no LLM.  Progress Judge already chose recovery_strategy;

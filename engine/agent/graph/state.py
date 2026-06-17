@@ -22,7 +22,7 @@ AgentStatus = Literal[
 ]
 
 
-class DataBoxAgentState(TypedDict, total=False):
+class DBFoxAgentState(TypedDict, total=False):
     # =========================================================================
     # 1. CORE & IDENTITY STATE
     # =========================================================================

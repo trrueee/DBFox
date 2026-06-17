@@ -27,7 +27,7 @@ from engine.ai_index import tokenize_query
 from engine.policy.redactor import DataRedactor
 from engine.sql.executor import execute_query
 
-logger = logging.getLogger("databox.tools.db")
+logger = logging.getLogger("dbfox.tools.db")
 
 # ---------------------------------------------------------------------------
 # constants

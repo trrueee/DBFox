@@ -10,11 +10,11 @@ def test_load_runtime_env_reads_private_langsmith_env(tmp_path, monkeypatch):
     langsmith_env.write_text(
         "LANGCHAIN_TRACING_V2=true\n"
         "LANGCHAIN_API_KEY=lsv2-test\n"
-        "LANGCHAIN_PROJECT=DataBox Test\n",
+        "LANGCHAIN_PROJECT=DBFox Test\n",
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("DATABOX_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_root))
     monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
     monkeypatch.delenv("LANGCHAIN_API_KEY", raising=False)
     monkeypatch.delenv("LANGCHAIN_PROJECT", raising=False)
@@ -25,4 +25,4 @@ def test_load_runtime_env_reads_private_langsmith_env(tmp_path, monkeypatch):
     assert loaded.count(langsmith_env) == 1
     assert __import__("os").environ["LANGCHAIN_TRACING_V2"] == "true"
     assert __import__("os").environ["LANGCHAIN_API_KEY"] == "lsv2-test"
-    assert __import__("os").environ["LANGCHAIN_PROJECT"] == "DataBox Test"
+    assert __import__("os").environ["LANGCHAIN_PROJECT"] == "DBFox Test"

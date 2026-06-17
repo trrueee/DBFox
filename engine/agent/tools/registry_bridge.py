@@ -9,7 +9,7 @@ from engine.agent_core.tool_registry import ToolRegistry, tool_to_group
 from engine.agent.tools.tool_manifest import enrich_description
 from engine.agent.tools.tool_aliases import to_alias
 
-logger = logging.getLogger("databox.databox_agent.tools.registry_bridge")
+logger = logging.getLogger("dbfox.dbfox_agent.tools.registry_bridge")
 
 
 class EmptyToolInput(BaseModel):
@@ -70,7 +70,7 @@ def build_langchain_tools(
     """Convert RegisteredTool specs from ToolRegistry to LangChain StructuredTool instances.
 
     Uses enriched descriptions from tool_manifest.py so the LLM gets
-    DataBox-specific affordance hints (when to use, what the tool produces,
+    DBFox-specific affordance hints (when to use, what the tool produces,
     what it depends on).
 
     When allowed_groups is non-empty, only tools whose group matches one of

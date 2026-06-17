@@ -4,7 +4,7 @@ from typing import Any
 from langgraph.types import interrupt
 from langchain_core.runnables import RunnableConfig
 
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 
 
 def _safety_after_approval(safety: Any) -> dict[str, Any] | None:
@@ -41,7 +41,7 @@ def _safety_after_approval(safety: Any) -> dict[str, Any] | None:
     return updated
 
 
-def approval_interrupt(state: DataBoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+def approval_interrupt(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """Suspend the graph and wait for human approval via LangGraph interrupt().
 
     The interrupt value carries the pending approval context so the caller
@@ -59,7 +59,7 @@ def approval_interrupt(state: DataBoxAgentState, config: RunnableConfig) -> dict
     # decision is the value passed via Command(resume=...)
     if isinstance(decision, dict) and decision.get("decision") == "approved":
         requested = pending.get("requested_action") if isinstance(pending, dict) else {}
-        # Build id from pending approval context so DataBoxToolNode can use call["id"]
+        # Build id from pending approval context so DBFoxToolNode can use call["id"]
         call_id = (
             (pending.get("tool_call_id") if isinstance(pending, dict) else None)
             or f"approved_{pending.get('id', 'unknown')}"

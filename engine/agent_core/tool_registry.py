@@ -1,4 +1,4 @@
-"""DataBox Agent Tool Registry — canonical type system for tool contracts.
+"""DBFox Agent Tool Registry — canonical type system for tool contracts.
 
 This is the SINGLE source of truth for tool type definitions.
 No other registry module exists.  All tool wrappers use these types.
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from engine.agent_core.types import AgentRunRequest, ToolObservation
 
-logger = logging.getLogger("databox.databox_agent.tool_registry")
+logger = logging.getLogger("dbfox.dbfox_agent.tool_registry")
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +235,8 @@ class ToolRegistry:
 
     Tools can come from multiple sources:
     - Builtin: engine/tools/builtin/*.yaml      (priority 0)
-    - User global: ~/.databox/tools/*.yaml      (priority 10)
-    - Project: .databox/tools/*.yaml             (priority 20)
+    - User global: ~/.dbfox/tools/*.yaml      (priority 10)
+    - Project: .dbfox/tools/*.yaml             (priority 20)
     - Programmatic: registry.register(tool)       (highest priority)
 
     get() returns None for unknown tools (safe for guard code).

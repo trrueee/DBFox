@@ -22,7 +22,7 @@ from engine.environment.inventory import (
     TableInventory,
 )
 
-logger = logging.getLogger("databox.environment.schema_introspector")
+logger = logging.getLogger("dbfox.environment.schema_introspector")
 
 
 class SchemaIntrospector:

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from engine.agent.graph.state import DataBoxAgentState
+from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.message_utils import is_ai_message, message_content_text, message_tool_calls
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.graph.message_utils import first_user_text
 
-logger = logging.getLogger("databox.databox_agent.progress.fast_path")
+logger = logging.getLogger("dbfox.dbfox_agent.progress.fast_path")
 
 
-def _max_steps_reason(state: DataBoxAgentState, max_steps: int) -> str:
+def _max_steps_reason(state: DBFoxAgentState, max_steps: int) -> str:
     execution = state.get("execution")
     if isinstance(execution, dict):
         if execution.get("success"):
@@ -26,7 +26,7 @@ def _max_steps_reason(state: DataBoxAgentState, max_steps: int) -> str:
     return f"Agent exceeded max_steps ({max_steps})."
 
 
-def check_escalate(state: DataBoxAgentState) -> dict[str, Any] | None:
+def check_escalate(state: DBFoxAgentState) -> dict[str, Any] | None:
     """Fast-path: detect escalate.tool_group and expand allowed_tool_groups.
 
     When the model calls escalate.tool_group, we immediately expand the
@@ -89,7 +89,7 @@ def check_escalate(state: DataBoxAgentState) -> dict[str, Any] | None:
     return None
 
 
-def check_sql_repair_fastpath(state: DataBoxAgentState) -> dict[str, Any] | None:
+def check_sql_repair_fastpath(state: DBFoxAgentState) -> dict[str, Any] | None:
     """Rule-based repair routing — coding-agent style before LLM judge."""
     from engine.agent.repair.sql_repair import (
         build_repair_trace_event,
@@ -123,7 +123,7 @@ def check_sql_repair_fastpath(state: DataBoxAgentState) -> dict[str, Any] | None
     }
 
 
-def deterministic_progress_fastpath(state: DataBoxAgentState) -> dict[str, Any] | None:
+def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | None:
     """Rule-based ReAct progress routing for the common path."""
     status = state.get("status", "running")
     error = state.get("error")
@@ -335,7 +335,7 @@ def progress_trace(decision: dict[str, Any], *, fastpath: bool) -> dict[str, Any
     return trace
 
 
-def rule_fallback(state: DataBoxAgentState) -> dict[str, Any]:
+def rule_fallback(state: DBFoxAgentState) -> dict[str, Any]:
     """Simple rule-based fallback when the Progress Judge LLM is unavailable."""
     status = state.get("status", "running")
     step_count = int(state.get("step_count", 0))

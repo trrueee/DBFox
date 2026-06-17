@@ -78,7 +78,7 @@ export default function TitleBar() {
         <span className="titlebar-logo">
           <FoxIcon variant="app" size={20} />
         </span>
-        <span className="titlebar-title">DataBox</span>
+        <span className="titlebar-title">DBFox</span>
       </span>
       <div className="titlebar-controls" style={{ gap: "8px" }}>
         <ThemeToggle />

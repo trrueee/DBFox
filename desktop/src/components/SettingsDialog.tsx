@@ -19,7 +19,7 @@ const DEFAULT_CONFIG: ApiConfig = {
   modelName: "",
 };
 
-const STORAGE_KEY = "databox-api-config";
+const STORAGE_KEY = "dbfox-api-config";
 
 function loadConfig(): ApiConfig {
   try {

@@ -21,7 +21,7 @@ from engine.agent_core.tool_registry import (
     ToolStateBinding,
 )
 
-logger = logging.getLogger("databox.databox_agent.extensions.loader")
+logger = logging.getLogger("dbfox.dbfox_agent.extensions.loader")
 
 
 # ── Tool loading ───────────────────────────────────────────────────────────────

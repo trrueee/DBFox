@@ -1,5 +1,5 @@
 import { CheckCircle2, XCircle, ChevronDown, ChevronRight, Clock, Wrench, Layers, Database, AlertTriangle } from "lucide-react";
-import type { AgentTabStatus } from "../../mock/databoxMock";
+import type { AgentTabStatus } from "../../mock/dbfoxMock";
 import type { AgentTaskSummary } from "./types";
 
 interface TraceSummaryBarProps {

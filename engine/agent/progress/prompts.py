@@ -1,6 +1,6 @@
 """Progress Judge v2 system prompt — failure diagnosis + recovery strategy."""
 
-PROGRESS_JUDGE_SYSTEM_PROMPT = """You are the progress judge for DataBox Agent v2.
+PROGRESS_JUDGE_SYSTEM_PROMPT = """You are the progress judge for DBFox Agent v2.
 
 Decide whether the user's task has been completed based on the FULL execution trace:
 - The original user question

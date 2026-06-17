@@ -4,14 +4,14 @@ Date: 2026-06-15
 
 ## Summary
 
-Rebuild the data source settings page as a management-first console that matches the existing DataBox desktop workbench style. The page should default to managing saved data sources instead of showing only a creation form.
+Rebuild the data source settings page as a management-first console that matches the existing DBFox desktop workbench style. The page should default to managing saved data sources instead of showing only a creation form.
 
 The approved direction is layout A: a left connection list and a right detail area. The first implementation includes switching the active data source, testing connections, syncing Schema metadata, creating connections, editing connections, deleting connections, and viewing configuration summaries.
 
 ## Goals
 
 - Make "data source management" and "new connection" feel like two clear states inside one console.
-- Keep the UI aligned with DataBox's existing high-density desktop style: pale blue-gray shell, white panels, purple primary actions, compact controls, and 8px control radius.
+- Keep the UI aligned with DBFox's existing high-density desktop style: pale blue-gray shell, white panels, purple primary actions, compact controls, and 8px control radius.
 - Prevent the reused `datasource-settings` tab from leaking stale "new connection" state into management mode.
 - Support the full confirmed management scope: select, activate, test, sync, create, edit, and delete.
 - Preserve existing backend safety behavior for dangerous delete operations.

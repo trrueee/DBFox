@@ -36,7 +36,7 @@ def load_runtime_env(
     project_env: Path | None = None,
     extra_env_files: Iterable[Path] | None = None,
 ) -> list[Path]:
-    """Load DataBox runtime env files before LangChain is imported."""
+    """Load DBFox runtime env files before LangChain is imported."""
     if project_env is None:
         project_env = Path(__file__).resolve().parent.parent / ".env"
 

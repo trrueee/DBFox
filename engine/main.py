@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-DataBox 本地引擎主入口模块 (Main Entrypoint Module)
+DBFox 本地引擎主入口模块 (Main Entrypoint Module)
 ---------------------------------------------
-这是 DataBox 后端服务的核心入口文件。
+这是 DBFox 后端服务的核心入口文件。
 它基于 FastAPI 异步 Web 框架构建，提供了：
 - 安全策略（CORS 跨域控制、本地 Token 令牌鉴权中间件）
 - 异步生命周期管理（启动时连接 SQLite 数据库，退出时关闭 SSH 隧道）
@@ -30,11 +30,11 @@ from fastapi.responses import JSONResponse
 
 from engine.api import router
 from engine.db import init_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.runtime_paths import private_runtime_file, write_private_text
 
 # 创建当前模块的日志记录器
-logger = logging.getLogger("databox.main")
+logger = logging.getLogger("dbfox.main")
 
 # 计算当前 main.py 所在的 engine 目录以及项目根目录
 ENGINE_DIR = Path(__file__).resolve().parent
@@ -124,7 +124,7 @@ async def lifespan(application: FastAPI) -> Any:
     init_db()  # 初始化本地 SQLite 数据库（自动检查并运行表结构迁移）
     
     print("===========================================================")
-    print("DataBox Local Engine 成功初始化并启动。")
+    print("DBFox Local Engine 成功初始化并启动。")
     print("服务监听地址: http://127.0.0.1:18625")
     print(f"安全令牌路径: {TOKEN_FILE}")
     print("===========================================================")
@@ -139,8 +139,8 @@ async def lifespan(application: FastAPI) -> Any:
 # 实例化 FastAPI 核心应用对象
 is_frozen = getattr(sys, "frozen", False)
 app = FastAPI(
-    title="DataBox Local Engine",
-    description="专为 DataBox 桌面外壳设计的安全数据库客户端核心引擎",
+    title="DBFox Local Engine",
+    description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
     version="1.0.0",
     lifespan=lifespan,
     # 如果是在生产打包（frozen）模式下，关闭自动生成的交互式接口文档，提高安全性
@@ -204,7 +204,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
 # 3. 配置跨域资源共享 (CORS Middleware)
 # 必须放在安全中间件之后注册，确保 CORS 在最外层包装所有响应（包括安全中间件直接返回的错误响应）
 # FastAPI/Starlette 的中间件栈是从后往前应用的——最后注册的中间件成为最外层
-_dev_cors_env = os.environ.get("DATABOX_DEV_CORS_ORIGINS", "")
+_dev_cors_env = os.environ.get("DBFOX_DEV_CORS_ORIGINS", "")
 _dev_cors_origins: list[str] = (
     [o.strip() for o in _dev_cors_env.split(",") if o.strip()]
     if _dev_cors_env
@@ -226,9 +226,9 @@ app.add_middleware(
 
 
 # 4. 全局业务异常捕获器 (Global Exception Handler)
-# 拦截所有继承自 DataBoxError 的自定义业务错误，将其转换为标准的 HTTP 400 JSON 错误响应，避免程序崩溃或暴露敏感调用栈
-@app.exception_handler(DataBoxError)
-async def databox_error_handler(request: Request, exc: DataBoxError) -> JSONResponse:
+# 拦截所有继承自 DBFoxError 的自定义业务错误，将其转换为标准的 HTTP 400 JSON 错误响应，避免程序崩溃或暴露敏感调用栈
+@app.exception_handler(DBFoxError)
+async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse:
     """
     全局自定义异常捕获
     
@@ -248,7 +248,7 @@ def read_root() -> dict[str, str]:
     """
     根目录状态接口
     """
-    return {"name": "DataBox Local Engine", "status": "running"}
+    return {"name": "DBFox Local Engine", "status": "running"}
 
 
 @app.get("/api/v1/health")
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     from engine.dev_server import default_reload_enabled, run_engine_server
 
-    parser = argparse.ArgumentParser(description="DataBox local engine")
+    parser = argparse.ArgumentParser(description="DBFox local engine")
     parser.add_argument(
         "--reload",
         action=argparse.BooleanOptionalAction,

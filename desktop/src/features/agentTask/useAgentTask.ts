@@ -1,6 +1,6 @@
 import { useReducer, useCallback } from "react";
 import type { AgentAnswer } from "../../lib/api/types";
-import type { AgentTabStatus } from "../../mock/databoxMock";
+import type { AgentTabStatus } from "../../mock/dbfoxMock";
 import type { AgentTaskState, AgentTaskAction, AgentTaskStep } from "./types";
 import { computeSummary } from "./types";
 

@@ -31,7 +31,7 @@ export function AnswerCard({ answer }: AnswerCardProps) {
     <div className="hifi-answer-card">
       <div className="hifi-answer-card-head">
         <span className="hifi-answer-avatar">
-          <FoxIcon variant="ai-tight" size={18} alt="DataBox AI" />
+          <FoxIcon variant="ai-tight" size={18} alt="DBFox AI" />
         </span>
         <span>AI</span>
       </div>

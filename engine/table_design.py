@@ -1,7 +1,7 @@
 import re
 from typing import Any, Mapping
 
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 
 
 IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -31,7 +31,7 @@ SUPPORTED_CHARSETS = {"utf8mb4"}
 SUPPORTED_COLLATIONS = {"utf8mb4_0900_ai_ci", "utf8mb4_unicode_ci", "utf8mb4_general_ci"}
 
 
-class TableDesignError(DataBoxError):
+class TableDesignError(DBFoxError):
     def __init__(self, message: str) -> None:
         super().__init__(message, code="TABLE_DESIGN_INVALID")
 

@@ -9,7 +9,7 @@ from engine.memory.session_memory import get_session_memory_service
 from engine.memory.memory_namespace import MemoryNamespace
 from engine.memory.memory_schema import MemoryRecord
 
-logger = logging.getLogger("databox.memory.retriever")
+logger = logging.getLogger("dbfox.memory.retriever")
 
 
 class MemoryRetriever:

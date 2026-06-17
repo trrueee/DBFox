@@ -14,7 +14,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   setTheme: () => {},
 });
 
-const STORAGE_KEY = "databox-theme";
+const STORAGE_KEY = "dbfox-theme";
 
 function getInitialTheme(): Theme {
   try {

@@ -16,7 +16,7 @@ TOOL_AFFORDANCE: dict[str, str] = {
         "foreign keys. Input: table_name. Outputs: column details, keys."
     ),
     "schema.refresh_catalog": (
-        "Re-introspect the live datasource and sync its schema to the DataBox "
+        "Re-introspect the live datasource and sync its schema to the DBFox "
         "catalog. Use when the catalog appears empty or stale."
     ),
     "db.observe": (

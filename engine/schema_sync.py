@@ -17,7 +17,7 @@ from engine.datasource import (
 )
 from engine.models import DataSource, SchemaColumn, SchemaTable
 
-logger = logging.getLogger("databox.schema_sync")
+logger = logging.getLogger("dbfox.schema_sync")
 
 SchemaSnapshot = tuple[list[SchemaTable], list[SchemaColumn], int]
 

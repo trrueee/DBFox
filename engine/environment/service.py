@@ -1,7 +1,7 @@
 """EnvironmentService — unified entry point for deterministic datasource facts.
 
 Aggregates information from datasource config (via datasource_resolver) and
-the DataBox system catalog (SchemaTable / SchemaColumn) into structured
+the DBFox system catalog (SchemaTable / SchemaColumn) into structured
 profiles and snapshots.  No LLM involvement.
 """
 
@@ -24,7 +24,7 @@ from engine.environment.models import (
 from engine.environment.inventory import SyncResult
 from engine.environment.schema_catalog_sync import ensure_catalog
 
-logger = logging.getLogger("databox.environment.service")
+logger = logging.getLogger("dbfox.environment.service")
 
 
 def _utcnow() -> datetime:

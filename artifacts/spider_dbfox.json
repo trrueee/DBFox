@@ -8,8 +8,8 @@
     "execution_success_rate": 0.4,
     "execution_accuracy": 0.4,
     "avg_latency_ms": 1798.4,
-    "runner_mode": "databox",
-    "is_databox_score": true
+    "runner_mode": "dbfox",
+    "is_dbfox_score": true
   },
   "cases": [
     {

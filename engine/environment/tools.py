@@ -15,7 +15,7 @@ from engine.agent_core.types import ToolObservation
 from engine.agent_core.tool_registry import ToolContext
 from engine.environment.service import EnvironmentService
 
-logger = logging.getLogger("databox.environment.tools")
+logger = logging.getLogger("dbfox.environment.tools")
 
 _svc = EnvironmentService()
 
@@ -151,7 +151,7 @@ def schema_describe_table(ctx: ToolContext, args: dict[str, Any]) -> ToolObserva
 # ---------------------------------------------------------------------------
 
 def schema_refresh_catalog(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-    """Re-introspect the live datasource and sync to the DataBox catalog."""
+    """Re-introspect the live datasource and sync to the DBFox catalog."""
     datasource_id = _datasource_id(ctx)
     reason = str(args.get("reason") or "")
 

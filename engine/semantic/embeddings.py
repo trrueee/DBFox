@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 from engine.models import SemanticAlias, utcnow
 
-logger = logging.getLogger("databox.embeddings")
+logger = logging.getLogger("dbfox.embeddings")
 
 MAX_RETRIES = 3
 

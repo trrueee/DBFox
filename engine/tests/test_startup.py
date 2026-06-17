@@ -25,7 +25,7 @@ def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:
     given broad excludes for root-level runtime or frontend dependency folders.
     The backend reload root is engine/, so these folders are outside its scope.
     """
-    assert "**/.databox_runtime/**" not in _RELOAD_EXCLUDES
+    assert "**/.dbfox_runtime/**" not in _RELOAD_EXCLUDES
     assert "**/node_modules/**" not in _RELOAD_EXCLUDES
 
 

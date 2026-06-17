@@ -4,18 +4,18 @@
 !.env.example
 *.local
 *.local.*
-.databox_runtime/
+.dbfox_runtime/
 engine/.secret_key
 engine/.local_token
 desktop/.env.local
 
 # Local databases and runtime state
-databox_local.db
-databox_local.db.bak_*
-databox_local.db-shm
-databox_local.db-wal
-databox_demo.db
-databox_agent_kernel_checkpoints.sqlite
+dbfox_local.db
+dbfox_local.db.bak_*
+dbfox_local.db-shm
+dbfox_local.db-wal
+dbfox_demo.db
+dbfox_agent_kernel_checkpoints.sqlite
 demo_shop
 *.sqlite
 *.sqlite3
@@ -56,7 +56,7 @@ checkpoints/
 # Sidecar build artifacts
 pyinstaller_dist/
 pyinstaller_build/
-databox-engine.spec
+dbfox-engine.spec
 .build_venv/
 engine/token_preset.py
 desktop/.env.local
@@ -104,7 +104,7 @@ artifacts/*_report*.md
 # Stale dev artifacts
 diff.txt
 diff_tests.txt
-databox-mysql-ssl-test/
+dbfox-mysql-ssl-test/
 _server_pid.txt
 log.txt
 desktop/log.txt

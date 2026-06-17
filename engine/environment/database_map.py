@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from engine.environment.models import CatalogSnapshot, TableSnapshot, ColumnSnapshot
 
-logger = logging.getLogger("databox.environment.database_map")
+logger = logging.getLogger("dbfox.environment.database_map")
 
 # ── Risk / sensitivity ─────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ from typing import Any
 
 
 def extract_final_sql(response: Any, events: list[dict[str, Any]]) -> str | None:
-    """Extract the single final predicted SQL from a DataBox agent run.
+    """Extract the single final predicted SQL from a DBFox agent run.
 
     Priority:
       1. Last db.query safe_sql from events (new ReAct path)

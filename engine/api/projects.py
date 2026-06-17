@@ -7,7 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
-from engine.errors import DataBoxError
+from engine.errors import DBFoxError
 from engine.models import (
     DEFAULT_PROJECT_ID,
     DEFAULT_PROJECT_NAME,
@@ -16,7 +16,7 @@ from engine.models import (
 )
 from engine.schemas import ProjectCreateRequest
 
-logger = logging.getLogger("databox.api.projects")
+logger = logging.getLogger("dbfox.api.projects")
 router = APIRouter()
 
 

@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-logger = logging.getLogger("databox.databox_agent.extensions.discovery")
+logger = logging.getLogger("dbfox.dbfox_agent.extensions.discovery")
 
 
 # ── Skill sources ─────────────────────────────────────────────────────────────
@@ -76,8 +76,8 @@ class UserSkillSource(SkillSource):
     """User-defined skills from a configurable directory.
 
     Medium priority.  Typical paths:
-    - ~/.databox/skills/        (global, per-user)
-    - .databox/skills/          (project-level)
+    - ~/.dbfox/skills/        (global, per-user)
+    - .dbfox/skills/          (project-level)
     """
 
     def __init__(self, path: str | Path, *, priority: int = 10) -> None:
@@ -191,8 +191,8 @@ class UserToolSource(ToolSource):
     """User-defined tool specs from a configurable directory.
 
     Medium priority.  Typical paths:
-    - ~/.databox/tools/        (global, per-user)
-    - .databox/tools/          (project-level)
+    - ~/.dbfox/tools/        (global, per-user)
+    - .dbfox/tools/          (project-level)
     """
 
     def __init__(self, path: str | Path, *, priority: int = 10) -> None:

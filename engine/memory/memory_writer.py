@@ -12,7 +12,7 @@ from engine.memory.memory_policy import (
 from engine.memory.memory_schema import MemoryRecord
 from engine.memory.memory_namespace import MemoryNamespace
 
-logger = logging.getLogger("databox.memory.writer")
+logger = logging.getLogger("dbfox.memory.writer")
 
 
 class MemoryWriter:

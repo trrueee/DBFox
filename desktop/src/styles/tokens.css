@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   DataBox Design Tokens — Canonical Token Layer
+   DBFox Design Tokens — Canonical Token Layer
    ═══════════════════════════════════════════════════════ */
 
 :root {
@@ -74,7 +74,7 @@
 
   /* ── shadcn/Radix HSL Bridge ──
      These exist only to satisfy imported UI primitives.
-     New feature CSS should use DataBox semantic tokens above. */
+     New feature CSS should use DBFox semantic tokens above. */
   --primary: 247 84% 68%;
   --destructive: 0 56% 52%;
   --muted: 210 40% 96%;

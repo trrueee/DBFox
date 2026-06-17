@@ -101,15 +101,15 @@ def test_keyring_lifecycle_and_migration(monkeypatch) -> None:
     
     # 3. Force recalculation of key using mocked keyring service names
     # Temporary patch service names to prevent collision with actual workspace keys
-    monkeypatch.setattr(crypto, "KEYRING_SERVICE", "DataBoxTestService")
-    monkeypatch.setattr(crypto, "KEYRING_USERNAME", "DataBoxTestUser")
+    monkeypatch.setattr(crypto, "KEYRING_SERVICE", "DBFoxTestService")
+    monkeypatch.setattr(crypto, "KEYRING_USERNAME", "DBFoxTestUser")
     
     # 4. Generate key and verify persistence inside mocked OS Keychain
     key = get_or_create_key()
     assert len(key) == 32
     
     # Ensure key was written to mock keyring
-    stored_b64 = keyring_store.get(("DataBoxTestService", "DataBoxTestUser"))
+    stored_b64 = keyring_store.get(("DBFoxTestService", "DBFoxTestUser"))
     assert stored_b64 is not None
     
     # Ensure decrypted base64 matches original generated key bytes

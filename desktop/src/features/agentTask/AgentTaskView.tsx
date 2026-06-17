@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader2, XCircle, ShieldAlert } from "lucide-react";
 import "./AgentTaskView.css";
-import type { WorkspaceTab } from "../../mock/databoxMock";
+import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { AgentTurnItem } from "./AgentTurnItem";
 import { parseConversationTurns, RISK_LABELS } from "./types";
 

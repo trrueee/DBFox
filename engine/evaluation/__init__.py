@@ -1,4 +1,4 @@
-"""DataBox Agent Eval Layer — quality evaluation for the full agent trajectory.
+"""DBFox Agent Eval Layer — quality evaluation for the full agent trajectory.
 
 Modules:
   schemas             — AgentEvalCase, AgentEvalInput, AgentEvalExpectation

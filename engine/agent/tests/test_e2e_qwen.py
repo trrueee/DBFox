@@ -16,7 +16,7 @@ These tests require real API credentials.  Set the env vars::
 
 Run with::
 
-    pytest engine/databox_agent/tests/test_e2e_qwen.py -v -s --tb=long
+    pytest engine/dbfox_agent/tests/test_e2e_qwen.py -v -s --tb=long
 """
 from __future__ import annotations
 
@@ -86,9 +86,9 @@ class TestRealModelToolCalling:
     def test_model_sees_alias_tool_names(self):
         """Model should receive underscore-aliased tool names, not dotted names."""
         from engine.agent.tools.registry_bridge import build_langchain_tools
-        from engine.tools.databox_tools import register_databox_tools
+        from engine.tools.dbfox_tools import register_dbfox_tools
 
-        registry = register_databox_tools()
+        registry = register_dbfox_tools()
         tools = build_langchain_tools(registry)
 
         tool_names = {t.name for t in tools}
@@ -119,10 +119,10 @@ class TestRealModelToolCalling:
     @_skip_if_no_api
     def test_qwen_tool_calling_trajectory(self):
         """Run a real Qwen invocation and inspect the tool-calling trajectory."""
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
 
         req = self._build_request(execute=True)
-        service = DataBoxAgentService(self.db)
+        service = DBFoxAgentService(self.db)
 
         events = list(service.run_iter(req))
 
@@ -179,7 +179,7 @@ class TestExecuteFalse:
 
     @_skip_if_no_api
     def test_execute_false_no_sql_execution(self):
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
         from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
@@ -192,7 +192,7 @@ class TestExecuteFalse:
             max_steps=10,
         )
 
-        service = DataBoxAgentService(self.db)
+        service = DBFoxAgentService(self.db)
         events = list(service.run_iter(req))
 
         # Collect all step names
@@ -264,7 +264,7 @@ class TestApprovalE2E:
     @_skip_if_no_api
     def test_approval_interrupt_resume_cycle(self):
         """Verify the full approval lifecycle with real model + LangGraph interrupt."""
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
         from engine.agent_core.types import AgentRunRequest
         from engine.agent_core import persistence as ap
 
@@ -280,7 +280,7 @@ class TestApprovalE2E:
             max_steps=10,
         )
 
-        service = DataBoxAgentService(self.db)
+        service = DBFoxAgentService(self.db)
         events_phase1 = list(service.run_iter(req))
 
         # Collect approval events
@@ -357,8 +357,8 @@ class TestApprovalE2E:
         This bypasses model-dependent behavior and directly tests the
         interrupt() → checkpoint → Command(resume) mechanism (P0-1 fix).
         """
-        from engine.agent.graph.react_graph import build_databox_react_graph
-        from engine.agent.graph.state import DataBoxAgentState
+        from engine.agent.graph.react_graph import build_dbfox_react_graph
+        from engine.agent.graph.state import DBFoxAgentState
         from engine.agent.app.request_context import RequestContext
         from engine.agent_core.types import AgentRunRequest
         from engine.agent_core import persistence as ap
@@ -385,7 +385,7 @@ class TestApprovalE2E:
         # where the model already has context about a validated SQL.
         # The LLM should be prompted to call sql_execute_readonly, and
         # policy will flag it for approval because requires_confirmation is set.
-        state = DataBoxAgentState(
+        state = DBFoxAgentState(
             run_id=run_id,
             thread_id=session_id,
             datasource_id=self.ds.id,
@@ -412,7 +412,7 @@ class TestApprovalE2E:
         )
 
         from langgraph.checkpoint.memory import MemorySaver
-        app = build_databox_react_graph(checkpointer=MemorySaver())
+        app = build_dbfox_react_graph(checkpointer=MemorySaver())
         config = {"configurable": {"thread_id": session_id, "registry": ctx.registry, "db": self.db, "request": req}}
 
         # Phase 1 — run until interrupt
@@ -477,7 +477,7 @@ class TestArtifactConsistency:
 
     @_skip_if_no_api
     def test_artifacts_in_response(self):
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
         from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
@@ -490,7 +490,7 @@ class TestArtifactConsistency:
             max_steps=10,
         )
 
-        service = DataBoxAgentService(self.db)
+        service = DBFoxAgentService(self.db)
         events = list(service.run_iter(req))
 
         # Collect SSE artifact IDs
@@ -536,7 +536,7 @@ class TestBlockedLoop:
     def test_blocked_loop_terminates(self):
         """Model that keeps calling sql.execute_readonly without validation
         should eventually be force-finalized."""
-        from engine.agent.app.service import DataBoxAgentService
+        from engine.agent.app.service import DBFoxAgentService
         from engine.agent_core.types import AgentRunRequest
 
         req = AgentRunRequest(
@@ -552,7 +552,7 @@ class TestBlockedLoop:
             max_steps=8,
         )
 
-        service = DataBoxAgentService(self.db)
+        service = DBFoxAgentService(self.db)
         events = list(service.run_iter(req))
 
         # Collect policy decisions

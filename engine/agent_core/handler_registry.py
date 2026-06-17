@@ -16,7 +16,7 @@ from typing import Any, Callable
 from engine.agent_core.types import ToolObservation
 from engine.agent_core.tool_registry import ToolContext
 
-logger = logging.getLogger("databox.databox_agent.handler_registry")
+logger = logging.getLogger("dbfox.dbfox_agent.handler_registry")
 
 ToolHandlerFn = Callable[["ToolContext", dict[str, Any]], ToolObservation]
 

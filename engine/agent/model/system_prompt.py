@@ -6,9 +6,9 @@ from typing import Any
 from engine.agent.skills.registry import get_skill_registry
 from engine.agent.skills.renderer import render_skill_for_model
 
-logger = logging.getLogger("databox.databox_agent.model.system_prompt")
+logger = logging.getLogger("dbfox.dbfox_agent.model.system_prompt")
 
-SYSTEM_PROMPT = """You are DataBox, an autonomous data analysis agent.
+SYSTEM_PROMPT = """You are DBFox, an autonomous data analysis agent.
 
 You solve user tasks by repeatedly:
 1. Understanding the user’s goal.
@@ -101,7 +101,7 @@ Do NOT overuse escalation. If you can complete the task with the tools you alrea
 
 
 def build_system_prompt(state: dict[str, Any]) -> str:
-    """Return the system prompt for the DataBox Agent.
+    """Return the system prompt for the DBFox Agent.
 
     When skills are selected, augments the prompt with skill-specific
     step guidance, success criteria, and recovery playbook.

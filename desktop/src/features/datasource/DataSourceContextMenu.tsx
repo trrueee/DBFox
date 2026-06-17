@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Sparkles, Terminal, Trash2, X } from "lucide-react";
-import type { ContextMenuState } from "../../mock/databoxMock";
+import type { ContextMenuState } from "../../mock/dbfoxMock";
 
 interface DataSourceContextMenuProps {
   contextMenu: ContextMenuState;

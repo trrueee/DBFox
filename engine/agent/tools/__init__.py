@@ -1,2 +1,2 @@
-# DataBox AgentNext Tools subpackage
+# DBFox AgentNext Tools subpackage
 from __future__ import annotations
