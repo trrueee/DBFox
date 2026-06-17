@@ -1,6 +1,22 @@
-export const ENGINE_PORT = import.meta.env.VITE_LOCAL_ENGINE_PORT || "18625";
-export const ENGINE_TOKEN = import.meta.env.VITE_LOCAL_ENGINE_TOKEN || "";
-export const BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
+export let ENGINE_PORT = import.meta.env.VITE_LOCAL_ENGINE_PORT || "18625";
+export let ENGINE_TOKEN = import.meta.env.VITE_LOCAL_ENGINE_TOKEN || "";
+export let BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
+
+export async function initEngineConfig(): Promise<void> {
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
+    return;
+  }
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const config = await invoke<{ port: number; token: string }>("get_engine_config");
+    ENGINE_PORT = String(config.port);
+    ENGINE_TOKEN = config.token;
+    BASE_URL = `http://127.0.0.1:${ENGINE_PORT}/api/v1`;
+    console.log(`[DBFox] Loaded dynamic engine config: port=${ENGINE_PORT}`);
+  } catch (err) {
+    console.error("[DBFox] Failed to fetch dynamic engine config from Tauri:", err);
+  }
+}
 
 export class ApiError extends Error {
   status?: number;

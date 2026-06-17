@@ -8,7 +8,7 @@ import uvicorn
 
 ENGINE_DIR = Path(__file__).resolve().parent
 ENGINE_HOST = "127.0.0.1"
-ENGINE_PORT = 18625
+ENGINE_PORT = int(os.environ.get("DBFOX_ENGINE_PORT", "18625"))
 
 _RELOAD_EXCLUDES = [
     "**/__pycache__/**",
