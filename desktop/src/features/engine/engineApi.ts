@@ -55,15 +55,8 @@ export async function listColumns(tableId: string) {
 }
 
 export async function executeSql(datasourceId: string, sql: string, question?: string) {
-  return request<EngineSqlResult>("/query/execute", {
-    method: "POST",
-    body: JSON.stringify({
-      datasource_id: datasourceId,
-      sql,
-      question,
-      execution_id: "frontend-" + Date.now(),
-    }),
-  });
+  const { queryApi } = await import("../../lib/api/query");
+  return queryApi.executeSql(datasourceId, sql, question, "frontend-" + Date.now()) as Promise<EngineSqlResult>;
 }
 
 export async function getDefaultDatasource() {
