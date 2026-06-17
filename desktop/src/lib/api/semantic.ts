@@ -27,19 +27,18 @@ export const semanticApi = {
       method: "DELETE",
     }),
 
-  syncEmbeddings: (datasourceId: string, apiKey?: string, apiBase?: string, modelName?: string) => {
-    let url = `/semantic/aliases/sync-embeddings?datasource_id=${encodeURIComponent(datasourceId)}`;
-    if (apiKey) {
-      url += `&api_key=${encodeURIComponent(apiKey)}`;
-    }
-    if (apiBase) {
-      url += `&api_base=${encodeURIComponent(apiBase)}`;
-    }
-    if (modelName) {
-      url += `&model_name=${encodeURIComponent(modelName)}`;
-    }
-    return request<{ success: boolean; synced_count: number; message: string }>(url, { method: "POST" });
-  },
+  syncEmbeddings: (datasourceId: string, apiKey?: string, apiBase?: string, modelName?: string) =>
+    request<{ success: boolean; synced_count: number; message: string }>(
+      `/semantic/aliases/sync-embeddings?datasource_id=${encodeURIComponent(datasourceId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          api_key: apiKey || undefined,
+          api_base: apiBase || undefined,
+          model_name: modelName || undefined,
+        }),
+      },
+    ),
 
   getSyncStatus: (datasourceId: string) =>
     request<SemanticSyncStatus>(

@@ -43,6 +43,7 @@ PROJECT_DIR = ENGINE_DIR.parent
 
 # 1. 本地引擎安全性：生成或读取本地安全访问令牌 (Local Secure Token)
 TOKEN_FILE = private_runtime_file("auth", ".local_token")
+is_frozen = getattr(sys, "frozen", False)
 
 
 def get_or_create_local_token() -> str:
@@ -60,7 +61,6 @@ def get_or_create_local_token() -> str:
         return env_token.strip()
 
     # 如果是在 Tauri 打包后的“冷冻（frozen）”环境下运行，尝试读取打包时预设的静态 Token
-    is_frozen = getattr(sys, "frozen", False)
     if is_frozen:
         try:
             from engine import token_preset
@@ -121,7 +121,6 @@ def _write_frontend_env_file_if_owned(env_file: Path, token: str) -> None:
 
 
 # Only write the frontend dev env file in source-mode local development.
-is_frozen = getattr(sys, "frozen", False)
 if not is_frozen:
     FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
     try:
@@ -173,7 +172,6 @@ async def lifespan(application: FastAPI) -> Any:
 
 
 # 实例化 FastAPI 核心应用对象
-is_frozen = getattr(sys, "frozen", False)
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",

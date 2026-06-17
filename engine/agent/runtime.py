@@ -79,7 +79,7 @@ class DBFoxAgentRuntime:
 
         for event in self.kernel.resume_approval_iter(
             run_id=run_id,
-            approval_id=resolved_approval_id,
+            approval_id=approval.id,
             approved=approval.status == "approved",
         ):
             yield self._facade_event(event)
