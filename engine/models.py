@@ -211,7 +211,8 @@ class SchemaTable(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     datasource = relationship("DataSource", back_populates="tables")
-    columns = relationship("SchemaColumn", back_populates="table", cascade="all, delete-orphan")
+    columns = relationship("SchemaColumn", back_populates="table", cascade="all, delete-orphan",
+                           foreign_keys="[SchemaColumn.table_id]")
 
     def __repr__(self) -> str:
         return f"<SchemaTable id={self.id!r} table_name={self.table_name!r} data_source_id={self.data_source_id!r}>"
@@ -254,7 +255,8 @@ class SchemaColumn(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-    table = relationship("SchemaTable", back_populates="columns")
+    table = relationship("SchemaTable", back_populates="columns",
+                         foreign_keys="[SchemaColumn.table_id]")
 
     def __repr__(self) -> str:
         return f"<SchemaColumn id={self.id!r} column_name={self.column_name!r} data_type={self.data_type!r}>"

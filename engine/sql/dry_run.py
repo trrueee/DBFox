@@ -21,7 +21,7 @@ class DryRunResult:
     message: str | None = None
 
 
-from engine.sql.executor import _validate_explain_sql
+from engine.sql.explain_validator import validate_explain_sql as _validate_explain_sql
 
 
 def dry_run_query(db: Session, datasource_id: str, sql: str) -> DryRunResult:
