@@ -365,7 +365,7 @@ class DBFoxAgentService:
             execution=None,
             schema_context=None,
             query_plan=None,
-            data_profile=None,
+            result_profile=None,
             chart_suggestion=None,
             answer=None,
             final_answer=None,
