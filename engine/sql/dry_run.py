@@ -21,35 +21,7 @@ class DryRunResult:
     message: str | None = None
 
 
-def _validate_explain_sql(sql: str, dialect: str) -> None:
-    """Secondary safety check for EXPLAIN inputs used by dry-run probes."""
-    import sqlglot
-    from sqlglot import exp
-
-    from engine.errors import GuardrailValidationError
-    from engine.sql.parser import normalize_dialect
-
-    sql_stripped = sql.strip()
-    while sql_stripped.endswith(";"):
-        sql_stripped = sql_stripped[:-1].strip()
-
-    sqlglot_dialect = normalize_dialect(dialect)
-
-    try:
-        exprs = sqlglot.parse(sql_stripped, read=sqlglot_dialect)
-    except Exception as exc:
-        raise GuardrailValidationError(f"SQL syntax error in EXPLAIN query: {exc}")
-
-    if len(exprs) != 1 or not exprs[0]:
-        raise GuardrailValidationError("EXPLAIN query must contain exactly one SQL statement.")
-
-    expr = exprs[0]
-    if not isinstance(expr, (exp.Select, exp.Union)):
-        raise GuardrailValidationError("EXPLAIN query must be a SELECT or UNION statement.")
-
-    for node in expr.walk():
-        if isinstance(node, (exp.Command, exp.Execute)):
-            raise GuardrailValidationError("EXPLAIN query contains blocked command types.")
+from engine.sql.executor import _validate_explain_sql
 
 
 def dry_run_query(db: Session, datasource_id: str, sql: str) -> DryRunResult:

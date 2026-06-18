@@ -130,27 +130,30 @@ export const DataSourcesPage = ({
     description: "",
   });
 
-  const fetchAliasesAndStatus = async (dsId: string) => {
+  const fetchAliasesAndStatus = async (dsId: string, isCancelled?: () => boolean) => {
     try {
       setLoadingAliases(true);
       const [listRes, statusRes] = await Promise.all([
         api.listAliases(dsId),
         api.getSyncStatus(dsId),
       ]);
+      if (isCancelled?.()) return;
       setAliases(listRes);
       setSyncStatus(statusRes);
     } catch (err) {
+      if (isCancelled?.()) return;
       console.error("Failed to load aliases or sync status", err);
     } finally {
-      setLoadingAliases(false);
+      if (!isCancelled?.()) setLoadingAliases(false);
     }
   };
 
   useEffect(() => {
     if (selectedId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void fetchAliasesAndStatus(selectedId);
-      setActiveTab("info"); // Reset active tab when datasource changes
+      let cancelled = false;
+      void fetchAliasesAndStatus(selectedId, () => cancelled);
+      setActiveTab("info");
+      return () => { cancelled = true; };
     } else {
       setAliases([]);
       setSyncStatus(null);
