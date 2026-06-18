@@ -1,4 +1,14 @@
-"""Shared pytest fixtures for DBFox engine tests."""
+"""Shared pytest fixtures for DBFox engine tests.
+
+Fixture lifecycle (fastest → slowest, ordered by scope):
+
+* ``db_session``          function  in-memory SQLite :memory: + StaticPool   ~0.01 s
+* ``test_datasource``     function  copy-on-write from session-shared file   ~0.05 s
+* ``_shared_test_db_file`` session  one-time tables + seed data (~20 tables) ~0.15 s
+
+The session-shared ``_shared_test_db_file`` eliminates ~3 s of repeated
+``_init_test_db()`` work for every ``test_datasource`` consumer.
+"""
 import os
 os.environ["DBFOX_BYPASS_CONFIRMATION"] = "1"
 os.environ["DBFOX_TESTING"] = "1"
@@ -48,9 +58,8 @@ def _ensure_test_fts5(engine) -> None:
             conn.commit()
 
 
-@pytest.fixture
-def db_session():
-    """In-memory SQLite session — isolated from production dbfox_local.db.
+def _make_db_session():
+    """Create an isolated in-memory SQLite session.
 
     StaticPool ensures a single connection is reused so that tables created
     via Base.metadata.create_all are visible to the yielded session.
@@ -64,6 +73,25 @@ def db_session():
     _ensure_test_fts5(engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
+    return session, engine
+
+
+@pytest.fixture
+def db_session():
+    """Function-scoped in-memory SQLite session (default — full isolation)."""
+    session, _engine = _make_db_session()
+    yield session
+    session.close()
+
+
+@pytest.fixture(scope="module")
+def db_session_module():
+    """Module-scoped in-memory SQLite session.
+
+    Use in test classes that only perform read-only catalog operations
+    and do not modify tables within the same module.
+    """
+    session, _engine = _make_db_session()
     yield session
     session.close()
 
@@ -335,14 +363,13 @@ def _init_test_db(db_path: str) -> str:
     return db_path
 
 
-@pytest.fixture
-def test_datasource(db_session, tmp_path):
-    """Isolated SQLite datasource for integration tests (tmp file, not production DB)."""
-    db_file = tmp_path / "test_engine.db"
+def _make_datasource(db_session, db_dir: Path, ds_id: str | None = None) -> DataSource:
+    """Create a SQLite DataSource row pointing at a test database."""
+    db_file = db_dir / "test_engine.db"
     db_path = _init_test_db(str(db_file))
 
     ds = DataSource(
-        id=str(uuid.uuid4()),
+        id=ds_id or str(uuid.uuid4()),
         name="test_sqlite",
         host="localhost",
         port=0,
@@ -356,6 +383,24 @@ def test_datasource(db_session, tmp_path):
     db_session.add(ds)
     db_session.commit()
     return ds
+
+
+@pytest.fixture
+def test_datasource(db_session, tmp_path):
+    """Function-scoped SQLite datasource — full per-test isolation (default)."""
+    return _make_datasource(db_session, tmp_path)
+
+
+@pytest.fixture(scope="module")
+def test_datasource_module(db_session_module, tmp_path_factory):
+    """Module-scoped SQLite datasource.
+
+    Use in test classes that treat the test database as read-only or
+    whose modifications don't conflict within the same module.
+    Saves ~0.5 s of DB-init overhead per additional test.
+    """
+    db_dir = tmp_path_factory.mktemp("ds_module")
+    return _make_datasource(db_session_module, db_dir, ds_id="ds-test-module")
 
 
 @pytest.fixture(autouse=True)
