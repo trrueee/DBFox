@@ -22,13 +22,8 @@ class PolicyEngine:
         if policy in {"table_preview", "schema_introspection", "explain"}:
             return
 
-        if not ds.is_read_only and ds.env != "prod":
-            return  # Fast path: development database and writable
-
-        # Parse AST to identify commands
-        # Resolve dialect so that MySQL backtick-quoted identifiers
-        # (e.g. `orders`) are correctly parsed instead of triggering
-        # POLICY_PARSE_ERROR.
+        # Always parse the AST so that DDL and Commands are blocked in every
+        # environment.  Dev writable datasources may run DML, but never DDL.
         try:
             expressions = parse_sql(sql_str, ds.db_type)
         except Exception as exc:
@@ -38,27 +33,33 @@ class PolicyEngine:
                 message=f"SQL 无法被安全策略引擎解析，已按潜在注入风险阻断。数据源: '{ds.name}'。"
             ) from exc
 
-        # Walk AST to detect mutations
-        mutations = (
-            exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Create, exp.Alter, exp.Command, exp.Merge
-        )
+        # DDL and Commands are always blocked — regardless of environment.
+        # Table designer / DDL intent must go through enforce_ddl_policy().
+        _BLOCKED_IN_ALL_ENVS = (exp.Drop, exp.Create, exp.Alter, exp.Command)
+        # DML is blocked on read-only datasources; allowed otherwise.
+        _DML_MUTATIONS = (exp.Insert, exp.Update, exp.Delete, exp.Merge)
 
         for expr in expressions:
             if not expr:
                 continue
             for node in expr.walk():
-                if isinstance(node, mutations):
-                    # Check Read-Only restriction
+                if isinstance(node, _BLOCKED_IN_ALL_ENVS):
+                    raise DBFoxError(
+                        code="DDL_BLOCKED",
+                        message=(
+                            f"数据源 '{ds.name}' 拒绝执行结构定义/命令 SQL "
+                            f"(指令类型: {type(node).__name__})。"
+                            f"DDL 操作请通过表设计器执行。"
+                        )
+                    )
+                if isinstance(node, _DML_MUTATIONS):
                     if ds.is_read_only:
                         raise DBFoxError(
                             code="READ_ONLY_VIOLATION",
-                            message=f"数据源 '{ds.name}' 处于只读防护模式下，禁止执行写入/修改/定义 SQL (指令类型: {type(node).__name__})。"
-                        )
-                    # Check Production restriction (for safety, restrict DDL in prod)
-                    if ds.env == "prod" and isinstance(node, (exp.Drop, exp.Create, exp.Alter)):
-                        raise DBFoxError(
-                            code="PROD_POLICY_VIOLATION",
-                            message=f"数据源 '{ds.name}' 属于生产环境，已被 Policy 引擎安全锁定，拒绝通过此处执行结构定义变更 (DDL: {type(node).__name__})。"
+                            message=(
+                                f"数据源 '{ds.name}' 处于只读防护模式下，"
+                                f"禁止执行写入/修改 SQL (指令类型: {type(node).__name__})。"
+                            )
                         )
 
     @staticmethod

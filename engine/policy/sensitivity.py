@@ -15,6 +15,9 @@ _SENSITIVE_PATTERN_STRINGS = [
     r"\b(ssn|social_security|tax_id|national_id)\b",
     r"\b(passport|driver_license)\b",
 ]
+# Patterns that are known-safe (bootstrapped defaults).  Any pattern added
+# by an administrator is escaped to prevent ReDoS via catastrophic backtracking.
+_SAFE_PATTERN_SET: frozenset[str] = frozenset(_SENSITIVE_PATTERN_STRINGS)
 _SENSITIVE_FALLBACK = re.compile("|".join(_SENSITIVE_PATTERN_STRINGS), re.IGNORECASE)
 
 def _bootstrap_sensitivity(db: Session, datasource_id: str) -> None:
@@ -57,7 +60,16 @@ def load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:
             .all()
         )
 
-    patterns = [str(r.alias) for r in rows]
+    patterns: list[str] = []
+    for r in rows:
+        alias = str(r.alias)
+        # Escape administrator-provided patterns to prevent ReDoS.
+        # Bootstrapped defaults (word-boundary anchored alternations) are
+        # known-safe and used verbatim.
+        if alias in _SAFE_PATTERN_SET:
+            patterns.append(alias)
+        else:
+            patterns.append(re.escape(alias))
     if not patterns:
         return _SENSITIVE_FALLBACK
     return re.compile("|".join(patterns))
