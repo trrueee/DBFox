@@ -92,13 +92,12 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
       - `raise HTTPException(...)`：抛出 FastAPI 的 HTTP 错误异常，以返回指定的 HTTP 状态码（如 400 或 500）和错误详情。
     """
     try:
-        # 调用核心备份方法
         record = create_backup(db, req.datasource_id, req.label, allow_fallback=req.allow_fallback)
-        db.commit()      # 提交事务
-        db.refresh(record)  # 刷新模型
+        db.commit()
+        db.refresh(record)
         return _backup_to_dict(record)
     except Exception:
-        db.rollback()
+        # create_backup already committed the failed status — no rollback.
         raise
 
 

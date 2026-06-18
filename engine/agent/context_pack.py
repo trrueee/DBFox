@@ -186,58 +186,83 @@ class ContextPack(BaseModel):
 
 
 # ── Builder ────────────────────────────────────────────────────────────────────
+#
+# Each ``_build_*_section`` function extracts a single section from raw agent
+# state.  ``build_context_pack`` orchestrates them — it does zero inline parsing.
 
 
 def build_context_pack(state: dict[str, Any]) -> ContextPack:
     """Build a ContextPack from raw agent state.
 
-    Called after each observe cycle.  All sections are populated
-    from the current state snapshot — no side effects.
+    Called after each observe cycle.  All sections are populated from the
+    current state snapshot — no side effects.  Section builders are
+    independently testable.
     """
-    # -- Workspace -----------------------------------------------------------
+    pack = ContextPack(
+        workspace=_build_workspace_section(state),
+        environment=_build_environment_section(state),
+        schema_context=_build_schema_section(state),
+        semantic=_build_semantic_section(state),
+        sql=_build_sql_section(state),
+        safety=_build_safety_section(state),
+        execution=_build_execution_section(state),
+        result=_build_result_section(state),
+        memory=_build_memory_section(),
+        run_state=_build_runstate_section(state),
+        skill=_build_skill_section(state),
+        intent=_build_intent_section(state),
+        recent_activity=_build_recent_activity_section(state),
+        constraints=_build_constraints_section(state),
+    )
+    pack.ui_summary = render_ui_summary(pack)
+    return pack
+
+
+# ── Section builders ────────────────────────────────────────────────────────────
+
+
+def _build_workspace_section(state: dict[str, Any]) -> WorkspaceSection:
     ws_raw = state.get("workspace_context") or {}
-    if isinstance(ws_raw, dict):
-        ws_tables = _normalize_str_list(
-            ws_raw.get("selected_table_names") or ws_raw.get("selected_tables") or []
-        )
-        ws_columns = _normalize_str_list(ws_raw.get("selected_column_refs") or [])
-        open_tabs = ws_raw.get("open_sql_tabs") or []
-        tab_titles = [
-            str(t.get("title") or t.get("id") or "")
-            for t in open_tabs[:6]
-            if isinstance(t, dict) and (t.get("title") or t.get("id"))
-        ]
-        preview = ws_raw.get("last_query_result_preview") or {}
-        preview_rows = int(preview.get("row_count") or preview.get("rows") or 0) if isinstance(preview, dict) else 0
-        active_table = ws_raw.get("active_table")
-        if not active_table and ws_tables:
-            active_table = ws_tables[0]
-        workspace = WorkspaceSection(
-            datasource_id=str(state.get("datasource_id") or ws_raw.get("datasource_id") or ""),
-            active_sql=_str_or_none(ws_raw.get("selected_sql") or ws_raw.get("active_sql")),
-            active_table=_str_or_none(active_table),
-            selected_tables=ws_tables[:10],
-            selected_columns=ws_columns[:20],
-            selected_artifact_id=_str_or_none(ws_raw.get("selected_artifact_id")),
-            open_tab_titles=tab_titles,
-            has_result=bool(ws_raw.get("has_result") or preview_rows > 0),
-            result_preview_rows=preview_rows,
-            error_summary=_str_or_none(ws_raw.get("last_error") or state.get("error")),
-        )
-    else:
-        workspace = WorkspaceSection(
+    if not isinstance(ws_raw, dict):
+        return WorkspaceSection(
             datasource_id=str(state.get("datasource_id") or ""),
             error_summary=_str_or_none(state.get("error")),
         )
 
-    # -- Environment ---------------------------------------------------------
-    env_raw = state.get("environment_profile") or {}
-    env_warnings: list[str] = []
-    raw_warnings = env_raw.get("warnings") or []
-    for w in raw_warnings:
-        env_warnings.append(str(w))
+    ws_tables = _normalize_str_list(
+        ws_raw.get("selected_table_names") or ws_raw.get("selected_tables") or []
+    )
+    ws_columns = _normalize_str_list(ws_raw.get("selected_column_refs") or [])
+    open_tabs = ws_raw.get("open_sql_tabs") or []
+    tab_titles = [
+        str(t.get("title") or t.get("id") or "")
+        for t in open_tabs[:6]
+        if isinstance(t, dict) and (t.get("title") or t.get("id"))
+    ]
+    preview = ws_raw.get("last_query_result_preview") or {}
+    preview_rows = int(preview.get("row_count") or preview.get("rows") or 0) if isinstance(preview, dict) else 0
+    active_table = ws_raw.get("active_table")
+    if not active_table and ws_tables:
+        active_table = ws_tables[0]
 
-    environment = EnvironmentSection(
+    return WorkspaceSection(
+        datasource_id=str(state.get("datasource_id") or ws_raw.get("datasource_id") or ""),
+        active_sql=_str_or_none(ws_raw.get("selected_sql") or ws_raw.get("active_sql")),
+        active_table=_str_or_none(active_table),
+        selected_tables=ws_tables[:10],
+        selected_columns=ws_columns[:20],
+        selected_artifact_id=_str_or_none(ws_raw.get("selected_artifact_id")),
+        open_tab_titles=tab_titles,
+        has_result=bool(ws_raw.get("has_result") or preview_rows > 0),
+        result_preview_rows=preview_rows,
+        error_summary=_str_or_none(ws_raw.get("last_error") or state.get("error")),
+    )
+
+
+def _build_environment_section(state: dict[str, Any]) -> EnvironmentSection:
+    env_raw = state.get("environment_profile") or {}
+    env_warnings: list[str] = [str(w) for w in (env_raw.get("warnings") or [])]
+    return EnvironmentSection(
         env_tier=str(env_raw.get("env") or env_raw.get("env_tier") or "unknown"),
         dialect=str(env_raw.get("dialect") or "unknown"),
         catalog_status=str(env_raw.get("catalog_status") or "unknown"),
@@ -245,59 +270,64 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         warnings=env_warnings[:5],
     )
 
-    # -- Schema --------------------------------------------------------------
+
+def _build_schema_section(state: dict[str, Any]) -> SchemaSection:
     schema_raw = state.get("schema_context") or {}
     selected_tables: list[str] = []
-    if isinstance(schema_raw, dict):
-        raw_tables = schema_raw.get("selected_tables") or []
-        for t in raw_tables:
-            selected_tables.append(str(t))
     candidate_columns: list[str] = []
+    ddl: str | None = None
+    ddl_size = 0
     if isinstance(schema_raw, dict):
-        raw_cols = schema_raw.get("candidate_columns") or schema_raw.get("selected_columns") or []
-        candidate_columns = _normalize_str_list(raw_cols)[:30]
-
-    schema = SchemaSection(
+        selected_tables = [str(t) for t in (schema_raw.get("selected_tables") or [])]
+        candidate_columns = _normalize_str_list(
+            schema_raw.get("candidate_columns") or schema_raw.get("selected_columns") or []
+        )[:30]
+        ddl = _str_or_none(schema_raw.get("schema_context"))
+        ddl_size = int(schema_raw.get("schema_context_size") or 0)
+    return SchemaSection(
         selected_tables=selected_tables,
         candidate_columns=candidate_columns,
-        ddl_snippet=_str_or_none(schema_raw.get("schema_context") if isinstance(schema_raw, dict) else None),
-        ddl_size=int(schema_raw.get("schema_context_size") or 0) if isinstance(schema_raw, dict) else 0,
+        ddl_snippet=ddl,
+        ddl_size=ddl_size,
     )
 
-    # -- Semantic ------------------------------------------------------------
-    sem_raw = state.get("semantic_resolution") or {}
-    if isinstance(sem_raw, dict):
-        semantic = SemanticSection(
-            resolved_terms=_normalize_term_list(sem_raw.get("resolved_terms") or []),
-            resolved_metrics=_normalize_term_list(sem_raw.get("resolved_metrics") or []),
-            join_paths=_normalize_str_list(sem_raw.get("join_paths") or []),
-            ambiguity_flags=_normalize_str_list(sem_raw.get("ambiguity") or []),
-            context_text=_str_or_none(sem_raw.get("semantic_context_text")),
-        )
-    else:
-        semantic = SemanticSection()
 
-    # -- SQL -----------------------------------------------------------------
+def _build_semantic_section(state: dict[str, Any]) -> SemanticSection:
+    sem_raw = state.get("semantic_resolution") or {}
+    if not isinstance(sem_raw, dict):
+        return SemanticSection()
+    return SemanticSection(
+        resolved_terms=_normalize_term_list(sem_raw.get("resolved_terms") or []),
+        resolved_metrics=_normalize_term_list(sem_raw.get("resolved_metrics") or []),
+        join_paths=_normalize_str_list(sem_raw.get("join_paths") or []),
+        ambiguity_flags=_normalize_str_list(sem_raw.get("ambiguity") or []),
+        context_text=_str_or_none(sem_raw.get("semantic_context_text")),
+    )
+
+
+def _build_sql_section(state: dict[str, Any]) -> SqlSection:
     sql_raw = state.get("sql")
     sql_str: str | None = None
     if isinstance(sql_raw, str):
         sql_str = sql_raw
     elif isinstance(sql_raw, dict):
         sql_str = sql_raw.get("sql") or str(sql_raw)
-    sql = SqlSection(sql=sql_str, sql_size=len(sql_str) if sql_str else 0)
+    return SqlSection(sql=sql_str, sql_size=len(sql_str) if sql_str else 0)
 
-    # -- Safety --------------------------------------------------------------
+
+def _build_safety_section(state: dict[str, Any]) -> SafetySection:
     safety_raw = state.get("safety") or {}
-    safety = SafetySection(
+    return SafetySection(
         can_execute=bool(safety_raw.get("can_execute")),
         requires_confirmation=bool(safety_raw.get("requires_confirmation")),
         blocked_reasons=_normalize_str_list(safety_raw.get("blocked_reasons") or []),
         passed=bool(safety_raw.get("passed")),
     )
 
-    # -- Execution -----------------------------------------------------------
+
+def _build_execution_section(state: dict[str, Any]) -> ExecutionSection:
     exec_raw = state.get("execution") or {}
-    execution = ExecutionSection(
+    return ExecutionSection(
         success=bool(exec_raw.get("success")),
         row_count=int(exec_raw.get("rowCount") or 0),
         columns=_normalize_str_list(exec_raw.get("columns") or []),
@@ -305,20 +335,23 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         truncated=bool(exec_raw.get("truncated")),
     )
 
-    # -- Result --------------------------------------------------------------
+
+def _build_result_section(state: dict[str, Any]) -> ResultSection:
     result_raw = state.get("data_profile") or {}
-    result = ResultSection(
+    return ResultSection(
         row_count=int(result_raw.get("row_count") or 0),
         notable_facts=_normalize_str_list(result_raw.get("notable_facts") or [])[:5],
         anomalies=_normalize_str_list(result_raw.get("anomalies") or [])[:3],
         chart_type=_str_or_none((state.get("chart_suggestion") or {}).get("type")),
     )
 
-    # -- Memory --------------------------------------------------------------
-    memory = MemorySection()
 
-    # -- Run state -----------------------------------------------------------
-    run_state = RunStateSection(
+def _build_memory_section() -> MemorySection:
+    return MemorySection()
+
+
+def _build_runstate_section(state: dict[str, Any]) -> RunStateSection:
+    return RunStateSection(
         step_count=int(state.get("step_count") or 0),
         max_steps=int(state.get("max_steps") or 20),
         retry_budget=int((state.get("progress_decision") or {}).get("retry_budget") or 0),
@@ -328,19 +361,20 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         error=_str_or_none(state.get("error")),
     )
 
-    # -- Skill ---------------------------------------------------------------
-    skill_ids: list[str] = state.get("selected_skill_ids") or []
+
+def _build_skill_section(state: dict[str, Any]) -> SkillSection:
     plan = state.get("plan_directive") or {}
-    skill = SkillSection(
-        selected_skill_ids=skill_ids,
+    return SkillSection(
+        selected_skill_ids=state.get("selected_skill_ids") or [],
         skill_summary=plan.get("reasoning_summary", ""),
     )
 
-    # -- Intent --------------------------------------------------------------
-    user_question = _first_user_message(state)
+
+def _build_intent_section(state: dict[str, Any]) -> IntentSection:
+    plan = state.get("plan_directive") or {}
     follow_up = state.get("follow_up_context") or {}
-    intent = IntentSection(
-        original_question=user_question,
+    return IntentSection(
+        original_question=_first_user_message(state),
         is_follow_up=bool(state.get("parent_run_id") or follow_up),
         parent_run_id=_str_or_none(state.get("parent_run_id")),
         task_type=str(plan.get("task_type") or ""),
@@ -348,14 +382,19 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         success_criteria=_normalize_str_list(plan.get("success_criteria") or [])[:5],
     )
 
-    # -- Recent activity -----------------------------------------------------
+
+def _build_recent_activity_section(state: dict[str, Any]) -> RecentActivitySection:
+    ws_raw = state.get("workspace_context") or {}
+    ws_ctx = ws_raw if isinstance(ws_raw, dict) else {}
+    workspace = _build_workspace_section(state)
+
     artifact_summaries: list[str] = []
     for art in (state.get("artifacts") or [])[-8:]:
         if isinstance(art, dict):
             art_type = str(art.get("type") or "artifact")
             title = str(art.get("title") or art.get("semantic_id") or art_type)
             artifact_summaries.append(f"{art_type}:{title}")
-    ws_ctx = ws_raw if isinstance(ws_raw, dict) else {}
+
     recent_sql: list[str] = []
     if workspace.active_sql:
         recent_sql.append(workspace.active_sql[:200])
@@ -363,45 +402,26 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         if tab_sql:
             recent_sql.append(f"{tab_title}: {tab_sql[:120]}")
 
+    follow_up_raw = state.get("follow_up_context") or {}
     follow_up_summary = None
-    if isinstance(follow_up, dict) and follow_up.get("previous_question"):
-        follow_up_summary = (
-            f"Follow-up to: {follow_up.get('previous_question', '')[:120]}"
-        )
+    if isinstance(follow_up_raw, dict) and follow_up_raw.get("previous_question"):
+        follow_up_summary = f"Follow-up to: {follow_up_raw.get('previous_question', '')[:120]}"
 
-    recent_activity = RecentActivitySection(
+    return RecentActivitySection(
         artifact_summaries=artifact_summaries,
         follow_up_summary=follow_up_summary,
         recent_sql_snippets=recent_sql[:4],
     )
 
-    # -- Constraints ---------------------------------------------------------
+
+def _build_constraints_section(state: dict[str, Any]) -> ConstraintsSection:
     blocked = state.get("blocked_tool_calls") or []
-    constraints = ConstraintsSection(
+    return ConstraintsSection(
         execute_allowed=bool(state.get("execute", True)),
         max_steps=int(state.get("max_steps") or 20),
         requires_approval=bool((state.get("safety") or {}).get("requires_confirmation")),
         policy_blocked_tools=len(blocked) if isinstance(blocked, list) else 0,
     )
-
-    pack = ContextPack(
-        workspace=workspace,
-        environment=environment,
-        schema_context=schema,
-        semantic=semantic,
-        sql=sql,
-        safety=safety,
-        execution=execution,
-        result=result,
-        memory=memory,
-        run_state=run_state,
-        skill=skill,
-        intent=intent,
-        recent_activity=recent_activity,
-        constraints=constraints,
-    )
-    pack.ui_summary = render_ui_summary(pack)
-    return pack
 
 
 # ── Renderers (node-specific views) ────────────────────────────────────────────

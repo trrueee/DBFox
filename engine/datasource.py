@@ -163,111 +163,109 @@ def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
 
 
 def test_connection(config: dict[str, Any]) -> dict[str, Any]:
-    """
-    Test connectivity to a database (MySQL, PostgreSQL, or SQLite).
-    Returns basic database stats and checks if permissions are readonly or have write capabilities.
-    """
+    """Test connectivity to a database — dispatches to the dialect-specific strategy."""
     db_type = config.get("db_type", "mysql")
 
     if db_type == "sqlite":
-        db_path = _require_existing_sqlite_file(config.get("database_name", ""))
-        import os
-        import sqlite3
+        return _test_sqlite_connection(config)
+    if db_type == "postgresql":
+        return _test_postgres_connection(config)
+    return _test_mysql_connection(config)
 
+
+# ── Dialect-specific connection testers ──────────────────────────────────────────
+
+
+def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
+    import os
+    import sqlite3
+
+    db_path = _require_existing_sqlite_file(config.get("database_name", ""))
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", timeout=5, uri=True)
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", timeout=5, uri=True)
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT sqlite_version()")
+            cursor = conn.cursor()
+            cursor.execute("SELECT sqlite_version()")
+            version_row = cursor.fetchone()
+            version = str(version_row[0]) if version_row else "unknown"
+
+            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+            tables_row = cursor.fetchone()
+            tables_count = int(tables_row[0]) if tables_row else 0
+
+            return {
+                "ok": True,
+                "serverVersion": f"SQLite {version}",
+                "readonly": not os.access(db_path, os.W_OK),
+                "tablesCount": tables_count,
+                "warnings": [],
+                "message": "SQLite 数据库连接测试成功！",
+            }
+        finally:
+            conn.close()
+    except DataSourceConnectionError:
+        raise
+    except Exception as e:
+        raise DataSourceConnectionError(f"无法建立 SQLite 数据库连接，请检查路径配置。错误: {str(e)}")
+
+
+def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
+    import psycopg2
+
+    host = config.get("host", "")
+    port = config.get("port", 5432)
+    database_name = config.get("database_name", "")
+    username = config.get("username", "")
+    password = config.get("password", "")
+
+    if not host or not database_name or not username:
+        raise DataSourceConnectionError("Missing host, database name, or username configuration.")
+
+    temp_tunnel = None
+    try:
+        test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
+        conn = psycopg2.connect(
+            host=test_host, port=test_port, user=username, password=password,
+            database=database_name, connect_timeout=5,
+            **build_postgres_ssl_params(config),
+        )
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT version()")
                 version_row = cursor.fetchone()
                 version = str(version_row[0]) if version_row else "unknown"
 
-                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+                cursor.execute("""
+                    SELECT COUNT(*) FROM information_schema.tables
+                    WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+                """)
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                readonly = not os.access(db_path, os.W_OK)
+                cursor.execute("SELECT current_setting('transaction_read_only')")
+                ro_res = cursor.fetchone()
+                readonly = (ro_res[0] == "on") if ro_res else False
+
+                warnings = []
+                if not readonly:
+                    warnings.append("提示：当前数据库账号包含写入权限，建议在生产环境使用只读账号以保安全。")
 
                 return {
-                    "ok": True,
-                    "serverVersion": f"SQLite {version}",
-                    "readonly": readonly,
-                    "tablesCount": tables_count,
-                    "warnings": [],
-                    "message": "SQLite 数据库连接测试成功！",
+                    "ok": True, "serverVersion": version, "readonly": readonly,
+                    "tablesCount": tables_count, "warnings": warnings,
+                    "message": "PostgreSQL 数据库连接测试成功！",
                 }
-            finally:
-                conn.close()
-        except Exception as e:
-            if isinstance(e, DataSourceConnectionError):
-                raise e
-            raise DataSourceConnectionError(f"无法建立 SQLite 数据库连接，请检查路径配置。错误: {str(e)}")
-
-    if db_type == "postgresql":
-        host = config.get("host", "")
-        port = config.get("port", 5432)
-        database_name = config.get("database_name", "")
-        username = config.get("username", "")
-        password = config.get("password", "")
-
-        if not host or not database_name or not username:
-            raise DataSourceConnectionError("Missing host, database name, or username configuration.")
-
-        temp_tunnel = None
-        try:
-            test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
-
-            import psycopg2
-
-            conn = psycopg2.connect(
-                host=test_host,
-                port=test_port,
-                user=username,
-                password=password,
-                database=database_name,
-                connect_timeout=5,
-                **build_postgres_ssl_params(config),
-            )
-            try:
-                with conn.cursor() as cursor:  # type: ignore[attr-defined]
-                    cursor.execute("SELECT version()")
-                    version_row = cursor.fetchone()
-                    version = str(version_row[0]) if version_row else "unknown"
-
-                    cursor.execute("""
-                        SELECT COUNT(*)
-                        FROM information_schema.tables
-                        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                    """)
-                    tables_row = cursor.fetchone()
-                    tables_count = int(tables_row[0]) if tables_row else 0
-
-                    cursor.execute("SELECT current_setting('transaction_read_only')")
-                    ro_res = cursor.fetchone()
-                    readonly = (ro_res[0] == "on") if ro_res else False
-
-                    warnings = []
-                    if not readonly:
-                        warnings.append("提示：当前数据库账号包含写入权限，建议在生产环境使用只读账号以保安全。")
-
-                    return {
-                        "ok": True,
-                        "serverVersion": version,
-                        "readonly": readonly,
-                        "tablesCount": tables_count,
-                        "warnings": warnings,
-                        "message": "PostgreSQL 数据库连接测试成功！",
-                    }
-            finally:
-                conn.close()
-        except Exception as e:
-            if isinstance(e, DataSourceConnectionError):
-                raise e
-            raise DataSourceConnectionError(f"无法建立 PostgreSQL 数据库连接，请检查配置信息。错误详情: {str(e)}")
         finally:
-            _cleanup_test_tunnel(temp_tunnel, config)
+            conn.close()
+    except DataSourceConnectionError:
+        raise
+    except Exception as e:
+        raise DataSourceConnectionError(f"无法建立 PostgreSQL 数据库连接，请检查配置信息。错误详情: {str(e)}")
+    finally:
+        _cleanup_test_tunnel(temp_tunnel, config)
 
-    # ── MySQL ────────────────────────────────────────────────────────
+
+def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
     host = config.get("host", "")
     port = config.get("port", 3306)
     database_name = config.get("database_name", "")
@@ -280,19 +278,13 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
     temp_tunnel = None
     try:
         test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
-
-        conn = pymysql.connect(  # type: ignore[assignment]
-            host=test_host,
-            port=test_port,
-            user=username,
-            password=password,
-            database=database_name,
-            charset="utf8mb4",
-            connect_timeout=5,
+        conn = pymysql.connect(
+            host=test_host, port=test_port, user=username, password=password,
+            database=database_name, charset="utf8mb4", connect_timeout=5,
             **build_mysql_ssl_params(config),
         )
         try:
-            with conn.cursor() as cursor:  # type: ignore[attr-defined]
+            with conn.cursor() as cursor:
                 cursor.execute("SELECT VERSION()")
                 version_row = cursor.fetchone()
                 version = str(version_row[0]) if version_row else "unknown"
@@ -304,46 +296,51 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                readonly = True
-                warnings = []
-                try:
-                    cursor.execute("SHOW GRANTS FOR CURRENT_USER()")
-                    grants = [row[0] for row in cursor.fetchall()]
-                    for grant in grants:
-                        grant_upper = grant.upper()
-                        if "ALL PRIVILEGES" in grant_upper or any(op in grant_upper for op in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER"]):
-                            readonly = False
-                            break
-                except Exception:
-                    try:
-                        cursor.execute("SHOW VARIABLES LIKE 'read_only'")
-                        res = cursor.fetchone()
-                        if res and res[1] == "ON":
-                            readonly = True
-                        else:
-                            readonly = False
-                    except Exception:
-                        readonly = False
-
-                if not readonly:
-                    warnings.append("提示：当前数据库账号包含写入权限(INSERT/UPDATE/DELETE/DROP)，建议在生产环境使用只读只查的只读账号以保安全。")
+                readonly, warnings = _check_mysql_readonly(cursor)
 
                 return {
-                    "ok": True,
-                    "serverVersion": version,
-                    "readonly": readonly,
-                    "tablesCount": tables_count,
-                    "warnings": warnings,
+                    "ok": True, "serverVersion": version, "readonly": readonly,
+                    "tablesCount": tables_count, "warnings": warnings,
                     "message": "数据库连接测试成功！",
                 }
         finally:
             conn.close()
+    except DataSourceConnectionError:
+        raise
     except Exception as e:
-        if isinstance(e, DataSourceConnectionError):
-            raise e
-        raise DataSourceConnectionError(f"无法建立数据库连接，请检查配置信息。错误详情: {str(e)}")
+        raise DataSourceConnectionError(f"无法建立 MySQL 数据库连接，请检查主机/端口/用户名/SSL 配置。错误详情: {str(e)}")
     finally:
         _cleanup_test_tunnel(temp_tunnel, config)
+
+
+def _check_mysql_readonly(cursor: Any) -> tuple[bool, list[str]]:
+    """Determine MySQL read-only status from GRANTS or server variables."""
+    readonly = True
+    warnings: list[str] = []
+    try:
+        cursor.execute("SHOW GRANTS FOR CURRENT_USER()")
+        grants = [row[0] for row in cursor.fetchall()]
+        for grant in grants:
+            grant_upper = grant.upper()
+            if "ALL PRIVILEGES" in grant_upper or any(
+                op in grant_upper for op in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER"]
+            ):
+                readonly = False
+                break
+    except Exception:
+        try:
+            cursor.execute("SHOW VARIABLES LIKE 'read_only'")
+            res = cursor.fetchone()
+            if res and res[1] == "ON":
+                readonly = True
+            else:
+                readonly = False
+        except Exception:
+            readonly = False
+
+    if not readonly:
+        warnings.append("提示：当前数据库账号包含写入权限(INSERT/UPDATE/DELETE/DROP)，建议在生产环境使用只读只查的只读账号以保安全。")
+    return readonly, warnings
 
 
 def datasource_connection_dict(ds: Any) -> dict[str, Any]:

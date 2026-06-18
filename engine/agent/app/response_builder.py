@@ -19,13 +19,15 @@ from engine.agent_core.types import (
     AgentStep,
     AnswerEvidence,
     FollowUpSuggestion,
-    ResultProfile,
     AgentVisibleEvent,
     AgentMessageBlock,
     AgentTraceEvent,
 )
 from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.context import build_response_context_summary, referenced_artifact_ids
+
+
+# ── build_response (orchestrator) ────────────────────────────────────────────────
 
 
 def build_response(
@@ -42,53 +44,17 @@ def build_response(
     error: str | None = None,
     status: str | None = None,
 ) -> AgentRunResponse:
-    """Build an AgentRunResponse from final graph state."""
+    """Build an AgentRunResponse from final graph state.
 
+    Each sub-result is built by a dedicated helper — this function is pure
+    orchestration.
+    """
     answer_raw = state.get("answer") or state.get("final_answer") or {}
-
-    if isinstance(answer_raw, dict):
-        evidence_mapped = []
-        for item in (answer_raw.get("evidence") or []):
-            if isinstance(item, dict):
-                art_id = item.get("artifact_id")
-                label = item.get("label")
-                val = item.get("value")
-            else:
-                art_id = getattr(item, "artifact_id", None)
-                label = getattr(item, "label", None)
-                val = getattr(item, "value", None)
-            
-            if artifacts and art_id:
-                for art in artifacts:
-                    if art.semantic_id == art_id:
-                        art_id = art.id
-                        break
-            evidence_mapped.append(AnswerEvidence(artifact_id=art_id, label=label or "", value=val))
-
-        answer = AgentAnswer(
-            answer=str(answer_raw.get("answer") or ""),
-            key_findings=answer_raw.get("key_findings") or [],
-            evidence=evidence_mapped,
-            caveats=answer_raw.get("caveats") or [],
-            recommendations=answer_raw.get("recommendations") or [],
-            follow_up_questions=answer_raw.get("follow_up_questions") or [],
-        )
-    else:
-        answer = AgentAnswer(answer=str(answer_raw or ""))
-
-    suggestions_raw = state.get("suggestions") or []
-    suggestions = [
-        FollowUpSuggestion.model_validate(item) if isinstance(item, dict) else item
-        for item in suggestions_raw
-    ]
-
-    sql = state.get("sql")
-    if isinstance(sql, dict):
-        sql = str(sql.get("sql") or "")
-
-    explanation = None
-    if isinstance(answer_raw, dict):
-        explanation = str(answer_raw.get("answer") or "")
+    answer = _build_answer(answer_raw, artifacts)
+    suggestions = _build_suggestions(state)
+    sql = _extract_sql(state)
+    explanation = _build_explanation(answer_raw, answer)
+    final_steps = _build_steps(state, steps)
 
     summary_text = _merge_context_summaries(
         state=state,
@@ -99,158 +65,9 @@ def build_response(
         ),
     )
 
-    from engine.agent.tools.tool_aliases import STEP_NAME_MAP
-
-    raw_traces = state.get("trace_events") or []
-    ordered_step_names = []
-    step_details = {}
-    for te in raw_traces:
-        if not isinstance(te, dict):
-            continue
-        te_type = te.get("type")
-        tool_name = te.get("tool_name")
-        if te_type in ("agent.tool.started", "agent.tool.completed") and tool_name:
-            step_name = STEP_NAME_MAP.get(tool_name, tool_name)
-            if step_name not in step_details:
-                ordered_step_names.append(step_name)
-                step_details[step_name] = {
-                    "status": "success",
-                    "latency_ms": 0,
-                    "input": te.get("input"),
-                    "output": te.get("output"),
-                    "error": te.get("error"),
-                }
-            if te_type == "agent.tool.completed":
-                step_details[step_name]["status"] = te.get("status") or "success"
-                step_details[step_name]["latency_ms"] = te.get("latency_ms") or 0
-                if te.get("error"):
-                    step_details[step_name]["error"] = te.get("error")
-                if te.get("input"):
-                    step_details[step_name]["input"] = te.get("input")
-                if te.get("output"):
-                    step_details[step_name]["output"] = te.get("output")
-
-    steps_list = []
-    for step_name in ordered_step_names:
-        details = step_details[step_name]
-        steps_list.append(AgentStep(
-            name=step_name,
-            status=details["status"],
-            latency_ms=details["latency_ms"],
-            input=details["input"],
-            output=details["output"],
-            error=details["error"],
-        ))
-
-    final_steps = steps_list if steps_list else (steps or [])
-
-    # Build events list
-    events = []
-    seq = 1
-    # 1. Narration completed
-    events.append(AgentVisibleEvent(
-        event_id=f"evt-{seq}",
-        sequence=seq,
-        type="agent.narration.completed",
-        content=explanation or "I have processed your request.",
-    ))
-    seq += 1
-    # 2. Artifact created events
-    for art in (artifacts or []):
-        events.append(AgentVisibleEvent(
-            event_id=f"evt-{seq}",
-            sequence=seq,
-            type="agent.artifact.created",
-            artifact=art,
-        ))
-        seq += 1
-    # 3. Answer completed
-    if answer:
-        events.append(AgentVisibleEvent(
-            event_id=f"evt-{seq}",
-            sequence=seq,
-            type="agent.answer.completed",
-            answer=answer,
-        ))
-        seq += 1
-    # 4. Suggestions created
-    if suggestions:
-        events.append(AgentVisibleEvent(
-            event_id=f"evt-{seq}",
-            sequence=seq,
-            type="agent.suggestions.created",
-            suggestions=suggestions,
-        ))
-        seq += 1
-
-    # Build message blocks
-    message_blocks = []
-    blk_seq = 1
-    # 1. Text block
-    message_blocks.append(AgentMessageBlock(
-        block_id=f"blk-{blk_seq}",
-        sequence=blk_seq,
-        type="text",
-        content=explanation or "Here is the response to your request.",
-    ))
-    blk_seq += 1
-    # 2. Artifact references
-    for art in (artifacts or []):
-        message_blocks.append(AgentMessageBlock(
-            block_id=f"blk-{blk_seq}",
-            sequence=blk_seq,
-            type="artifact_ref",
-            artifact_id=art.id,
-            content=art.title,
-        ))
-        blk_seq += 1
-    # 3. Answer block
-    if answer:
-        message_blocks.append(AgentMessageBlock(
-            block_id=f"blk-{blk_seq}",
-            sequence=blk_seq,
-            type="answer",
-            answer=answer,
-        ))
-        blk_seq += 1
-    # 4. Suggestions block
-    if suggestions:
-        message_blocks.append(AgentMessageBlock(
-            block_id=f"blk-{blk_seq}",
-            sequence=blk_seq,
-            type="suggestions",
-            suggestions=suggestions,
-        ))
-        blk_seq += 1
-
-    # Build trace events
-    trace_events = []
-    te_seq = 1
-    for i, step in enumerate(final_steps):
-        step_id = f"step-{i}"
-        # Step started
-        trace_events.append(AgentTraceEvent(
-            event_id=f"te-{te_seq}",
-            sequence=te_seq,
-            type="agent.trace.step_started",
-            step_id=step_id,
-            name=step.name,
-        ))
-        te_seq += 1
-        # Step completed
-        trace_events.append(AgentTraceEvent(
-            event_id=f"te-{te_seq}",
-            sequence=te_seq,
-            type="agent.trace.step_completed",
-            step_id=step_id,
-            name=step.name,
-            status=step.status,
-            latency_ms=step.latency_ms,
-            input=step.input,
-            output=step.output,
-            error=step.error,
-        ))
-        te_seq += 1
+    events = _build_visible_events(explanation, artifacts, answer, suggestions)
+    message_blocks = _build_message_blocks(explanation, artifacts, answer, suggestions)
+    trace_events = _build_trace_events(final_steps)
 
     canvas = build_canvas(state, final_steps, answer, run_id, session_id,
                           status or "completed", req.question)
@@ -284,6 +101,172 @@ def build_response(
         approval_context=None,
         canvas=canvas,
     )
+
+
+# ── Sub-builders ─────────────────────────────────────────────────────────────────
+
+
+def _build_answer(answer_raw: Any, artifacts: list[AgentArtifact] | None) -> AgentAnswer:
+    if not isinstance(answer_raw, dict):
+        return AgentAnswer(answer=str(answer_raw or ""))
+
+    evidence_mapped: list[AnswerEvidence] = []
+    for item in (answer_raw.get("evidence") or []):
+        if isinstance(item, dict):
+            art_id = item.get("artifact_id")
+            label = item.get("label")
+            val = item.get("value")
+        else:
+            art_id = getattr(item, "artifact_id", None)
+            label = getattr(item, "label", None)
+            val = getattr(item, "value", None)
+
+        if artifacts and art_id:
+            for art in artifacts:
+                if art.semantic_id == art_id:
+                    art_id = art.id
+                    break
+        evidence_mapped.append(AnswerEvidence(artifact_id=art_id, label=label or "", value=val))
+
+    return AgentAnswer(
+        answer=str(answer_raw.get("answer") or ""),
+        key_findings=answer_raw.get("key_findings") or [],
+        evidence=evidence_mapped,
+        caveats=answer_raw.get("caveats") or [],
+        recommendations=answer_raw.get("recommendations") or [],
+        follow_up_questions=answer_raw.get("follow_up_questions") or [],
+    )
+
+
+def _build_suggestions(state: dict[str, Any]) -> list[FollowUpSuggestion]:
+    suggestions_raw = state.get("suggestions") or []
+    return [
+        FollowUpSuggestion.model_validate(item) if isinstance(item, dict) else item
+        for item in suggestions_raw
+    ]
+
+
+def _extract_sql(state: dict[str, Any]) -> str | dict | None:
+    sql = state.get("sql")
+    if isinstance(sql, dict):
+        return str(sql.get("sql") or "")
+    return sql
+
+
+def _build_explanation(answer_raw: Any, answer: AgentAnswer) -> str | None:
+    if isinstance(answer_raw, dict):
+        return str(answer_raw.get("answer") or "")
+    return None
+
+
+def _build_steps(state: dict[str, Any], steps: list[AgentStep] | None) -> list[AgentStep]:
+    from engine.agent.tools.tool_aliases import STEP_NAME_MAP
+
+    raw_traces = state.get("trace_events") or []
+    ordered_step_names: list[str] = []
+    step_details: dict[str, dict[str, Any]] = {}
+
+    for te in raw_traces:
+        if not isinstance(te, dict):
+            continue
+        te_type = te.get("type")
+        tool_name = te.get("tool_name")
+        if te_type in ("agent.tool.started", "agent.tool.completed") and tool_name:
+            step_name = STEP_NAME_MAP.get(tool_name, tool_name)
+            if step_name not in step_details:
+                ordered_step_names.append(step_name)
+                step_details[step_name] = {
+                    "status": "success", "latency_ms": 0,
+                    "input": te.get("input"), "output": te.get("output"), "error": te.get("error"),
+                }
+            if te_type == "agent.tool.completed":
+                step_details[step_name]["status"] = te.get("status") or "success"
+                step_details[step_name]["latency_ms"] = te.get("latency_ms") or 0
+                if te.get("error"):
+                    step_details[step_name]["error"] = te.get("error")
+                if te.get("input"):
+                    step_details[step_name]["input"] = te.get("input")
+                if te.get("output"):
+                    step_details[step_name]["output"] = te.get("output")
+
+    steps_list = [
+        AgentStep(name=sn, status=sd["status"], latency_ms=sd["latency_ms"],
+                   input=sd["input"], output=sd["output"], error=sd["error"])
+        for sn in ordered_step_names
+        for sd in [step_details[sn]]
+    ]
+    return steps_list if steps_list else (steps or [])
+
+
+def _build_visible_events(
+    explanation: str | None,
+    artifacts: list[AgentArtifact] | None,
+    answer: AgentAnswer,
+    suggestions: list[FollowUpSuggestion],
+) -> list[AgentVisibleEvent]:
+    events: list[AgentVisibleEvent] = []
+    seq = 1
+    events.append(AgentVisibleEvent(event_id=f"evt-{seq}", sequence=seq,
+                                     type="agent.narration.completed",
+                                     content=explanation or "I have processed your request."))
+    seq += 1
+    for art in (artifacts or []):
+        events.append(AgentVisibleEvent(event_id=f"evt-{seq}", sequence=seq,
+                                         type="agent.artifact.created", artifact=art))
+        seq += 1
+    if answer:
+        events.append(AgentVisibleEvent(event_id=f"evt-{seq}", sequence=seq,
+                                         type="agent.answer.completed", answer=answer))
+        seq += 1
+    if suggestions:
+        events.append(AgentVisibleEvent(event_id=f"evt-{seq}", sequence=seq,
+                                         type="agent.suggestions.created", suggestions=suggestions))
+        seq += 1
+    return events
+
+
+def _build_message_blocks(
+    explanation: str | None,
+    artifacts: list[AgentArtifact] | None,
+    answer: AgentAnswer,
+    suggestions: list[FollowUpSuggestion],
+) -> list[AgentMessageBlock]:
+    blocks: list[AgentMessageBlock] = []
+    blk_seq = 1
+    blocks.append(AgentMessageBlock(block_id=f"blk-{blk_seq}", sequence=blk_seq,
+                                     type="text", content=explanation or "Here is the response to your request."))
+    blk_seq += 1
+    for art in (artifacts or []):
+        blocks.append(AgentMessageBlock(block_id=f"blk-{blk_seq}", sequence=blk_seq,
+                                         type="artifact_ref", artifact_id=art.id, content=art.title))
+        blk_seq += 1
+    if answer:
+        blocks.append(AgentMessageBlock(block_id=f"blk-{blk_seq}", sequence=blk_seq,
+                                         type="answer", answer=answer))
+        blk_seq += 1
+    if suggestions:
+        blocks.append(AgentMessageBlock(block_id=f"blk-{blk_seq}", sequence=blk_seq,
+                                         type="suggestions", suggestions=suggestions))
+        blk_seq += 1
+    return blocks
+
+
+def _build_trace_events(steps: list[AgentStep]) -> list[AgentTraceEvent]:
+    trace_events: list[AgentTraceEvent] = []
+    te_seq = 1
+    for i, step in enumerate(steps):
+        step_id = f"step-{i}"
+        trace_events.append(AgentTraceEvent(event_id=f"te-{te_seq}", sequence=te_seq,
+                                             type="agent.trace.step_started",
+                                             step_id=step_id, name=step.name))
+        te_seq += 1
+        trace_events.append(AgentTraceEvent(event_id=f"te-{te_seq}", sequence=te_seq,
+                                             type="agent.trace.step_completed",
+                                             step_id=step_id, name=step.name,
+                                             status=step.status, latency_ms=step.latency_ms,
+                                             input=step.input, output=step.output, error=step.error))
+        te_seq += 1
+    return trace_events
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
