@@ -2,26 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from typing import Any, Callable
 from langchain_core.messages import ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from engine.tools.sandbox.base import ExecutionContext
 from engine.agent_core.types import ToolObservation
-from engine.tools.tool_runtime_gateway import ToolRuntimeGateway
-from engine.agent_core.tool_registry import ToolContext
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.tools.tool_aliases import STEP_NAME_MAP, to_internal, to_alias
-from engine.environment.dialect_resolver import resolve_datasource_dialect
+from engine.agent.tools.tool_aliases import to_internal, to_alias
+from engine.tools.runtime.runtime import ToolRuntime
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.tool_node")
-
-
-def _step_name(tool_name: str) -> str:
-    return STEP_NAME_MAP.get(tool_name, tool_name)
-
 
 def execute_allowed_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     ctx = graph_context(config)
@@ -89,87 +80,18 @@ def _execute_tool(
     tool_name: str,
     args: dict[str, Any],
 ) -> ToolObservation:
-    tool = registry.require(tool_name)
-    logger.debug("[DEBUG TOOL] tool_name=%s, state.get('safety')=%s, state.get('execute')=%s", tool_name, state.get('safety'), state.get('execute'))
-    if hasattr(tool, "base_tool") and tool.base_tool is not None:
-        merged_args = dict(args)
-        if "question" not in merged_args and req is not None:
-            merged_args["question"] = req.question
-        if "schema_context" not in merged_args:
-            merged_args["schema_context"] = state.get("schema_context")
-        if "query_plan" not in merged_args:
-            merged_args["query_plan"] = state.get("query_plan")
-        if "follow_up_context" not in merged_args:
-            merged_args["follow_up_context"] = state.get("follow_up_context")
-        if "safety" not in merged_args:
-            merged_args["safety"] = state.get("safety")
-        if "execution" not in merged_args:
-            merged_args["execution"] = state.get("execution")
-        if "data_profile" not in merged_args:
-            merged_args["data_profile"] = state.get("data_profile")
-        if "chart_suggestion" not in merged_args:
-            merged_args["chart_suggestion"] = state.get("chart_suggestion")
-        if "suggestions" not in merged_args:
-            merged_args["suggestions"] = state.get("suggestions")
-        if "error" not in merged_args:
-            merged_args["error"] = state.get("error")
-        if "sql" not in merged_args:
-            merged_args["sql"] = state.get("sql")
-
-        datasource_id = req.datasource_id if req else ""
-        dialect = resolve_datasource_dialect(db, datasource_id) if db else "mysql"
-        exec_ctx = ExecutionContext(
-            thread_id=str(state.get("thread_id") or state.get("session_id") or ""),
-            datasource_id=datasource_id,
-            db_dialect=dialect,
-            read_only=tool.spec.policy.side_effect != "write",
-            db_session=db,
-            api_key=req.api_key if req else None,
-            api_base=req.api_base if req else None,
-            model_name=req.model_name if req else None,
-        )
-        # Step input recorded for the trace/response: the model's raw args
-        # enriched with the contextual flags legacy tools always reported.
-        obs_input = dict(args)
-        if "question" not in obs_input and merged_args.get("question"):
-            obs_input["question"] = merged_args["question"]
-        obs_input["has_follow_up_context"] = bool(merged_args.get("follow_up_context"))
-
-        start_time = time.perf_counter()
-        try:
-            base_tool = tool.base_tool
-            validated_input = base_tool.input_schema.model_validate(merged_args)
-            output_model = base_tool.execute(validated_input, exec_ctx)
-            output_dict = output_model.model_dump(mode="json")
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            status = "skipped" if tool_name == "sql.skip_execution" else "success"
-            obs_name = _step_name(tool_name)
-            return ToolObservation(
-                name=obs_name,
-                status=status,
-                input=obs_input,
-                output=output_dict,
-                error=None,
-                latency_ms=latency_ms,
-            )
-        except Exception as exc:
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            obs_name = _step_name(tool_name)
-            return ToolObservation(
-                name=obs_name,
-                status="failed",
-                input=obs_input,
-                output=None,
-                error=str(exc),
-                latency_ms=latency_ms,
-            )
-
-    ctx_state = dict(state)
-    ctx_state["_current_tool_name"] = tool_name
-    ctx = ToolContext(db=db, request=req, state_view=ctx_state)
-    validated_args = ToolRuntimeGateway.validate_input(tool.spec.name, tool.spec.input_model, args)
-    observation = tool.handler(ctx, validated_args)
-    return ToolRuntimeGateway.validate_observation_output(tool.spec.name, tool.spec.output_model, observation)
+    """Execute a single tool call through the typed ToolRuntime."""
+    logger.debug(
+        "[DEBUG TOOL] tool_name=%s, state.get('safety')=%s, state.get('execute')=%s",
+        tool_name, state.get("safety"), state.get("execute"),
+    )
+    return ToolRuntime(registry).invoke(
+        tool_name=tool_name,
+        raw_input=args,
+        state=dict(state),
+        request=req,
+        db=db,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -250,12 +172,12 @@ def _summarize_sql_revise(output: dict[str, Any]) -> str:
     return f"[sql.revise] can_fix=True, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
 
 
-def _summarize_analyze_data(output: dict[str, Any]) -> str:
+def _summarize_result_profile(output: dict[str, Any]) -> str:
     row_count = output.get("row_count", 0)
     facts = output.get("notable_facts") or []
     anomalies = output.get("anomalies") or []
     return (
-        f"[analyze_data] OK. rows={row_count}, "
+        f"[result.profile] OK. rows={row_count}, "
         f"notable_facts={facts[:5]}, anomalies={anomalies[:3]}"
     )
 
@@ -396,7 +318,7 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "sql.validate": _summarize_sql_validate,
     "sql.execute_readonly": _summarize_sql_execute_readonly,
     "sql.revise": _summarize_sql_revise,
-    "analyze_data": _summarize_analyze_data,
+    "result.profile": _summarize_result_profile,
     "chart.suggest": _summarize_chart_suggest,
     "followup.suggest": _summarize_followup_suggest,
     "schema.list_tables": _summarize_schema_list_tables,

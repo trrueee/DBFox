@@ -92,8 +92,8 @@ def emit_artifacts_from_observation(
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
 
-    if step_name == "analyze_data" and state.get("data_profile") and observation.status == "success":
-        profile_raw = state.get("data_profile")
+    if step_name == "result.profile" and state.get("result_profile") and observation.status == "success":
+        profile_raw = state.get("result_profile")
         if isinstance(profile_raw, dict):
             try:
                 profile_obj = ResultProfile.model_validate(profile_raw)
@@ -152,11 +152,14 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
         obs = ToolObservation.model_validate(result_dict)
         step_name = obs.name
         tool_name = _tool_name_from_step(step_name)
+        tool = ctx.registry.get(tool_name)
+        merge_strategy = tool.spec.state.merge_strategy if tool is not None else "reuse"
 
         databinding_updates = apply_tool_result_to_state(
             state=temp_state,
             tool_name=tool_name,
             observation=obs,
+            merge_strategy=merge_strategy,
         )
 
         # Remove the legacy dict artifacts built by standard databinding
