@@ -173,8 +173,8 @@ class TunnelManager:
         try:
             try:
                 instance.tunnel.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to stop old tunnel for %s during reconnect: %s", ds_id, e)
 
             new_tunnel = self._start_physical_tunnel(ds_dict)
             with self._lock:
@@ -202,15 +202,19 @@ class TunnelManager:
         return _create_physical_tunnel_forwarder(ds_dict, is_managed=True)
 
     def cleanup_stale(self) -> None:
+        to_dispose: list[tuple[str, TunnelInstance]] = []
         with self._lock:
             for ds_id, instance in list(self._tunnels.items()):
                 if not instance.tunnel.is_active:
                     logger.info("Purging dead inactive tunnel instance: %s", ds_id)
-                    try:
-                        instance.tunnel.stop()
-                    except Exception:
-                        pass
+                    to_dispose.append((ds_id, instance))
                     self._tunnels.pop(ds_id, None)
+
+        for ds_id, instance in to_dispose:
+            try:
+                instance.tunnel.stop()
+            except Exception as e:
+                logger.warning("Failed to stop stale tunnel for %s: %s", ds_id, e)
 
 
 TUNNEL_MANAGER = TunnelManager()
