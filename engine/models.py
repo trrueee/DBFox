@@ -246,8 +246,8 @@ class SchemaColumn(Base):  # type: ignore[misc,valid-type]
     is_primary_key = Column(Boolean, nullable=False, default=False)
     is_foreign_key = Column(Boolean, nullable=False, default=False)
 
-    foreign_table_id = Column(String, nullable=True)
-    foreign_column_id = Column(String, nullable=True)
+    foreign_table_id = Column(String, ForeignKey("schema_tables.id", ondelete="SET NULL"), nullable=True)
+    foreign_column_id = Column(String, ForeignKey("schema_columns.id", ondelete="SET NULL"), nullable=True)
 
     ordinal_position = Column(Integer, nullable=True)
 
@@ -459,7 +459,7 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
 
     id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
-    session_id = Column(String, nullable=False)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     step_name = Column(String, nullable=False)
     tool_name = Column(String, nullable=True)
 
@@ -656,7 +656,7 @@ class WorkspaceTableScope(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    table_id = Column(String, nullable=False)
+    table_id = Column(String, ForeignKey("schema_tables.id", ondelete="CASCADE"), nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)

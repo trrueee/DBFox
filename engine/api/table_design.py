@@ -71,5 +71,5 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
         from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "TEST_DATA_FAILED", "message": f"测试数据生成失败: {str(exc)}"}
+            detail={"code": "TEST_DATA_FAILED", "message": sanitize_error_message(str(exc))}
         )

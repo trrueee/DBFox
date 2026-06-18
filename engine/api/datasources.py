@@ -486,6 +486,7 @@ def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str
             db.commit()
         except Exception:
             db.rollback()
+            logger.warning("Failed to persist default domain tags for datasource %s", id)
         rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
         
     return [{"id": r.id, "pattern": r.pattern, "tag": r.tag, "priority": r.priority} for r in rules]
