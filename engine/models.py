@@ -423,7 +423,7 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_runs_created", "created_at"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     parent_run_id = Column(String, nullable=True)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
@@ -457,7 +457,7 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_approvals_status", "status"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
     step_name = Column(String, nullable=False)
@@ -490,7 +490,7 @@ class AgentCheckpoint(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_checkpoints_session", "session_id"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
 
@@ -517,7 +517,7 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_artifacts_session", "session_id"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
     semantic_id = Column(String, nullable=True)
@@ -541,7 +541,7 @@ class AgentRuntimeEventRecord(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_runtime_events_session", "session_id"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
     sequence = Column(Integer, nullable=False)
@@ -560,7 +560,7 @@ class AgentTraceEventRecord(Base):  # type: ignore[misc,valid-type]
         Index("ix_agent_trace_events_session", "session_id"),
     )
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
     sequence = Column(Integer, nullable=False)
@@ -772,7 +772,7 @@ class ChatConversation(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "chat_conversations"
     __table_args__ = (Index("ix_chat_conversations_updated_at", "updated_at"),)
 
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String, nullable=False)
     created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)

@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -343,27 +344,40 @@ class SQLiteLongTermMemoryStore:
         return True
 
     def purge(self) -> int:
-        """Permanently remove soft-deleted and expired records."""
-        deleted_count = 0
-        expired_count = 0
-        with self._connect() as conn:
-            cur = conn.execute(
-                "DELETE FROM long_term_memories WHERE status = 'deleted'"
-            )
-            deleted_count = cur.rowcount
-        # Expired records: we need to inspect payloads for expires_at
+        """Permanently remove soft-deleted and expired records.
+
+        Collects all stale record IDs in a single scan, then executes one
+        transaction to delete them — avoiding the N+1 per-record connection
+        overhead of the previous implementation.
+        """
+        stale_ids: list[str] = []
         for rec in self._load_records(raw_only=True):
-            if _is_expired(rec):
-                with self._connect() as conn:
+            if rec.status == "deleted" or _is_expired(rec):
+                stale_ids.append(rec.id)
+
+        if not stale_ids:
+            return 0
+
+        with self._connect() as conn:
+            conn.execute("BEGIN")
+            try:
+                # Split into batches of 500 to avoid hitting SQLite's
+                # SQLITE_MAX_VARIABLE_NUMBER (default 999).
+                batch_size = 500
+                for i in range(0, len(stale_ids), batch_size):
+                    batch = stale_ids[i : i + batch_size]
+                    placeholders = ",".join(["?"] * len(batch))
                     conn.execute(
-                        "DELETE FROM long_term_memories WHERE id = ?",
-                        (rec.id,),
+                        f"DELETE FROM long_term_memories WHERE id IN ({placeholders})",
+                        batch,
                     )
-                expired_count += 1
-        total = deleted_count + expired_count
-        if total:
-            logger.debug("Purged %d stale long-term memory records", total)
-        return total
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+
+        logger.debug("Purged %d stale long-term memory records", len(stale_ids))
+        return len(stale_ids)
 
     # ------------------------------------------------------------------
     # Read
@@ -661,13 +675,26 @@ def _matches_keywords(record: MemoryRecord, keywords: list[str]) -> bool:
 
 
 def _is_expired(record: MemoryRecord) -> bool:
+    """Return True if *record* has a non-null ``expires_at`` that is in the past.
+
+    Both offset-aware and offset-naive ISO-8601 strings are accepted.
+    Naive timestamps are interpreted as UTC.
+    """
     if not record.expires_at:
         return False
     try:
         expiry = datetime.fromisoformat(record.expires_at)
     except (ValueError, TypeError):
         return False
-    return datetime.now(timezone.utc) > expiry
+    # Make offset-naive datetimes aware so they can be compared against
+    # timezone-aware ``datetime.now(timezone.utc)`` (required in Python 3.12+).
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.now(timezone.utc) > expiry
+    except TypeError:
+        # Defensive: if we still cannot compare, treat as not-expired
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -675,15 +702,23 @@ def _is_expired(record: MemoryRecord) -> bool:
 # ---------------------------------------------------------------------------
 
 _store: LongTermMemoryStore | SQLiteLongTermMemoryStore | None = None
+_store_lock = threading.Lock()
 
 
 def get_long_term_store() -> LongTermMemoryStore | SQLiteLongTermMemoryStore:
+    """Return the module-level singleton memory store, creating it on first call.
+
+    Uses double-checked locking so that concurrent callers never create two
+    instances of the backing SQLite store.
+    """
     global _store
     if _store is None:
-        if os.environ.get("DBFOX_MEMORY_STORE", "").lower() == "memory":
-            _store = LongTermMemoryStore()
-        else:
-            _store = SQLiteLongTermMemoryStore(
-                private_runtime_file("memory", "long_term_memory.sqlite")
-            )
+        with _store_lock:
+            if _store is None:
+                if os.environ.get("DBFOX_MEMORY_STORE", "").lower() == "memory":
+                    _store = LongTermMemoryStore()
+                else:
+                    _store = SQLiteLongTermMemoryStore(
+                        private_runtime_file("memory", "long_term_memory.sqlite")
+                    )
     return _store

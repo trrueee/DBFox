@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any, cast
 
@@ -9,6 +10,17 @@ from sqlalchemy.pool import QueuePool
 from engine.sql.pool_registry import get_pool_registry
 
 logger = logging.getLogger("dbfox.sql.pool_manager")
+
+
+def _password_key_salt(password: Any) -> str:
+    """Return a stable, non-reversible hash fragment for the pool key.
+
+    Never includes the plain-text password so that pool-registry log lines
+    do not leak credentials.
+    """
+    if not password:
+        return ""
+    return hashlib.sha256(f"dbfox-pool-salt:{password}".encode()).hexdigest()[:12]
 
 
 def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
@@ -25,6 +37,7 @@ def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("sslrootcert", ""),
         pool_params.get("sslcert", ""),
         pool_params.get("sslkey", ""),
+        _password_key_salt(pool_params.get("password")),
     )
 
     def creator() -> Any:
@@ -45,6 +58,7 @@ def get_postgres_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
 
     return get_pool_registry().get_or_create(
         pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
+        timeout=10.0,
     )
 
 
@@ -62,7 +76,8 @@ def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
         pool_params.get("user"),
         pool_params.get("database"),
         pool_params.get("ssl_ca"),
-        pool_params.get("ssl_cert")
+        pool_params.get("ssl_cert"),
+        _password_key_salt(pool_params.get("password")),
     )
 
     def creator() -> pymysql.Connection:
@@ -70,6 +85,7 @@ def get_mysql_pool(datasource_id: str, params: dict[str, Any]) -> QueuePool:
 
     return get_pool_registry().get_or_create(
         pool_key, cast(Any, creator), pool_size=5, max_overflow=10, recycle=1800,
+        timeout=10.0,
     )
 
 

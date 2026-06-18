@@ -8,7 +8,9 @@ from langgraph.graph.message import add_messages
 # Reducer for append-only lists (artifacts, trace_events, runtime_events).
 # messages uses its own add_messages reducer from LangGraph.
 def _add_list(left: list[Any], right: list[Any]) -> list[Any]:
-    if right and isinstance(right[0], dict) and right[0].get("__clear__"):
+    if not right:
+        return left
+    if isinstance(right[0], dict) and right[0].get("__clear__"):
         return right[1:]
     return left + right
 
@@ -100,8 +102,13 @@ class DBFoxAgentState(TypedDict, total=False):
     """Descriptive profiling and analysis of the SQL query results."""
     chart_suggestion: dict[str, Any] | None
     """Auto-generated suggestion for rendering result charts."""
-    suggestions: list[dict[str, Any]]
-    """Follow-up questions or actions suggested by the agent."""
+    suggestions: Annotated[list[dict[str, Any]], _add_list]
+    """Follow-up questions or actions suggested by the agent.
+
+    Uses ``_add_list`` reducer so that multiple nodes can append suggestions
+    concurrently without data loss.  To replace all suggestions atomically,
+    include ``{"__clear__": True}`` as the first element of the update.
+    """
     answer: dict[str, Any] | None
     """Synthesized final response to the user's question."""
     final_answer: dict[str, Any] | None
