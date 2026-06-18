@@ -1,16 +1,57 @@
 import logging
 import random
 import uuid
-import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
-from engine.sql.test_executor import execute_query_for_test
+from engine.sql.executor import execute_query
 from engine.errors import DBFoxError
 
 logger = logging.getLogger("dbfox.test_data")
+
+# Safety gate: test-data INSERT is only allowed on dev / test datasources.
+_TEST_DATA_ALLOWED_ENVS = frozenset({"dev", "test", ""})
+
+
+def _execute_test_data_insert(db: Session, datasource_id: str, insert_sql: str, params: dict[str, Any]) -> None:
+    """Execute a single parameterized INSERT directly on the target datasource.
+
+    Bypasses the Guardrail (which blocks non-SELECT) but enforces:
+    * datasource env must be dev/test (prod is refused)
+    * frozen builds always refuse
+    """
+    import sys
+    if getattr(sys, "frozen", False):
+        raise DBFoxError("TEST_DATA_DENIED", "测试数据写入在打包构建中不可用。")
+
+    ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+    if not ds:
+        raise DBFoxError("DATASOURCE_NOT_FOUND", "数据源不存在")
+
+    ds_env = (ds.env or "").lower()
+    if ds_env not in _TEST_DATA_ALLOWED_ENVS:
+        raise DBFoxError(
+            "TEST_DATA_DENIED",
+            f"测试数据写入仅允许 dev/test 环境数据源，当前数据源环境为 '{ds_env}'。",
+        )
+
+    db_type = (ds.db_type or "mysql").lower()
+    if db_type == "sqlite":
+        import sqlite3
+        db_path = str(ds.database_name or "")
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.execute(insert_sql, params)
+            conn.commit()
+        finally:
+            conn.close()
+    elif db_type == "postgresql":
+        raise DBFoxError("TEST_DATA_UNSUPPORTED", "测试数据生成暂不支持 PostgreSQL。")
+    else:
+        raise DBFoxError("TEST_DATA_UNSUPPORTED", "测试数据生成暂不支持 MySQL，请使用 SQLite 数据源。")
 
 # High fidelity preset data lists for generating premium realistic test data
 CHINESE_SURNAMES = ["赵", "钱", "孙", "李", "周", "吴", "郑", "王", "冯", "陈", "褚", "卫", "蒋", "沈", "韩", "杨", "朱", "秦", "尤", "许", "何", "吕", "施", "张", "孔", "曹", "严", "华", "金", "魏", "陶", "姜"]
@@ -105,7 +146,14 @@ def generate_smart_test_data(
     Ensures smart FK mapping by pre-querying parent tables dynamically.
     """
     start_time = datetime.now()
-    
+
+    # 0. Safety cap — prevent a misconfigured request from hammering the DB.
+    if row_count > 10_000:
+        raise DBFoxError(
+            "ROW_COUNT_TOO_LARGE",
+            f"单次生成行数不能超过 10000，当前请求 {row_count} 行。"
+        )
+
     # 1. Fetch source datasource and schema table
     datasource = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not datasource:
@@ -157,9 +205,11 @@ def generate_smart_test_data(
             except DBFoxError:
                 raise
             except Exception as e:
-                logger.error(f"Failed to query parent keys: {e}")
-                # Create a generic dummy value just in case
-                fk_mappings[str(col.column_name)] = [1, 2, 3]
+                logger.exception("Failed to query parent keys for FK column %s", col.column_name)
+                raise DBFoxError(
+                    "FK_RESOLUTION_FAILED",
+                    f"无法查询外键关联表 `{parent_table.table_name}` 的数据：{e}"
+                ) from e
 
     # 3. Generate high fidelity fake data row by row
     generated_rows: List[Dict[str, Any]] = []
@@ -269,48 +319,30 @@ def generate_smart_test_data(
         
         generated_rows.append(row_data)
 
-    # 4. Perform database batch insertion
+    # 4. Perform parameterized batch insertion on the target datasource.
+    #    Guardrail blocks non-SELECT, so we go directly to the datasource
+    #    connection via _execute_test_data_insert (which enforces dev/test
+    #    datasource only).  No string-concatenated SQL — all values are
+    #    passed as bind parameters.
     inserted_count = 0
-    sql_statements = []
-    
-    for row in generated_rows:
-        cols_str = ", ".join(f"`{k}`" for k in row.keys())
-        
-        # Format values properly for standard MySQL SQL
-        vals_list = []
-        for v in row.values():
-            if v is None:
-                vals_list.append("NULL")
-            elif isinstance(v, (int, float)):
-                vals_list.append(str(v))
-            elif isinstance(v, bool):
-                vals_list.append("1" if v else "0")
-            else:
-                # Escape single quotes
-                escaped = str(v).replace("'", "\\'")
-                vals_list.append(f"'{escaped}'")
-                
-        vals_str = ", ".join(vals_list)
-        insert_sql = f"INSERT INTO `{table_name}` ({cols_str}) VALUES ({vals_str})"
-        sql_statements.append(insert_sql)
 
-    # Execute transactions sequentially or in one batch
     try:
-        for sql in sql_statements:
-            res = execute_query_for_test(db, datasource_id, sql)
-            if not res["success"]:
-                raise DBFoxError(
-                    "BATCH_INSERT_FAILED",
-                    f"批量插入测试数据失败，SQL: {sql}, 错误: {res.get('error_message', '未知错误')}"
-                )
+        for row in generated_rows:
+            cols = list(row.keys())
+            # SQLite parameterized style: ``:col_name`` placeholders
+            placeholders = ", ".join(f":{c}" for c in cols)
+            cols_quoted = ", ".join(f"`{c}`" for c in cols)
+            insert_sql = f"INSERT INTO `{table_name}` ({cols_quoted}) VALUES ({placeholders})"
+
+            _execute_test_data_insert(db, datasource_id, insert_sql, row)
             inserted_count += 1
-            
+
         latency_ms = int((datetime.now() - start_time).total_seconds() * 1000)
-        
+
         # Automatically update metastore row count estimate
         table.row_count_estimate = (table.row_count_estimate or 0) + inserted_count  # type: ignore[assignment]
         db.commit()
-        
+
         return {
             "success": True,
             "tableName": table_name,
