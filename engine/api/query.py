@@ -127,6 +127,11 @@ def api_query_history(
             if fts_rows:
                 fts_ids = [row[0] for row in fts_rows]
                 history_query = history_query.filter(QueryHistory.id.in_(fts_ids))
+            else:
+                # FTS5 matched nothing — return empty immediately rather
+                # than falling through with an unfiltered query that would
+                # expose the full history to a no-hit search.
+                return []
         except Exception:
             # FTS5 unavailable — fall back to LIKE
             pattern = f"%{search_term}%"
