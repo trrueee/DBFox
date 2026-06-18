@@ -54,7 +54,7 @@ class PoolRegistry:
                 entry.last_used = time.monotonic()
                 return entry.pool
 
-            self._evict_if_needed(pool_size + max_overflow)
+            to_dispose = self._evict_if_needed(pool_size + max_overflow)
 
             pool = QueuePool(
                 creator,
@@ -68,7 +68,16 @@ class PoolRegistry:
                 "PoolRegistry: created pool key=%s total_pools=%d total_capacity=%d",
                 key, len(self._pools), self._total_capacity(),
             )
-            return pool
+
+        # Dispose evicted pools outside the lock so that a concurrent thread
+        # holding a checked-out connection can return it without deadlock.
+        for entry in to_dispose:
+            try:
+                entry.pool.dispose()
+            except Exception:
+                pass
+
+        return pool
 
     def has(self, key: tuple[Any, ...]) -> bool:
         """Check if a pool exists for the given key without allocating a creator closure."""
@@ -79,8 +88,16 @@ class PoolRegistry:
         """Must be called while ``self._lock`` is held."""
         return sum(e.capacity for e in self._pools.values())
 
-    def _evict_if_needed(self, new_pool_capacity: int) -> None:
-        """Must be called while ``self._lock`` is held."""
+    def _evict_if_needed(self, new_pool_capacity: int) -> list[PoolEntry]:
+        """Select and remove LRU entries from the pool dict.
+
+        Must be called while ``self._lock`` is held.
+
+        Returns the removed entries so the caller can dispose their pools
+        **after** releasing the lock (``pool.dispose()`` blocks until all
+        checked-out connections are returned, which may require the lock).
+        """
+        to_dispose: list[PoolEntry] = []
         while len(self._pools) >= self._max_pools or (
             self._total_capacity() + new_pool_capacity > self._max_connections and self._pools
         ):
@@ -88,44 +105,49 @@ class PoolRegistry:
                 break
             lru_key = min(self._pools, key=lambda k: self._pools[k].last_used)
             entry = self._pools.pop(lru_key)
-            try:
-                entry.pool.dispose()
-            except Exception:
-                pass
+            to_dispose.append(entry)
             logger.info(
-                "PoolRegistry: evicted pool key=%s capacity=%d",
+                "PoolRegistry: evicting pool key=%s capacity=%d",
                 lru_key, entry.capacity,
             )
+        return to_dispose
 
     def dispose_datasource(self, datasource_id: str) -> int:
         """Dispose all pools whose key starts with the given datasource_id.
 
         Returns the number of pools that were disposed.
         """
+        to_dispose: list[PoolEntry] = []
         with self._lock:
             keys_to_dispose = [k for k in self._pools if k[0] == datasource_id]
             for k in keys_to_dispose:
                 entry = self._pools.pop(k, None)
                 if entry is not None:
-                    try:
-                        entry.pool.dispose()
-                    except Exception:
-                        pass
+                    to_dispose.append(entry)
             if keys_to_dispose:
                 logger.info(
-                    "PoolRegistry: disposed %d pool(s) for datasource %s",
+                    "PoolRegistry: disposing %d pool(s) for datasource %s",
                     len(keys_to_dispose), datasource_id,
                 )
-            return len(keys_to_dispose)
+
+        for entry in to_dispose:
+            try:
+                entry.pool.dispose()
+            except Exception:
+                pass
+        return len(keys_to_dispose)
 
     def dispose_all(self) -> None:
+        to_dispose: list[PoolEntry] = []
         with self._lock:
-            for entry in self._pools.values():
-                try:
-                    entry.pool.dispose()
-                except Exception:
-                    pass
+            to_dispose = list(self._pools.values())
             self._pools.clear()
+
+        for entry in to_dispose:
+            try:
+                entry.pool.dispose()
+            except Exception:
+                pass
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

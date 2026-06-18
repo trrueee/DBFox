@@ -1,4 +1,4 @@
-﻿"""SessionMemory service — maintains per-session context across runs.
+"""SessionMemory service — maintains per-session context across runs.
 
 Tracks the last question, SQL, execution, and artifacts so follow-up
 requests ("export that", "revise the query", "chart the result") work
@@ -39,42 +39,41 @@ class SessionMemoryService:
         final_state: dict[str, Any],
         response: Any,  # AgentRunResponse
     ) -> SessionMemory:
-        mem = self.get(session_id)
-        mem.last_question = question
-        mem.recent_run_ids.append(run_id)
-        # Keep only last 10 runs
-        mem.recent_run_ids = mem.recent_run_ids[-10:]
-
-        # SQL
-        sql = final_state.get("sql")
-        if sql:
-            mem.last_sql = str(sql)
-
-        # Execution
-        execution = final_state.get("execution")
-        if isinstance(execution, dict) and execution.get("id"):
-            mem.last_execution_id = str(execution.get("id"))
-
-        # Artifacts from response
-        artifacts = getattr(response, "artifacts", []) or []
-        for art in artifacts:
-            art_id = getattr(art, "id", None)
-            art_type = getattr(art, "type", None)
-            if not art_id:
-                continue
-            mem.recent_artifact_ids.append(str(art_id))
-            mem.recent_artifact_ids = mem.recent_artifact_ids[-20:]
-            if art_type == "table":
-                mem.last_table_artifact_id = str(art_id)
-            elif art_type == "chart":
-                mem.last_chart_artifact_id = str(art_id)
-            elif art_type == "report":
-                mem.last_report_artifact_id = str(art_id)
-
-        mem.updated_at = SessionMemory.model_fields["updated_at"].default_factory()  # type: ignore[attr-defined]
-
         with self._lock:
-            self._cache[session_id] = mem
+            mem = self._cache.get(session_id)
+            if mem is None:
+                mem = SessionMemory(session_id=session_id)
+                self._cache[session_id] = mem
+
+            mem.last_question = question
+            mem.recent_run_ids.append(run_id)
+            mem.recent_run_ids = mem.recent_run_ids[-10:]
+
+            sql = final_state.get("sql")
+            if sql:
+                mem.last_sql = str(sql)
+
+            execution = final_state.get("execution")
+            if isinstance(execution, dict) and execution.get("id"):
+                mem.last_execution_id = str(execution.get("id"))
+
+            artifacts = getattr(response, "artifacts", []) or []
+            for art in artifacts:
+                art_id = getattr(art, "id", None)
+                art_type = getattr(art, "type", None)
+                if not art_id:
+                    continue
+                mem.recent_artifact_ids.append(str(art_id))
+                mem.recent_artifact_ids = mem.recent_artifact_ids[-20:]
+                if art_type == "table":
+                    mem.last_table_artifact_id = str(art_id)
+                elif art_type == "chart":
+                    mem.last_chart_artifact_id = str(art_id)
+                elif art_type == "report":
+                    mem.last_report_artifact_id = str(art_id)
+
+            mem.updated_at = SessionMemory.model_fields["updated_at"].default_factory()  # type: ignore[attr-defined]
+
         logger.debug("SessionMemory updated: session=%s run=%s", session_id, run_id)
         return mem
 
@@ -96,12 +95,20 @@ class SessionMemoryService:
         return "### Session Context\n" + "\n".join(f"- {p}" for p in parts) + "\n"
 
     def set_topic(self, session_id: str, topic: str) -> None:
-        mem = self.get(session_id)
-        mem.current_topic = topic
+        with self._lock:
+            mem = self._cache.get(session_id)
+            if mem is None:
+                mem = SessionMemory(session_id=session_id)
+                self._cache[session_id] = mem
+            mem.current_topic = topic
 
     def set_dataset_summary(self, session_id: str, summary: str) -> None:
-        mem = self.get(session_id)
-        mem.current_dataset_summary = summary
+        with self._lock:
+            mem = self._cache.get(session_id)
+            if mem is None:
+                mem = SessionMemory(session_id=session_id)
+                self._cache[session_id] = mem
+            mem.current_dataset_summary = summary
 
 
 # Module-level singleton
