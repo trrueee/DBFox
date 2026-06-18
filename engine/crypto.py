@@ -16,61 +16,99 @@ KEYRING_USERNAME = "DatabaseClientSecretKey"
 
 
 def get_or_create_key() -> bytes:
-    # 1. Primary: Try loading symmetric key from OS Keychain
-    keyring_key = None
+    """Return the current symmetric encryption key, creating one if necessary.
+
+    Priority order (file is authoritative; keyring is a best-effort cache):
+
+    1. **Private runtime file** — the canonical key store. Always consulted
+       first so that the key survives keyring outages.
+    2. **OS keyring** — if no file key exists, try the keyring and
+       **mirror** any key found there into the file.  This handles
+       upgrades from older versions that only wrote to the keyring.
+    3. **Generate** a fresh AES-256 key, persist it to the file
+       (authoritative), then attempt to cache it in the keyring.
+
+    This ordering prevents the "split-brain" scenario where keyring
+    intermittent availability causes two different keys to exist in the
+    two stores, making previously encrypted data unrecoverable.
+    """
+    # 1. Primary / authoritative: private runtime file
+    if KEY_FILE.exists():
+        try:
+            key = KEY_FILE.read_bytes()
+            _chmod_private(KEY_FILE, is_dir=False)
+            # Best-effort: ensure the keyring has a copy for backwards compat
+            _mirror_to_keyring(key)
+            return key
+        except Exception as e:
+            logger.critical(
+                "Key file exists but failed to read: %s. Aborting.", e
+            )
+            raise RuntimeError(
+                f"Could not read existing secret key file: {e}"
+            ) from e
+
+    # 2. Fallback: try the OS keyring (handles upgrades from keyring-only era)
+    keyring_key = _load_from_keyring()
+    if keyring_key is not None:
+        logger.info("Retrieved existing key from OS keyring; mirroring to file.")
+        _persist_key_file(keyring_key)
+        _mirror_to_keyring(keyring_key)
+        return keyring_key
+
+    # 3. No key exists anywhere — generate a new one
+    new_key = AESGCM.generate_key(bit_length=256)  # type: ignore[call-arg]
+
+    # File is authoritative — must succeed before we consider the key usable
+    try:
+        _persist_key_file(new_key)
+    except Exception as e:
+        logger.critical("Failed to persist newly generated secret key: %s", e)
+        raise RuntimeError(
+            "Could not write secret key file — refusing to operate with an "
+            "unpersisted key."
+        ) from e
+
+    # Keyring is a best-effort cache
+    _mirror_to_keyring(new_key)
+    logger.info("Generated and persisted a new symmetric encryption key.")
+    return new_key
+
+
+def _load_from_keyring() -> bytes | None:
+    """Try to read the symmetric key from the OS keyring.
+
+    Returns ``None`` when the keyring is unavailable or holds no key.
+    """
     try:
         import keyring
         stored_b64 = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
         if stored_b64:
             try:
-                keyring_key = base64.b64decode(stored_b64.encode("utf-8"))
+                return base64.b64decode(stored_b64.encode("utf-8"))
             except Exception:
-                logger.warning("OS Keychain secret key corrupted; regenerating key.")
+                logger.warning(
+                    "OS keyring secret key corrupted; ignoring keyring copy."
+                )
     except Exception as e:
-        logger.warning(f"OS Keychain via keyring is unavailable: {e}")
+        logger.debug("OS keyring unavailable: %s", e)
+    return None
 
-    if keyring_key is not None:
-        return keyring_key
 
-    # 2. Fallback: read key from private runtime file
-    if KEY_FILE.exists():
-        try:
-            key = KEY_FILE.read_bytes()
-            _chmod_private(KEY_FILE, is_dir=False)
-            return key
-        except Exception as e:
-            logger.critical(f"Key file exists but failed to read: {e}. Aborting to prevent credential loss.")
-            raise RuntimeError(f"Could not read existing secret key file: {e}") from e
-
-    # 3. Generate new symmetric key if none exists
-    new_key = AESGCM.generate_key(bit_length=256)  # type: ignore[call-arg]
-    
-    # Try storing it in the OS Keychain
-    saved_in_keyring = False
+def _mirror_to_keyring(key: bytes) -> None:
+    """Best-effort cache of *key* in the OS keyring for backwards compatibility."""
     try:
         import keyring
-        b64_key = base64.b64encode(new_key).decode("utf-8")
+        b64_key = base64.b64encode(key).decode("utf-8")
         keyring.set_password(KEYRING_SERVICE, KEYRING_USERNAME, b64_key)
-        saved_in_keyring = True
-        logger.info("Successfully generated and saved symmetric key in OS Keychain.")
     except Exception as e:
-        logger.warning(f"Failed to store generated symmetric key in OS Keychain: {e}")
+        logger.debug("Failed to mirror key to OS keyring: %s", e)
 
-    if saved_in_keyring:
-        return new_key
 
-    # 4. File system fallback if keychain is completely unavailable
-    try:
-        write_private_bytes(KEY_FILE, new_key)
-        _chmod_private(KEY_FILE, is_dir=False)
-        logger.warning(
-            "OS keychain unavailable; using local encrypted-key fallback. "
-            "Restricting key file to current user."
-        )
-    except Exception as e:
-        logger.error(f"Critical: Failed to save fallback symmetric key: {e}")
-        
-    return new_key
+def _persist_key_file(key: bytes) -> None:
+    """Write *key* to the private runtime key file with restricted permissions."""
+    write_private_bytes(KEY_FILE, key)
+    _chmod_private(KEY_FILE, is_dir=False)
 
 
 def encrypt_password(password: str) -> tuple[str, str]:

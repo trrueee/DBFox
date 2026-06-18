@@ -124,8 +124,11 @@ def _rule_validated_sql(
     hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
 
     # agent_autonomous_read + prod → approval
-    if _rule_agent_autonomous_read(state, execution_mode, safe_sql, original_sql, policy):
-        return _rule_agent_autonomous_read(state, execution_mode, safe_sql, original_sql, policy)
+    approval_decision = _rule_agent_autonomous_read(
+        state, execution_mode, safe_sql, original_sql, policy
+    )
+    if approval_decision:
+        return approval_decision
 
     if hard_blockers:
         return PolicyDecision(status="blocked", reason=f"SQL blocked by TrustGate: {hard_blockers}", risk_level="danger")
@@ -184,12 +187,17 @@ def _rule_requires_approval(
 
 
 # Ordered list: each rule gets a chance to block/approve.  First non-None wins.
+# Core safety checks (tool existence, side-effects, group allowlist, execution mode)
+# MUST run before any fast-path allow rules so that dangerous tools cannot
+# slip past them by name alone.
 _RULES: list[_RuleFunc] = [
     _rule_unknown_tool,
     _rule_side_effects,
-    _rule_escalate_tool,
     _rule_tool_group,
     _rule_execution_mode,
+    # Fast-path allow for the no-side-effect escalate.tool_group control operation.
+    # Placed *after* the core checks above so it cannot bypass group or mode gates.
+    _rule_escalate_tool,
     _rule_validated_sql,
     _rule_agent_read_approval,
     _rule_requires_approval,

@@ -356,7 +356,7 @@ class DBFoxAgentService:
             trace_events=[{"__clear__": True}],
             runtime_events=[{"__clear__": True}],
             plan_events=[{"__clear__": True}],
-            suggestions=[],
+            suggestions=[{"__clear__": True}],
             error=None,
             pending_approval=pending_approval,
             parent_run_id=req.parent_run_id,
