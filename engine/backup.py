@@ -266,7 +266,8 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
         record.status = "failed"
         record.completed_at = completed
         record.duration_ms = int((time.monotonic() - start_time) * 1000)
-        record.error_message = str(exc)
+        record.error_message = str(exc)[:2000]
+        db.commit()  # independent commit so API rollback does not erase the audit trail
         raise
 
     return record
