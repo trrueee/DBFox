@@ -206,8 +206,9 @@ def api_list_datasources(
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
     from engine.projects.service import get_or_create_default_project
-    get_or_create_default_project(db)
-    db.commit()
+    _project, created = get_or_create_default_project(db)
+    if created:
+        db.commit()
 
     query = db.query(DataSource)
     if project_id:

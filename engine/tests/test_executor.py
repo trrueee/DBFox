@@ -310,7 +310,7 @@ class TestPerformanceAndExplain:
 
     def test_explain_sql_secondary_validation(self, db_session_module, test_datasource_module) -> None:
         from engine.errors import GuardrailValidationError
-        from engine.sql.executor import _validate_explain_sql
+        from engine.sql.explain_validator import validate_explain_sql as _validate_explain_sql
 
         # Valid select passes
         _validate_explain_sql("SELECT id FROM users", "sqlite")

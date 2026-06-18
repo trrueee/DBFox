@@ -35,8 +35,8 @@ from engine.projects.service import get_or_create_default_project
 @router.get("/projects")
 def api_list_projects(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     try:
-        if not db.query(Project).filter(Project.id == DEFAULT_PROJECT_ID).first():
-            get_or_create_default_project(db)
+        _project, created = get_or_create_default_project(db)
+        if created:
             db.commit()
 
         projects = db.query(Project).filter(Project.status == "active").order_by(Project.created_at.asc()).all()

@@ -216,17 +216,19 @@ export const DataSourcesPage = ({
 
 
   const [prevInitialShowAddForm, setPrevInitialShowAddForm] = useState(initialShowAddForm);
-  if (initialShowAddForm !== prevInitialShowAddForm) {
-    setPrevInitialShowAddForm(initialShowAddForm);
-    if (initialShowAddForm) {
-      setMode("create");
-      setForm(emptyForm());
-      setFormError("");
-      setTestResult({ status: "idle", message: "" });
-    } else {
-      setMode("detail");
+  useEffect(() => {
+    if (initialShowAddForm !== prevInitialShowAddForm) {
+      setPrevInitialShowAddForm(initialShowAddForm);
+      if (initialShowAddForm) {
+        setMode("create");
+        setForm(emptyForm());
+        setFormError("");
+        setTestResult({ status: "idle", message: "" });
+      } else {
+        setMode("detail");
+      }
     }
-  }
+  }, [initialShowAddForm, prevInitialShowAddForm]);
 
   const selected = datasources.find((d) => d.id === selectedId) || null;
 

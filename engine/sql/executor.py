@@ -328,33 +328,13 @@ def execute_query(
     return result
 
 def _validate_explain_sql(sql: str, dialect: str) -> None:
-    """Secondary safety check for EXPLAIN inputs to prevent SQL injection in f-strings."""
-    import sqlglot
-    from sqlglot import exp
-    from engine.errors import GuardrailValidationError
-    from engine.sql.parser import normalize_dialect
+    """Secondary safety check for EXPLAIN inputs — delegated to shared module.
 
-    sql_stripped = sql.strip()
-    while sql_stripped.endswith(";"):
-        sql_stripped = sql_stripped[:-1].strip()
-
-    sqlglot_dialect = normalize_dialect(dialect)
-
-    try:
-        exprs = sqlglot.parse(sql_stripped, read=sqlglot_dialect)
-    except Exception as exc:
-        raise GuardrailValidationError(f"SQL syntax error in EXPLAIN query: {exc}")
-
-    if len(exprs) != 1 or not exprs[0]:
-        raise GuardrailValidationError("EXPLAIN query must contain exactly one SQL statement.")
-
-    expr = exprs[0]
-    if not isinstance(expr, (exp.Select, exp.Union)):
-        raise GuardrailValidationError("EXPLAIN query must be a SELECT or UNION statement.")
-
-    for node in expr.walk():
-        if isinstance(node, (exp.Command, exp.Execute)):
-            raise GuardrailValidationError("EXPLAIN query contains blocked command types.")
+    Kept as a re-export alias for backward compatibility; prefer importing
+    ``validate_explain_sql`` directly from ``engine.sql.explain_validator``.
+    """
+    from engine.sql.explain_validator import validate_explain_sql as _impl
+    _impl(sql, dialect)
 
 
 def explain_sql(

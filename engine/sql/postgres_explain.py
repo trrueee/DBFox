@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from engine.datasource import datasource_connection_dict, get_postgres_connection_params
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource
-from engine.sql.executor import (
+from engine.sql.safety_gate import (
     _decision_block_message,
     _decision_checks_for_error,
     _resolve_execution_safety_decision,
@@ -35,7 +35,7 @@ def explain_postgres_sql(db: Session, datasource_id: str, sql_str: str) -> dict[
         )
 
     safe_sql = str(decision.safe_sql or "").strip()
-    from engine.sql.executor import _validate_explain_sql
+    from engine.sql.explain_validator import validate_explain_sql as _validate_explain_sql
     _validate_explain_sql(safe_sql, "postgres")
     conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
 
