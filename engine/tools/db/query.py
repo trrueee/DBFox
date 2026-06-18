@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.sql.executor import execute_query
 from engine.tools.db._common import (

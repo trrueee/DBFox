@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.errors import DBFoxError, ToolInputError
 from engine.models import DataSource, SemanticAlias
