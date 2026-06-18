@@ -46,6 +46,7 @@ class PoolRegistry:
         pool_size: int = 5,
         max_overflow: int = 10,
         recycle: int = 1800,
+        timeout: float = 10.0,
     ) -> QueuePool:
         with self._lock:
             if key in self._pools:
@@ -55,7 +56,13 @@ class PoolRegistry:
 
             self._evict_if_needed(pool_size + max_overflow)
 
-            pool = QueuePool(creator, pool_size=pool_size, max_overflow=max_overflow, recycle=recycle)
+            pool = QueuePool(
+                creator,
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                recycle=recycle,
+                timeout=timeout,
+            )
             self._pools[key] = PoolEntry(pool=pool, key=key, capacity=pool_size + max_overflow)
             logger.info(
                 "PoolRegistry: created pool key=%s total_pools=%d total_capacity=%d",
