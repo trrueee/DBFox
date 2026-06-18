@@ -1,6 +1,13 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+
+from engine.db import Base, engine as db_engine
+# Ensure all ORM tables exist in the test database so that app-level
+# TestClient requests (e.g. /api/v1/datasources) do not fail with a
+# missing-table error.
+Base.metadata.create_all(bind=db_engine)
+
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
