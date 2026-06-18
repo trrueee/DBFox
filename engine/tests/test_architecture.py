@@ -137,13 +137,13 @@ def test_engine_agent_init_exports_runtime_only() -> None:
 
 
 def test_agent_core_exports_public_contracts() -> None:
-    """engine.agent_core must export ToolRegistry, types, persistence."""
+    """engine.agent_core exports data contracts, not tool runtime classes."""
     agent_core = importlib.import_module("engine.agent_core")
-    assert hasattr(agent_core, "ToolRegistry"), "agent_core must export ToolRegistry"
-    assert hasattr(agent_core, "ToolSpec"), "agent_core must export ToolSpec"
-    assert hasattr(agent_core, "ToolPolicy"), "agent_core must export ToolPolicy"
     assert hasattr(agent_core, "AgentRunRequest"), "agent_core must export AgentRunRequest"
     assert hasattr(agent_core, "persistence"), "agent_core must export persistence"
+    assert not hasattr(agent_core, "ToolRegistry"), "tool runtime belongs in engine.tools.runtime"
+    assert not hasattr(agent_core, "ToolSpec"), "tool runtime belongs in engine.tools.runtime"
+    assert not hasattr(agent_core, "ToolPolicy"), "tool runtime belongs in engine.tools.runtime"
     # CRITICAL: agent_core must NOT export DBFoxAgentRuntime
     assert not hasattr(agent_core, "DBFoxAgentRuntime"), (
         "agent_core must NOT export DBFoxAgentRuntime (it belongs in engine.agent)"
