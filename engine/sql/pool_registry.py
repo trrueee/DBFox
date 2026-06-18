@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -36,6 +37,7 @@ class PoolRegistry:
         self._max_pools = max_pools
         self._max_connections = max_connections
         self._pools: dict[tuple[Any, ...], PoolEntry] = {}
+        self._lock = threading.Lock()
 
     def get_or_create(
         self,
@@ -45,29 +47,33 @@ class PoolRegistry:
         max_overflow: int = 10,
         recycle: int = 1800,
     ) -> QueuePool:
-        if key in self._pools:
-            entry = self._pools[key]
-            entry.last_used = time.monotonic()
-            return entry.pool
+        with self._lock:
+            if key in self._pools:
+                entry = self._pools[key]
+                entry.last_used = time.monotonic()
+                return entry.pool
 
-        self._evict_if_needed(pool_size + max_overflow)
+            self._evict_if_needed(pool_size + max_overflow)
 
-        pool = QueuePool(creator, pool_size=pool_size, max_overflow=max_overflow, recycle=recycle)
-        self._pools[key] = PoolEntry(pool=pool, key=key, capacity=pool_size + max_overflow)
-        logger.info(
-            "PoolRegistry: created pool key=%s total_pools=%d total_capacity=%d",
-            key, len(self._pools), self._total_capacity(),
-        )
-        return pool
+            pool = QueuePool(creator, pool_size=pool_size, max_overflow=max_overflow, recycle=recycle)
+            self._pools[key] = PoolEntry(pool=pool, key=key, capacity=pool_size + max_overflow)
+            logger.info(
+                "PoolRegistry: created pool key=%s total_pools=%d total_capacity=%d",
+                key, len(self._pools), self._total_capacity(),
+            )
+            return pool
 
     def has(self, key: tuple[Any, ...]) -> bool:
         """Check if a pool exists for the given key without allocating a creator closure."""
-        return key in self._pools
+        with self._lock:
+            return key in self._pools
 
     def _total_capacity(self) -> int:
+        """Must be called while ``self._lock`` is held."""
         return sum(e.capacity for e in self._pools.values())
 
     def _evict_if_needed(self, new_pool_capacity: int) -> None:
+        """Must be called while ``self._lock`` is held."""
         while len(self._pools) >= self._max_pools or (
             self._total_capacity() + new_pool_capacity > self._max_connections and self._pools
         ):
@@ -89,44 +95,50 @@ class PoolRegistry:
 
         Returns the number of pools that were disposed.
         """
-        keys_to_dispose = [k for k in self._pools if k[0] == datasource_id]
-        for k in keys_to_dispose:
-            entry = self._pools.pop(k, None)
-            if entry is not None:
+        with self._lock:
+            keys_to_dispose = [k for k in self._pools if k[0] == datasource_id]
+            for k in keys_to_dispose:
+                entry = self._pools.pop(k, None)
+                if entry is not None:
+                    try:
+                        entry.pool.dispose()
+                    except Exception:
+                        pass
+            if keys_to_dispose:
+                logger.info(
+                    "PoolRegistry: disposed %d pool(s) for datasource %s",
+                    len(keys_to_dispose), datasource_id,
+                )
+            return len(keys_to_dispose)
+
+    def dispose_all(self) -> None:
+        with self._lock:
+            for entry in self._pools.values():
                 try:
                     entry.pool.dispose()
                 except Exception:
                     pass
-        if keys_to_dispose:
-            logger.info(
-                "PoolRegistry: disposed %d pool(s) for datasource %s",
-                len(keys_to_dispose), datasource_id,
-            )
-        return len(keys_to_dispose)
-
-    def dispose_all(self) -> None:
-        for entry in self._pools.values():
-            try:
-                entry.pool.dispose()
-            except Exception:
-                pass
-        self._pools.clear()
+            self._pools.clear()
 
     def snapshot(self) -> dict[str, Any]:
-        return {
-            "pool_count": len(self._pools),
-            "total_capacity": self._total_capacity(),
-            "max_pools": self._max_pools,
-            "max_connections": self._max_connections,
-        }
+        with self._lock:
+            return {
+                "pool_count": len(self._pools),
+                "total_capacity": self._total_capacity(),
+                "max_pools": self._max_pools,
+                "max_connections": self._max_connections,
+            }
 
 
 # Module-level singleton
 _pool_registry: PoolRegistry | None = None
+_registry_lock = threading.Lock()
 
 
 def get_pool_registry() -> PoolRegistry:
     global _pool_registry
     if _pool_registry is None:
-        _pool_registry = PoolRegistry()
+        with _registry_lock:
+            if _pool_registry is None:
+                _pool_registry = PoolRegistry()
     return _pool_registry

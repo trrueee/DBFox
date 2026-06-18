@@ -49,3 +49,45 @@ def test_table_star_warns_select_star() -> None:
     result = guardrail_check("SELECT users.* FROM users LIMIT 10")
     assert result["result"] == "warn"
     assert "select_star" in _rules("SELECT users.* FROM users LIMIT 10")
+
+
+# ── MySQL executable comment bypass regression tests ──────────────────
+
+def test_mysql_exec_comment_drop_rejected() -> None:
+    """/*!50001 DROP TABLE logs;*/ must be rejected — it hides DDL in a comment."""
+    result = guardrail_check("/*!50001 DROP TABLE logs;*/ SELECT 1;")
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules("/*!50001 DROP TABLE logs;*/ SELECT 1;")
+
+
+def test_mysql_exec_comment_delete_rejected() -> None:
+    result = guardrail_check("/*!50700 DELETE FROM users WHERE 1=1;*/ SELECT name FROM users;")
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules("/*!50700 DELETE FROM users WHERE 1=1;*/ SELECT name FROM users;")
+
+
+def test_mysql_exec_comment_standalone_rejected() -> None:
+    """Executable comment as the entire SQL body must be rejected."""
+    result = guardrail_check("/*!50001 DROP TABLE logs;*/")
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules("/*!50001 DROP TABLE logs;*/")
+
+
+def test_mysql_exec_comment_mid_query_rejected() -> None:
+    """Executable comment embedded in a SELECT must be rejected."""
+    result = guardrail_check("SELECT 1 /*!50001 UNION SELECT password FROM users;*/ FROM t;")
+    assert result["result"] == "reject"
+    assert "mysql_executable_comment" in _rules("SELECT 1 /*!50001 UNION SELECT password FROM users;*/ FROM t;")
+
+
+def test_optimizer_hint_allowed() -> None:
+    """/*+ INDEX(...) */ optimizer hints are NOT executable comments and must pass."""
+    result = guardrail_check("SELECT /*+ INDEX(t idx) */ name FROM t LIMIT 10")
+    assert result["result"] in ("pass", "warn")
+    assert "mysql_executable_comment" not in _rules("SELECT /*+ INDEX(t idx) */ name FROM t LIMIT 10")
+
+
+def test_hash_comment_delimiter() -> None:
+    """MySQL # line comments must not cause false multi-statement detection."""
+    from engine.sql.guardrail import count_statement_delimiters
+    assert count_statement_delimiters("SELECT 1 # comment with ; inside\nFROM t;") == 1
