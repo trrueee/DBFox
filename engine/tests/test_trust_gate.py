@@ -4,11 +4,11 @@ from engine.sql.dry_run import DryRunResult
 from engine.sql.trust_gate import TrustGate
 
 
-def test_trust_gate_safe_select(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_safe_select(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    result = TrustGate(db_session, validate_sql_schema).evaluate(
-        test_datasource.id,
+    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+        test_datasource_module.id,
         "SELECT id, username FROM users LIMIT 10",
     )
 
@@ -19,11 +19,11 @@ def test_trust_gate_safe_select(db_session, test_datasource) -> None:
     assert result["guardrail"]["result"] == "pass"
 
 
-def test_trust_gate_allows_order_by_projection_alias(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_allows_order_by_projection_alias(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    result = TrustGate(db_session, validate_sql_schema).evaluate(
-        test_datasource.id,
+    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+        test_datasource_module.id,
         """
         SELECT username, COUNT(*) AS invocation_count
         FROM users
@@ -38,11 +38,11 @@ def test_trust_gate_allows_order_by_projection_alias(db_session, test_datasource
     assert result["riskLevel"] == "safe"
 
 
-def test_trust_gate_schema_warning_requires_confirmation(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_schema_warning_requires_confirmation(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    result = TrustGate(db_session, validate_sql_schema).evaluate(
-        test_datasource.id,
+    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+        test_datasource_module.id,
         "SELECT imaginary_column FROM users LIMIT 10",
         policy="agent_readonly",
     )
@@ -53,11 +53,11 @@ def test_trust_gate_schema_warning_requires_confirmation(db_session, test_dataso
     assert any("imaginary_column" in warning for warning in result["schemaWarnings"])
 
 
-def test_trust_gate_rejects_dangerous_sql(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_rejects_dangerous_sql(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    result = TrustGate(db_session, validate_sql_schema).evaluate(
-        test_datasource.id,
+    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+        test_datasource_module.id,
         "DROP TABLE users",
     )
 
@@ -67,13 +67,13 @@ def test_trust_gate_rejects_dangerous_sql(db_session, test_datasource) -> None:
     assert result["guardrail"]["result"] == "reject"
 
 
-def test_trust_gate_prod_datasource_requires_confirmation(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
-    test_datasource.env = "prod"
-    db_session.commit()
+def test_trust_gate_prod_datasource_requires_confirmation(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
+    test_datasource_module.env = "prod"
+    db_session_module.commit()
 
-    result = TrustGate(db_session, validate_sql_schema).evaluate(
-        test_datasource.id,
+    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+        test_datasource_module.id,
         "SELECT id, username FROM users LIMIT 10",
         policy="agent_readonly",
     )
@@ -84,11 +84,11 @@ def test_trust_gate_prod_datasource_requires_confirmation(db_session, test_datas
     assert any("Production datasource" in message for message in result["messages"])
 
 
-def test_trust_gate_execution_decision_blocks_invalid_order_by_syntax(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_execution_decision_blocks_invalid_order_by_syntax(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users ORDER BY ARRAY() LIMIT 10",
         policy="agent_readonly",
     )
@@ -99,11 +99,11 @@ def test_trust_gate_execution_decision_blocks_invalid_order_by_syntax(db_session
     assert "guardrail_reject" in decision.blocked_reasons
 
 
-def test_trust_gate_execution_decision_blocks_missing_table_schema_error(db_session, test_datasource) -> None:
-    sync_schema(db_session, test_datasource.id)
+def test_trust_gate_execution_decision_blocks_missing_table_schema_error(db_session_module, test_datasource_module) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM missing_table LIMIT 10",
         policy="agent_readonly",
     )
@@ -116,19 +116,19 @@ def test_trust_gate_execution_decision_blocks_missing_table_schema_error(db_sess
 
 
 def test_trust_gate_execution_decision_warns_when_dry_run_unavailable(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
 
     def fail_dry_run(*_args, **_kwargs):
         raise RuntimeError("dry run connection unavailable")
 
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fail_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users LIMIT 10",
         policy="agent_readonly",
     )
@@ -140,11 +140,11 @@ def test_trust_gate_execution_decision_warns_when_dry_run_unavailable(
 
 
 def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
     original_sql = "SELECT id FROM users"
     safe_sql = "SELECT id FROM users LIMIT 1000"
     dry_run_sql: list[str] = []
@@ -165,8 +165,8 @@ def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
     monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         original_sql,
         policy="agent_readonly",
     )
@@ -179,11 +179,11 @@ def test_trust_gate_execution_decision_dry_runs_guardrail_safe_sql(
 
 
 def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_result(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
     safe_sql = "SELECT id FROM users LIMIT 1000"
 
     def fake_guardrail(sql: str, dialect: str = "mysql"):
@@ -203,8 +203,8 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
     monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users",
         policy="agent_readonly",
     )
@@ -215,11 +215,11 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
 
 
 def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
     safe_sql = "SELECT missing_column FROM users LIMIT 1000"
     dry_run_sql: list[str] = []
 
@@ -241,8 +241,8 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
     monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users",
         policy="agent_readonly",
     )
@@ -256,11 +256,11 @@ def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(
 
 
 def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
     dry_run_sql: list[str] = []
 
     def fake_guardrail(sql: str, dialect: str = "mysql"):
@@ -279,8 +279,8 @@ def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
     monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users",
         policy="agent_readonly",
     )
@@ -292,11 +292,11 @@ def test_trust_gate_execution_decision_skips_dry_run_when_guardrail_rejects(
 
 
 def test_trust_gate_execution_decision_skips_dry_run_when_safe_sql_is_empty(
-    db_session,
-    test_datasource,
+    db_session_module,
+    test_datasource_module,
     monkeypatch,
 ) -> None:
-    sync_schema(db_session, test_datasource.id)
+    sync_schema(db_session_module, test_datasource_module.id)
     dry_run_sql: list[str] = []
 
     def fake_guardrail(sql: str, dialect: str = "mysql"):
@@ -315,8 +315,8 @@ def test_trust_gate_execution_decision_skips_dry_run_when_safe_sql_is_empty(
     monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
     monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
 
-    decision = TrustGate(db_session, validate_sql_schema).execution_decision(
-        test_datasource.id,
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
         "SELECT id FROM users",
         policy="agent_readonly",
     )
