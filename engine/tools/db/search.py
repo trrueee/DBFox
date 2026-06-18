@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.ai_index import tokenize_query
 from engine.models import SchemaSearchDoc
 from engine.tools.db._common import (

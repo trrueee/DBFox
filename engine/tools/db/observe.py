@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.models import DataSource, QueryHistory, SchemaColumn, SchemaTable
 from engine.tools.db._common import (
     _column_summary,

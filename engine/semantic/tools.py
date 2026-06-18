@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.agent_core.types import ToolObservation
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.semantic.resolver import SemanticResolver
 
 # Module-level singleton — resolver needs a db per call, so we create it
