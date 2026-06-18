@@ -282,8 +282,12 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
                     if not exists_in_any:
                         tbl_list = ", ".join(f"`{t}`" for t in queried_valid_tables)
                         warnings.append(f"生成 SQL 中的字段 `{col_node.name}` 不存在于查询的表 {tbl_list} 中")
+    except sqlglot.errors.ParseError as e:
+        logger.warning("Schema validation parse error for datasource %s: %s", datasource_id, e)
+        warnings.append(f"Schema validation could not parse SQL for safety check: {e}")
     except Exception as e:
-        logger.warning("Schema validation error: %s", e)
+        logger.exception("Unexpected schema validation error for datasource %s", datasource_id)
+        warnings.append("Schema validation encountered an unexpected error — SQL was not verified against local schema cache.")
     return warnings
 
 

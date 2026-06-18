@@ -19,7 +19,7 @@ def test_sync_tables(db_session, test_datasource) -> None:
 
 def test_sync_columns(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    columns = db_session.query(SchemaColumn).join(SchemaTable).filter(
+    columns = db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).all()
     assert len(columns) > 0
@@ -93,7 +93,7 @@ def test_sync_idempotent(db_session, test_datasource) -> None:
     initial_count = db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
-    initial_col_count = db_session.query(SchemaColumn).join(SchemaTable).filter(
+    initial_col_count = db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
 
@@ -102,7 +102,7 @@ def test_sync_idempotent(db_session, test_datasource) -> None:
     second_count = db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
-    second_col_count = db_session.query(SchemaColumn).join(SchemaTable).filter(
+    second_col_count = db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
 
@@ -121,7 +121,7 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
     initial_table_count = db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
-    initial_column_count = db_session.query(SchemaColumn).join(SchemaTable).filter(
+    initial_column_count = db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count()
 
@@ -136,7 +136,7 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
     assert db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count() == initial_table_count
-    assert db_session.query(SchemaColumn).join(SchemaTable).filter(
+    assert db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == test_datasource.id
     ).count() == initial_column_count
 
@@ -150,7 +150,7 @@ def test_cascade_delete_datasource(db_session, test_datasource) -> None:
 
     # Verify tables and columns exist
     assert db_session.query(SchemaTable).filter(SchemaTable.data_source_id == ds_id).count() == 20
-    assert db_session.query(SchemaColumn).join(SchemaTable).filter(
+    assert db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == ds_id
     ).count() > 0
 
@@ -160,6 +160,6 @@ def test_cascade_delete_datasource(db_session, test_datasource) -> None:
 
     # Verify cascade — no orphaned schema data
     assert db_session.query(SchemaTable).filter(SchemaTable.data_source_id == ds_id).count() == 0
-    assert db_session.query(SchemaColumn).join(SchemaTable).filter(
+    assert db_session.query(SchemaColumn).join(SchemaTable, SchemaColumn.table_id == SchemaTable.id).filter(
         SchemaTable.data_source_id == ds_id
     ).count() == 0

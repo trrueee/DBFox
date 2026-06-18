@@ -493,11 +493,26 @@ class SQLiteLongTermMemoryStore:
             records.append(record)
         return records
 
-    def all(self) -> list[MemoryRecord]:
+    def all(self, limit: int | None = 500, offset: int = 0) -> list[MemoryRecord]:
+        """Return memory records with optional pagination.
+
+        Args:
+            limit: Max records to return.  None = no limit (use with caution;
+                   large datasets may cause high memory usage).
+            offset: Number of records to skip (requires ORDER BY for stability).
+        """
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT payload FROM long_term_memories WHERE status != 'deleted'"
-            ).fetchall()
+            if limit is None:
+                rows = conn.execute(
+                    "SELECT payload FROM long_term_memories WHERE status != 'deleted'"
+                    " ORDER BY created_at DESC"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT payload FROM long_term_memories WHERE status != 'deleted'"
+                    " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (limit, offset),
+                ).fetchall()
         records: list[MemoryRecord] = []
         for row in rows:
             record = self._record_from_payload(str(row["payload"]))
