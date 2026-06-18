@@ -337,7 +337,7 @@ def _build_execution_section(state: dict[str, Any]) -> ExecutionSection:
 
 
 def _build_result_section(state: dict[str, Any]) -> ResultSection:
-    result_raw = state.get("data_profile") or {}
+    result_raw = state.get("result_profile") or {}
     return ResultSection(
         row_count=int(result_raw.get("row_count") or 0),
         notable_facts=_normalize_str_list(result_raw.get("notable_facts") or [])[:5],

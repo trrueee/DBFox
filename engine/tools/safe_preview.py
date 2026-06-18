@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.tools.db_tools import db_preview as _db_preview
 

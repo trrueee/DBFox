@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params, get_postgres_connection_params
 from engine.errors import ToolInputError

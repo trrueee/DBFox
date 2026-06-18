@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse
-from engine.agent_core.tool_registry import ToolRegistry
+from engine.tools.runtime.registry import ToolRegistry
 from engine.agent.app.runtime_config import RuntimeConfig
 
 

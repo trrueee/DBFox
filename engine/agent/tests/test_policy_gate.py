@@ -1,16 +1,31 @@
 from __future__ import annotations
 
-import pytest
-from unittest.mock import MagicMock, patch
+from pydantic import BaseModel
 
-from engine.agent_core.tool_registry import (
-    RegisteredTool,
-    ToolContext,
-    ToolPolicy,
-    ToolRegistry,
-    ToolSpec,
-)
-from engine.policy.gate import PolicyGate, PolicyDecision
+from engine.policy.gate import PolicyGate
+from engine.tools.runtime import BaseTool, ToolPolicy, ToolRegistry
+
+
+class EmptyInput(BaseModel):
+    pass
+
+
+class EmptyOutput(BaseModel):
+    ok: bool = True
+
+
+class PolicyTestTool(BaseTool[EmptyInput, EmptyOutput]):
+    input_model = EmptyInput
+    output_model = EmptyOutput
+
+    def __init__(self, name: str, policy: ToolPolicy) -> None:
+        self.name = name
+        self.group = name.split(".", 1)[0]
+        self.description = f"Test tool: {name}"
+        self.policy = policy
+
+    def run(self, tool_input, context):
+        return EmptyOutput()
 
 
 def _make_tool(
@@ -20,18 +35,14 @@ def _make_tool(
     requires_approval: bool = False,
     requires_validated_sql: bool = False,
 ):
-    return RegisteredTool(
-        spec=ToolSpec(
-            name=name,
-            description=f"Test tool: {name}",
-            policy=ToolPolicy(
-                risk_level=risk_level,
-                side_effect=side_effect,
-                requires_approval=requires_approval,
-                requires_validated_sql=requires_validated_sql,
-            ),
+    return PolicyTestTool(
+        name,
+        ToolPolicy(
+            risk_level=risk_level,
+            side_effect=side_effect,
+            requires_approval=requires_approval,
+            requires_validated_sql=requires_validated_sql,
         ),
-        handler=lambda ctx, args: MagicMock(),
     )
 
 
@@ -71,6 +82,32 @@ class TestPolicyGateBasics:
         decision = gate.check({}, "risky.tool", {"arg": 1})
         assert decision.status == "approval_required"
         assert decision.risk_level == "warning"
+
+    def test_escalate_tool_group_bypasses_group_check(self):
+        from engine.tools.dbfox_tools import register_dbfox_tools
+
+        registry = register_dbfox_tools()
+        gate = PolicyGate(registry)
+        state = {
+            "allowed_tool_groups": [
+                "environment",
+                "schema",
+                "db",
+                "semantic",
+                "memory",
+                "result",
+                "chart",
+                "answer",
+            ]
+        }
+
+        decision = gate.check(
+            state,
+            "escalate.tool_group",
+            {"group": "execution", "reason": "Need to execute validated SQL."},
+        )
+
+        assert decision.status == "allowed"
 
 
 class TestSqlExecutionPolicy:

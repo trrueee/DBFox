@@ -154,7 +154,7 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
             parts.append(f"  - Execution Error: {execution.get('error')}")
 
     # 9. Profile result
-    profile = state.get("data_profile")
+    profile = state.get("result_profile")
     if profile:
         parts.append(f"- **Data Profile**:\n```json\n{profile}\n```")
 

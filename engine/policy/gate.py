@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable, Literal
 from pydantic import BaseModel, Field
 
-from engine.agent_core.tool_registry import ToolRegistry, tool_to_group
+from engine.tools.runtime.registry import ToolRegistry, tool_to_group
 
 
 class PolicyDecision(BaseModel):
@@ -63,6 +63,8 @@ def _rule_tool_group(
     _gate: PolicyGate, state: dict, tool_name: str, _args: dict, _mode: str,
     tool: Any, _policy: Any,
 ) -> PolicyDecision | None:
+    if tool_name == "escalate.tool_group":
+        return None
     allowed_groups = state.get("allowed_tool_groups") or []
     if allowed_groups:
         group = tool.spec.group or tool_to_group(tool_name)
@@ -196,7 +198,8 @@ _RULES: list[_RuleFunc] = [
     _rule_tool_group,
     _rule_execution_mode,
     # Fast-path allow for the no-side-effect escalate.tool_group control operation.
-    # Placed *after* the core checks above so it cannot bypass group or mode gates.
+    # _rule_tool_group explicitly exempts it because escalation is the mechanism
+    # for requesting a group not yet in allowed_tool_groups.
     _rule_escalate_tool,
     _rule_validated_sql,
     _rule_agent_read_approval,
