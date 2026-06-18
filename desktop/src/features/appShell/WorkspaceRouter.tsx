@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { ConversationHistoryPanel } from "../conversation/ConversationHistoryPanel";
 import { TableWorkspace } from "../workspace/TableWorkspace";
-import { SqlConsoleWorkspace } from "../workspace/SqlConsoleWorkspace";
+import { SqlConsoleWorkspace, type ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { MultiTableWorkspace } from "../workspace/MultiTableWorkspace";
 import { AgentEvalPage } from "../../pages/AgentEvalPage";
 import { DataSourcesPage } from "../../pages/DataSourcesPage";
@@ -50,7 +50,7 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
 }
 
 // ── SmartQueryHome tab ──
-function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
+function SmartQueryHomeTab(_props: { showToast: WorkspaceRouterProps["showToast"] }) {
   const [askInputValue, setAskInputValue] = useState("");
   const contextTables = useWorkspaceStore((s) => s.contextTables);
   const addContextTable = useWorkspaceStore((s) => s.addContextTable);
@@ -127,7 +127,7 @@ function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; show
     }));
   };
 
-  const onAppendEntries = (id: string, newEntries: unknown[]) => {
+  const onAppendEntries = (id: string, newEntries: ConsoleEntry[]) => {
     useWorkspaceStore.setState((s) => ({
       sqlConsoleState: {
         ...s.sqlConsoleState,

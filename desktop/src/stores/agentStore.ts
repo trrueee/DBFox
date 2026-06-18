@@ -50,7 +50,7 @@ export type AgentStore = AgentState & AgentActions;
 /** Maximum wall-clock time for a single Agent run before the AbortController fires. */
 const AGENT_RUN_TIMEOUT_MS = 300_000;
 
-export const useAgentStore = create<AgentStore>()((set, get) => ({
+export const useAgentStore = create<AgentStore>()((_set, get) => ({
   _abortControllers: new Map(),
   _runIds: new Map(),
   _cancelledTabs: new Set(),

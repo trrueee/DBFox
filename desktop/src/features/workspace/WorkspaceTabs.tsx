@@ -1,7 +1,5 @@
-import type { MouseEvent } from "react";
 import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Cpu, Database } from "lucide-react";
 import { FoxIcon } from "../../components/brand/FoxIcon";
-import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 interface WorkspaceTabsProps {

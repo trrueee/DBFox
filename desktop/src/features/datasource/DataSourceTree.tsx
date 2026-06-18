@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import type { EngineSchemaTable } from "../engine/engineApi";
 import "./DataSourceTree.css";
 
 interface DataSourceTreeProps {
