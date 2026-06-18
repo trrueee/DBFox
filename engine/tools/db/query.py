@@ -35,7 +35,7 @@ def db_query(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
             ctx.request.datasource_id,
             sql,
             question=str(args.get("question") or ctx.request.question or ""),
-            safety_policy="readonly",
+            safety_policy="agent_readonly",
             redact=True,
         )
     except Exception as exc:
