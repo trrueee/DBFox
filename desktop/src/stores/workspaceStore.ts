@@ -281,8 +281,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           (a, b) => b.updatedAt - a.updatedAt,
         ),
       }));
-    } catch {
-      // toast handled by caller
+    } catch (err) {
+      console.error("persistConversation failed:", err);
     }
   },
 
@@ -290,8 +290,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     try {
       await deleteConversation(id);
       set((s) => ({ conversations: s.conversations.filter((c) => c.id !== id) }));
-    } catch {
-      // toast handled by caller
+    } catch (err) {
+      console.error("deleteConversationById failed:", err);
     }
   },
 
@@ -304,8 +304,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     try {
       const history = await listConversations();
       set({ conversations: history });
-    } catch {
-      // toast handled by caller
+    } catch (err) {
+      console.error("initConversations failed:", err);
     }
   },
 

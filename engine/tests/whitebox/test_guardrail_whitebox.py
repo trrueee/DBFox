@@ -181,6 +181,21 @@ def test_delim9():
 def test_delim10():
     assert count_statement_delimiters("SELECT --word;") == 1
 
+# covers: DELIM-11 MySQL # line comment
+def test_delim11():
+    """MySQL # line comments must be stripped before counting."""
+    assert count_statement_delimiters("SELECT 1 # comment ; with semicolons\nFROM t;") == 1
+
+# covers: DELIM-12 MySQL executable comment NOT stripped
+def test_delim12():
+    """Semicolons inside /*!...*/ executable comments must be counted."""
+    assert count_statement_delimiters("/*!50001 DROP TABLE t;*/ SELECT 1;") == 2
+
+# covers: DELIM-13 MySQL executable comment — only the body semicolons count
+def test_delim13():
+    """Optimizer hints (no version digits) are stripped like regular comments."""
+    assert count_statement_delimiters("SELECT /*+ INDEX(t) ; */ 1;") == 1
+
 
 def test_legal_sql_golden_set():
     import os

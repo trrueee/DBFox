@@ -21,24 +21,31 @@ def compact_messages(messages: list[Any], config: MemoryCompactionConfig | None 
 
     Strategy:
       1. Keep all non-tool messages.
-      2. Keep most recent N tool messages.
-      3. If still over budget, drop oldest non-system messages.
+      2. Keep most recent N tool messages (capped by ``max_tool_messages``).
+      3. If still over budget, drop oldest messages from the head.
     """
     cfg = config or DEFAULT_CONFIG
-    if len(messages) <= cfg.max_messages:
+    if not messages or len(messages) <= cfg.max_messages:
         return list(messages)
 
     # Split
     tool_msgs = [m for m in messages if _is_tool(m)]
     other_msgs = [m for m in messages if not _is_tool(m)]
 
-    # Keep last N tool messages
-    kept_tools = tool_msgs[-cfg.max_tool_messages:] if len(tool_msgs) > cfg.max_tool_messages else tool_msgs
+    # Keep last N tool messages.  Guard against max_tool_messages=0
+    # because ``list[-0:]`` returns the *entire* list in Python.
+    if cfg.max_tool_messages <= 0:
+        kept_tools: list[Any] = []
+    elif len(tool_msgs) > cfg.max_tool_messages:
+        kept_tools = tool_msgs[-cfg.max_tool_messages:]
+    else:
+        kept_tools = tool_msgs
 
-    # Rebuild
-    result = kept_tools + other_msgs
-    # Sort by original index approximation
+    # Rebuild preserving original order: non-tool messages first, then tool
+    # messages.  Both groups maintain their relative order.
+    result = other_msgs + kept_tools
     if len(result) > cfg.max_messages:
+        # Drop oldest entries (from the head) to stay within budget.
         result = result[-cfg.max_messages:]
 
     return result

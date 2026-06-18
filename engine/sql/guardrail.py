@@ -98,20 +98,45 @@ def guardrail_check_with_ast(
 
 
 def count_statement_delimiters(sql: str) -> int:
-    """Counts the number of semicolons that are not inside string literals or comments."""
-    # Remove single line comments. MySQL requires a whitespace (space/tab/newline
-    # etc.) after `--` for the rest of the line to be treated as a comment.
-    # `--word` is NOT a comment in MySQL.
+    """Counts the number of semicolons that are not inside string literals or comments.
+
+    MySQL executable comments (``/*!<digits> ... */``) are NOT stripped —
+    their contents are treated as active SQL because MySQL will execute them.
+    """
+    # Remove single line comments:
+    #   - ``-- `` / ``--\t`` → rest of line is comment (MySQL standard)
+    #   - ``--`` at end of line → empty comment (MySQL requires a whitespace
+    #     after ``--``, so ``--word`` is NOT a comment)
+    #   - ``#`` line comments (MySQL)
     sql = re.sub(r"--(?:[ \t]+.*|$)", "", sql, flags=re.MULTILINE)
-    # Remove multi-line comments
+    sql = re.sub(r"#.*$", "", sql, flags=re.MULTILINE)
+
+    # Remove regular block comments (``/* ... */``) but NOT MySQL executable
+    # comments (``/*!<digits> ... */``).  Executable comments are left in-place
+    # so their semicolons contribute to the multi-statement count.
+    # We use a two-pass approach: first extract executable comments, strip
+    # regular comments from the remainder, then re-insert the executable bodies.
+    _EXEC_COMMENT_RE = re.compile(r"/\*!(\d+)(.*?)\*/", flags=re.DOTALL)
+    exec_comment_bodies: list[str] = []
+    placeholder = "\x00DBFOX_EXEC_COMMENT\x00"
+
+    def _save_exec_comment(m: re.Match) -> str:
+        exec_comment_bodies.append(m.group(2))  # the code inside /*!<ver> ... */
+        return placeholder
+
+    sql = _EXEC_COMMENT_RE.sub(_save_exec_comment, sql)
+    # Now strip regular block comments from the remainder
     sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
-    
+    # Re-insert the executable comment bodies
+    for body in exec_comment_bodies:
+        sql = sql.replace(placeholder, body, 1)
+
     in_single_quote = False
     in_double_quote = False
     in_backtick = False
     escaped = False
     semicolons = 0
-    
+
     for char in sql:
         if escaped:
             escaped = False
@@ -127,8 +152,38 @@ def count_statement_delimiters(sql: str) -> int:
             in_backtick = not in_backtick
         elif char == ';' and not in_single_quote and not in_double_quote and not in_backtick:
             semicolons += 1
-            
+
     return semicolons
+
+
+# Pattern that matches MySQL executable comment openings: /*! followed by digits.
+# Used to block these outright — they can hide dangerous SQL from the AST walker.
+_MYSQL_EXEC_COMMENT_START = re.compile(r"/\*!\d")
+
+
+def _is_select_node(node: exp.Expression) -> bool:
+    """Check if an AST node is a read-only SELECT or set operation."""
+    if isinstance(node, exp.Select):
+        return True
+    if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
+        return _is_select_node(node.left) and _is_select_node(node.right)  # type: ignore[arg-type]
+    if isinstance(node, exp.Subquery):
+        return _is_select_node(node.this)
+    if isinstance(node, exp.With):
+        return _is_select_node(node.this)
+    return False
+
+
+def _projection_has_star(projection: exp.Expression) -> bool:
+    """Check if a SELECT projection uses ``*`` (excluding safe COUNT(*))."""
+    inner = projection.this if isinstance(projection, exp.Alias) else projection
+    if isinstance(inner, exp.Count):
+        return False
+    if isinstance(inner, exp.Star):
+        return True
+    if isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star):
+        return True
+    return False
 
 def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     """
@@ -160,6 +215,26 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             "safeSql": "",
             "checks": [{"rule": "empty_sql", "level": "reject", "message": "SQL 语句不能为空"}],
             "message": "拒绝执行：SQL 语句为空"
+        }
+
+    # Block MySQL executable comments (/*!<digits> ... */) upfront.
+    # These can hide dangerous SQL (e.g. /*!50001 DROP TABLE t;*/) from both
+    # the delimiter counter and the AST walker because sqlglot treats them as
+    # inert comment nodes while MySQL WILL execute their contents.
+    if _MYSQL_EXEC_COMMENT_START.search(sql_str):
+        return {
+            "result": "reject",
+            "originalSql": sql_str,
+            "safeSql": "",
+            "checks": [{
+                "rule": "mysql_executable_comment",
+                "level": "reject",
+                "message": (
+                    "禁止使用 MySQL 版本化可执行注释 (/*!...*/)。"
+                    "此类注释可以隐藏高危 SQL 指令，存在绕过安全审计的风险。"
+                ),
+            }],
+            "message": "拒绝执行：检测到 MySQL 可执行注释，该语法可能被用于绕过安全审计。",
         }
 
     # Enforce safe length limit
@@ -205,7 +280,7 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             })
             has_errors = True
 
-        if not expressions:
+        if not expressions or not expressions[0]:
             raise ValueError("SQL parsing yielded empty AST")
 
         expression: exp.Expression = expressions[0]  # type: ignore[assignment]
@@ -218,20 +293,9 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             "message": "拒绝执行：语法解析失败"
         }
 
-    # 2. Enforce SELECT only
-    # Check if outer node is a Select or SetOperation (Union/Intersect/Except of Selects)
-    def is_select_node(node: exp.Expression) -> bool:
-        if isinstance(node, exp.Select):
-            return True
-        if isinstance(node, (exp.Union, exp.Intersect, exp.Except)):
-            return is_select_node(node.left) and is_select_node(node.right)  # type: ignore[arg-type]
-        if isinstance(node, exp.Subquery):
-            return is_select_node(node.this)
-        if isinstance(node, exp.With):
-            return is_select_node(node.this)
-        return False
-
-    if not isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With)) or not is_select_node(expression):
+    # 2. Enforce SELECT only — delegated to module-level helper for testability
+    if not isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except, exp.Subquery, exp.With)) \
+       or not _is_select_node(expression):
         checks.append({
             "rule": "select_only",
             "level": "reject",
@@ -331,18 +395,8 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
         }
 
     # 4. Check for SELECT * Warning while excluding safe aggregate COUNT(*).
-    def projection_has_star(projection: exp.Expression) -> bool:
-        inner = projection.this if isinstance(projection, exp.Alias) else projection
-        if isinstance(inner, exp.Count):
-            return False
-        if isinstance(inner, exp.Star):
-            return True
-        if isinstance(inner, exp.Column) and isinstance(inner.this, exp.Star):
-            return True
-        return False
-
     has_star = any(
-        projection_has_star(projection)
+        _projection_has_star(projection)
         for select in expression.find_all(exp.Select)
         for projection in select.expressions
     )
