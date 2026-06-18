@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from engine.agent_core.tool_registry import ToolContext
+from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import AgentRunRequest
 from engine.semantic.tools import semantic_resolve
 from engine.environment.tools import environment_get_profile

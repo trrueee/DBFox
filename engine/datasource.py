@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,8 @@ from engine.tunnel import (
     get_or_create_tunnel_for_dict,
     open_temporary_tunnel,
 )
+
+logger = logging.getLogger("dbfox.datasource")
 
 
 def _normalized_optional_path(value: Any) -> str | None:
@@ -158,8 +161,13 @@ def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
     if tunnel is not None and not config.get("is_managed"):
         try:
             tunnel.stop()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Failed to stop test tunnel (host=%s port=%s): %s",
+                config.get("ssh_host", "unknown"),
+                config.get("ssh_port", "unknown"),
+                e,
+            )
 
 
 def test_connection(config: dict[str, Any]) -> dict[str, Any]:

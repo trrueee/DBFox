@@ -59,7 +59,6 @@ Scope: Full codebase (Python backend + TypeScript frontend + Rust Tauri)
 | # | Issue | Status |
 |---|-------|--------|
 | 21 | `_write_query_history` still creates `sessionmaker` inline | Test/prod compat — kept intentionally |
-| 30 | `_analyze_data_handler` imports `profile_result` inside function | `time` moved to top-level; `profile_result` still inside |
 | 84 | `api_list_projects` runs `get_or_create_default_project` on every request | Added existence check, but still runs per-request |
 | 33 | `_build_columns` FK resolution empty `pass` | Replaced with comment explaining FK resolution is in `_build_relationships` |
 | 36 | `_catalog_status` always returns "fresh" | Docstring explains staleness tracked separately via `last_sync_status` |
@@ -168,7 +167,6 @@ Scope: Full codebase (Python backend + TypeScript frontend + Rust Tauri)
 
 | # | Issue | Location | Severity |
 |---|-------|----------|----------|
-| 30 | `_analyze_data_handler` imports `profile_result` inside function | `dbfox_tools.py:163` | Low |
 | 41 | `api_llm_test` imports `time` inside function | `agent.py:68` | Low |
 | 42 | `DatabaseMapBuilder.build` imports `json` + `datetime` inside function | `database_map.py:238-239` | Low |
 | 56 | `create_openai_client` docstring after import | `openai.py:19-20` | Low |
