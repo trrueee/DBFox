@@ -105,8 +105,6 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
   const y = typeof payload.y === "string" ? payload.y : "";
   if ((chartType !== "line" && chartType !== "bar") || !x || !y) return null;
 
-  // The chart artifact is only a suggestion {type, x, y}; series data lives in
-  // the companion result_table artifact.
   const tableArtifact = all.find((item) => item.type === "table");
   const rowsValue = tableArtifact?.payload?.rows;
   const rawRows = Array.isArray(rowsValue) ? rowsValue : [];

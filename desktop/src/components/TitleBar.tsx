@@ -4,23 +4,30 @@ import { FoxIcon } from "./brand/FoxIcon";
 import { ThemeToggle } from "./ThemeToggle";
 import "./TitleBar.css";
 
+interface TauriWindow {
+  isMaximized(): Promise<boolean>;
+  minimize(): Promise<void>;
+  toggleMaximize(): Promise<void>;
+  close(): Promise<void>;
+}
+
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-let _tauriWindow: (() => Promise<Win>) | null = null;
+let _tauriWindow: (() => Promise<TauriWindow>) | null = null;
 
-async function getTauriWindow(): Promise<Win | null> {
+async function getTauriWindow(): Promise<TauriWindow | null> {
   if (!isTauriRuntime()) return null;
   if (!_tauriWindow) {
     try {
       const mod = await import("@tauri-apps/api/window");
-      _tauriWindow = () => mod.getCurrentWindow() as unknown as Win;
+      _tauriWindow = () => mod.getCurrentWindow() as unknown as Promise<TauriWindow>;
     } catch {
       return null;
     }
   }
-  return _tauriWindow();
+  return _tauriWindow!();
 }
 
 export default function TitleBar() {

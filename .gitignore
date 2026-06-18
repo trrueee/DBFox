@@ -1,15 +1,18 @@
-# Environment files and credentials
+# ============================================================
+# Environment & Secrets
+# ============================================================
 .env
 .env.*
 !.env.example
 *.local
 *.local.*
-.dbfox_runtime/
 engine/.secret_key
 engine/.local_token
 desktop/.env.local
 
-# Local databases and runtime state
+# ============================================================
+# Databases & Runtime State
+# ============================================================
 dbfox_local.db
 dbfox_local.db.bak_*
 dbfox_local.db-shm
@@ -26,11 +29,14 @@ demo_shop
 *.sqlite-shm
 *.sqlite-wal
 *.sqlite-journal
+.dbfox_runtime/
 
-# Exceptions for test databases that must be tracked
+# Test fixture databases must be tracked
 !engine/tests/fixtures/**/*.sqlite
 
+# ============================================================
 # Python
+# ============================================================
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -45,23 +51,18 @@ htmlcov/
 coverage.xml
 *.log
 
-# LangGraph / Agent runtime
-.langgraph/
-checkpoints/
-*.checkpoint
-*.checkpoint.sqlite
-*.checkpoint.sqlite-shm
-*.checkpoint.sqlite-wal
-
-# Sidecar build artifacts
+# ============================================================
+# Sidecar Build
+# ============================================================
 pyinstaller_dist/
 pyinstaller_build/
 dbfox-engine.spec
 .build_venv/
 engine/token_preset.py
-desktop/.env.local
 
-# Frontend / Tauri
+# ============================================================
+# Desktop / Tauri
+# ============================================================
 desktop/node_modules/
 desktop/dist/
 desktop/.vite/
@@ -72,11 +73,11 @@ desktop/src-tauri/target/
 desktop/src-tauri/binaries/
 desktop/src-tauri/gen/*
 desktop/src-tauri/.tauri/
-
-# Exceptions for Tauri schema generation files that must be tracked
 !desktop/src-tauri/gen/schemas/
 
-# Eval local config and generated artifacts
+# ============================================================
+# Agent Eval
+# ============================================================
 .agent_eval/config.local.json
 .agent_eval/outputs/
 .agent_eval/agent_only_events/
@@ -90,18 +91,31 @@ desktop/src-tauri/.tauri/
 .agent_eval/**/*.sqlite3
 .agent_eval/**/*.db
 
-# Deprecated / archived
-弃用/
-
-# Generated artifacts and eval data
+# ============================================================
+# Generated Artifacts
+# ============================================================
 artifacts/*.json
 artifacts/*_report*.md
-
-# Exceptions for benchmark and baseline files that must be tracked
 !artifacts/spider_*.json
 
+# ============================================================
+# LangGraph / Agent Runtime
+# ============================================================
+.langgraph/
+checkpoints/
+*.checkpoint
+*.checkpoint.sqlite
+*.checkpoint.sqlite-shm
+*.checkpoint.sqlite-wal
 
-# Stale dev artifacts
+# ============================================================
+# Deprecated
+# ============================================================
+弃用/
+
+# ============================================================
+# Stale Dev Artifacts
+# ============================================================
 diff.txt
 diff_tests.txt
 dbfox-mysql-ssl-test/
@@ -109,19 +123,29 @@ _server_pid.txt
 log.txt
 desktop/log.txt
 desktop/log_*.txt
+_linecount.py
+lint_results.txt
+session-ses_*.md
 
-# Root-level dependency leakage (desktop/node_modules is covered above)
+# ============================================================
+# Root Dependency Leakage
+# ============================================================
 node_modules/
 
-# OS / editor
+# ============================================================
+# OS / Editor
+# ============================================================
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
 
-# LLM / coding assistant local state
+# ============================================================
+# AI Coding Assistants
+# ============================================================
 .claude/
+.codegraph/
 .impeccable/
 .gemini/
 .cursor/
@@ -132,6 +156,3 @@ Thumbs.db
 .superpowers/
 .worktrees/
 docs/skills/
-_linecount.py
-lint_results.txt
-session-ses_*.md

@@ -36,16 +36,16 @@ describe("workspaceStore — tabs", () => {
     const s = useWorkspaceStore.getState();
     expect(s.tabs).toHaveLength(2);
     expect(s.tabs[1].type).toBe("sql");
-    expect(s.activeTabId).toBe("sql-0");
-    expect(s.sqlConsoleState["sql-0"].draftSql).toBe("SELECT 1");
+    expect(s.activeTabId).toBe("sql-1");
+    expect(s.sqlConsoleState["sql-1"].draftSql).toBe("SELECT 1");
   });
 
   it("closeTab removes the tab and clears its console state", () => {
     useWorkspaceStore.getState().openSqlConsole();
-    useWorkspaceStore.getState().closeTab("sql-0");
+    useWorkspaceStore.getState().closeTab("sql-1");
     const s = useWorkspaceStore.getState();
-    expect(s.tabs.find((t) => t.id === "sql-0")).toBeUndefined();
-    expect(s.sqlConsoleState["sql-0"]).toBeUndefined();
+    expect(s.tabs.find((t) => t.id === "sql-1")).toBeUndefined();
+    expect(s.sqlConsoleState["sql-1"]).toBeUndefined();
   });
 
   it("closeTab restores the default tab when all tabs are gone", () => {

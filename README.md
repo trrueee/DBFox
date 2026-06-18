@@ -56,7 +56,7 @@
 └────────────────────────────────────────────────┘
 ```
 
----依赖-
+---
 
 ## 快速开始
 
@@ -131,7 +131,6 @@ cd desktop && npm run tauri -- build
 │   └── src-tauri/             # Tauri 2 Rust shell
 ├── docs/                      # 设计文档
 ├── build_sidecar.py           # PyInstaller 引擎打包脚本
-├── start.py                   # 开发一键启动
 ├── requirements.txt           # Python 依赖
 └── README.md
 ```
