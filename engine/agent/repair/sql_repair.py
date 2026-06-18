@@ -89,7 +89,7 @@ def plan_sql_repair(
             error_text = str(execution.get("error") or state.get("error") or "")
 
     if execution.get("success") and int(execution.get("rowCount") or 0) == 0:
-        if state.get("data_profile"):
+        if state.get("result_profile"):
             return None
         error_text = error_text or "Query succeeded but returned zero rows."
 

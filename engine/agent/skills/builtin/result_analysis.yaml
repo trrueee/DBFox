@@ -24,7 +24,7 @@ forbidden_tool_groups:
   - execution
 
 steps:
-  - analyze_data
+  - result.profile
   - chart.suggest
 
 success_criteria:
@@ -41,7 +41,7 @@ recovery:
     - condition: "result set is empty"
       action: "explain that empty results mean no matching data, check if filters were too restrictive"
   profile_error:
-    - condition: "analyze_data fails"
+    - condition: "result.profile fails"
       action: "report the error and suggest re-running the query"
 
 writeback:

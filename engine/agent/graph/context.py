@@ -14,7 +14,7 @@ from langchain_core.runnables import RunnableConfig
 from sqlalchemy.orm import Session
 
 from engine.agent_core.types import AgentRunRequest
-from engine.agent_core.tool_registry import ToolRegistry
+from engine.tools.runtime.registry import ToolRegistry
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""Tests for the analysis agent flow — analyze_data, chart.suggest.
+"""Tests for the analysis agent flow — result.profile, chart.suggest.
 
 Covers:
 - Safe tool groups include analysis tools
@@ -35,36 +35,44 @@ class TestSafeToolGroups:
 
 class TestEscalateGroups:
     def test_escalate_accepts_result_group(self):
-        from engine.tools.dbfox_tools import _escalate_tool_group
-        ctx = MagicMock()
-        ctx.state_view = {"allowed_tool_groups": ["db"]}
-        result = _escalate_tool_group(ctx, {"group": "result", "reason": "test"})
-        assert result.status == "success"
-        assert result.output["escalated"] is True
+        from engine.tools.dbfox_tools import EscalateTool
+        from engine.tools.runtime.context import ToolRunContext
+
+        result = EscalateTool().run(
+            EscalateTool.input_model(group="result", reason="test"),
+            ToolRunContext(state={"allowed_tool_groups": ["db"]}),
+        )
+        assert result.model_dump(mode="json")["escalated"] is True
 
     def test_escalate_accepts_chart_group(self):
-        from engine.tools.dbfox_tools import _escalate_tool_group
-        ctx = MagicMock()
-        ctx.state_view = {"allowed_tool_groups": ["db"]}
-        result = _escalate_tool_group(ctx, {"group": "chart", "reason": "test"})
-        assert result.status == "success"
+        from engine.tools.dbfox_tools import EscalateTool
+        from engine.tools.runtime.context import ToolRunContext
+
+        result = EscalateTool().run(
+            EscalateTool.input_model(group="chart", reason="test"),
+            ToolRunContext(state={"allowed_tool_groups": ["db"]}),
+        )
+        assert result.model_dump(mode="json")["group"] == "chart"
 
     def test_escalate_accepts_answer_group(self):
-        from engine.tools.dbfox_tools import _escalate_tool_group
-        ctx = MagicMock()
-        ctx.state_view = {"allowed_tool_groups": ["db"]}
-        result = _escalate_tool_group(ctx, {"group": "answer", "reason": "test"})
-        assert result.status == "success"
+        from engine.tools.dbfox_tools import EscalateTool
+        from engine.tools.runtime.context import ToolRunContext
+
+        result = EscalateTool().run(
+            EscalateTool.input_model(group="answer", reason="test"),
+            ToolRunContext(state={"allowed_tool_groups": ["db"]}),
+        )
+        assert result.model_dump(mode="json")["group"] == "answer"
 
 
 class TestBuiltinRegistry:
     def test_registry_loads_analysis_tools(self):
         from engine.tools.dbfox_tools import register_dbfox_tools
         registry = register_dbfox_tools()
-        for name in ["analyze_data", "chart.suggest"]:
+        for name in ["result.profile", "chart.suggest", "answer.synthesize"]:
             tool = registry.get(name)
             assert tool is not None, f"{name} not found in registry"
-            assert tool.spec.group in ("result", "chart", "answer", "analysis")
+            assert tool.spec.group in ("result", "chart", "answer")
 
     def test_analysis_tools_are_exposed_with_model_safe_aliases(self):
         from engine.agent.tools.registry_bridge import build_langchain_tools
@@ -74,18 +82,19 @@ class TestBuiltinRegistry:
         tools = build_langchain_tools(registry, allowed_groups=["result", "chart", "answer"])
         tool_names = {tool.name for tool in tools}
 
-        assert "analyze_data" in tool_names
+        assert "result_profile" in tool_names
         assert "chart_suggest" in tool_names
+        assert "answer_synthesize" in tool_names
         assert all("." not in name for name in tool_names)
 
 
 class TestToolGroupMap:
-    def test_tool_to_group_analyze_data(self):
-        from engine.agent_core.tool_registry import tool_to_group
-        assert tool_to_group("analyze_data") == "result"
+    def test_tool_to_group_result_profile(self):
+        from engine.tools.runtime.registry import tool_to_group
+        assert tool_to_group("result.profile") == "result"
 
     def test_tool_to_group_chart_suggest(self):
-        from engine.agent_core.tool_registry import tool_to_group
+        from engine.tools.runtime.registry import tool_to_group
         assert tool_to_group("chart.suggest") == "chart"
 
 
@@ -94,11 +103,11 @@ class TestToolGroupMap:
 # ---------------------------------------------------------------------------
 
 class TestDatabinding:
-    def test_analyze_data_applier(self):
+    def test_result_profile_applier(self):
         from engine.agent_core.databinding import apply_tool_result_to_state
-        obs = ToolObservation(name="analyze_data", status="success", output={"row_count": 5}, latency_ms=1)
-        result = apply_tool_result_to_state(state={}, tool_name="analyze_data", observation=obs)
-        assert result["data_profile"] == {"row_count": 5}
+        obs = ToolObservation(name="result.profile", status="success", output={"row_count": 5}, latency_ms=1)
+        result = apply_tool_result_to_state(state={}, tool_name="result.profile", observation=obs)
+        assert result["result_profile"] == {"row_count": 5}
 
     def test_chart_suggest_applier(self):
         from engine.agent_core.databinding import apply_tool_result_to_state
@@ -107,9 +116,9 @@ class TestDatabinding:
         assert result["chart_suggestion"] == {"type": "bar"}
 
     def test_analysis_tools_in_artifact_set(self):
-        from engine.agent_core.databinding import _ARTIFACT_TOOLS
-        assert "analyze_data" in _ARTIFACT_TOOLS
-        assert "chart.suggest" in _ARTIFACT_TOOLS
+        from engine.tools.runtime.state_reducer import ARTIFACT_TOOLS
+        assert "result.profile" in ARTIFACT_TOOLS
+        assert "chart.suggest" in ARTIFACT_TOOLS
 
     def test_successful_db_query_clears_stale_error_state(self):
         from engine.agent_core.databinding import apply_tool_result_to_state
@@ -139,16 +148,15 @@ class TestDatabinding:
 
 
 class TestAnalysisHandlers:
-    def test_analyze_data_uses_request_question_when_arg_missing(self):
-        from engine.agent_core.tool_registry import ToolContext
-        from engine.tools.dbfox_tools import _analyze_data_handler
+    def test_result_profile_uses_request_question_when_arg_missing(self):
+        from engine.tools.dbfox_tools import ResultProfileTool
+        from engine.tools.runtime.context import ToolRunContext
 
         request = MagicMock()
         request.question = "How many orders are there?"
-        ctx = ToolContext(
-            db=MagicMock(),
+        ctx = ToolRunContext(
             request=request,
-            state_view={
+            state={
                 "execution": {
                     "success": True,
                     "rowCount": 1,
@@ -158,11 +166,10 @@ class TestAnalysisHandlers:
             },
         )
 
-        result = _analyze_data_handler(ctx, {})
+        result = ResultProfileTool().run(ResultProfileTool.input_model(), ctx)
 
-        assert result.status == "success"
-        assert result.output["row_count"] == 1
-        assert "notable_facts" in result.output
+        assert result.row_count == 1
+        assert result.notable_facts is not None
 
 
 # ---------------------------------------------------------------------------
@@ -172,14 +179,14 @@ class TestAnalysisHandlers:
 class TestProgressGuard:
     def test_guard_does_not_block_single_query_without_profile(self):
         """With relaxed guard, a single db.query without profile does NOT trigger
-        the analysis guard. The model is free to answer directly or call analyze_data."""
+        the analysis guard. The model is free to answer directly or call result.profile."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
             "status": "running",
             "step_count": 3,
             "max_steps": 20,
             "execution": {"success": True, "rowCount": 10},
-            "data_profile": None,
+            "result_profile": None,
             "answer": None,
             "messages": [],
             "last_tool_results": [],
@@ -198,18 +205,18 @@ class TestProgressGuard:
             "step_count": 6,
             "max_steps": 20,
             "execution": {"success": True, "rowCount": 10},
-            "data_profile": None,
+            "result_profile": None,
             "answer": None,
             "messages": [],
             "last_tool_results": [
-                {"name": "query_database", "status": "success"},
-                {"name": "query_database", "status": "success"},
+                {"name": "db.query", "status": "success"},
+                {"name": "db.query", "status": "success"},
             ],
         }
         result = deterministic_progress_fastpath(state)
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "analyze_data" in result["progress_decision"]["next_action_hint"]
+        assert "result.profile" in result["progress_decision"]["next_action_hint"]
 
     def test_guard_allows_finalize_with_answer(self):
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
@@ -218,7 +225,7 @@ class TestProgressGuard:
             "step_count": 5,
             "max_steps": 20,
             "execution": {"success": True, "rowCount": 10},
-            "data_profile": {"row_count": 10},
+            "result_profile": {"row_count": 10},
             "answer": {"answer": "The total is 42."},
             "messages": [],
             "last_tool_results": [],
@@ -236,12 +243,12 @@ class TestProgressGuard:
             "step_count": 20,
             "max_steps": 20,
             "execution": {"success": True, "rowCount": 0},
-            "data_profile": None,
+            "result_profile": None,
             "answer": None,
             "messages": [],
             "last_tool_results": [
-                {"name": "query_database", "status": "success"},
-                {"name": "query_database", "status": "success"},
+                {"name": "db.query", "status": "success"},
+                {"name": "db.query", "status": "success"},
             ],
         }
 
@@ -249,7 +256,7 @@ class TestProgressGuard:
 
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "analyze_data" in result["progress_decision"]["next_action_hint"]
+        assert "result.profile" in result["progress_decision"]["next_action_hint"]
         assert "error" not in result
 
     def test_guard_final_text_wins_over_max_steps_without_error(self):
@@ -280,14 +287,14 @@ class TestProgressGuard:
             "step_count": 5,
             "max_steps": 20,
             "execution": {"success": True, "rowCount": 10},
-            "data_profile": {"row_count": 10},
+            "result_profile": {"row_count": 10},
             "answer": None,
             "messages": [],
             "last_tool_results": [],
         }
         result = deterministic_progress_fastpath(state)
         # Should fall through to the last_tool_results check or None
-        # Guard should NOT fire because data_profile exists
+        # Guard should NOT fire because result_profile exists
         if result is not None:
             assert result["progress_decision"]["status"] != "continue" or "profiling" not in result["progress_decision"].get("reason_summary", "").lower()
 
@@ -300,7 +307,7 @@ class TestSystemPrompt:
     def test_prompt_no_longer_says_stop(self):
         from engine.agent.model.system_prompt import SYSTEM_PROMPT
         assert "STOP and answer" not in SYSTEM_PROMPT
-        assert "analyze_data" in SYSTEM_PROMPT
+        assert "result.profile" in SYSTEM_PROMPT
         assert "chart.suggest" in SYSTEM_PROMPT
 
     def test_prompt_requires_text_with_tool_calls(self):
