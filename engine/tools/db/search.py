@@ -32,9 +32,13 @@ def _fts_search(db: Session, datasource_id: str, query: str, limit: int) -> list
     for t in tokens:
         if t.upper() in {"AND", "OR", "NOT", "NEAR"}:
             continue
-        if not re.match(r"^[a-zA-Z0-9_一-龥]+$", t):
+        # Sanitize token to strip FTS5 operators
+        clean_token = re.sub(r'[*^\"()-]', '', t)
+        if not clean_token:
             continue
-        valid_tokens.append(t)
+        if not re.match(r"^[a-zA-Z0-9_一-龥]+$", clean_token):
+            continue
+        valid_tokens.append(clean_token)
 
     if not valid_tokens:
         return []
@@ -160,26 +164,49 @@ def _compute_reasons(row, tokens: list[str]) -> list[str]:
 def _fallback_keyword_search(db: Session, datasource_id: str, query: str, limit: int) -> list[dict[str, Any]]:
     """Fallback: search SchemaTable and SchemaColumn by name when FTS returns nothing."""
     from engine.models import SchemaTable as ST, SchemaColumn as SC
+    from sqlalchemy import or_
 
     tokens = tokenize_query(query)
+    if not tokens:
+        return []
+
+    # Filter tables using LIKE for any token
+    table_filters = []
+    for tok in tokens:
+        table_filters.append(ST.table_name.ilike(f"%{tok}%"))
+        table_filters.append(ST.table_comment.ilike(f"%{tok}%"))
+
     table_results: list[dict[str, Any]] = []
-    tables = db.query(ST).filter(ST.data_source_id == datasource_id).all()
-    for t in tables:
-        name = str(t.table_name).lower()
-        score = sum(3.0 for tok in tokens if tok.lower() in name)
-        if t.table_comment and any(tok.lower() in str(t.table_comment).lower() for tok in tokens):
-            score += 1.0
-        if score > 0:
-            table_results.append({"type": "table", "name": str(t.table_name), "table_name": str(t.table_name), "score": score, "reasons": ["keyword_table_name"]})
+    if table_filters:
+        tables = db.query(ST).filter(ST.data_source_id == datasource_id, or_(*table_filters)).all()
+        for t in tables:
+            name = str(t.table_name).lower()
+            score = sum(3.0 for tok in tokens if tok.lower() in name)
+            if t.table_comment and any(tok.lower() in str(t.table_comment).lower() for tok in tokens):
+                score += 1.0
+            if score > 0:
+                table_results.append({"type": "table", "name": str(t.table_name), "table_name": str(t.table_name), "score": score, "reasons": ["keyword_table_name"]})
+
+    # Filter columns using LIKE for any token
+    col_filters = []
+    for tok in tokens:
+        col_filters.append(SC.column_name.ilike(f"%{tok}%"))
+        col_filters.append(SC.column_comment.ilike(f"%{tok}%"))
 
     col_results: list[dict[str, Any]] = []
-    columns = db.query(SC).join(ST, SC.table_id == ST.id).filter(ST.data_source_id == datasource_id).all()
-    for c in columns:
-        col_name = str(c.column_name).lower()
-        score = sum(2.0 for tok in tokens if tok.lower() in col_name)
-        if score > 0:
-            table_name = str(c.table.table_name) if c.table else ""
-            col_results.append({"type": "column", "name": f"{table_name}.{c.column_name}", "table_name": table_name, "column_name": str(c.column_name), "score": score, "reasons": ["keyword_column_name"]})
+    if col_filters:
+        columns = db.query(SC).join(ST, SC.table_id == ST.id).filter(
+            ST.data_source_id == datasource_id,
+            or_(*col_filters)
+        ).all()
+        for c in columns:
+            col_name = str(c.column_name).lower()
+            score = sum(2.0 for tok in tokens if tok.lower() in col_name)
+            if c.column_comment and any(tok.lower() in str(c.column_comment).lower() for tok in tokens):
+                score += 0.5
+            if score > 0:
+                table_name = str(c.table.table_name) if c.table else ""
+                col_results.append({"type": "column", "name": f"{table_name}.{c.column_name}", "table_name": table_name, "column_name": str(c.column_name), "score": score, "reasons": ["keyword_column_name"]})
 
     results = table_results + col_results
     results.sort(key=lambda r: (-r["score"], r["type"], r["name"]))

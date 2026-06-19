@@ -139,44 +139,59 @@ class ConfirmationManager:
         details: dict[str, Any], expected_confirm_text: str,
     ) -> str:
         self._ensure_db_loaded()
+        now = time.time()
+
+        # Cleanup expired in-memory cache first (under lock)
         with self._lock:
-            now = time.time()
-            self._cleanup(now)
+            expired = [t for t, (exp, _) in self._cache.items() if now > exp]
+            for token in expired:
+                del self._cache[token]
 
-            token = str(uuid.uuid4())
-            expires_at = now + self._ttl
-            data = {
-                "datasource_id": str(datasource_id),
-                "action": action,
-                "details": details,
-                "expected_confirm_text": expected_confirm_text,
-            }
+        # Best-effort DB clean (outside lock)
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM confirmation_tokens WHERE expires_at <= ?", (now,)
+                )
+                conn.commit()
+        except Exception:
+            pass
 
-            # Persist to DB
-            try:
-                with self._connect() as conn:
-                    conn.execute(
-                        "INSERT INTO confirmation_tokens"
-                        " (token, expires_at, datasource_id, action, details_json, expected_confirm_text)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
-                        (
-                            token, expires_at, str(datasource_id),
-                            action, json.dumps(details, ensure_ascii=False),
-                            expected_confirm_text,
-                        ),
-                    )
-                    conn.commit()
-            except Exception:
-                logger.exception("Failed to persist confirmation token — operating memory-only")
+        token = str(uuid.uuid4())
+        expires_at = now + self._ttl
+        data = {
+            "datasource_id": str(datasource_id),
+            "action": action,
+            "details": details,
+            "expected_confirm_text": expected_confirm_text,
+        }
 
-            # Cache in memory
+        # Persist to DB (outside lock)
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO confirmation_tokens"
+                    " (token, expires_at, datasource_id, action, details_json, expected_confirm_text)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        token, expires_at, str(datasource_id),
+                        action, json.dumps(details, ensure_ascii=False),
+                        expected_confirm_text,
+                    ),
+                )
+                conn.commit()
+        except Exception:
+            logger.exception("Failed to persist confirmation token — operating memory-only")
+
+        # Cache in memory (under lock)
+        with self._lock:
             self._cache[token] = (expires_at, data)
 
-            logger.info(
-                "Created confirmation token %s... for action %s on datasource %s",
-                token[:8], action, datasource_id,
-            )
-            return token
+        logger.info(
+            "Created confirmation token %s... for action %s on datasource %s",
+            token[:8], action, datasource_id,
+        )
+        return token
 
     def validate_and_consume(
         self,
@@ -193,74 +208,67 @@ class ConfirmationManager:
         Returns (is_valid, error_message).
         """
         self._ensure_db_loaded()
-        with self._lock:
-            now = time.time()
-            self._cleanup(now)
+        now = time.time()
 
+        # Cleanup memory first (under lock)
+        with self._lock:
+            expired = [t for t, (exp, _) in self._cache.items() if now > exp]
+            for t_id in expired:
+                del self._cache[t_id]
+
+        # Best-effort DB clean (outside lock)
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "DELETE FROM confirmation_tokens WHERE expires_at <= ?", (now,)
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+        # Check and retrieve token (under lock)
+        with self._lock:
             if not token or token not in self._cache:
                 return False, "确认令牌无效或已过期，请重新发起操作。"
-
             expire_at, data = self._cache[token]
-            # Consume token immediately (one-time use) — from both cache and DB
+            # Consume token immediately (one-time use) — from cache
             del self._cache[token]
-            try:
-                with self._connect() as conn:
-                    conn.execute("DELETE FROM confirmation_tokens WHERE token = ?", (token,))
-                    conn.commit()
-            except Exception:
-                logger.exception("Failed to delete consumed confirmation token from DB")
 
-            if now > expire_at:
-                return False, "确认令牌已过期，请重新发起操作。"
+        # Delete consumed token from DB (outside lock)
+        try:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM confirmation_tokens WHERE token = ?", (token,))
+                conn.commit()
+        except Exception:
+            logger.exception("Failed to delete consumed confirmation token from DB")
 
-            # 1. Action Check
-            if data["action"] != expected_action:
-                return False, "二次确认操作类型不匹配，安全拒绝执行。"
+        if now > expire_at:
+            return False, "确认令牌已过期，请重新发起操作。"
 
-            # 2. Datasource Check
-            if str(data["datasource_id"]) != str(expected_datasource_id):
-                return False, "二次确认数据源不匹配，安全拒绝执行。"
+        # 1. Action Check
+        if data["action"] != expected_action:
+            return False, "二次确认操作类型不匹配，安全拒绝执行。"
 
-            # 3. Parameter / Details Check
-            for k, expected_val in expected_details.items():
-                actual_val = data["details"].get(k)
-                if str(actual_val) != str(expected_val):
-                    return False, f"二次确认参数 '{k}' 不匹配，操作可能已被篡改，安全拒绝执行。"
+        # 2. Datasource Check
+        if str(data["datasource_id"]) != str(expected_datasource_id):
+            return False, "二次确认数据源不匹配，安全拒绝执行。"
 
-            # 4. Confirmation Text Check
-            expected_text = data["expected_confirm_text"].strip()
-            if confirm_text.strip() != expected_text:
-                return False, f"二次确认文本不匹配！请输入数据源名称 '{expected_text}' 进行确认。"
+        # 3. Parameter / Details Check
+        for k, expected_val in expected_details.items():
+            actual_val = data["details"].get(k)
+            if str(actual_val) != str(expected_val):
+                return False, f"二次确认参数 '{k}' 不匹配，操作可能已被篡改，安全拒绝执行。"
 
-            logger.info(
-                "Successfully consumed confirmation token %s... for action %s",
-                token[:8], data["action"],
-            )
-            return True, ""
+        # 4. Confirmation Text Check
+        expected_text = data["expected_confirm_text"].strip()
+        if confirm_text.strip() != expected_text:
+            return False, f"二次确认文本不匹配！请输入数据源名称 '{expected_text}' 进行确认。"
 
-    # ------------------------------------------------------------------
-    # Maintenance
-    # ------------------------------------------------------------------
-
-    def _cleanup(self, now: float) -> None:
-        """Remove expired tokens from the in-memory cache.
-
-        DB cleanup is deferred to startup (_load_existing naturally skips
-        expired rows).  Periodic deep-clean runs on create_confirmation.
-        """
-        expired = [t for t, (exp, _) in self._cache.items() if now > exp]
-        for token in expired:
-            del self._cache[token]
-        if expired:
-            # Best-effort: delete expired from DB as well
-            try:
-                with self._connect() as conn:
-                    conn.execute(
-                        "DELETE FROM confirmation_tokens WHERE expires_at <= ?", (now,)
-                    )
-                    conn.commit()
-            except Exception:
-                pass
+        logger.info(
+            "Successfully consumed confirmation token %s... for action %s",
+            token[:8], data["action"],
+        )
+        return True, ""
 
 # Global confirmation manager instance
 confirmation_manager = ConfirmationManager()
