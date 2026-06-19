@@ -4132,3 +4132,150 @@
   gap: 10px 14px;
 }
 
+.hifi-diagnostics-page {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hifi-diagnostics-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hifi-diagnostics-badge,
+.hifi-log-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hifi-diagnostics-badge,
+.hifi-log-status.ok {
+  color: #047857;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.24);
+}
+
+.hifi-log-status.missing {
+  color: #9a3412;
+  background: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.24);
+}
+
+.hifi-diagnostics-error,
+.hifi-diagnostics-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  font-size: 0.78rem;
+}
+
+.hifi-diagnostics-empty {
+  justify-content: center;
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  background: var(--color-bg);
+}
+
+.hifi-diagnostics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.hifi-diagnostics-metric {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--color-panel);
+}
+
+.hifi-diagnostics-metric span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.hifi-diagnostics-metric strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+}
+
+.hifi-diagnostics-sources {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hifi-diagnostics-source {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--color-panel);
+}
+
+.hifi-diagnostics-source-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.hifi-diagnostics-source-header h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.hifi-diagnostics-source-header p {
+  margin: 4px 0 0;
+  max-width: 72vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.hifi-diagnostics-source pre {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px 14px;
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-bg) 72%, #ffffff);
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+

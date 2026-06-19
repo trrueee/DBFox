@@ -1,6 +1,7 @@
 import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useDatasourceStore } from "../../stores/datasourceStore";
 
 interface ContextDrawerProps {
   open: boolean;
@@ -50,9 +51,34 @@ function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
 }
 
 function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; contextTables: string[] }) {
+  const tables = useDatasourceStore((s) => s.tables);
+
   if (activeTab.type === "table") {
     const tableId = activeTab.tableId || "";
-    return <InfoList rows={[["物理表名:", tableId], ["预估行数:", "12,345 Rows"], ["物理大小:", "2.48 MB"], ["存储引擎:", "InnoDB"], ["创建时间:", "2024-11-16"]]} />;
+    const table = tables.find((t) => t.table_name === tableId);
+
+    const rows = [
+      ["物理表名:", tableId],
+      ["表类型:", table?.table_type || "BASE TABLE"],
+      ["注释描述:", table?.table_comment || "—"],
+    ];
+
+    if (table) {
+      if (table.row_count_estimate !== undefined && table.row_count_estimate !== null) {
+        rows.push(["预估行数:", `${table.row_count_estimate.toLocaleString()} 行`]);
+      }
+      rows.push(["AI 描述:", table.ai_description || "—"]);
+      rows.push(["主题域:", table.subject_area || "—"]);
+      rows.push(["业务术语:", table.business_terms || "—"]);
+      rows.push(["语义标签:", table.semantic_tags || "—"]);
+      if (table.ai_confidence !== undefined && table.ai_confidence !== null) {
+        rows.push(["AI 置信度/打分:", `${(table.ai_confidence * 100).toFixed(1)}%`]);
+      }
+    } else {
+      rows.push(["预估行数:", "12,345 Rows"]);
+      rows.push(["存储引擎:", "InnoDB"]);
+    }
+    return <InfoList rows={rows} />;
   }
   if (activeTab.type === "sql") {
     return <InfoList rows={[["连接名称:", "prod-mysql"], ["会话端口:", "3306"], ["事务模式:", "AUTO-COMMIT"]]} />;
@@ -62,14 +88,17 @@ function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; con
 
 function InfoList({ rows }: { rows: string[][] }) {
   return (
-    <div className="flex flex-col gap-2 font-mono text-[10px] text-slate-700">
-      <span className="text-[10px] font-sans text-slate-400 uppercase block mb-1.5">当前对象物理属性</span>
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex justify-between border-b border-slate-100 pb-1.5">
-          <span className="text-slate-400">{label}</span>
-          <span className="font-semibold text-slate-900">{value}</span>
-        </div>
-      ))}
+    <div className="flex flex-col gap-2.5 font-mono text-[10px] text-slate-700">
+      <span className="text-[10px] font-sans text-slate-400 uppercase block mb-1.5">当前对象物理与 AI 属性</span>
+      {rows.map(([label, value]) => {
+        const isLong = value.length > 25 || label.includes("描述");
+        return (
+          <div key={label} className={`flex ${isLong ? "flex-col gap-1 items-start" : "justify-between"} border-b border-slate-100 pb-1.5`}>
+            <span className="text-slate-400">{label}</span>
+            <span className={`font-semibold text-slate-900 ${isLong ? "text-[10px] break-all whitespace-pre-wrap text-left" : "text-right"}`}>{value}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

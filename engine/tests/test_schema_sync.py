@@ -116,6 +116,48 @@ def test_sync_failure_status(db_session) -> None:
         sync_schema(db_session, str(uuid.uuid4()))
 
 
+def test_sync_passes_llm_config_to_ai_enrichment(db_session, test_datasource, monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_enrich(db, datasource_id, **kwargs):
+        captured["datasource_id"] = datasource_id
+        captured["kwargs"] = kwargs
+        return {"ai_enriched": True, "enriched_count": 1, "reason": ""}
+
+    monkeypatch.setattr("engine.ai_enrich.ai_enrich_catalog", _fake_enrich)
+
+    result = sync_schema(
+        db_session,
+        test_datasource.id,
+        ai_api_key="sk-test",
+        ai_api_base="https://example.test/v1",
+        ai_model_name="qwen-plus",
+    )
+
+    assert result["ok"] is True
+    assert captured == {
+        "datasource_id": test_datasource.id,
+        "kwargs": {
+            "api_key": "sk-test",
+            "api_base": "https://example.test/v1",
+            "model_name": "qwen-plus",
+        },
+    }
+
+
+def test_sync_reports_ai_enrichment_warning(db_session, test_datasource, monkeypatch) -> None:
+    def _fake_enrich(db, datasource_id, **kwargs):
+        return {"ai_enriched": False, "enriched_count": 0, "reason": "missing api key"}
+
+    monkeypatch.setattr("engine.ai_enrich.ai_enrich_catalog", _fake_enrich)
+
+    result = sync_schema(db_session, test_datasource.id, ai_api_key="sk-test")
+
+    assert result["ok"] is True
+    assert result["aiEnrich"]["ai_enriched"] is False
+    assert result["warnings"] == ["AI 语义打分未完成：missing api key"]
+
+
 def test_sync_failure_preserves_existing_schema(db_session, test_datasource, monkeypatch) -> None:
     sync_schema(db_session, test_datasource.id)
     initial_table_count = db_session.query(SchemaTable).filter(

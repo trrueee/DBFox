@@ -29,6 +29,7 @@ interface WorkspaceActions {
   openConnectionManagerTab: () => void;
   openNewConnectionTab: () => void;
   openAgentEvalTab: () => void;
+  openDiagnosticsTab: () => void;
   openConversationResult: (conv: Conversation) => void;
   openTableTab: (tableName: string, initialSubtab?: string) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
@@ -149,6 +150,16 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const tabId = "agent-eval";
     set((s) => ({
       tabs: s.tabs.some((t) => t.id === tabId) ? s.tabs : [...s.tabs, { id: tabId, title: "Agent 评测", type: "agent-eval" }],
+      activeTabId: tabId,
+    }));
+  },
+
+  openDiagnosticsTab: () => {
+    const tabId = "diagnostics";
+    set((s) => ({
+      tabs: s.tabs.some((t) => t.id === tabId)
+        ? s.tabs
+        : [...s.tabs, { id: tabId, title: "诊断日志", type: "diagnostics" }],
       activeTabId: tabId,
     }));
   },

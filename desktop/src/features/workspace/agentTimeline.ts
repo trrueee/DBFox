@@ -49,15 +49,7 @@ export function appendAgentRuntimeEvent(
     return upsertToolStep(current, event);
   }
 
-  if (event.type === "agent.answer.completed" && event.answer?.answer) {
-    return upsertById(current, {
-      id: "agent-answer",
-      kind: "assistant",
-      title: "AI",
-      content: event.answer.answer,
-      status: "success",
-    });
-  }
+  if (event.type === "agent.answer.completed") return current;
 
   if (event.type === "agent.run.failed") {
     return upsertById(current, {
@@ -79,15 +71,6 @@ export function timelineFromFinalResponse(
   let next = [...current];
   for (const step of response.steps || []) {
     next = upsertById(next, itemFromStep(step, next));
-  }
-  if (response.answer?.answer) {
-    next = upsertById(next, {
-      id: "agent-answer",
-      kind: "assistant",
-      title: "AI",
-      content: response.answer.answer,
-      status: response.success || response.status === "completed" || response.status === "success" ? "success" : "info",
-    });
   }
   if (!response.success && response.error && !response.answer?.answer) {
     next = upsertById(next, {

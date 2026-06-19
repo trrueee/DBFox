@@ -53,7 +53,17 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
       {!loading && !error && (
         <table className="hifi-table">
           <thead>
-            <tr><th>字段名</th><th>类型</th><th>约束</th><th>可空</th><th>默认值</th><th>注释</th></tr>
+            <tr>
+              <th>字段名</th>
+              <th>类型</th>
+              <th>约束</th>
+              <th>可空</th>
+              <th>默认值</th>
+              <th>注释</th>
+              <th>AI 描述</th>
+              <th>AI 置信度</th>
+              <th>语义标签</th>
+            </tr>
           </thead>
           <tbody>
             {columns.map((column) => (
@@ -68,6 +78,34 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
                 <td>{column.is_nullable ? "是" : "否"}</td>
                 <td>{column.column_default || "—"}</td>
                 <td>{column.column_comment || "—"}</td>
+                <td style={{ color: "var(--text-secondary)" }}>{column.ai_description || "—"}</td>
+                <td>
+                  {column.ai_confidence !== undefined && column.ai_confidence !== null ? (
+                    <span style={{ 
+                      fontSize: "0.7rem", 
+                      color: column.ai_confidence >= 0.8 ? "var(--color-success)" : column.ai_confidence >= 0.5 ? "var(--color-warning)" : "var(--color-danger)",
+                      background: column.ai_confidence >= 0.8 ? "var(--color-success-soft)" : column.ai_confidence >= 0.5 ? "var(--color-warning-soft)" : "var(--color-danger-soft)",
+                      padding: "2px 6px",
+                      borderRadius: 4,
+                      fontWeight: 600
+                    }}>
+                      {(column.ai_confidence * 100).toFixed(0)}%
+                    </span>
+                  ) : "—"}
+                </td>
+                <td>
+                  {column.semantic_tags ? (
+                    <span style={{ 
+                      fontSize: "0.7rem", 
+                      color: "var(--color-primary)",
+                      background: "var(--color-primary-soft)",
+                      padding: "2px 6px",
+                      borderRadius: 4
+                    }}>
+                      {column.semantic_tags}
+                    </span>
+                  ) : "—"}
+                </td>
               </tr>
             ))}
           </tbody>

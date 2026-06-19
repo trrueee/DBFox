@@ -65,6 +65,18 @@ describe("workspaceStore — tabs", () => {
     useWorkspaceStore.getState().patchTab("smart-query", { agentStatus: "running" });
     expect(useWorkspaceStore.getState().tabs[0].agentStatus).toBe("running");
   });
+
+  it("openDiagnosticsTab opens a single diagnostics tab and activates it", () => {
+    useWorkspaceStore.getState().openDiagnosticsTab();
+    useWorkspaceStore.getState().openDiagnosticsTab();
+
+    const s = useWorkspaceStore.getState();
+    const diagnosticTabs = s.tabs.filter((t) => t.type === "diagnostics");
+    expect(diagnosticTabs).toHaveLength(1);
+    expect(diagnosticTabs[0].id).toBe("diagnostics");
+    expect(diagnosticTabs[0].title).toBe("诊断日志");
+    expect(s.activeTabId).toBe("diagnostics");
+  });
 });
 
 describe("workspaceStore — messages", () => {
