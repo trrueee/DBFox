@@ -13,6 +13,7 @@ class ColumnInventory(BaseModel):
     column_default: str | None = None
     is_primary_key: bool = False
     is_foreign_key: bool = False
+    column_comment: str | None = None
 
 
 class ForeignKeyInventory(BaseModel):

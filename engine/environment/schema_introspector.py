@@ -249,6 +249,7 @@ class SchemaIntrospector:
                     column_default=default,
                     is_primary_key=col_key == "PRI",
                     is_foreign_key=col_key == "MUL",
+                    column_comment=col_comment,
                 )
             )
         return columns
@@ -388,8 +389,13 @@ class SchemaIntrospector:
                       AND tc.table_schema = c.table_schema
                       AND tc.table_name = c.table_name
                       AND kcu.column_name = c.column_name
-                ) AS is_foreign_key
+                ) AS is_foreign_key,
+                COALESCE(pg_catalog.col_description(pg_class_c.oid, c.ordinal_position), '') AS column_comment
             FROM information_schema.columns c
+            LEFT JOIN pg_catalog.pg_namespace pg_n
+                ON pg_n.nspname = c.table_schema
+            LEFT JOIN pg_catalog.pg_class pg_class_c
+                ON pg_class_c.relname = c.table_name AND pg_class_c.relnamespace = pg_n.oid
             WHERE c.table_schema = %s AND c.table_name = %s
             ORDER BY c.ordinal_position
             """,
@@ -404,8 +410,9 @@ class SchemaIntrospector:
                 column_default=str(default) if default is not None else None,
                 is_primary_key=bool(is_pk),
                 is_foreign_key=bool(is_fk),
+                column_comment=str(col_comment) if col_comment else None,
             )
-            for col_name, data_type, column_type, nullable, default, is_pk, is_fk in cursor.fetchall()
+            for col_name, data_type, column_type, nullable, default, is_pk, is_fk, col_comment in cursor.fetchall()
         ]
 
     def _postgres_foreign_keys(self, conn: Any, schema: str, table_name: str) -> list[ForeignKeyInventory]:

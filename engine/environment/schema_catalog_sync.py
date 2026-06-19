@@ -140,7 +140,7 @@ class SchemaCatalogSync:
                     column_default=col_inv.column_default,
                     is_primary_key=col_inv.is_primary_key,
                     is_foreign_key=col_inv.is_foreign_key,
-                    column_comment="",
+                    column_comment=col_inv.column_comment or "",
                 )
                 db.add(sc)
                 result.columns_created += 1
@@ -148,8 +148,10 @@ class SchemaCatalogSync:
                 sc.data_type = col_inv.data_type
                 sc.column_type = col_inv.column_type
                 sc.is_nullable = col_inv.is_nullable
+                sc.column_default = col_inv.column_default
                 sc.is_primary_key = col_inv.is_primary_key
                 sc.is_foreign_key = col_inv.is_foreign_key
+                sc.column_comment = col_inv.column_comment or ""
                 result.columns_updated += 1
 
         # Remove stale columns
