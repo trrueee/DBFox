@@ -140,50 +140,55 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
     last_tool_results = state.get("last_tool_results") or []
 
     state_updates: dict[str, Any] = {}
-    temp_state = dict(state)
+    import copy
+    temp_state = copy.deepcopy(state)
 
     new_artifacts_dicts = []
 
     for result_dict in last_tool_results:
-        obs = ToolObservation.model_validate(result_dict)
-        step_name = obs.name
-        tool_name = _tool_name_from_step(step_name)
-        tool = ctx.registry.get(tool_name)
-        merge_strategy = tool.spec.state.merge_strategy if tool is not None else "reuse"
+        try:
+            obs = ToolObservation.model_validate(result_dict)
+            step_name = obs.name
+            tool_name = _tool_name_from_step(step_name)
+            tool = ctx.registry.get(tool_name)
+            merge_strategy = tool.spec.state.merge_strategy if tool is not None else "reuse"
 
-        databinding_updates = apply_tool_result_to_state(
-            state=temp_state,
-            tool_name=tool_name,
-            observation=obs,
-            merge_strategy=merge_strategy,
-        )
+            databinding_updates = apply_tool_result_to_state(
+                state=temp_state,
+                tool_name=tool_name,
+                observation=obs,
+                merge_strategy=merge_strategy,
+            )
 
-        # Remove the legacy dict artifacts built by standard databinding
-        databinding_updates.pop("artifacts", None)
+            # Remove the legacy dict artifacts built by standard databinding
+            databinding_updates.pop("artifacts", None)
 
-        temp_state.update(databinding_updates)
-        
-        # Merge updates (accumulating lists)
-        for k, v in databinding_updates.items():
-            if k in {"tool_results", "trace_events"}:
-                state_updates.setdefault(k, []).extend(v)
-            else:
-                state_updates[k] = v
+            temp_state.update(databinding_updates)
+            
+            # Merge updates (accumulating lists)
+            for k, v in databinding_updates.items():
+                if k in {"tool_results", "trace_events"}:
+                    state_updates.setdefault(k, []).extend(v)
+                else:
+                    state_updates[k] = v
 
-        artifacts = emit_artifacts_from_observation(step_name, obs, temp_state, run_id)
-        if artifacts:
-            for art in artifacts:
-                art_dict = art.model_dump(mode="json")
-                new_artifacts_dicts.append(art_dict)
-                if db is not None:
-                    try:
-                        from engine.models import AgentArtifactRecord
-                        existing_count = db.query(AgentArtifactRecord).filter(
-                            AgentArtifactRecord.run_id == run_id
-                        ).count()
-                        ap.record_artifact(db, thread_id, run_id, art, sequence=existing_count + 1)
-                    except Exception as exc:
-                        logger.warning("Failed to save artifact %s to DB: %s", art.id, exc)
+            artifacts = emit_artifacts_from_observation(step_name, obs, temp_state, run_id)
+            if artifacts:
+                for art in artifacts:
+                    art_dict = art.model_dump(mode="json")
+                    new_artifacts_dicts.append(art_dict)
+                    if db is not None:
+                        try:
+                            from engine.models import AgentArtifactRecord
+                            existing_count = db.query(AgentArtifactRecord).filter(
+                                AgentArtifactRecord.run_id == run_id
+                            ).count()
+                            ap.record_artifact(db, thread_id, run_id, art, sequence=existing_count + 1)
+                        except Exception as exc:
+                            logger.warning("Failed to save artifact %s to DB: %s", art.id, exc)
+        except Exception as exc:
+            logger.warning("Failed to process tool observation: %s (payload: %s)", exc, result_dict, exc_info=True)
+            continue
 
     if new_artifacts_dicts:
         state_updates["artifacts"] = new_artifacts_dicts

@@ -170,7 +170,7 @@ class ContextPack(BaseModel):
         """True if the run is in a failure state."""
         return bool(
             self.run_state.error
-            or not self.execution.success
+            or (self.execution.error is not None)
             or self.run_state.status in ("failed", "blocked")
         )
 
