@@ -214,7 +214,13 @@ function parseSseEvent(rawEvent: string): AgentRuntimeEvent | null {
     .filter((line) => line.startsWith("data:"))
     .map((line) => line.slice(5).trimStart());
   if (dataLines.length === 0) return null;
-  return JSON.parse(dataLines.join("\n")) as AgentRuntimeEvent;
+  const rawData = dataLines.join("\n");
+  try {
+    return JSON.parse(rawData) as AgentRuntimeEvent;
+  } catch (err) {
+    console.warn("Failed to parse SSE event JSON payload:", err, "raw data:", rawData);
+    return null;
+  }
 }
 
 async function streamAgentRun(

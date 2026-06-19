@@ -142,7 +142,9 @@ async function _fetchWithRetry<T>(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       // Don't retry client errors (4xx)
-      if (lastError instanceof Error && "code" in lastError) break;
+      if (lastError instanceof ApiError && lastError.status && lastError.status >= 400 && lastError.status < 500) {
+        break;
+      }
       if (attempt < retries) {
         await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
       }
