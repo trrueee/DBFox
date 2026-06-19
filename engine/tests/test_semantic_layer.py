@@ -606,4 +606,48 @@ class TestSemanticEmbeddingRecall:
         assert data["synced_count"] == 1
         assert data["last_sync_at"] is not None
 
+    def test_sensitive_aliases_are_filtered_from_semantic_recall_and_apis(self, client, db_session):
+        from engine.models import SemanticAlias
+        from engine.policy.sensitivity import load_sensitivity
+        
+        ds = _make_datasource(db_session, "sensitive_filter_test")
+        
+        # 1. Add standard alias
+        db_session.add(SemanticAlias(
+            id=str(uuid.uuid4()), data_source_id=ds.id,
+            alias="订单金额", target_type="column", target="orders.amount"
+        ))
+        
+        # 2. Add sensitive alias (bootstrapped default style)
+        db_session.add(SemanticAlias(
+            id=str(uuid.uuid4()), data_source_id=ds.id,
+            alias=r"\b(ssn|social_security|tax_id|national_id)\b", target_type="sensitive", target="*"
+        ))
+        db_session.commit()
+        
+        # 3. Check resolver only loads standard alias
+        resolver = SemanticAliasResolver.from_db(db_session, ds.id)
+        assert "订单金额" in resolver.aliases
+        # regex pattern should not be loaded as alias
+        assert r"\b(ssn|social_security|tax_id|national_id)\b" not in resolver.aliases
+        
+        # 4. Check API list endpoint filters out sensitive alias
+        resp_list = client.get(f"/api/v1/semantic/aliases?datasource_id={ds.id}")
+        assert resp_list.status_code == 200
+        items = resp_list.json()
+        assert len(items) == 1
+        assert items[0]["alias"] == "订单金额"
+        
+        # 5. Check API sync status filters out sensitive alias
+        resp_status = client.get(f"/api/v1/semantic/aliases/sync-status?datasource_id={ds.id}")
+        assert resp_status.status_code == 200
+        status_data = resp_status.json()
+        assert status_data["total_count"] == 1
+        
+        # 6. Check that sensitivity policy loader still loads it correctly
+        pattern = load_sensitivity(db_session, ds.id)
+        assert pattern is not None
+        assert pattern.search("ssn") is not None
+
+
 

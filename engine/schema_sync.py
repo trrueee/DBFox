@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -308,12 +309,90 @@ def _build_postgresql_schema_snapshot(ds: DataSource, datasource_id: str) -> Sch
         engine.dispose()
 
 
+# AI metadata fields that should survive schema sync so manual edits
+# (主题域 / AI描述 / 置信度 / 语义标签 / 业务术语) are not lost.
+_TABLE_AI_FIELDS = [
+    "ai_description", "semantic_tags", "business_terms", "aliases",
+    "table_role", "grain", "subject_area", "ai_confidence", "ai_enriched_at",
+    "schema_hash",  # preserve so tables without structural changes skip re-enrichment
+]
+_COLUMN_AI_FIELDS = [
+    "ai_description", "semantic_tags", "business_terms", "aliases",
+    "column_role", "metric_type", "is_pii", "ai_confidence", "ai_enriched_at",
+]
+
+
+def _snapshot_ai_metadata(
+    db: Session, datasource_id: str,
+) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
+    """Read existing AI metadata before the old rows are deleted."""
+    old_tables = (
+        db.query(SchemaTable)
+        .filter(SchemaTable.data_source_id == datasource_id)
+        .all()
+    )
+    table_ai: dict[str, dict[str, Any]] = {}
+    column_ai: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for t in old_tables:
+        t_name = str(t.table_name)
+        saved: dict[str, Any] = {}
+        for field in _TABLE_AI_FIELDS:
+            val = getattr(t, field, None)
+            if val is not None:
+                saved[field] = val
+        if saved:
+            table_ai[t_name] = saved
+
+        for col in t.columns or []:
+            c_name = str(col.column_name)
+            csaved: dict[str, Any] = {}
+            for field in _COLUMN_AI_FIELDS:
+                val = getattr(col, field, None)
+                if val is not None:
+                    csaved[field] = val
+            if csaved:
+                column_ai[(t_name, c_name)] = csaved
+
+    return table_ai, column_ai
+
+
+def _restore_ai_metadata(
+    tables_to_insert: list[SchemaTable],
+    columns_to_insert: list[SchemaColumn],
+    table_ai: dict[str, dict[str, Any]],
+    column_ai: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    """Copy preserved AI metadata onto the fresh snapshot rows."""
+    for t in tables_to_insert:
+        t_name = str(t.table_name)
+        saved = table_ai.get(t_name, {})
+        for field, val in saved.items():
+            setattr(t, field, val)
+
+    table_name_by_id: dict[str, str] = {}
+    for t in tables_to_insert:
+        table_name_by_id[str(t.id)] = str(t.table_name)
+
+    for col in columns_to_insert:
+        t_name = table_name_by_id.get(str(col.table_id))
+        if not t_name:
+            continue
+        c_name = str(col.column_name)
+        csaved = column_ai.get((t_name, c_name), {})
+        for field, val in csaved.items():
+            setattr(col, field, val)
+
+
 def _replace_schema_snapshot(
     db: Session,
     datasource_id: str,
     tables_to_insert: list[SchemaTable],
     columns_to_insert: list[SchemaColumn],
 ) -> None:
+    # Preserve user-edited AI metadata before deleting old rows
+    table_ai, column_ai = _snapshot_ai_metadata(db, datasource_id)
+
     table_ids = [
         row[0]
         for row in db.query(SchemaTable.id).filter(SchemaTable.data_source_id == datasource_id).all()
@@ -323,9 +402,29 @@ def _replace_schema_snapshot(
     db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).delete(synchronize_session=False)
     db.add_all(tables_to_insert)
     db.add_all(columns_to_insert)
+    db.flush()  # assign IDs so FK relationships are resolved
+
+    _restore_ai_metadata(tables_to_insert, columns_to_insert, table_ai, column_ai)
 
 
-def sync_schema(db: Session, datasource_id: str, *, ai_enrich: bool = True) -> dict[str, Any]:
+def _ai_enrich_warning(enrich_result: dict[str, Any]) -> str | None:
+    if enrich_result.get("ai_enriched") is not False:
+        return None
+    reason = str(enrich_result.get("reason") or "").strip()
+    if not reason or reason == "no structural changes":
+        return None
+    return f"AI 语义打分未完成：{reason}"
+
+
+def sync_schema(
+    db: Session,
+    datasource_id: str,
+    *,
+    ai_enrich: bool = True,
+    ai_api_key: str | None = None,
+    ai_api_base: str | None = None,
+    ai_model_name: str | None = None,
+) -> dict[str, Any]:
     """
     Synchronize metadata into local SQLite without deleting the previous snapshot
     until the new snapshot has been gathered successfully.
@@ -353,16 +452,53 @@ def sync_schema(db: Session, datasource_id: str, *, ai_enrich: bool = True) -> d
         )
         db.commit()
 
+        enrich_result: dict[str, Any] | None = None
+        warnings: list[str] = []
         if ai_enrich:
-            from engine.ai_enrich import ai_enrich_catalog
-            enrich_result = ai_enrich_catalog(db, datasource_id)
+            # Early check: skip AI enrichment when no LLM API key is available.
+            # Mirrors agent.api._check_llm_credentials — key comes from frontend
+            # request body (configured in Settings UI), OPENAI_API_KEY as fallback.
+            _resolved_key = (ai_api_key or os.getenv("OPENAI_API_KEY", "")).strip()
+            if not _resolved_key:
+                logger.info("AI enrich skipped for datasource %s: no LLM API key configured", datasource_id)
+                enrich_result = {
+                    "ai_enriched": False,
+                    "enriched_count": 0,
+                    "reason": "请先在设置中配置 LLM API Key。",
+                }
+            else:
+                from engine.ai_enrich import ai_enrich_catalog
+                try:
+                    enrich_result = ai_enrich_catalog(
+                        db,
+                        datasource_id,
+                        api_key=ai_api_key,
+                        api_base=ai_api_base,
+                        model_name=ai_model_name,
+                    )
+                except Exception as exc:
+                    db.rollback()
+                    logger.exception("AI enrich failed for datasource %s: %s", datasource_id, exc)
+                    enrich_result = {
+                        "ai_enriched": False,
+                        "enriched_count": 0,
+                        "reason": str(exc),
+                    }
             logger.info("AI enrich: %s", enrich_result)
+            warning = _ai_enrich_warning(enrich_result)
+            if warning:
+                warnings.append(warning)
 
-        return {
+        response: dict[str, Any] = {
             "ok": True,
             "tablesSynced": tables_synced,
             "message": "Schema synchronized successfully.",
         }
+        if enrich_result is not None:
+            response["aiEnrich"] = enrich_result
+        if warnings:
+            response["warnings"] = warnings
+        return response
 
     except Exception as e:
         db.rollback()

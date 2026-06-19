@@ -1,4 +1,4 @@
-import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Cpu, Database } from "lucide-react";
+import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Cpu, Database, Bug } from "lucide-react";
 import { FoxIcon } from "../../components/brand/FoxIcon";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 
@@ -27,6 +27,7 @@ export function WorkspaceTabs({ onOpenSqlConsole }: WorkspaceTabsProps) {
               {tab.type === "conversation-history" && <MessageSquare size={11} className="text-indigo-500" />}
               {tab.type === "llm-config" && <Cpu size={11} className="text-pink-500" />}
               {tab.type === "datasource-settings" && <Database size={11} className="text-blue-500" />}
+              {tab.type === "diagnostics" && <Bug size={11} className="text-rose-500" />}
               <span className="truncate max-w-[100px]">{tab.title}</span>
               <X size={10} className="hifi-tab-close ml-1.5 opacity-60 hover:opacity-100" onClick={(event) => { event.stopPropagation(); closeTab(tab.id); }} />
             </div>

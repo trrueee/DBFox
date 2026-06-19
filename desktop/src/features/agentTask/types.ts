@@ -173,7 +173,11 @@ export const RISK_LABELS: Record<string, string> = {
 
 /** Group chatMessages + agentTimeline into per-turn conversation turns.
  *  Each turn = one user message + its corresponding AI response (trace + answer).
- *  History turns get plain AI text; the most recent turn gets full agent trace data. */
+ *  History turns get plain AI text; the most recent turn gets full agent trace data.
+ *
+ *  IMPORTANT: agent data (timeline, answer, artifacts) must be attached to the
+ *  turn that contains the user's question, NOT to orphan AI-only turns created
+ *  by trailing messages like suggestions. */
 export function parseConversationTurns(tab: WorkspaceTab): ConversationTurn[] {
   const messages = tab.chatMessages || [];
   const timeline = tab.agentTimeline || [];
@@ -202,15 +206,16 @@ export function parseConversationTurns(tab: WorkspaceTab): ConversationTurn[] {
           hasAgentData: false,
         });
         pendingUser = null;
-      } else {
-        // AI message without preceding user (edge case) — treat as standalone
-        turns.push({
-          id: `turn-ai-${msg.id}`,
-          userMessage: "",
-          aiText: msg.text,
-          hasAgentData: false,
-        });
+      } else if (turns.length > 0) {
+        // AI message without preceding user (e.g. suggestions appended after
+        // the answer) — merge into the previous turn rather than creating an
+        // orphan turn that would steal agent data.
+        const last = turns[turns.length - 1];
+        last.aiText = last.aiText
+          ? `${last.aiText}\n\n${msg.text}`
+          : msg.text;
       }
+      // If there are no turns at all, drop the orphan — nothing to attach to.
     }
   }
 
@@ -233,15 +238,26 @@ export function parseConversationTurns(tab: WorkspaceTab): ConversationTurn[] {
       approval: tab.agentApproval,
     });
   } else if (hasTimeline && turns.length > 0) {
-    // Agent data exists for the last completed turn — enrich it
-    const last = turns[turns.length - 1];
-    last.hasAgentData = true;
-    last.agentTimeline = timeline;
-    last.agentAnswer = tab.agentAnswer;
-    last.agentStatus = agentStatus || "idle";
-    last.artifacts = tab.artifacts;
-    last.suggestions = tab.agentSuggestions;
-    last.approval = tab.agentApproval;
+    // Find the LAST turn that has a real user message, so agent data
+    // (timeline, answer, artifacts) is never attached to an orphan AI-only
+    // turn created by trailing suggestions or progress messages.
+    let targetTurn: ConversationTurn | null = null;
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].userMessage) {
+        targetTurn = turns[i];
+        break;
+      }
+    }
+    if (!targetTurn) {
+      targetTurn = turns[turns.length - 1];
+    }
+    targetTurn.hasAgentData = true;
+    targetTurn.agentTimeline = timeline;
+    targetTurn.agentAnswer = tab.agentAnswer;
+    targetTurn.agentStatus = agentStatus || "idle";
+    targetTurn.artifacts = tab.artifacts;
+    targetTurn.suggestions = tab.agentSuggestions;
+    targetTurn.approval = tab.agentApproval;
   } else if (hasTimeline && turns.length === 0) {
     // Timeline items exist but no chat messages (edge case) — build single turn
     const userItem = timeline.find((t) => t.kind === "user");

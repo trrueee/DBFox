@@ -98,7 +98,14 @@ class SemanticAliasResolver:
         resolver.enable_embedding_recall = ds.enable_embedding_recall if ds else False
 
         # Load all aliases for this data source
-        rows = db.query(SemanticAlias).filter(SemanticAlias.data_source_id == datasource_id).all()
+        rows = (
+            db.query(SemanticAlias)
+            .filter(
+                SemanticAlias.data_source_id == datasource_id,
+                SemanticAlias.target_type != "sensitive"
+            )
+            .all()
+        )
         db_aliases: dict[str, str] = {}
         db_meta: dict[str, dict[str, str]] = {}
         for row in rows:

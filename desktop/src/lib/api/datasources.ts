@@ -8,6 +8,7 @@ import type {
   DataSourceTestResult,
   DataSourceUpdateParams,
   DeleteConfirm,
+  SchemaSyncOptions,
   SchemaSyncResult,
 } from "./types";
 
@@ -32,8 +33,11 @@ export const datasourcesApi = {
   updateDatasource: (id: string, params: DataSourceUpdateParams) =>
     request<DataSource>(`/datasources/${id}`, { method: "PUT", body: JSON.stringify(params) }),
 
-  syncSchema: (id: string) =>
-    request<SchemaSyncResult>(`/datasources/${id}/sync`, { method: "POST" }),
+  syncSchema: (id: string, options?: SchemaSyncOptions) =>
+    request<SchemaSyncResult>(`/datasources/${id}/sync`, {
+      method: "POST",
+      body: options ? JSON.stringify(options) : undefined,
+    }),
 
   releaseDatasource: (id: string) =>
     request<{ success: boolean; message: string }>(`/datasources/${id}/release`, { method: "POST" }),

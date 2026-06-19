@@ -100,12 +100,19 @@ export interface DeleteConfirm {
   text: string;
 }
 
+export interface SchemaSyncOptions {
+  ai_enrich?: boolean;
+  api_key?: string;
+  api_base?: string;
+  model_name?: string;
+}
+
 /** Consolidated CRUD actions for datasource management. */
 export interface DataSourceActions {
   createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
-  syncSchema: (id: string) => Promise<unknown>;
+  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<unknown>;
   checkHealth: (id: string) => Promise<DataSourceHealthResult>;
 }
 export interface DataSourceHealthResult {
@@ -184,8 +191,17 @@ export interface DataSourceTestResult {
 
 export interface SchemaSyncResult {
   success?: boolean;
+  ok?: boolean;
   message?: string;
   syncedTables?: number;
+  tablesSynced?: number;
+  warnings?: string[];
+  aiEnrich?: {
+    ai_enriched?: boolean;
+    enriched_count?: number;
+    reason?: string;
+    errors?: string[];
+  };
   [key: string]: unknown;
 }
 
