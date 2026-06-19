@@ -12,7 +12,6 @@ from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
-    build_semantic_resolution_artifact,
     build_sql_suggestion_artifact,
     build_profile_artifact,
     build_query_plan_artifact,
@@ -81,11 +80,8 @@ def emit_artifacts_from_observation(
     artifacts = []
 
     # Artifact emission for new db.* tools
-    if step_name in ("db.query", "sql.execute_readonly") and state.get("execution") and state.get("execution", {}).get("success"):
+    if step_name == "db.query" and state.get("execution") and state.get("execution", {}).get("success"):
         artifacts.append(build_table_artifact(state["execution"], safety=state.get("safety"), identity=identity))
-
-    if step_name == "semantic.resolve" and state.get("semantic_resolution"):
-        artifacts.append(build_semantic_resolution_artifact(state["semantic_resolution"], identity=identity))
 
     if step_name == "db.query" and observation.output and observation.status == "success":
         payload = dict(observation.output)

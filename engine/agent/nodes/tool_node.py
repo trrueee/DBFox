@@ -312,15 +312,9 @@ def _summarize_default(output: dict[str, Any]) -> str:
 
 
 _SUMMARIZERS: dict[str, _Summarizer] = {
-    "schema.build_context": _summarize_schema_build_context,
-    "query_plan.build": _summarize_query_plan_build,
-    "sql.generate": _summarize_sql_generate,
-    "sql.validate": _summarize_sql_validate,
-    "sql.execute_readonly": _summarize_sql_execute_readonly,
-    "sql.revise": _summarize_sql_revise,
+    # ── Active tools (tool-layer-v2) ──
     "result.profile": _summarize_result_profile,
     "chart.suggest": _summarize_chart_suggest,
-    "followup.suggest": _summarize_followup_suggest,
     "schema.list_tables": _summarize_schema_list_tables,
     "schema.describe_table": _summarize_schema_describe_table,
     "schema.refresh_catalog": _summarize_schema_refresh_catalog,
@@ -334,6 +328,14 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "memory.write": _summarize_memory_write,
     "memory.delete": _summarize_memory_delete,
     "memory.summarize_session": _summarize_memory_summarize_session,
+    # ── Legacy summarizers (kept as functions; tools removed in tool-layer-v2) ──
+    # schema.build_context   → replaced by db.observe + db.search
+    # query_plan.build       → tool removed
+    # sql.generate           → merged into db.query via TrustGate
+    # sql.validate           → merged into db.query via TrustGate
+    # sql.execute_readonly   → merged into db.query
+    # sql.revise             → tool removed
+    # followup.suggest       → tool removed
 }
 
 

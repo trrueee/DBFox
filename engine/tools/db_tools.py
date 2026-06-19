@@ -26,7 +26,7 @@ from __future__ import annotations
 from engine.tools.db.observe import db_observe
 from engine.tools.db.search import db_search
 from engine.tools.db.inspect import db_inspect
-from engine.tools.db.preview import db_preview
+from engine.tools.safe_preview import db_preview
 from engine.tools.db.query import db_query
 from engine.tools.db.remember import db_remember
 

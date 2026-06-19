@@ -58,14 +58,6 @@ class SchemaSection(BaseModel):
     ddl_size: int = 0
 
 
-class SemanticSection(BaseModel):
-    resolved_terms: list[dict[str, str]] = Field(default_factory=list)
-    resolved_metrics: list[dict[str, str]] = Field(default_factory=list)
-    join_paths: list[str] = Field(default_factory=list)
-    ambiguity_flags: list[str] = Field(default_factory=list)
-    context_text: str | None = None
-
-
 class SqlSection(BaseModel):
     sql: str | None = None
     sql_size: int = 0
@@ -151,7 +143,6 @@ class ContextPack(BaseModel):
         default_factory=SchemaSection,
         validation_alias=AliasChoices("schema_context", "schema"),
     )
-    semantic: SemanticSection = Field(default_factory=SemanticSection)
     sql: SqlSection = Field(default_factory=SqlSection)
     safety: SafetySection = Field(default_factory=SafetySection)
     execution: ExecutionSection = Field(default_factory=ExecutionSection)
@@ -172,7 +163,6 @@ class ContextPack(BaseModel):
             or self.sql.sql
             or self.execution.success
             or self.result.notable_facts
-            or self.semantic.resolved_terms
         )
 
     @property
@@ -202,7 +192,6 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         workspace=_build_workspace_section(state),
         environment=_build_environment_section(state),
         schema_context=_build_schema_section(state),
-        semantic=_build_semantic_section(state),
         sql=_build_sql_section(state),
         safety=_build_safety_section(state),
         execution=_build_execution_section(state),
@@ -289,19 +278,6 @@ def _build_schema_section(state: dict[str, Any]) -> SchemaSection:
         candidate_columns=candidate_columns,
         ddl_snippet=ddl,
         ddl_size=ddl_size,
-    )
-
-
-def _build_semantic_section(state: dict[str, Any]) -> SemanticSection:
-    sem_raw = state.get("semantic_resolution") or {}
-    if not isinstance(sem_raw, dict):
-        return SemanticSection()
-    return SemanticSection(
-        resolved_terms=_normalize_term_list(sem_raw.get("resolved_terms") or []),
-        resolved_metrics=_normalize_term_list(sem_raw.get("resolved_metrics") or []),
-        join_paths=_normalize_str_list(sem_raw.get("join_paths") or []),
-        ambiguity_flags=_normalize_str_list(sem_raw.get("ambiguity") or []),
-        context_text=_str_or_none(sem_raw.get("semantic_context_text")),
     )
 
 
@@ -494,13 +470,6 @@ def render_for_model(pack: ContextPack) -> str:
         parts.append(f"- **Candidate Columns**: {', '.join(pack.schema_context.candidate_columns[:15])}")
     if pack.schema_context.ddl_snippet:
         parts.append(f"- **DDL**:\n```sql\n{pack.schema_context.ddl_snippet[:3000]}\n```")
-
-    # Semantic
-    if pack.semantic.context_text:
-        parts.append(f"- **Semantic Context**: {pack.semantic.context_text}")
-    if pack.semantic.resolved_terms:
-        terms = [f"{t.get('term', '?')} → {t.get('mapping', '?')}" for t in pack.semantic.resolved_terms[:5]]
-        parts.append(f"- **Resolved Terms**: {', '.join(terms)}")
 
     # SQL
     if pack.sql.sql:

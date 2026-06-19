@@ -95,7 +95,6 @@ Do NOT call additional database tools unless the result is wrong, incomplete, em
 
 You always have access to `escalate.tool_group`. Use it when:
 - You need a tool from a group that isn’t currently available to you.
-- Example: you need semantic.resolve to map a business term — call escalate.tool_group with group="semantic" and a brief reason.
 - After escalation, the requested tools become available on your next call.
 
 Do NOT overuse escalation. If you can complete the task with the tools you already have, do so. Escalate only when genuinely blocked."""

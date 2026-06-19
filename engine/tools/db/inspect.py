@@ -12,8 +12,6 @@ from typing import Any
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
-from engine.tools.runtime.context import ToolContext
-from engine.agent_core.types import ToolObservation
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params, get_postgres_connection_params
 from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
@@ -23,40 +21,33 @@ from engine.tools.db._common import (
     _column_summary,
     _datasource,
     _ordered_columns,
-    tool_handler,
 )
 
 logger = logging.getLogger("dbfox.tools.db.inspect")
 
 
-@tool_handler("db.inspect")
-def db_inspect(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    """Live introspection of a table or column from the real database.
-
-    Connects to the live database and runs system introspection queries
-    (``information_schema``, ``pg_catalog``, ``PRAGMA``) to return the
-    current structure — not a stale catalog snapshot.
-    """
-    target = str(args.get("target") or "").strip()
+def db_inspect(db: Session, datasource_id: str, target: str) -> dict[str, Any]:
+    """Live introspection of a table or column from the real database."""
+    target = target.strip()
     if not target:
         raise ToolInputError("target is required (table or table.column).")
 
-    ds_id = ctx.request.datasource_id
+    ds_id = datasource_id
     cache_key = (ds_id, target)
     cached_output = _INSPECT_CACHE.get(cache_key)
     if cached_output is not None:
         logger.info("db.inspect cache hit for %s", target)
         return cached_output
 
-    ds = _datasource(ctx.db, ds_id)
+    ds = _datasource(db, ds_id)
     dialect = (ds.db_type or "mysql").lower()
 
     if dialect == "sqlite":
-        output = _sqlite_inspect_detail(ctx.db, ds, target)
+        output = _sqlite_inspect_detail(db, ds, target)
     elif dialect == "postgres" or dialect == "postgresql":
-        output = _pg_inspect_detail(ctx.db, ds, target)
+        output = _pg_inspect_detail(db, ds, target)
     else:
-        output = _mysql_inspect_detail(ctx.db, ds, target)
+        output = _mysql_inspect_detail(db, ds, target)
     _INSPECT_CACHE.set(cache_key, output)
     return output
 

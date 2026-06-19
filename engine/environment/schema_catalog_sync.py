@@ -162,7 +162,7 @@ class SchemaCatalogSync:
 def ensure_catalog(db: Session, datasource_id: str, *, ai_enrich: bool = False) -> SyncResult:
     """Introspect and sync if the catalog is empty for this datasource.
 
-    Safe to call before schema.build_context — if tables already exist
+    Safe to call before schema linking — if tables already exist
     it will still refresh (upsert).
     """
     return SchemaCatalogSync().sync(db, datasource_id, ai_enrich=ai_enrich)

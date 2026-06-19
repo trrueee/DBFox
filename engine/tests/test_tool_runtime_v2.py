@@ -182,10 +182,4 @@ def test_wrapped_memory_tools_consume_identity_state():
         assert required <= consumes
 
 
-def test_semantic_resolve_consumes_workspace_context():
-    from engine.tools.dbfox_tools import register_dbfox_tools
 
-    registry = register_dbfox_tools()
-    consumes = set(registry.require("semantic.resolve").state.consumes)
-
-    assert {"datasource_id", "question", "workspace_context"} <= consumes

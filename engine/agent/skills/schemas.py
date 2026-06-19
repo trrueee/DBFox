@@ -70,7 +70,7 @@ class SkillSpec(BaseModel):
     """
 
     id: str = Field(
-        description="Unique skill identifier, e.g. 'safe_data_lookup'.",
+        description="Unique skill identifier, e.g. 'schema_exploration'.",
     )
     name: str = Field(
         description="Human-readable name, e.g. 'Safe Data Lookup'.",

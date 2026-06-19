@@ -81,7 +81,6 @@ environment.get_profile
 schema.list_tables
 schema.describe_table
 schema.refresh_catalog
-semantic.resolve
 db.observe
 db.search
 db.inspect
@@ -130,7 +129,6 @@ Tools return output models. The reducer maps successful outputs into state:
 | Tool | State writes |
 | --- | --- |
 | `environment.get_profile` | `environment_profile`, `database_map` |
-| `semantic.resolve` | `semantic_resolution` |
 | `db.observe` | `database_map` |
 | `db.search` | `db_search_results` |
 | `db.inspect` | `db_inspection` |
