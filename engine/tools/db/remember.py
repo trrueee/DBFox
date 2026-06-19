@@ -57,7 +57,7 @@ def db_remember(db: Session, datasource_id: str, *, mem_type: str, target: str,
         needs_approval = _remember_needs_approval(ds, memory_type)
 
         if memory_type in ("table_alias", "column_alias"):
-            return _remember_alias(db, datasource_id, target, memory_type, evidence, **_extra)
+            return _remember_alias(db, datasource_id, target, memory_type, evidence, needs_approval, **_extra)
         if memory_type == "column_values":
             return _remember_column_values(db, datasource_id, target, evidence, needs_approval, **_extra)
         if memory_type == "join_path":
@@ -90,8 +90,31 @@ def _remember_needs_approval(ds: DataSource, memory_type: str) -> bool:
 
 
 def _remember_alias(db: Session, datasource_id: str, target: str, memory_type: str,
-                   evidence: str, **_extra: Any) -> dict[str, Any]:
-    target_type = "column" if "." in target else "table"
+                   evidence: str, needs_approval: bool, **_extra: Any) -> dict[str, Any]:
+    from engine.models import SchemaTable
+    parts = [p.strip() for p in target.split(".") if p.strip()]
+    if len(parts) == 2:
+        # Check if parts[0] is a table name in this datasource. If so, it's table.column.
+        # Otherwise if parts[1] is a table name, it's schema.table.
+        first_is_table = db.query(SchemaTable).filter(
+            SchemaTable.data_source_id == datasource_id,
+            SchemaTable.table_name == parts[0]
+        ).first() is not None
+        if first_is_table:
+            target_type = "column"
+        else:
+            second_is_table = db.query(SchemaTable).filter(
+                SchemaTable.data_source_id == datasource_id,
+                SchemaTable.table_name == parts[1]
+            ).first() is not None
+            if second_is_table:
+                target_type = "table"
+            else:
+                target_type = "column"
+    elif len(parts) >= 3:
+        target_type = "column"
+    else:
+        target_type = "table"
     aliases = _string_list(_extra.get("aliases"))
     value = _extra.get("value")
     if isinstance(value, str) and value.strip():
@@ -100,6 +123,11 @@ def _remember_alias(db: Session, datasource_id: str, target: str, memory_type: s
 
     if not aliases:
         raise ToolInputError("aliases or value is required.")
+
+    if needs_approval:
+        return {"status": "pending_confirmation", "type": memory_type, "target": target,
+                "aliases": aliases,
+                "reason": "prod environment requires user confirmation for semantic aliases."}
 
     created: list[dict[str, Any]] = []
     for alias in aliases:
@@ -117,7 +145,7 @@ def _remember_alias(db: Session, datasource_id: str, target: str, memory_type: s
                                  description=_redact_pii(evidence[:500])))
             created.append({"alias": alias, "target": target, "target_type": target_type})
 
-    db.commit()
+
     return {"status": "remembered", "type": memory_type, "target": target,
             "created": created, "will_affect_future_search": len(created) > 0}
 
@@ -148,7 +176,7 @@ def _remember_column_values(db: Session, datasource_id: str, target: str, eviden
                                  description=_redact_pii(f"Observed via db.preview. {evidence}"[:500])))
             created.append({"value": v, "target": target})
 
-    db.commit()
+
     return {"status": "remembered", "type": "column_values", "target": target,
             "created": created, "will_affect_future_search": len(created) > 0}
 
@@ -166,6 +194,11 @@ def _remember_join_path(db: Session, datasource_id: str, target: str, evidence: 
     )
     description = _redact_pii(str(join_value.get("description", evidence))[:500])
 
+    if needs_approval:
+        return {"status": "pending_confirmation",
+                "type": "join_path", "target": target, "join": join_value,
+                "note": "requires user confirmation"}
+
     existing = (
         db.query(SemanticAlias)
         .filter(SemanticAlias.data_source_id == datasource_id,
@@ -177,11 +210,11 @@ def _remember_join_path(db: Session, datasource_id: str, target: str, evidence: 
     if existing is None:
         db.add(SemanticAlias(data_source_id=datasource_id, alias=alias_text.strip(),
                              target_type="join_path", target=target, description=description))
-        db.commit()
 
-    return {"status": "pending_confirmation" if needs_approval else "remembered",
+
+    return {"status": "remembered",
             "type": "join_path", "target": target, "join": join_value,
-            "note": "requires user confirmation" if needs_approval else "saved"}
+            "note": "saved"}
 
 
 def _remember_business_def(db: Session, datasource_id: str, target: str, evidence: str,
@@ -198,6 +231,11 @@ def _remember_business_def(db: Session, datasource_id: str, target: str, evidenc
     if not definition:
         raise ToolInputError("definition or value is required for business_definition.")
 
+    if needs_approval:
+        return {"status": "pending_confirmation",
+                "type": "business_definition", "target": target, "definition": definition,
+                "note": "Business definitions always require user confirmation."}
+
     existing = (
         db.query(SemanticAlias)
         .filter(SemanticAlias.data_source_id == datasource_id,
@@ -209,9 +247,9 @@ def _remember_business_def(db: Session, datasource_id: str, target: str, evidenc
         db.add(SemanticAlias(data_source_id=datasource_id, alias=target,
                              target_type="business_definition", target=target,
                              description=description))
-        db.commit()
 
-    return {"status": "pending_confirmation" if needs_approval else "remembered",
+
+    return {"status": "remembered",
             "type": "business_definition", "target": target, "definition": definition,
             "note": "Business definitions always require user confirmation."}
 

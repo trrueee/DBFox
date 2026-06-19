@@ -110,6 +110,10 @@ class SessionMemoryService:
                 self._cache[session_id] = mem
             mem.current_dataset_summary = summary
 
+    def set(self, session_id: str, mem: SessionMemory) -> None:
+        with self._lock:
+            self._cache[session_id] = mem
+
 
 # Module-level singleton
 _session_service: SessionMemoryService | None = None
