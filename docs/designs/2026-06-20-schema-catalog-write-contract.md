@@ -1,347 +1,106 @@
-# Schema Catalog Write Contract — Design Spec
+# Schema Docs + AI Enrich Retention / Semantic Feature Removal Guide
 
-> 2026-06-20 | schema catalog, search index, AI enrich, and semantic alias write boundaries
+> 2026-06-20 | keep schema_search_docs and AI enrichment; remove semantic metric rules and embedding recall
 
-## 1. Context
+## 1. Decision
 
-DBFox 当前同时存在 schema 同步、AI catalog 增强、`db.search` 搜索文档、FTS5 索引、语义别名和 embedding 召回等多条数据链路。它们服务的是不同目标，但在实现上容易被揉在一次同步流程里：创建数据源后自动 schema sync，schema sync 又可能触发 AI enrich，AI enrich 成功后才生成 `schema_search_docs`，搜索工具又依赖 `schema_search_docs` / `schema_search_fts`。
-
-这种耦合会导致几个问题：
-
-1. schema sync 被 LLM 调用拖慢，甚至因为 token、超时、网络、API key 等问题失败。
-2. 没有 AI key 或 AI enrich 失败时，基础表名 / 字段名 / 注释也无法稳定进入搜索索引。
-3. 用户手动编辑表描述、字段描述、业务术语、别名后，只更新 catalog，不一定同步更新搜索文档。
-4. Agent 查询阶段可能反复调用 search / describe / query，实际原因是底层 catalog 与索引状态不一致。
-
-## 2. Goals
-
-**目标：** 明确 DBFox schema 相关表的写入边界，建立可控、可重建、可增量的 catalog 管线。
-
-核心原则：
-
-1. `schema_tables` / `schema_columns` 是 schema catalog 的 source of truth。
-2. `schema_search_docs` 是可重建的搜索文档索引，不是 source of truth。
-3. `schema_search_fts` 是 FTS5 搜索引擎索引，不承载业务语义。
-4. `semantic_aliases` 是业务词典 / 同义词 / embedding 召回规则，不与 schema search docs 混写。
-5. AI enrich 是离线增强，不应阻塞 schema sync 的确定性成功。
-6. Agent 查询和用户问数流程不得反向污染 schema catalog。
-
-**非目标：**
-
-1. 不在本文定义具体 UI 交互。
-2. 不强制引入外部向量数据库。
-3. 不要求一次性迁移所有历史实现，但后续代码应以本文为写入契约。
-
-## 3. Tables and Ownership
-
-| 表 / 索引 | 职责 | 写入者 | 是否 source of truth | 备注 |
-|---|---|---|---|---|
-| `data_sources` | 数据源连接配置、测试状态、同步状态 | datasource API / sync service | 是 | 只记录数据源与流程状态 |
-| `schema_tables` | 表级 catalog，含基础 schema 与表级 AI 字段 | schema sync / AI enrich / metadata editor | 是 | 表描述、语义标签、业务术语最终落这里 |
-| `schema_columns` | 字段级 catalog，含基础字段信息与字段级 AI 字段 | schema sync / AI enrich / metadata editor | 是 | 字段描述、角色、PII、metric type 最终落这里 |
-| `schema_search_docs` | table / column 搜索文档 | search index builder | 否 | 可由 `schema_tables` / `schema_columns` 重建 |
-| `schema_search_fts` | SQLite FTS5 虚拟表 | FTS maintenance layer | 否 | 不直接承载业务状态 |
-| `semantic_aliases` | 业务别名、目标映射、embedding blob | semantic API / embedding sync | 是 | 用于 alias resolver 与 embedding recall |
-| `query_history` | SQL 执行历史 | query tool / console | 是，但不属于 schema | 可用于历史问句召回，不回写 schema |
-| `agent_runs` / `agent_*` | Agent 运行轨迹、trace、artifact、approval | agent runtime | 是，但不属于 schema | 不回写 catalog |
-
-## 4. Write Events
-
-### 4.1 Create Data Source
-
-创建数据源只写：
+DBFox 暂时不做以下两类能力：
 
 ```text
-`data_sources`
+1. semantic metric rule
+   例如：销售额 = 售价 * 销量
+
+2. embedding recall
+   包括 SemanticAliasResolver 的向量召回、alias embedding sync、embedding_blob 存储等
 ```
 
-不得自动写：
+当前保留并重点做好的能力是：
 
 ```text
-`schema_tables`
-`schema_columns`
-`schema_search_docs`
-`semantic_aliases`
+1. schema_tables / schema_columns
+2. AI catalog enrichment descriptions
+3. schema_search_docs
+4. schema_search_fts
+5. db.search / schema linking 基础字段召回
 ```
 
-创建数据源不应隐式触发 AI enrich。是否自动执行 schema sync 可以作为独立产品决策，但实现上必须保证 schema sync 与 AI enrich 解耦。
+也就是说，当前路线不做“语义指标规则系统”和“不做 embedding 召回”。先把表字段 catalog、AI 描述增强、schema 搜索文档和 Agent 上下文构建稳定下来。
 
-### 4.2 Test Connection
+## 2. What to Keep
 
-测试连接只写：
+### 2.1 Keep `schema_tables`
+
+`schema_tables` 继续作为表级 schema catalog 的 source of truth。
+
+保留内容：
 
 ```text
-`data_sources.last_test_at`
-`data_sources.last_test_status`
-`data_sources.last_test_error`
-`data_sources.last_test_latency_ms`
-`data_sources.last_test_readonly`
-`data_sources.last_test_server_version`
-`data_sources.last_test_tables_count`
-`data_sources.last_test_warnings`
+table_name
+table_schema
+table_type
+table_comment
+row_count_estimate
+schema_hash
+ai_description
+semantic_tags
+business_terms
+aliases
+table_role
+grain
+subject_area
+ai_confidence
+ai_enriched_at
 ```
 
-不得写 schema catalog，不得写 search docs，不得触发 AI enrich。
+说明：这里的 `aliases` 字段可以继续作为 AI enrich 产生的表级自然语言补充文本，不等同于独立的 `semantic_aliases` 功能。
 
-### 4.3 Schema Sync
+### 2.2 Keep `schema_columns`
 
-schema sync 只负责确定性 introspection 与 catalog upsert / delete：
+`schema_columns` 继续作为字段级 schema catalog 的 source of truth。
+
+保留内容：
 
 ```text
-`schema_tables`
-`schema_columns`
-`data_sources.last_sync_at`
-`data_sources.last_sync_status`
-`data_sources.last_sync_error`
+column_name
+data_type
+column_type
+column_comment
+is_primary_key
+is_foreign_key
+foreign_table_id
+foreign_column_id
+ai_description
+semantic_tags
+business_terms
+aliases
+column_role
+metric_type
+is_pii
+ai_confidence
+ai_enriched_at
 ```
 
-同步内容包括：
+说明：字段 AI 增强仍然有价值。比如用户问“售价”，可以通过字段 comment、AI description、business_terms、aliases 找到 `orders.price`。
 
-1. table schema / name / type / comment。
-2. row count estimate，若可低成本获取。
-3. column name / type / nullable / default / comment。
-4. primary key / foreign key 关系。
-5. schema hash。
+### 2.3 Keep `schema_search_docs`
 
-schema sync 默认不得调用 LLM。
+`schema_search_docs` 是当前要保留的核心搜索文档表。
 
-推荐 API 行为：
-
-```python
-sync_schema_catalog(datasource_id, *, full=False) -> SchemaSyncResult
-```
-
-其中 `SchemaSyncResult` 应包含：
+职责：
 
 ```text
-created_tables
-updated_tables
-removed_tables
-created_columns
-updated_columns
-removed_columns
-changed_table_ids
-warnings
+把 schema_tables / schema_columns 的基础信息和 AI 增强信息整理成可搜索文档。
 ```
 
-### 4.4 Build Base Search Docs
-
-schema sync 成功后，应对 changed tables 构建基础搜索文档：
+保留字段方向：
 
 ```text
-`schema_search_docs`
-`schema_search_fts`
-```
-
-基础搜索文档不得依赖 AI enrich。即使没有 API key，也必须可以根据以下信息生成：
-
-1. table name。
-2. table comment。
-3. column names。
-4. column comments。
-5. primary key / foreign key。
-6. relation summary。
-7. data type hints。
-
-推荐函数：
-
-```python
-rebuild_search_docs_for_table(datasource_id, table_id)
-rebuild_search_docs_for_datasource(datasource_id)
-```
-
-`schema_search_docs` 是可重建索引。任何写入失败不得回滚已经成功的 schema catalog，但应记录 warning。
-
-### 4.5 AI Catalog Enrich
-
-AI enrich 是离线增强任务，只处理 changed / dirty / selected tables。
-
-输入集合：
-
-```text
-changed_table_ids from schema sync
-OR manually_dirty_table_ids
-OR user_selected_table_ids
-OR force_all=True
-```
-
-写入：
-
-```text
-`schema_tables.ai_description`
-`schema_tables.semantic_tags`
-`schema_tables.business_terms`
-`schema_tables.aliases`
-`schema_tables.table_role`
-`schema_tables.grain`
-`schema_tables.subject_area`
-`schema_tables.ai_confidence`
-`schema_tables.ai_enriched_at`
-
-`schema_columns.ai_description`
-`schema_columns.semantic_tags`
-`schema_columns.business_terms`
-`schema_columns.aliases`
-`schema_columns.column_role`
-`schema_columns.metric_type`
-`schema_columns.is_pii`
-`schema_columns.ai_confidence`
-`schema_columns.ai_enriched_at`
-```
-
-AI enrich 成功写入某张表后，必须局部重建该表搜索文档：
-
-```text
-schema_tables / schema_columns AI fields
-  -> rebuild_search_docs_for_table(table_id)
-  -> refresh schema_search_fts rows for this table
-```
-
-AI enrich 失败时：
-
-1. 不得破坏已有基础 catalog。
-2. 不得删除已有基础 search docs。
-3. 只标记该批次 enrich failed / partial_success。
-4. 后续可以重试 dirty tables。
-
-推荐函数：
-
-```python
-run_ai_enrich_for_tables(datasource_id, table_ids, *, api_key, api_base, model_name) -> AiEnrichResult
-```
-
-### 4.6 Manual Metadata Update
-
-用户手动编辑表描述、字段描述、业务术语、别名、语义标签时，写入 source of truth：
-
-```text
-`schema_tables`
-`schema_columns`
-```
-
-然后立即重建对应表的 search docs：
-
-```text
-`schema_search_docs`
-`schema_search_fts`
-```
-
-不得触发 schema sync。不得触发 AI enrich。
-
-推荐函数：
-
-```python
-update_table_metadata(table_id, payload, *, rebuild_search=True)
-update_column_metadata(column_id, payload, *, rebuild_search=True)
-```
-
-### 4.7 Semantic Alias Update
-
-新增 / 修改 / 删除业务别名时，只写：
-
-```text
-`semantic_aliases`
-```
-
-不得写：
-
-```text
-`schema_tables`
-`schema_columns`
-`schema_search_docs`
-```
-
-`semantic_aliases` 用于业务词典和 alias resolver，例如：
-
-```text
-销售额 -> orders.total_amount
-客户 -> users
-GMV -> orders.total_amount
-```
-
-### 4.8 Sync Alias Embeddings
-
-embedding sync 是独立离线任务，只写：
-
-```text
-`semantic_aliases.embedding_blob`
-`semantic_aliases.embedding_synced_at`
-```
-
-不得写 schema catalog，不得重建 schema search docs。
-
-推荐函数：
-
-```python
-sync_alias_embeddings(datasource_id) -> EmbeddingSyncResult
-```
-
-### 4.9 Agent Query / SQL Console
-
-Agent 查询、SQL console、result analysis 可以写：
-
-```text
-`query_history`
-`agent_runs`
-`agent_runtime_events`
-`agent_trace_events`
-`agent_artifacts`
-`agent_checkpoints`
-```
-
-不得写：
-
-```text
-`schema_tables`
-`schema_columns`
-`schema_search_docs`
-`semantic_aliases`
-```
-
-例外：只有用户明确点击“保存为别名”、“保存为指标”、“保存为描述”这类显式动作时，才进入对应 metadata / semantic 写入流程。
-
-## 5. Search Index Contract
-
-### 5.1 `schema_search_docs`
-
-`schema_search_docs` 应作为 table / column 级搜索文档表。
-
-每个 table 至少一条：
-
-```text
-entity_type = "table"
-entity_id = schema_tables.id
-table_name = schema_tables.table_name
-column_name = NULL
-name = schema_tables.table_name
-search_text = base + AI enhanced text
-```
-
-每个 column 可以一条：
-
-```text
-entity_type = "column"
-entity_id = schema_columns.id
-table_name = schema_tables.table_name
-column_name = schema_columns.column_name
-name = "{table_name}.{column_name}"
-search_text = base + AI enhanced text
-```
-
-基础 search text 必须包含：
-
-```text
-table name
-table comment
-column names
-column comments
-primary key / foreign key hints
-relation summary
-```
-
-AI search text 可包含：
-
-```text
+datasource_id
+entity_type
+entity_id
+table_name
+column_name
+name
 ai_description
 semantic_tags
 business_terms
@@ -352,170 +111,356 @@ subject_area
 column_role
 metric_type
 column_summary
+relation_summary
+search_text
+ai_confidence
 ```
 
-### 5.2 `schema_search_fts`
+`schema_search_docs` 不作为 source of truth，它应该可以从 `schema_tables` / `schema_columns` 重建。
 
-`schema_search_fts` 是 FTS5 虚拟表，不应被业务代码当普通业务表直接维护。
+### 2.4 Keep `schema_search_fts`
 
-短期实现建议：
+`schema_search_fts` 继续作为 SQLite FTS5 索引。
+
+职责：
 
 ```text
-rebuild_search_docs_for_table(table_id)
-  1. delete old schema_search_docs for this table
-  2. insert new schema_search_docs rows
-  3. refresh matching FTS rows or rebuild FTS content
+为 schema_search_docs.search_text 提供全文搜索能力。
 ```
 
-长期实现可选：
+要求：
 
 ```text
-Use SQLite triggers on schema_search_docs insert/update/delete to keep schema_search_fts in sync.
+schema_search_docs 写入 / 重建后，必须同步维护 schema_search_fts。
 ```
 
-在没有 triggers 之前，所有写入 `schema_search_docs` 的代码必须显式维护 FTS。
+### 2.5 Keep AI Enrichment
 
-## 6. Dirty State and Incremental Control
+AI enrich 继续保留，但只做 catalog 描述增强，不负责创建 metric rule，不负责 embedding，不阻塞 schema sync。
 
-建议增加轻量 dirty tracking，避免全量重建：
+AI enrich 应写入：
 
 ```text
-schema_tables.schema_hash
+schema_tables.ai_description
+schema_tables.semantic_tags
+schema_tables.business_terms
+schema_tables.aliases
+schema_tables.table_role
+schema_tables.grain
+schema_tables.subject_area
+schema_tables.ai_confidence
 schema_tables.ai_enriched_at
-schema_tables.search_indexed_at        # optional
-schema_tables.search_index_version     # optional
-schema_tables.metadata_dirty           # optional
+
+schema_columns.ai_description
+schema_columns.semantic_tags
+schema_columns.business_terms
+schema_columns.aliases
+schema_columns.column_role
+schema_columns.metric_type
+schema_columns.is_pii
+schema_columns.ai_confidence
 schema_columns.ai_enriched_at
 ```
 
-最小可行版本可以不加新字段，直接通过函数参数传递 changed table ids。
+AI enrich 成功后，应重建对应 table 的 `schema_search_docs` / `schema_search_fts`。
 
-推荐 dirty 规则：
+## 3. What to Remove / Deprecate
 
-| 事件 | dirty 类型 | 后续动作 |
-|---|---|---|
-| 表结构变更 | `schema_dirty` | update catalog, rebuild base search docs, optionally enqueue AI enrich |
-| 表 / 字段 comment 变更 | `schema_dirty` | update catalog, rebuild base search docs, optionally enqueue AI enrich |
-| AI enrich 成功 | `search_dirty` | rebuild enriched search docs |
-| 手动 metadata 编辑 | `search_dirty` | rebuild search docs only |
-| alias 变更 | `embedding_dirty` | mark alias embedding stale |
-| embedding sync 成功 | none | resolver cache invalidation only |
+### 3.1 Remove Semantic Metric Rule Feature
 
-## 7. Failure and Transaction Boundaries
+暂时删除 / 停止推进：
 
-### 7.1 Schema Sync
-
-schema sync 应该是确定性事务：
-
-1. introspection 成功后写 catalog。
-2. catalog 写入失败则 rollback。
-3. search docs rebuild 失败不得导致 catalog 回滚，但必须返回 warning。
-4. AI enrich 不在 schema sync 事务内。
-
-### 7.2 AI Enrich
-
-AI enrich 应按 batch / table 粒度提交。
-
-1. 单批失败不影响其他批。
-2. 单表失败不删除旧 AI metadata。
-3. 成功表立即重建 search docs。
-4. 失败原因记录到 result / log。
-
-### 7.3 Search Docs
-
-`schema_search_docs` 可以随时全量重建。
-
-因此 search docs 写入失败时，系统应允许用户继续 browse schema / describe table，只是 search 质量下降。
-
-### 7.4 Embeddings
-
-embedding sync 失败不影响 alias 精确匹配。
-
-`SemanticAliasResolver` 必须始终先走 exact match，再在 `enable_embedding_recall` 且 embedding 可用时走 vector recall。
-
-## 8. API Boundary Proposal
-
-推荐形成以下内部服务 API：
-
-```python
-class SchemaCatalogService:
-    def sync_schema_catalog(self, datasource_id: str, *, full: bool = False) -> SchemaSyncResult: ...
-    def describe_table(self, datasource_id: str, table_name: str) -> TableDescription: ...
-
-class SchemaSearchIndexService:
-    def rebuild_search_docs_for_table(self, datasource_id: str, table_id: str) -> SearchIndexResult: ...
-    def rebuild_search_docs_for_datasource(self, datasource_id: str) -> SearchIndexResult: ...
-    def search(self, datasource_id: str, query: str, *, limit: int = 20) -> SearchResult: ...
-
-class AiCatalogEnrichService:
-    def run_for_tables(self, datasource_id: str, table_ids: list[str], config: LlmConfig) -> AiEnrichResult: ...
-
-class SchemaMetadataService:
-    def update_table_metadata(self, table_id: str, payload: dict, *, rebuild_search: bool = True) -> None: ...
-    def update_column_metadata(self, column_id: str, payload: dict, *, rebuild_search: bool = True) -> None: ...
-
-class SemanticAliasService:
-    def upsert_alias(self, datasource_id: str, alias: str, target: str, target_type: str) -> None: ...
-    def sync_alias_embeddings(self, datasource_id: str) -> EmbeddingSyncResult: ...
+```text
+semantic_metrics 作为用户配置指标规则的产品能力
+SemanticMetricResolver
+metric rule recall
+metric expression dependency expansion
+前端“新增指标规则 / 销售额 = 售价 * 销量”管理 UI
+Agent metric_context 注入
 ```
 
-## 9. Migration Plan
+如果代码里已经有 `semantic_metrics` 表和 CRUD API，短期可以选择：
 
-### Phase 1 — Make Sync Deterministic
+```text
+1. 不在前端暴露入口。
+2. 不在 Agent / SchemaLinker 主链路中调用。
+3. 不新增 resolver。
+4. 不新增测试依赖这个能力。
+```
 
-1. Change schema sync default to `ai_enrich=False`.
-2. Ensure datasource creation does not block on AI enrich.
-3. Return explicit sync result and warnings.
+如果后续决定彻底清理，需要单独 migration 删除：
 
-### Phase 2 — Always Build Base Search Docs
+```text
+semantic_metrics
+semantic_dimensions
+workspace_table_scopes  # 若确认也不再使用
+```
 
-1. Add `rebuild_search_docs_for_table`.
-2. Call it after schema sync for changed tables.
-3. Ensure `db.search` can search table / column names and comments without AI enrich.
+但本阶段优先从产品和主链路移除，不强制立即 drop 表，避免历史库迁移风险。
 
-### Phase 3 — Decouple AI Enrich
+### 3.2 Remove Embedding Recall Feature
 
-1. Move AI enrich to explicit action / background job.
-2. Run only for changed / selected tables.
-3. On success, update AI fields and rebuild affected search docs.
+删除 / 停止推进：
 
-### Phase 4 — Fix Manual Metadata Writes
+```text
+SemanticAliasResolver vector recall
+EmbeddingService for alias recall
+semantic_aliases.embedding_blob
+semantic_aliases.embedding_synced_at
+DataSource.enable_embedding_recall
+POST /semantic/aliases/sync-embeddings
+GET /semantic/aliases/sync-status
+embedding stale detection
+embedding cache / alias_matrix
+```
 
-1. Table metadata update rebuilds that table search docs.
-2. Column metadata update rebuilds parent table search docs.
-3. Add tests for manual description searchability.
+如果短期不做破坏性 DB migration，则处理方式：
 
-### Phase 5 — Alias Embedding Isolation
+```text
+1. 前端不展示 embedding 开关。
+2. API 不再暴露 sync embeddings 入口。
+3. Agent / SchemaLinker 不依赖 embedding recall。
+4. 测试移除 vector recall / sync embeddings 相关用例。
+5. 代码中保留字段不使用，等后续 migration 统一删除。
+```
 
-1. Keep `semantic_aliases` separate from schema search docs.
-2. Sync embeddings only through semantic alias API.
-3. Invalidate resolver cache after embedding sync.
+后续彻底清理 migration 可删除：
 
-## 10. Required Tests
+```text
+semantic_aliases.embedding_blob
+semantic_aliases.embedding_synced_at
+data_sources.enable_embedding_recall
+```
 
-Minimum regression coverage:
+### 3.3 Remove Semantic Alias as Main Product Path
 
-1. `sync_schema_catalog(ai_enrich=False)` creates / updates `schema_tables` and `schema_columns` without LLM config.
-2. After schema sync without AI key, `schema_search_docs` contains table and column docs.
-3. `db.search` finds a table by table name without AI enrich.
-4. `db.search` finds a column by column comment without AI enrich.
-5. AI enrich failure does not delete existing `schema_search_docs`.
-6. AI enrich success updates `schema_tables` / `schema_columns` AI fields and rebuilds affected search docs.
-7. Manual table description update makes the new description searchable.
-8. Manual column description update makes the new description searchable.
-9. Adding `semantic_aliases` does not mutate schema search docs.
-10. Syncing alias embeddings only updates `embedding_blob` and `embedding_synced_at`.
+`semantic_aliases` 不再作为主产品能力推进。
 
-## 11. Summary
+删除 / 停止推进：
 
-The write model should be:
+```text
+semantic alias 管理 UI
+SemanticAliasResolver 作为 schema linking 的核心入口
+alias formula decompounding
+alias embedding recall
+alias sync embeddings
+```
+
+短期兼容策略：
+
+```text
+1. 不立刻 drop semantic_aliases 表。
+2. 不让新功能依赖 semantic_aliases。
+3. 如果现有代码读 semantic_aliases，可逐步改为只使用 schema_search_docs / schema_columns。
+4. 清理测试时，不再把 semantic_aliases 当主链路能力验证。
+```
+
+## 4. Target Architecture After Removal
+
+删除 metric rule 和 embedding 后，问数上下文构建应变成：
+
+```text
+User Question
+  -> schema_search_docs search
+  -> schema_tables / schema_columns lookup
+  -> SchemaContextBuilder render
+  -> LLM prompt
+  -> SQL generation
+```
+
+普通问题和业务词问题都走同一条 schema search 路径。
+
+例如用户问：
+
+```text
+今天售价最高的商品是什么？
+```
+
+后端应：
+
+```text
+1. 用 “售价 / 商品” 搜 schema_search_docs。
+2. 命中 products.price 或 orders.price 等字段。
+3. 读取字段所在表和字段增强信息。
+4. 构造 schema context。
+5. 发给 AI 生成 SQL。
+```
+
+不再尝试：
+
+```text
+1. 查 semantic_metrics。
+2. 展开 metric expression。
+3. 查 semantic_aliases。
+4. 做 embedding recall。
+```
+
+## 5. Required Backend Cleanup
+
+### 5.1 Schema Search Docs Must Become Reliable
+
+因为不做 metric rule 和 embedding，`schema_search_docs` 必须承担主要召回职责。
+
+要求：
+
+```text
+1. schema sync 成功后，即使没有 AI enrich，也要生成基础 schema_search_docs。
+2. AI enrich 成功后，重建对应 table 的 schema_search_docs。
+3. 手动更新 table / column metadata 后，重建对应 table 的 schema_search_docs。
+4. db.search fallback 不能只搜 name/comment，也要搜 AI 字段和 search docs。
+```
+
+### 5.2 AI Enrich Must Be Optional
+
+schema sync 默认不应被 AI enrich 阻塞。
+
+推荐行为：
+
+```text
+POST /datasources/{id}/sync
+  -> 只做 schema catalog sync
+  -> 生成基础 schema_search_docs
+  -> 返回
+
+POST /datasources/{id}/ai-enrich
+  -> 单独执行 AI enrich
+  -> 更新 schema_tables / schema_columns AI 字段
+  -> 重建 schema_search_docs
+```
+
+### 5.3 Remove Agent Dependency on Semantic Alias / Metric / Embedding
+
+Agent context 构建阶段应只依赖：
+
+```text
+schema_search_docs
+schema_tables
+schema_columns
+workspace selected tables, if any
+query history, if retained
+```
+
+不再依赖：
+
+```text
+semantic_aliases
+semantic_metrics
+semantic_dimensions
+embedding recall
+```
+
+## 6. Required Frontend Cleanup
+
+删除 / 不做以下入口：
+
+```text
+semantic metric rule 管理 UI
+semantic alias 管理 UI
+embedding recall 开关
+sync embeddings 按钮
+metric rule preview / resolve API 调用
+```
+
+保留 / 强化以下入口：
+
+```text
+schema 浏览
+表描述编辑
+字段描述编辑
+AI enrich 按钮
+schema sync 按钮
+schema search / table search
+```
+
+前端重点应该变成：
+
+```text
+1. 数据源同步 schema。
+2. 查看表字段。
+3. 编辑表 / 字段描述。
+4. 触发 AI 增强描述。
+5. 搜索表 / 字段。
+```
+
+## 7. Required Test Cleanup
+
+删除 / 停用测试：
+
+```text
+SemanticAliasResolver vector recall tests
+sync embeddings API tests
+semantic metric rule tests
+formula decompounding tests tied to alias
+Agent metric context tests
+```
+
+保留 / 新增测试：
+
+```text
+schema sync without AI key still creates schema_tables / schema_columns
+schema sync creates base schema_search_docs
+AI enrich updates schema_tables / schema_columns AI fields
+AI enrich rebuilds schema_search_docs
+manual table description update rebuilds schema_search_docs
+manual column description update rebuilds schema_search_docs
+db.search finds table by table name
+db.search finds column by column comment
+db.search finds column by ai_description / business_terms
+Agent context includes relevant schema docs without semantic_aliases / embedding
+```
+
+## 8. Migration Strategy
+
+### Phase 1 — Product Path Removal
+
+```text
+1. Delete docs for metric rule recall and embedding recall.
+2. Hide / remove frontend entry points if any.
+3. Stop adding new code that depends on semantic_aliases / semantic_metrics / embeddings.
+4. Update design docs to make schema_search_docs + AI enrich the retained path.
+```
+
+### Phase 2 — Runtime Path Removal
+
+```text
+1. Remove SemanticAliasResolver from SchemaLinker main path.
+2. Remove embedding recall branches.
+3. Remove sync embeddings API routes.
+4. Remove Agent semantic metric / alias context injection.
+5. Make db.search and schema_search_docs the primary schema recall mechanism.
+```
+
+### Phase 3 — Schema Cleanup
+
+Only after confirming no historical data must be preserved:
+
+```text
+1. Drop embedding columns.
+2. Drop enable_embedding_recall.
+3. Drop semantic_aliases if unused.
+4. Drop semantic_metrics / semantic_dimensions / workspace_table_scopes if unused.
+```
+
+This phase should be a separate migration with backup / rollback notes.
+
+## 9. Summary
+
+Current retained direction:
 
 ```text
 schema_tables / schema_columns = source of truth
-schema_search_docs = rebuildable search document index
-schema_search_fts = FTS engine index
-semantic_aliases = business alias and embedding recall rules
-query_history / agent_* = runtime history
+AI enrich = table / column description enhancement
+schema_search_docs = searchable schema document index
+schema_search_fts = FTS index for schema_search_docs
+Agent context = built from schema_search_docs + catalog only
 ```
 
-Do not write everything everywhere. Write by event, rebuild by table, and keep AI / embedding as optional offline enhancements instead of prerequisites for basic schema search.
+Current removed direction:
+
+```text
+semantic metric rule recall = not doing
+semantic alias as product path = not doing
+embedding recall = not doing
+```
+
+Focus now: make schema sync, AI descriptions, schema_search_docs, and db.search reliable before adding higher-level semantic rule systems.
