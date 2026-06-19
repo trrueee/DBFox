@@ -34,6 +34,12 @@ def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
     return BackupResponse.model_validate(record).model_dump(mode="json")
 
 
+def _restore_allow_fallback(req: RestoreConfirmRequest | None, query_allow_fallback: bool) -> bool:
+    if req is not None and "allow_fallback" in req.model_fields_set:
+        return bool(req.allow_fallback)
+    return query_allow_fallback
+
+
 # =========================================================================
 # 接口 1: 获取某个项目下的所有备份记录列表 (GET)
 # =========================================================================
@@ -147,6 +153,7 @@ def api_restore_backup(
     """Execute backup restore (high-risk overwrite)."""
     confirm_token = req.confirm_token if req else None
     confirm_text = req.confirm_text if req else None
+    effective_allow_fallback = _restore_allow_fallback(req, allow_fallback)
 
     # 1. 查找备份记录
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
@@ -164,7 +171,7 @@ def api_restore_backup(
     # 4. 🔒 双因子令牌验证
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
-        expected_details = {"backup_id": backup_id}
+        expected_details = {"backup_id": backup_id, "allow_fallback": effective_allow_fallback}
 
         if not confirm_token:
             token = confirmation_manager.create_confirmation(
@@ -193,7 +200,7 @@ def api_restore_backup(
 
     # 5. 二次确认通过，执行底层真实的恢复逻辑
     try:
-        res = execute_restore(db, backup_id, allow_fallback=allow_fallback)
+        res = execute_restore(db, backup_id, allow_fallback=effective_allow_fallback)
         db.commit()  # 物理恢复完成，更新本地备份记录的状态为已成功，并提交本地事务
         
         # 恢复完成后，在后台异步触发一次表结构元数据同步，使 DBFox 里的元数据与实际数据库保持一致

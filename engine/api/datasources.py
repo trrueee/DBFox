@@ -461,6 +461,7 @@ class DomainTagRuleSchema(BaseModel):
 @router.get("/datasources/{id}/domain-tags")
 def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     from engine.models import DomainTagRule
+    from engine.tools.db.observe import _RULES_CACHE
     rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
     if not rules:
         default_patterns = [
@@ -485,6 +486,7 @@ def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str
                 )
         try:
             db.commit()
+            _RULES_CACHE.pop(id, None)
         except Exception:
             db.rollback()
             logger.warning("Failed to persist default domain tags for datasource %s", id)
@@ -495,6 +497,7 @@ def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str
 @router.post("/datasources/{id}/domain-tags")
 def api_save_domain_tags(id: str, rules: list[DomainTagRuleSchema], db: Session = Depends(get_db)) -> dict[str, Any]:
     from engine.models import DomainTagRule
+    from engine.tools.db.observe import _RULES_CACHE
     try:
         db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).delete()
         for r in rules:
@@ -507,6 +510,7 @@ def api_save_domain_tags(id: str, rules: list[DomainTagRuleSchema], db: Session 
                 )
             )
         db.commit()
+        _RULES_CACHE.pop(id, None)
         return {"success": True, "message": "Domain tag rules saved successfully"}
     except Exception as exc:
         db.rollback()
