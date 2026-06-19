@@ -227,6 +227,111 @@ def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> No
     assert resp.json()["detail"]["code"] == "MYSQL_CLIENT_NOT_FOUND"
 
 
+def test_restore_body_allow_fallback_false_uses_strict_mode(client, db_session, monkeypatch) -> None:
+    runtime_dir = _runtime_dir("test_restore_body_strict")
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    def fake_dump(ds: DataSource, output_path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("-- MySQL dump\nCREATE TABLE users (id int);\n", encoding="utf-8")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump)
+
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    backup = resp.json()
+
+    from engine.backup import BackupError
+    def fake_restore_missing(ds: DataSource, sql_file_path: Path) -> None:
+        raise BackupError("mysql client command was not found. Please install MySQL client tools and ensure mysql is in PATH.")
+
+    monkeypatch.setattr("engine.backup._run_mysql_restore", fake_restore_missing)
+
+    resp = client.post(
+        f"/api/v1/backups/{backup['id']}/restore",
+        json={"allow_fallback": False},
+        headers=_headers(),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "MYSQL_CLIENT_NOT_FOUND"
+
+
+def test_restore_confirmation_binds_allow_fallback(client, db_session, monkeypatch) -> None:
+    runtime_dir = _runtime_dir("test_restore_confirmation_details")
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    def fake_dump(ds: DataSource, output_path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("-- MySQL dump\nCREATE TABLE users (id int);\n", encoding="utf-8")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump)
+
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    backup = resp.json()
+
+    class FakeConfirmationManager:
+        def __init__(self) -> None:
+            self.created_details: dict[str, object] | None = None
+
+        def create_confirmation(self, datasource_id: str, action: str, details: dict[str, object], expected_confirm_text: str) -> str:
+            self.created_details = details
+            return "restore-token"
+
+        def validate_and_consume(
+            self,
+            token: str,
+            confirm_text: str,
+            *,
+            expected_action: str,
+            expected_datasource_id: str,
+            expected_details: dict[str, object],
+        ) -> tuple[bool, str]:
+            assert token == "restore-token"
+            assert confirm_text == datasource.name
+            assert expected_action == "restore_backup"
+            assert expected_datasource_id == datasource.id
+            if self.created_details != expected_details:
+                return False, "details mismatch"
+            return True, ""
+
+    manager = FakeConfirmationManager()
+    monkeypatch.setattr("engine.policy.confirmation_bypass_enabled", lambda: False)
+    monkeypatch.setattr("engine.policy.confirmation_manager", manager)
+
+    resp = client.post(
+        f"/api/v1/backups/{backup['id']}/restore",
+        json={"allow_fallback": False},
+        headers=_headers(),
+    )
+    assert resp.status_code == 200
+    confirmation = resp.json()
+    assert confirmation["requires_confirmation"] is True
+    assert manager.created_details == {"backup_id": backup["id"], "allow_fallback": False}
+
+    resp = client.post(
+        f"/api/v1/backups/{backup['id']}/restore",
+        json={
+            "confirm_token": confirmation["confirm_token"],
+            "confirm_text": datasource.name,
+            "allow_fallback": True,
+        },
+        headers=_headers(),
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "CONFIRMATION_FAILED"
+
+
 def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_restore_env_mismatch")
     monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))

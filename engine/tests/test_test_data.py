@@ -64,3 +64,58 @@ def test_generate_test_data_success(client, db_session, test_datasource) -> None
     exec_data = exec_resp.json()
     assert exec_data["success"] is True
     assert len(exec_data["rows"]) >= 1
+
+
+def test_generate_test_data_confirmation_binds_language(client, test_datasource, monkeypatch) -> None:
+    class FakeConfirmationManager:
+        def __init__(self) -> None:
+            self.created_details: dict[str, object] | None = None
+
+        def create_confirmation(self, datasource_id: str, action: str, details: dict[str, object], expected_confirm_text: str) -> str:
+            self.created_details = details
+            return "test-data-token"
+
+        def validate_and_consume(
+            self,
+            token: str,
+            confirm_text: str,
+            *,
+            expected_action: str,
+            expected_datasource_id: str,
+            expected_details: dict[str, object],
+        ) -> tuple[bool, str]:
+            assert token == "test-data-token"
+            assert confirm_text == test_datasource.name
+            assert expected_action == "generate_test_data"
+            assert expected_datasource_id == test_datasource.id
+            if self.created_details != expected_details:
+                return False, "details mismatch"
+            return True, ""
+
+    manager = FakeConfirmationManager()
+    monkeypatch.setattr("engine.policy.confirmation_bypass_enabled", lambda: False)
+    monkeypatch.setattr("engine.policy.confirmation_manager", manager)
+
+    resp = client.post("/api/v1/schema/generate-test-data", json={
+        "datasource_id": test_datasource.id,
+        "table_name": "users",
+        "row_count": 5,
+        "language": "zh",
+    }, headers=_headers())
+
+    assert resp.status_code == 200
+    confirmation = resp.json()
+    assert confirmation["requires_confirmation"] is True
+    assert manager.created_details == {"table_name": "users", "row_count": 5, "language": "zh"}
+
+    resp = client.post("/api/v1/schema/generate-test-data", json={
+        "datasource_id": test_datasource.id,
+        "table_name": "users",
+        "row_count": 5,
+        "language": "en",
+        "confirm_token": confirmation["confirm_token"],
+        "confirm_text": test_datasource.name,
+    }, headers=_headers())
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "CONFIRMATION_FAILED"
