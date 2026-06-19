@@ -45,17 +45,48 @@ def _fts_search(db: Session, datasource_id: str, query: str, limit: int) -> list
 
     exact_parts = [f'"{t}"' for t in valid_tokens if len(t) >= 2]
     token_parts = [t for t in valid_tokens if len(t) >= 2]
+    # For CJK text, FTS5's unicode61 tokenizer treats each character as a
+    # token, but jieba segments into words. Add individual CJK chars so the
+    # MATCH query actually finds FTS5-indexed content.
+    cjk_chars: list[str] = []
+    for t in valid_tokens:
+        cjk_chars.extend(re.findall(r"[一-鿿]", t))
+    token_parts.extend(cjk_chars)
     fts_query = " OR ".join(exact_parts + token_parts)
 
-    sql = sa_text("""
-        SELECT d.*, fts.rank
-        FROM schema_search_fts fts
-        JOIN schema_search_docs d ON d.id = fts.rowid
-        WHERE fts MATCH :q AND d.datasource_id = :ds_id
-        ORDER BY fts.rank
-        LIMIT :lim
-    """)
-    rows = db.execute(sql, {"q": fts_query, "ds_id": datasource_id, "lim": limit * 3}).fetchall()
+    # Use raw DBAPI connection for FTS5 MATCH with CJK characters to avoid
+    # SQLAlchemy sa_text parameter encoding issues.
+    try:
+        raw_conn = db.connection().connection
+        import sqlite3 as _sqlite3
+        if not isinstance(raw_conn, _sqlite3.Connection):
+            raw_conn = getattr(raw_conn, "driver_connection", None) or getattr(raw_conn, "connection", None)
+        if raw_conn is not None:
+            safe_q = fts_query.replace("'", "''")
+            raw_sql = (
+                f"SELECT d.*, fts.rank FROM schema_search_fts fts "
+                f"JOIN schema_search_docs d ON d.id = fts.rowid "
+                f"WHERE schema_search_fts MATCH '{safe_q}' "
+                f"AND d.datasource_id = ? "
+                f"ORDER BY fts.rank LIMIT ?"
+            )
+            cursor = raw_conn.execute(raw_sql, (datasource_id, limit * 3))
+            rows_raw = cursor.fetchall()
+            cols = [d[0] for d in cursor.description]
+            rows = [dict(zip(cols, r)) for r in rows_raw]
+            # Wrap as objects with attribute access for _row_to_search_result
+            _Row = type("_Row", (), {})
+            wrapped_rows = []
+            for r in rows:
+                obj = _Row()
+                for k, v in r.items():
+                    setattr(obj, k, v)
+                wrapped_rows.append(obj)
+            rows = wrapped_rows
+        else:
+            rows = []
+    except Exception:
+        rows = []
 
     results: list[dict[str, Any]] = []
     seen_tables: set[str] = set()

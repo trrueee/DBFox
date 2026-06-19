@@ -30,12 +30,14 @@ from fastapi.responses import JSONResponse
 
 from engine.api import router
 from engine.db import init_db
+from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import DBFoxError, NotFoundError
 from engine.schemas import ErrorResponse
 from engine.runtime_paths import private_runtime_file, write_private_text
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
+DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
 
 # 计算当前 main.py 所在的 engine 目录以及项目根目录
 ENGINE_DIR = Path(__file__).resolve().parent

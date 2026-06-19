@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
@@ -58,6 +59,11 @@ def _schema_table_to_dict(table: SchemaTable) -> dict[str, Any]:
         "row_count_estimate": table.row_count_estimate,
         "columns_count": len(table.columns),
         "module_tag": table.table_schema or None,
+        "ai_description": table.ai_description or "",
+        "semantic_tags": table.semantic_tags or "",
+        "business_terms": table.business_terms or "",
+        "ai_confidence": table.ai_confidence,
+        "subject_area": table.subject_area or "",
     }
 
 
@@ -396,10 +402,29 @@ def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, 
         raise
 
 
+class SchemaSyncRequest(BaseModel):
+    ai_enrich: bool = True
+    api_key: str | None = None
+    api_base: str | None = None
+    model_name: str | None = None
+
+
 @router.post("/datasources/{id}/sync")
-def api_sync_schema(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+def api_sync_schema(
+    id: str,
+    req: SchemaSyncRequest | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
     try:
-        return sync_schema(db, id)
+        payload = req or SchemaSyncRequest()
+        return sync_schema(
+            db,
+            id,
+            ai_enrich=payload.ai_enrich,
+            ai_api_key=payload.api_key,
+            ai_api_base=payload.api_base,
+            ai_model_name=payload.model_name,
+        )
     except ValueError as exc:
         raise DBFoxError(code="SYNC_FAILED", message=str(exc))
 
@@ -437,6 +462,10 @@ def api_list_columns(table_id: str, db: Session = Depends(get_db)) -> list[dict[
             "is_foreign_key": bool(column.is_foreign_key),
             "foreign_table_id": column.foreign_table_id,
             "foreign_column_id": column.foreign_column_id,
+            "ai_description": column.ai_description or "",
+            "semantic_tags": column.semantic_tags or "",
+            "business_terms": column.business_terms or "",
+            "ai_confidence": column.ai_confidence,
         }
         for column in table.columns
     ]
@@ -450,8 +479,6 @@ def api_get_er_diagram(datasource_id: str = Query(...), db: Session = Depends(ge
         logger.exception("ER diagram build failed")
         raise
 
-
-from pydantic import BaseModel
 
 class DomainTagRuleSchema(BaseModel):
     pattern: str
@@ -516,3 +543,93 @@ def api_save_domain_tags(id: str, rules: list[DomainTagRuleSchema], db: Session 
         db.rollback()
         from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(status_code=400, detail=sanitize_error_message(str(exc)))
+
+
+class TableMetadataUpdateRequest(BaseModel):
+    ai_description: str | None = None
+    semantic_tags: str | None = None
+    business_terms: str | None = None
+    subject_area: str | None = None
+    ai_confidence: float | None = None
+
+@router.put("/schema/tables/{table_id}")
+def api_update_table_metadata(
+    table_id: str,
+    req: TableMetadataUpdateRequest,
+    db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    table = db.query(SchemaTable).filter(SchemaTable.id == table_id).first()
+    if not table:
+        raise NotFoundError("表结构记录不存在")
+    
+    if req.ai_description is not None:
+        table.ai_description = req.ai_description
+    if req.semantic_tags is not None:
+        table.semantic_tags = req.semantic_tags
+    if req.business_terms is not None:
+        table.business_terms = req.business_terms
+    if req.subject_area is not None:
+        table.subject_area = req.subject_area
+    if req.ai_confidence is not None:
+        table.ai_confidence = req.ai_confidence
+
+    try:
+        db.commit()
+        db.refresh(table)
+        return {"success": True, "table": _schema_table_to_dict(table)}
+    except Exception as exc:
+        db.rollback()
+        raise DBFoxError(code="UPDATE_FAILED", message=str(exc))
+
+
+class ColumnMetadataUpdateRequest(BaseModel):
+    ai_description: str | None = None
+    semantic_tags: str | None = None
+    business_terms: str | None = None
+    ai_confidence: float | None = None
+
+@router.put("/schema/columns/{column_id}")
+def api_update_column_metadata(
+    column_id: str,
+    req: ColumnMetadataUpdateRequest,
+    db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    column = db.query(SchemaColumn).filter(SchemaColumn.id == column_id).first()
+    if not column:
+        raise NotFoundError("字段结构记录不存在")
+    
+    if req.ai_description is not None:
+        column.ai_description = req.ai_description
+    if req.semantic_tags is not None:
+        column.semantic_tags = req.semantic_tags
+    if req.business_terms is not None:
+        column.business_terms = req.business_terms
+    if req.ai_confidence is not None:
+        column.ai_confidence = req.ai_confidence
+
+    try:
+        db.commit()
+        db.refresh(column)
+        return {
+            "success": True,
+            "column": {
+                "id": column.id,
+                "column_name": column.column_name,
+                "data_type": column.data_type,
+                "column_type": column.column_type,
+                "is_nullable": bool(column.is_nullable),
+                "column_default": column.column_default or "",
+                "column_comment": column.column_comment or "",
+                "is_primary_key": bool(column.is_primary_key),
+                "is_foreign_key": bool(column.is_foreign_key),
+                "foreign_table_id": column.foreign_table_id,
+                "foreign_column_id": column.foreign_column_id,
+                "ai_description": column.ai_description or "",
+                "semantic_tags": column.semantic_tags or "",
+                "business_terms": column.business_terms or "",
+                "ai_confidence": column.ai_confidence,
+            }
+        }
+    except Exception as exc:
+        db.rollback()
+        raise DBFoxError(code="UPDATE_FAILED", message=str(exc))

@@ -13,7 +13,8 @@ export type WorkspaceTabType =
   | "conversation-history"
   | "llm-config"
   | "datasource-settings"
-  | "agent-eval";
+  | "agent-eval"
+  | "diagnostics";
 
 export type AgentApprovalInfo = {
   runId: string;

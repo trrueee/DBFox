@@ -12,6 +12,11 @@ export interface EngineSchemaTable {
   row_count_estimate?: number | null;
   columns_count?: number | null;
   module_tag?: string | null;
+  ai_description?: string | null;
+  semantic_tags?: string | null;
+  business_terms?: string | null;
+  ai_confidence?: number | null;
+  subject_area?: string | null;
 }
 
 export interface EngineColumn {
@@ -26,6 +31,10 @@ export interface EngineColumn {
   is_foreign_key: boolean;
   foreign_table_id?: string | null;
   foreign_column_id?: string | null;
+  ai_description?: string | null;
+  semantic_tags?: string | null;
+  business_terms?: string | null;
+  ai_confidence?: number | null;
 }
 
 export interface EngineSqlResult {

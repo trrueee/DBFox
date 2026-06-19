@@ -12,6 +12,7 @@ import TitleBar from "./components/TitleBar";
 import { useSidebarLayout } from "./features/appShell/useSidebarLayout";
 import { useAppCommands } from "./features/appShell/useAppCommands";
 import { WorkspaceRouter } from "./features/appShell/WorkspaceRouter";
+import { installClientErrorLogging } from "./lib/diagnostics/clientLog";
 import { useDatasourceStore } from "./stores/datasourceStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 
@@ -25,6 +26,7 @@ export default function App() {
 
   // ── Store initialization (mount once) ──
   useEffect(() => {
+    installClientErrorLogging();
     useDatasourceStore.getState().loadDatasources();
     useWorkspaceStore.getState().initConversations();
   }, []);
@@ -114,6 +116,7 @@ export default function App() {
     openConnectionManagerTab: useWorkspaceStore.getState().openConnectionManagerTab,
     openNewConnectionTab,
     openAgentEvalTab: useWorkspaceStore.getState().openAgentEvalTab,
+    openDiagnosticsTab: useWorkspaceStore.getState().openDiagnosticsTab,
     openTableTab,
     setTabs,
     setActiveTabId: useWorkspaceStore.getState().setActiveTabId,

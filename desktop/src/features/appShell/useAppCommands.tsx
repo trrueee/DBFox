@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical } from "lucide-react";
+import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical, Bug } from "lucide-react";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable, EngineColumn } from "../engine/engineApi";
 
@@ -13,6 +13,7 @@ interface UseAppCommandsProps {
   openConnectionManagerTab: () => void;
   openNewConnectionTab: () => void;
   openAgentEvalTab: () => void;
+  openDiagnosticsTab: () => void;
   openTableTab: (tableName: string) => void;
   setTabs: React.Dispatch<React.SetStateAction<WorkspaceTab[]>>;
   setActiveTabId: (id: string) => void;
@@ -26,6 +27,7 @@ export function useAppCommands({
   openConnectionManagerTab,
   openNewConnectionTab,
   openAgentEvalTab,
+  openDiagnosticsTab,
   openTableTab,
   setTabs,
   setActiveTabId,
@@ -82,6 +84,13 @@ export function useAppCommands({
         icon: <FlaskConical size={13} className="text-amber-500" />,
         action: () => openAgentEvalTab(),
       },
+      {
+        id: "diagnostics-logs",
+        name: "打开诊断日志",
+        category: "开发与诊断",
+        icon: <Bug size={13} className="text-rose-500" />,
+        action: () => openDiagnosticsTab(),
+      },
     ];
 
     tables.forEach((table) => {
@@ -115,6 +124,7 @@ export function useAppCommands({
     openConnectionManagerTab,
     openNewConnectionTab,
     openAgentEvalTab,
+    openDiagnosticsTab,
     openTableTab,
     setTabs,
     setActiveTabId,

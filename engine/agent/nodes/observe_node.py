@@ -140,8 +140,16 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
     last_tool_results = state.get("last_tool_results") or []
 
     state_updates: dict[str, Any] = {}
-    import copy
-    temp_state = copy.deepcopy(state)
+    # Shallow-copy each top-level key individually to avoid RecursionError
+    # from deepcopy of deeply nested LangChain messages / artifacts.
+    temp_state: dict[str, Any] = {}
+    for k, v in state.items():
+        if isinstance(v, list):
+            temp_state[k] = list(v)
+        elif isinstance(v, dict):
+            temp_state[k] = dict(v)
+        else:
+            temp_state[k] = v
 
     new_artifacts_dicts = []
 

@@ -28,7 +28,7 @@ def _lcut(text: str) -> list[str]:
     """jieba lcut polyfill — works with both jieba and jieba3k."""
     import jieba
     if hasattr(jieba, "lcut"):
-        return _lcut(text)
+        return list(jieba.lcut(text))
     return list(jieba.cut(text))
 
 
@@ -164,6 +164,8 @@ def enrich_tables_batch(
     *,
     provider: str = "aliyun",
     model: str = "qwen-plus",
+    api_key: str | None = None,
+    api_base: str | None = None,
     max_retries: int = 3,
 ) -> dict[str, Any]:
     """Call LLM to generate AI metadata for a batch of tables.
@@ -182,7 +184,13 @@ def enrich_tables_batch(
 
     for attempt in range(max_retries):
         try:
-            result = _call_llm(prompt, provider=provider, model=model)
+            result = _call_llm(
+                prompt,
+                provider=provider,
+                model=model,
+                api_key=api_key,
+                api_base=api_base,
+            )
             parsed = json.loads(result) if isinstance(result, str) else result
             _validate_enrich_result(parsed, [t["name"] for t in tables_context])
             return parsed
@@ -226,21 +234,54 @@ Return JSON:
 {{"tables": [{{"name": "...", "ai_description": "...", ...}}]}}"""
 
 
-def _call_llm(prompt: str, *, provider: str, model: str) -> str:
+def _call_llm(
+    prompt: str,
+    *,
+    provider: str,
+    model: str,
+    api_key: str | None = None,
+    api_base: str | None = None,
+) -> str:
     """Call the configured LLM provider. Extend this for additional providers."""
     if provider == "aliyun":
-        return _call_aliyun_llm(prompt, model=model)
+        return _call_aliyun_llm(prompt, model=model, api_key=api_key, api_base=api_base)
     raise ValueError(f"Unknown LLM provider: {provider}")
 
 
-def _call_aliyun_llm(prompt: str, *, model: str) -> str:
-    """Call Aliyun (Qwen) via OpenAI-compatible API."""
+def _call_aliyun_llm(
+    prompt: str,
+    *,
+    model: str,
+    api_key: str | None = None,
+    api_base: str | None = None,
+) -> str:
+    """Call Aliyun (Qwen) via OpenAI-compatible API.
+
+    API key resolution mirrors engine.llm.factory.get_chat_model so that
+    the same .env vars work for both Agent conversations and AI enrichment.
+    """
     import os
     from openai import OpenAI
 
+    # ── API key (mirrors agent.api._check_llm_credentials) ──
+    resolved_api_key = (
+        api_key
+        or os.getenv("OPENAI_API_KEY", "")
+    ).strip()
+
+    # ── API base ──
+    resolved_api_base = (
+        api_base
+        or os.getenv("OPENAI_API_BASE")
+        or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    ).strip()
+
+    if not resolved_api_key:
+        raise RuntimeError("请先在设置中配置 LLM API Key。")
+
     client = OpenAI(
-        api_key=os.getenv("DASHSCOPE_API_KEY", ""),
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        api_key=resolved_api_key,
+        base_url=resolved_api_base,
     )
     response = client.chat.completions.create(
         model=model,

@@ -88,7 +88,7 @@ describe("agentTimeline", () => {
     });
   });
 
-  it("hydrates final response steps with input, output, and answer", () => {
+  it("hydrates final response steps without duplicating the final answer in the timeline", () => {
     const response: AgentRunResponse = {
       run_id: "run-1",
       session_id: "session-1",
@@ -115,10 +115,28 @@ describe("agentTimeline", () => {
 
     const timeline = timelineFromFinalResponse(createInitialAgentTimeline(response.question), response);
 
-    expect(timeline.map((item) => item.id)).toEqual(["user-request", "tool-db.inspect", "agent-answer"]);
+    expect(timeline.map((item) => item.id)).toEqual(["user-request", "tool-db.inspect"]);
     expect(timeline[1].input).toEqual({ target: "account_behaviors" });
     expect(timeline[1].output).toEqual({ name: "account_behaviors", columns: [{ name: "action_type" }] });
-    expect(timeline[2].content).toBe("account_behaviors: 6 column(s)");
+  });
+
+  it("does not append answer.completed events as thinking rows", () => {
+    let timeline = createInitialAgentTimeline("hello");
+
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 2,
+      type: "agent.answer.completed",
+      answer: {
+        answer: "你好！有什么我可以帮你的吗？",
+        key_findings: [],
+        evidence: [],
+        caveats: [],
+        recommendations: [],
+        follow_up_questions: [],
+      },
+    }));
+
+    expect(timeline.map((item) => item.id)).toEqual(["user-request"]);
   });
 
   it("hydrates final mapped steps into existing live tool nodes", () => {

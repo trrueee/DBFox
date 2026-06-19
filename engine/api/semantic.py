@@ -86,7 +86,15 @@ def _check_table_belongs(db: Session, table_id: str, datasource_id: str) -> Sche
 @router.get("/semantic/aliases")
 def api_list_aliases(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> list[dict[str, Any]]:
     _check_datasource(db, datasource_id)
-    items = db.query(SemanticAlias).filter(SemanticAlias.data_source_id == datasource_id).order_by(SemanticAlias.created_at.desc()).all()
+    items = (
+        db.query(SemanticAlias)
+        .filter(
+            SemanticAlias.data_source_id == datasource_id,
+            SemanticAlias.target_type != "sensitive"
+        )
+        .order_by(SemanticAlias.created_at.desc())
+        .all()
+    )
     return [_alias_to_dict(item) for item in items]
 
 
@@ -357,7 +365,14 @@ def api_sync_embeddings(
 @router.get("/semantic/aliases/sync-status")
 def api_sync_status(datasource_id: str = Query(...), db: Session = Depends(get_db)) -> dict[str, Any]:
     _check_datasource(db, datasource_id)
-    aliases = db.query(SemanticAlias).filter(SemanticAlias.data_source_id == datasource_id).all()
+    aliases = (
+        db.query(SemanticAlias)
+        .filter(
+            SemanticAlias.data_source_id == datasource_id,
+            SemanticAlias.target_type != "sensitive"
+        )
+        .all()
+    )
     
     total_count = len(aliases)
     synced_count = 0

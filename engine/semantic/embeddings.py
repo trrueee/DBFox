@@ -19,8 +19,15 @@ class EmbeddingService:
     THRESHOLD = 0.75
 
     def __init__(self, api_key: str | None = None, api_base: str | None = None, model_name: str | None = None) -> None:
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY", "")
-        self.base_url = api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.api_key = (
+            api_key
+            or os.getenv("OPENAI_API_KEY", "")
+        )
+        self.base_url = (
+            api_base
+            or os.getenv("OPENAI_API_BASE")
+            or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
         self.model_name = self._resolve_embedding_model(
             model_name or os.getenv("DASHSCOPE_EMBEDDING_MODEL"), self.base_url
         )
@@ -105,7 +112,14 @@ class EmbeddingService:
 
     def sync_aliases(self, db: Session, datasource_id: str) -> dict:
         """Batch generate embeddings for all semantic aliases in a data source and save to DB."""
-        aliases = db.query(SemanticAlias).filter(SemanticAlias.data_source_id == datasource_id).all()
+        aliases = (
+            db.query(SemanticAlias)
+            .filter(
+                SemanticAlias.data_source_id == datasource_id,
+                SemanticAlias.target_type != "sensitive"
+            )
+            .all()
+        )
         if not aliases:
             return {"success": True, "synced_count": 0, "message": "该数据源下没有配置别名规则。"}
 

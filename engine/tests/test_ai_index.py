@@ -32,6 +32,13 @@ def test_segment_for_fts_chinese():
     assert " " in result or len(result) > 5
 
 
+def test_segment_for_fts_uses_jieba_lcut_without_recursing():
+    result = segment_for_fts("小红书工具")
+
+    assert result
+    assert "小红书" in result or "工具" in result
+
+
 def test_segment_for_fts_preserves_english():
     result = segment_for_fts("xhs_feature_usage_daily")
     assert result == "xhs_feature_usage_daily"

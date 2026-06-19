@@ -20,8 +20,9 @@ from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTa
 
 logger = logging.getLogger("dbfox.ai_enrich")
 
-AI_LLM_TABLE_BATCH = 50
-AI_LLM_BATCH_INTERVAL_MS = 200
+AI_LLM_TABLE_BATCH = 5
+AI_LLM_BATCH_INTERVAL_MS = 300
+AI_LLM_MAX_TABLES_PER_RUN = 30
 
 
 def ai_enrich_catalog(
@@ -29,6 +30,9 @@ def ai_enrich_catalog(
     datasource_id: str,
     *,
     table_batch: int = AI_LLM_TABLE_BATCH,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Run AI enrichment on all changed tables for a datasource."""
     tables = (
@@ -48,20 +52,38 @@ def ai_enrich_catalog(
     if not changed:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "no structural changes"}
 
-    # 2. Batch LLM enrichment
+    # 2. Cap total tables per run to avoid overwhelming the LLM
+    total_changed = len(changed)
+    capped = False
+    if total_changed > AI_LLM_MAX_TABLES_PER_RUN:
+        changed = changed[:AI_LLM_MAX_TABLES_PER_RUN]
+        capped = True
+        logger.warning(
+            "AI enrich: capping to %d/%d changed tables for datasource %s",
+            AI_LLM_MAX_TABLES_PER_RUN, total_changed, datasource_id,
+        )
+
+    # 3. Batch LLM enrichment
     enriched_count = 0
+    errors: list[str] = []
     for i in range(0, len(changed), table_batch):
         batch = changed[i : i + table_batch]
         context = _build_table_context(db, batch)
 
         try:
-            ai_result = enrich_tables_batch(context)
+            ai_result = enrich_tables_batch(
+                context,
+                api_key=api_key,
+                api_base=api_base,
+                model=model_name or "qwen-plus",
+            )
             _write_ai_metadata(db, batch, ai_result)
             _rebuild_search_docs(db, datasource_id, batch, ai_result)
             _update_schema_hashes(batch)
             enriched_count += len(batch)
         except Exception as exc:
             logger.exception("AI enrich batch %d failed: %s", i // table_batch, exc)
+            errors.append(str(exc))
             db.rollback()
             continue
 
@@ -72,7 +94,24 @@ def ai_enrich_catalog(
     _clean_orphan_search_docs(db, datasource_id)
 
     db.commit()
-    return {"ai_enriched": True, "enriched_count": enriched_count, "reason": ""}
+    if errors and enriched_count == 0:
+        return {
+            "ai_enriched": False,
+            "enriched_count": 0,
+            "reason": "; ".join(errors),
+            "errors": errors,
+        }
+    result: dict[str, Any] = {
+        "ai_enriched": enriched_count > 0,
+        "enriched_count": enriched_count,
+        "reason": "; ".join(errors),
+        "errors": errors,
+    }
+    if capped:
+        result["capped"] = True
+        result["total_changed"] = total_changed
+        result["max_tables_per_run"] = AI_LLM_MAX_TABLES_PER_RUN
+    return result
 
 
 def _build_table_context(db: OrmSession, tables: list[SchemaTable]) -> list[dict[str, Any]]:

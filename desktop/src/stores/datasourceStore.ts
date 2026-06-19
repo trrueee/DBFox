@@ -6,7 +6,7 @@ import {
   type EngineSchemaTable,
 } from "../features/engine/engineApi";
 import { datasourcesApi } from "../lib/api/datasources";
-import type { DataSource, DataSourceCreateParams, DataSourceHealthResult, DataSourceUpdateParams, DeleteConfirm } from "../lib/api/types";
+import type { DataSource, DataSourceCreateParams, DataSourceHealthResult, DataSourceUpdateParams, DeleteConfirm, SchemaSyncOptions } from "../lib/api/types";
 
 interface DatasourceState {
   datasources: DataSource[];
@@ -25,7 +25,7 @@ interface DatasourceActions {
   createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
-  syncSchema: (id: string) => Promise<unknown>;
+  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<unknown>;
   checkHealth: (id: string) => Promise<DataSourceHealthResult>;
 }
 
@@ -139,8 +139,8 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
     return result;
   },
 
-  syncSchema: async (id) => {
-    const result = await datasourcesApi.syncSchema(id);
+  syncSchema: async (id, options) => {
+    const result = await datasourcesApi.syncSchema(id, options);
     await get().loadDatasources();
     if (id === get().activeDatasourceId) {
       set({ loadingSchema: true });

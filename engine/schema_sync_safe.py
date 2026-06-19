@@ -10,7 +10,7 @@ from engine.models import DataSource
 from engine.schema_sync import sync_schema as _legacy_sync_schema
 
 
-def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
+def sync_schema(db: Session, datasource_id: str, **kwargs: Any) -> dict[str, Any]:
     """Safer schema sync entry point used by the API.
 
     - SQLite: refuses missing files so sync cannot create an empty database.
@@ -27,6 +27,6 @@ def sync_schema(db: Session, datasource_id: str) -> dict[str, Any]:
             raise DataSourceConnectionError(
                 f"SQLite database file does not exist: {path}"
             )
-        return _legacy_sync_schema(db, datasource_id)
+        return _legacy_sync_schema(db, datasource_id, **kwargs)
 
-    return _legacy_sync_schema(db, datasource_id)
+    return _legacy_sync_schema(db, datasource_id, **kwargs)

@@ -7,6 +7,7 @@ import { SqlConsoleWorkspace, type ConsoleEntry } from "../workspace/SqlConsoleW
 import { MultiTableWorkspace } from "../workspace/MultiTableWorkspace";
 import { AgentEvalPage } from "../../pages/AgentEvalPage";
 import { DataSourcesPage } from "../../pages/DataSourcesPage";
+import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
 import { QueryResultWorkspace } from "../workspace/QueryResultWorkspace";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
@@ -42,6 +43,9 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
   }
   if (activeTab.type === "agent-eval") {
     return <AgentEvalTab showToast={showToast} />;
+  }
+  if (activeTab.type === "diagnostics") {
+    return <DiagnosticsTab showToast={showToast} />;
   }
   if (activeTab.type === "datasource-settings") {
     return <DatasourceSettingsTab activeTab={activeTab} showToast={showToast} />;
@@ -154,6 +158,14 @@ function AgentEvalTab({ showToast }: { showToast: WorkspaceRouterProps["showToas
   const datasources = useDatasourceStore((s) => s.datasources);
   const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
   return <AgentEvalPage datasources={datasources} activeDatasourceId={activeDatasourceId} onToast={showToast} />;
+}
+
+function DiagnosticsTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
+  return (
+    <div className="hifi-settings-tab-frame">
+      <DiagnosticsPage onToast={showToast} />
+    </div>
+  );
 }
 
 // ── DatasourceSettings tab ──
