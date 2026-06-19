@@ -50,15 +50,20 @@ def test_domain_tag_rules_lifecycle(db_session, client):
     db_session.add(table)
     db_session.commit()
 
-    # 2. Verify _table_tags dynamically bootstraps default rules and matches "user"
+    # 2. Bootstrap default rules via the API endpoint (replaces old auto-bootstrap in _table_tags)
+    response = client.get("/api/v1/datasources/ds-tags-test/domain-tags", headers=_headers())
+    assert response.status_code == 200
+    assert len(response.json()) > 0
+
+    # 3. Verify _table_tags reads the bootstrapped rules and matches "user"
     tags = _table_tags(db_session, table)
     assert "user" in tags
 
-    # Verify rules were bootstrapped in DB
+    # Verify rules were persisted in DB
     db_rules = db_session.query(DomainTagRule).filter(DomainTagRule.data_source_id == "ds-tags-test").all()
     assert len(db_rules) > 0
 
-    # 3. Test API GET /datasources/{id}/domain-tags
+    # 4. Test API GET /datasources/{id}/domain-tags again — should return the bootstrapped rules
     response = client.get("/api/v1/datasources/ds-tags-test/domain-tags", headers=_headers())
     assert response.status_code == 200
     res_data = response.json()
@@ -68,7 +73,7 @@ def test_domain_tag_rules_lifecycle(db_session, client):
     assert user_rule["tag"] == "user"
     assert user_rule["priority"] == 10
 
-    # 4. Test API POST /datasources/{id}/domain-tags to custom define rules
+    # 5. Test API POST /datasources/{id}/domain-tags to custom define rules
     # We define a custom tag "vip" with pattern "accounts" and high priority (100)
     custom_rules = [
         {"pattern": "accounts", "tag": "vip", "priority": 100},
@@ -78,7 +83,7 @@ def test_domain_tag_rules_lifecycle(db_session, client):
     assert post_res.status_code == 200
     assert post_res.json() == {"success": True, "message": "Domain tag rules saved successfully"}
 
-    # 5. Clear session and reload from DB to evaluate new tags
+    # 6. Clear session and reload from DB to evaluate new tags
     db_session.expire_all()
     new_tags = _table_tags(db_session, table)
     # Since "accounts" matches "my_user_accounts_table" with priority 100, "vip" should be first

@@ -61,8 +61,6 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
         if output.get("database_map") is not None:
             result["database_map"] = output.get("database_map")
         return result
-    if tool_name == "semantic.resolve":
-        return {"semantic_resolution": output}
     if tool_name == "db.observe":
         return {"database_map": output}
     if tool_name == "db.search":

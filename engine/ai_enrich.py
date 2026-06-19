@@ -16,7 +16,7 @@ from engine.ai_index import (
     compute_schema_hash,
     enrich_tables_batch,
 )
-from engine.models import SchemaColumn, SchemaSearchDoc, SchemaTable
+from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
 
@@ -135,6 +135,50 @@ def _write_ai_metadata(db: OrmSession, tables: list[SchemaTable], ai_result: dic
             col.is_pii = False
             col.ai_confidence = float(ac.get("ai_confidence", 0))
             col.ai_enriched_at = now
+
+        _sync_domain_tag_from_ai(db, table, ai)
+
+
+def _sync_domain_tag_from_ai(db: OrmSession, table: SchemaTable, ai: dict[str, Any]) -> None:
+    """Write LLM-assigned subject / semantic tags into DomainTagRule so that
+    db.observe and db.inspect can use them for domain grouping.
+
+    Rules derived from AI enrichment get priority 20 (bootstrap defaults are 10,
+    user-created rules are typically 10 as well).
+    """
+    subject_area = str(ai.get("subject_area") or "").strip()
+    semantic_tags: list[str] = ai.get("semantic_tags") or []
+
+    tags_to_apply: list[str] = []
+    if subject_area:
+        tags_to_apply.append(subject_area)
+    for tag in semantic_tags:
+        tag_str = str(tag).strip()
+        if tag_str and tag_str not in tags_to_apply:
+            tags_to_apply.append(tag_str)
+
+    datasource_id = str(table.data_source_id)
+    table_name = str(table.table_name)
+
+    # Only write per-table rules (pattern = table_name) so that the tag is
+    # scoped to this table and won't accidentally match unrelated tables.
+    existing = {
+        rule.tag
+        for rule in db.query(DomainTagRule).filter(
+            DomainTagRule.data_source_id == datasource_id,
+            DomainTagRule.pattern == table_name,
+        ).all()
+    }
+
+    for tag in tags_to_apply:
+        if tag in existing:
+            continue
+        db.add(DomainTagRule(
+            data_source_id=datasource_id,
+            pattern=table_name,
+            tag=tag,
+            priority=20,
+        ))
 
 
 def _rebuild_search_docs(

@@ -2,37 +2,53 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.tools.runtime.context import ToolContext
-from engine.agent_core.types import ToolObservation
-from engine.tools.db_tools import db_preview as _db_preview
+from sqlalchemy.orm import Session
+
+from engine.tools.db.preview import db_preview as _db_preview
 
 
-def db_preview(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
+def db_preview(db: Session, datasource_id: str, *, table: str, columns: list[str] | None = None,
+               limit: int = 10, where: dict[str, Any] | None = None,
+               order_by: dict[str, Any] | list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Guard db.preview against raw SQL fragment injection.
 
-    This wrapper blocks raw WHERE/ORDER BY strings at the tool boundary.
-    The underlying SQL builder only accepts structured parameters:
-
+    The underlying SQL builder only accepts structured params:
     - where:  {"column": "status", "op": "=", "value": "active"}
-    - order_by: {"column": "id", "direction": "desc"}
-      or [{"column": "name"}, {"column": "id", "direction": "desc"}]
+    - order_by: {"column": "id", "direction": "desc"} or [{...}]
     """
-    if isinstance(args.get("where"), str) and str(args.get("where") or "").strip():
-        return ToolObservation(
-            name="db.preview",
-            status="failed",
-            input=args,
-            error="Raw string WHERE fragments are not allowed. Use structured where: {column, op, value}.",
-            latency_ms=0,
+    if isinstance(where, str) and where.strip():
+        raise ValueError(
+            "Raw string WHERE fragments are not allowed. "
+            "Use structured where: {column, op, value}."
+        )
+    if isinstance(order_by, str) and order_by.strip():
+        raise ValueError(
+            "Raw string ORDER BY fragments are not allowed. "
+            "Use structured order_by: {column, direction} or [{...}]."
         )
 
-    if isinstance(args.get("order_by"), str) and str(args.get("order_by") or "").strip():
-        return ToolObservation(
-            name="db.preview",
-            status="failed",
-            input=args,
-            error="Raw string ORDER BY fragments are not allowed. Use structured order_by: {column, direction} or [{...}].",
-            latency_ms=0,
-        )
+    # This wrapper validates and delegates to the real preview handler.
+    # The old ToolContext/ToolObservation bridge is kept here since db_preview
+    # internally still uses those types.
+    from engine.tools.runtime.context import ToolContext
+    from engine.agent_core.types import ToolObservation
+    from engine.agent_core.types import AgentRunRequest
 
-    return _db_preview(ctx, args)
+    args: dict[str, Any] = {"table": table, "limit": limit}
+    if columns:
+        args["columns"] = columns
+    if where:
+        args["where"] = where
+    if order_by:
+        args["order_by"] = order_by
+
+    ctx = ToolContext(
+        db=db,
+        request=AgentRunRequest(datasource_id=datasource_id, question=""),
+        state_view={"datasource_id": datasource_id},
+    )
+
+    result: ToolObservation = _db_preview(ctx, args)
+    if result.status != "success":
+        raise RuntimeError(result.error or "db.preview failed")
+    return result.output or {}
