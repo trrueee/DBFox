@@ -29,7 +29,7 @@ class TestSafeToolGroups:
 
     def test_full_safe_groups_still_include_db_groups(self):
         from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
-        for group in ["environment", "schema", "db", "semantic", "memory"]:
+        for group in ["environment", "schema", "db", "memory"]:
             assert group in FULL_SAFE_TOOL_GROUPS
 
 

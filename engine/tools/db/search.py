@@ -1,81 +1,48 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.tools.runtime.context import ToolContext
 from engine.ai_index import tokenize_query
-from engine.models import SchemaSearchDoc
-from engine.tools.db._common import (
-    _catalog_tables,
-    _clamp,
-    _ordered_columns,
-    DEFAULT_SEARCH_LIMIT,
-    tool_handler,
-)
+
+logger = logging.getLogger("dbfox.tools.db.search")
 
 
-@tool_handler("db.search")
-def db_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    """Search tables and columns via FTS5 when AI-enriched; fallback to keyword otherwise."""
-    query = str(args.get("query") or ctx.request.question or "").strip()
-    limit = _clamp(int(args.get("limit", DEFAULT_SEARCH_LIMIT) or DEFAULT_SEARCH_LIMIT), 1, 50)
-
-    # Check if AI enrichment has run (schema_search_docs exists)
-    has_docs = (
-        ctx.db.query(SchemaSearchDoc)
-        .filter(SchemaSearchDoc.datasource_id == ctx.request.datasource_id)
-        .first()
-    )
-
-    if has_docs is not None:
-        results = _fts_search(ctx.db, ctx.request.datasource_id, query, limit)
-        return {
-            "query": query,
-            "limit": limit,
-            "engine": "fts5",
-            "results": results,
-            "total_matches": len(results),
-        }
-    else:
-        results = _fallback_keyword_search(ctx, query, limit)
-        return {
-            "query": query,
-            "limit": limit,
-            "engine": "keyword_fallback",
-            "results": results,
-            "total_matches": len(results),
-        }
+def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> dict[str, Any]:
+    """FTS5 search + rule-based scoring against SchemaSearchDoc. Falls back to keyword if FTS unavailable."""
+    try:
+        fts_results = _fts_search(db, datasource_id, query, limit)
+        if fts_results:
+            return {"engine": "fts5", "limit": limit, "results": fts_results, "total_matches": len(fts_results)}
+    except Exception:
+        logger.debug("FTS5 search unavailable, falling back to keyword search", exc_info=True)
+    fallback = _fallback_keyword_search(db, datasource_id, query, limit)
+    return {"engine": "keyword_fallback", "limit": limit, "results": fallback, "total_matches": len(fallback)}
 
 
 def _fts_search(db: Session, datasource_id: str, query: str, limit: int) -> list[dict[str, Any]]:
-    """FTS5-based search using AI-enriched schema_search_docs."""
     from sqlalchemy import text as sa_text
 
     tokens = tokenize_query(query)
-    
-    # Filter tokens to prevent FTS5 operator injection and enforce character whitelist
     valid_tokens = []
     for t in tokens:
         if t.upper() in {"AND", "OR", "NOT", "NEAR"}:
             continue
-        if not re.match(r"^[a-zA-Z0-9_\u4e00-\u9fa5]+$", t):
+        if not re.match(r"^[a-zA-Z0-9_一-龥]+$", t):
             continue
         valid_tokens.append(t)
-    tokens = valid_tokens
 
-    if not tokens:
+    if not valid_tokens:
         return []
 
-    # Build FTS5 query: exact phrases + OR tokens
-    exact_parts = [f'"{t}"' for t in tokens if len(t) >= 2]
-    token_parts = [t for t in tokens if len(t) >= 2]
+    exact_parts = [f'"{t}"' for t in valid_tokens if len(t) >= 2]
+    token_parts = [t for t in valid_tokens if len(t) >= 2]
     fts_query = " OR ".join(exact_parts + token_parts)
 
-    # FTS5 recall
     sql = sa_text("""
         SELECT d.*, fts.rank
         FROM schema_search_fts fts
@@ -86,16 +53,15 @@ def _fts_search(db: Session, datasource_id: str, query: str, limit: int) -> list
     """)
     rows = db.execute(sql, {"q": fts_query, "ds_id": datasource_id, "lim": limit * 3}).fetchall()
 
-    # Score and group
     results: list[dict[str, Any]] = []
     seen_tables: set[str] = set()
     for row in rows:
-        item = _row_to_search_result(row, tokens, query)
+        item = _row_to_search_result(row, valid_tokens, query)
         if item is None:
             continue
+        if item["type"] == "table" and item["table_name"] in seen_tables:
+            continue
         if item["type"] == "table":
-            if item["table_name"] in seen_tables:
-                continue
             seen_tables.add(item["table_name"])
         results.append(item)
 
@@ -104,7 +70,6 @@ def _fts_search(db: Session, datasource_id: str, query: str, limit: int) -> list
 
 
 def _row_to_search_result(row, tokens: list[str], query: str) -> dict[str, Any] | None:
-    """Convert a schema_search_docs row to a search result dict with scoring."""
     entity_type = str(getattr(row, "entity_type", "table") or "table")
     score = _compute_total_score(row, tokens, query)
     if score <= 0:
@@ -121,7 +86,6 @@ def _row_to_search_result(row, tokens: list[str], query: str) -> dict[str, Any] 
     if entity_type == "table":
         item["ai_description"] = str(getattr(row, "ai_description", "") or "")
         item["table_role"] = str(getattr(row, "table_role", "") or "")
-
         try:
             item["semantic_tags"] = json.loads(getattr(row, "semantic_tags", "[]") or "[]")
         except (json.JSONDecodeError, TypeError):
@@ -136,13 +100,12 @@ def _row_to_search_result(row, tokens: list[str], query: str) -> dict[str, Any] 
 
 
 def _compute_total_score(row, tokens: list[str], query: str) -> float:
-    """Compute unified total_score."""
     aliases_raw = str(getattr(row, "aliases", "") or "")
     terms_raw = str(getattr(row, "business_terms", "") or "")
     desc_raw = str(getattr(row, "ai_description", "") or "")
     name_raw = str(getattr(row, "name", "") or "")
 
-    # exact_alias_match (0 or 1)
+    # exact alias match
     exact_alias = 0.0
     for token in tokens:
         if token.lower() in aliases_raw.lower():
@@ -154,114 +117,70 @@ def _compute_total_score(row, tokens: list[str], query: str) -> float:
                 exact_alias = 1.0
                 break
 
-    # business_term_match (coverage ratio)
+    # business term coverage
     all_terms = terms_raw.lower().split()
-    if all_terms:
-        hits = sum(1 for t in all_terms if any(tok.lower() in t for tok in tokens))
-        term_score = hits / len(all_terms) if all_terms else 0
-    else:
-        term_score = 0.0
+    term_hits = sum(1 for t in tokens if any(t.lower() in term for term in all_terms)) if all_terms else 0
+    term_cov = term_hits / max(len(tokens), 1)
 
-    # field_name_match (token coverage in search_text)
+    # name token match
+    name_lower = name_raw.lower()
+    name_hits = sum(1 for t in tokens if t.lower() in name_lower)
+    name_cov = name_hits / max(len(tokens), 1)
+
+    # search_text token coverage
     search_text = str(getattr(row, "search_text", "") or "").lower()
-    if tokens:
-        hits = sum(1 for tok in tokens if tok.lower() in search_text)
-        field_score = hits / len(tokens)
-    else:
-        field_score = 0.0
+    st_hits = sum(1 for t in tokens if t.lower() in search_text) if search_text else 0
+    st_cov = st_hits / max(len(tokens), 1)
 
-    # ai_description_match
+    # ai_description match
     desc_lower = desc_raw.lower()
-    if tokens and desc_lower:
-        hits = sum(1 for tok in tokens if tok.lower() in desc_lower)
-        desc_score = hits / len(tokens)
-    else:
-        desc_score = 0.0
+    desc_hits = sum(1 for t in tokens if t.lower() in desc_lower) if desc_lower else 0
+    desc_cov = desc_hits / max(len(tokens), 1)
 
-    # structure_boost
-    col_role = str(getattr(row, "column_role", "") or "")
-    m_type = str(getattr(row, "metric_type", "") or "")
-    struct_score = 0.0
-    if col_role == "time":
-        struct_score += 0.3
-    if col_role == "measure" or m_type:
-        struct_score += 0.3
-    if col_role == "dimension":
-        struct_score += 0.2
-
-    # usage_boost — placeholder
-    usage_score = 0.0
-
-    total = (
-        exact_alias * 0.25
-        + term_score * 0.25
-        + field_score * 0.20
-        + desc_score * 0.15
-        + min(struct_score, 1.0) * 0.10
-        + usage_score * 0.05
-    )
-    return total * 100
+    return exact_alias * 15.0 + term_cov * 5.0 + name_cov * 3.0 + st_cov * 3.0 + desc_cov * 2.0
 
 
 def _compute_reasons(row, tokens: list[str]) -> list[str]:
-    """Generate human-readable reasons for the match."""
-    reasons: list[str] = []
-    name = str(getattr(row, "name", "") or "")
-    aliases = str(getattr(row, "aliases", "") or "")
-    terms = str(getattr(row, "business_terms", "") or "")
-    table_name = str(getattr(row, "table_name", "") or "")
-
-    for token in tokens:
-        tl = token.lower()
-        if tl == name.lower() or name.lower().endswith(f".{tl}"):
-            reasons.append(f"精确名称命中: {token}")
-        elif tl in aliases.lower():
-            reasons.append(f"别名命中: {token}")
-        elif tl in terms.lower():
-            reasons.append(f"业务词命中: {token}")
-
-    col_role = str(getattr(row, "column_role", "") or "")
-    m_type = str(getattr(row, "metric_type", "") or "")
-    if col_role == "time":
-        reasons.append("时间字段加权")
-    if m_type:
-        reasons.append("指标字段加权")
-    if table_name and any(tok.lower() in table_name.lower() for tok in tokens):
-        reasons.append("表名命中")
-
-    return reasons[:6]
+    reasons = []
+    name = str(getattr(row, "name", "")).lower()
+    for t in tokens:
+        if t.lower() in name:
+            reasons.append(f"name_match:{t}")
+    aliases = str(getattr(row, "aliases", "")).lower()
+    for t in tokens:
+        if t.lower() in aliases:
+            reasons.append(f"alias_match:{t}")
+    desc = str(getattr(row, "ai_description", "")).lower()
+    for t in tokens:
+        if t.lower() in desc:
+            reasons.append(f"ai_description_match:{t}")
+    return reasons
 
 
-def _fallback_keyword_search(ctx: ToolContext, query: str, limit: int) -> list[dict[str, Any]]:
-    """Fallback keyword search: table/column name + comment match, no AI tags, no bootstrap synonyms."""
-    tables = _catalog_tables(ctx.db, ctx.request.datasource_id)
+def _fallback_keyword_search(db: Session, datasource_id: str, query: str, limit: int) -> list[dict[str, Any]]:
+    """Fallback: search SchemaTable and SchemaColumn by name when FTS returns nothing."""
+    from engine.models import SchemaTable as ST, SchemaColumn as SC
 
-    results: list[dict[str, Any]] = []
-    query_lower = query.lower()
-    for table in tables:
-        tname = str(table.table_name).lower()
-        tcomment = str(table.table_comment or "").lower()
-        if query_lower in tname or query_lower in tcomment:
-            results.append({
-                "type": "table",
-                "name": str(table.table_name),
-                "table_name": str(table.table_name),
-                "score": 0.5 if query_lower in tname else 0.3,
-                "reasons": ["名称匹配" if query_lower in tname else "注释匹配"],
-                "columns": [str(c.column_name) for c in _ordered_columns(table)][:8],
-            })
-        for col in _ordered_columns(table):
-            cname = str(col.column_name).lower()
-            ccomment = str(col.column_comment or "").lower()
-            if query_lower in cname or query_lower in ccomment:
-                results.append({
-                    "type": "column",
-                    "name": f"{table.table_name}.{col.column_name}",
-                    "table_name": str(table.table_name),
-                    "column_name": str(col.column_name),
-                    "score": 0.4 if query_lower in cname else 0.2,
-                    "reasons": ["字段名匹配" if query_lower in cname else "字段注释匹配"],
-                })
+    tokens = tokenize_query(query)
+    table_results: list[dict[str, Any]] = []
+    tables = db.query(ST).filter(ST.data_source_id == datasource_id).all()
+    for t in tables:
+        name = str(t.table_name).lower()
+        score = sum(3.0 for tok in tokens if tok.lower() in name)
+        if t.table_comment and any(tok.lower() in str(t.table_comment).lower() for tok in tokens):
+            score += 1.0
+        if score > 0:
+            table_results.append({"type": "table", "name": str(t.table_name), "table_name": str(t.table_name), "score": score, "reasons": ["keyword_table_name"]})
 
-    results.sort(key=lambda r: (-float(r["score"]), r["type"], r["name"]))
+    col_results: list[dict[str, Any]] = []
+    columns = db.query(SC).join(ST, SC.table_id == ST.id).filter(ST.data_source_id == datasource_id).all()
+    for c in columns:
+        col_name = str(c.column_name).lower()
+        score = sum(2.0 for tok in tokens if tok.lower() in col_name)
+        if score > 0:
+            table_name = str(c.table.table_name) if c.table else ""
+            col_results.append({"type": "column", "name": f"{table_name}.{c.column_name}", "table_name": table_name, "column_name": str(c.column_name), "score": score, "reasons": ["keyword_column_name"]})
+
+    results = table_results + col_results
+    results.sort(key=lambda r: (-r["score"], r["type"], r["name"]))
     return results[:limit]

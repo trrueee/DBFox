@@ -149,15 +149,16 @@ export const DataSourcesPage = ({
   };
 
   useEffect(() => {
-    if (selectedId) {
-      let cancelled = false;
-      void fetchAliasesAndStatus(selectedId, () => cancelled);
-      setActiveTab("info");
-      return () => { cancelled = true; };
-    } else {
+    if (!selectedId) {
       setAliases([]);
       setSyncStatus(null);
+      return undefined;
     }
+
+    let cancelled = false;
+    void fetchAliasesAndStatus(selectedId, () => cancelled);
+    setActiveTab("info");
+    return () => { cancelled = true; };
   }, [selectedId]);
 
   const handleAddAlias = async () => {

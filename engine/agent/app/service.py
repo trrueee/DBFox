@@ -46,7 +46,7 @@ logger = logging.getLogger("dbfox.dbfox_agent.service")
 # Full set of safe tool groups available to the model on every run.
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
-    "environment", "schema", "db", "semantic", "memory",
+    "environment", "schema", "db", "memory",
     "result", "chart", "answer",
 ]
 
@@ -152,6 +152,17 @@ class DBFoxAgentService:
         except GeneratorExit:
             # Client disconnected (SSE stream closed by frontend cancel/abort).
             try:
+                # Cancel any active SQL query on the target database so that
+                # long-running queries don't keep consuming DB resources after
+                # the user has abandoned the conversation.
+                execution = accumulated_state.get("execution") or {}
+                execution_id = execution.get("executionId") if isinstance(execution, dict) else None
+                if execution_id:
+                    try:
+                        from engine.query_registry import QUERY_REGISTRY
+                        QUERY_REGISTRY.cancel(execution_id)
+                    except Exception:
+                        logger.debug("Failed to cancel active SQL query on SSE disconnect", exc_info=True)
                 agent_persistence.cancel_run(self.db, run_id=run_id)
                 self.db.commit()
             except Exception:
@@ -392,7 +403,13 @@ class DBFoxAgentService:
                 if isinstance(value, list):
                     target.setdefault(key, []).extend(value)
                 continue
-            target[key] = value
+            # Deep-merge dict fields so that nested keys from earlier chunks
+            # are not overwritten by later partial updates (e.g. environment_profile
+            # built incrementally across observe and progress nodes).
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                target[key] = {**target[key], **value}
+            else:
+                target[key] = value
 
     def _build_emitter(self, run_id: str, session_id: str, start_sequence: int) -> EventEmitter:
         def save(event: AgentRuntimeEvent) -> None:

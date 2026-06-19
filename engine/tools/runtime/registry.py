@@ -5,7 +5,6 @@ from engine.tools.runtime.base import BaseTool
 TOOL_GROUP_MAP: dict[str, str] = {
     "environment.": "environment",
     "schema.": "schema",
-    "semantic.": "semantic",
     "db.": "db",
     "result.": "result",
     "chart.": "chart",

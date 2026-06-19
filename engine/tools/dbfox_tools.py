@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent_core.answer import synthesize_agent_answer
 from engine.agent_core.chart_builder import suggest_plotly_chart
 from engine.agent_core.result_profiler import profile_result
-from engine.agent_core.types import AgentAnswer, ResultProfile, ToolObservation
+from engine.agent_core.types import AgentAnswer, ResultProfile
+from engine.environment.tools import (
+    environment_get_profile,
+    schema_describe_table,
+    schema_list_tables,
+    schema_refresh_catalog,
+)
 from engine.tools.db_tools import (
     db_inspect,
     db_observe,
@@ -24,7 +30,6 @@ from engine.tools.memory_tools import (
 from engine.tools.runtime import (
     ArtifactSpec,
     BaseTool,
-    ToolContext,
     ToolExecutionSpec,
     ToolPolicy,
     ToolRegistry,
@@ -34,83 +39,106 @@ from engine.tools.runtime import (
 from engine.tools.safe_preview import db_preview
 
 
-class EmptyInput(BaseModel):
-    pass
-
+# ── Output ────────────────────────────────────────────────────────────────────
 
 class LooseOutput(BaseModel):
+    """Output model for tools whose result shape is handler-defined."""
     model_config = ConfigDict(extra="allow")
+
+
+# ── Input models ───────────────────────────────────────────────────────────────
+
+
+class EmptyInput(BaseModel):
+    """Tool takes no arguments."""
 
 
 class SearchInput(BaseModel):
-    query: str
-    limit: int | None = None
+    query: str = Field(description="Keywords to search for in table names, column names, comments, and AI-enriched descriptions.")
+    limit: int = Field(default=20, description="Max results to return.")
 
 
 class InspectInput(BaseModel):
-    target: str
+    target: str = Field(description='Table or column to inspect, e.g. "users" or "users.email".')
 
 
 class PreviewInput(BaseModel):
-    table: str
-    columns: list[str] | None = None
-    limit: int | None = None
-    where: Any | None = None
-    order_by: str | None = None
+    table: str = Field(description="Table name to preview.")
+    columns: list[str] | None = Field(default=None, description="Specific columns to include (omit for all).")
+    limit: int = Field(default=10, description="Max rows to return.")
+    where: dict[str, Any] | None = Field(default=None, description="Structured filter: {column, op, value}.")
+    order_by: dict[str, Any] | list[dict[str, Any]] | None = Field(default=None, description="Structured sort: {column, direction} or [{...}].")
 
 
 class QueryInput(BaseModel):
-    sql: str
-    question: str | None = None
+    sql: str = Field(description="A single read-only SELECT statement to execute through TrustGate safety validation.")
+    question: str | None = Field(default=None, description="The original user question this SQL answers.")
 
 
 class RememberInput(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    type: str = Field(description="Memory type: table_alias, column_alias, column_values, join_path, business_definition.")
+    target: str = Field(description="Table or column name this memory is about.")
+    evidence: str = Field(default="", description="Evidence or description of the discovery.")
+    aliases: list[str] | None = Field(default=None, description="Alias names (for table_alias/column_alias).")
+    value: Any | None = Field(default=None, description="Value payload: alias string, values list, join dict, or definition dict.")
+    content: dict[str, Any] | None = Field(default=None, description="Structured metadata payload.")
 
 
 class EscalateInput(BaseModel):
-    group: str
-    reason: str = ""
+    group: str = Field(description="Tool group to request access to.")
+    reason: str = Field(default="", description="Why this group is needed for the current task.")
+
+
+class DescribeTableInput(BaseModel):
+    table_name: str = Field(description="Name of the table to describe.")
+
+
+class RefreshCatalogInput(BaseModel):
+    reason: str = Field(default="", description="Why the catalog needs refreshing (e.g. 'tables appear missing').")
+
+
+class MemorySearchInput(BaseModel):
+    query: str = Field(description="Search terms for finding relevant memories.")
+    scope: list[str] | None = Field(default=None, description="Namespaces to search: user, datasource, project.")
+    memory_types: list[str] | None = Field(default=None, description="Filter by memory type.")
+    limit: int = Field(default=10, description="Max results.")
+
+
+class MemoryWriteInput(BaseModel):
+    type: str = Field(default="user_preference", description="Memory type: user_preference, schema_discovery, business_rule.")
+    text: str = Field(description="What to remember, in natural language.")
+    content: dict[str, Any] | None = Field(default=None, description="Optional structured metadata.")
+
+
+class MemoryDeleteInput(BaseModel):
+    memory_id: str = Field(description="ID of the memory record to delete.")
+    reason: str = Field(default="user_requested", description="Why this memory is being deleted.")
 
 
 class ResultProfileInput(BaseModel):
-    execution_result: dict[str, Any] | None = None
-    question: str | None = None
+    execution_result: dict[str, Any] | None = Field(default=None, description="Execution result to profile (uses latest if omitted).")
+    question: str | None = Field(default=None, description="Original user question for context.")
 
 
 class ChartSuggestInput(BaseModel):
-    force: bool | None = None
+    force: bool = Field(default=False, description="Force chart generation even if data seems unsuitable.")
 
 
 class AnswerSynthesizeInput(BaseModel):
-    question: str | None = None
+    question: str | None = Field(default=None, description="The original user question (uses session question if omitted).")
 
 
-class _ObservationFunctionTool(BaseTool[BaseModel, LooseOutput]):
-    input_model: type[BaseModel] = EmptyInput
-    output_model = LooseOutput
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec()
-    artifacts = ArtifactSpec()
-    _handler: Callable[[ToolContext, dict[str, Any]], ToolObservation]
-
-    def run(self, tool_input: BaseModel, context: ToolRunContext) -> LooseOutput:
-        old_context = ToolContext(
-            db=context.db_session,
-            request=context.request,
-            state_view=dict(context.state),
-        )
-        observation = self._handler(old_context, tool_input.model_dump(mode="json", exclude_none=True))
-        if observation.status != "success":
-            raise RuntimeError(observation.error or f"{self.name} failed")
-        return LooseOutput.model_validate(observation.output or {})
+# ── Control ────────────────────────────────────────────────────────────────────
 
 
 class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
     name = "escalate.tool_group"
     group = "control"
-    description = "Request access to an additional tool group."
+    description = (
+        "Request access to a tool group not currently available. "
+        "Use when the current tool set is insufficient for the task. "
+        "After escalation, the new group becomes available on the next call."
+    )
     input_model = EscalateInput
     output_model = LooseOutput
     policy = ToolPolicy()
@@ -120,99 +148,252 @@ class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
 
     def run(self, tool_input: EscalateInput, context: ToolRunContext) -> LooseOutput:
         valid_groups = {
-            "environment",
-            "schema",
-            "db",
-            "semantic",
-            "memory",
-            "execution",
-            "result",
-            "chart",
-            "answer",
+            "environment", "schema", "db", "semantic", "memory",
+            "execution", "result", "chart", "answer",
         }
         group = tool_input.group.strip()
         reason = tool_input.reason.strip()
         if group not in valid_groups:
-            raise RuntimeError(f"Unknown tool group '{group}'. Valid groups: {', '.join(sorted(valid_groups))}")
+            raise RuntimeError(f"Unknown tool group '{group}'. Valid: {', '.join(sorted(valid_groups))}")
         current_groups = list(context.state.get("allowed_tool_groups") or [])
         if group in current_groups:
             return LooseOutput.model_validate({
-                "escalated": False,
-                "group": group,
-                "reason": reason,
+                "escalated": False, "group": group, "reason": reason,
                 "message": f"Group '{group}' is already available.",
             })
         return LooseOutput.model_validate({
-            "escalated": True,
-            "group": group,
-            "reason": reason,
+            "escalated": True, "group": group, "reason": reason,
             "escalated_tool_groups": current_groups + [group],
         })
 
 
-class DbObserveTool(_ObservationFunctionTool):
+# ── Environment & Schema ───────────────────────────────────────────────────────
+
+
+class EnvironmentGetProfileTool(BaseTool[EmptyInput, LooseOutput]):
+    name = "environment.get_profile"
+    group = "environment"
+    description = "Return the datasource environment profile: dialect, version, catalog status, table count, and any configuration warnings."
+    input_model = EmptyInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(produces=("environment_profile", "database_map"))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: EmptyInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(environment_get_profile(context.db_session, context.request.datasource_id))
+
+
+class SchemaListTablesTool(BaseTool[EmptyInput, LooseOutput]):
+    name = "schema.list_tables"
+    group = "schema"
+    description = "List all tables in the current datasource catalog with their column counts and estimated row counts."
+    input_model = EmptyInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec()
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: EmptyInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(schema_list_tables(context.db_session, context.request.datasource_id))
+
+
+class SchemaDescribeTableTool(BaseTool[DescribeTableInput, LooseOutput]):
+    name = "schema.describe_table"
+    group = "schema"
+    description = "Describe a single table: every column name, data type, nullability, default value, primary/foreign key flags, and column comment."
+    input_model = DescribeTableInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec()
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: DescribeTableInput, context: ToolRunContext) -> LooseOutput:
+        try:
+            result = schema_describe_table(context.db_session, context.request.datasource_id, tool_input.table_name)
+            return LooseOutput.model_validate(result)
+        except ValueError as e:
+            raise RuntimeError(str(e))
+
+
+class SchemaRefreshCatalogTool(BaseTool[RefreshCatalogInput, LooseOutput]):
+    name = "schema.refresh_catalog"
+    group = "schema"
+    description = "Re-introspect the live datasource and update the local schema catalog. Use when tables appear to be missing or the catalog seems stale."
+    input_model = RefreshCatalogInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec()
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: RefreshCatalogInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(schema_refresh_catalog(context.db_session, context.request.datasource_id, tool_input.reason))
+
+
+# ── DB ─────────────────────────────────────────────────────────────────────────
+
+
+class DbObserveTool(BaseTool[EmptyInput, LooseOutput]):
     name = "db.observe"
     group = "db"
-    description = "Look at the local database map: schemas, table summaries, domains, primary keys, and relationships."
+    description = (
+        "Get a high-level map of the database: schemas, tables grouped by "
+        "business domain, column counts, primary keys, foreign keys, query "
+        "history stats, and catalog freshness warnings. Use this FIRST to "
+        "orient yourself before searching or inspecting specific objects."
+    )
     input_model = EmptyInput
-    _handler = staticmethod(db_observe)
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
     state = ToolStateSpec(produces=("database_map",))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: EmptyInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(db_observe(context.db_session, context.request.datasource_id))
 
 
-class DbSearchTool(_ObservationFunctionTool):
+class DbSearchTool(BaseTool[SearchInput, LooseOutput]):
     name = "db.search"
     group = "db"
-    description = "Search the local database index for tables and columns by names, comments, aliases, and semantic hints."
+    description = (
+        "Full-text search across table names, column names, comments, AI-enriched "
+        "descriptions, business terms, and aliases. Returns scored results with "
+        "match reasons. Use after db.observe to find relevant tables and columns "
+        "for the user's question."
+    )
     input_model = SearchInput
-    _handler = staticmethod(db_search)
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
     state = ToolStateSpec(produces=("db_search_results",))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: SearchInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(db_search(context.db_session, context.request.datasource_id, tool_input.query, tool_input.limit))
 
 
-class DbInspectTool(_ObservationFunctionTool):
+class DbInspectTool(BaseTool[InspectInput, LooseOutput]):
     name = "db.inspect"
     group = "db"
-    description = "Inspect one live database object in real time."
+    description = (
+        "Live-inspect a single database object. For a table, returns every column "
+        "with type, nullability, primary/foreign key relationships (both directions), "
+        "indexes, and row count estimate. For a column, returns type details and "
+        "foreign key target. Use to verify structure before writing SQL."
+    )
     input_model = InspectInput
-    _handler = staticmethod(db_inspect)
-    state = ToolStateSpec(produces=("db_inspection",), clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"), merge_strategy="new")
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(
+        produces=("db_inspection",),
+        clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
+        merge_strategy="new",
+    )
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: InspectInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(db_inspect(context.db_session, context.request.datasource_id, tool_input.target))
 
 
-class DbPreviewTool(_ObservationFunctionTool):
+class DbPreviewTool(BaseTool[PreviewInput, LooseOutput]):
     name = "db.preview"
     group = "db"
-    description = "Preview a small masked sample from a table."
+    description = (
+        "Safely preview a small sample of real data rows from a table. "
+        "Sensitive columns (PII, credentials) are automatically redacted. "
+        "Use to confirm what the data actually looks like before writing SQL."
+    )
     input_model = PreviewInput
-    _handler = staticmethod(db_preview)
+    output_model = LooseOutput
     policy = ToolPolicy(side_effect="read", risk_level="safe")
-    state = ToolStateSpec(produces=("db_preview",), clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"))
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(
+        produces=("db_preview",),
+        clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
+    )
     artifacts = ArtifactSpec(emit=True, artifact_types=("table",))
 
+    def run(self, tool_input: PreviewInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(db_preview(
+            context.db_session, context.request.datasource_id,
+            table=tool_input.table, columns=tool_input.columns, limit=tool_input.limit,
+            where=tool_input.where, order_by=tool_input.order_by,
+        ))
 
-class DbQueryTool(_ObservationFunctionTool):
+
+class DbQueryTool(BaseTool[QueryInput, LooseOutput]):
     name = "db.query"
     group = "db"
-    description = "Safely execute read-only SELECT SQL through TrustGate and guardrails."
+    description = (
+        "Execute a read-only SELECT SQL statement through the full safety "
+        "pipeline: Guardrail (AST-level validation), TrustGate (schema "
+        "verification + EXPLAIN dry-run), and PolicyEngine (environment rules). "
+        "Results are automatically redacted for sensitive columns. "
+        "Write the SQL yourself based on what you learned from observe/search/inspect/preview."
+    )
     input_model = QueryInput
-    _handler = staticmethod(db_query)
+    output_model = LooseOutput
     policy = ToolPolicy(side_effect="read", risk_level="warning")
-    state = ToolStateSpec(produces=("execution",), clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"))
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(
+        produces=("execution",),
+        clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
+    )
     artifacts = ArtifactSpec(emit=True, artifact_types=("table",))
 
+    def run(self, tool_input: QueryInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(db_query(context.db_session, context.request.datasource_id, tool_input.sql, tool_input.question or ""))
 
-class DbRememberTool(_ObservationFunctionTool):
+
+class DbRememberTool(BaseTool[RememberInput, LooseOutput]):
     name = "db.remember"
     group = "db"
-    description = "Record useful schema or business semantics for future searches."
+    description = (
+        "Record a useful discovery for future searches: schema aliases, "
+        "join paths, business definitions, or data quirks. Stored memories "
+        "are searchable in later sessions via db.search and memory.search."
+    )
     input_model = RememberInput
-    _handler = staticmethod(db_remember)
+    output_model = LooseOutput
     policy = ToolPolicy(side_effect="write", risk_level="warning")
+    execution = ToolExecutionSpec()
     state = ToolStateSpec(merge_strategy="new")
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: RememberInput, context: ToolRunContext) -> LooseOutput:
+        extra: dict[str, Any] = {}
+        if tool_input.aliases:
+            extra["aliases"] = tool_input.aliases
+        if tool_input.value is not None:
+            extra["value"] = tool_input.value
+        if tool_input.content:
+            extra.update(tool_input.content)
+        return LooseOutput.model_validate(db_remember(
+            context.db_session, context.request.datasource_id,
+            mem_type=tool_input.type, target=tool_input.target,
+            evidence=tool_input.evidence, **extra,
+        ))
+
+
+# ── Result / Chart / Answer ────────────────────────────────────────────────────
 
 
 class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfile]):
     name = "result.profile"
     group = "result"
-    description = "Compute a statistical profile of the latest query result."
+    description = (
+        "Compute a statistical profile of the latest SQL query result: "
+        "row count, column types, min/max/mean/std for numeric columns, "
+        "pattern detection (time_series, category_breakdown, single_metric), "
+        "and anomaly flagging. Use for analytical questions where you need "
+        "to understand trends, distributions, or outliers."
+    )
     input_model = ResultProfileInput
     output_model = ResultProfile
     policy = ToolPolicy()
@@ -236,7 +417,11 @@ class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfile]):
 class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
     name = "chart.suggest"
     group = "chart"
-    description = "Suggest a deterministic chart for the current query result."
+    description = (
+        "Suggest a chart visualization for the current query result. "
+        "Automatically picks chart type (bar/line/pie), label column, and "
+        "value column based on column types and data shape."
+    )
     input_model = ChartSuggestInput
     output_model = LooseOutput
     policy = ToolPolicy()
@@ -254,7 +439,12 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
 class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
     name = "answer.synthesize"
     group = "answer"
-    description = "Synthesize a structured final answer from query, profile, chart, and safety state."
+    description = (
+        "Synthesize a structured final answer from all collected evidence: "
+        "query results, profile, chart, safety decisions, and any errors. "
+        "Produces an AgentAnswer with key findings, evidence references, "
+        "caveats, recommendations, and follow-up questions."
+    )
     input_model = AnswerSynthesizeInput
     output_model = AgentAnswer
     policy = ToolPolicy()
@@ -283,77 +473,97 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
         )
 
 
-def _wrap_observation_tool(
-    *,
-    name: str,
-    group: str,
-    description: str,
-    handler: Callable[[ToolContext, dict[str, Any]], ToolObservation],
-    input_model: type[BaseModel] = EmptyInput,
-    consumes: tuple[str, ...] = (),
-    produces: tuple[str, ...] = (),
-    side_effect: str = "none",
-    risk_level: str = "safe",
-) -> BaseTool:
-    return type(
-        f"{name.replace('.', '_').title().replace('_', '')}Tool",
-        (_ObservationFunctionTool,),
-        {
-            "name": name,
-            "group": group,
-            "description": description,
-            "input_model": input_model,
-            "_handler": staticmethod(handler),
-            "policy": ToolPolicy(side_effect=side_effect, risk_level=risk_level),
-            "state": ToolStateSpec(consumes=consumes, produces=produces),
-        },
-    )()
+# ── Memory ─────────────────────────────────────────────────────────────────────
+
+
+class MemorySearchTool(BaseTool[MemorySearchInput, LooseOutput]):
+    name = "memory.search"
+    group = "memory"
+    description = "Search long-term memory for relevant context from past sessions: schema discoveries, business rules, user preferences, and join paths."
+    input_model = MemorySearchInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: MemorySearchInput, context: ToolRunContext) -> LooseOutput:
+        state = context.state
+        return LooseOutput.model_validate(memory_search(
+            query=tool_input.query,
+            user_id=state.get("user_id") or state.get("thread_id"),
+            datasource_id=state.get("datasource_id") or context.request.datasource_id,
+            project_id=state.get("project_id"),
+            scope=tool_input.scope,
+            memory_types=tool_input.memory_types,
+            limit=tool_input.limit,
+        ))
+
+
+class MemoryWriteTool(BaseTool[MemoryWriteInput, LooseOutput]):
+    name = "memory.write"
+    group = "memory"
+    description = "Write a new entry to long-term memory. Use for discoveries that will be useful in future sessions: table relationships, business definitions, user preferences, or data quirks."
+    input_model = MemoryWriteInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="write", risk_level="warning")
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: MemoryWriteInput, context: ToolRunContext) -> LooseOutput:
+        state = context.state
+        return LooseOutput.model_validate(memory_write(
+            mem_type=tool_input.type,
+            text=tool_input.text,
+            content=tool_input.content,
+            user_id=state.get("user_id") or state.get("thread_id"),
+            datasource_id=state.get("datasource_id") or context.request.datasource_id,
+            project_id=state.get("project_id"),
+        ))
+
+
+class MemoryDeleteTool(BaseTool[MemoryDeleteInput, LooseOutput]):
+    name = "memory.delete"
+    group = "memory"
+    description = "Delete a long-term memory entry by ID."
+    input_model = MemoryDeleteInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="write", risk_level="warning")
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: MemoryDeleteInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(memory_delete(memory_id=tool_input.memory_id, reason=tool_input.reason))
+
+
+class MemorySummarizeSessionTool(BaseTool[EmptyInput, LooseOutput]):
+    name = "memory.summarize_session"
+    group = "memory"
+    description = "Summarize the current conversation session into a compact memory for future recall. Use at the end of a successful task."
+    input_model = EmptyInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: EmptyInput, context: ToolRunContext) -> LooseOutput:
+        session_id = str(context.state.get("thread_id") or context.state.get("session_id") or "")
+        return LooseOutput.model_validate(memory_summarize_session(session_id=session_id))
+
+
+# ── Registry ───────────────────────────────────────────────────────────────────
 
 
 def register_dbfox_tools() -> ToolRegistry:
-    from engine.environment.tools import (
-        environment_get_profile,
-        schema_describe_table,
-        schema_list_tables,
-        schema_refresh_catalog,
-    )
-    from engine.semantic.tools import semantic_resolve
-
     registry = ToolRegistry()
     registry.register(EscalateTool())
-    registry.register(_wrap_observation_tool(
-        name="environment.get_profile",
-        group="environment",
-        description="Get datasource environment profile.",
-        handler=environment_get_profile,
-        produces=("environment_profile", "database_map"),
-    ))
-    registry.register(_wrap_observation_tool(
-        name="schema.list_tables",
-        group="schema",
-        description="List live datasource tables.",
-        handler=schema_list_tables,
-    ))
-    registry.register(_wrap_observation_tool(
-        name="schema.describe_table",
-        group="schema",
-        description="Describe a named live datasource table.",
-        handler=schema_describe_table,
-    ))
-    registry.register(_wrap_observation_tool(
-        name="schema.refresh_catalog",
-        group="schema",
-        description="Refresh the local schema catalog from the live datasource.",
-        handler=schema_refresh_catalog,
-    ))
-    registry.register(_wrap_observation_tool(
-        name="semantic.resolve",
-        group="semantic",
-        description="Resolve business semantics for the current question.",
-        handler=semantic_resolve,
-        consumes=("datasource_id", "question", "workspace_context"),
-        produces=("semantic_resolution",),
-    ))
+    registry.register(EnvironmentGetProfileTool())
+    registry.register(SchemaListTablesTool())
+    registry.register(SchemaDescribeTableTool())
+    registry.register(SchemaRefreshCatalogTool())
     registry.register(DbObserveTool())
     registry.register(DbSearchTool())
     registry.register(DbInspectTool())
@@ -363,36 +573,8 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(ResultProfileTool())
     registry.register(ChartSuggestTool())
     registry.register(AnswerSynthesizeTool())
-    registry.register(_wrap_observation_tool(
-        name="memory.search",
-        group="memory",
-        description="Search long-term memory for relevant context.",
-        handler=memory_search,
-        consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"),
-    ))
-    registry.register(_wrap_observation_tool(
-        name="memory.write",
-        group="memory",
-        description="Write a new long-term memory entry.",
-        handler=memory_write,
-        consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"),
-        side_effect="write",
-        risk_level="warning",
-    ))
-    registry.register(_wrap_observation_tool(
-        name="memory.delete",
-        group="memory",
-        description="Delete a long-term memory entry.",
-        handler=memory_delete,
-        consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"),
-        side_effect="write",
-        risk_level="warning",
-    ))
-    registry.register(_wrap_observation_tool(
-        name="memory.summarize_session",
-        group="memory",
-        description="Summarize the current session for future recall.",
-        handler=memory_summarize_session,
-        consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"),
-    ))
+    registry.register(MemorySearchTool())
+    registry.register(MemoryWriteTool())
+    registry.register(MemoryDeleteTool())
+    registry.register(MemorySummarizeSessionTool())
     return registry
