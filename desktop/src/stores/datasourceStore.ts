@@ -162,6 +162,8 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
   },
 }));
 
+let activeTablesFetchId: string | null = null;
+
 // Side-effect: fetch tables when active datasource changes
 useDatasourceStore.subscribe((state, prev) => {
   if (state.activeDatasourceId === prev.activeDatasourceId) return;
@@ -169,18 +171,32 @@ useDatasourceStore.subscribe((state, prev) => {
     useDatasourceStore.setState({ tables: [], tableColumns: {} });
     return;
   }
-  let cancelled = false;
-  listTables(state.activeDatasourceId)
+  const targetId = state.activeDatasourceId;
+  activeTablesFetchId = targetId;
+
+  useDatasourceStore.setState({ loadingSchema: true, schemaError: "" });
+
+  listTables(targetId)
     .then((result) => {
-      if (!cancelled) useDatasourceStore.setState({ tables: result });
+      if (activeTablesFetchId === targetId) {
+        useDatasourceStore.setState({ tables: result, schemaError: "" });
+      }
     })
-    .catch(() => {
-      // Schema errors handled by the UI via schemaError state
+    .catch((err) => {
+      if (activeTablesFetchId === targetId) {
+        useDatasourceStore.setState({
+          schemaError: err instanceof Error ? err.message : "读取数据库结构失败",
+        });
+      }
+    })
+    .finally(() => {
+      if (activeTablesFetchId === targetId) {
+        useDatasourceStore.setState({ loadingSchema: false });
+      }
     });
-  return () => {
-    cancelled = true;
-  };
 });
+
+let activeColumnsFetchTables: EngineSchemaTable[] | null = null;
 
 // Side-effect: fetch columns when tables change
 useDatasourceStore.subscribe((state, prev) => {
@@ -189,10 +205,12 @@ useDatasourceStore.subscribe((state, prev) => {
     useDatasourceStore.setState({ tableColumns: {} });
     return;
   }
-  let cancelled = false;
+  const currentTables = state.tables;
+  activeColumnsFetchTables = currentTables;
+
   const fetchColumns = async () => {
     const results = await Promise.all(
-      state.tables.map(async (table) => {
+      currentTables.map(async (table) => {
         try {
           const columns = await listColumns(table.id);
           return { name: table.table_name, columns };
@@ -201,15 +219,12 @@ useDatasourceStore.subscribe((state, prev) => {
         }
       }),
     );
-    if (cancelled) return;
+    if (activeColumnsFetchTables !== currentTables) return;
     const cols: Record<string, EngineColumn[]> = {};
     for (const { name, columns } of results) {
       cols[name] = columns;
     }
-    if (!cancelled) useDatasourceStore.setState({ tableColumns: cols });
+    useDatasourceStore.setState({ tableColumns: cols });
   };
   fetchColumns();
-  return () => {
-    cancelled = true;
-  };
 });
