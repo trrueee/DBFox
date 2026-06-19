@@ -109,7 +109,7 @@ def memory_summarize_session(*, session_id: str) -> dict[str, Any]:
     summary = ". ".join(summary_parts) if summary_parts else "No activity in this session."
 
     mem.summary = summary
-    svc._cache[session_id] = mem
+    svc.set(session_id, mem)
 
     return {
         "session_id": session_id, "summary": summary,

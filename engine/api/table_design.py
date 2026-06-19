@@ -28,7 +28,7 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
 
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
-        expected_details = {"table_name": req.table_name, "row_count": req.row_count}
+        expected_details = {"table_name": req.table_name, "row_count": req.row_count, "language": req.language}
         if not req.confirm_token:
             token = confirmation_manager.create_confirmation(
                 datasource_id=req.datasource_id,

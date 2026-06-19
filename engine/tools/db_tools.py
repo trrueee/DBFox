@@ -30,6 +30,15 @@ from engine.tools.safe_preview import db_preview
 from engine.tools.db.query import db_query
 from engine.tools.db.remember import db_remember
 
+__all__ = [
+    "db_observe",
+    "db_search",
+    "db_inspect",
+    "db_preview",
+    "db_query",
+    "db_remember",
+]
+
 # ---------------------------------------------------------------------------
 # Shared helpers that tests and downstream code import directly
 # ---------------------------------------------------------------------------
