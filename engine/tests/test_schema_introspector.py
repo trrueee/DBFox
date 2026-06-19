@@ -44,10 +44,16 @@ class _FakeCursor:
             return
 
         if "information_schema.columns" in query:
-            self.rows = [
-                ("id", "integer", "integer", "NO", None, True, False),
-                ("customer_id", "integer", "integer", "YES", None, False, True),
-            ]
+            if self.dialect == "postgres":
+                self.rows = [
+                    ("id", "integer", "integer", "NO", None, True, False, "id comment"),
+                    ("customer_id", "integer", "integer", "YES", None, False, True, "cust comment"),
+                ]
+            else:
+                self.rows = [
+                    ("id", "integer", "integer", "NO", None, True, False),
+                    ("customer_id", "integer", "integer", "YES", None, False, True),
+                ]
             return
 
         if "table_constraints" in query and "primary key" in query:
