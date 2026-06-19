@@ -23,9 +23,35 @@ from engine.tools.db._common import (
 logger = logging.getLogger("dbfox.tools.db.observe")
 
 
+_RULES_CACHE: dict[str, list[Any]] = {}
+_TABLE_NAMES_CACHE: dict[str, str] = {}
+_REVERSE_FK_CACHE: dict[str, list[str]] = {}
+
 def db_observe(db: Session, datasource_id: str) -> dict[str, Any]:
     """Return the database map — tables, domains, counts, query stats."""
+    _RULES_CACHE.pop(datasource_id, None)
     tables = _catalog_tables(db, datasource_id)
+    
+    # Populate memory caches for table names and reverse FKs to optimize queries
+    global _TABLE_NAMES_CACHE, _REVERSE_FK_CACHE
+    _TABLE_NAMES_CACHE = {str(t.id): str(t.table_name) for t in tables}
+    
+    from engine.models import SchemaColumn
+    fk_cols = (
+        db.query(SchemaColumn)
+        .join(SchemaTable, SchemaColumn.table_id == SchemaTable.id)
+        .filter(SchemaTable.data_source_id == datasource_id, SchemaColumn.is_foreign_key == True)
+        .all()
+    )
+    
+    rev_fk = defaultdict(list)
+    for col in fk_cols:
+        if col.foreign_table_id and col.table_id:
+            ref_table_name = _TABLE_NAMES_CACHE.get(str(col.table_id))
+            if ref_table_name:
+                rev_fk[str(col.foreign_table_id)].append(ref_table_name)
+    _REVERSE_FK_CACHE = dict(rev_fk)
+
     ds = _datasource(db, datasource_id)
     selected = tables  # always overview mode for agent
 
@@ -80,15 +106,7 @@ def _schema_table_summary(db: Session, table: SchemaTable) -> dict[str, Any]:
     }
 
 
-def _query_stats_for_table(db: Session, datasource_id: str, table_name: str) -> dict[str, Any]:
-    since = datetime.now(UTC) - timedelta(days=90)
-    records = (
-        db.query(QueryHistory.executed_sql, QueryHistory.created_at)
-        .filter(QueryHistory.data_source_id == datasource_id, QueryHistory.created_at >= since)
-        .all()
-    )
-    hits = [r.created_at for r in records if r.executed_sql and table_name in r.executed_sql]
-    return {"hit_count": len(hits), "last_queried_at": max(hits).isoformat() if hits else None}
+# First definition of _query_stats_for_table removed to prevent duplicates
 
 
 def _domain_sections(db: Session, tables: list[SchemaTable]) -> list[dict[str, Any]]:
@@ -106,15 +124,20 @@ def _domain_sections(db: Session, tables: list[SchemaTable]) -> list[dict[str, A
 def _table_tags(db: Session, table: SchemaTable) -> list[str]:
     from engine.models import DomainTagRule
     name = str(table.table_name or "").lower()
-    rules = (
-        db.query(DomainTagRule)
-        .filter(DomainTagRule.data_source_id == table.data_source_id)
-        .order_by(DomainTagRule.priority.desc())
-        .all()
-    )
+    ds_id = table.data_source_id
+    
+    if ds_id not in _RULES_CACHE:
+        _RULES_CACHE[ds_id] = (
+            db.query(DomainTagRule)
+            .filter(DomainTagRule.data_source_id == ds_id)
+            .order_by(DomainTagRule.priority.desc())
+            .all()
+        )
+    rules = _RULES_CACHE[ds_id]
+    
     tags: list[str] = []
     for rule in rules:
-        if rule.pattern in name and rule.tag not in tags:
+        if rule.pattern and rule.pattern.lower() in name and rule.tag not in tags:
             tags.append(rule.tag)
     return tags or ["other"]
 
@@ -123,17 +146,25 @@ def _connected_table_names(db: Session, table: SchemaTable) -> set[str]:
     connected: set[str] = set()
     for col in (table.columns or []):
         if col.is_foreign_key and col.foreign_table_id:
-            target = db.query(SchemaTable).filter(SchemaTable.id == col.foreign_table_id).first()
-            if target is not None:
-                connected.add(str(target.table_name))
-    reverse = (
-        db.query(SchemaColumn)
-        .filter(SchemaColumn.foreign_table_id == table.id)
-        .all()
-    )
-    for col in reverse:
-        if col.table is not None:
-            connected.add(str(col.table.table_name))
+            target_name = _TABLE_NAMES_CACHE.get(str(col.foreign_table_id))
+            if target_name:
+                connected.add(target_name)
+            else:
+                target = db.query(SchemaTable).filter(SchemaTable.id == col.foreign_table_id).first()
+                if target is not None:
+                    connected.add(str(target.table_name))
+    reverse_list = _REVERSE_FK_CACHE.get(str(table.id))
+    if reverse_list is not None:
+        connected.update(reverse_list)
+    else:
+        reverse = (
+            db.query(SchemaColumn)
+            .filter(SchemaColumn.foreign_table_id == table.id)
+            .all()
+        )
+        for col in reverse:
+            if col.table is not None:
+                connected.add(str(col.table.table_name))
     return connected
 
 
@@ -150,11 +181,15 @@ def _fk_summary(col: SchemaColumn) -> dict[str, Any]:
 def _query_stats_for_table(db: Session, datasource_id: str, table_name: str) -> dict[str, Any]:
     since = datetime.now(UTC) - timedelta(days=90)
     records = (
-        db.query(QueryHistory.executed_sql, QueryHistory.created_at)
-        .filter(QueryHistory.data_source_id == datasource_id, QueryHistory.created_at >= since)
+        db.query(QueryHistory.created_at)
+        .filter(
+            QueryHistory.data_source_id == datasource_id,
+            QueryHistory.created_at >= since,
+            QueryHistory.executed_sql.like(f"%{table_name}%")
+        )
         .all()
     )
-    hits = [r.created_at for r in records if r.executed_sql and table_name in r.executed_sql]
+    hits = [r.created_at for r in records]
     return {"hit_count": len(hits), "last_queried_at": max(hits).isoformat() if hits else None}
 
 

@@ -56,15 +56,15 @@ def ai_enrich_catalog(
 
         try:
             ai_result = enrich_tables_batch(context)
+            _write_ai_metadata(db, batch, ai_result)
+            _rebuild_search_docs(db, datasource_id, batch, ai_result)
+            _update_schema_hashes(batch)
+            enriched_count += len(batch)
         except Exception as exc:
             logger.exception("AI enrich batch %d failed: %s", i // table_batch, exc)
+            db.rollback()
             continue
 
-        _write_ai_metadata(db, batch, ai_result)
-        _rebuild_search_docs(db, datasource_id, batch, ai_result)
-        _update_schema_hashes(batch)
-
-        enriched_count += len(batch)
         if i + table_batch < len(changed):
             time.sleep(AI_LLM_BATCH_INTERVAL_MS / 1000)
 
@@ -132,7 +132,7 @@ def _write_ai_metadata(db: OrmSession, tables: list[SchemaTable], ai_result: dic
             col.aliases = json.dumps(ac.get("aliases") or [], ensure_ascii=False)
             col.column_role = str(ac.get("column_role") or "") or None
             col.metric_type = str(ac.get("metric_type") or "") if ac.get("metric_type") else None
-            col.is_pii = False
+            col.is_pii = bool(col.is_pii or ac.get("is_pii", False))
             col.ai_confidence = float(ac.get("ai_confidence", 0))
             col.ai_enriched_at = now
 
@@ -326,10 +326,8 @@ def _clean_orphan_search_docs(db: OrmSession, datasource_id: str) -> None:
 
 def _connected_table_names(db: OrmSession, table: SchemaTable) -> set[str]:
     """Get FK-connected table names."""
-    connected: set[str] = set()
-    for col in table.columns or []:
-        if col.is_foreign_key and col.foreign_table_id:
-            target = db.query(SchemaTable).filter(SchemaTable.id == col.foreign_table_id).first()
-            if target:
-                connected.add(str(target.table_name))
-    return connected
+    fk_ids = {col.foreign_table_id for col in table.columns or [] if col.is_foreign_key and col.foreign_table_id}
+    if not fk_ids:
+        return set()
+    targets = db.query(SchemaTable).filter(SchemaTable.id.in_(fk_ids)).all()
+    return {str(t.table_name) for t in targets}
