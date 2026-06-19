@@ -120,35 +120,12 @@ class DBFoxAgentService:
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
         accumulated_state: dict[str, Any] = dict(initial_state)
-        last_context_summary = ""
 
         try:
-            for chunk in app.stream(initial_state, config=config, stream_mode="updates"):
-                for node_name, update in chunk.items():
-                    if not isinstance(update, dict):
-                        continue
-
-                    self._merge_state(accumulated_state, update)
-                    node_str = str(node_name)
-
-                    # Emit artifacts from observe node
-                    if node_str == "observe":
-                        yield from observe_events(
-                            emit, update, agent_state, artifact_identity, emitted_artifact_ids
-                        )
-
-                    if node_str in ("observe", "progress", "repair"):
-                        event, last_context_summary = context_update_event(
-                            emit, accumulated_state, last_context_summary,
-                        )
-                        if event is not None:
-                            yield event
-
-                    # Emit trace events
-                    if "trace_events" in update:
-                        for te in update["trace_events"]:
-                            if isinstance(te, dict):
-                                yield from trace_to_events(emit, te)
+            yield from self._stream_and_merge(
+                app, initial_state, config, accumulated_state, emit,
+                agent_state, artifact_identity, emitted_artifact_ids
+            )
         except GeneratorExit:
             # Client disconnected (SSE stream closed by frontend cancel/abort).
             try:
@@ -169,6 +146,10 @@ class DBFoxAgentService:
                 self._rollback_quietly()
             yield emit("agent.run.cancelled", error="Client disconnected — run cancelled.")
             return
+        except Exception as exc:
+            logger.exception("Agent stream execution failed: %s", exc)
+            accumulated_state["status"] = "failed"
+            accumulated_state["error"] = f"Internal agent error: {exc}"
 
         # ---- after the stream loop: check for LangGraph interrupt ----------
         snapshot = app.get_state(config)
@@ -197,6 +178,12 @@ class DBFoxAgentService:
             dict(snapshot.values) if (snapshot is not None and isinstance(snapshot.values, dict))
             else dict(accumulated_state)
         )
+
+        if final_state.get("status") == "running" or not final_state.get("status"):
+            if accumulated_state.get("status") == "failed":
+                final_state["status"] = "failed"
+        if not final_state.get("error") and accumulated_state.get("error"):
+            final_state["error"] = accumulated_state.get("error")
 
         success = final_state.get("status") == "completed" and not final_state.get("error")
         response = build_response(
@@ -280,23 +267,23 @@ class DBFoxAgentService:
             "note": note or "",
         }
 
-        for chunk in app.stream(
-            Command(resume=resume_value), config=config, stream_mode="updates"
-        ):
-            for node_name, update in chunk.items():
-                if not isinstance(update, dict):
-                    continue
-                self._merge_state(accumulated_state, update)
-                node_str = str(node_name)
-
-                if node_str == "observe":
-                    yield from observe_events(
-                        emit, update, agent_state, artifact_identity, emitted_artifact_ids
-                    )
-                if "trace_events" in update:
-                    for te in update["trace_events"]:
-                        if isinstance(te, dict):
-                            yield from trace_to_events(emit, te)
+        try:
+            yield from self._stream_and_merge(
+                app, Command(resume=resume_value), config, accumulated_state, emit,
+                agent_state, artifact_identity, emitted_artifact_ids
+            )
+        except GeneratorExit:
+            try:
+                agent_persistence.cancel_run(self.db, run_id=run_id)
+                self.db.commit()
+            except Exception:
+                self._rollback_quietly()
+            yield emit("agent.run.cancelled", error="Client disconnected — run cancelled.")
+            return
+        except Exception as exc:
+            logger.exception("Agent stream execution failed: %s", exc)
+            accumulated_state["status"] = "failed"
+            accumulated_state["error"] = f"Internal agent error: {exc}"
 
         snapshot = app.get_state(config)
         final_state: dict[str, Any] = (
@@ -306,6 +293,12 @@ class DBFoxAgentService:
         if not approved:
             final_state["status"] = "failed"
             final_state["error"] = "User rejected approval."
+
+        if final_state.get("status") == "running" or not final_state.get("status"):
+            if accumulated_state.get("status") == "failed":
+                final_state["status"] = "failed"
+        if not final_state.get("error") and accumulated_state.get("error"):
+            final_state["error"] = accumulated_state.get("error")
 
         success = final_state.get("status") == "completed" and not final_state.get("error")
         response = build_response(
@@ -396,12 +389,69 @@ class DBFoxAgentService:
             datasource_id=req.datasource_id,
         )
 
+    def _stream_and_merge(
+        self,
+        app: Any,
+        input_value: Any,
+        config: Any,
+        accumulated_state: dict[str, Any],
+        emit: Any,
+        agent_state: Any,
+        artifact_identity: Any,
+        emitted_artifact_ids: set[str],
+    ) -> Iterator[AgentRuntimeEvent]:
+        last_context_summary = ""
+        for chunk in app.stream(input_value, config=config, stream_mode="updates"):
+            for node_name, update in chunk.items():
+                if not isinstance(update, dict):
+                    continue
+
+                self._merge_state(accumulated_state, update)
+                node_str = str(node_name)
+
+                # Emit artifacts from observe node
+                if node_str == "observe":
+                    yield from observe_events(
+                        emit, update, agent_state, artifact_identity, emitted_artifact_ids
+                    )
+
+                if node_str in ("observe", "progress", "repair"):
+                    event, last_context_summary = context_update_event(
+                        emit, accumulated_state, last_context_summary,
+                    )
+                    if event is not None:
+                        yield event
+
+                # Emit trace events
+                if "trace_events" in update:
+                    for te in update["trace_events"]:
+                        if isinstance(te, dict):
+                            yield from trace_to_events(emit, te)
+
     def _merge_state(self, target: dict[str, Any], update: dict[str, Any]) -> None:
+        from engine.agent.graph.state import DBFoxAgentState
+        from typing import get_origin, get_args
+        import typing
+
+        if not hasattr(self, "_list_keys"):
+            list_keys = set()
+            for key, ann in DBFoxAgentState.__annotations__.items():
+                origin = get_origin(ann)
+                if origin is list or ann is list:
+                    list_keys.add(key)
+                elif origin is typing.Annotated or (hasattr(typing, "_AnnotatedAlias") and isinstance(ann, typing._AnnotatedAlias)):
+                    args = get_args(ann)
+                    if args and (get_origin(args[0]) is list or args[0] is list):
+                        list_keys.add(key)
+            self._list_keys = list_keys
+
         for key, value in update.items():
-            if key in ("messages", "artifacts", "trace_events", "runtime_events", "plan_events",
-                       "tool_results", "last_tool_results", "repair_trace"):
+            if key in self._list_keys:
                 if isinstance(value, list):
-                    target.setdefault(key, []).extend(value)
+                    if value and isinstance(value[0], dict) and value[0].get("__clear__"):
+                        target[key] = list(value[1:])
+                    else:
+                        target.setdefault(key, []).extend(value)
                 continue
             # Deep-merge dict fields so that nested keys from earlier chunks
             # are not overwritten by later partial updates (e.g. environment_profile
