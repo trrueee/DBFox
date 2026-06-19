@@ -211,3 +211,86 @@ def test_db_remember_records_table_alias_and_redacts_evidence(db_session, test_d
         .one()
     )
     assert row.description == "Found in request from [REDACTED_EMAIL]"
+
+
+def test_db_remember_prod_alias_requires_confirmation_without_write(db_session, test_datasource) -> None:
+    test_datasource.env = "prod"
+    db_session.commit()
+
+    result = db_remember(
+        db_session,
+        test_datasource.id,
+        mem_type="table_alias",
+        target="users",
+        aliases=["customers"],
+    )
+
+    assert result["status"] == "pending_confirmation"
+    assert result["aliases"] == ["customers"]
+    assert (
+        db_session.query(SemanticAlias)
+        .filter(
+            SemanticAlias.data_source_id == test_datasource.id,
+            SemanticAlias.alias == "customers",
+            SemanticAlias.target_type == "table",
+            SemanticAlias.target == "users",
+        )
+        .count()
+        == 0
+    )
+
+
+def test_db_remember_join_path_requires_confirmation_without_write(db_session, test_datasource) -> None:
+    result = db_remember(
+        db_session,
+        test_datasource.id,
+        mem_type="join_path",
+        target="orders.users",
+        value={
+            "left_table": "orders",
+            "left_column": "user_id",
+            "right_table": "users",
+            "right_column": "id",
+            "join_type": "many_to_one",
+            "description": "orders.user_id links to users.id",
+        },
+    )
+
+    assert result["status"] == "pending_confirmation"
+    assert result["join"]["left_table"] == "orders"
+    assert (
+        db_session.query(SemanticAlias)
+        .filter(
+            SemanticAlias.data_source_id == test_datasource.id,
+            SemanticAlias.target_type == "join_path",
+            SemanticAlias.target == "orders.users",
+        )
+        .count()
+        == 0
+    )
+
+
+def test_db_remember_business_definition_requires_confirmation_without_write(db_session, test_datasource) -> None:
+    result = db_remember(
+        db_session,
+        test_datasource.id,
+        mem_type="business_definition",
+        target="active_users",
+        value={
+            "description": "Users with a recent login from alice@example.com",
+            "sql": "SELECT * FROM users WHERE email = 'alice@example.com'",
+        },
+    )
+
+    assert result["status"] == "pending_confirmation"
+    assert result["definition"]["sql"] == "SELECT * FROM users WHERE email = '[REDACTED_EMAIL]'"
+    assert (
+        db_session.query(SemanticAlias)
+        .filter(
+            SemanticAlias.data_source_id == test_datasource.id,
+            SemanticAlias.target_type == "business_definition",
+            SemanticAlias.target == "active_users",
+        )
+        .count()
+        == 0
+    )
