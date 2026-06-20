@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from typing import Any
 from engine.agent.graph.state import DBFoxAgentState
@@ -8,6 +10,17 @@ from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.graph.message_utils import first_user_text
 
 logger = logging.getLogger("dbfox.dbfox_agent.progress.fast_path")
+
+
+def _arg_signature(tool_name: str, args: dict[str, Any]) -> str:
+    """Deterministic hash signature for tool name + canonical args.
+
+    Used by loop prevention to detect identical tool invocations across steps
+    even when dict ordering or minor formatting differs.
+    """
+    canonical = json.dumps(args, sort_keys=True, ensure_ascii=False, default=str)
+    digest = hashlib.sha256(f"{tool_name}::{canonical}".encode()).hexdigest()[:16]
+    return digest
 
 
 def _max_steps_reason(state: DBFoxAgentState, max_steps: int) -> str:
@@ -123,12 +136,201 @@ def check_sql_repair_fastpath(state: DBFoxAgentState) -> dict[str, Any] | None:
     }
 
 
+def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
+    history = state.get("tool_call_history") or []
+    if len(history) < 2:
+        return None
+
+    # Get the last tool execution
+    current = history[-1]
+    name = current.get("name")
+    inputs = current.get("input") or {}
+    curr_sig = _arg_signature(name, inputs)
+
+    # Hash-based dedup: look for same tool + same canonical arg signature
+    prev = None
+    for item in reversed(history[:-1]):
+        if item.get("name") != name:
+            continue
+        item_inputs = item.get("input") or {}
+        if _arg_signature(name, item_inputs) == curr_sig:
+            prev = item
+            break
+
+    # Also check exhausted_paths for pre-existing empty/failed signatures
+    exhausted = set(state.get("exhausted_paths") or [])
+    if not prev:
+        for ep in exhausted:
+            if ep.startswith(f"{name}::") and curr_sig in ep:
+                decision = progress_decision_dict(
+                    status="clarify",
+                    reason_summary=f"{name} with these arguments was already exhausted in a previous step.",
+                    should_finalize=True,
+                    should_ask_user=True,
+                )
+                return {
+                    "status": "waiting_user",
+                    "progress_decision": decision,
+                    "trace_events": [progress_trace(decision, fastpath=True)],
+                }
+        return None
+        
+    # 1. same db.search empty result twice triggers stop / clarify.
+    if name == "db.search":
+        current_cnt = current.get("results_count")
+        prev_cnt = prev.get("results_count")
+        if current_cnt == 0 and prev_cnt == 0:
+            decision = progress_decision_dict(
+                status="clarify",
+                reason_summary="The search for query matches returned no results twice. Clarification is required.",
+                should_finalize=True,
+                should_ask_user=True,
+            )
+            return {
+                "status": "waiting_user",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+            
+    # 2. same schema.describe_table not found twice triggers stop / clarify.
+    if name == "schema.describe_table":
+        current_cnt = current.get("columns_count")
+        prev_cnt = prev.get("columns_count")
+        current_failed = current.get("status") == "failed"
+        prev_failed = prev.get("status") == "failed"
+        if (current_cnt == 0 or current_failed) and (prev_cnt == 0 or prev_failed):
+            decision = progress_decision_dict(
+                status="clarify",
+                reason_summary=f"Table description was not found twice for table: {inputs.get('table_name')}.",
+                should_finalize=True,
+                should_ask_user=True,
+            )
+            return {
+                "status": "waiting_user",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+            
+    # 3. same db.inspect object missing twice triggers stop / clarify.
+    if name == "db.inspect":
+        current_failed = current.get("status") == "failed"
+        prev_failed = prev.get("status") == "failed"
+        if current_failed and prev_failed:
+            decision = progress_decision_dict(
+                status="clarify",
+                reason_summary=f"Table or column inspection failed twice for: {inputs}.",
+                should_finalize=True,
+                should_ask_user=True,
+            )
+            return {
+                "status": "waiting_user",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+
+    # 4. same sql.validate hard blockers twice triggers stop.
+    if name == "sql.validate":
+        curr_blockers = [r for r in current.get("blocked_reasons") or [] if r != "requires_confirmation"]
+        prev_blockers = [r for r in prev.get("blocked_reasons") or [] if r != "requires_confirmation"]
+        if curr_blockers and prev_blockers and sorted(curr_blockers) == sorted(prev_blockers):
+            decision = progress_decision_dict(
+                status="failed",
+                reason_summary=f"SQL validation blocked by same safety guardrails twice: {curr_blockers}.",
+                should_finalize=True,
+                root_cause=f"SQL blocked twice: {curr_blockers}",
+            )
+            return {
+                "status": "failed",
+                "error": f"SQL blocked twice by safety guardrails: {curr_blockers}",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+
+    # 5. same db.query / sql.execute_readonly error twice → stop.
+    if name in ("db.query", "sql.execute_readonly"):
+        curr_status = current.get("status")
+        prev_status = prev.get("status")
+        curr_err = current.get("error")
+        prev_err = prev.get("error")
+        if curr_status == "failed" and prev_status == "failed" and curr_err == prev_err:
+            decision = progress_decision_dict(
+                status="failed",
+                reason_summary=f"SQL execution failed twice with the same error: {curr_err}.",
+                should_finalize=True,
+                root_cause=curr_err,
+            )
+            return {
+                "status": "failed",
+                "error": f"SQL execution failed twice with same error: {curr_err}",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+
+    # 6. same schema.list_tables_page empty page twice → stop.
+    if name == "schema.list_tables_page":
+        curr_empty = (current.get("results_count") or 0) == 0
+        prev_empty = (prev.get("results_count") or 0) == 0
+        if curr_empty and prev_empty:
+            decision = progress_decision_dict(
+                status="clarify",
+                reason_summary="Pagination returned empty results twice. No more tables to browse.",
+                should_finalize=True,
+                should_ask_user=True,
+            )
+            return {
+                "status": "waiting_user",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+
+    # 7. same schema.expand_related_tables empty twice → stop.
+    if name == "schema.expand_related_tables":
+        curr_empty = (current.get("results_count") or 0) == 0
+        prev_empty = (prev.get("results_count") or 0) == 0
+        if curr_empty and prev_empty:
+            decision = progress_decision_dict(
+                status="clarify",
+                reason_summary=f"No FK relationships found twice for table: {inputs.get('table_name')}.",
+                should_finalize=True,
+                should_ask_user=True,
+            )
+            return {
+                "status": "waiting_user",
+                "progress_decision": decision,
+                "trace_events": [progress_trace(decision, fastpath=True)],
+            }
+
+    # 8. Generic: same tool + same args + same failure twice → stop.
+    curr_status = current.get("status")
+    prev_status = prev.get("status")
+    if curr_status == "failed" and prev_status == "failed":
+        decision = progress_decision_dict(
+            status="failed",
+            reason_summary=f"Tool '{name}' failed twice with the same arguments.",
+            should_finalize=True,
+            root_cause=f"Repeated failure: {name}",
+        )
+        return {
+            "status": "failed",
+            "error": f"Tool '{name}' failed twice with same arguments.",
+            "progress_decision": decision,
+            "trace_events": [progress_trace(decision, fastpath=True)],
+        }
+
+    return None
+
+
 def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | None:
     """Rule-based ReAct progress routing for the common path."""
     status = state.get("status", "running")
     error = state.get("error")
     step_count = int(state.get("step_count", 0))
     max_steps = int(state.get("max_steps", 20))
+
+    # ---- Loop prevention checks --------------------
+    loop_result = check_loop_prevention(state)
+    if loop_result is not None:
+        return loop_result
 
     if status == "failed" or error:
         reason = str(error or "Agent reported failure.")

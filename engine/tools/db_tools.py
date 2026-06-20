@@ -9,13 +9,14 @@ Design principles:
 This module is a thin re-export layer. The actual implementations live in
 ``engine/tools/db/`` sub-modules:
 
-  - ``_common.py``  — shared constants, helpers, and the ``tool_handler`` decorator
+  - ``_common.py``  — shared constants and helpers
   - ``observe.py``  — ``db.observe`` handler
   - ``search.py``   — ``db.search`` handler
   - ``inspect.py``  — ``db.inspect`` handler
   - ``preview.py``  — ``db.preview`` handler
   - ``query.py``    — ``db.query`` handler
   - ``remember.py`` — ``db.remember`` handler
+  - ``sql_execution.py`` — ``sql.validate`` / ``sql.execute_readonly`` handlers
 """
 
 from __future__ import annotations
@@ -26,9 +27,10 @@ from __future__ import annotations
 from engine.tools.db.observe import db_observe
 from engine.tools.db.search import db_search
 from engine.tools.db.inspect import db_inspect
-from engine.tools.safe_preview import db_preview
+from engine.tools.db.preview import db_preview
 from engine.tools.db.query import db_query
 from engine.tools.db.remember import db_remember
+from engine.tools.db.sql_execution import sql_validate, sql_execute_readonly
 
 __all__ = [
     "db_observe",
@@ -37,6 +39,8 @@ __all__ = [
     "db_preview",
     "db_query",
     "db_remember",
+    "sql_validate",
+    "sql_execute_readonly",
 ]
 
 # ---------------------------------------------------------------------------
@@ -61,7 +65,6 @@ from engine.tools.db._common import (
     _redact_row,
     _string_list,
     _success,
-    tool_handler,
 )
 from engine.tools.db.observe import (
     _connected_table_names,

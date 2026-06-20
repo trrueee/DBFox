@@ -4,7 +4,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.model.context_builder import build_progress_guidance_message
-from engine.agent.progress.fast_path import check_sql_repair_fastpath as _check_sql_repair_fastpath
+from engine.agent.progress.fast_path import (
+    deterministic_progress_fastpath,
+    check_sql_repair_fastpath as _check_sql_repair_fastpath,
+)
 from engine.agent.progress.lens_formatter import enrich_progress_result as _enrich_progress_result
 from engine.agent.planning.schemas import AgentPlanDirective
 from engine.agent.progress.clarification_policy import (
@@ -336,3 +339,75 @@ class TestModelProgressInjection:
         assert build_progress_guidance_message({
             "progress_decision": {"status": "complete"},
         }) is None
+
+
+class TestLoopPrevention:
+    def _state(self, **kwargs) -> DBFoxAgentState:
+        base: DBFoxAgentState = {
+            "messages": [HumanMessage(content="Why did sales drop?")],
+            "revision_count": 0,
+            "plan_directive": {"reasoning_summary": "Analyze sales drop"},
+        }
+        base.update(kwargs)  # type: ignore[typeddict-item]
+        return base
+
+    def test_repeated_empty_db_search_triggers_clarify(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "db.search", "input": {"query": "sales"}, "status": "success", "results_count": 0},
+                {"name": "db.search", "input": {"query": "sales"}, "status": "success", "results_count": 0},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        assert result is not None
+        assert result["status"] == "waiting_user"
+        assert result["progress_decision"]["status"] == "clarify"
+        assert result["progress_decision"]["should_ask_user"] is True
+        assert result["progress_decision"]["should_finalize"] is True
+
+    def test_repeated_schema_describe_table_not_found_triggers_clarify(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "schema.describe_table", "input": {"table_name": "orders"}, "status": "failed", "error": "table not found"},
+                {"name": "schema.describe_table", "input": {"table_name": "orders"}, "status": "failed", "error": "table not found"},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        assert result is not None
+        assert result["status"] == "waiting_user"
+        assert result["progress_decision"]["status"] == "clarify"
+
+    def test_repeated_sql_execution_error_triggers_stop(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "sql.execute_readonly", "input": {"sql": "SELECT * FROM orders"}, "status": "failed", "error": "syntax error"},
+                {"name": "sql.execute_readonly", "input": {"sql": "SELECT * FROM orders"}, "status": "failed", "error": "syntax error"},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        assert result is not None
+        assert result["status"] == "failed"
+        assert result["progress_decision"]["status"] == "failed"
+        assert "syntax error" in result["error"]
+
+    def test_one_empty_search_does_not_trigger_loop(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "db.search", "input": {"query": "sales"}, "status": "success", "results_count": 0},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        if result is not None:
+            assert result.get("status") != "waiting_user"
+
+    def test_useful_db_search_continues_normally(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "db.search", "input": {"query": "sales"}, "status": "success", "results_count": 5},
+                {"name": "db.search", "input": {"query": "sales"}, "status": "success", "results_count": 5},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        if result is not None:
+            assert result.get("status") != "waiting_user"
+
