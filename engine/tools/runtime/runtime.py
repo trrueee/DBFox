@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -8,6 +9,8 @@ from pydantic import ValidationError
 from engine.agent_core.types import ToolObservation
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
+
+logger = logging.getLogger("dbfox.tools.runtime")
 
 
 class ToolRuntime:
@@ -51,13 +54,15 @@ class ToolRuntime:
         except Exception as exc:
             return self._failed(tool_name, raw_input, "Tool execution failed", exc, start)
 
+        elapsed = int((time.perf_counter() - start) * 1000)
+        logger.info("%s OK (%dms)", tool_name, elapsed)
         return ToolObservation(
             name=tool_name,
             status="success",
             input=dict(raw_input),
             output=parsed_output.model_dump(mode="json"),
             error=None,
-            latency_ms=int((time.perf_counter() - start) * 1000),
+            latency_ms=elapsed,
         )
 
     @staticmethod
@@ -68,6 +73,7 @@ class ToolRuntime:
         exc: Exception,
         start: float,
     ) -> ToolObservation:
+        logger.error("%s FAILED (%dms): %s — %s", tool_name, int((time.perf_counter() - start) * 1000), message, exc)
         return ToolObservation(
             name=tool_name,
             status="failed",

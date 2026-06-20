@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Literal
 from pydantic import BaseModel, Field
 
 from engine.tools.runtime.registry import ToolRegistry, tool_to_group
+
+logger = logging.getLogger("dbfox.policy.gate")
 
 
 class PolicyDecision(BaseModel):
@@ -227,8 +230,14 @@ class PolicyGate:
         for rule in _RULES:
             decision = rule(self, state, tool_name, args, execution_mode, tool, policy)
             if decision is not None:
+                if decision.status != "allowed":
+                    logger.warning(
+                        "PolicyGate: %s → %s (reason=%s)",
+                        tool_name, decision.status, decision.reason,
+                    )
                 return decision
 
+        logger.debug("PolicyGate: %s → allowed", tool_name)
         return PolicyDecision(
             status="allowed",
             reason=f"Tool {tool_name} is allowed by policy.",
