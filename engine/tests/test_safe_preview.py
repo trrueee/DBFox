@@ -3,7 +3,7 @@
 import pytest
 
 from engine.tools.dbfox_tools import PreviewInput
-from engine.tools.safe_preview import db_preview
+from engine.tools.db.preview import db_preview
 
 
 def test_preview_input_rejects_string_where() -> None:

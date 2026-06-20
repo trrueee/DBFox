@@ -78,6 +78,63 @@ def test_db_query_contract_writes_execution_and_sql():
     assert update["trace_events"][0]["payload"]["_merge_strategy"] == "reuse"
 
 
+def test_sql_validate_contract_writes_safety_and_sql():
+    safety = {
+        "can_execute": True,
+        "safe_sql": "SELECT id, platform FROM platform_accounts LIMIT 100",
+        "original_sql": "SELECT id, platform FROM platform_accounts",
+        "blocked_reasons": [],
+    }
+    update = apply_tool_observation_to_state(
+        state={},
+        tool_name="sql.validate",
+        observation=_observation(
+            "sql.validate",
+            output={
+                "can_execute": True,
+                "safe_sql": safety["safe_sql"],
+                "original_sql": safety["original_sql"],
+                "execution_safety_decision": safety,
+            },
+        ),
+    )
+
+    assert update["safety"] == safety
+    assert update["sql"] == safety["safe_sql"]
+    assert update["trace_events"][0]["payload"]["_merge_strategy"] == "reuse"
+
+
+def test_sql_execute_readonly_contract_writes_execution_sql_and_artifact():
+    update = apply_tool_observation_to_state(
+        state={"error": "old", "last_error_telemetry": {"old": True}},
+        tool_name="sql.execute_readonly",
+        observation=_observation(
+            "sql.execute_readonly",
+            output={"status": "success", "returned_rows": 2, "safe_sql": "SELECT 1"},
+        ),
+    )
+
+    assert "sql.execute_readonly" in ERROR_CLEARING_TOOLS
+    assert "sql.execute_readonly" in ARTIFACT_TOOLS
+    assert update["execution"]["success"] is True
+    assert update["execution"]["rowCount"] == 2
+    assert update["sql"] == "SELECT 1"
+    assert update["artifacts"][0]["tool_name"] == "sql.execute_readonly"
+    assert update["error"] is None
+    assert update["last_error_telemetry"] is None
+    assert update["last_failed_tool_call"] is None
+
+
+def test_db_search_tool_description_uses_semantic_expression_not_keywords():
+    from engine.tools.dbfox_tools import SearchInput
+
+    description = SearchInput.model_fields["query"].description or ""
+    assert "Keywords" not in description
+    assert "semantic search expression" in description
+    assert "one expression per call" in description
+    assert "make multiple db.search calls" in description
+
+
 def test_unknown_tool_gets_safe_default_reducer_behavior():
     update = apply_tool_observation_to_state(
         state={},

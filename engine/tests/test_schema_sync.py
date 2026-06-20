@@ -167,10 +167,10 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
         SchemaTable.data_source_id == test_datasource.id
     ).count()
 
-    def _failing_snapshot(ds, ds_id):
+    def _failing_snapshot(db, ds_id):
         raise ValueError("Simulated schema sync failure")
 
-    monkeypatch.setattr(schema_sync_module, "_build_sqlite_schema_snapshot", _failing_snapshot)
+    monkeypatch.setattr("engine.environment.schema_catalog_sync.introspect_datasource", _failing_snapshot)
 
     with pytest.raises(ValueError, match="Schema sync failed"):
         sync_schema(db_session, test_datasource.id)
