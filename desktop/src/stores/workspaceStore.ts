@@ -220,7 +220,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         ...s.tabs,
         {
           id: tabId,
-          title: "问数结果",
+          title: text.length > 30 ? text.slice(0, 30) + "…" : text,
           type: "query-result",
           queryText: text,
           conversationId: `conversation-${nextId}`,
