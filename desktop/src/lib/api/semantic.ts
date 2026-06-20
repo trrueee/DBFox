@@ -3,7 +3,6 @@ import type {
   SemanticAlias,
   SemanticAliasCreateParams,
   SemanticAliasUpdateParams,
-  SemanticSyncStatus,
 } from "./types";
 
 export const semanticApi = {
@@ -27,21 +26,6 @@ export const semanticApi = {
       method: "DELETE",
     }),
 
-  syncEmbeddings: (datasourceId: string, apiKey?: string, apiBase?: string, modelName?: string) =>
-    request<{ success: boolean; synced_count: number; message: string }>(
-      `/semantic/aliases/sync-embeddings?datasource_id=${encodeURIComponent(datasourceId)}`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          api_key: apiKey || undefined,
-          api_base: apiBase || undefined,
-          model_name: modelName || undefined,
-        }),
-      },
-    ),
-
-  getSyncStatus: (datasourceId: string) =>
-    request<SemanticSyncStatus>(
-      `/semantic/aliases/sync-status?datasource_id=${encodeURIComponent(datasourceId)}`
-    ),
+  // NOTE: syncEmbeddings and getSyncStatus were removed in MVP simplification (2026-06-20).
+  // AI enrichment is now triggered via datasource sync with ai_enrich: true.
 };
