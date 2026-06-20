@@ -14,7 +14,7 @@ Structure:
     ├─ sql            — current SQL candidate
     ├─ safety         — TrustGate / guardrail result
     ├─ execution      — query execution result
-    ├─ result         — result profile / facts / anomalies
+    ├─ result         — analysis units summary / chart type
     ├─ memory         — relevant memories (auto-injected)
     ├─ run_state      — step count / retry history / error
     └─ skill          — active skill guidance
@@ -79,9 +79,9 @@ class ExecutionSection(BaseModel):
 
 
 class ResultSection(BaseModel):
-    row_count: int = 0
-    notable_facts: list[str] = Field(default_factory=list)
-    anomalies: list[str] = Field(default_factory=list)
+    query_count: int = 0
+    total_rows: int = 0
+    non_empty_queries: int = 0
     chart_type: str | None = None
 
 
@@ -162,7 +162,7 @@ class ContextPack(BaseModel):
             self.schema_context.selected_tables
             or self.sql.sql
             or self.execution.success
-            or self.result.notable_facts
+            or self.result.total_rows > 0
         )
 
     @property
@@ -313,11 +313,15 @@ def _build_execution_section(state: dict[str, Any]) -> ExecutionSection:
 
 
 def _build_result_section(state: dict[str, Any]) -> ResultSection:
-    result_raw = state.get("result_profile") or {}
+    units = state.get("analysis_units") or []
+    non_empty = [u for u in units if not u.get("is_empty")]
+    total_rows = sum(
+        int((u.get("execution") or {}).get("rowCount", 0)) for u in non_empty
+    )
     return ResultSection(
-        row_count=int(result_raw.get("row_count") or 0),
-        notable_facts=_normalize_str_list(result_raw.get("notable_facts") or [])[:5],
-        anomalies=_normalize_str_list(result_raw.get("anomalies") or [])[:3],
+        query_count=len(units),
+        total_rows=total_rows,
+        non_empty_queries=len(non_empty),
         chart_type=_str_or_none((state.get("chart_suggestion") or {}).get("type")),
     )
 
@@ -494,9 +498,8 @@ def render_for_model(pack: ContextPack) -> str:
         parts.append(f"  Error: {pack.execution.error}")
 
     # Result
-    if pack.result.notable_facts:
-        facts = "; ".join(pack.result.notable_facts[:3])
-        parts.append(f"- **Result Profile**: {facts}")
+    if pack.result.total_rows > 0:
+        parts.append(f"- **Results**: {pack.result.query_count} queries, {pack.result.total_rows} rows")
 
     # Error
     if pack.run_state.error:
@@ -541,10 +544,10 @@ def render_for_judge(pack: ContextPack) -> str:
             f"rows={pack.execution.row_count}"
         )
 
-    if pack.result.notable_facts:
-        parts.append(f"Notable facts: {len(pack.result.notable_facts)}")
-    if pack.result.anomalies:
-        parts.append(f"Anomalies: {len(pack.result.anomalies)}")
+    if pack.result.total_rows > 0:
+        parts.append(f"Results: {pack.result.non_empty_queries}/{pack.result.query_count} queries, {pack.result.total_rows} rows")
+    if pack.result.chart_type:
+        parts.append(f"Chart: {pack.result.chart_type}")
 
     if pack.run_state.error:
         parts.append(f"Error: {pack.run_state.error[:300]}")

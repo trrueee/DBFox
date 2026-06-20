@@ -6,7 +6,7 @@ Decide whether the user's task has been completed based on the FULL execution tr
 - The original user question
 - Available workspace context
 - Tool observations and their results (db.observe, db.search, db.inspect, db.preview, db.query, etc.)
-- Generated artifacts (SQL, profiles, charts, answers)
+- Generated artifacts (SQL, tables, charts, answers)
 - Execution results and any errors
 - The model's latest assistant message
 - Step count and retry history
@@ -29,7 +29,7 @@ Diagnose the failure layer:
 - **schema**        — unknown table/column, stale catalog, schema drift.
 - **sql**           — guardrail rejected, trust gate blocked, SQL execution error, timeout.
 - **execution**     — DB error, connection refused, permission denied.
-- **result**        — empty result, unexpected profile, anomaly in data.
+- **result**        — empty result, unexpected data patterns, anomaly in data.
 - **policy**        — PolicyGate blocked the requested tool.
 - **unknown**       — cannot determine the cause.
 

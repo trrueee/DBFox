@@ -414,7 +414,7 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
     # We only emit a gentle hint when the model appears stuck (cycling).
     execution = state.get("execution")
     if (isinstance(execution, dict) and execution.get("success")
-            and not state.get("result_profile") and not state.get("answer")
+            and not state.get("answer")
             and not state.get("final_answer")):
         # Only intervene if model has been cycling (called db.query multiple times
         # without producing text or calling result.profile)
@@ -586,7 +586,7 @@ def rule_fallback(state: DBFoxAgentState) -> dict[str, Any]:
     elif answer and answer.get("answer"):
         decision = ProgressDecision(status="complete", reason_summary="Agent produced an answer.")
     elif (isinstance(execution, dict) and execution.get("success")
-            and not state.get("result_profile") and not state.get("answer")):
+            and not state.get("answer")):
         decision = ProgressDecision(
             status="continue",
             reason_summary="Query succeeded. You may call result.profile for complex results, or answer directly.",

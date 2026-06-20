@@ -21,7 +21,6 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "memory_write": "memory.write",
     "memory_delete": "memory.delete",
     "memory_summarize_session": "memory.summarize_session",
-    "result_profile": "result.profile",
     "chart_suggest": "chart.suggest",
     "answer_synthesize": "answer.synthesize",
 }
@@ -46,7 +45,6 @@ STEP_NAME_MAP: dict[str, str] = {
     "memory.write": "memory_write",
     "memory.delete": "memory_delete",
     "memory.summarize_session": "summarize_session",
-    "result.profile": "profile_result",
     "chart.suggest": "suggest_chart",
     "answer.synthesize": "synthesize_answer",
 }

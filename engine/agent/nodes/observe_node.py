@@ -12,13 +12,11 @@ from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
     build_sql_suggestion_artifact,
-    build_profile_artifact,
     build_query_plan_artifact,
     build_safety_artifact,
     build_sql_artifact,
     build_table_artifact,
 )
-from engine.agent_core.types import ResultProfile
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.observe_node")
 
@@ -104,25 +102,6 @@ def emit_artifacts_from_observation(
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
-
-    if step_name == "result.profile" and state.get("result_profile") and observation.status == "success":
-        profile_raw = state.get("result_profile")
-        if isinstance(profile_raw, dict):
-            try:
-                profile_obj = ResultProfile.model_validate(profile_raw)
-            except Exception:
-                profile_obj = None
-        elif isinstance(profile_raw, ResultProfile):
-            profile_obj = profile_raw
-        else:
-            profile_obj = None
-        if profile_obj is not None:
-            artifacts.append(build_profile_artifact(
-                profile_obj,
-                execution=state.get("execution"),
-                safety=state.get("safety"),
-                identity=identity,
-            ))
 
     if step_name == "chart.suggest" and state.get("chart_suggestion") and observation.status == "success":
         chart = state.get("chart_suggestion")

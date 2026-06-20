@@ -2,80 +2,27 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_core.types import FollowUpSuggestion, ResultProfile
+from engine.agent_core.types import FollowUpSuggestion
 
 
 def suggest_followups(
     question: str,
-    result_profile: ResultProfile | None,
     chart_suggestion: dict[str, Any] | None,
     sql: str | None,
     safety: dict[str, Any] | None,
     execution: dict[str, Any] | None,
 ) -> list[FollowUpSuggestion]:
     suggestions: list[FollowUpSuggestion] = []
-    patterns = set(result_profile.detected_patterns if result_profile else [])
 
-    if "empty_result" in patterns:
-        suggestions.extend(
-            [
-                FollowUpSuggestion(
-                    label="Widen filters",
-                    question=f"{question} with a wider time range or looser filters",
-                    reason="The current query returned no rows.",
-                    action_type="ask",
-                ),
-                FollowUpSuggestion(
-                    label="Preview raw data",
-                    question="Show a small sample of the source table before filters",
-                    reason="A raw preview helps verify whether filters or data availability caused the empty result.",
-                    action_type="ask",
-                ),
-            ]
+    # Without result_profile, fall back to the generic suggestion
+    suggestions.append(
+        FollowUpSuggestion(
+            label="Break down",
+            question=f"Break this result down by a useful business dimension: {question}",
+            reason="A dimension breakdown is often the next step after a direct query.",
+            action_type="ask",
         )
-    elif "time_series" in patterns:
-        suggestions.extend(
-            [
-                FollowUpSuggestion(
-                    label="Compare period",
-                    question=f"Compare this result with the previous comparable period: {question}",
-                    reason="Trend results are easier to judge against a baseline.",
-                    action_type="ask",
-                ),
-                FollowUpSuggestion(
-                    label="Find anomaly dates",
-                    question=f"Find the dates or intervals with the largest change for: {question}",
-                    reason="The result appears time-based, so anomaly dates are useful next evidence.",
-                    action_type="ask",
-                ),
-            ]
-        )
-    elif "category_breakdown" in patterns or "top_k" in patterns:
-        suggestions.extend(
-            [
-                FollowUpSuggestion(
-                    label="Drill into top value",
-                    question=f"Drill into the top category from this result: {question}",
-                    reason="Category breakdowns usually need a second pass on the largest contributor.",
-                    action_type="ask",
-                ),
-                FollowUpSuggestion(
-                    label="Show share",
-                    question=f"Calculate each category's share for: {question}",
-                    reason="Absolute values are clearer when paired with contribution share.",
-                    action_type="ask",
-                ),
-            ]
-        )
-    else:
-        suggestions.append(
-            FollowUpSuggestion(
-                label="Break down",
-                question=f"Break this result down by a useful business dimension: {question}",
-                reason="A dimension breakdown is often the next step after a direct query.",
-                action_type="ask",
-            )
-        )
+    )
 
     if chart_suggestion and chart_suggestion.get("type") not in (None, "table"):
         suggestions.append(

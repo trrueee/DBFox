@@ -346,7 +346,7 @@ export interface AgentChartSuggestion {
 export interface AgentArtifact {
   id: string;
   semantic_id?: string | null;
-  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "table" | "chart" | "insight" | "recommendation" | "error";
+  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "table" | "chart" | "error";
   title: string;
   payload: Record<string, unknown>;
   presentation: {
@@ -491,15 +491,6 @@ export interface AgentMessageBlock {
   suggestions?: FollowUpSuggestion[];
 }
 
-export interface ResultProfile {
-  row_count: number;
-  column_profiles: Record<string, Record<string, unknown>>;
-  detected_patterns: string[];
-  notable_facts: string[];
-  anomalies: string[];
-  limitations: string[];
-}
-
 export interface AgentVisibleEvent {
   event_id?: string | null;
   sequence?: number | null;
@@ -559,7 +550,6 @@ export interface AgentRunResponse {
   execution?: Record<string, unknown> | null;
   explanation?: string | null;
   chart_suggestion?: Record<string, unknown> | null;
-  result_profile?: ResultProfile | null;
   answer?: AgentAnswer | null;
   suggestions?: FollowUpSuggestion[];
   artifacts: AgentArtifact[];
@@ -643,6 +633,10 @@ export interface AgentSessionRunSummary {
   created_at?: string | null;
   [key: string]: unknown;
 }
+
+// Artifact categorization — matches backend EVIDENCE_ARTIFACT_TYPES / PROCESS_ARTIFACT_TYPES
+export const EVIDENCE_ARTIFACT_TYPES = new Set(["table", "chart", "sql"]);
+export const PROCESS_ARTIFACT_TYPES = new Set(["query_plan", "sql_suggestion", "safety", "agent_plan", "error"]);
 
 export interface AgentArtifactRecord {
   id: string;

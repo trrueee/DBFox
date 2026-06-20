@@ -129,7 +129,6 @@ class TestModelNodeStepLimit:
                 "step_count": 20,
                 "max_steps": 20,
                 "execution": {"success": True, "rowCount": 0},
-                "result_profile": None,
                 "answer": None,
                 "allowed_tool_groups": [],
             },

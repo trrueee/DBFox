@@ -109,7 +109,6 @@ class TestRealModelToolCalling:
             "sql_execute_readonly",
             "sql_skip_execution",
             "sql_revise",
-            "result_profile",
             "chart_suggest",
         }
         missing = expected - tool_names
@@ -222,8 +221,6 @@ class TestExecuteFalse:
             "skip_execution",
             "sql.skip_execution",
             "sql_skip_execution",
-            "result.profile",
-            "result_profile",
             "generate_sql_candidate",
             "sql.generate",
             "sql_generate",
