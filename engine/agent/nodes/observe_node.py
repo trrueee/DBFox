@@ -24,6 +24,24 @@ from engine.agent_core.types import ResultProfile
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.observe_node")
 
 
+def _is_empty_result(tool_name: str, output: Any) -> bool:
+    """Check whether a tool result is semantically empty (no data found)."""
+    if not isinstance(output, dict):
+        return False
+    if tool_name == "db.search":
+        results = output.get("results")
+        return isinstance(results, list) and len(results) == 0
+    if tool_name in ("schema.describe_table", "db.inspect"):
+        return output.get("columns_count") == 0 or output.get("status") == "failed"
+    if tool_name == "schema.list_tables_page":
+        tbls = output.get("tables")
+        return isinstance(tbls, list) and len(tbls) == 0
+    if tool_name == "schema.expand_related_tables":
+        rels = output.get("related_tables")
+        return isinstance(rels, list) and len(rels) == 0
+    return False
+
+
 from engine.agent.tools.tool_aliases import STEP_NAME_TO_INTERNAL
 
 
@@ -79,11 +97,11 @@ def emit_artifacts_from_observation(
     identity = AgentArtifactIdentity(run_id)
     artifacts = []
 
-    # Artifact emission for new db.* tools
-    if step_name == "db.query" and state.get("execution") and state.get("execution", {}).get("success"):
+    # Artifact emission for execution tools
+    if step_name in ("db.query", "sql.execute_readonly") and state.get("execution") and state.get("execution", {}).get("success"):
         artifacts.append(build_table_artifact(state["execution"], safety=state.get("safety"), identity=identity))
 
-    if step_name == "db.query" and observation.output and observation.status == "success":
+    if step_name in ("db.query", "sql.execute_readonly") and observation.output and observation.status == "success":
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
         artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
@@ -153,6 +171,11 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
 
     new_artifacts_dicts = []
 
+    tool_history_entries = []
+    candidate_tables_new: list[str] = []
+    searched_terms_new: list[str] = []
+    exhausted_paths_new: list[str] = []
+
     for result_dict in last_tool_results:
         try:
             obs = ToolObservation.model_validate(result_dict)
@@ -180,6 +203,73 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
                 else:
                     state_updates[k] = v
 
+            history_entry = {
+                "name": tool_name,
+                "input": obs.input or {},
+                "status": obs.status,
+                "error": obs.error,
+            }
+            if isinstance(obs.output, dict):
+                history_entry["output_keys"] = list(obs.output.keys())
+                if "results" in obs.output and isinstance(obs.output["results"], list):
+                    history_entry["results_count"] = len(obs.output["results"])
+                if "tables" in obs.output and isinstance(obs.output["tables"], list):
+                    history_entry["results_count"] = len(obs.output["tables"])
+                if "related_tables" in obs.output and isinstance(obs.output["related_tables"], list):
+                    history_entry["results_count"] = len(obs.output["related_tables"])
+                if "columns" in obs.output and isinstance(obs.output["columns"], list):
+                    history_entry["columns_count"] = len(obs.output["columns"])
+                if "blocked_reasons" in obs.output and isinstance(obs.output["blocked_reasons"], list):
+                    history_entry["blocked_reasons"] = obs.output["blocked_reasons"]
+                if "rowCount" in obs.output:
+                    history_entry["returned_rows"] = obs.output["rowCount"]
+                elif "returned_rows" in obs.output:
+                    history_entry["returned_rows"] = obs.output["returned_rows"]
+            
+            tool_history_entries.append(history_entry)
+
+            # ── Large Catalog Exploration: track candidate_tables ──────────
+            if isinstance(obs.output, dict):
+                # db.search / schema.list_tables_page → collect table names
+                results = obs.output.get("results") or obs.output.get("tables") or []
+                if isinstance(results, list):
+                    for item in results:
+                        name = (item.get("name") or item.get("table_name") or "").strip()
+                        if name:
+                            candidate_tables_new.append(name)
+                # schema.expand_related_tables → seed + related
+                seed = obs.output.get("seed_table") or {}
+                if isinstance(seed, dict) and seed.get("table_name"):
+                    candidate_tables_new.append(str(seed["table_name"]))
+                related = obs.output.get("related_tables") or []
+                if isinstance(related, list):
+                    for r in related:
+                        n = (r.get("table_name") or "").strip()
+                        if n:
+                            candidate_tables_new.append(n)
+
+                # Track searched terms (db.search)
+                if tool_name == "db.search" and isinstance(obs.input, dict):
+                    q = str(obs.input.get("query") or "").strip().lower()
+                    if q:
+                        searched_terms_new.append(q)
+
+            # Track exhausted paths for empty/failed results
+            arg_sig = ""
+            if isinstance(obs.input, dict):
+                # Build a compact arg signature for dedup
+                key_parts = []
+                for k in sorted(obs.input.keys()):
+                    v = obs.input[k]
+                    if isinstance(v, str):
+                        key_parts.append(f"{k}={v.lower()[:60]}")
+                    else:
+                        key_parts.append(f"{k}={v}")
+                arg_sig = ",".join(key_parts)
+
+            if obs.status == "failed" or _is_empty_result(tool_name, obs.output):
+                exhausted_paths_new.append(f"{tool_name}::{arg_sig}")
+
             artifacts = emit_artifacts_from_observation(step_name, obs, temp_state, run_id)
             if artifacts:
                 for art in artifacts:
@@ -197,6 +287,35 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
         except Exception as exc:
             logger.warning("Failed to process tool observation: %s (payload: %s)", exc, result_dict, exc_info=True)
             continue
+
+    if tool_history_entries:
+        state_updates["tool_call_history"] = tool_history_entries
+
+    # ── Large Catalog Exploration: dedup and merge ────────────────────────
+    if candidate_tables_new:
+        existing_ct = list(temp_state.get("candidate_tables") or [])
+        seen_ct = set(existing_ct)
+        for n in candidate_tables_new:
+            if n not in seen_ct:
+                existing_ct.append(n)
+                seen_ct.add(n)
+        state_updates["candidate_tables"] = existing_ct
+
+    if searched_terms_new:
+        existing_st = [s.lower() for s in (temp_state.get("searched_terms") or [])]
+        for t in searched_terms_new:
+            if t not in existing_st:
+                existing_st.append(t)
+        state_updates["searched_terms"] = existing_st
+
+    if exhausted_paths_new:
+        existing_ep = list(temp_state.get("exhausted_paths") or [])
+        seen_ep = set(existing_ep)
+        for p in exhausted_paths_new:
+            if p not in seen_ep:
+                existing_ep.append(p)
+                seen_ep.add(p)
+        state_updates["exhausted_paths"] = existing_ep
 
     if new_artifacts_dicts:
         state_updates["artifacts"] = new_artifacts_dicts

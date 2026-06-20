@@ -36,7 +36,7 @@ success_criteria:
 recovery:
   no_execution_data:
     - condition: "no execution result available to profile"
-      action: "explain that data must be queried first, then use db.observe/db.search/db.query before result.profile"
+      action: "explain that data must be queried first, then use db.observe/db.search/sql.validate/sql.execute_readonly before result.profile"
   empty_result:
     - condition: "result set is empty"
       action: "explain that empty results mean no matching data, check if filters were too restrictive"

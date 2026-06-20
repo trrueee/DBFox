@@ -47,7 +47,7 @@ logger = logging.getLogger("dbfox.dbfox_agent.service")
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
     "environment", "schema", "db", "memory",
-    "result", "chart", "answer",
+    "result", "chart", "answer", "sql",
 ]
 
 
@@ -351,6 +351,10 @@ class DBFoxAgentService:
             db_search_results=None,
             db_inspection=None,
             db_preview=None,
+            # ---- Large Catalog Exploration ----
+            candidate_tables=[],
+            searched_terms=[{"__clear__": True}],
+            exhausted_paths=[{"__clear__": True}],
             # ---- Tool-call / policy routing ----
             pending_tool_calls=[],
             allowed_tool_calls=[],
@@ -361,6 +365,7 @@ class DBFoxAgentService:
             runtime_events=[{"__clear__": True}],
             plan_events=[{"__clear__": True}],
             suggestions=[{"__clear__": True}],
+            tool_call_history=[{"__clear__": True}],
             error=None,
             pending_approval=pending_approval,
             parent_run_id=req.parent_run_id,
@@ -445,14 +450,24 @@ class DBFoxAgentService:
                         list_keys.add(key)
             self._list_keys = list_keys
 
+        # Routing list keys that should use replace semantics
+        replace_keys = {
+            "allowed_tool_calls",
+            "blocked_tool_calls",
+            "pending_tool_calls",
+            "last_tool_results",
+            "allowed_tool_groups",
+        }
+
         for key, value in update.items():
-            if key in self._list_keys:
+            if key in self._list_keys and key not in replace_keys:
                 if isinstance(value, list):
                     if value and isinstance(value[0], dict) and value[0].get("__clear__"):
                         target[key] = list(value[1:])
                     else:
                         target.setdefault(key, []).extend(value)
                 continue
+            
             # Deep-merge dict fields so that nested keys from earlier chunks
             # are not overwritten by later partial updates (e.g. environment_profile
             # built incrementally across observe and progress nodes).

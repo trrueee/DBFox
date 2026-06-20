@@ -27,15 +27,60 @@ _RULES_CACHE: dict[str, list[Any]] = {}
 _TABLE_NAMES_CACHE: dict[str, str] = {}
 _REVERSE_FK_CACHE: dict[str, list[str]] = {}
 
+# Threshold above which db.observe returns a lightweight summary instead of a
+# full table listing.  Large enterprise catalogs (200-2000+ tables) must not
+# be dumped into the model's context.
+_LARGE_CATALOG_THRESHOLD = 30
+
+
 def db_observe(db: Session, datasource_id: str) -> dict[str, Any]:
-    """Return the database map — tables, domains, counts, query stats."""
+    """Return the database map — tables, domains, counts, query stats.
+
+    For catalogs with more than ``_LARGE_CATALOG_THRESHOLD`` tables, returns a
+    lightweight summary (dialect, table count, domain breakdown, and navigation
+    hints) instead of the full table listing, to avoid blowing up the model
+    context.
+    """
     _RULES_CACHE.pop(datasource_id, None)
     tables = _catalog_tables(db, datasource_id)
-    
+    table_count = len(tables)
+
+    ds = _datasource(db, datasource_id)
+
+    output: dict[str, Any] = {
+        "datasource_id": ds.id,
+        "datasource_name": ds.name,
+        "dialect": ds.db_type or "mysql",
+        "catalog_status": ds.last_sync_status or ("ready" if tables else "empty"),
+        "last_sync_at": ds.last_sync_at.isoformat() if ds.last_sync_at else None,
+        "table_count": table_count,
+        "warnings": _catalog_warnings(tables),
+    }
+
+    # ── Large catalog: lightweight summary only ──────────────────────────
+    if table_count > _LARGE_CATALOG_THRESHOLD:
+        output["mode"] = "summary"
+        output["domains"] = _domain_sections(db, tables)
+        output["schemas"] = _schema_sections(db, tables)
+
+        # Navigation hints guide the agent toward the right exploration tools.
+        output["next_action_hint"] = (
+            f"This is a large database ({table_count} tables). "
+            f"Do NOT try to list all tables. Instead:\n"
+            f"1. Use db.search(\"<keywords>\") to find relevant tables by name, "
+            f"column, comment, or business term.\n"
+            f"2. Use schema.list_tables_page(offset=0, limit=20) to browse "
+            f"tables page-by-page if you need an overview.\n"
+            f"3. Use schema.expand_related_tables(\"<table>\") to explore "
+            f"foreign-key neighbors of a candidate table."
+        )
+        return output
+
+    # ── Small / medium catalog: full listing ─────────────────────────────
     # Populate memory caches for table names and reverse FKs to optimize queries
     global _TABLE_NAMES_CACHE, _REVERSE_FK_CACHE
     _TABLE_NAMES_CACHE = {str(t.id): str(t.table_name) for t in tables}
-    
+
     from engine.models import SchemaColumn
     fk_cols = (
         db.query(SchemaColumn)
@@ -43,7 +88,7 @@ def db_observe(db: Session, datasource_id: str) -> dict[str, Any]:
         .filter(SchemaTable.data_source_id == datasource_id, SchemaColumn.is_foreign_key == True)
         .all()
     )
-    
+
     rev_fk = defaultdict(list)
     for col in fk_cols:
         if col.foreign_table_id and col.table_id:
@@ -52,21 +97,9 @@ def db_observe(db: Session, datasource_id: str) -> dict[str, Any]:
                 rev_fk[str(col.foreign_table_id)].append(ref_table_name)
     _REVERSE_FK_CACHE = dict(rev_fk)
 
-    ds = _datasource(db, datasource_id)
-    selected = tables  # always overview mode for agent
-
-    output: dict[str, Any] = {
-        "datasource_id": ds.id,
-        "datasource_name": ds.name,
-        "dialect": ds.db_type or "mysql",
-        "catalog_status": ds.last_sync_status or ("ready" if tables else "empty"),
-        "last_sync_at": ds.last_sync_at.isoformat() if ds.last_sync_at else None,
-        "table_count": len(tables),
-        "warnings": _catalog_warnings(tables),
-    }
-
-    output["schemas"] = _schema_sections(db, selected or tables)
-    output["domains"] = _domain_sections(db, selected or tables)
+    output["mode"] = "full"
+    output["schemas"] = _schema_sections(db, tables)
+    output["domains"] = _domain_sections(db, tables)
 
     return output
 

@@ -11,6 +11,7 @@ TOOL_GROUP_MAP: dict[str, str] = {
     "answer.": "answer",
     "memory.": "memory",
     "escalate.": "control",
+    "sql.": "sql",
 }
 
 

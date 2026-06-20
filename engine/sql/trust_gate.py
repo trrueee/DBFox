@@ -46,6 +46,7 @@ class ExecutionSafetyDecision(BaseModel):
     passed: bool
     can_execute: bool
     requires_confirmation: bool
+    risk_level: RiskLevel = "safe"
     guardrail: GuardrailResult
     schema_warnings: list[str] = Field(default_factory=list)
     scope_state: dict[str, Any] = Field(default_factory=dict)
@@ -191,7 +192,8 @@ class TrustGate:
 
         blocked_reasons = list(dict.fromkeys(blocked_reasons))
         can_execute = not blocked_reasons
-        safe_sql = candidate_safe_sql if can_execute else None
+        hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
+        safe_sql = candidate_safe_sql if not hard_blockers else None
 
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
@@ -201,6 +203,7 @@ class TrustGate:
             passed=can_execute,
             can_execute=can_execute,
             requires_confirmation=requires_confirmation,
+            risk_level=trust_gate["riskLevel"],
             guardrail=guardrail,
             schema_warnings=schema_warnings,
             scope_state={

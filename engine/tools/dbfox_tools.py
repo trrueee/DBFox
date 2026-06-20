@@ -12,6 +12,8 @@ from engine.environment.tools import (
     environment_get_profile,
     schema_describe_table,
     schema_list_tables,
+    schema_list_tables_page,
+    schema_expand_related_tables,
     schema_refresh_catalog,
 )
 from engine.tools.db_tools import (
@@ -36,7 +38,7 @@ from engine.tools.runtime import (
     ToolRunContext,
     ToolStateSpec,
 )
-from engine.tools.safe_preview import db_preview
+from engine.tools.db.preview import db_preview
 
 
 # ── Output ────────────────────────────────────────────────────────────────────
@@ -75,6 +77,16 @@ class QueryInput(BaseModel):
     question: str | None = Field(default=None, description="The original user question this SQL answers.")
 
 
+class SqlValidateInput(BaseModel):
+    sql: str = Field(description="A single SELECT statement to validate against safety policies, schema cache, and syntax check.")
+    question: str | None = Field(default=None, description="The original user question this SQL answers.")
+
+
+class SqlExecuteReadonlyInput(BaseModel):
+    sql: str = Field(description="The exact SELECT SQL statement to execute. Must match the validated safe_sql or original_sql from sql.validate.")
+    question: str | None = Field(default=None, description="The original user question this SQL answers.")
+
+
 class RememberInput(BaseModel):
     type: str = Field(description="Memory type: table_alias, column_alias, column_values, join_path, business_definition.")
     target: str = Field(description="Table or column name this memory is about.")
@@ -95,6 +107,18 @@ class DescribeTableInput(BaseModel):
 
 class RefreshCatalogInput(BaseModel):
     reason: str = Field(default="", description="Why the catalog needs refreshing (e.g. 'tables appear missing').")
+
+
+class ListTablesPageInput(BaseModel):
+    offset: int = Field(default=0, description="Number of tables to skip.", ge=0)
+    limit: int = Field(default=20, description="Max tables to return (1-100).", ge=1, le=100)
+    name_filter: str | None = Field(default=None, description="Case-insensitive substring filter on table name.")
+
+
+class ExpandRelatedTablesInput(BaseModel):
+    table_name: str = Field(description="Seed table name to expand from.")
+    depth: int = Field(default=1, description="How many FK hops to expand (only depth=1 supported currently).", ge=1, le=1)
+    limit: int = Field(default=20, description="Max related tables to return.", ge=1, le=50)
 
 
 class MemorySearchInput(BaseModel):
@@ -149,7 +173,7 @@ class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
     def run(self, tool_input: EscalateInput, context: ToolRunContext) -> LooseOutput:
         valid_groups = {
             "environment", "schema", "db", "semantic", "memory",
-            "execution", "result", "chart", "answer",
+            "execution", "result", "chart", "answer", "sql",
         }
         group = tool_input.group.strip()
         reason = tool_input.reason.strip()
@@ -232,6 +256,59 @@ class SchemaRefreshCatalogTool(BaseTool[RefreshCatalogInput, LooseOutput]):
 
     def run(self, tool_input: RefreshCatalogInput, context: ToolRunContext) -> LooseOutput:
         return LooseOutput.model_validate(schema_refresh_catalog(context.db_session, context.request.datasource_id, tool_input.reason))
+
+
+class SchemaListTablesPageTool(BaseTool[ListTablesPageInput, LooseOutput]):
+    name = "schema.list_tables_page"
+    group = "schema"
+    description = (
+        "Browse tables page-by-page without dumping the entire catalog. "
+        "Accept an offset/limit pagination and an optional name_filter. "
+        "Use this for large catalogs instead of schema.list_tables. "
+        "Each page tells you if there are more pages (has_more)."
+    )
+    input_model = ListTablesPageInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(produces=("candidate_tables",))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: ListTablesPageInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(schema_list_tables_page(
+            context.db_session,
+            context.request.datasource_id,
+            offset=tool_input.offset,
+            limit=tool_input.limit,
+            name_filter=tool_input.name_filter,
+        ))
+
+
+class SchemaExpandRelatedTablesTool(BaseTool[ExpandRelatedTablesInput, LooseOutput]):
+    name = "schema.expand_related_tables"
+    group = "schema"
+    description = (
+        "Find tables related to a given table through foreign keys. "
+        "Returns both outgoing FK references (tables this one points to) "
+        "and incoming FK references (tables that point to this one). "
+        "Use this after discovering a candidate table to explore its "
+        "neighbourhood without searching the entire catalog."
+    )
+    input_model = ExpandRelatedTablesInput
+    output_model = LooseOutput
+    policy = ToolPolicy()
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(produces=("candidate_tables",))
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: ExpandRelatedTablesInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate(schema_expand_related_tables(
+            context.db_session,
+            context.request.datasource_id,
+            table_name=tool_input.table_name,
+            depth=tool_input.depth,
+            limit=tool_input.limit,
+        ))
 
 
 # ── DB ─────────────────────────────────────────────────────────────────────────
@@ -321,9 +398,13 @@ class DbPreviewTool(BaseTool[PreviewInput, LooseOutput]):
 
     def run(self, tool_input: PreviewInput, context: ToolRunContext) -> LooseOutput:
         return LooseOutput.model_validate(db_preview(
-            context.db_session, context.request.datasource_id,
-            table=tool_input.table, columns=tool_input.columns, limit=tool_input.limit,
-            where=tool_input.where, order_by=tool_input.order_by,
+            context.db_session,
+            context.request.datasource_id,
+            table=tool_input.table,
+            columns=tool_input.columns,
+            limit=tool_input.limit,
+            where=tool_input.where,
+            order_by=tool_input.order_by,
         ))
 
 
@@ -339,7 +420,7 @@ class DbQueryTool(BaseTool[QueryInput, LooseOutput]):
     )
     input_model = QueryInput
     output_model = LooseOutput
-    policy = ToolPolicy(side_effect="read", risk_level="warning")
+    policy = ToolPolicy(side_effect="read", risk_level="warning", visible_to_model=False)
     execution = ToolExecutionSpec()
     state = ToolStateSpec(
         produces=("execution",),
@@ -349,6 +430,58 @@ class DbQueryTool(BaseTool[QueryInput, LooseOutput]):
 
     def run(self, tool_input: QueryInput, context: ToolRunContext) -> LooseOutput:
         return LooseOutput.model_validate(db_query(context.db_session, context.request.datasource_id, tool_input.sql, tool_input.question or ""))
+
+
+class SqlValidateTool(BaseTool[SqlValidateInput, LooseOutput]):
+    name = "sql.validate"
+    group = "sql"
+    description = (
+        "Validate a SELECT SQL query against safety policies, schema cache, and syntax check. "
+        "Does NOT execute the query or read real data. "
+        "Always call this first before trying to execute any SQL query."
+    )
+    input_model = SqlValidateInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="none", risk_level="safe")
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(produces=("safety", "sql"), merge_strategy="new")
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: SqlValidateInput, context: ToolRunContext) -> LooseOutput:
+        from engine.tools.db_tools import sql_validate
+        return LooseOutput.model_validate(sql_validate(
+            context.db_session, context.request.datasource_id,
+            tool_input.sql, tool_input.question or "",
+        ))
+
+
+class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
+    name = "sql.execute_readonly"
+    group = "sql"
+    description = (
+        "Execute a read-only SELECT SQL statement using a previously validated safety decision. "
+        "Requires a successful sql.validate call in the current session. "
+        "If manual confirmation is required, this tool will trigger an approval interrupt."
+    )
+    input_model = SqlExecuteReadonlyInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="read", risk_level="warning", requires_validated_sql=True)
+    execution = ToolExecutionSpec()
+    state = ToolStateSpec(
+        consumes=("safety", "sql"),
+        produces=("execution",),
+        clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
+        merge_strategy="new",
+    )
+    artifacts = ArtifactSpec(emit=True, artifact_types=("table",))
+
+    def run(self, tool_input: SqlExecuteReadonlyInput, context: ToolRunContext) -> LooseOutput:
+        from engine.tools.db_tools import sql_execute_readonly
+        return LooseOutput.model_validate(sql_execute_readonly(
+            context.db_session, context.request.datasource_id,
+            tool_input.sql, tool_input.question or "",
+            safety=context.state.get("safety"),
+        ))
 
 
 class DbRememberTool(BaseTool[RememberInput, LooseOutput]):
@@ -361,7 +494,7 @@ class DbRememberTool(BaseTool[RememberInput, LooseOutput]):
     )
     input_model = RememberInput
     output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning")
+    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
     execution = ToolExecutionSpec()
     state = ToolStateSpec(merge_strategy="new")
     artifacts = ArtifactSpec()
@@ -506,7 +639,7 @@ class MemoryWriteTool(BaseTool[MemoryWriteInput, LooseOutput]):
     description = "Write a new entry to long-term memory. Use for discoveries that will be useful in future sessions: table relationships, business definitions, user preferences, or data quirks."
     input_model = MemoryWriteInput
     output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning")
+    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
     execution = ToolExecutionSpec()
     state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
     artifacts = ArtifactSpec()
@@ -529,7 +662,7 @@ class MemoryDeleteTool(BaseTool[MemoryDeleteInput, LooseOutput]):
     description = "Delete a long-term memory entry by ID."
     input_model = MemoryDeleteInput
     output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning")
+    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
     execution = ToolExecutionSpec()
     state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
     artifacts = ArtifactSpec()
@@ -564,11 +697,15 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(SchemaListTablesTool())
     registry.register(SchemaDescribeTableTool())
     registry.register(SchemaRefreshCatalogTool())
+    registry.register(SchemaListTablesPageTool())
+    registry.register(SchemaExpandRelatedTablesTool())
     registry.register(DbObserveTool())
     registry.register(DbSearchTool())
     registry.register(DbInspectTool())
     registry.register(DbPreviewTool())
     registry.register(DbQueryTool())
+    registry.register(SqlValidateTool())
+    registry.register(SqlExecuteReadonlyTool())
     registry.register(DbRememberTool())
     registry.register(ResultProfileTool())
     registry.register(ChartSuggestTool())

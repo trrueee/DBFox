@@ -207,6 +207,27 @@ def _summarize_schema_describe_table(output: dict[str, Any]) -> str:
     return f"[schema.describe_table] {output.get('table_name', '?')}: {len(cols)} column(s): {', '.join(col_names)}"
 
 
+def _summarize_schema_list_tables_page(output: dict[str, Any]) -> str:
+    p = output.get("page") or {}
+    tables = output.get("tables") or []
+    names = [t.get("table_name", "") for t in tables[:15]]
+    return (
+        f"[schema.list_tables_page] page {p.get('offset', 0)}-{p.get('offset', 0) + len(tables)} "
+        f"of {p.get('total', '?')} (has_more={p.get('has_more', False)}): "
+        f"{', '.join(names)}"
+    )
+
+
+def _summarize_schema_expand_related(output: dict[str, Any]) -> str:
+    seed = output.get("seed_table") or {}
+    related = output.get("related_tables") or []
+    names = [r.get("table_name", "") for r in related[:15]]
+    return (
+        f"[schema.expand_related_tables] {seed.get('table_name', '?')} → "
+        f"{len(related)} related: {', '.join(names)}"
+    )
+
+
 def _summarize_schema_refresh_catalog(output: dict[str, Any]) -> str:
     return (
         f"[schema.refresh_catalog] synced={output.get('synced')}, "
@@ -216,12 +237,21 @@ def _summarize_schema_refresh_catalog(output: dict[str, Any]) -> str:
 
 
 def _summarize_db_observe(output: dict[str, Any]) -> str:
-    schemas = output.get("schemas") or []
-    domains = output.get("domains") or []
     table_count = output.get("table_count", 0)
+    mode = output.get("mode", "full")
+    domains = output.get("domains") or []
+    domain_names = [d.get("name") for d in domains[:8]]
+    if mode == "summary":
+        hint = output.get("next_action_hint", "")
+        hint_short = hint[:200] + "..." if len(hint) > 200 else hint
+        return (
+            f"[db.observe] LARGE CATALOG ({table_count} tables). "
+            f"Domains: {domain_names}. {hint_short}"
+        )
+    schemas = output.get("schemas") or []
     return (
         f"[db.observe] {table_count} table(s), "
-        f"schemas={len(schemas)}, domains={[d.get('name') for d in domains[:8]]}."
+        f"schemas={len(schemas)}, domains={domain_names}."
     )
 
 
@@ -316,6 +346,8 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "result.profile": _summarize_result_profile,
     "chart.suggest": _summarize_chart_suggest,
     "schema.list_tables": _summarize_schema_list_tables,
+    "schema.list_tables_page": _summarize_schema_list_tables_page,
+    "schema.expand_related_tables": _summarize_schema_expand_related,
     "schema.describe_table": _summarize_schema_describe_table,
     "schema.refresh_catalog": _summarize_schema_refresh_catalog,
     "db.observe": _summarize_db_observe,
@@ -323,6 +355,8 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "db.inspect": _summarize_db_inspect,
     "db.preview": _summarize_db_preview,
     "db.query": _summarize_db_query,
+    "sql.validate": _summarize_sql_validate,
+    "sql.execute_readonly": _summarize_sql_execute_readonly,
     "db.remember": _summarize_db_remember,
     "memory.search": _summarize_memory_search,
     "memory.write": _summarize_memory_write,
@@ -332,8 +366,6 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     # schema.build_context   → replaced by db.observe + db.search
     # query_plan.build       → tool removed
     # sql.generate           → merged into db.query via TrustGate
-    # sql.validate           → merged into db.query via TrustGate
-    # sql.execute_readonly   → merged into db.query
     # sql.revise             → tool removed
     # followup.suggest       → tool removed
 }
