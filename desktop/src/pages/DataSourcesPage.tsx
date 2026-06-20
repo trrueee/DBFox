@@ -602,18 +602,6 @@ export const DataSourcesPage = ({
           </div>
         )}
 
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {activeTab === "tables" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
