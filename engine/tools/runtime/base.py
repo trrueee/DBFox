@@ -89,6 +89,14 @@ class BaseTool(Generic[I, O]):
     ``__init_subclass__``.
     """
 
+    # Defaults — subclasses override as needed
+    policy: ToolPolicy = ToolPolicy()
+    execution: ToolExecutionSpec = ToolExecutionSpec()
+    state: ToolStateSpec = ToolStateSpec()
+    artifacts: ArtifactSpec = ArtifactSpec()
+    kind: Literal["code", "llm", "hybrid"] = "code"
+    metadata: dict[str, Any] = {}
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         # Only enforce on concrete tool classes, skip intermediate bases.
