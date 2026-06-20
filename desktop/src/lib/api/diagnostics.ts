@@ -27,7 +27,7 @@ export const diagnosticsApi = {
     ),
 
   clearLogs: () =>
-    request<{ cleared: boolean; sources_cleared: string[] }>("/diagnostics/logs", {
-      method: "DELETE",
+    request<{ cleared: boolean; sources_cleared: string[] }>("/diagnostics/logs/clear", {
+      method: "POST",
     }),
 };
