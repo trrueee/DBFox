@@ -210,9 +210,12 @@ def build_profile_artifact(
     safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
-    depends = ["result_table"] if execution and execution.get("success") else []
+    sql = _execution_sql(execution) if execution else None
+    table_sem = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
+    depends = [table_sem] if execution and execution.get("success") else []
+    sem_id = "result_profile" if not sql else f"result_profile_{_sql_fingerprint(sql)}"
     return _artifact(
-        "result_profile",
+        sem_id,
         "insight",
         "Result profile",
         {**result_profile.model_dump(), "safety_state": _safety_state(safety)},
@@ -228,10 +231,14 @@ def build_chart_artifact(
     chart_suggestion: dict[str, Any],
     *,
     safety: dict[str, Any] | None,
+    execution: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    sql = _execution_sql(execution) if execution else None
+    table_sem = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
+    sem_id = "chart_suggestion" if not sql else f"chart_suggestion_{_sql_fingerprint(sql)}"
     return _artifact(
-        "chart_suggestion",
+        sem_id,
         "chart",
         "Chart suggestion",
         {**chart_suggestion, "safety_state": _safety_state(safety)},
@@ -239,7 +246,7 @@ def build_chart_artifact(
         priority=30,
         identity=identity,
         produced_by_step="suggest_chart",
-        depends_on=["result_table"],
+        depends_on=[table_sem],
     )
 
 

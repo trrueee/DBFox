@@ -130,6 +130,19 @@ class DBFoxAgentState(TypedDict, total=False):
     concurrently without data loss.  To replace all suggestions atomically,
     include ``{"__clear__": True}`` as the first element of the update.
     """
+
+    # ── Multi-query Analysis Units (P1) ──
+    analysis_units: Annotated[list[dict[str, Any]], _add_list]
+    """Accumulated query execution results, one per distinct SQL statement.
+
+    Each successful ``sql.execute_readonly`` appends a new unit.  Subsequent
+    ``result.profile`` and ``chart.suggest`` calls enrich the matching unit
+    (keyed by SQL fingerprint).  The final ``answer.synthesize`` can consume
+    all units instead of only the latest execution.
+    """
+    current_analysis_unit_id: str | None
+    """SQL fingerprint of the most recently executed query, used to match
+    profile/chart results to the correct analysis unit."""
     answer: dict[str, Any] | None
     """Synthesized final response to the user's question."""
     final_answer: dict[str, Any] | None
@@ -206,7 +219,11 @@ class DBFoxAgentState(TypedDict, total=False):
     """[UI/Eval Compatibility] Tool namespaces the agent is permitted to query."""
     selected_skill_ids: list[str]
     """[UI/Eval Compatibility] List of registered custom agent skills active in this context."""
-    visible_plan: dict[str, Any] | None
-    """[UI/Task Lens Compatibility] The user-visible plan displayed in the frontend Task Lens."""
-    plan: dict[str, Any] | None
-    """[UI Compatibility] Historic serialization structure mapped to database checkpoints."""
+    # =========================================================================
+    # 9. MULTI-QUERY ANALYSIS UNITS
+    # =========================================================================
+    analysis_units: list[dict[str, Any]]
+    """Collection of AnalysisUnits capturing details of each significant SQL execution."""
+    current_analysis_unit_id: str | None
+    """ID of the active/latest AnalysisUnit."""
+
