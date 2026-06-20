@@ -37,7 +37,6 @@ export interface DataSource {
   is_read_only?: boolean;
   env?: string;
   status: string;
-  enable_embedding_recall?: boolean;
   ssh_enabled?: boolean;
   ssh_host?: string;
   ssh_port?: number;
@@ -717,32 +716,4 @@ export interface ERDiagramData {
   edges: EREdge[];
 }
 
-export interface SemanticAlias {
-  id: string;
-  data_source_id: string;
-  alias: string;
-  target_type: string;
-  target: string;
-  description?: string;
-  embedding_synced_at?: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface SemanticAliasCreateParams {
-  data_source_id: string;
-  alias: string;
-  target_type: string;
-  target: string;
-  description?: string;
-}
-
-export type SemanticAliasUpdateParams = SemanticAliasCreateParams;
-
-export interface SemanticSyncStatus {
-  total_count: number;
-  synced_count: number;
-  stale_count: number;
-  last_sync_at?: string | null;
-}
 
