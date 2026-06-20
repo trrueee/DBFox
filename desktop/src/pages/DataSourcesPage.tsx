@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, Fragment } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -6,16 +6,11 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Trash2,
-  Activity,
-  Tag,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
+  Trash2,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { request } from "../lib/api/client";
-import type { EngineSchemaTable, EngineColumn } from "../features/engine/engineApi";
 import type { DataSource, DataSourceActions, Project, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
 import {
   buildDatasourceCreatePayload,
@@ -139,104 +134,10 @@ export const DataSourcesPage = ({
   const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
 
   // Semantic layer states
-  const [activeTab, setActiveTab] = useState<"info" | "tables">("info");
+  const [activeTab, setActiveTab] = useState<"info">("info");
   const [aiEnriching, setAiEnriching] = useState(false);
 
-  // Table AI metadata scoring states
-  const [tables, setTables] = useState<EngineSchemaTable[]>([]);
-  const [loadingTables, setLoadingTables] = useState(false);
-  const [expandedTableId, setExpandedTableId] = useState<string | null>(null);
-  const [columnsMap, setColumnsMap] = useState<Record<string, EngineColumn[]>>({});
-  const [loadingColumnsId, setLoadingColumnsId] = useState<string | null>(null);
-  const [searchTableQuery, setSearchTableQuery] = useState("");
-  const [editingEntity, setEditingEntity] = useState<{
-    type: "table" | "column";
-    id: string;
-    name: string;
-    ai_description: string;
-    semantic_tags: string;
-    business_terms: string;
-    subject_area?: string;
-    ai_confidence?: number;
-  } | null>(null);
-
   const selected = datasources.find((d) => d.id === selectedId) || null;
-
-  const fetchTables = async (dsId: string) => {
-    try {
-      setLoadingTables(true);
-      const res = await request<EngineSchemaTable[]>("/schema/tables?datasource_id=" + encodeURIComponent(dsId));
-      setTables(res || []);
-    } catch (err) {
-      toast.toast("获取数据表列表失败: " + (err as Error).message, "error");
-    } finally {
-      setLoadingTables(false);
-    }
-  };
-
-  const handleToggleExpandTable = async (table: EngineSchemaTable) => {
-    if (expandedTableId === table.id) {
-      setExpandedTableId(null);
-      return;
-    }
-    setExpandedTableId(table.id);
-    if (columnsMap[table.id]) {
-      return;
-    }
-    try {
-      setLoadingColumnsId(table.id);
-      const cols = await request<EngineColumn[]>(`/schema/tables/${encodeURIComponent(table.id)}/columns`);
-      setColumnsMap(prev => ({ ...prev, [table.id]: cols || [] }));
-    } catch (err) {
-      toast.toast("获取字段列表失败: " + (err as Error).message, "error");
-    } finally {
-      setLoadingColumnsId(null);
-    }
-  };
-
-  const handleSaveMetadata = async () => {
-    if (!editingEntity) return;
-    try {
-      if (editingEntity.type === "table") {
-        await request(`/schema/tables/${encodeURIComponent(editingEntity.id)}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            ai_description: editingEntity.ai_description,
-            semantic_tags: editingEntity.semantic_tags,
-            business_terms: editingEntity.business_terms,
-            subject_area: editingEntity.subject_area,
-            ai_confidence: editingEntity.ai_confidence !== undefined ? Number(editingEntity.ai_confidence) : undefined,
-          }),
-        });
-        toast.toast("表语义属性已更新", "success");
-        if (selected) void fetchTables(selected.id);
-      } else {
-        await request(`/schema/columns/${encodeURIComponent(editingEntity.id)}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            ai_description: editingEntity.ai_description,
-            semantic_tags: editingEntity.semantic_tags,
-            business_terms: editingEntity.business_terms,
-            ai_confidence: editingEntity.ai_confidence !== undefined ? Number(editingEntity.ai_confidence) : undefined,
-          }),
-        });
-        toast.toast("字段语义属性已更新", "success");
-        if (expandedTableId) {
-          const cols = await request<EngineColumn[]>(`/schema/tables/${encodeURIComponent(expandedTableId)}/columns`);
-          setColumnsMap(prev => ({ ...prev, [expandedTableId]: cols || [] }));
-        }
-      }
-      setEditingEntity(null);
-    } catch (err) {
-      toast.toast("更新语义属性失败: " + (err as Error).message, "error");
-    }
-  };
-
-  useEffect(() => {
-    if (selected && activeTab === "tables") {
-      void fetchTables(selected.id);
-    }
-  }, [selected, activeTab]);
 
   const handleAiEnrich = async () => {
     if (!selectedId) return;
@@ -246,7 +147,6 @@ export const DataSourcesPage = ({
       const syncResult = await syncFn(selectedId, buildSchemaSyncOptions(true));
       await loadDatasources(selectedId);
       await onRefreshDatasources();
-      await fetchTables(selectedId);
       const warning = firstSchemaSyncWarning(syncResult);
       toast.toast(warning || "AI 语义增强完成", warning ? "warning" : "success");
     } catch (err: unknown) {
@@ -394,47 +294,6 @@ export const DataSourcesPage = ({
     return true;
   };
 
-  const handleSync = async () => {
-    if (!selected) return;
-    try {
-      setActionState("syncing");
-      const syncFn = syncSchema || api.syncSchema;
-      const syncResult = await syncFn(selected.id, buildSchemaSyncOptions());
-      await loadDatasources(selected.id);
-      await onRefreshDatasources();
-      setColumnsMap({});
-      setExpandedTableId(null);
-      // Explicitly refresh the table metadata list so the "表语义与打分管理"
-      // tab picks up AI-enriched fields (subject_area, ai_description, etc.)
-      // without requiring a manual tab switch.
-      await fetchTables(selected.id);
-      const warning = firstSchemaSyncWarning(syncResult);
-      toast.toast(warning || "Schema 同步完成", warning ? "warning" : "success");
-    } catch (error: unknown) {
-      toast.toast((error as Error).message || "同步失败", "error");
-    } finally {
-      setActionState("idle");
-    }
-  };
-
-  const handleHealthCheck = async () => {
-    if (!selected) return;
-    try {
-      setActionState("testing");
-      const healthFn = checkHealth || api.checkDatasourceHealth;
-      const result = await healthFn(selected.id);
-      if (!result.ok) {
-        toast.toast(result.message || "连接健康检查失败", "error");
-      } else {
-        toast.toast("连接健康检查通过", "success");
-      }
-      await loadDatasources(selected.id);
-      await onRefreshDatasources();
-    } finally {
-      setActionState("idle");
-    }
-  };
-
   const handleDelete = async () => {
     if (!selected) return;
     try {
@@ -510,8 +369,6 @@ export const DataSourcesPage = ({
           <div style={{ display: "flex", gap: 6 }}>
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }}>设为当前</button>
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => startEdit(selected)}>编辑</button>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleSync} disabled={actionState === "syncing"}><RefreshCw size={12} className={actionState === "syncing" ? "animate-spin" : ""} /> 同步</button>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleHealthCheck} disabled={actionState === "testing"}><Activity size={12} /> 检测</button>
             <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={actionState === "deleting"}><Trash2 size={12} /> 删除</button>
           </div>
         </div>
@@ -540,22 +397,6 @@ export const DataSourcesPage = ({
               fontWeight: activeTab === "info" ? 600 : 500 
             }}
           >基本信息</button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("tables")} 
-            style={{ 
-              padding: "8px 4px", 
-              fontSize: "0.85rem", 
-              borderBottom: activeTab === "tables" ? "2px solid var(--color-primary)" : "2px solid transparent", 
-              color: activeTab === "tables" ? "var(--color-text-primary)" : "var(--color-text-muted)", 
-              background: "none", 
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              cursor: "pointer", 
-              fontWeight: activeTab === "tables" ? 600 : 500 
-            }}
-          >表语义与打分管理</button>
         </div>
 
         {activeTab === "info" && (
@@ -602,294 +443,9 @@ export const DataSourcesPage = ({
           </div>
         )}
 
-        {activeTab === "tables" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, flex: 1, minHeight: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-secondary)", borderRadius: 6, padding: "6px 12px", width: 280, border: "1px solid var(--border-light)" }}>
-                <Search size={14} style={{ color: "var(--text-muted)" }} />
-                <input 
-                  className="hifi-input" 
-                  style={{ border: "none", background: "transparent", padding: 0, fontSize: "0.78rem", width: "100%" }} 
-                  placeholder="搜索表名或语义描述..." 
-                  value={searchTableQuery}
-                  onChange={(e) => setSearchTableQuery(e.target.value)}
-                />
-              </div>
-              <button 
-                type="button" 
-                className="hifi-btn hifi-btn-outline" 
-                style={{ padding: "6px 16px", fontSize: "0.78rem" }} 
-                onClick={() => fetchTables(selected.id)}
-                disabled={loadingTables}
-              >
-                <RefreshCw size={12} className={loadingTables ? "animate-spin" : ""} style={{ marginRight: 6 }} />
-                刷新列表
-              </button>
-            </div>
-
-            {loadingTables ? (
-              <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>正在加载数据表语义列表...</div>
-            ) : tables.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 24, border: "1px dashed var(--border-light)", borderRadius: 10, color: "var(--text-muted)", fontSize: "0.78rem" }}>
-                未找到该数据源下的 Schema 表结构。请点击右上角【同步】按钮刷新。
-              </div>
-            ) : (
-              <div style={{ flex: 1, overflowY: "auto", border: "1px solid var(--border-light)", borderRadius: 8 }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem", textAlign: "left" }}>
-                  <thead style={{ background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-light)", position: "sticky", top: 0, zIndex: 1 }}>
-                    <tr>
-                      <th style={{ padding: "8px 12px", width: 40 }}></th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600 }}>物理表名</th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600 }}>主题域</th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600 }}>注释 / AI 描述</th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600 }}>AI置信度</th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600 }}>语义标签 / 业务术语</th>
-                      <th style={{ padding: "8px 12px", fontWeight: 600, textAlign: "right" }}>操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tables
-                      .filter(t => !searchTableQuery || t.table_name.toLowerCase().includes(searchTableQuery.toLowerCase()) || (t.ai_description || "").toLowerCase().includes(searchTableQuery.toLowerCase()))
-                      .map((t) => {
-                        const isExpanded = expandedTableId === t.id;
-                        const confidence = t.ai_confidence !== undefined && t.ai_confidence !== null ? t.ai_confidence : null;
-                        return (
-                          <Fragment key={t.id}>
-                            <tr style={{ borderBottom: "1px solid var(--border-light)", background: isExpanded ? "var(--bg-secondary)" : "transparent" }}>
-                              <td style={{ padding: "8px 12px" }}>
-                                <button 
-                                  type="button"
-                                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", padding: 0 }}
-                                  onClick={() => handleToggleExpandTable(t)}
-                                >
-                                  {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                </button>
-                              </td>
-                              <td style={{ padding: "8px 12px", fontWeight: 600 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                  <Database size={12} style={{ color: "var(--color-primary)" }} />
-                                  {t.table_name}
-                                </div>
-                              </td>
-                              <td style={{ padding: "8px 12px" }}>{t.subject_area || "—"}</td>
-                              <td style={{ padding: "8px 12px" }}>
-                                <div style={{ fontWeight: 500, color: "var(--text-primary)" }}>{t.table_comment || "—"}</div>
-                                {t.ai_description && (
-                                  <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>{t.ai_description}</div>
-                                )}
-                              </td>
-                              <td style={{ padding: "8px 12px" }}>
-                                {confidence !== null ? (
-                                  <span style={{ 
-                                    fontSize: "0.7rem", 
-                                    color: confidence >= 0.8 ? "var(--color-success)" : confidence >= 0.5 ? "var(--color-warning)" : "var(--color-danger)",
-                                    background: confidence >= 0.8 ? "var(--color-success-soft)" : confidence >= 0.5 ? "var(--color-warning-soft)" : "var(--color-danger-soft)",
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
-                                    fontWeight: 600
-                                  }}>
-                                    {(confidence * 100).toFixed(0)}%
-                                  </span>
-                                ) : "—"}
-                              </td>
-                              <td style={{ padding: "8px 12px" }}>
-                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                  {t.semantic_tags && (
-                                    <span style={{ fontSize: "0.68rem", color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "1px 5px", borderRadius: 4 }}>
-                                      {t.semantic_tags}
-                                    </span>
-                                  )}
-                                  {t.business_terms && (
-                                    <span style={{ fontSize: "0.68rem", color: "var(--color-info)", background: "var(--color-info-soft)", padding: "1px 5px", borderRadius: 4 }}>
-                                      {t.business_terms}
-                                    </span>
-                                  )}
-                                  {!t.semantic_tags && !t.business_terms && "—"}
-                                </div>
-                              </td>
-                              <td style={{ padding: "8px 12px", textAlign: "right" }}>
-                                <button 
-                                  type="button" 
-                                  className="hifi-btn hifi-btn-outline" 
-                                  style={{ padding: "2px 8px", fontSize: "0.7rem" }}
-                                  onClick={() => setEditingEntity({
-                                    type: "table",
-                                    id: t.id,
-                                    name: t.table_name,
-                                    ai_description: t.ai_description || "",
-                                    semantic_tags: t.semantic_tags || "",
-                                    business_terms: t.business_terms || "",
-                                    subject_area: t.subject_area || "",
-                                    ai_confidence: confidence !== null ? confidence : 1.0,
-                                  })}
-                                >
-                                  编辑语义
-                                </button>
-                              </td>
-                            </tr>
-                            {isExpanded && (
-                              <tr>
-                                <td colSpan={7} style={{ padding: "8px 24px", background: "var(--bg-secondary)" }}>
-                                  <div style={{ borderLeft: "2px solid var(--border-hover)", paddingLeft: 12 }}>
-                                    <div style={{ fontWeight: 600, fontSize: "0.75rem", marginBottom: 6, color: "var(--text-secondary)" }}>字段 (Columns) 语义与置信度</div>
-                                    {loadingColumnsId === t.id ? (
-                                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>加载中...</div>
-                                    ) : !columnsMap[t.id] || columnsMap[t.id].length === 0 ? (
-                                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>暂无字段数据。</div>
-                                    ) : (
-                                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.72rem", background: "var(--bg-primary)" }}>
-                                        <thead>
-                                          <tr style={{ borderBottom: "1px solid var(--border-light)" }}>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>列名</th>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>物理类型</th>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>物理注释 / AI 描述</th>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>置信度</th>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600 }}>语义标签</th>
-                                            <th style={{ padding: "6px 8px", fontWeight: 600, textAlign: "right" }}>操作</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {columnsMap[t.id].map((col) => {
-                                            const colConfidence = col.ai_confidence !== undefined && col.ai_confidence !== null ? col.ai_confidence : null;
-                                            return (
-                                              <tr key={col.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-                                                <td style={{ padding: "6px 8px", fontFamily: "monospace" }}>{col.column_name}</td>
-                                                <td style={{ padding: "6px 8px", color: "var(--text-muted)" }}>{col.column_type || col.data_type}</td>
-                                                <td style={{ padding: "6px 8px" }}>
-                                                  <div>{col.column_comment || "—"}</div>
-                                                  {col.ai_description && (
-                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>{col.ai_description}</div>
-                                                  )}
-                                                </td>
-                                                <td style={{ padding: "6px 8px" }}>
-                                                  {colConfidence !== null ? (
-                                                    <span style={{ 
-                                                      fontSize: "0.65rem", 
-                                                      color: colConfidence >= 0.8 ? "var(--color-success)" : colConfidence >= 0.5 ? "var(--color-warning)" : "var(--color-danger)",
-                                                      background: colConfidence >= 0.8 ? "var(--color-success-soft)" : colConfidence >= 0.5 ? "var(--color-warning-soft)" : "var(--color-danger-soft)",
-                                                      padding: "1px 4px",
-                                                      borderRadius: 3,
-                                                      fontWeight: 600
-                                                    }}>
-                                                      {(colConfidence * 100).toFixed(0)}%
-                                                    </span>
-                                                  ) : "—"}
-                                                </td>
-                                                <td style={{ padding: "6px 8px" }}>
-                                                  {col.semantic_tags ? (
-                                                    <span style={{ fontSize: "0.65rem", color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "1px 4px", borderRadius: 3 }}>
-                                                      {col.semantic_tags}
-                                                    </span>
-                                                  ) : "—"}
-                                                </td>
-                                                <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                                                  <button 
-                                                    type="button" 
-                                                    className="hifi-btn hifi-btn-outline" 
-                                                    style={{ padding: "1px 6px", fontSize: "0.68rem" }}
-                                                    onClick={() => setEditingEntity({
-                                                      type: "column",
-                                                      id: col.id,
-                                                      name: col.column_name,
-                                                      ai_description: col.ai_description || "",
-                                                      semantic_tags: col.semantic_tags || "",
-                                                      business_terms: col.business_terms || "",
-                                                      ai_confidence: colConfidence !== null ? colConfidence : 1.0,
-                                                    })}
-                                                  >
-                                                    编辑语义
-                                                  </button>
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-      {editingEntity && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }}>
-          <div style={{ background: "var(--bg-primary)", padding: 20, borderRadius: 12, width: 480, border: "1px solid var(--border-hover)", color: "var(--text-primary)" }}>
-            <h4 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: 16 }}>编辑 {editingEntity.type === "table" ? "数据表" : "字段"} 语义属性 - {editingEntity.name}</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
-              <div>
-                <label className="field-label">AI 语义描述</label>
-                <textarea 
-                  className="hifi-input"
-                  style={{ width: "100%", height: 72, fontSize: "0.78rem", resize: "none", padding: 8 }}
-                  value={editingEntity.ai_description}
-                  onChange={(e) => setEditingEntity(prev => prev ? ({ ...prev, ai_description: e.target.value }) : null)}
-                />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label className="field-label">语义标签 (逗号分隔)</label>
-                  <input 
-                    className="hifi-input"
-                    style={{ fontSize: "0.78rem" }}
-                    value={editingEntity.semantic_tags}
-                    onChange={(e) => setEditingEntity(prev => prev ? ({ ...prev, semantic_tags: e.target.value }) : null)}
-                  />
-                </div>
-                <div>
-                  <label className="field-label">业务术语</label>
-                  <input 
-                    className="hifi-input"
-                    style={{ fontSize: "0.78rem" }}
-                    value={editingEntity.business_terms}
-                    onChange={(e) => setEditingEntity(prev => prev ? ({ ...prev, business_terms: e.target.value }) : null)}
-                  />
-                </div>
-              </div>
-              {editingEntity.type === "table" && (
-                <div>
-                  <label className="field-label">主题域</label>
-                  <input 
-                    className="hifi-input"
-                    style={{ fontSize: "0.78rem" }}
-                    value={editingEntity.subject_area || ""}
-                    onChange={(e) => setEditingEntity(prev => prev ? ({ ...prev, subject_area: e.target.value }) : null)}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="field-label">置信度打分 (0.0 - 1.0)</label>
-                <input 
-                  type="number"
-                  step="0.05"
-                  min="0"
-                  max="1"
-                  className="hifi-input"
-                  style={{ fontSize: "0.78rem" }}
-                  value={editingEntity.ai_confidence !== undefined ? editingEntity.ai_confidence : 1.0}
-                  onChange={(e) => setEditingEntity(prev => prev ? ({ ...prev, ai_confidence: parseFloat(e.target.value) || 0 }) : null)}
-                />
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button type="button" className="hifi-btn hifi-btn-outline" onClick={() => setEditingEntity(null)}>取消</button>
-              <button type="button" className="hifi-btn hifi-btn-primary" onClick={handleSaveMetadata}>保存</button>
-            </div>
-          </div>
-        </div>
-      )}
       </div>
     );
   };
-
   return (
     <div className="hifi-tab-pane hifi-datasource-page">
       <div className="hifi-page-header">
