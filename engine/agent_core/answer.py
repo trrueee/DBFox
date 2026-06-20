@@ -16,6 +16,7 @@ def synthesize_agent_answer(
     suggestions: list[FollowUpSuggestion] | None = None,
     error: str | None = None,
     *,
+    analysis_units: list[dict[str, Any]] | None = None,
     model_name: str | None = None,
     api_key: str | None = None,
     api_base: str | None = None,
@@ -29,6 +30,30 @@ def synthesize_agent_answer(
             recommendations=recommendation_texts(suggestions or []),
             follow_up_questions=[suggestion.question for suggestion in (suggestions or [])],
         )
+
+    # ── Multi-unit report composition (P2) ──────────────────────────
+    units = analysis_units or []
+    non_empty = [u for u in units if not u.get("is_empty")]
+    if len(non_empty) >= 2:
+        try:
+            report = _compose_multi_unit_report(
+                question=question,
+                units=non_empty,
+                model_name=model_name,
+                api_key=api_key,
+                api_base=api_base,
+            )
+            if report:
+                return AgentAnswer(
+                    answer=report.get("summary", ""),
+                    key_findings=report.get("key_findings", [])[:8],
+                    evidence=_multi_unit_evidence(non_empty, sql, safety),
+                    caveats=report.get("caveats", [])[:5],
+                    recommendations=report.get("recommendations", []),
+                    follow_up_questions=report.get("follow_up_questions", []),
+                )
+        except Exception:
+            pass  # Fall through to single-unit path
 
     execution_success = bool((execution or {}).get("success"))
     review_only = bool(safety and safety.get("can_execute") and not execution_success and execution and execution.get("reason"))
@@ -212,3 +237,180 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(value)
         result.append(value)
     return result
+
+
+def _compose_multi_unit_report(
+    *,
+    question: str,
+    units: list[dict[str, Any]],
+    model_name: str | None = None,
+    api_key: str | None = None,
+    api_base: str | None = None,
+) -> dict[str, Any] | None:
+    """Compose a structured report from multiple analysis units via LLM."""
+    import os
+
+    has_credentials = bool(
+        api_key
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("QWEN_API_KEY")
+        or os.environ.get("DBFOX_LLM_API_KEY")
+    )
+    if not (has_credentials or os.environ.get("DBFOX_TESTING") == "1"):
+        return None
+
+    from engine.llm import get_chat_model
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    # Build unit summaries for the prompt
+    unit_summaries: list[str] = []
+    for i, u in enumerate(units):
+        sql_short = (u.get("sql") or "")[:200]
+        rows_count = u.get("execution", {}).get("rowCount", 0)
+        columns = u.get("execution", {}).get("columns", [])
+        rows = u.get("execution", {}).get("rows", [])
+        is_empty = rows_count == 0
+        profile = u.get("profile") or {}
+        chart = u.get("chart") or {}
+
+        unit_text = (
+            f"### Query {i + 1}\n"
+            f"- SQL: {sql_short}\n"
+            f"- Columns: {columns}\n"
+            f"- Row count: {rows_count}\n"
+            f"- Empty: {is_empty}\n"
+        )
+        if profile:
+            facts = profile.get("notable_facts") or []
+            anomalies = profile.get("anomalies") or []
+            if facts:
+                unit_text += f"- Notable facts: {'; '.join(facts[:5])}\n"
+            if anomalies:
+                unit_text += f"- Anomalies: {'; '.join(anomalies[:3])}\n"
+        if chart:
+            unit_text += f"- Chart type: {chart.get('type')}, dimensions: {chart.get('x')} vs {chart.get('y')}\n"
+        # Preview first 3 rows
+        if rows:
+            preview = _format_result_preview(columns, rows[:3])
+            unit_text += f"- Data preview:\n{preview}\n"
+        unit_summaries.append(unit_text)
+
+    units_text = "\n".join(unit_summaries)
+
+    system_prompt = (
+        "你是一个专业的数据分析报告撰写专家。你会收到多个查询结果，"
+        "需要将它们整合成一份结构化的业务分析报告。"
+        "请使用中文，语气客观、专业。"
+        "你的报告应包含：结论、关键发现、数据口径说明、以及后续建议。"
+        "不要包含 markdown 格式标题（#、##），控制在 300-600 字。"
+    )
+
+    user_content = (
+        f"用户问题: {question}\n\n"
+        f"共执行了 {len(units)} 次查询，结果如下:\n\n"
+        f"{units_text}\n\n"
+        "请基于以上所有查询结果，撰写一份综合分析报告。按以下结构组织：\n"
+        "1. 结论（1-2句总结核心发现）\n"
+        "2. 关键指标（列出最重要的数字和比率）\n"
+        "3. 维度分析（如果多次查询覆盖不同维度，说明它们之间的关系）\n"
+        "4. 数据口径（说明分析覆盖的数据范围）\n"
+        "5. 建议（基于发现给出可操作的下一步建议）\n\n"
+        "报告："
+    )
+
+    try:
+        model = get_chat_model(
+            model_name=model_name,
+            api_key=api_key,
+            api_base=api_base,
+            temperature=0.3,
+        )
+        response = model.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_content),
+        ])
+        if not response or not response.content:
+            return None
+
+        report_text = response.content.strip()
+
+        # Extract key findings from profiles
+        all_facts: list[str] = []
+        for u in units:
+            profile = u.get("profile") or {}
+            for f in (profile.get("notable_facts") or []):
+                all_facts.append(str(f))
+
+        # Collect caveats
+        caveats: list[str] = []
+        for u in units:
+            if u.get("is_empty"):
+                caveats.append(f"Query '{u.get('sql', '')[:60]}...' returned no rows")
+            if u.get("is_truncated"):
+                caveats.append("Some results were truncated")
+            profile = u.get("profile") or {}
+            for lim in (profile.get("limitations") or []):
+                caveats.append(str(lim))
+            for anom in (profile.get("anomalies") or []):
+                caveats.append(str(anom))
+
+        return {
+            "summary": report_text,
+            "key_findings": _dedupe(all_facts),
+            "caveats": _dedupe(caveats),
+            "recommendations": [],
+            "follow_up_questions": [],
+        }
+    except Exception:
+        return None
+
+
+def _multi_unit_evidence(
+    units: list[dict[str, Any]],
+    sql: str | None,
+    safety: dict[str, Any] | None,
+) -> list[AnswerEvidence]:
+    """Build evidence list referencing all analysis units."""
+    evidence: list[AnswerEvidence] = []
+    total_rows = 0
+    total_empty = 0
+    for u in units:
+        exec_data = u.get("execution") or {}
+        total_rows += int(exec_data.get("rowCount", 0))
+        if exec_data.get("rowCount", 0) == 0:
+            total_empty += 1
+
+    evidence.append(
+        AnswerEvidence(
+            artifact_id="result_table",
+            label="查询次数",
+            value=len(units),
+        )
+    )
+    if total_rows > 0:
+        evidence.append(
+            AnswerEvidence(
+                artifact_id="result_table",
+                label="合计行数",
+                value=total_rows,
+            )
+        )
+    if total_empty > 0:
+        evidence.append(
+            AnswerEvidence(
+                artifact_id="result_table",
+                label="空结果查询",
+                value=total_empty,
+            )
+        )
+    if sql:
+        evidence.append(AnswerEvidence(artifact_id="sql_candidate", label="SQL", value="已验证"))
+    if safety:
+        evidence.append(
+            AnswerEvidence(
+                artifact_id="safety_report",
+                label="安全检查",
+                value="通过" if safety.get("can_execute") else "已阻止",
+            )
+        )
+    return evidence

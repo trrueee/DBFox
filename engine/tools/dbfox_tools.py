@@ -608,6 +608,7 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
             result_profile=result_profile,
             suggestions=context.state.get("suggestions"),
             error=context.state.get("error"),
+            analysis_units=list(context.state.get("analysis_units") or []),
             model_name=model_name,
             api_key=api_key,
             api_base=api_base,
