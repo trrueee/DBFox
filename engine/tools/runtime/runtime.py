@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -28,8 +29,23 @@ class ToolRuntime:
     ) -> ToolObservation:
         tool = self.registry.require(tool_name)
         start = time.perf_counter()
+
+        # Auto-coerce JSON strings → native types.  LLMs frequently pass
+        # lists / dicts as JSON-encoded strings (e.g. columns='["a","b"]'),
+        # which causes Pydantic validation to reject valid intent.
+        coerced_input = dict(raw_input)
+        for key, value in coerced_input.items():
+            if isinstance(value, str) and len(value) >= 2:
+                stripped = value.strip()
+                if (stripped.startswith("[") and stripped.endswith("]")) or \
+                   (stripped.startswith("{") and stripped.endswith("}")):
+                    try:
+                        coerced_input[key] = json.loads(stripped)
+                    except (json.JSONDecodeError, ValueError):
+                        pass  # not valid JSON, keep original string
+
         try:
-            parsed_input = tool.input_model.model_validate(raw_input)
+            parsed_input = tool.input_model.model_validate(coerced_input)
         except ValidationError as exc:
             return self._failed(tool_name, raw_input, "Input contract failed", exc, start)
 
