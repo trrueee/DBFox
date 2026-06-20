@@ -117,26 +117,6 @@ def test_runtime_reports_validation_failure_as_failed_observation():
     assert "Input contract failed" in (observation.error or "")
 
 
-def test_state_reducer_applies_result_profile():
-    from engine.tools.runtime.state_reducer import apply_tool_observation_to_state
-
-    obs = ToolObservation(
-        name="result.profile",
-        status="success",
-        output={"row_count": 3},
-        latency_ms=1,
-    )
-
-    update = apply_tool_observation_to_state(
-        state={},
-        tool_name="result.profile",
-        observation=obs,
-    )
-
-    assert update["result_profile"] == {"row_count": 3}
-    assert update["trace_events"][0]["payload"]["tool_name"] == "result.profile"
-
-
 def test_state_reducer_clears_db_query_errors():
     from engine.tools.runtime.state_reducer import apply_tool_observation_to_state
 
@@ -165,7 +145,6 @@ def test_builtin_registry_loads_base_tools_without_yaml():
     names = {tool.name for tool in registry.list_tools()}
 
     assert "db.query" in names
-    assert "result.profile" in names
     assert "chart.suggest" in names
     assert "answer.synthesize" in names
     assert "analyze_data" not in names

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation, ResultProfile
+from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation
 
 
 class AgentArtifactIdentity:
@@ -28,7 +28,6 @@ def build_agent_artifacts(
     safety: dict[str, Any] | None,
     execution: dict[str, Any] | None,
     chart_suggestion: dict[str, Any] | None,
-    result_profile: ResultProfile | None,
     answer: AgentAnswer | None,
     error: str | None = None,
     identity: AgentArtifactIdentity | None = None,
@@ -48,13 +47,7 @@ def build_agent_artifacts(
         artifacts.append(build_table_artifact(execution, safety=safety, identity=identity))
 
     if chart_suggestion and chart_suggestion.get("type") and chart_suggestion.get("type") != "table":
-        artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, identity=identity))
-
-    if result_profile:
-        artifacts.append(build_profile_artifact(result_profile, execution=execution, safety=safety, identity=identity))
-
-    if answer and answer.recommendations:
-        artifacts.append(build_recommendations_artifact(answer, identity=identity))
+        artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, execution=execution, identity=identity))
 
     if error:
         artifacts.append(build_error_artifact(error, safety=safety, execution=execution, identity=identity))
@@ -203,30 +196,6 @@ def build_table_artifact(
     )
 
 
-def build_profile_artifact(
-    result_profile: ResultProfile,
-    *,
-    execution: dict[str, Any] | None = None,
-    safety: dict[str, Any] | None = None,
-    identity: AgentArtifactIdentity | None = None,
-) -> AgentArtifact:
-    sql = _execution_sql(execution) if execution else None
-    table_sem = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
-    depends = [table_sem] if execution and execution.get("success") else []
-    sem_id = "result_profile" if not sql else f"result_profile_{_sql_fingerprint(sql)}"
-    return _artifact(
-        sem_id,
-        "insight",
-        "Result profile",
-        {**result_profile.model_dump(), "safety_state": _safety_state(safety)},
-        mode="both",
-        priority=10,
-        identity=identity,
-        produced_by_step="profile_result",
-        depends_on=depends,
-    )
-
-
 def build_chart_artifact(
     chart_suggestion: dict[str, Any],
     *,
@@ -247,24 +216,6 @@ def build_chart_artifact(
         identity=identity,
         produced_by_step="suggest_chart",
         depends_on=[table_sem],
-    )
-
-
-def build_recommendations_artifact(
-    answer: AgentAnswer,
-    *,
-    identity: AgentArtifactIdentity | None = None,
-) -> AgentArtifact:
-    return _artifact(
-        "recommendations",
-        "recommendation",
-        "Recommended next steps",
-        {"recommendations": answer.recommendations, "followUpQuestions": answer.follow_up_questions},
-        mode="inline",
-        priority=40,
-        identity=identity,
-        produced_by_step="answer_synthesizer",
-        depends_on=["result_profile"],
     )
 
 

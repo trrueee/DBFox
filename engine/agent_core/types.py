@@ -15,10 +15,14 @@ AgentArtifactType = Literal[
     "safety",
     "table",
     "chart",
-    "insight",
-    "recommendation",
     "error",
 ]
+
+# Artifact categorization for frontend rendering
+EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset({"table", "chart", "sql"})
+PROCESS_ARTIFACT_TYPES: frozenset[str] = frozenset({
+    "query_plan", "sql_suggestion", "safety", "agent_plan", "error",
+})
 AgentPresentationMode = Literal["inline", "dock", "both", "hidden"]
 AgentRuntimeEventType = Literal[
     "agent.run.started",
@@ -239,28 +243,6 @@ class AgentMessageBlock(BaseModel):
     suggestions: list[FollowUpSuggestion] = Field(default_factory=list)
 
 
-class ColumnProfile(BaseModel):
-    kind: Literal["numeric", "category", "time", "unknown"]
-    count: int
-    null_count: int = 0
-    distinct_count: int = 0
-    sample_values: list[Any] = Field(default_factory=list)
-    min: float | str | None = None
-    max: float | str | None = None
-    sum: float | None = None
-    avg: float | None = None
-    top_values: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class ResultProfile(BaseModel):
-    row_count: int
-    column_profiles: dict[str, ColumnProfile] = Field(default_factory=dict)
-    detected_patterns: list[str] = Field(default_factory=list)
-    notable_facts: list[str] = Field(default_factory=list)
-    anomalies: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-
-
 class AgentVisibleEvent(BaseModel):
     event_id: str | None = None
     sequence: int | None = None
@@ -315,7 +297,6 @@ class AgentRunResponse(BaseModel):
     execution: dict[str, Any] | None = None
     explanation: str | None = None
     chart_suggestion: dict[str, Any] | None = None
-    result_profile: ResultProfile | None = None
     answer: AgentAnswer | None = None
     suggestions: list[FollowUpSuggestion] = Field(default_factory=list)
     artifacts: list[AgentArtifact] = Field(default_factory=list)

@@ -170,9 +170,6 @@ def _summarize_artifact_payload(payload: dict[str, Any]) -> str:
     if "rowCount" in payload or "columns" in payload:
         columns = payload.get("columns") if isinstance(payload.get("columns"), list) else []
         return f"rowCount={payload.get('rowCount')}; columns={', '.join(str(c) for c in columns[:8])}"
-    if "notable_facts" in payload:
-        facts = payload.get("notable_facts") if isinstance(payload.get("notable_facts"), list) else []
-        return "; ".join(str(f) for f in facts[:4])
     if "can_execute" in payload:
         return f"can_execute={payload.get('can_execute')}"
     if "error" in payload:

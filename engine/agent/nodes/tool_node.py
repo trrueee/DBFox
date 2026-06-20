@@ -176,16 +176,6 @@ def _summarize_sql_revise(output: dict[str, Any]) -> str:
     return f"[sql.revise] can_fix=True, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
 
 
-def _summarize_result_profile(output: dict[str, Any]) -> str:
-    row_count = output.get("row_count", 0)
-    facts = output.get("notable_facts") or []
-    anomalies = output.get("anomalies") or []
-    return (
-        f"[result.profile] OK. rows={row_count}, "
-        f"notable_facts={facts[:5]}, anomalies={anomalies[:3]}"
-    )
-
-
 def _summarize_chart_suggest(output: dict[str, Any]) -> str:
     chart_type = output.get("type", "unknown")
     x_col = output.get("x", "")
@@ -347,7 +337,6 @@ def _summarize_default(output: dict[str, Any]) -> str:
 
 _SUMMARIZERS: dict[str, _Summarizer] = {
     # ── Active tools (tool-layer-v2) ──
-    "result.profile": _summarize_result_profile,
     "chart.suggest": _summarize_chart_suggest,
     "schema.list_tables": _summarize_schema_list_tables,
     "schema.list_tables_page": _summarize_schema_list_tables_page,
