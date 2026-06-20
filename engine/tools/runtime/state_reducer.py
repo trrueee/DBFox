@@ -113,6 +113,14 @@ def apply_tool_observation_to_state(
     tool_update = _apply_success_output(tool_name, output)
     update.update(tool_update)
 
+    # Enrich matching AnalysisUnit when chart.suggest runs
+    if tool_name == "chart.suggest":
+        unit_id = state.get("current_analysis_unit_id")
+        if unit_id:
+            update["analysis_units"] = _enrich_units(
+                state.get("analysis_units", []), unit_id, chart=output,
+            )
+
     if tool_name in ARTIFACT_TOOLS:
         update["artifacts"] = [_artifact_event(tool_name, output)]
 
@@ -185,11 +193,7 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
             result["sql"] = sql
         return result
     if tool_name == "chart.suggest":
-        result = {"chart_suggestion": output}
-        unit_id = state.get("current_analysis_unit_id")
-        if unit_id:
-            result["analysis_units"] = _enrich_units(state.get("analysis_units", []), unit_id, chart=output)
-        return result
+        return {"chart_suggestion": output}
     if tool_name == "answer.synthesize":
         return {"answer": output, "final_answer": output}
     return {}
