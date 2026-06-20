@@ -97,23 +97,34 @@ class SyncPersistenceSink(AgentPersistenceSink):
         self._main_db = main_db
         self._session_factory = SessionLocal
 
-    def _write(self, fn: Callable[[Session], None]) -> None:
-        """Execute *fn* with a dedicated session. Failures are logged, never raised."""
-        db = self._session_factory()
-        try:
-            fn(db)
-            db.commit()
-        except Exception as exc:
-            logger.exception("Persistence write failed in SyncPersistenceSink")
+    def _write(self, fn: Callable[[Session], None], max_retries: int = 3) -> None:
+        """Execute *fn* with a dedicated session. Retries on lock with backoff."""
+        import time as _time
+        last_error = None
+        for attempt in range(max_retries):
+            db = self._session_factory()
             try:
-                db.rollback()
-            except Exception as roll_exc:
-                logger.exception("Persistence rollback failed: %s", roll_exc)
-        finally:
-            try:
-                db.close()
-            except Exception as close_exc:
-                logger.exception("Persistence close failed: %s", close_exc)
+                fn(db)
+                db.commit()
+                return
+            except Exception as exc:
+                last_error = exc
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                # SQLite lock is transient — retry after backoff
+                if attempt < max_retries - 1:
+                    _time.sleep(0.05 * (attempt + 1))
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+        logger.error(
+            "Persistence write failed after %d retries: %s",
+            max_retries, last_error,
+        )
 
     def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
         import logging
