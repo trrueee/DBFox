@@ -8,7 +8,6 @@ from engine.agent_core.types import ToolObservation
 from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent_core import persistence as ap
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
@@ -130,30 +129,42 @@ def emit_artifacts_from_observation(
         if isinstance(chart, dict) and chart.get("type") and chart.get("type") != "table":
             artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), identity=identity))
 
-    # Bind dependencies
+    # Bind dependencies. result_table is now keyed per-query (result_table_{hash}),
+    # so a bare "result_table" dep must resolve to the most recent table artifact.
     existing_artifacts = state.get("artifacts") or []
-    semantic_to_id = {}
+    semantic_to_id: dict[str, str] = {}
+    latest_table_id: str | None = None
     for item in existing_artifacts:
         if isinstance(item, dict):
             sem_id = item.get("semantic_id") or item.get("id")
             item_id = item.get("id")
+            item_type = item.get("type")
         else:
             sem_id = item.semantic_id or item.id
             item_id = item.id
+            item_type = item.type
         if sem_id and item_id:
             semantic_to_id[sem_id] = item_id
+        if item_type == "table" and item_id:
+            latest_table_id = item_id
 
     for art in artifacts:
-        art.depends_on = [semantic_to_id.get(dep, dep) for dep in art.depends_on]
+        resolved: list[str] = []
+        for dep in art.depends_on:
+            if dep == "result_table":
+                resolved.append(semantic_to_id.get(dep) or latest_table_id or dep)
+            else:
+                resolved.append(semantic_to_id.get(dep, dep))
+        # De-dup while preserving order
+        seen_deps: set[str] = set()
+        art.depends_on = [d for d in resolved if not (d in seen_deps or seen_deps.add(d))]
 
     return artifacts
 
 
 def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     ctx = graph_context(config)
-    db = ctx.db
     run_id = state.get("run_id") or ""
-    thread_id = state.get("thread_id") or state.get("run_id") or ""
 
     last_tool_results = state.get("last_tool_results") or []
 
@@ -254,18 +265,11 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
                     if q:
                         searched_terms_new.append(q)
 
-            # Track exhausted paths for empty/failed results
-            arg_sig = ""
-            if isinstance(obs.input, dict):
-                # Build a compact arg signature for dedup
-                key_parts = []
-                for k in sorted(obs.input.keys()):
-                    v = obs.input[k]
-                    if isinstance(v, str):
-                        key_parts.append(f"{k}={v.lower()[:60]}")
-                    else:
-                        key_parts.append(f"{k}={v}")
-                arg_sig = ",".join(key_parts)
+            # Track exhausted paths for empty/failed results.
+            # Use the same SHA-based signature as check_loop_prevention so the
+            # exhausted_paths pre-check in fast_path can match.
+            from engine.agent.progress.fast_path import _arg_signature
+            arg_sig = _arg_signature(tool_name, obs.input or {})
 
             if obs.status == "failed" or _is_empty_result(tool_name, obs.output):
                 exhausted_paths_new.append(f"{tool_name}::{arg_sig}")
@@ -275,15 +279,6 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
                 for art in artifacts:
                     art_dict = art.model_dump(mode="json")
                     new_artifacts_dicts.append(art_dict)
-                    if db is not None:
-                        try:
-                            from engine.models import AgentArtifactRecord
-                            existing_count = db.query(AgentArtifactRecord).filter(
-                                AgentArtifactRecord.run_id == run_id
-                            ).count()
-                            ap.record_artifact(db, thread_id, run_id, art, sequence=existing_count + 1)
-                        except Exception as exc:
-                            logger.warning("Failed to save artifact %s to DB: %s", art.id, exc)
         except Exception as exc:
             logger.warning("Failed to process tool observation: %s (payload: %s)", exc, result_dict, exc_info=True)
             continue
