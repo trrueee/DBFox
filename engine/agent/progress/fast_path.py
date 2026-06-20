@@ -162,6 +162,7 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
     if not prev:
         for ep in exhausted:
             if ep.startswith(f"{name}::") and curr_sig in ep:
+                logger.warning("Loop prevention: %s already exhausted — stopping", name)
                 decision = progress_decision_dict(
                     status="clarify",
                     reason_summary=f"{name} with these arguments was already exhausted in a previous step.",
@@ -174,7 +175,10 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
                     "trace_events": [progress_trace(decision, fastpath=True)],
                 }
         return None
-        
+
+    # Duplicate detected — hash match found.  Each rule below fires the circuit breaker.
+    logger.warning("Loop prevention: %s repeated with same args (sig=%s)", name, curr_sig)
+
     # 1. same db.search empty result twice triggers stop / clarify.
     if name == "db.search":
         current_cnt = current.get("results_count")
