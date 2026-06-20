@@ -110,7 +110,8 @@ def ai_enrich_catalog(
                 model=model_name or "qwen-plus",
             )
             _write_ai_metadata(db, batch, ai_result)
-            _rebuild_search_docs(db, datasource_id, batch, ai_result)
+            from engine.environment.schema_catalog_sync import rebuild_search_docs
+            rebuild_search_docs(db, datasource_id)
             _update_schema_hashes(batch)
             enriched_count += len(batch)
         except Exception as exc:
@@ -121,9 +122,6 @@ def ai_enrich_catalog(
 
         if i + table_batch < len(changed):
             time.sleep(AI_LLM_BATCH_INTERVAL_MS / 1000)
-
-    # 3. Cleanup orphan search docs
-    _clean_orphan_search_docs(db, datasource_id)
 
     db.commit()
     if errors and enriched_count == 0:
@@ -273,147 +271,10 @@ def _sync_domain_tag_from_ai(db: OrmSession, table: SchemaTable, ai: dict[str, A
         ))
 
 
-def _rebuild_search_docs(
-    db: OrmSession,
-    datasource_id: str,
-    tables: list[SchemaTable],
-    ai_result: dict[str, Any],
-) -> None:
-    """Rebuild schema_search_docs rows for a batch of tables."""
-    now = datetime.now(timezone.utc)
-    ai_tables = {t["name"]: t for t in ai_result.get("tables", []) if isinstance(t, dict)}
-
-    # Delete existing rows for these tables
-    table_names = [str(t.table_name) for t in tables]
-    if table_names:
-        db.query(SchemaSearchDoc).filter(
-            SchemaSearchDoc.datasource_id == datasource_id,
-            SchemaSearchDoc.table_name.in_(table_names),
-        ).delete(synchronize_session=False)
-
-    for table in tables:
-        ai = ai_tables.get(str(table.table_name))
-        tags = ai.get("semantic_tags") if ai else []
-        terms = ai.get("business_terms") if ai else []
-        _aliases = ai.get("aliases") if ai else []
-        role = ai.get("table_role") if ai else None
-        grain = ai.get("grain") if ai else None
-        desc = ai.get("ai_description") if ai else None
-        confidence = float(ai.get("ai_confidence", 0)) if ai else None
-        cols = sorted(list(table.columns or []), key=lambda c: (c.ordinal_position or 0, str(c.column_name)))
-
-        col_names = [str(c.column_name) for c in cols]
-        col_descs = {str(c.column_name): c.ai_description for c in cols if c.ai_description}
-
-        relation_text = ", ".join(sorted(_connected_table_names(db, table))) or None
-
-        search_text = build_table_search_text(
-            table_name=str(table.table_name),
-            ai_description=desc,
-            semantic_tags=tags if isinstance(tags, list) else None,
-            business_terms=terms if isinstance(terms, list) else None,
-            aliases=_aliases if isinstance(_aliases, list) else None,
-            table_role=role,
-            grain=grain,
-            column_names=col_names,
-            column_ai_descriptions=col_descs,
-            relation_text=relation_text,
-        )
-
-        db.add(SchemaSearchDoc(
-            datasource_id=datasource_id,
-            entity_type="table",
-            entity_id=str(table.id),
-            table_name=str(table.table_name),
-            column_name=None,
-            name=str(table.table_name),
-            ai_description=desc,
-            semantic_tags=json.dumps(tags, ensure_ascii=False) if tags else None,
-            business_terms=json.dumps(terms, ensure_ascii=False) if terms else None,
-            aliases=json.dumps(_aliases, ensure_ascii=False) if _aliases else None,
-            table_role=role,
-            grain=grain,
-            subject_area=ai.get("subject_area") if ai else None,
-            column_summary=", ".join(col_names),
-            relation_summary=relation_text,
-            search_text=search_text,
-            ai_confidence=confidence,
-            updated_at=now,
-        ))
-
-        # Column-level docs
-        ai_cols = {c["name"]: c for c in (ai.get("columns") or []) if isinstance(c, dict)} if ai else {}
-        for col in cols:
-            ac = ai_cols.get(str(col.column_name))
-            if not ac:
-                continue
-            ctags = ac.get("semantic_tags")
-            cterms = ac.get("business_terms")
-            caliases = ac.get("aliases")
-            crole = ac.get("column_role")
-            cmtype = ac.get("metric_type")
-            cdesc = ac.get("ai_description")
-            cconf = float(ac.get("ai_confidence", 0))
-
-            col_search_text = build_column_search_text(
-                column_name=str(col.column_name),
-                table_name=str(table.table_name),
-                ai_description=cdesc,
-                semantic_tags=ctags if isinstance(ctags, list) else None,
-                business_terms=cterms if isinstance(cterms, list) else None,
-                column_role=crole,
-                metric_type=cmtype,
-            )
-
-            db.add(SchemaSearchDoc(
-                datasource_id=datasource_id,
-                entity_type="column",
-                entity_id=str(col.id),
-                table_name=str(table.table_name),
-                column_name=str(col.column_name),
-                name=str(col.column_name),
-                ai_description=cdesc,
-                semantic_tags=json.dumps(ctags, ensure_ascii=False) if ctags else None,
-                business_terms=json.dumps(cterms, ensure_ascii=False) if cterms else None,
-                aliases=json.dumps(caliases, ensure_ascii=False) if caliases else None,
-                column_role=crole,
-                metric_type=cmtype,
-                column_summary=None,
-                relation_summary=None,
-                search_text=col_search_text,
-                ai_confidence=cconf,
-                updated_at=now,
-            ))
-
-    db.flush()
-
-
 def _update_schema_hashes(tables: list[SchemaTable]) -> None:
     """Update schema_hash after successful enrichment."""
     for table in tables:
         table.schema_hash = compute_schema_hash(table)
-
-
-def _clean_orphan_search_docs(db: OrmSession, datasource_id: str) -> None:
-    """Remove search docs for tables that no longer exist in catalog."""
-    db.query(SchemaSearchDoc).filter(
-        SchemaSearchDoc.datasource_id == datasource_id,
-        SchemaSearchDoc.entity_type == "table",
-        ~SchemaSearchDoc.table_name.in_(
-            db.query(SchemaTable.table_name).filter(
-                SchemaTable.data_source_id == datasource_id,
-            )
-        ),
-    ).delete(synchronize_session=False)
-    db.query(SchemaSearchDoc).filter(
-        SchemaSearchDoc.datasource_id == datasource_id,
-        SchemaSearchDoc.entity_type == "column",
-        ~SchemaSearchDoc.table_name.in_(
-            db.query(SchemaTable.table_name).filter(
-                SchemaTable.data_source_id == datasource_id,
-            )
-        ),
-    ).delete(synchronize_session=False)
 
 
 def _connected_table_names(db: OrmSession, table: SchemaTable) -> set[str]:

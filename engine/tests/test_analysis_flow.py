@@ -316,3 +316,15 @@ class TestSystemPrompt:
         from engine.agent.model.system_prompt import SYSTEM_PROMPT
         assert "Always speak" in SYSTEM_PROMPT
         assert "Never send an empty message" in SYSTEM_PROMPT
+
+    def test_prompt_requires_semantic_expansion_for_schema_search(self):
+        from engine.agent.model.system_prompt import SYSTEM_PROMPT
+
+        assert "semantic search expressions" in SYSTEM_PROMPT
+        assert "Do not search only the user's literal words" in SYSTEM_PROMPT
+        assert "call db.search separately" in SYSTEM_PROMPT
+        assert "same step when possible" in SYSTEM_PROMPT
+        assert "Before the first db.search" in SYSTEM_PROMPT
+        assert "state your semantic search plan in Chinese" in SYSTEM_PROMPT
+        assert "issue at least two db.search calls" in SYSTEM_PROMPT
+        assert "Never claim a table was found unless it appears in a tool result" in SYSTEM_PROMPT

@@ -66,7 +66,7 @@ def test_ai_enrich_catalog_batches_tables_by_default(db_session, test_datasource
 
     monkeypatch.setattr("engine.ai_enrich.enrich_tables_batch", fake_enrich_tables_batch)
 
-    result = ai_enrich_catalog(db_session, test_datasource.id)
+    result = ai_enrich_catalog(db_session, test_datasource.id, api_key="sk-fake")
 
     assert result["ai_enriched"] is True
     assert result["enriched_count"] == 12
