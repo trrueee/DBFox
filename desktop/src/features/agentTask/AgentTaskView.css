@@ -727,3 +727,121 @@
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ════════════════════════════════════════════════════════════
+   FinalAnswerCard — Structured Report Layout (P2)
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Metric cards row ── */
+.task-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.task-metric-card {
+  background: var(--at-surface);
+  border: 1px solid var(--at-border-light);
+  border-radius: 8px;
+  padding: 12px 14px;
+  text-align: center;
+}
+.task-metric-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--at-fg);
+  line-height: 1.2;
+}
+.task-metric-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--at-fg-tertiary);
+  margin-top: 2px;
+}
+
+/* ── Report sections ── */
+.task-report-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.task-report-section {
+  background: var(--at-surface);
+  border: 1px solid var(--at-border-light);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.task-report-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.task-report-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--at-fg);
+}
+.task-report-section-body {
+  font-size: var(--at-text-sm);
+  color: var(--at-fg-secondary);
+  line-height: var(--at-leading);
+}
+.task-section-conclusion { border-left: 3px solid #3B82F6; }
+.task-section-metrics   { border-left: 3px solid #22C55E; }
+.task-section-breakdown { border-left: 3px solid #A855F7; }
+.task-section-trend     { border-left: 3px solid #F97316; }
+.task-section-diagnosis { border-left: 3px solid #F59E0B; }
+.task-section-recommendation { border-left: 3px solid #EAB308; }
+.task-section-scope     { border-left: 3px solid #94A3B8; }
+
+/* ── Per-unit cards ── */
+.task-unit-card {
+  border: 1px solid var(--at-border-light);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--at-surface);
+}
+.task-unit-table {
+  border-bottom: 1px solid var(--at-border-light);
+}
+
+/* ── Chart bar ── */
+.task-chart-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+}
+.task-chart-bar-label {
+  font-size: 0.72rem;
+  width: 80px;
+  flex-shrink: 0;
+  color: var(--at-fg-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-chart-bar-track {
+  flex: 1;
+  height: 18px;
+  background: var(--at-hover);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.task-chart-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #A855F7, #7C3AED);
+  border-radius: 4px;
+  min-width: 2px;
+  transition: width 0.4s ease;
+}
+.task-chart-bar-value {
+  font-size: 0.72rem;
+  font-weight: 600;
+  width: 50px;
+  text-align: right;
+  color: var(--at-fg);
+}
