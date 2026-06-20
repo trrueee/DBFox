@@ -268,7 +268,7 @@ def _artifact_to_card(art: dict[str, Any], all_visible: list[dict[str, Any]]) ->
             lines = []
             if isinstance(payload.get("row_count"), int):
                 lines.append(f"共 {payload['row_count']} 行结果。")
-            for key in ("notable_facts", "detected_patterns", "anomalies", "limitations"):
+            for key in ("detected_patterns", "anomalies", "limitations"):
                 vals = payload.get(key)
                 if isinstance(vals, list):
                     for val in vals:

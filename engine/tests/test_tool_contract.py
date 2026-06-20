@@ -47,21 +47,6 @@ def test_failure_preserves_telemetry():
     assert update["error"] == "boom"
 
 
-def test_result_profile_contract_writes_profile_and_artifact():
-    output = {"row_count": 3, "notable_facts": ["x"]}
-    update = apply_tool_observation_to_state(
-        state={},
-        tool_name="result.profile",
-        observation=_observation("result.profile", output=output),
-        merge_strategy="new",
-    )
-
-    assert "result.profile" in ARTIFACT_TOOLS
-    assert update["result_profile"] == output
-    assert update["trace_events"][0]["payload"]["_merge_strategy"] == "new"
-    assert update["artifacts"][0]["tool_name"] == "result.profile"
-
-
 def test_db_query_contract_writes_execution_and_sql():
     update = apply_tool_observation_to_state(
         state={},
@@ -142,7 +127,6 @@ def test_unknown_tool_gets_safe_default_reducer_behavior():
         observation=_observation("some.unknown.tool"),
     )
 
-    assert "result_profile" not in update
     assert "artifacts" not in update
     assert update["trace_events"][0]["payload"]["_merge_strategy"] == "reuse"
 

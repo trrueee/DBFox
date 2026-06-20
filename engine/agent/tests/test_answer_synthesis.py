@@ -1,64 +1,69 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
-import pytest
-from engine.agent_core.types import ResultProfile
 from engine.agent_core.answer import synthesize_agent_answer
 
 
-def test_synthesize_agent_answer_fallback():
-    # No credentials, should fallback to default behavior
+def test_synthesize_agent_answer_no_analysis_units_no_credentials():
+    """No analysis units, no credentials — should fallback to default behavior."""
     result = synthesize_agent_answer(
         question="What is the total sales?",
-        query_plan=None,
-        sql="SELECT SUM(sales) FROM orders",
-        safety={"can_execute": True},
-        execution={
-            "success": True,
-            "rowCount": 50,
-            "columns": ["total_sales"],
-            "rows": [[10000]],
-        },
-        result_profile=ResultProfile(
-            row_count=50,
-            notable_facts=["Total sales is 10000."],
-            anomalies=[],
-            limitations=[],
-        ),
+        analysis_units=[],
     )
-    assert result.answer.startswith("Total sales is 10000.")
-    assert "result_table" in [ev.artifact_id for ev in result.evidence]
+    assert "total sales" in result.answer.lower()
+    assert len(result.key_findings) >= 1
+
+
+def test_synthesize_agent_answer_empty_result_set():
+    """Empty result set — should still produce a fallback answer."""
+    result = synthesize_agent_answer(
+        question="How many orders?",
+        analysis_units=[{
+            "id": "unit1",
+            "sql": "SELECT COUNT(*) FROM orders",
+            "execution": {
+                "success": True,
+                "rowCount": 0,
+                "columns": ["count"],
+                "rows": [],
+            },
+        }],
+    )
+    assert result.answer is not None
+    assert len(result.key_findings) >= 1
 
 
 @patch("engine.llm.get_chat_model")
 def test_synthesize_agent_answer_with_llm(mock_get_chat_model):
     mock_model = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = "This is a detailed AI generated business analysis."
+    mock_response.content = (
+        "## 结论\n"
+        "共 **50** 条记录，总销售额 **10,000** 元。\n\n"
+        "## 关键指标\n"
+        "- **总销售额：10,000**\n\n"
+        "## 分析\n销售趋势稳定。\n\n"
+        "## 数据口径\n覆盖全部订单。\n\n"
+        "## 建议\n持续监控。"
+    )
     mock_model.invoke.return_value = mock_response
     mock_get_chat_model.return_value = mock_model
 
-    # With credentials (or DBFOX_TESTING)
     with patch.dict("os.environ", {"DBFOX_TESTING": "1"}):
         result = synthesize_agent_answer(
             question="What is the total sales?",
-            query_plan=None,
-            sql="SELECT SUM(sales) FROM orders",
-            safety={"can_execute": True},
-            execution={
-                "success": True,
-                "rowCount": 50,
-                "columns": ["total_sales"],
-                "rows": [[10000]],
-            },
-            result_profile=ResultProfile(
-                row_count=50,
-                notable_facts=["Total sales is 10000."],
-                anomalies=[],
-                limitations=[],
-            ),
+            analysis_units=[{
+                "id": "abc",
+                "sql": "SELECT SUM(amount) FROM orders",
+                "execution": {
+                    "success": True,
+                    "rowCount": 1,
+                    "columns": ["total"],
+                    "rows": [[10000]],
+                },
+            }],
         )
 
-    assert result.answer == "This is a detailed AI generated business analysis."
-    # Since we mocked the model, it should be invoked with HumanMessage and SystemMessage
+    assert "10,000" in result.answer
+    assert len(result.key_findings) >= 1
     mock_model.invoke.assert_called_once()

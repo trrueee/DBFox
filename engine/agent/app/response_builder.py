@@ -87,7 +87,7 @@ def build_response(
         execution=state.get("execution") if isinstance(state.get("execution"), dict) else None,
         explanation=explanation,
         chart_suggestion=state.get("chart_suggestion") if isinstance(state.get("chart_suggestion"), dict) else None,
-        result_profile=state.get("result_profile") if isinstance(state.get("result_profile"), dict) else None,
+        analysis_units=state.get("analysis_units") if isinstance(state.get("analysis_units"), dict) else None,
         answer=answer,
         suggestions=suggestions,
         artifacts=artifacts or [],

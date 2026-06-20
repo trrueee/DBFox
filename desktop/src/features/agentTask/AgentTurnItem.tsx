@@ -6,6 +6,7 @@ import { UserPromptCard } from "./UserPromptCard";
 import { TraceTimeline } from "./TraceTimeline";
 import { TraceSummaryBar } from "./TraceSummaryBar";
 import { FinalAnswerCard } from "./FinalAnswerCard";
+import { EVIDENCE_ARTIFACT_TYPES } from "../../lib/api/types";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -158,8 +159,7 @@ export function AgentTurnItem({
         {hasAgent && hasAnswer && turn.agentAnswer && (
           <FinalAnswerCard
             answer={turn.agentAnswer}
-            artifacts={turn.artifacts || []}
-            suggestions={turn.suggestions}
+            artifacts={(turn.artifacts || []).filter(a => EVIDENCE_ARTIFACT_TYPES.has(a.type))}
             agentStatus={agentStatus}
             onSendFollowUp={onSendFollowUp}
             onOpenSqlConsole={onOpenSqlConsole}

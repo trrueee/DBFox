@@ -62,12 +62,12 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
         if not success:
             context_parts.append(f"  Error: {execution.get('error')}")
 
-    result_profile = state.get("result_profile")
-    if result_profile:
-        facts = result_profile.get("notable_facts") or []
-        anomalies = result_profile.get("anomalies") or []
-        context_parts.append(f"### Result Profile\nrow_count={result_profile.get('row_count')}, "
-                             f"notable_facts={facts[:3]}, anomalies={anomalies[:3]}")
+    # Analysis units summary (from multi-query execution)
+    analysis_units = state.get("analysis_units") or []
+    if analysis_units:
+        total_units = len(analysis_units)
+        non_empty = [u for u in analysis_units if not u.get("is_empty")]
+        context_parts.append(f"### Analysis Units\n{len(non_empty)}/{total_units} queries returned results")
 
     error = state.get("error")
     if error:

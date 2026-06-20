@@ -5,33 +5,21 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DBFoxAgentState
-from engine.agent.graph.message_utils import first_user_text, message_content_text
+from engine.agent.graph.message_utils import first_user_text
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 
 
 def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
-    """Finalize the agent run: extract answer from last AIMessage and set terminal status.
+    """Finalize the agent run — mark status, persist, write trajectory."""
 
-    This node is reached when the model produces a response without tool_calls,
-    meaning it considers the task complete.
-    """
     messages = state.get("messages", [])
     error = state.get("error")
-    original_error = error
     pending_approval = state.get("pending_approval")
 
-    # Determine final answer text
-    answer_text = ""
-    if messages:
-        last = messages[-1]
-        answer_text = message_content_text(last)
-    clean_answer_text = "" if _looks_like_tool_envelope(answer_text) else answer_text
     existing_answer = state.get("answer")
-    existing_answer_text = ""
-    if isinstance(existing_answer, dict):
-        existing_answer_text = str(existing_answer.get("answer") or "").strip()
-    has_answer = bool(clean_answer_text or existing_answer_text)
+    answer_dict = existing_answer if isinstance(existing_answer, dict) else {}
+    has_answer = bool(answer_dict.get("answer") or "")
 
     if pending_approval:
         status = "waiting_approval"
@@ -45,83 +33,27 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
         if not error:
             error = "Agent completed without producing an answer."
 
-    # Build answer payload for AgentRunResponse compatibility
-    artifacts = state.get("artifacts") or []
-    evidence = []
-    for art in artifacts:
-        if isinstance(art, dict):
-            art_id = art.get("id")
-            art_type = art.get("type")
-            art_title = art.get("title") or ""
-        else:
-            art_id = getattr(art, "id", None)
-            art_type = getattr(art, "type", None)
-            art_title = getattr(art, "title", None) or ""
-
-        if art_id and art_type:
-            if art_type == "table":
-                evidence.append({
-                    "artifact_id": art_id,
-                    "label": "数据详情",
-                    "value": f"表格数据 ({art_title})",
-                })
-            elif art_type == "chart":
-                evidence.append({
-                    "artifact_id": art_id,
-                    "label": "图表展示",
-                    "value": f"图表 ({art_title})",
-                })
-            elif art_type == "profile":
-                evidence.append({
-                    "artifact_id": art_id,
-                    "label": "数据特征分析",
-                    "value": f"数据概览 ({art_title})",
-                })
-
-    if isinstance(existing_answer, dict):
-        answer_payload = {
-            "answer": clean_answer_text or existing_answer.get("answer") or "",
-            "key_findings": existing_answer.get("key_findings") or [],
-            "evidence": existing_answer.get("evidence") or evidence or [],
-            "caveats": existing_answer.get("caveats") or [],
-            "recommendations": existing_answer.get("recommendations") or [],
-            "follow_up_questions": existing_answer.get("follow_up_questions") or [],
-        }
-    else:
-        answer_payload = {
-            "answer": clean_answer_text,
-            "key_findings": [],
-            "evidence": evidence,
-            "caveats": [],
-            "recommendations": [],
-            "follow_up_questions": [],
-        }
-
-    if has_answer and original_error:
-        caveats = answer_payload.setdefault("caveats", [])
-        if isinstance(caveats, list):
-            caveat = f"部分后续检查未完成：{original_error}"
-            if caveat not in caveats:
-                caveats.append(caveat)
+    # Ensure answer has evidence from analysis_units if missing
+    if has_answer and not answer_dict.get("evidence"):
+        from engine.agent_core.answer import _build_evidence
+        units = state.get("analysis_units") or []
+        answer_dict["evidence"] = [
+            ev.model_dump() for ev in _build_evidence(units)
+        ]
 
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
         "status": status,
         "has_answer": has_answer,
-        "has_error": bool(original_error),
+        "has_error": bool(error),
     }
-    if original_error and status == "completed":
-        trace_event["nonfatal_error"] = str(original_error)
-    if pending_approval:
-        trace_event["pending_approval"] = True
 
-    # ---- Auto-write trajectory to memory (Agent v2) -----------------------
-    _auto_write_trajectory(state, status, str(answer_payload.get("answer") or ""))
+    _auto_write_trajectory(state, status, str(answer_dict.get("answer") or ""))
 
     result: dict[str, Any] = {
         "status": status,
-        "answer": answer_payload,
-        "final_answer": answer_payload,
+        "answer": answer_dict,
+        "final_answer": answer_dict,
         "error": error,
         "trace_events": [trace_event],
         "agent_graph_route": "end",
@@ -133,19 +65,6 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
             result["artifacts"] = [error_artifact]
 
     return result
-
-
-def _looks_like_tool_envelope(text: str) -> bool:
-    stripped = (text or "").strip()
-    if not stripped.startswith("["):
-        return False
-    prefix = stripped[:120].lower()
-    return (
-        "] ok." in prefix
-        or "] failed." in prefix
-        or "] error." in prefix
-        or "] success." in prefix
-    )
 
 
 def _build_and_persist_error_artifact(

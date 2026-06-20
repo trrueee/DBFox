@@ -6,8 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from engine.agent_core.answer import synthesize_agent_answer
 from engine.agent_core.chart_builder import suggest_plotly_chart
-from engine.agent_core.result_profiler import profile_result
-from engine.agent_core.types import AgentAnswer, ResultProfile
+from engine.agent_core.types import AgentAnswer
 from engine.environment.tools import (
     environment_get_profile,
     schema_describe_table,
@@ -138,10 +137,6 @@ class MemoryDeleteInput(BaseModel):
     memory_id: str = Field(description="ID of the memory record to delete.")
     reason: str = Field(default="user_requested", description="Why this memory is being deleted.")
 
-
-class ResultProfileInput(BaseModel):
-    execution_result: dict[str, Any] | None = Field(default=None, description="Execution result to profile (uses latest if omitted).")
-    question: str | None = Field(default=None, description="Original user question for context.")
 
 
 class ChartSuggestInput(BaseModel):
@@ -517,35 +512,6 @@ class DbRememberTool(BaseTool[RememberInput, LooseOutput]):
 # ── Result / Chart / Answer ────────────────────────────────────────────────────
 
 
-class ResultProfileTool(BaseTool[ResultProfileInput, ResultProfile]):
-    name = "result.profile"
-    group = "result"
-    description = (
-        "Compute a statistical profile of the latest SQL query result: "
-        "row count, column types, min/max/mean/std for numeric columns, "
-        "pattern detection (time_series, category_breakdown, single_metric), "
-        "and anomaly flagging. Use for analytical questions where you need "
-        "to understand trends, distributions, or outliers."
-    )
-    input_model = ResultProfileInput
-    output_model = ResultProfile
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("execution",), produces=("result_profile",), merge_strategy="new")
-    artifacts = ArtifactSpec(emit=True, artifact_types=("insight",))
-
-    def run(self, tool_input: ResultProfileInput, context: ToolRunContext) -> ResultProfile:
-        execution = tool_input.execution_result or context.state.get("execution")
-        if not isinstance(execution, dict) or not execution.get("success"):
-            raise RuntimeError("No successful execution result available. Run db.query first.")
-        question = tool_input.question or getattr(context.request, "question", "") or ""
-        return profile_result(
-            question=question,
-            columns=list(execution.get("columns") or []),
-            rows=list(execution.get("rows") or []),
-            execution_success=True,
-        )
-
 
 class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
     name = "chart.suggest"
@@ -583,35 +549,25 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
     policy = ToolPolicy()
     execution = ToolExecutionSpec()
     state = ToolStateSpec(
-        consumes=("query_plan", "sql", "safety", "execution", "result_profile", "suggestions", "error"),
+        consumes=("analysis_units", "error"),
         produces=("answer", "final_answer"),
         merge_strategy="always_new",
     )
-    artifacts = ArtifactSpec(emit=True, artifact_types=("insight", "recommendation"))
+    artifacts = ArtifactSpec(emit=True, artifact_types=("sql", "table", "chart"))
 
     def run(self, tool_input: AnswerSynthesizeInput, context: ToolRunContext) -> AgentAnswer:
-        result_profile = context.state.get("result_profile")
-        if isinstance(result_profile, dict):
-            result_profile = ResultProfile.model_validate(result_profile)
         question = tool_input.question or getattr(context.request, "question", "") or ""
-        
         model_name = getattr(context.request, "model_name", None)
         api_key = getattr(context.request, "api_key", None)
         api_base = getattr(context.request, "api_base", None)
 
         return synthesize_agent_answer(
             question=question,
-            query_plan=context.state.get("query_plan"),
-            sql=context.state.get("sql"),
-            safety=context.state.get("safety"),
-            execution=context.state.get("execution"),
-            result_profile=result_profile,
-            suggestions=context.state.get("suggestions"),
-            error=context.state.get("error"),
             analysis_units=list(context.state.get("analysis_units") or []),
             model_name=model_name,
             api_key=api_key,
             api_base=api_base,
+            error=context.state.get("error"),
         )
 
 
@@ -716,7 +672,7 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(SqlValidateTool())
     registry.register(SqlExecuteReadonlyTool())
     registry.register(DbRememberTool())
-    registry.register(ResultProfileTool())
+
     registry.register(ChartSuggestTool())
     registry.register(AnswerSynthesizeTool())
     registry.register(MemorySearchTool())
