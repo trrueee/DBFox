@@ -6,6 +6,7 @@ import { UserPromptCard } from "./UserPromptCard";
 import { TraceTimeline } from "./TraceTimeline";
 import { TraceSummaryBar } from "./TraceSummaryBar";
 import { FinalAnswerCard } from "./FinalAnswerCard";
+import { MarkdownContent } from "../workspace/queryResult/MarkdownContent";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -182,8 +183,8 @@ export function AgentTurnItem({
 
         {/* ── Plain AI text (for history turns without agent data) ── */}
         {!hasAgent && turn.aiText && (
-          <div className="task-turn-ai-text">
-            <span>{turn.aiText}</span>
+          <div className="task-answer-markdown">
+            <MarkdownContent content={turn.aiText} />
           </div>
         )}
       </div>
