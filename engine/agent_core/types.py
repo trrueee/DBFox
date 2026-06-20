@@ -133,7 +133,7 @@ class AgentRunRequest(BaseModel):
     workspace_context: AgentWorkspaceContext | None = None
     optimize_rag: bool = True
     execute: bool = True
-    max_steps: int = Field(default=12, ge=1, le=20)
+    max_steps: int = Field(default=30, ge=1, le=60)
     semantic_mode: Literal["off", "shadow", "retry"] = "off"
     execution_mode: Literal["none", "suggest_only", "user_requested_read", "agent_autonomous_read"] | None = None
 

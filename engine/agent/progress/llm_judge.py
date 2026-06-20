@@ -110,7 +110,7 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
 
     # Step count
     step_count = state.get("step_count", 0)
-    max_steps = state.get("max_steps", 20)
+    max_steps = state.get("max_steps", 50)
     context_parts.append(f"### Progress\nstep_count={step_count}, max_steps={max_steps}")
 
     # ---- Active skill recovery context (Agent v2) --------------------------
