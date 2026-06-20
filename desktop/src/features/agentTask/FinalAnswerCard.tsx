@@ -70,6 +70,36 @@ export function FinalAnswerCard({
           </summary>
 
           <div className="task-evidence-body">
+            {/* Charts */}
+            {chartArts.map(c => {
+              const series: { label: string; value: number }[] = c.series || (c as any).payload?.series || [];
+              return (
+                <div key={c.id} className="task-evidence-chart">
+                  <div className="task-evidence-head">
+                    <BarChartIcon size={11} className="text-purple-500" />
+                    <span>{c.title || "图表"}</span>
+                  </div>
+                  {series.length > 0 ? (
+                    <div className="task-artifact-chart-bars">
+                      {series.map((s, si) => (
+                        <div key={si} className="task-chart-bar-row">
+                          <span className="task-chart-bar-label">{s.label}</span>
+                          <div className="task-chart-bar-track">
+                            <div className="task-chart-bar-fill" style={{
+                              width: `${Math.min(100, (s.value / (series.reduce((m, p) => p.value > m ? p.value : m, 1) || 1)) * 100)}%`,
+                            }} />
+                          </div>
+                          <span className="task-chart-bar-value">{Number(s.value).toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 p-2">暂无图表数据</div>
+                  )}
+                </div>
+              );
+            })}
+
             {/* Tables — columns/rows are at artifact top level */}
             {tableArts.map(t => {
               const cols: string[] = (t as any).columns || [];
@@ -174,5 +204,13 @@ export function FinalAnswerCard({
         </div>
       )}
     </div>
+  );
+}
+
+function BarChartIcon({ size, className }: { size: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
   );
 }
