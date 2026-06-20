@@ -56,7 +56,7 @@ class EmptyInput(BaseModel):
 
 
 class SearchInput(BaseModel):
-    query: str = Field(description="Keywords to search for in table names, column names, comments, and AI-enriched descriptions.")
+    query: str = Field(description="A semantic search expression for table names, column names, comments, aliases, and AI-enriched descriptions; use one expression per call, and make multiple db.search calls for multiple candidate expressions.")
     limit: int = Field(default=20, description="Max results to return.")
 
 

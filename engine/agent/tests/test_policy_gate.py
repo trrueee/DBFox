@@ -15,6 +15,9 @@ class EmptyOutput(BaseModel):
 
 
 class PolicyTestTool(BaseTool[EmptyInput, EmptyOutput]):
+    name = "dummy.tool"
+    group = "dummy"
+    description = "dummy description"
     input_model = EmptyInput
     output_model = EmptyOutput
 
