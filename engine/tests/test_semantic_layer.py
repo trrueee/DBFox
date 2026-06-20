@@ -18,8 +18,6 @@ from engine.models import (
     SchemaColumn,
     SchemaTable,
     SemanticAlias,
-    SemanticDimension,
-    SemanticMetric,
     WorkspaceTableScope,
 )
 from engine.semantic import SchemaLinker, SemanticAliasResolver
@@ -288,6 +286,7 @@ class TestWorkspaceTableScope:
 # ---------------------------------------------------------------------------
 
 class TestSemanticAPI:
+    @pytest.mark.skip(reason="Alias CRUD API removed in MVP simplification (2026-06-20)")
     def test_create_alias(self, client, db_session, test_datasource):
         resp = client.post(
             "/api/v1/semantic/aliases",
@@ -304,6 +303,7 @@ class TestSemanticAPI:
         assert data["alias"] == "GMV"
         assert data["target"] == "orders.total_amount"
 
+    @pytest.mark.skip(reason="Alias CRUD API removed in MVP simplification (2026-06-20)")
     def test_list_aliases(self, client, db_session, test_datasource):
         # create two
         client.post("/api/v1/semantic/aliases", json={
@@ -317,6 +317,7 @@ class TestSemanticAPI:
         items = resp.json()
         assert len(items) == 2
 
+    @pytest.mark.skip(reason="Alias CRUD API removed in MVP simplification (2026-06-20)")
     def test_duplicate_alias_rejected(self, client, db_session, test_datasource):
         resp1 = client.post("/api/v1/semantic/aliases", json={
             "data_source_id": test_datasource.id, "alias": "dup", "target_type": "column", "target": "t.c",
@@ -327,6 +328,7 @@ class TestSemanticAPI:
         })
         assert resp2.status_code == 409
 
+    @pytest.mark.skip(reason="Alias CRUD API removed in MVP simplification (2026-06-20)")
     def test_delete_alias(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/aliases", json={
             "data_source_id": test_datasource.id, "alias": "to_delete", "target_type": "table", "target": "t",
@@ -336,6 +338,7 @@ class TestSemanticAPI:
         assert del_resp.status_code == 200
         assert del_resp.json()["success"] is True
 
+    @pytest.mark.skip(reason="SemanticMetric removed in MVP simplification (2026-06-20)")
     def test_create_metric(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/metrics", json={
             "data_source_id": test_datasource.id,
@@ -346,6 +349,7 @@ class TestSemanticAPI:
         data = resp.json()
         assert data["name"] == "GMV"
 
+    @pytest.mark.skip(reason="SemanticDimension removed in MVP simplification (2026-06-20)")
     def test_create_dimension(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/dimensions", json={
             "data_source_id": test_datasource.id,
@@ -357,6 +361,7 @@ class TestSemanticAPI:
         data = resp.json()
         assert data["name"] == "下单日期"
 
+    @pytest.mark.skip(reason="SemanticMetric removed in MVP simplification (2026-06-20)")
     def test_duplicate_metric_rejected(self, client, db_session, test_datasource):
         client.post("/api/v1/semantic/metrics", json={
             "data_source_id": test_datasource.id, "name": "dup_metric", "expression": "COUNT(*)",
@@ -366,6 +371,7 @@ class TestSemanticAPI:
         })
         assert resp2.status_code == 409
 
+    @pytest.mark.skip(reason="SemanticDimension removed in MVP simplification (2026-06-20)")
     def test_duplicate_dimension_rejected(self, client, db_session, test_datasource):
         client.post("/api/v1/semantic/dimensions", json={
             "data_source_id": test_datasource.id, "name": "dup_dim", "column_ref": "t.c",
@@ -375,6 +381,7 @@ class TestSemanticAPI:
         })
         assert resp2.status_code == 409
 
+    @pytest.mark.skip(reason="SemanticMetric removed in MVP simplification (2026-06-20)")
     def test_update_metric(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/metrics", json={
             "data_source_id": test_datasource.id, "name": "test_update", "expression": "COUNT(*)",
@@ -384,6 +391,7 @@ class TestSemanticAPI:
         assert upd.status_code == 200
         assert upd.json()["expression"] == "SUM(x)"
 
+    @pytest.mark.skip(reason="SemanticDimension removed in MVP simplification (2026-06-20)")
     def test_update_dimension(self, client, db_session, test_datasource):
         resp = client.post("/api/v1/semantic/dimensions", json={
             "data_source_id": test_datasource.id, "name": "test_dim", "column_ref": "t.c",
@@ -491,6 +499,7 @@ class TestSemanticEmbeddingRecall:
         v[0] = 1.0
         return v
 
+    @pytest.mark.skip(reason="Formula expansion removed in MVP simplification (2026-06-20)")
     def test_formula_decompounding_and_cycles(self, db_session):
         """Test that compound aliases resolve recursively and handle cyclic dependencies gracefully."""
         from engine.semantic.alias import SemanticAliasResolver, AliasMatch
@@ -520,6 +529,7 @@ class TestSemanticEmbeddingRecall:
         assert len(resolved_cycle) > 0
 
     @patch("engine.semantic.embeddings.EmbeddingService.embed")
+    @pytest.mark.skip(reason="Vector recall removed in MVP simplification (2026-06-20)")
     def test_vector_recall_and_deduplication(self, mock_embed, db_session):
         """Test that vector recall works, queries embeddings, and prioritizes exact match."""
         from engine.semantic.alias import SemanticAliasResolver
@@ -565,6 +575,7 @@ class TestSemanticEmbeddingRecall:
         assert matches_exact[0].source == "db" # exact match source
 
     @patch("engine.semantic.embeddings.EmbeddingService.embed")
+    @pytest.mark.skip(reason="Embedding sync removed in MVP simplification (2026-06-20)")
     def test_sync_embeddings_api(self, mock_embed, client, db_session):
         """Test synchronization API and status retrieval."""
         from engine.models import DataSource, SemanticAlias
@@ -606,6 +617,7 @@ class TestSemanticEmbeddingRecall:
         assert data["synced_count"] == 1
         assert data["last_sync_at"] is not None
 
+    @pytest.mark.skip(reason="Alias CRUD API removed in MVP simplification (2026-06-20)")
     def test_sensitive_aliases_are_filtered_from_semantic_recall_and_apis(self, client, db_session):
         from engine.models import SemanticAlias
         from engine.policy.sensitivity import load_sensitivity
@@ -637,14 +649,9 @@ class TestSemanticEmbeddingRecall:
         items = resp_list.json()
         assert len(items) == 1
         assert items[0]["alias"] == "订单金额"
-        
-        # 5. Check API sync status filters out sensitive alias
-        resp_status = client.get(f"/api/v1/semantic/aliases/sync-status?datasource_id={ds.id}")
-        assert resp_status.status_code == 200
-        status_data = resp_status.json()
-        assert status_data["total_count"] == 1
-        
-        # 6. Check that sensitivity policy loader still loads it correctly
+
+        # 5. Check that sensitivity policy loader still loads it correctly
+        # NOTE: embedding sync-status endpoint was removed in MVP simplification
         pattern = load_sensitivity(db_session, ds.id)
         assert pattern is not None
         assert pattern.search("ssn") is not None

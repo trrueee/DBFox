@@ -121,7 +121,6 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     is_read_only = Column(Boolean, nullable=False, default=False)
     env = Column(String, nullable=False, default="dev")
     status = Column(String, nullable=False, default="active")
-    enable_embedding_recall = Column(Boolean, nullable=False, default=False)
 
     last_test_at = Column(DateTime, nullable=True)
     last_test_status = Column(String, nullable=True)
@@ -608,44 +607,13 @@ class SemanticAlias(Base):  # type: ignore[misc,valid-type]
     target_type = Column(String, nullable=False)
     target = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    embedding_blob = Column(LargeBinary, nullable=True)
-    embedding_synced_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
-class SemanticMetric(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "semantic_metrics"
-    __table_args__ = (
-        Index("ix_semantic_metrics_datasource", "data_source_id"),
-        UniqueConstraint("data_source_id", "name", name="uq_semantic_metrics_ds_name"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String, nullable=False)
-    expression = Column(String, nullable=False)
-    source_columns_json = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
-
-
-class SemanticDimension(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "semantic_dimensions"
-    __table_args__ = (
-        Index("ix_semantic_dimensions_datasource", "data_source_id"),
-        UniqueConstraint("data_source_id", "name", name="uq_semantic_dimensions_ds_name"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String, nullable=False)
-    column_ref = Column(String, nullable=False)
-    transform = Column(String, nullable=True)
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+# NOTE: SemanticMetric and SemanticDimension models were removed in the MVP
+# simplification (2026-06-20).  Metric rules and formula expansion are deferred
+# to a future release.  The DB tables may still exist but are no longer used.
 
 
 class WorkspaceTableScope(Base):  # type: ignore[misc,valid-type]

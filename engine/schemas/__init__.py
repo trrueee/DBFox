@@ -27,12 +27,6 @@ from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateReq
 from engine.schemas.query import SQLValidateRequest, SQLExecuteRequest, SQLCancelRequest, SQLExplainRequest
 from engine.schemas.ai import SQLGenerateRequest, SchemaAlterationRequest, GoldenSQLCreateRequest, BenchmarkRequest
 from engine.schemas.semantic import (
-    SemanticAliasCreateRequest,
-    SemanticAliasUpdateRequest,
-    SemanticMetricCreateRequest,
-    SemanticMetricUpdateRequest,
-    SemanticDimensionCreateRequest,
-    SemanticDimensionUpdateRequest,
     WorkspaceTableScopeUpdateRequest,
 )
 
@@ -58,11 +52,5 @@ __all__ = [
     "SchemaAlterationRequest",
     "GoldenSQLCreateRequest",
     "BenchmarkRequest",
-    "SemanticAliasCreateRequest",
-    "SemanticAliasUpdateRequest",
-    "SemanticMetricCreateRequest",
-    "SemanticMetricUpdateRequest",
-    "SemanticDimensionCreateRequest",
-    "SemanticDimensionUpdateRequest",
     "WorkspaceTableScopeUpdateRequest",
 ]
