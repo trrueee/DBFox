@@ -24,6 +24,7 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
+@pytest.mark.skip(reason="DomainTagRule management API removed in MVP simplification (2026-06-20)")
 def test_domain_tag_rules_lifecycle(db_session, client):
     # 1. Create a DataSource and SchemaTable
     ds = DataSource(

@@ -35,7 +35,6 @@ class DataSourceResponse(BaseModel):
     is_read_only: bool = False
     env: str | None = None
     status: str | None = None
-    enable_embedding_recall: bool = False
 
     ssh_enabled: bool = False
     ssh_host: str | None = None
@@ -110,7 +109,6 @@ class DataSourceCreateRequest(BaseModel):
     connection_mode: str = "direct"
     is_read_only: bool = False
     env: str = "dev"
-    enable_embedding_recall: bool = False
 
     ssh_enabled: bool = False
     ssh_host: str | None = None
@@ -138,7 +136,6 @@ class DataSourceUpdateRequest(BaseModel):
     connection_mode: str = "direct"
     is_read_only: bool = False
     env: str = "dev"
-    enable_embedding_recall: bool = False
 
     ssh_enabled: bool = False
     ssh_host: str | None = None

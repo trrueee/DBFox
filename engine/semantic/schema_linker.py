@@ -116,15 +116,9 @@ class SchemaLinker:
         self,
         db: Session,
         alias_resolver: SemanticAliasResolver | None = None,
-        api_key: str | None = None,
-        api_base: str | None = None,
-        model_name: str | None = None,
     ) -> None:
         self.db = db
         self.alias_resolver = alias_resolver
-        self.api_key = api_key
-        self.api_base = api_base
-        self.model_name = model_name
 
     def _get_alias_resolver(self, datasource_id: str) -> SemanticAliasResolver:
         if self.alias_resolver is not None:
@@ -132,9 +126,6 @@ class SchemaLinker:
         return SemanticAliasResolver.from_db(
             self.db,
             datasource_id,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            model_name=self.model_name,
         )
 
     def _resolve_workspace_table_ids(
