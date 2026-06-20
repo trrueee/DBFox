@@ -23,7 +23,7 @@ def get_diagnostic_logs(
     )
 
 
-@router.delete("/diagnostics/logs")
+@router.post("/diagnostics/logs/clear")
 def clear_diagnostic_logs() -> dict[str, object]:
     cleared: list[str] = []
     for name, path in diagnostic_log_paths():
