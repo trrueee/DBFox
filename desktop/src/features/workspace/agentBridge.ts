@@ -105,6 +105,49 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
   const y = typeof payload.y === "string" ? payload.y : "";
   if ((chartType !== "line" && chartType !== "bar") || !x || !y) return null;
 
+  // The backend chart_builder already computes the series from the result set
+  // (with aggregation + dedup). Trust it first — reconstructing from the raw
+  // table artifact loses aggregation and frequently yields an empty series
+  // when the table artifact's row shape differs.
+  const series = seriesFromPayload(payload)
+    ?? seriesFromTableArtifact(all, x, y);
+  if (!series || series.length === 0) return null;
+
+  return {
+    id: artifact.id,
+    type: "chart",
+    title: `${y} 按 ${x} 分布`,
+    description: typeof payload.reason === "string" ? payload.reason : undefined,
+    chartType,
+    series,
+  };
+}
+
+/** Use the series already computed by the backend chart_builder. */
+function seriesFromPayload(
+  payload: Record<string, unknown>,
+): Array<{ label: string; value: number }> | null {
+  const raw = payload.series;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const series: Array<{ label: string; value: number }> = [];
+  for (const point of raw) {
+    if (!point || typeof point !== "object") continue;
+    const record = point as Record<string, unknown>;
+    const label = formatCell(record.label);
+    const value = Number(record.value);
+    if (!Number.isFinite(value)) continue;
+    series.push({ label, value });
+    if (series.length >= 60) break;
+  }
+  return series.length > 0 ? series : null;
+}
+
+/** Fallback: rebuild series from the raw table artifact rows (pre-aggregation). */
+function seriesFromTableArtifact(
+  all: ApiAgentArtifact[],
+  x: string,
+  y: string,
+): Array<{ label: string; value: number }> | null {
   const tableArtifact = all.find((item) => item.type === "table");
   const rowsValue = tableArtifact?.payload?.rows;
   const rawRows = Array.isArray(rowsValue) ? rowsValue : [];
@@ -117,16 +160,7 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
     series.push({ label: formatCell(record[x]), value });
     if (series.length >= 60) break;
   }
-  if (series.length === 0) return null;
-
-  return {
-    id: artifact.id,
-    type: "chart",
-    title: `${y} 按 ${x} 分布`,
-    description: typeof payload.reason === "string" ? payload.reason : undefined,
-    chartType,
-    series,
-  };
+  return series.length > 0 ? series : null;
 }
 
 function mapInsightArtifact(artifact: ApiAgentArtifact): MarkdownArtifact | null {

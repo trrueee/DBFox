@@ -258,6 +258,9 @@ export function parseConversationTurns(tab: WorkspaceTab): ConversationTurn[] {
     targetTurn.artifacts = tab.artifacts;
     targetTurn.suggestions = tab.agentSuggestions;
     targetTurn.approval = tab.agentApproval;
+    if (targetTurn.agentAnswer?.answer) {
+      targetTurn.aiText = undefined;
+    }
   } else if (hasTimeline && turns.length === 0) {
     // Timeline items exist but no chat messages (edge case) — build single turn
     const userItem = timeline.find((t) => t.kind === "user");

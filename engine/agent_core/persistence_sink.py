@@ -126,7 +126,7 @@ class SyncPersistenceSink(AgentPersistenceSink):
                 question=question,
                 session_id=session_id,
                 parent_run_id=None,
-                max_steps=20,
+                max_steps=50,
             )
             ap.create_or_get_session(db, req, run_id)
             ap.start_run(db, req, run_id, session_id)

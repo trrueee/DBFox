@@ -18,10 +18,10 @@ def synthesize_agent_answer(
 ) -> AgentAnswer:
     if error:
         return AgentAnswer(
-            answer=f"I could not complete the analysis because: {error}",
+            answer=f"未能完成分析：{error}",
             key_findings=[],
             evidence=_base_evidence(sql=sql, safety=safety, execution=execution, result_profile=result_profile),
-            caveats=["No business conclusion was produced because the run did not complete successfully."],
+            caveats=["本次运行未成功完成，因此没有生成业务结论。"],
             recommendations=recommendation_texts(suggestions or []),
             follow_up_questions=[suggestion.question for suggestion in (suggestions or [])],
         )
@@ -37,16 +37,14 @@ def synthesize_agent_answer(
         facts = list(result_profile.notable_facts if result_profile else [])
 
         if row_count == 0:
-            answer = f"The query returned no rows for: {question}"
+            answer = f"已完成查询，但没有找到符合“{question}”的记录。"
         elif row_count <= 10 and rows:
-            # For small results, include the data directly so the user sees it
-            preview = _format_result_preview(columns, rows)
-            answer = f"Query returned {row_count} row(s) for \"{question}\":\n{preview}"
+            answer = f"已完成查询，共返回 {row_count} 行结果；明细请查看下方表格产出物。"
         else:
-            lead = facts[0] if facts else f"The query returned {row_count} rows."
-            answer = f"{lead} — analyzed for question: {question}"
+            lead = facts[0] if facts else f"共返回 {row_count} 行结果。"
+            answer = f"{lead}本次问题：{question}"
     elif review_only:
-        answer = "I generated and validated the SQL, but execution was disabled for this review-only run. No result set was retrieved."
+        answer = "已生成并验证 SQL，但本次运行处于仅审阅模式，未执行查询，因此没有结果集。"
         # Do NOT include profile facts — they are misleading when no execution happened
         if result_profile:
             facts = []
@@ -85,7 +83,7 @@ def _base_evidence(
         evidence.append(
             AnswerEvidence(
                 artifact_id="result_table",
-                label="Rows returned",
+                label="查询行数",
                 value=execution_data.get("rowCount", len(execution_data.get("rows", []) or [])),
             )
         )
@@ -94,8 +92,8 @@ def _base_evidence(
             evidence.append(
                 AnswerEvidence(
                     artifact_id="result_profile",
-                    label="Result profile",
-                    value=f"{result_profile.row_count} rows profiled",
+                    label="结果画像",
+                    value=f"已分析 {result_profile.row_count} 行",
                 )
             )
         else:
@@ -103,18 +101,18 @@ def _base_evidence(
             evidence.append(
                 AnswerEvidence(
                     artifact_id="result_profile",
-                    label="Result profile",
-                    value="execution was skipped; no result set available",
+                    label="结果画像",
+                    value="未执行查询，没有可分析的结果集",
                 )
             )
     if sql:
-        evidence.append(AnswerEvidence(artifact_id="sql_candidate", label="SQL", value="validated candidate"))
+        evidence.append(AnswerEvidence(artifact_id="sql_candidate", label="SQL", value="已验证"))
     if safety:
         evidence.append(
             AnswerEvidence(
                 artifact_id="safety_report",
-                label="Safety",
-                value="passed" if safety.get("can_execute") else "blocked",
+                label="安全检查",
+                value="通过" if safety.get("can_execute") else "已阻止",
             )
         )
     return evidence

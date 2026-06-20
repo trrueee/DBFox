@@ -19,16 +19,16 @@ def profile_result(
         return ResultProfile(
             row_count=0,
             detected_patterns=["execution_skipped"],
-            notable_facts=["Execution was skipped or not performed; no result set is available."],
-            limitations=["Execution was skipped; no result set was returned to profile."],
+            notable_facts=["查询未执行或被跳过，没有可分析的结果集。"],
+            limitations=["本次没有返回结果集，因此无法生成结果画像。"],
         )
 
     if row_count == 0:
         return ResultProfile(
             row_count=0,
             detected_patterns=["empty_result"],
-            notable_facts=["The query returned no rows."],
-            limitations=["Empty results can mean the filters are too narrow or the source data has no matching records."],
+            notable_facts=["查询没有返回记录。"],
+            limitations=["空结果可能表示筛选条件过窄，或源数据中没有匹配记录。"],
         )
 
     profiles = {column: _profile_column(column, [row.get(column) for row in rows]) for column in columns}
@@ -125,21 +125,21 @@ def _notable_facts(
     patterns: list[str],
     row_count: int,
 ) -> list[str]:
-    facts = [f"The result contains {row_count} profiled rows."]
+    facts = [f"结果包含 {row_count} 行可分析记录。"]
     numeric_profiles = [(name, profile) for name, profile in profiles.items() if profile.kind == "numeric"]
     category_profiles = [(name, profile) for name, profile in profiles.items() if profile.kind == "category"]
 
     if "single_metric" in patterns and numeric_profiles:
         name, profile = numeric_profiles[0]
-        facts.append(f"{name} is {profile.max}.")
+        facts.append(f"{name} 为 {profile.max}。")
     if category_profiles:
         name, profile = category_profiles[0]
         if profile.top_values:
             top = profile.top_values[0]
-            facts.append(f"The most frequent {name} value is {top['value']} ({top['count']} rows).")
+            facts.append(f"{name} 中最常见的值是 {top['value']}（{top['count']} 行）。")
     if numeric_profiles:
         name, profile = numeric_profiles[0]
-        facts.append(f"{name} ranges from {profile.min} to {profile.max}.")
+        facts.append(f"{name} 的范围是 {_format_number(profile.min)} 到 {_format_number(profile.max)}。")
     return facts[:5]
 
 
@@ -154,15 +154,21 @@ def _detect_anomalies(profiles: dict[str, ColumnProfile]) -> list[str]:
         except (TypeError, ValueError):
             continue
         if max_value >= avg_value * 3 and max_value > 0:
-            anomalies.append(f"{name} has a high maximum relative to its average.")
+            anomalies.append(f"{name} 的最大值相对平均值偏高。")
     return anomalies
 
 
 def _limitations(row_count: int, rows: list[dict[str, Any]]) -> list[str]:
-    limitations = ["The profile is based on the rows returned to the agent, not necessarily the full source table."]
+    limitations = ["结果画像基于本次返回给 Agent 的行，不一定代表完整源表。"]
     if row_count >= 100 or len(rows) >= 100:
-        limitations.append("The result may be sampled or truncated; verify totals with a focused aggregate query.")
+        limitations.append("结果可能经过抽样或截断；如需总量，请使用更聚焦的聚合查询核验。")
     return limitations
+
+
+def _format_number(value: float | str | None) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def _unique_preview(values: list[Any], limit: int = 5) -> list[Any]:
