@@ -349,7 +349,6 @@ function finishAgentRun(
         : null,
     });
     // Persist conversation even when waiting for approval
-    const tab = ws.tabs.find((t) => t.id === tabId);
     if (tab) {
       ws.persistConversation({
         id: tab.conversationId || `conv-${Date.now()}`,
@@ -394,7 +393,6 @@ function finishAgentRun(
   });
 
   // Persist conversation to backend after every run
-  const tab = ws.tabs.find((t) => t.id === tabId);
   if (tab) {
     const messages = (tab.chatMessages || []).map((msg, i) => ({
       id: String(msg.id || i),
