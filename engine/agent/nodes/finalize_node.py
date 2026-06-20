@@ -26,10 +26,16 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
     if messages:
         last = messages[-1]
         answer_text = message_content_text(last)
+    clean_answer_text = "" if _looks_like_tool_envelope(answer_text) else answer_text
+    existing_answer = state.get("answer")
+    existing_answer_text = ""
+    if isinstance(existing_answer, dict):
+        existing_answer_text = str(existing_answer.get("answer") or "").strip()
+    has_answer = bool(clean_answer_text or existing_answer_text)
 
     if pending_approval:
         status = "waiting_approval"
-    elif answer_text:
+    elif has_answer:
         status = "completed"
         error = None
     elif error:
@@ -40,7 +46,6 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
             error = "Agent completed without producing an answer."
 
     # Build answer payload for AgentRunResponse compatibility
-    existing_answer = state.get("answer")
     artifacts = state.get("artifacts") or []
     evidence = []
     for art in artifacts:
@@ -75,7 +80,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
 
     if isinstance(existing_answer, dict):
         answer_payload = {
-            "answer": answer_text or existing_answer.get("answer") or "",
+            "answer": clean_answer_text or existing_answer.get("answer") or "",
             "key_findings": existing_answer.get("key_findings") or [],
             "evidence": evidence or existing_answer.get("evidence") or [],
             "caveats": existing_answer.get("caveats") or [],
@@ -84,7 +89,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
         }
     else:
         answer_payload = {
-            "answer": answer_text,
+            "answer": clean_answer_text,
             "key_findings": [],
             "evidence": evidence,
             "caveats": [],
@@ -92,7 +97,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
             "follow_up_questions": [],
         }
 
-    if answer_text and original_error:
+    if has_answer and original_error:
         caveats = answer_payload.setdefault("caveats", [])
         if isinstance(caveats, list):
             caveat = f"部分后续检查未完成：{original_error}"
@@ -102,7 +107,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
         "status": status,
-        "has_answer": bool(answer_text),
+        "has_answer": has_answer,
         "has_error": bool(original_error),
     }
     if original_error and status == "completed":
@@ -111,7 +116,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
         trace_event["pending_approval"] = True
 
     # ---- Auto-write trajectory to memory (Agent v2) -----------------------
-    _auto_write_trajectory(state, status, answer_text)
+    _auto_write_trajectory(state, status, str(answer_payload.get("answer") or ""))
 
     result: dict[str, Any] = {
         "status": status,
@@ -128,6 +133,19 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
             result["artifacts"] = [error_artifact]
 
     return result
+
+
+def _looks_like_tool_envelope(text: str) -> bool:
+    stripped = (text or "").strip()
+    if not stripped.startswith("["):
+        return False
+    prefix = stripped[:120].lower()
+    return (
+        "] ok." in prefix
+        or "] failed." in prefix
+        or "] error." in prefix
+        or "] success." in prefix
+    )
 
 
 def _build_and_persist_error_artifact(

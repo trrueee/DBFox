@@ -88,3 +88,28 @@ class TestFinalizeNode:
         assert "recommendations" in result["answer"]
         assert "follow_up_questions" in result["answer"]
         assert "final_answer" in result
+
+    def test_finalize_does_not_display_answer_synthesize_tool_envelope(self):
+        state: DBFoxAgentState = {
+            "messages": [
+                HumanMessage(content="分析小红书工具使用情况"),
+                AIMessage(content='[answer.synthesize] OK. {"answer":"Query returned 8 row(s)"}'),
+            ],
+            "answer": {
+                "answer": "小红书工具调用共 8 条，主要集中在内容生成和发布流程。",
+                "key_findings": ["共 8 条工具调用记录。"],
+                "evidence": [],
+                "caveats": [],
+                "recommendations": [],
+                "follow_up_questions": [],
+            },
+            "status": "running",
+            "error": None,
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(state, {})
+
+        assert result["status"] == "completed"
+        assert result["answer"]["answer"] == "小红书工具调用共 8 条，主要集中在内容生成和发布流程。"
+        assert "[answer.synthesize]" not in result["answer"]["answer"]

@@ -198,7 +198,13 @@ class DBFoxAgentService:
             status=final_state.get("status"),
         )
 
-        yield from final_events(emit, response, agent_state, emitted_artifact_ids)
+        for event in final_events(emit, response, agent_state, emitted_artifact_ids):
+            self._persist_artifact_event(
+                response.session_id,
+                event,
+                index=len(emitted_artifact_ids),
+            )
+            yield event
         yield self._finalize_persistence(emit, response)
 
     def resume_approval_iter(
@@ -314,7 +320,13 @@ class DBFoxAgentService:
             approval=approval,
         )
 
-        yield from final_events(emit, response, agent_state, emitted_artifact_ids)
+        for event in final_events(emit, response, agent_state, emitted_artifact_ids):
+            self._persist_artifact_event(
+                response.session_id,
+                event,
+                index=len(emitted_artifact_ids),
+            )
+            yield event
         yield self._finalize_persistence(emit, response)
 
     # ---- Internal helpers ----------------------------------------------------
@@ -416,9 +428,15 @@ class DBFoxAgentService:
 
                 # Emit artifacts from observe node
                 if node_str == "observe":
-                    yield from observe_events(
+                    for event in observe_events(
                         emit, update, agent_state, artifact_identity, emitted_artifact_ids
-                    )
+                    ):
+                        self._persist_artifact_event(
+                            agent_state.session_id,
+                            event,
+                            index=len(emitted_artifact_ids),
+                        )
+                        yield event
 
                 if node_str in ("observe", "progress", "repair"):
                     event, last_context_summary = context_update_event(
@@ -482,6 +500,29 @@ class DBFoxAgentService:
                 self.persistence_sink.record_event(session_id, event)
 
         return EventEmitter(run_id, save, start_sequence=start_sequence)
+
+    def _persist_artifact_event(
+        self,
+        session_id: str,
+        event: AgentRuntimeEvent,
+        *,
+        index: int,
+    ) -> None:
+        if (
+            not self._persist_events
+            or event.type != "agent.artifact.created"
+            or event.artifact is None
+        ):
+            return
+        try:
+            self.persistence_sink.record_artifact(session_id, event.run_id, event.artifact, index)
+        except Exception as exc:
+            logger.warning(
+                "Failed to persist artifact %s for run %s: %s",
+                event.artifact.id,
+                event.run_id,
+                exc,
+            )
 
     def _finalize_persistence(
         self, emit: Any, response: AgentRunResponse
