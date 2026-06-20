@@ -351,7 +351,7 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
     status = state.get("status", "running")
     error = state.get("error")
     step_count = int(state.get("step_count", 0))
-    max_steps = int(state.get("max_steps", 20))
+    max_steps = int(state.get("max_steps", 50))
 
     # ---- Loop prevention checks --------------------
     loop_result = check_loop_prevention(state)
@@ -567,7 +567,7 @@ def rule_fallback(state: DBFoxAgentState) -> dict[str, Any]:
     """Simple rule-based fallback when the Progress Judge LLM is unavailable."""
     status = state.get("status", "running")
     step_count = int(state.get("step_count", 0))
-    max_steps = int(state.get("max_steps", 20))
+    max_steps = int(state.get("max_steps", 50))
     error = state.get("error")
     answer = state.get("answer") or state.get("final_answer")
     execution = state.get("execution")

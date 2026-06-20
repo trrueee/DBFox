@@ -42,7 +42,7 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
     # the step limit was hit, which wastes tokens and can produce confusing
     # ToolMessages for tools that will never execute.
     step_count = int(state.get("step_count", 0))
-    max_steps = int(state.get("max_steps", 20))
+    max_steps = int(state.get("max_steps", 50))
     if step_count >= max_steps and not _within_post_query_analysis_grace(
         state,
         step_count=step_count,
