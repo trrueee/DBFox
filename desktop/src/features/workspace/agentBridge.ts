@@ -103,7 +103,9 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
   const chartType = payload.type;
   const x = typeof payload.x === "string" ? payload.x : "";
   const y = typeof payload.y === "string" ? payload.y : "";
-  if ((chartType !== "line" && chartType !== "bar") || !x || !y) return null;
+  // All backend chart types rendered as bar (or line for time series)
+  const supported = new Set(["line", "bar", "pie", "scatter", "area"]);
+  if (!supported.has(chartType) || !x || !y) return null;
 
   // The backend chart_builder already computes the series from the result set
   // (with aggregation + dedup). Trust it first — reconstructing from the raw
