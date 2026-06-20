@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -55,7 +56,15 @@ def ai_enrich_catalog(
     if not changed:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "no structural changes"}
 
-    # 2. Cap total tables per run to avoid overwhelming the LLM
+    # 2. Pre-check API key availability — avoid retry storm when missing
+    api_key_available = bool(
+        (api_key or "").strip()
+        or (os.environ.get("OPENAI_API_KEY") or "").strip()
+    )
+    if not api_key_available:
+        return {"ai_enriched": False, "enriched_count": 0, "reason": "请先在设置中配置 LLM API Key。"}
+
+    # 3. Cap total tables per run to avoid overwhelming the LLM
     total_changed = len(changed)
     capped = False
     if total_changed > AI_LLM_MAX_TABLES_PER_RUN:
@@ -66,7 +75,7 @@ def ai_enrich_catalog(
             AI_LLM_MAX_TABLES_PER_RUN, total_changed, datasource_id,
         )
 
-    # 3. Batch LLM enrichment
+    # 4. Batch LLM enrichment
     enriched_count = 0
     errors: list[str] = []
     for i in range(0, len(changed), table_batch):
