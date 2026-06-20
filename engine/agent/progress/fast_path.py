@@ -249,6 +249,28 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
                 "progress_decision": decision,
                 "trace_events": [progress_trace(decision, fastpath=True)],
             }
+        # 4b. sql.validate succeeded twice with same SQL but no execute → nudge/fail
+        curr_success = current.get("status") == "success" and current.get("can_execute")
+        prev_success = prev.get("status") == "success" and prev.get("can_execute")
+        if curr_success and prev_success:
+            # Check if sql.execute_readonly was called between these two validates
+            exec_between = any(
+                h.get("name") == "sql.execute_readonly"
+                for h in history[history.index(prev):]
+            )
+            if not exec_between:
+                decision = progress_decision_dict(
+                    status="failed",
+                    reason_summary="SQL validated twice without execution. Call sql.execute_readonly with the validated SQL, not sql.validate again.",
+                    should_finalize=True,
+                    root_cause="sql.validate loop — agent re-validated instead of executing",
+                )
+                return {
+                    "status": "failed",
+                    "error": "SQL validated twice without executing. Use sql.execute_readonly, not sql.validate.",
+                    "progress_decision": decision,
+                    "trace_events": [progress_trace(decision, fastpath=True)],
+                }
 
     # 5. same db.query / sql.execute_readonly error twice → stop.
     if name in ("db.query", "sql.execute_readonly"):
