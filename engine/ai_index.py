@@ -261,13 +261,16 @@ def _call_aliyun_llm(
     the same .env vars work for both Agent conversations and AI enrichment.
     """
     import os
+    import httpx
     from openai import OpenAI
 
-    # ── API key (mirrors agent.api._check_llm_credentials) ──
+    # ── API key ──
     resolved_api_key = (
         api_key
         or os.getenv("OPENAI_API_KEY", "")
     ).strip()
+    if not resolved_api_key:
+        raise RuntimeError("请先在设置中配置 LLM API Key。")
 
     # ── API base ──
     resolved_api_base = (
@@ -276,26 +279,37 @@ def _call_aliyun_llm(
         or "https://dashscope.aliyuncs.com/compatible-mode/v1"
     ).strip()
 
-    if not resolved_api_key:
-        raise RuntimeError("请先在设置中配置 LLM API Key。")
+    # ── Timing & token budget ──
+    prompt_chars = len(prompt)
+    # Rough estimate: 1 token ≈ 1.5 chars for Chinese, 4 chars for English
+    estimated_input_tokens = int(prompt_chars / 2.5)
+    output_tokens = min(8192, max(2048, estimated_input_tokens * 2))
 
+    # ── Call with timeout ──
+    timeout = httpx.Timeout(30.0, read=120.0)
     client = OpenAI(
         api_key=resolved_api_key,
         base_url=resolved_api_base,
+        timeout=timeout,
+        max_retries=0,  # we handle retries in enrich_tables_batch
     )
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=output_tokens,
     )
+
     content = response.choices[0].message.content
-    # Strip markdown code fences if present
-    if content and content.startswith("```"):
-        lines = content.split("\n")
-        lines = [l for l in lines if not l.startswith("```")]
-        content = "\n".join(lines)
-    return content or "{}"
+    if not content or not content.strip():
+        raise RuntimeError("AI enrichment returned empty response")
+
+    # Strip markdown code fences (any flavour: ```json, ```, etc.)
+    import re as _re
+    content = _re.sub(r"^```[a-z]*\s*\n?", "", content.strip(), flags=_re.IGNORECASE)
+    content = _re.sub(r"\n?```\s*$", "", content)
+
+    return content
 
 
 def _validate_enrich_result(result: dict[str, Any], expected_table_names: list[str]) -> None:

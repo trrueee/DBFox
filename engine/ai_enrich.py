@@ -23,6 +23,9 @@ logger = logging.getLogger("dbfox.ai_enrich")
 AI_LLM_TABLE_BATCH = 5
 AI_LLM_BATCH_INTERVAL_MS = 300
 AI_LLM_MAX_TABLES_PER_RUN = 30
+AI_LLM_MAX_COLUMNS_PER_TABLE = 60
+AI_LLM_MAX_COMMENT_LENGTH = 200
+AI_LLM_MAX_PROMPT_CHARS = 24_000
 
 
 def ai_enrich_catalog(
@@ -70,6 +73,26 @@ def ai_enrich_catalog(
         batch = changed[i : i + table_batch]
         context = _build_table_context(db, batch)
 
+        # Context overflow guard — if a single batch exceeds the prompt budget,
+        # shrink the batch size dynamically.
+        import json as _json
+        context_size = len(_json.dumps(context, ensure_ascii=False, default=str))
+        if context_size > AI_LLM_MAX_PROMPT_CHARS:
+            logger.warning(
+                "AI enrich: batch context %d chars exceeds limit %d — "
+                "shrinking batch from %d tables to 1",
+                context_size, AI_LLM_MAX_PROMPT_CHARS, len(batch),
+            )
+            batch = batch[:1]
+            context = _build_table_context(db, batch)
+            context_size = len(_json.dumps(context, ensure_ascii=False, default=str))
+            if context_size > AI_LLM_MAX_PROMPT_CHARS:
+                logger.error(
+                    "AI enrich: single table '%s' context %d chars still exceeds limit — skipping",
+                    str(batch[0].table_name), context_size,
+                )
+                continue
+
         try:
             ai_result = enrich_tables_batch(
                 context,
@@ -115,25 +138,46 @@ def ai_enrich_catalog(
 
 
 def _build_table_context(db: OrmSession, tables: list[SchemaTable]) -> list[dict[str, Any]]:
-    """Build LLM input context for a batch of tables."""
+    """Build LLM input context for a batch of tables.
+
+    Safety caps to prevent context overflow:
+    - Max ``AI_LLM_MAX_COLUMNS_PER_TABLE`` columns per table
+    - Comments truncated to ``AI_LLM_MAX_COMMENT_LENGTH`` chars
+    """
     result: list[dict[str, Any]] = []
     for table in tables:
-        columns = sorted(
+        all_columns = sorted(
             list(table.columns or []),
             key=lambda c: (c.ordinal_position or 0, str(c.column_name)),
         )
+        # Prioritise PK/FK columns, then fill up to the cap
+        priority_cols = [c for c in all_columns if c.is_primary_key or c.is_foreign_key]
+        other_cols = [c for c in all_columns if not (c.is_primary_key or c.is_foreign_key)]
+        selected = priority_cols + other_cols
+        if len(selected) > AI_LLM_MAX_COLUMNS_PER_TABLE:
+            truncated = len(selected) - AI_LLM_MAX_COLUMNS_PER_TABLE
+            selected = selected[:AI_LLM_MAX_COLUMNS_PER_TABLE]
+            logger.debug(
+                "AI enrich: table %s has %d columns, truncating %d for LLM context",
+                str(table.table_name), len(all_columns), truncated,
+            )
+
+        def _clip(s: str) -> str:
+            s = str(s or "")
+            return s if len(s) <= AI_LLM_MAX_COMMENT_LENGTH else s[:AI_LLM_MAX_COMMENT_LENGTH - 3] + "..."
+
         result.append({
             "name": str(table.table_name),
-            "comment": str(table.table_comment or ""),
+            "comment": _clip(table.table_comment),
             "columns": [
                 {
                     "name": str(c.column_name),
                     "type": str(c.column_type or c.data_type or ""),
-                    "comment": str(c.column_comment or ""),
+                    "comment": _clip(c.column_comment),
                     "is_pk": bool(c.is_primary_key),
                     "is_fk": bool(c.is_foreign_key),
                 }
-                for c in columns
+                for c in selected
             ],
             "related_tables": sorted(_connected_table_names(db, table)),
         })
