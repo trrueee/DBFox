@@ -231,6 +231,7 @@ class MySQLInspector(BaseInspector):
         pool = get_mysql_pool(self.ds.id, params)
         conn = pool.connect()
         try:
+            _ping_mysql_connection(conn)
             yield conn
         finally:
             conn.close()

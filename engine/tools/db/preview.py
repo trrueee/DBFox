@@ -35,6 +35,11 @@ def db_preview(
 
     Safety: column whitelist, LIMIT ≤ 20, TrustGate, timeout, redaction.
     """
+    if where is not None and not isinstance(where, dict):
+        raise ValueError("WHERE must be a dictionary")
+    if order_by is not None and not isinstance(order_by, (dict, list)):
+        raise ValueError("ORDER BY must be a dictionary or list of dictionaries")
+
     start = time.perf_counter()
     table_name = table.strip()
     if not table_name:
