@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import logging
 import re
 import time
@@ -8,7 +7,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.tools.runtime.context import ToolContext
 from engine.agent_core.types import ToolObservation
 from engine.errors import DBFoxError, GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError, ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
@@ -20,28 +18,6 @@ MAX_PREVIEW_ROWS = 20
 DEFAULT_PREVIEW_ROWS = 10
 DEFAULT_SEARCH_LIMIT = 20
 TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[一-鿿]+")
-
-
-def tool_handler(name: str):
-    def decorator(fn):
-        @functools.wraps(fn)
-        def wrapper(ctx: ToolContext, args: dict[str, Any]) -> ToolObservation:
-            start = time.perf_counter()
-            try:
-                output = fn(ctx, args)
-                return _success(name, args, output, start)
-            except ToolInputError as exc:
-                return _failed(name, args, str(exc), start)
-            except ValueError as exc:
-                return _failed(name, args, str(exc), start)
-            except DBFoxError as exc:
-                logger.exception("Tool %s failed", name)
-                return _execution_failed(name, args, exc, start)
-            except Exception as exc:
-                logger.exception("Tool %s failed unexpectedly", name)
-                return _execution_failed(name, args, exc, start)
-        return wrapper
-    return decorator
 
 
 def _load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:

@@ -17,6 +17,7 @@ class ToolPolicy(BaseModel):
     requires_approval: bool = False
     requires_validated_sql: bool = False
     allowed_execution_modes: tuple[str, ...] = ()
+    visible_to_model: bool = True
 
 
 class ToolExecutionSpec(BaseModel):
@@ -67,26 +68,46 @@ class ToolSpec:
 
 
 class BaseTool(Generic[I, O]):
-    name: str
-    group: str
-    description: str
-    input_model: type[I]
-    output_model: type[O]
-    policy: ToolPolicy = ToolPolicy()
-    execution: ToolExecutionSpec = ToolExecutionSpec()
-    state: ToolStateSpec = ToolStateSpec()
-    artifacts: ArtifactSpec = ArtifactSpec()
-    kind: Literal["code", "llm", "hybrid"] = "code"
-    metadata: dict[str, Any] = {}
+    """Base class for all DBFox agent tools.
+
+    Subclasses MUST define these class-level attributes::
+
+        class MyTool(BaseTool[MyInput, MyOutput]):
+            name = "my.tool"
+            group = "my_group"
+            description = "What this tool does."
+            input_model = MyInput
+            output_model = MyOutput
+            policy = ToolPolicy(...)      # optional
+            execution = ToolExecutionSpec()  # optional
+            state = ToolStateSpec(...)    # optional
+            artifacts = ArtifactSpec(...) # optional
+            kind = "code"                 # optional
+
+    ``name``, ``group``, ``description``, ``input_model``, and
+    ``output_model`` are enforced at subclass definition time via
+    ``__init_subclass__``.
+    """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Only enforce on concrete tool classes, skip intermediate bases.
+        required = ["name", "group", "description", "input_model", "output_model"]
+        missing = [attr for attr in required if not hasattr(cls, attr) or getattr(cls, attr, None) is None]
+        if missing:
+            raise TypeError(
+                f"{cls.__name__} is missing required tool attributes: {', '.join(missing)}. "
+                f"Define them as class-level attributes on your tool class."
+            )
 
     @property
     def spec(self) -> ToolSpec:
         return ToolSpec(
-            name=self.name,
-            group=self.group,
-            description=self.description,
-            input_model=self.input_model,
-            output_model=self.output_model,
+            name=self.name,  # type: ignore[attr-defined]
+            group=self.group,  # type: ignore[attr-defined]
+            description=self.description,  # type: ignore[attr-defined]
+            input_model=self.input_model,  # type: ignore[attr-defined]
+            output_model=self.output_model,  # type: ignore[attr-defined]
             policy=self.policy,
             execution=self.execution,
             state=self.state,
@@ -96,4 +117,4 @@ class BaseTool(Generic[I, O]):
         )
 
     def run(self, tool_input: I, context: Any) -> O:
-        raise NotImplementedError
+        raise NotImplementedError(f"{self.__class__.__name__}.run() must be implemented")
