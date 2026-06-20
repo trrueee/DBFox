@@ -1,3 +1,13 @@
+"""
+.. deprecated::
+    This module is superseded by ``engine.environment.schema_catalog_sync``
+    which uses an upsert strategy and is the single source of truth for all
+    schema sync operations as of 2026-06-20 (MVP simplification).
+
+    Kept for the ``build_er_diagram_data()`` helper and for backward
+    compatibility.  New code should call ``ensure_catalog()`` instead.
+"""
+
 from __future__ import annotations
 
 import logging
