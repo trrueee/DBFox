@@ -118,6 +118,7 @@ class SchemaIntrospector:
             tables.append(
                 TableInventory(
                     table_name=table_name,
+                    table_schema="main",
                     table_type=table_type,
                     columns=columns,
                     foreign_keys=foreign_keys,

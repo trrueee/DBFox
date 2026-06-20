@@ -51,3 +51,4 @@ class SyncResult(BaseModel):
     columns_updated: int = 0
     columns_removed: int = 0
     synced: bool = False
+    ai_enrich_result: dict[str, Any] | None = None
