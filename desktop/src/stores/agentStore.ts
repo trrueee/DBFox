@@ -348,6 +348,24 @@ function finishAgentRun(
           }
         : null,
     });
+    // Persist conversation even when waiting for approval
+    const tab = ws.tabs.find((t) => t.id === tabId);
+    if (tab) {
+      ws.persistConversation({
+        id: tab.conversationId || `conv-${Date.now()}`,
+        title: tab.queryText || tab.title || "对话",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        contextTables: ws.contextTables,
+        messages: (tab.chatMessages || []).map((msg, i) => ({
+          id: String(msg.id || i),
+          role: msg.sender === "user" ? "user" as const : "assistant" as const,
+          content: msg.text || "",
+          createdAt: Date.now() - ((tab.chatMessages || []).length - i) * 1000,
+        })),
+        artifacts: [],
+      });
+    }
     return;
   }
 
@@ -374,4 +392,31 @@ function finishAgentRun(
     agentAnswer: response.answer || null,
     agentSuggestions: response.suggestions || null,
   });
+
+  // Persist conversation to backend after every run
+  const tab = ws.tabs.find((t) => t.id === tabId);
+  if (tab) {
+    const messages = (tab.chatMessages || []).map((msg, i) => ({
+      id: String(msg.id || i),
+      role: msg.sender === "user" ? "user" as const : "assistant" as const,
+      content: msg.text || "",
+      createdAt: Date.now() - (tab.chatMessages!.length - i) * 1000,
+    }));
+    ws.persistConversation({
+      id: tab.conversationId || `conv-${Date.now()}`,
+      title: tab.queryText || tab.title || "对话",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      contextTables: ws.contextTables,
+      messages,
+      artifacts: (tab.artifacts || []).map(a => ({
+        id: a.id,
+        type: a.type as string,
+        title: a.title || "",
+        payload: a.payload as Record<string, unknown> || {},
+        depends_on: (a as any).depends_on || [],
+        semantic_id: (a as any).semantic_id || a.id,
+      })) as any[],
+    });
+  }
 }
