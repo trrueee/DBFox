@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -45,11 +44,3 @@ class ToolRunContext(BaseModel):
         )
 
 
-@dataclass(frozen=True)
-class ToolContext:
-    """Read-only adapter context for existing low-level tool functions."""
-
-    db: Any
-    request: Any
-    state_view: Mapping[str, Any] = field(default_factory=dict)
-    runtime: ToolRunContext = field(default_factory=ToolRunContext)

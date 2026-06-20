@@ -30,6 +30,8 @@ def build_langchain_tools(
     tools: list[StructuredTool] = []
     for tool in registry.list_tools():
         spec = tool.spec
+        if not spec.policy.visible_to_model:
+            continue
         if allowed_groups is not None and spec.group not in allowed_groups:
             continue
         alias = to_alias(spec.name)

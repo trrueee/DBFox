@@ -165,7 +165,7 @@ def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, t
 
 def test_db_preview_rejects_unknown_columns_before_query(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    with pytest.raises(RuntimeError, match="Unknown column"):
+    with pytest.raises(ValueError, match="Unknown column"):
         db_preview(db_session, test_datasource.id, table="users", columns=["missing"])
     assert db_session.query(QueryHistory).count() == 0
 

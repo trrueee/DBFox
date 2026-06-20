@@ -81,7 +81,7 @@ def _rule_execution_mode(
     _gate: PolicyGate, state: dict, tool_name: str, _args: dict, execution_mode: str,
     _tool: Any, policy: Any,
 ) -> PolicyDecision | None:
-    data_read_tools = {"db.preview", "db.query"}
+    data_read_tools = {"db.preview", "sql.execute_readonly"}
     if tool_name in data_read_tools or policy.requires_validated_sql:
         effective_mode = execution_mode
         if execution_mode == "user_requested_read" and not state.get("execute", True):
@@ -161,7 +161,7 @@ def _rule_agent_read_approval(
     _gate: PolicyGate, state: dict, tool_name: str, args: dict, execution_mode: str,
     _tool: Any, policy: Any,
 ) -> PolicyDecision | None:
-    if tool_name in {"db.preview", "db.query"} and execution_mode == "agent_autonomous_read":
+    if tool_name in {"db.preview", "sql.execute_readonly"} and execution_mode == "agent_autonomous_read":
         env_profile = state.get("environment_profile") or {}
         env = env_profile.get("env", "unknown")
         if env == "prod" or policy.risk_level in ("warning", "danger"):

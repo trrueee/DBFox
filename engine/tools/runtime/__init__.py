@@ -6,7 +6,7 @@ from engine.tools.runtime.base import (
     ToolSpec,
     ToolStateSpec,
 )
-from engine.tools.runtime.context import ToolContext, ToolRunContext
+from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 from engine.tools.runtime.runtime import ToolRuntime
 
@@ -14,7 +14,6 @@ __all__ = [
     "ArtifactSpec",
     "BaseTool",
     "ToolExecutionSpec",
-    "ToolContext",
     "ToolPolicy",
     "ToolRunContext",
     "ToolRegistry",
