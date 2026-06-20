@@ -89,9 +89,7 @@ def synthesize_agent_answer(
                 if rows:
                     preview_text = _format_result_preview(columns, rows[:30])
 
-                notable_facts_str = "\n".join(f"- {f}" for f in result_profile.notable_facts) if result_profile and result_profile.notable_facts else "无"
-                anomalies_str = "\n".join(f"- {a}" for a in result_profile.anomalies) if result_profile and result_profile.anomalies else "无"
-                limitations_str = "\n".join(f"- {l}" for l in result_profile.limitations) if result_profile and result_profile.limitations else "无"
+                profile_text = _format_profile_for_ai(result_profile) if result_profile else "无"
 
                 system_prompt = (
                     "你是一个专业的数据分析专家，能够根据用户的查询问题和执行出的数据库结果数据，生成专业、有深度的商业/业务分析结论。"
@@ -105,13 +103,9 @@ def synthesize_agent_answer(
                 user_content = (
                     f"用户问题: {question}\n"
                     f"执行的 SQL: {sql}\n"
-                    f"结果集列名: {columns}\n"
                     f"结果集行数: {row_count}\n"
                     f"结果集预览 (最多显示前30行):\n{preview_text}\n\n"
-                    f"数据统计特征 (由系统计算):\n"
-                    f"显著事实:\n{notable_facts_str}\n"
-                    f"异常值/异常模式:\n{anomalies_str}\n"
-                    f"数据限制或偏差提示:\n{limitations_str}\n\n"
+                    f"数据画像 (每列的统计特征):\n{profile_text}\n\n"
                     f"请基于以上信息，生成深入的业务洞察和分析结论。"
                 )
 
@@ -205,6 +199,47 @@ def _base_evidence(
             )
         )
     return evidence
+
+
+def _format_profile_for_ai(profile: ResultProfile) -> str:
+    """Format per-column statistics for the AI — rich enough to generate insight."""
+    lines: list[str] = []
+    col_profiles = getattr(profile, "column_profiles", None) or {}
+
+    total_rows = profile.row_count
+    lines.append(f"总行数: {total_rows}")
+
+    for col_name, cp in col_profiles.items():
+        parts = [f"  {col_name} ({cp.kind})"]
+        parts.append(f"非空: {cp.count - cp.null_count}/{cp.count}")
+        if cp.distinct_count is not None:
+            parts.append(f"去重: {cp.distinct_count}")
+
+        if cp.kind == "numeric":
+            if cp.sum is not None:
+                parts.append(f"合计: {cp.sum}")
+            if cp.avg is not None and cp.avg != 0:
+                parts.append(f"均值: {cp.avg:.2f}")
+            if cp.min is not None and cp.max is not None:
+                parts.append(f"范围: {cp.min} ~ {cp.max}")
+
+        if cp.kind == "category" and cp.top_values:
+            top_str = ", ".join(
+                f"{tv['value']}({tv['count']})" for tv in (cp.top_values or [])[:5]
+            )
+            parts.append(f"分布: {top_str}")
+
+        if cp.kind == "time" and cp.min and cp.max:
+            parts.append(f"时间范围: {cp.min} ~ {cp.max}")
+
+        lines.append(" | ".join(parts))
+
+    # Patterns detected
+    patterns = getattr(profile, "detected_patterns", None) or []
+    if patterns:
+        lines.append(f"检测模式: {', '.join(patterns)}")
+
+    return "\n".join(lines)
 
 
 def _format_result_preview(columns: list[str], rows: list[list[Any]]) -> str:
