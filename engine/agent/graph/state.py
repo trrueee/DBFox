@@ -81,6 +81,27 @@ class DBFoxAgentState(TypedDict, total=False):
     context_pack: dict[str, Any] | None
     """Agent v2 consolidated metadata pack sent to the LLM and the frontend."""
 
+    # ── Large Catalog Exploration State ──
+    candidate_tables: list[str]
+    """Pool of table names discovered through search/expand that are candidates for the current question.
+
+    Populated by db.search, schema.list_tables_page, and schema.expand_related_tables.
+    Used by the model to track which tables are relevant without re-searching.
+    """
+    searched_terms: Annotated[list[str], _add_list]
+    """Set of search queries already executed (lowercased, deduped before search).
+
+    Prevents the agent from repeating the same keyword search across steps.
+    The observe_node normalizes and deduplicates entries before appending.
+    """
+    exhausted_paths: Annotated[list[str], _add_list]
+    """Tool+argument signatures that returned empty or failed results.
+
+    Format: ``{tool_name}::{arg_signature}`` (e.g. ``db.search::cookie``,
+    ``schema.describe_table::users_archive``).  The loop prevention fast-path
+    uses this to short-circuit retries before they happen.
+    """
+
     # =========================================================================
     # 3. SQL GENERATION & SAFETY GATE
     # =========================================================================
@@ -163,6 +184,8 @@ class DBFoxAgentState(TypedDict, total=False):
     """Counter tracking consecutive replan loop iterations."""
     consecutive_blocks: int
     """Counter for tracking sequential policy violations to abort infinite loops."""
+    tool_call_history: Annotated[list[dict[str, Any]], _add_list]
+    """History of executed tool calls for loop prevention."""
 
     # =========================================================================
     # 8. PERSISTENCE COLLECTIONS & UI COMPATIBILITY

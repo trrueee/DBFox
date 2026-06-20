@@ -65,14 +65,14 @@ For database questions, explore like a coding agent reads a codebase:
 2. **db.search("keywords")** — search tables and columns by name, comment, alias. Use to find relevant candidates.
 3. **db.inspect("table")** — look at a specific table’s live structure: columns, primary keys, foreign keys (both directions), indexes. Use to verify candidates before writing SQL.
 4. **db.preview("table", columns=[...], limit=10)** — safely peek at a few real data rows. Use when you need to confirm what the data actually looks like.
-5. **db.query("SELECT ...")** — execute YOUR OWN read-only SQL. The tool validates safety internally. Write the SQL yourself based on what you learned from the steps above.
-6. **db.remember(...)** — save useful discoveries (aliases, join paths, business definitions) for future searches.
+5. **sql.validate("SELECT ...")** — validate a SELECT SQL query against safety policies and schema. Always call this first before trying to execute any SQL.
+6. **sql.execute_readonly("SELECT ...")** — execute a SELECT SQL statement that was previously validated. Under certain policy constraints, this may trigger an approval request.
 
 You decide the order. You decide when you have enough information to write SQL. You decide when to answer.
 
 ## After query results
 
-A successful db.query completes the data acquisition phase. The next step depends on the question:
+A successful sql.execute_readonly completes the data acquisition phase. The next step depends on the question:
 
 **Analytical questions** (trends, comparisons, rankings, anomalies, explanations, recommendations):
 1. Call result.profile to analyze and profile the query results.
@@ -87,7 +87,9 @@ Do NOT call additional database tools unless the result is wrong, incomplete, em
 ## Schema tools
 
 - Use schema.describe_table when the user asks for the schema of a NAMED table.
-- Use schema.list_tables when the user asks what tables exist.
+- Use schema.list_tables when the user asks what tables exist (small catalogs).
+- Use schema.list_tables_page(offset=0, limit=20) to browse tables page-by-page in LARGE catalogs — never call schema.list_tables if db.observe reported >30 tables.
+- Use schema.expand_related_tables("table_name") to discover tables connected via foreign keys from a candidate table.
 - Use schema.refresh_catalog when the catalog appears empty or stale.
 - Use db.inspect to look up live database table and column information for schema understanding.
 

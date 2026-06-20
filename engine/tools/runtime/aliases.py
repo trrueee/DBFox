@@ -4,8 +4,12 @@ from __future__ import annotations
 
 ALIAS_TO_INTERNAL: dict[str, str] = {
     "schema_list_tables": "schema.list_tables",
+    "schema_list_tables_page": "schema.list_tables_page",
+    "schema_expand_related_tables": "schema.expand_related_tables",
     "schema_describe_table": "schema.describe_table",
     "schema_refresh_catalog": "schema.refresh_catalog",
+    "sql_validate": "sql.validate",
+    "sql_execute_readonly": "sql.execute_readonly",
     "db_observe": "db.observe",
     "db_search": "db.search",
     "db_inspect": "db.inspect",
@@ -26,8 +30,12 @@ INTERNAL_TO_ALIAS: dict[str, str] = {v: k for k, v in ALIAS_TO_INTERNAL.items()}
 
 STEP_NAME_MAP: dict[str, str] = {
     "schema.list_tables": "list_tables",
+    "schema.list_tables_page": "list_tables_page",
+    "schema.expand_related_tables": "expand_related_tables",
     "schema.describe_table": "describe_table",
     "schema.refresh_catalog": "refresh_catalog",
+    "sql.validate": "validate_sql",
+    "sql.execute_readonly": "execute_readonly",
     "db.observe": "observe_database",
     "db.search": "search_database",
     "db.inspect": "inspect_database",
