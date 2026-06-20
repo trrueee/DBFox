@@ -5,7 +5,6 @@ import {
 import type { AgentAnswer } from "../../lib/api/types";
 import type { AgentArtifact } from "../../types/agentArtifact";
 import type { AgentTabStatus } from "../../mock/dbfoxMock";
-import { EVIDENCE_ARTIFACT_TYPES } from "../../lib/api/types";
 import { MarkdownContent } from "../workspace/queryResult/MarkdownContent";
 
 interface FinalAnswerCardProps {
@@ -22,8 +21,11 @@ function isRealAnswer(answer: AgentAnswer): boolean {
   return text.length > 0;
 }
 
+// Evidence artifact types — only table / chart / sql are user-visible data products
+const EVIDENCE_TYPES = new Set(["table", "chart", "sql"]);
+
 function getEvidenceArtifacts(all: AgentArtifact[]): AgentArtifact[] {
-  return all.filter(a => EVIDENCE_ARTIFACT_TYPES.has(a.type));
+  return all.filter(a => EVIDENCE_TYPES.has(a.type));
 }
 
 export function FinalAnswerCard({
@@ -68,59 +70,66 @@ export function FinalAnswerCard({
           </summary>
 
           <div className="task-evidence-body">
-            {/* Tables */}
-            {tableArts.map(t => (
-              <div key={t.id} className="task-evidence-table">
-                <div className="task-evidence-head">
-                  <Database size={11} className="text-green-500" />
-                  <span>{t.title || "结果表"}</span>
-                  <span className="text-[10px] text-slate-400 ml-auto">
-                    {(t.payload?.rows as any[])?.length ?? 0} 行 × {(t.payload?.columns as any[])?.length ?? 0} 列
-                  </span>
+            {/* Tables — columns/rows are at artifact top level */}
+            {tableArts.map(t => {
+              const cols: string[] = (t as any).columns || [];
+              const rows: any[][] = (t as any).rows || [];
+              return (
+                <div key={t.id} className="task-evidence-table">
+                  <div className="task-evidence-head">
+                    <Database size={11} className="text-green-500" />
+                    <span>{t.title || "结果表"}</span>
+                    <span className="text-[10px] text-slate-400 ml-auto">
+                      {rows.length} 行 × {cols.length} 列
+                    </span>
+                  </div>
+                  <div className="task-artifact-table-wrap">
+                    <table className="task-artifact-table">
+                      <thead><tr>
+                        {cols.slice(0, 6).map((col: string, ci: number) => (
+                          <th key={ci}>{col}</th>
+                        ))}
+                      </tr></thead>
+                      <tbody>
+                        {rows.slice(0, 10).map((row: any[], ri: number) => (
+                          <tr key={ri}>
+                            {cols.slice(0, 6).map((col: string, ci: number) => (
+                              <td key={ci}>{String(row?.[ci] ?? (row as Record<string, unknown>)?.[col] ?? "")}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {rows.length > 10 && (
+                      <div className="task-artifact-table-more">
+                        仅显示前 10 行，共 {rows.length} 行
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="task-artifact-table-wrap">
-                  <table className="task-artifact-table">
-                    <thead><tr>
-                      {((t.payload?.columns as string[]) || []).slice(0, 6).map((col: string, ci: number) => (
-                        <th key={ci}>{col}</th>
-                      ))}
-                    </tr></thead>
-                    <tbody>
-                      {((t.payload?.rows as any[][]) || []).slice(0, 10).map((row: any[], ri: number) => (
-                        <tr key={ri}>
-                          {((t.payload?.columns as string[]) || []).slice(0, 6).map((col: string, ci: number) => (
-                            <td key={ci}>{String(row?.[ci] ?? (row as Record<string, unknown>)?.[col] ?? "")}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {((t.payload?.rows as any[]) || []).length > 10 && (
-                    <div className="task-artifact-table-more">
-                      仅显示前 10 行，共 {(t.payload?.rows as any[]).length} 行
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
-            {/* SQL */}
-            {sqlArts.map(s => (
-              <div key={s.id} className="task-evidence-sql">
-                <div className="task-evidence-head">
-                  <Terminal size={11} className="text-blue-500" />
-                  <span>SQL</span>
+            {/* SQL — sql string is at artifact top level */}
+            {sqlArts.map(s => {
+              const sqlText: string = (s as any).sql || "";
+              return (
+                <div key={s.id} className="task-evidence-sql">
+                  <div className="task-evidence-head">
+                    <Terminal size={11} className="text-blue-500" />
+                    <span>SQL</span>
+                  </div>
+                  <pre className="task-artifact-sql-pre">{sqlText}</pre>
+                  <button
+                    className="task-artifact-btn"
+                    onClick={() => onOpenSqlConsole(sqlText)}
+                    type="button"
+                  >
+                    在 SQL 控制台打开
+                  </button>
                 </div>
-                <pre className="task-artifact-sql-pre">{(s.payload as any)?.sql || ""}</pre>
-                <button
-                  className="task-artifact-btn"
-                  onClick={() => onOpenSqlConsole((s.payload as any)?.sql)}
-                  type="button"
-                >
-                  在 SQL 控制台打开
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </details>
       )}
