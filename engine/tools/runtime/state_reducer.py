@@ -1,9 +1,38 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import uuid4
 
 from engine.agent_core.types import ToolObservation
+
+TRACE_MAX_VALUE_LENGTH = 120  # chars per field value; rows array gets special caps
+TRACE_MAX_ROWS = 3            # keep first 3 rows for trace UI preview
+
+
+def _clip_dict(d: dict[str, Any]) -> dict[str, Any]:
+    """Return a trace-safe copy with long strings and large arrays trimmed."""
+    if not isinstance(d, dict) or not d:
+        return {}
+    out: dict[str, Any] = {}
+    for key, value in d.items():
+        if isinstance(value, str):
+            out[key] = value if len(value) <= TRACE_MAX_VALUE_LENGTH else value[:TRACE_MAX_VALUE_LENGTH - 3] + "..."
+        elif isinstance(value, list):
+            if key in ("rows", "results") and len(value) > TRACE_MAX_ROWS:
+                clipped = list(value[:TRACE_MAX_ROWS])
+                clipped.append(f"... ({len(value) - TRACE_MAX_ROWS} more items)")
+                out[key] = clipped
+            elif len(value) > 10:
+                out[key] = list(value[:10])
+            else:
+                out[key] = list(value)
+        elif isinstance(value, dict):
+            out[key] = _clip_dict(value)
+        else:
+            out[key] = value
+    return out
+
 
 RESET_SELF_HEALING: dict[str, Any] = {
     "last_error_telemetry": None,
@@ -11,8 +40,8 @@ RESET_SELF_HEALING: dict[str, Any] = {
 }
 
 RESET_ALL_ERROR_STATE = ("error", "last_error_telemetry", "last_failed_tool_call")
-ERROR_CLEARING_TOOLS = {"db.query", "db.preview", "db.inspect"}
-ARTIFACT_TOOLS = {"db.preview", "db.query", "result.profile", "chart.suggest", "answer.synthesize"}
+ERROR_CLEARING_TOOLS = {"db.query", "db.preview", "db.inspect", "sql.execute_readonly"}
+ARTIFACT_TOOLS = {"db.preview", "db.query", "sql.execute_readonly", "result.profile", "chart.suggest", "answer.synthesize"}
 
 
 def apply_tool_observation_to_state(
@@ -23,6 +52,12 @@ def apply_tool_observation_to_state(
     merge_strategy: str = "reuse",
 ) -> dict[str, Any]:
     output = observation.output or {}
+    # Truncate large outputs before writing to trace — keep under ~2KB for UI
+    raw_input = observation.input or {}
+    raw_output = observation.output or {}
+    clipped_input = _clip_dict(raw_input)
+    clipped_output = _clip_dict(raw_output)
+
     update: dict[str, Any] = {
         "tool_results": [observation.model_dump(mode="json")],
         "trace_events": [
@@ -33,6 +68,10 @@ def apply_tool_observation_to_state(
                     "observation_name": observation.name,
                     "status": observation.status,
                     "_merge_strategy": merge_strategy,
+                    "input": clipped_input,
+                    "output": clipped_output,
+                    "latency_ms": observation.latency_ms,
+                    "error": observation.error,
                 },
             }
         ],
@@ -69,14 +108,39 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
         return {"db_inspection": output}
     if tool_name == "db.preview":
         return {"db_preview": output}
-    if tool_name == "db.query":
+    if tool_name == "db.query" or tool_name == "sql.execute_readonly":
         execution = dict(output)
-        execution["success"] = output.get("status") == "success"
+        execution["success"] = bool(output.get("success")) or output.get("status") == "success"
         execution["rowCount"] = output.get("rowCount", output.get("returned_rows", 0))
-        execution["latencyMs"] = output.get("latencyMs", output.get("execution_time_ms", 0))
+        execution["latencyMs"] = output.get(
+            "latencyMs",
+            output.get("execution_time_ms", output.get("latency_ms", 0)),
+        )
         result = {"execution": execution, **RESET_SELF_HEALING}
         if output.get("safe_sql"):
             result["sql"] = output.get("safe_sql")
+        return result
+    if tool_name == "sql.validate":
+        safety = output.get("execution_safety_decision")
+        if not isinstance(safety, dict):
+            safety = {
+                "can_execute": output.get("can_execute"),
+                "requires_confirmation": output.get("requires_confirmation"),
+                "safe_sql": output.get("safe_sql"),
+                "original_sql": output.get("original_sql"),
+                "risk_level": output.get("risk_level"),
+                "blocked_reasons": output.get("blocked_reasons") or [],
+                "messages": output.get("messages") or [],
+            }
+        result = {"safety": safety}
+        sql = (
+            output.get("safe_sql")
+            or safety.get("safe_sql")
+            or output.get("original_sql")
+            or safety.get("original_sql")
+        )
+        if sql:
+            result["sql"] = sql
         return result
     if tool_name == "result.profile":
         return {"result_profile": output}
