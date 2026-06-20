@@ -141,6 +141,10 @@ def _summarize_sql_validate(output: dict[str, Any]) -> str:
         parts.append(f"blocked_reasons={blocked}")
     if safe:
         parts.append(f"safe_sql={safe[:200]}")
+    if can_exec and not requires:
+        parts.append("→ NEXT: call sql.execute_readonly with this SQL.")
+    if requires:
+        parts.append("→ NEXT: wait for user approval before executing.")
     return " ".join(parts)
 
 
