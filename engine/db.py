@@ -87,6 +87,20 @@ engine: Engine = create_engine(
     pool_timeout=DB_POOL_TIMEOUT_SECONDS,
 )
 
+# Apply WAL + busy_timeout PRAGMAs to every new connection in the pool.
+from sqlalchemy import event as _sa_event
+
+@_sa_event.listens_for(engine, "connect")
+def _apply_sqlite_pragmas(dbapi_connection, _connection_record):
+    if DATABASE_URL.startswith("sqlite:///"):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
+
 # ---------------------------------------------------------------------------
 # DB write tracing (for diagnosing concurrent eval SQLite lock issues)
 # Set AGENT_DB_WRITE_TRACE=true to log all INSERT/UPDATE/DELETE to JSONL
