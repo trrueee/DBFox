@@ -82,7 +82,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
         answer_payload = {
             "answer": clean_answer_text or existing_answer.get("answer") or "",
             "key_findings": existing_answer.get("key_findings") or [],
-            "evidence": evidence or existing_answer.get("evidence") or [],
+            "evidence": existing_answer.get("evidence") or evidence or [],
             "caveats": existing_answer.get("caveats") or [],
             "recommendations": existing_answer.get("recommendations") or [],
             "follow_up_questions": existing_answer.get("follow_up_questions") or [],
