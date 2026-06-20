@@ -40,6 +40,14 @@ interface ReportSection {
 }
 
 const SECTION_PATTERNS: { pattern: RegExp; type: ReportSection["type"]; title: string }[] = [
+  { pattern: /^#{1,3}\s*结论/i, type: "conclusion", title: "结论" },
+  { pattern: /^#{1,3}\s*(关键|核心).{0,4}(指标|数据)/i, type: "metrics", title: "关键指标" },
+  { pattern: /^#{1,3}\s*(维度|分布|分组|状态|平台).{0,4}(分析|分布)/i, type: "breakdown", title: "维度分析" },
+  { pattern: /^#{1,3}\s*(趋势|变化|时间)/i, type: "trend", title: "趋势分析" },
+  { pattern: /^#{1,3}\s*(异常|风险|问题|诊断)/i, type: "diagnosis", title: "异常与风险" },
+  { pattern: /^#{1,3}\s*(建议|推荐|后续|下一步)/i, type: "recommendation", title: "建议" },
+  { pattern: /^#{1,3}\s*(数据|口径|来源|范围|覆盖)/i, type: "scope", title: "数据口径" },
+  // Fallback: Chinese patterns anywhere in line (for non-markdown output)
   { pattern: /结论[：:]/i, type: "conclusion", title: "结论" },
   { pattern: /关键指标|核心指标|指标总览/i, type: "metrics", title: "关键指标" },
   { pattern: /维度分析|分布|分组|状态分布|平台分布/i, type: "breakdown", title: "维度分析" },
