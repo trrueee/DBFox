@@ -123,7 +123,7 @@ def _build_answer(answer_raw: Any, artifacts: list[AgentArtifact] | None) -> Age
 
         if artifacts and art_id:
             for art in artifacts:
-                if art.semantic_id == art_id:
+                if art.semantic_id == art_id or (art_id == "result_table" and art.semantic_id and art.semantic_id.startswith("result_table_")):
                     art_id = art.id
                     break
         evidence_mapped.append(AnswerEvidence(artifact_id=art_id, label=label or "", value=val))

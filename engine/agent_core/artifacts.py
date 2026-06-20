@@ -341,3 +341,18 @@ def _artifact(
         produced_by_step=produced_by_step,
         depends_on=depends_on or [],
     )
+
+
+def _execution_sql(execution: dict[str, Any] | None) -> str | None:
+    if not execution:
+        return None
+    sql = execution.get("sql") or execution.get("safe_sql") or execution.get("original_sql")
+    if not sql:
+        return None
+    return str(sql).strip()
+
+
+def _sql_fingerprint(sql: str) -> str:
+    import hashlib
+    return hashlib.md5(sql.encode("utf-8")).hexdigest()[:8]
+
