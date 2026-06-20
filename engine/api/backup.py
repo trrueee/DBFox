@@ -19,7 +19,7 @@ from engine.errors import DBFoxError, NotFoundError
 from engine.models import BackupRecord, DataSource
 from engine.schemas import BackupCreateRequest
 from engine.schemas.backup import BackupResponse, RestoreConfirmRequest
-from engine.schema_sync import sync_schema
+from engine.environment.schema_catalog_sync import ensure_catalog
 from engine.policy.engine import PolicyEngine
 
 # 获取当前模块的日志记录器
@@ -205,7 +205,7 @@ def api_restore_backup(
         
         # 恢复完成后，在后台异步触发一次表结构元数据同步，使 DBFox 里的元数据与实际数据库保持一致
         try:
-            sync_schema(db, res["datasource_id"])
+            ensure_catalog(db, res["datasource_id"])
             db.commit()
         except Exception:
             db.rollback()

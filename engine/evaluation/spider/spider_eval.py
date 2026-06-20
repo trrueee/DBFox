@@ -334,9 +334,9 @@ def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) ->
 
 def _sync_and_validate(db_session: Any, datasource_id: str) -> None:
     """Sync schema and raise if it fails."""
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog
 
-    sync_schema(db_session, datasource_id)
+    ensure_catalog(db_session, datasource_id)
 
     tables = _get_synced_table_names(db_session, datasource_id)
     if not tables:

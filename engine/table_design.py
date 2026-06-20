@@ -256,7 +256,7 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
     from engine.models import DataSource, QueryHistory
     from engine.datasource import get_mysql_connection_params
     from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
-    from engine.schema_sync import sync_schema
+    from engine.environment.schema_catalog_sync import ensure_catalog
     import sqlite3
     import time
     import uuid
@@ -346,7 +346,8 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
     # Post-execution schema sync to populate new tables in sidebar metadata
     sync_result = None
     try:
-        sync_result = sync_schema(db, datasource_id)
+        result = ensure_catalog(db, datasource_id)
+        sync_result = result.model_dump(mode="json")
     except Exception:
         # Schema sync failure shouldn't raise since table is already created
         pass
