@@ -177,8 +177,14 @@ def build_table_artifact(
     safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    # Fingerprint the SQL so each distinct query gets its own table artifact.
+    # Without this, every execution reuses semantic_id="result_table" and later
+    # queries clobber earlier ones (the UI would show the last query's rows
+    # even when the answer summarises an earlier, different result set).
+    sql = _execution_sql(execution)
+    semantic_id = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
     return _artifact(
-        "result_table",
+        semantic_id,
         "table",
         "Result table",
         {
@@ -186,6 +192,7 @@ def build_table_artifact(
             "rows": execution.get("rows", []),
             "rowCount": execution.get("rowCount", len(execution.get("rows", []) or [])),
             "latencyMs": execution.get("latencyMs", 0),
+            "sql": sql,
             "safety_state": _safety_state(safety),
         },
         mode="both",

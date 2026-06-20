@@ -190,11 +190,19 @@ describe("agentTimeline", () => {
       type: "agent.progress.update",
       step: {
         status: "running",
-        summary: "Tool observation received; continuing ReAct loop.",
+        summary: "Preparing SQL repair",
       },
     }));
     timeline = appendAgentRuntimeEvent(timeline, event({
       sequence: 4,
+      type: "agent.progress.update",
+      step: {
+        status: "running",
+        summary: "Tool observation received; continuing ReAct loop.",
+      },
+    }));
+    timeline = appendAgentRuntimeEvent(timeline, event({
+      sequence: 5,
       type: "agent.progress.update",
       step: {
         status: "running",

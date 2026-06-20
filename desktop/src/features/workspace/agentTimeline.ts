@@ -284,6 +284,7 @@ export function normalizeAgentProgressText(text: string): string {
     "Tool observation received; continuing ReAct loop.": "",
     "Model produced a final text response.": "",
     "Answer payload exists.": "",
+    "Preparing SQL repair": "",
     "Query failed — revising SQL based on the error.": "查询遇到问题，正在根据错误调整。",
     "Use sql.revise with the execution error, re-validate, then retry.": "正在重新校验查询并准备重试。",
     "Column not found — looking up schema to fix the query.": "字段不匹配，正在核对表结构。",
