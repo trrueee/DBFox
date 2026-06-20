@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, FileWarning, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, FileWarning, RefreshCw, Trash2 } from "lucide-react";
 import { diagnosticsApi, type DiagnosticLogsResponse } from "../lib/api/diagnostics";
 import { getClientLogSource } from "../lib/diagnostics/clientLog";
 import { getUserErrorMessage } from "../lib/api/client";
@@ -47,6 +47,20 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
     }
   };
 
+  const handleClearLogs = async () => {
+    try {
+      const result = await diagnosticsApi.clearLogs();
+      if (result.cleared) {
+        onToast(`已清空 ${result.sources_cleared.length} 个日志源`, "success");
+      } else {
+        onToast("没有可清空的日志文件", "warning");
+      }
+      await loadLogs();
+    } catch (err) {
+      onToast(getUserErrorMessage(err, "清空日志失败"), "error");
+    }
+  };
+
   const existingSources = logs?.sources.filter((source) => source.exists).length ?? 0;
 
   return (
@@ -64,6 +78,10 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
           <button className="hifi-btn" type="button" onClick={loadLogs} disabled={loading}>
             <RefreshCw size={14} />
             刷新
+          </button>
+          <button className="hifi-btn hifi-btn-outline" type="button" onClick={handleClearLogs} disabled={loading}>
+            <Trash2 size={14} />
+            清空
           </button>
           <button className="hifi-btn hifi-btn-primary" type="button" onClick={handleCopy} disabled={!logs}>
             <Copy size={14} />

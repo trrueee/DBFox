@@ -25,4 +25,9 @@ export const diagnosticsApi = {
     request<DiagnosticLogsResponse>(
       `/diagnostics/logs?max_lines=${encodeURIComponent(String(maxLines))}`,
     ),
+
+  clearLogs: () =>
+    request<{ cleared: boolean; sources_cleared: string[] }>("/diagnostics/logs", {
+      method: "DELETE",
+    }),
 };

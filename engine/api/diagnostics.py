@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Query
 
 from engine.diagnostics.logs import (
@@ -19,3 +21,17 @@ def get_diagnostic_logs(
         max_lines=max_lines,
         sources=diagnostic_log_paths(),
     )
+
+
+@router.delete("/diagnostics/logs")
+def clear_diagnostic_logs() -> dict[str, object]:
+    cleared: list[str] = []
+    for name, path in diagnostic_log_paths():
+        if path.exists():
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.truncate(0)
+                cleared.append(name)
+            except OSError:
+                pass
+    return {"cleared": len(cleared) > 0, "sources_cleared": cleared}
