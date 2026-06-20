@@ -1,10 +1,38 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 from uuid import uuid4
 
 from engine.agent_core.types import ToolObservation
+
+
+def _fingerprint(sql: str) -> str:
+    """Stable short hash of a SQL string for analysis unit keying."""
+    return hashlib.sha256(sql.strip().encode()).hexdigest()[:16]
+
+
+def _enrich_units(
+    units: list[dict[str, Any]],
+    unit_id: str,
+    *,
+    profile: dict[str, Any] | None = None,
+    chart: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return a new list with the matching unit enriched in-place copy."""
+    updated = list(units)
+    for i, u in enumerate(updated):
+        if u.get("id") == unit_id:
+            copy = dict(u)
+            if profile is not None:
+                copy["profile"] = profile
+            if chart is not None:
+                copy["chart"] = chart
+            updated[i] = copy
+            break
+    return updated
+
 
 TRACE_MAX_VALUE_LENGTH = 120  # chars per field value; rows array gets special caps
 TRACE_MAX_ROWS = 3            # keep first 3 rows for trace UI preview
@@ -119,6 +147,23 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
         result = {"execution": execution, **RESET_SELF_HEALING}
         if output.get("safe_sql"):
             result["sql"] = output.get("safe_sql")
+        # Append AnalysisUnit for multi-query report composition
+        if execution.get("success"):
+            sql_text = output.get("safe_sql") or output.get("original_sql") or ""
+            unit_id = _fingerprint(sql_text) if sql_text else uuid4().hex[:12]
+            result["current_analysis_unit_id"] = unit_id
+            result["analysis_units"] = [{
+                "id": unit_id,
+                "sql": sql_text,
+                "execution": {
+                    "columns": execution.get("columns", []),
+                    "rows": execution.get("rows", []),
+                    "rowCount": execution.get("rowCount", 0),
+                    "latencyMs": execution.get("latencyMs", 0),
+                },
+                "is_empty": int(execution.get("rowCount", 0)) == 0,
+                "is_truncated": bool(execution.get("truncated", False)),
+            }]
         return result
     if tool_name == "sql.validate":
         safety = output.get("execution_safety_decision")
@@ -143,9 +188,17 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
             result["sql"] = sql
         return result
     if tool_name == "result.profile":
-        return {"result_profile": output}
+        result: dict[str, Any] = {"result_profile": output}
+        unit_id = state.get("current_analysis_unit_id")
+        if unit_id:
+            result["analysis_units"] = _enrich_units(state.get("analysis_units", []), unit_id, profile=output)
+        return result
     if tool_name == "chart.suggest":
-        return {"chart_suggestion": output}
+        result = {"chart_suggestion": output}
+        unit_id = state.get("current_analysis_unit_id")
+        if unit_id:
+            result["analysis_units"] = _enrich_units(state.get("analysis_units", []), unit_id, chart=output)
+        return result
     if tool_name == "answer.synthesize":
         return {"answer": output, "final_answer": output}
     return {}

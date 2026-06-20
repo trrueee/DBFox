@@ -367,6 +367,9 @@ class DBFoxAgentService:
             candidate_tables=[],
             searched_terms=[{"__clear__": True}],
             exhausted_paths=[{"__clear__": True}],
+            # ---- Multi-query Analysis Units ----
+            analysis_units=[{"__clear__": True}],
+            current_analysis_unit_id=None,
             # ---- Tool-call / policy routing ----
             pending_tool_calls=[],
             allowed_tool_calls=[],

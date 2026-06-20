@@ -127,7 +127,7 @@ def emit_artifacts_from_observation(
     if step_name == "chart.suggest" and state.get("chart_suggestion") and observation.status == "success":
         chart = state.get("chart_suggestion")
         if isinstance(chart, dict) and chart.get("type") and chart.get("type") != "table":
-            artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), identity=identity))
+            artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), execution=state.get("execution"), identity=identity))
 
     # Bind dependencies. result_table is now keyed per-query (result_table_{hash}),
     # so a bare "result_table" dep must resolve to the most recent table artifact.
