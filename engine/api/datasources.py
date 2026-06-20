@@ -20,7 +20,7 @@ from engine.models import (
 )
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceResponse, _json_list_or_empty
 from engine.schema_sync import build_er_diagram_data
-from engine.schema_sync_safe import sync_schema
+from engine.environment.schema_catalog_sync import ensure_catalog as _sync_catalog
 
 logger = logging.getLogger("dbfox.api.datasources")
 router = APIRouter()
@@ -39,7 +39,6 @@ def _datasource_to_dict(ds: DataSource) -> dict[str, Any]:
     result.setdefault("ssl_verify_identity", False)
     result.setdefault("connection_mode", "direct")
     result.setdefault("status", "active")
-    result.setdefault("enable_embedding_recall", False)
     result.setdefault("ssh_enabled", False)
     result.setdefault("ssl_enabled", False)
     result.setdefault("project_id", DEFAULT_PROJECT_ID)
@@ -195,7 +194,6 @@ def api_create_datasource(req: DataSourceCreateRequest, db: Session = Depends(ge
             is_read_only=req.is_read_only,
             env=req.env,
             status="active",
-            enable_embedding_recall=req.enable_embedding_recall,
         )
         db.add(datasource)
         db.commit()
@@ -252,7 +250,6 @@ def api_update_datasource(id: str, req: DataSourceUpdateRequest, db: Session = D
         datasource.connection_mode = req.connection_mode
         datasource.is_read_only = req.is_read_only
         datasource.env = req.env
-        datasource.enable_embedding_recall = req.enable_embedding_recall
         datasource.ssh_enabled = req.ssh_enabled
         datasource.ssh_host = req.ssh_host
         datasource.ssh_port = req.ssh_port
@@ -403,7 +400,7 @@ def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, 
 
 
 class SchemaSyncRequest(BaseModel):
-    ai_enrich: bool = True
+    ai_enrich: bool = False
     api_key: str | None = None
     api_base: str | None = None
     model_name: str | None = None
@@ -415,16 +412,37 @@ def api_sync_schema(
     req: SchemaSyncRequest | None = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    """Sync datasource schema into the DBFox catalog.
+
+    By default ONLY introspects table structure (columns, PKs, FKs) and
+    generates basic ``schema_search_docs`` index entries.  AI enrichment is
+    opt-in via ``ai_enrich: true`` and requires valid LLM API credentials.
+    """
     try:
         payload = req or SchemaSyncRequest()
-        return sync_schema(
-            db,
-            id,
-            ai_enrich=payload.ai_enrich,
-            ai_api_key=payload.api_key,
-            ai_api_base=payload.api_base,
-            ai_model_name=payload.model_name,
-        )
+        result = _sync_catalog(db, id, ai_enrich=payload.ai_enrich)
+
+        response: dict[str, Any] = {
+            "ok": result.synced,
+            "tablesSynced": (result.tables_created or 0) + (result.tables_updated or 0),
+            "tablesDropped": result.tables_removed or 0,
+            "columnsCreated": result.columns_created or 0,
+            "columnsUpdated": result.columns_updated or 0,
+            "columnsRemoved": result.columns_removed or 0,
+            "message": f"Synced: {result.tables_created or 0} created, {result.tables_updated or 0} updated, {result.tables_removed or 0} removed.",
+        }
+
+        if payload.ai_enrich:
+            from engine.ai_enrich import ai_enrich_catalog
+            enrich = ai_enrich_catalog(
+                db, id,
+                api_key=payload.api_key,
+                api_base=payload.api_base,
+                model_name=payload.model_name,
+            )
+            response["aiEnrich"] = enrich.model_dump(mode="json") if hasattr(enrich, 'model_dump') else dict(enrich or {})
+
+        return response
     except ValueError as exc:
         raise DBFoxError(code="SYNC_FAILED", message=str(exc))
 
@@ -434,7 +452,7 @@ def api_list_tables(datasource_id: str = Query(...), db: Session = Depends(get_d
     tables = _load_schema_tables(db, datasource_id)
     if not tables:
         try:
-            sync_schema(db, datasource_id)
+            _sync_catalog(db, datasource_id)  # ai_enrich=False by default — no API key needed
         except Exception:
             db.rollback()
             logger.warning("Auto schema sync before listing tables failed for %s", datasource_id)
@@ -480,69 +498,10 @@ def api_get_er_diagram(datasource_id: str = Query(...), db: Session = Depends(ge
         raise
 
 
-class DomainTagRuleSchema(BaseModel):
-    pattern: str
-    tag: str
-    priority: int
-
-@router.get("/datasources/{id}/domain-tags")
-def api_get_domain_tags(id: str, db: Session = Depends(get_db)) -> list[dict[str, Any]]:
-    from engine.models import DomainTagRule
-    from engine.tools.db.observe import _RULES_CACHE
-    rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
-    if not rules:
-        default_patterns = [
-            ("user", ["user", "member", "customer", "account"]),
-            ("order", ["order", "cart", "coupon"]),
-            ("product", ["product", "category", "sku", "inventory", "item"]),
-            ("payment", ["payment", "pay", "refund", "transaction"]),
-            ("shipping", ["shipping", "address", "carrier", "logistics"]),
-            ("analytics", ["analytics", "click", "recommendation", "event", "log"]),
-            ("system", ["system", "admin", "setting", "config"]),
-            ("content", ["article", "post", "comment", "review", "tag"]),
-        ]
-        for tag, needles in default_patterns:
-            for needle in needles:
-                db.add(
-                    DomainTagRule(
-                        data_source_id=id,
-                        pattern=needle,
-                        tag=tag,
-                        priority=10,
-                    )
-                )
-        try:
-            db.commit()
-            _RULES_CACHE.pop(id, None)
-        except Exception:
-            db.rollback()
-            logger.warning("Failed to persist default domain tags for datasource %s", id)
-        rules = db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).order_by(DomainTagRule.priority.desc()).all()
-        
-    return [{"id": r.id, "pattern": r.pattern, "tag": r.tag, "priority": r.priority} for r in rules]
-
-@router.post("/datasources/{id}/domain-tags")
-def api_save_domain_tags(id: str, rules: list[DomainTagRuleSchema], db: Session = Depends(get_db)) -> dict[str, Any]:
-    from engine.models import DomainTagRule
-    from engine.tools.db.observe import _RULES_CACHE
-    try:
-        db.query(DomainTagRule).filter(DomainTagRule.data_source_id == id).delete()
-        for r in rules:
-            db.add(
-                DomainTagRule(
-                    data_source_id=id,
-                    pattern=r.pattern,
-                    tag=r.tag,
-                    priority=r.priority
-                )
-            )
-        db.commit()
-        _RULES_CACHE.pop(id, None)
-        return {"success": True, "message": "Domain tag rules saved successfully"}
-    except Exception as exc:
-        db.rollback()
-        from engine.policy.error_sanitizer import sanitize_error_message
-        raise HTTPException(status_code=400, detail=sanitize_error_message(str(exc)))
+# NOTE: DomainTagRule management endpoints (GET/POST /datasources/{id}/domain-tags)
+# were removed in the MVP simplification (2026-06-20).  Domain tags are still used
+# internally by db.observe for display grouping, but the management UI and API
+# are no longer exposed.
 
 
 class TableMetadataUpdateRequest(BaseModel):
