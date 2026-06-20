@@ -168,13 +168,21 @@ class SyncPersistenceSink(AgentPersistenceSink):
 
 
 def create_persistence_sink(db: Session) -> AgentPersistenceSink:
-    """Factory: create the appropriate sink based on AGENT_PERSISTENCE_MODE."""
+    """Factory: create the appropriate sink based on AGENT_PERSISTENCE_MODE.
+
+    Default is SessionPersistenceSink (shares caller's session) to avoid
+    SQLite write-write lock contention that occurs when SyncPersistenceSink
+    opens a second session concurrently with the agent's main session.
+    """
     mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync").lower()
     if os.environ.get("DBFOX_TESTING") == "1":
         return SessionPersistenceSink(db)
     if mode == "disabled":
         return NoopPersistenceSink()
+    if mode == "sync":
+        # Dedicated session — use only for non-SQLite or when isolation is required
+        return SyncPersistenceSink(db)
     if mode == "buffered":
-        # For now, buffered = disabled for eval safety
         return NoopPersistenceSink()
-    return SyncPersistenceSink(db)
+    # Default: share the caller's session (no separate write connection)
+    return SessionPersistenceSink(db)
