@@ -62,7 +62,7 @@ def apply_tool_observation_to_state(
         "tool_results": [observation.model_dump(mode="json")],
         "trace_events": [
             {
-                "type": "tool.completed",
+                "type": "agent.tool.completed",
                 "payload": {
                     "tool_name": tool_name,
                     "observation_name": observation.name,

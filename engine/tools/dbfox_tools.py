@@ -594,6 +594,11 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
         if isinstance(result_profile, dict):
             result_profile = ResultProfile.model_validate(result_profile)
         question = tool_input.question or getattr(context.request, "question", "") or ""
+        
+        model_name = getattr(context.request, "model_name", None)
+        api_key = getattr(context.request, "api_key", None)
+        api_base = getattr(context.request, "api_base", None)
+
         return synthesize_agent_answer(
             question=question,
             query_plan=context.state.get("query_plan"),
@@ -603,6 +608,9 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
             result_profile=result_profile,
             suggestions=context.state.get("suggestions"),
             error=context.state.get("error"),
+            model_name=model_name,
+            api_key=api_key,
+            api_base=api_base,
         )
 
 
