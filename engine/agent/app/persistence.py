@@ -22,6 +22,8 @@ logger = logging.getLogger("dbfox.dbfox_agent.app.persistence")
 
 def resolve_session_id(db: Session, req: AgentRunRequest) -> str:
     """Resolve the session ID for the run, preserving multi-turn thread continuity."""
+    if req.conversation_id:
+        return str(req.conversation_id)
     if req.session_id:
         return str(req.session_id)
     if req.parent_run_id:
@@ -66,6 +68,9 @@ def request_from_run(db: Session, run_id: str) -> AgentRunRequest:
         datasource_id=str(run.datasource_id),
         question=str(run.question),
         session_id=str(run.session_id),
+        conversation_id=str(run.session_id),
+        user_message_id=str(run.user_message_id) if run.user_message_id else None,
+        assistant_message_id=str(run.assistant_message_id) if run.assistant_message_id else None,
         parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
         execute=True,
         max_steps=20,
