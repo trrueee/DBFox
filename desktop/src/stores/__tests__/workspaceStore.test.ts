@@ -1,17 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useWorkspaceStore } from "../workspaceStore";
-import type { Conversation } from "../../types/conversation";
-
-vi.mock("../../features/conversation/conversationRepository", () => ({
-  deleteConversation: vi.fn(),
-  listConversations: vi.fn(),
-  saveConversation: vi.fn(),
-}));
-
-// Re-import the mocked module so we can assert on the fns.
-const { saveConversation, listConversations, deleteConversation } = await import(
-  "../../features/conversation/conversationRepository"
-);
 
 const INITIAL = {
   tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" as const }],
@@ -20,7 +8,6 @@ const INITIAL = {
   selectedTables: [],
   contextTables: [],
   tableSubTabs: {},
-  conversations: [],
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 };
 
@@ -128,71 +115,17 @@ describe("workspaceStore — context tables", () => {
 });
 
 describe("workspaceStore — conversations", () => {
-  beforeEach(() => {
-    reset();
-    vi.mocked(saveConversation).mockReset();
-    vi.mocked(listConversations).mockReset();
-    vi.mocked(deleteConversation).mockReset();
-  });
+  beforeEach(reset);
 
-  it("persistConversation calls saveConversation and prepends to state", async () => {
-    vi.mocked(saveConversation).mockResolvedValue(undefined);
-    const conv: Conversation = {
-      id: "c1",
-      title: "T",
-      createdAt: 100,
-      updatedAt: 100,
-      contextTables: [],
-      messages: [],
-      artifacts: [],
-    };
-    await useWorkspaceStore.getState().persistConversation(conv);
-    expect(saveConversation).toHaveBeenCalledWith(conv);
-    expect(useWorkspaceStore.getState().conversations.map((c) => c.id)).toEqual(["c1"]);
-  });
+  it("openConversationResult opens a lightweight conversation tab", () => {
+    useWorkspaceStore.getState().openConversationResult({ id: "conv-1", title: "Orders" });
+    useWorkspaceStore.getState().openConversationResult({ id: "conv-1", title: "Orders" });
 
-  it("persistConversation keeps the newest copy when id already exists", async () => {
-    vi.mocked(saveConversation).mockResolvedValue(undefined);
-    const base: Conversation = {
-      id: "c1",
-      title: "old",
-      createdAt: 100,
-      updatedAt: 100,
-      contextTables: [],
-      messages: [],
-      artifacts: [],
-    };
-    await useWorkspaceStore.getState().persistConversation(base);
-    await useWorkspaceStore.getState().persistConversation({ ...base, title: "new", updatedAt: 200 });
-    const convs = useWorkspaceStore.getState().conversations;
-    expect(convs).toHaveLength(1);
-    expect(convs[0].title).toBe("new");
-  });
-
-  it("deleteConversationById calls deleteConversation and removes from state", async () => {
-    vi.mocked(deleteConversation).mockResolvedValue(undefined);
-    vi.mocked(saveConversation).mockResolvedValue(undefined);
-    await useWorkspaceStore.getState().persistConversation({
-      id: "c1",
-      title: "T",
-      createdAt: 100,
-      updatedAt: 100,
-      contextTables: [],
-      messages: [],
-      artifacts: [],
-    });
-    await useWorkspaceStore.getState().deleteConversationById("c1");
-    expect(deleteConversation).toHaveBeenCalledWith("c1");
-    expect(useWorkspaceStore.getState().conversations).toHaveLength(0);
-  });
-
-  it("initConversations loads history via listConversations", async () => {
-    const history: Conversation[] = [
-      { id: "h1", title: "H1", createdAt: 1, updatedAt: 1, contextTables: [], messages: [], artifacts: [] },
-    ];
-    vi.mocked(listConversations).mockResolvedValue(history);
-    await useWorkspaceStore.getState().initConversations();
-    expect(listConversations).toHaveBeenCalled();
-    expect(useWorkspaceStore.getState().conversations).toEqual(history);
+    const state = useWorkspaceStore.getState();
+    const tabs = state.tabs.filter((tab) => tab.id === "conversation-conv-1");
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0].type).toBe("query-result");
+    expect(tabs[0].conversationId).toBe("conv-1");
+    expect(state.activeTabId).toBe("conversation-conv-1");
   });
 });
