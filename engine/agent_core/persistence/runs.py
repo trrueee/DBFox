@@ -1,7 +1,6 @@
 """Run lifecycle operations — start, complete, fail, cancel, query."""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse
-from engine.models import AgentRun, AgentArtifactRecord, ChatConversation
+from engine.models import AgentRun, AgentArtifactRecord
 from engine.agent_core.persistence._common import (
     _safe_json,
     _restore_response,
@@ -45,22 +44,6 @@ def start_run(
     db.add(run)
     db.flush()
 
-    if req.workspace_context and req.workspace_context.selected_table_names:
-        row = db.query(ChatConversation).filter(ChatConversation.id == session_id).first()
-        if row is None:
-            row = ChatConversation(
-                id=session_id,
-                title=req.question,
-                created_at=int(datetime.now(UTC).timestamp() * 1000),
-                updated_at=int(datetime.now(UTC).timestamp() * 1000),
-            )
-            db.add(row)
-        row.context_tables_json = json.dumps(req.workspace_context.selected_table_names)
-        db.flush()
-
-    from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-    sync_chat_conversation_from_session(db, session_id)
-
 
 def complete_run(db: Session, response: AgentRunResponse) -> None:
     try:
@@ -78,8 +61,6 @@ def complete_run(db: Session, response: AgentRunResponse) -> None:
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         db.flush()
         _save_trace_events(db, response)
-        from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-        sync_chat_conversation_from_session(db, run.session_id)
     except Exception as exc:
         logger.exception("Failed to complete run %s", response.run_id)
         raise exc
@@ -131,8 +112,6 @@ def fail_run(
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         db.flush()
-        from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-        sync_chat_conversation_from_session(db, session_id)
     except Exception:
         logger.exception("Failed to record failure for run %s", run_id)
 
@@ -151,8 +130,6 @@ def cancel_run(db: Session, *, run_id: str) -> None:
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         db.flush()
-        from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-        sync_chat_conversation_from_session(db, run.session_id)
     except Exception:
         logger.exception("Failed to cancel run %s", run_id)
 
@@ -178,8 +155,6 @@ def mark_run_waiting_approval(
         run.response_json = _safe_json(_redact_response(response))  # type: ignore[assignment]
         run.context_summary = response.context_summary  # type: ignore[assignment]
     db.flush()
-    from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-    sync_chat_conversation_from_session(db, run.session_id)
 
 
 def mark_run_resumed(db: Session, *, run_id: str, current_step_name: str | None = "query_database") -> None:
@@ -193,8 +168,6 @@ def mark_run_resumed(db: Session, *, run_id: str, current_step_name: str | None 
     run.completed_at = None  # type: ignore[assignment]
     run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
     db.flush()
-    from engine.agent_core.persistence.conversations import sync_chat_conversation_from_session
-    sync_chat_conversation_from_session(db, run.session_id)
 
 
 def get_run(db: Session, run_id: str) -> AgentRunResponse | None:

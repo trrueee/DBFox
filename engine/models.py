@@ -407,13 +407,42 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=True)
+    context_tables_json = Column(Text, nullable=False, default="[]")
+    archived_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
+    messages = relationship(
+        "AgentMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="AgentMessage.sequence",
+    )
     runs = relationship("AgentRun", back_populates="session", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<AgentSession id={self.id!r} title={self.title!r} datasource_id={self.datasource_id!r}>"
+
+
+class AgentMessage(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_messages"
+    __table_args__ = (
+        Index("ix_agent_messages_session", "session_id"),
+        Index("ix_agent_messages_role", "role"),
+        UniqueConstraint("session_id", "sequence", name="uq_agent_messages_session_sequence"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False, default="")
+    status = Column(String, nullable=False, default="created")
+    sequence = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    session = relationship("AgentSession", back_populates="messages")
 
 
 class AgentRun(Base):  # type: ignore[misc,valid-type]
@@ -428,6 +457,8 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     parent_run_id = Column(String, nullable=True)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    user_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
+    assistant_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     question = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="running")
     current_step_name = Column(String, nullable=True)
@@ -435,6 +466,9 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     response_json = Column(Text, nullable=True)
     context_summary = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -521,6 +555,7 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
+    message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     semantic_id = Column(String, nullable=True)
     type = Column(String, nullable=False)
     title = Column(String, nullable=False)
@@ -529,6 +564,7 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     payload_json = Column(Text, nullable=False)
     presentation_json = Column(Text, nullable=False)
     refs_json = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default="completed")
     sequence = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
@@ -734,21 +770,3 @@ class AgentEvalCaseResult(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     eval_run = relationship("AgentEvalRun", back_populates="case_results")
-
-
-class ChatConversation(Base):  # type: ignore[misc,valid-type]
-    """Local chat session history mirrored from the desktop UI."""
-
-    __tablename__ = "chat_conversations"
-    __table_args__ = (Index("ix_chat_conversations_updated_at", "updated_at"),)
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    title = Column(String, nullable=False)
-    created_at = Column(Integer, nullable=False)
-    updated_at = Column(Integer, nullable=False)
-    context_tables_json = Column(Text, nullable=False, default="[]")
-    messages_json = Column(Text, nullable=False, default="[]")
-    artifacts_json = Column(Text, nullable=False, default="[]")
-
-    def __repr__(self) -> str:
-        return f"<ChatConversation id={self.id!r} title={self.title!r}>"
