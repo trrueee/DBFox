@@ -33,6 +33,19 @@ class TestFinalizeNode:
         assert result["status"] == "failed"
         assert result["error"] == "Something went wrong"
 
+    def test_finalize_preserves_terminal_failure_even_with_ai_message(self):
+        state: DBFoxAgentState = {
+            "messages": [AIMessage(content="Agent requires a configured LLM API key.")],
+            "status": "failed",
+            "error": "No LLM credentials.",
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(state, {})
+
+        assert result["status"] == "failed"
+        assert result["error"] == "No LLM credentials."
+
     def test_finalize_with_answer_and_stale_error_completes_with_caveat(self):
         state: DBFoxAgentState = {
             "messages": [

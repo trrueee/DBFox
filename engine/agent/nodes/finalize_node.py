@@ -5,7 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DBFoxAgentState
-from engine.agent.graph.message_utils import first_user_text
+from engine.agent.graph.message_utils import first_user_text, is_ai_message, message_content_text, message_tool_calls
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 
@@ -16,15 +16,36 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
     messages = state.get("messages", [])
     error = state.get("error")
     pending_approval = state.get("pending_approval")
+    terminal_failed = state.get("status") == "failed"
 
     existing_answer = state.get("answer")
     answer_dict = existing_answer if isinstance(existing_answer, dict) else {}
     has_answer = bool(answer_dict.get("answer") or "")
+    had_error_before_finalize = bool(error)
+
+    if not has_answer and not terminal_failed:
+        for msg in reversed(messages):
+            if is_ai_message(msg) and not message_tool_calls(msg):
+                content = message_content_text(msg)
+                if content:
+                    answer_dict = {
+                        "answer": content,
+                        "key_findings": [],
+                        "caveats": [],
+                        "recommendations": [],
+                        "follow_up_questions": [],
+                    }
+                    has_answer = True
+                    break
 
     if pending_approval:
         status = "waiting_approval"
     elif has_answer:
         status = "completed"
+        if had_error_before_finalize:
+            answer_dict.setdefault("caveats", []).append(
+                "部分后续检查未完成，结果可能不完整。"
+            )
         error = None
     elif error:
         status = "failed"
@@ -45,7 +66,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
         "type": "agent.finalized",
         "status": status,
         "has_answer": has_answer,
-        "has_error": bool(error),
+        "has_error": had_error_before_finalize,
     }
 
     _auto_write_trajectory(state, status, str(answer_dict.get("answer") or ""))
