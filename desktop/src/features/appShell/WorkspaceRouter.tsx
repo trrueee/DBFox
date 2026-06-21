@@ -2,20 +2,21 @@ import { useState } from "react";
 import type { WorkspaceTab } from "../../mock/dbfoxMock";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { ConversationHistoryPanel } from "../conversation/ConversationHistoryPanel";
+import { ConversationWorkspace } from "../conversation/workspace/ConversationWorkspace";
 import { TableWorkspace } from "../workspace/TableWorkspace";
 import { SqlConsoleWorkspace, type ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { MultiTableWorkspace } from "../workspace/MultiTableWorkspace";
 import { AgentEvalPage } from "../../pages/AgentEvalPage";
 import { DataSourcesPage } from "../../pages/DataSourcesPage";
 import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
-import { QueryResultWorkspace } from "../workspace/QueryResultWorkspace";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { testLlmConnection } from "../../lib/api/agent";
 import { defaultSql } from "../../mock/dbfoxMock";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useConversationStore } from "../../stores/conversationStore";
+import type { ConversationSummary } from "../../types/conversation";
 
 interface WorkspaceRouterProps {
   activeTab: WorkspaceTab;
@@ -50,23 +51,31 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
   if (activeTab.type === "datasource-settings") {
     return <DatasourceSettingsTab activeTab={activeTab} showToast={showToast} />;
   }
-  return <QueryResultTab activeTab={activeTab} showToast={showToast} />;
+  return <QueryResultTab activeTab={activeTab} />;
 }
 
 // ── SmartQueryHome tab ──
-function SmartQueryHomeTab(_props: { showToast: WorkspaceRouterProps["showToast"] }) {
+function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
   const [askInputValue, setAskInputValue] = useState("");
   const contextTables = useWorkspaceStore((s) => s.contextTables);
   const addContextTable = useWorkspaceStore((s) => s.addContextTable);
   const removeContextTable = useWorkspaceStore((s) => s.removeContextTable);
   const clearContextTables = useWorkspaceStore((s) => s.clearContextTables);
 
-  const handleSubmitAsk = () => {
+  const handleSubmitAsk = async () => {
     const text = askInputValue.trim();
     if (!text) return;
-    const tabId = useWorkspaceStore.getState().openQueryResultTab(text);
     setAskInputValue("");
-    if (tabId) void useAgentStore.getState().runAgentForTab(tabId, text);
+    try {
+      const detail = await useConversationStore.getState().createAndOpenConversation(text, contextTables);
+      useWorkspaceStore.getState().openConversationResult({ id: detail.id, title: detail.title });
+      void useConversationStore
+        .getState()
+        .sendMessage(detail.id, text)
+        .catch((error) => showToast(error instanceof Error ? error.message : "执行失败", "error"));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "创建会话失败", "error");
+    }
   };
 
   return (
@@ -84,16 +93,18 @@ function SmartQueryHomeTab(_props: { showToast: WorkspaceRouterProps["showToast"
 
 // ── ConversationHistory tab ──
 function ConversationHistoryTab({ activeTab }: { activeTab: WorkspaceTab }) {
-  const conversations = useWorkspaceStore((s) => s.conversations);
-  const openConversationResult = useWorkspaceStore((s) => s.openConversationResult);
-  const deleteConversationById = useWorkspaceStore((s) => s.deleteConversationById);
+  const conversations = useConversationStore((s) => s.summaries);
+  const openConversation = async (summary: ConversationSummary) => {
+    await useConversationStore.getState().openConversation(summary.id);
+    useWorkspaceStore.getState().openConversationResult({ id: summary.id, title: summary.title });
+  };
 
   return (
     <ConversationHistoryPanel
       conversations={conversations}
       activeConversationId={activeTab.conversationId}
-      onOpenConversation={openConversationResult}
-      onDeleteConversation={deleteConversationById}
+      onOpenConversation={(summary) => void openConversation(summary)}
+      onDeleteConversation={(conversationId) => void useConversationStore.getState().deleteConversationById(conversationId)}
     />
   );
 }
@@ -203,23 +214,19 @@ function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceT
 }
 
 // ── QueryResult tab ──
-function QueryResultTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
+function QueryResultTab({ activeTab }: { activeTab: WorkspaceTab }) {
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
-  const sendFollowUp = useAgentStore((s) => s.sendFollowUp);
-  const handleApprovalDecision = useAgentStore((s) => s.handleApprovalDecision);
-  const cancelAgentRun = useAgentStore((s) => s.cancelAgentRun);
-  const regenerateAgentRun = useAgentStore((s) => s.regenerateAgentRun);
+  const conversationId = activeTab.conversationId || "";
 
   return (
-    <QueryResultWorkspace
-      tab={activeTab}
+    <ConversationWorkspace
+      conversationId={conversationId}
+      onOpenHistory={() => useWorkspaceStore.getState().openConversationHistoryTab()}
       onOpenSqlConsole={openSqlConsole}
-      onSendFollowUp={sendFollowUp}
-      onApproveAgent={(tabId) => void handleApprovalDecision(tabId, true)}
-      onRejectAgent={(tabId) => void handleApprovalDecision(tabId, false)}
-      onCancelRun={cancelAgentRun}
-      onRegenerateRun={regenerateAgentRun}
-      onToast={showToast}
+      onDelete={() => {
+        if (conversationId) void useConversationStore.getState().deleteConversationById(conversationId);
+        useWorkspaceStore.getState().closeTab(activeTab.id);
+      }}
     />
   );
 }

@@ -35,6 +35,7 @@ export interface WorkspaceTab {
   selectedTables?: string[];
   queryText?: string;
   conversationId?: string;
+  // Conversation content is stored in conversationStore. These legacy fields stay only until old AgentTaskView callers are deleted.
   chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
   agentTimeline?: AgentTimelineItem[];
   artifacts?: AgentArtifact[];
