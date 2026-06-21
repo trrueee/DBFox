@@ -4,12 +4,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse
-from engine.models import AgentRun, AgentArtifactRecord
+from engine.models import AgentMessage, AgentRun, AgentArtifactRecord
 from engine.agent_core.persistence._common import (
     _safe_json,
     _restore_response,
@@ -23,12 +24,75 @@ from engine.agent_core.persistence._common import (
 logger = logging.getLogger("dbfox.agent.persistence")
 
 
+def _next_message_sequence(db: Session, session_id: str) -> int:
+    value = (
+        db.query(AgentMessage.sequence)
+        .filter(AgentMessage.session_id == session_id)
+        .order_by(AgentMessage.sequence.desc())
+        .first()
+    )
+    return int(value[0]) + 1 if value else 1
+
+
+def _answer_text(response: AgentRunResponse) -> str:
+    if response.answer and response.answer.answer.strip():
+        return response.answer.answer.strip()
+    if response.explanation and response.explanation.strip():
+        return response.explanation.strip()
+    if response.error and response.error.strip():
+        return f"执行未完成：{response.error}"
+    return "已完成。"
+
+
+def _update_assistant_message(
+    db: Session,
+    run: AgentRun,
+    *,
+    content: str,
+    status: str,
+) -> None:
+    assistant = db.get(AgentMessage, run.assistant_message_id) if run.assistant_message_id else None
+    if assistant is None:
+        return
+    assistant.content = content  # type: ignore[assignment]
+    assistant.status = status  # type: ignore[assignment]
+    assistant.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+
+
 def start_run(
     db: Session,
     req: AgentRunRequest,
     run_id: str,
     session_id: str,
 ) -> None:
+    now = datetime.now(UTC)
+    user_message_id = req.user_message_id or f"msg-user-{uuid4()}"
+    assistant_message_id = req.assistant_message_id or f"msg-assistant-{uuid4()}"
+    sequence = _next_message_sequence(db, session_id)
+    db.add(
+        AgentMessage(
+            id=user_message_id,
+            session_id=session_id,
+            role="user",
+            content=req.question,
+            status="completed",
+            sequence=sequence,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.add(
+        AgentMessage(
+            id=assistant_message_id,
+            session_id=session_id,
+            role="assistant",
+            content="",
+            status="streaming",
+            sequence=sequence + 1,
+            created_at=now,
+            updated_at=now,
+        )
+    )
     run = AgentRun(
         id=run_id,
         session_id=session_id,
@@ -36,10 +100,13 @@ def start_run(
             req.follow_up_context.parent_run_id if req.follow_up_context else None
         ),
         datasource_id=req.datasource_id,
+        user_message_id=user_message_id,
+        assistant_message_id=assistant_message_id,
         question=req.question,
         status="running",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        started_at=now,
+        created_at=now,
+        updated_at=now,
     )
     db.add(run)
     db.flush()
@@ -51,14 +118,21 @@ def complete_run(db: Session, response: AgentRunResponse) -> None:
         if run is None:
             logger.warning("Cannot complete run %s: run not found", response.run_id)
             return
-        run.status = "success" if response.success else "failed"  # type: ignore[assignment]
+        run.status = response.status or ("completed" if response.success else "failed")  # type: ignore[assignment]
         run.current_step_name = None  # type: ignore[assignment]
         run.waiting_approval_id = None  # type: ignore[assignment]
         run.response_json = _safe_json(_redact_response(response))  # type: ignore[assignment]
         run.context_summary = response.context_summary  # type: ignore[assignment]
         run.error = response.error  # type: ignore[assignment]
+        run.error_message = response.error  # type: ignore[assignment]
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+        _update_assistant_message(
+            db,
+            run,
+            content=_answer_text(response),
+            status="completed" if response.success else "failed",
+        )
         db.flush()
         _save_trace_events(db, response)
     except Exception as exc:
@@ -106,11 +180,18 @@ def fail_run(
         run.current_step_name = None  # type: ignore[assignment]
         run.waiting_approval_id = None  # type: ignore[assignment]
         run.error = error  # type: ignore[assignment]
+        run.error_message = error  # type: ignore[assignment]
         if response is not None:
             run.response_json = _safe_json(_redact_response(response))  # type: ignore[assignment]
             run.context_summary = response.context_summary  # type: ignore[assignment]
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+        _update_assistant_message(
+            db,
+            run,
+            content=_answer_text(response) if response is not None else f"执行未完成：{error}",
+            status="failed",
+        )
         db.flush()
     except Exception:
         logger.exception("Failed to record failure for run %s", run_id)
@@ -127,8 +208,15 @@ def cancel_run(db: Session, *, run_id: str) -> None:
         run.current_step_name = None  # type: ignore[assignment]
         run.waiting_approval_id = None  # type: ignore[assignment]
         run.error = "User cancelled the agent run."  # type: ignore[assignment]
+        run.error_message = "User cancelled the agent run."  # type: ignore[assignment]
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
+        _update_assistant_message(
+            db,
+            run,
+            content="已取消。",
+            status="cancelled",
+        )
         db.flush()
     except Exception:
         logger.exception("Failed to cancel run %s", run_id)

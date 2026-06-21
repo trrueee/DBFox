@@ -75,6 +75,9 @@ def build_response(
     return AgentRunResponse(
         run_id=run_id,
         session_id=session_id,
+        conversation_id=req.conversation_id or session_id,
+        user_message_id=req.user_message_id,
+        assistant_message_id=req.assistant_message_id,
         parent_run_id=req.parent_run_id,
         success=success,
         status=status or ("completed" if success else "failed"),
