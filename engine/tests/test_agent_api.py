@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import engine.api.agent as agent_module
 from fastapi import HTTPException
 
-from engine.agent_core.types import AgentResumeRequest, AgentRunRequest
+from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRuntimeEvent
 from engine.api.agent import sse_failed_event
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
@@ -93,6 +93,47 @@ def test_api_agent_run_stream_rolls_back_db_session_on_unhandled_exception(monke
 
     assert fake_db.rollback_calls == 1
     assert "AGENT_RUNTIME_ERROR" in body
+
+
+def test_api_agent_run_stream_includes_conversation_message_ids(monkeypatch) -> None:
+    class FakeDb:
+        def rollback(self) -> None:
+            pass
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run_iter(self, _req: AgentRunRequest):
+            yield AgentRuntimeEvent(
+                event_id="evt-1",
+                run_id="run-1",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.started",
+            )
+
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+    response = agent_module.api_agent_run_stream(
+        AgentRunRequest(
+            datasource_id="ds-1",
+            question="hello",
+            session_id="conv-1",
+            conversation_id="conv-1",
+            user_message_id="msg-user-1",
+            assistant_message_id="msg-assistant-1",
+            api_key="test-key",
+        ),
+        FakeDb(),  # type: ignore[arg-type]
+    )
+    body = asyncio.run(_streaming_response_text(response))
+    data_line = next(line for line in body.splitlines() if line.startswith("data: "))
+    payload = json.loads(data_line[6:])
+
+    assert payload["conversation_id"] == "conv-1"
+    assert payload["user_message_id"] == "msg-user-1"
+    assert payload["assistant_message_id"] == "msg-assistant-1"
+    assert payload["message_id"] == "msg-assistant-1"
 
 
 def test_api_agent_resume_stream_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
