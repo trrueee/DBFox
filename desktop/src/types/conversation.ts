@@ -1,62 +1,104 @@
-import type { AgentArtifact } from "./agentArtifact";
+import type { AgentAnswer, AgentRuntimeEvent } from "../lib/api/types";
 
-export type ConversationRole = "user" | "assistant";
+export type ConversationRole = "user" | "assistant" | "system";
+export type ConversationMessageStatus = "created" | "streaming" | "completed" | "failed" | "cancelled";
+export type AgentRunStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
+export type ConversationArtifactType = "sql" | "table" | "chart" | "markdown" | "agent_plan" | "query_plan" | "sql_suggestion" | "safety" | "error";
+
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  datasource_id: string;
+  updated_at: string | null;
+  last_message: string;
+  message_count: number;
+  run_status: AgentRunStatus | null;
+  artifact_count: number;
+}
 
 export interface ConversationMessage {
   id: string;
+  conversation_id: string;
   role: ConversationRole;
   content: string;
-  createdAt: number;
+  status: ConversationMessageStatus;
+  sequence: number;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-export interface Conversation {
+export interface ConversationRun {
+  id: string;
+  conversation_id: string;
+  parent_run_id?: string | null;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
+  datasource_id: string;
+  question: string;
+  status: AgentRunStatus;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  answer?: AgentAnswer | null;
+}
+
+export interface ConversationArtifact {
+  id: string;
+  conversation_id: string;
+  run_id: string;
+  message_id?: string | null;
+  semantic_id?: string | null;
+  type: ConversationArtifactType;
+  title: string;
+  status: "created" | "running" | "completed" | "failed";
+  sequence?: number | null;
+  payload: Record<string, unknown>;
+  presentation?: Record<string, unknown>;
+  depends_on: string[];
+  refs?: Record<string, unknown>;
+  created_at?: string | null;
+}
+
+export interface ConversationDetail {
   id: string;
   title: string;
-  createdAt: number;
-  updatedAt: number;
-  contextTables: string[];
+  datasource_id: string;
+  context_tables: string[];
+  created_at: string | null;
+  updated_at: string | null;
   messages: ConversationMessage[];
-  artifacts: AgentArtifact[];
+  runs: ConversationRun[];
+  artifacts: ConversationArtifact[];
+  approvals: unknown[];
 }
 
-export interface ConversationRecord {
-  id: string;
-  title: string;
-  created_at: number;
-  updated_at: number;
-  context_tables_json: string;
-  messages_json: string;
-  artifacts_json: string;
+export interface ConversationCreateInput {
+  datasource_id: string;
+  title?: string;
+  context_tables: string[];
 }
 
-export function conversationToRecord(conversation: Conversation): ConversationRecord {
-  return {
-    id: conversation.id,
-    title: conversation.title,
-    created_at: conversation.createdAt,
-    updated_at: conversation.updatedAt,
-    context_tables_json: JSON.stringify(conversation.contextTables),
-    messages_json: JSON.stringify(conversation.messages),
-    artifacts_json: JSON.stringify(conversation.artifacts),
-  };
+export interface ConversationMessageInput {
+  content: string;
+  api_key?: string;
+  api_base?: string;
+  model_name?: string;
+  execute?: boolean;
 }
 
-export function recordToConversation(record: ConversationRecord): Conversation {
-  return {
-    id: record.id,
-    title: record.title,
-    createdAt: record.created_at,
-    updatedAt: record.updated_at,
-    contextTables: safeJsonParse<string[]>(record.context_tables_json, []),
-    messages: safeJsonParse<ConversationMessage[]>(record.messages_json, []),
-    artifacts: safeJsonParse<AgentArtifact[]>(record.artifacts_json, []),
-  };
+export interface ConversationMessageStart {
+  conversation_id: string;
+  user_message_id: string;
+  assistant_message_id: string;
+  run_id: string | null;
 }
 
-function safeJsonParse<T>(text: string, fallback: T): T {
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return fallback;
-  }
-}
+export type ConversationStreamEvent = AgentRuntimeEvent & {
+  conversation_id?: string | null;
+  message_id?: string | null;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
+};

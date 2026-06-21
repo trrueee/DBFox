@@ -346,7 +346,7 @@ export interface AgentChartSuggestion {
 export interface AgentArtifact {
   id: string;
   semantic_id?: string | null;
-  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "table" | "chart" | "error";
+  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "table" | "chart" | "error" | "insight" | "recommendation";
   title: string;
   payload: Record<string, unknown>;
   presentation: {
@@ -525,6 +525,9 @@ export interface AgentTraceEvent {
 
 export interface AgentRunConfig {
   sessionId?: string | null;
+  conversationId?: string | null;
+  userMessageId?: string | null;
+  assistantMessageId?: string | null;
   parentRunId?: string | null;
   followUpContext?: AgentFollowUpContext | null;
   apiKey?: string;
@@ -538,6 +541,9 @@ export interface AgentRunConfig {
 export interface AgentRunResponse {
   run_id: string;
   session_id: string;
+  conversation_id?: string | null;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
   parent_run_id?: string | null;
   success: boolean;
   status?: string | null;
@@ -585,6 +591,10 @@ export type AgentRuntimeEventType =
 export interface AgentRuntimeEvent {
   event_id: string;
   run_id: string;
+  conversation_id?: string | null;
+  message_id?: string | null;
+  user_message_id?: string | null;
+  assistant_message_id?: string | null;
   sequence: number;
   created_at_ms: number;
   type: AgentRuntimeEventType;
