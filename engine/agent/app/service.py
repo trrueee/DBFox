@@ -51,6 +51,15 @@ FULL_SAFE_TOOL_GROUPS = [
 ]
 
 
+def _runtime_error_message(exc: Exception) -> str:
+    from engine.llm.errors import llm_error_from_exception
+
+    llm_error = llm_error_from_exception(exc)
+    if llm_error is not None:
+        return str(llm_error)
+    return f"Internal agent error: {exc}"
+
+
 class DBFoxAgentService:
     """Next-generation DBFox agent service built on a pure ReAct graph.
 
@@ -149,7 +158,7 @@ class DBFoxAgentService:
         except Exception as exc:
             logger.exception("Agent stream execution failed: %s", exc)
             accumulated_state["status"] = "failed"
-            accumulated_state["error"] = f"Internal agent error: {exc}"
+            accumulated_state["error"] = _runtime_error_message(exc)
 
         # ---- after the stream loop: check for LangGraph interrupt ----------
         snapshot = app.get_state(config)
@@ -289,7 +298,7 @@ class DBFoxAgentService:
         except Exception as exc:
             logger.exception("Agent stream execution failed: %s", exc)
             accumulated_state["status"] = "failed"
-            accumulated_state["error"] = f"Internal agent error: {exc}"
+            accumulated_state["error"] = _runtime_error_message(exc)
 
         snapshot = app.get_state(config)
         final_state: dict[str, Any] = (
