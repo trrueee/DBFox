@@ -1,13 +1,8 @@
 import { create } from "zustand";
 import type { WorkspaceTab } from "../mock/dbfoxMock";
 import { defaultSql } from "../mock/dbfoxMock";
-import type { Conversation, ConversationMessage } from "../types/conversation";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
-import {
-  deleteConversation,
-  listConversations,
-  saveConversation,
-} from "../features/conversation/conversationRepository";
+import type { ConversationSummary } from "../types/conversation";
 
 interface WorkspaceState {
   tabs: WorkspaceTab[];
@@ -16,7 +11,6 @@ interface WorkspaceState {
   selectedTables: string[];
   contextTables: string[];
   tableSubTabs: Record<string, string>;
-  conversations: Conversation[];
   _tabSeq: { sql: number; multiTable: number; queryResult: number; message: number };
 }
 
@@ -26,11 +20,13 @@ interface WorkspaceActions {
   closeTab: (tabId: string) => void;
   openSqlConsole: (initialSql?: string) => void;
   openLlmConfigTab: () => void;
+  openConversationHistoryTab: () => void;
+  openSmartQueryTab: () => void;
   openConnectionManagerTab: () => void;
   openNewConnectionTab: () => void;
   openAgentEvalTab: () => void;
   openDiagnosticsTab: () => void;
-  openConversationResult: (conv: Conversation) => void;
+  openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
   openTableTab: (tableName: string, initialSubtab?: string) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;
@@ -48,59 +44,40 @@ interface WorkspaceActions {
   setTableSubTabs: (
     updater: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>),
   ) => void;
-  persistConversation: (conv: Conversation) => Promise<void>;
-  deleteConversationById: (id: string) => Promise<void>;
-  initConversations: () => Promise<void>;
   _nextMsgId: () => number;
   _activeTab: () => WorkspaceTab | undefined;
 }
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
-function conversationMessagesToTabMessages(messages: ConversationMessage[]) {
-  return messages.map((message, index) => ({
-    id: Number(message.id.replace(/\D/g, "")) || index + 1,
-    sender: (message.role === "user" ? "user" : "ai") as "user" | "ai",
-    text: message.content,
-  }));
-}
+const HOME_TAB: WorkspaceTab = { id: "smart-query", title: "Ask", type: "smart-query" };
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
-  tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" }],
-  activeTabId: "smart-query",
+  tabs: [HOME_TAB],
+  activeTabId: HOME_TAB.id,
   sqlConsoleState: {},
   selectedTables: [],
   contextTables: [],
   tableSubTabs: {},
-  conversations: [],
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 
   setActiveTabId: (id) => set({ activeTabId: id }),
 
   setTabs: (updater) =>
-    set((s) => ({ tabs: typeof updater === "function" ? updater(s.tabs) : updater })),
+    set((state) => ({ tabs: typeof updater === "function" ? updater(state.tabs) : updater })),
 
   closeTab: (tabId) => {
     const { tabs, activeTabId } = get();
-    const nextTabs = tabs.filter((t) => t.id !== tabId);
-    if (nextTabs.length === 0) {
-      set((s) => {
-        const { [tabId]: _, ...rest } = s.sqlConsoleState;
-        return {
-          tabs: [{ id: "smart-query", title: "问数工作台", type: "smart-query" }],
-          activeTabId: "smart-query",
-          sqlConsoleState: rest,
-        };
-      });
-      return;
-    }
-    set((s) => {
-      const { [tabId]: _, ...rest } = s.sqlConsoleState;
-      const nextActiveId = activeTabId === tabId ? nextTabs[nextTabs.length - 1].id : activeTabId;
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    set((state) => {
+      const { [tabId]: _closed, ...sqlConsoleState } = state.sqlConsoleState;
+      if (nextTabs.length === 0) {
+        return { tabs: [HOME_TAB], activeTabId: HOME_TAB.id, sqlConsoleState };
+      }
       return {
         tabs: nextTabs,
-        activeTabId: nextActiveId,
-        sqlConsoleState: rest,
+        activeTabId: activeTabId === tabId ? nextTabs[nextTabs.length - 1].id : activeTabId,
+        sqlConsoleState,
       };
     });
   },
@@ -109,10 +86,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const seq = get()._tabSeq;
     const tabId = `sql-${seq.sql++}`;
     set({ _tabSeq: { ...seq } });
-    set((s) => ({ tabs: [...s.tabs, { id: tabId, title: "SQL 控制台", type: "sql" }], activeTabId: tabId }));
-    set((s) => ({
+    set((state) => ({
+      tabs: [...state.tabs, { id: tabId, title: "SQL Console", type: "sql" }],
+      activeTabId: tabId,
       sqlConsoleState: {
-        ...s.sqlConsoleState,
+        ...state.sqlConsoleState,
         [tabId]: { draftSql: initialSql ?? defaultSql, entries: [], running: false },
       },
     }));
@@ -120,79 +98,93 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   openLlmConfigTab: () => {
     const tabId = "llm-config";
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId) ? s.tabs : [...s.tabs, { id: tabId, title: "LLM 配置", type: "llm-config" }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: "LLM Config", type: "llm-config" }],
       activeTabId: tabId,
+    }));
+  },
+
+  openConversationHistoryTab: () => {
+    const tabId = "conversation-history";
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: "History", type: "conversation-history" }],
+      activeTabId: tabId,
+    }));
+  },
+
+  openSmartQueryTab: () => {
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === HOME_TAB.id) ? state.tabs : [HOME_TAB, ...state.tabs],
+      activeTabId: HOME_TAB.id,
     }));
   },
 
   openConnectionManagerTab: () => {
     const tabId = "datasource-settings";
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId)
-        ? s.tabs.map((t) => (t.id === tabId ? { ...t, title: "数据源管理" } : t))
-        : [...s.tabs, { id: tabId, title: "数据源管理", type: "datasource-settings" }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "Data Sources" } : tab))
+        : [...state.tabs, { id: tabId, title: "Data Sources", type: "datasource-settings" }],
       activeTabId: tabId,
     }));
   },
 
   openNewConnectionTab: () => {
     const tabId = "datasource-settings";
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId)
-        ? s.tabs.map((t) => (t.id === tabId ? { ...t, title: "新建数据源" } : t))
-        : [...s.tabs, { id: tabId, title: "新建数据源", type: "datasource-settings" }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "New Datasource" } : tab))
+        : [...state.tabs, { id: tabId, title: "New Datasource", type: "datasource-settings" }],
       activeTabId: tabId,
     }));
   },
 
   openAgentEvalTab: () => {
     const tabId = "agent-eval";
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId) ? s.tabs : [...s.tabs, { id: tabId, title: "Agent 评测", type: "agent-eval" }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: "Agent Eval", type: "agent-eval" }],
       activeTabId: tabId,
     }));
   },
 
   openDiagnosticsTab: () => {
     const tabId = "diagnostics";
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId)
-        ? s.tabs
-        : [...s.tabs, { id: tabId, title: "诊断日志", type: "diagnostics" }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: "诊断日志", type: "diagnostics" }],
       activeTabId: tabId,
     }));
   },
 
   openConversationResult: (conv) => {
     const tabId = `conversation-${conv.id}`;
-    const tab: WorkspaceTab = {
-      id: tabId,
-      title: conv.title,
-      type: "query-result",
-      queryText: conv.title,
-      conversationId: conv.id,
-      chatMessages: conversationMessagesToTabMessages(conv.messages),
-      artifacts: conv.artifacts,
-    };
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId) ? s.tabs.map((t) => (t.id === tabId ? tab : t)) : [...s.tabs, tab],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: conv.title, type: "query-result", conversationId: conv.id }],
       activeTabId: tabId,
     }));
   },
 
   openTableTab: (tableName, initialSubtab = "preview") => {
     const tabId = `table-${tableName}`;
-    set((s) => ({
-      tabs: s.tabs.some((t) => t.id === tabId)
-        ? s.tabs
-        : [...s.tabs, { id: tabId, title: tableName, type: "table", tableId: tableName }],
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs
+        : [...state.tabs, { id: tabId, title: tableName, type: "table", tableId: tableName }],
       activeTabId: tabId,
       selectedTables: [tableName],
+      tableSubTabs: initialSubtab
+        ? { ...state.tableSubTabs, [tableName]: initialSubtab }
+        : state.tableSubTabs,
     }));
-    if (initialSubtab) {
-      set((s) => ({ tableSubTabs: { ...s.tableSubTabs, [tableName]: initialSubtab } }));
-    }
   },
 
   openMultiTableWorkspace: (tables) => {
@@ -201,8 +193,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const tabId = `multi-table-${seq.multiTable++}`;
     set({ _tabSeq: { ...seq } });
     const title = `Workspace: ${tables.slice(0, 2).join(" & ")}${tables.length > 2 ? "..." : ""}`;
-    set((s) => ({
-      tabs: [...s.tabs, { id: tabId, title, type: "multi-table", selectedTables: tables }],
+    set((state) => ({
+      tabs: [...state.tabs, { id: tabId, title, type: "multi-table", selectedTables: tables }],
       activeTabId: tabId,
     }));
   },
@@ -212,15 +204,15 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     if (!text) return undefined;
     const seq = get()._tabSeq;
     const nextId = seq.queryResult++;
+    const msgId = seq.message++;
     set({ _tabSeq: { ...seq } });
     const tabId = `query-result-${nextId}`;
-    const msgId = seq.message++;
-    set((s) => ({
+    set((state) => ({
       tabs: [
-        ...s.tabs,
+        ...state.tabs,
         {
           id: tabId,
-          title: text.length > 30 ? text.slice(0, 30) + "…" : text,
+          title: text.length > 30 ? `${text.slice(0, 30)}...` : text,
           type: "query-result",
           queryText: text,
           conversationId: `conversation-${nextId}`,
@@ -234,91 +226,57 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   },
 
   patchTab: (tabId, patch) =>
-    set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, ...patch } : t)) })),
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)),
+    })),
 
   appendTabMessages: (tabId, messages) =>
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === tabId ? { ...t, chatMessages: [...(t.chatMessages || []), ...messages] } : t,
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), ...messages] } : tab,
       ),
     })),
 
   updateTabMessage: (tabId, messageId, text) =>
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === tabId
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId
           ? {
-              ...t,
-              chatMessages: (t.chatMessages || []).map((m) =>
-                m.id === messageId ? { ...m, text } : m,
+              ...tab,
+              chatMessages: (tab.chatMessages || []).map((message) =>
+                message.id === messageId ? { ...message, text } : message,
               ),
             }
-          : t,
+          : tab,
       ),
     })),
 
   patchTabTimeline: (tabId, updater) =>
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === tabId ? { ...t, agentTimeline: updater(t.agentTimeline || []) } : t,
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId ? { ...tab, agentTimeline: updater(tab.agentTimeline || []) } : tab,
       ),
     })),
 
   setSelectedTables: (tables) =>
-    set((s) => ({
-      selectedTables: typeof tables === "function" ? tables(s.selectedTables) : tables,
+    set((state) => ({
+      selectedTables: typeof tables === "function" ? tables(state.selectedTables) : tables,
     })),
 
   addContextTable: (name) =>
-    set((s) => ({
-      contextTables: s.contextTables.includes(name) ? s.contextTables : [...s.contextTables, name],
+    set((state) => ({
+      contextTables: state.contextTables.includes(name) ? state.contextTables : [...state.contextTables, name],
     })),
 
   removeContextTable: (name) =>
-    set((s) => ({ contextTables: s.contextTables.filter((t) => t !== name) })),
+    set((state) => ({ contextTables: state.contextTables.filter((table) => table !== name) })),
 
   clearContextTables: () => set({ contextTables: [] }),
 
   setTableSubTabs: (updater) =>
-    set((s) => ({
-      tableSubTabs: typeof updater === "function" ? updater(s.tableSubTabs) : updater,
+    set((state) => ({
+      tableSubTabs: typeof updater === "function" ? updater(state.tableSubTabs) : updater,
     })),
-
-  persistConversation: async (conv) => {
-    try {
-      await saveConversation(conv);
-      set((s) => ({
-        conversations: [conv, ...s.conversations.filter((c) => c.id !== conv.id)].sort(
-          (a, b) => b.updatedAt - a.updatedAt,
-        ),
-      }));
-    } catch (err) {
-      console.error("persistConversation failed:", err);
-    }
-  },
-
-  deleteConversationById: async (id) => {
-    try {
-      await deleteConversation(id);
-      set((s) => ({ conversations: s.conversations.filter((c) => c.id !== id) }));
-    } catch (err) {
-      console.error("deleteConversationById failed:", err);
-    }
-  },
-
-  initConversations: async () => {
-    // Legacy Tauri rusqlite conversation migration has been removed.
-    // Set the flag so any residual migration check is a no-op.
-    if (typeof window !== "undefined") {
-      localStorage.setItem("dbfox_legacy_conversations_migrated", "true");
-    }
-    try {
-      const history = await listConversations();
-      set({ conversations: history });
-    } catch (err) {
-      console.error("initConversations failed:", err);
-    }
-  },
 
   _nextMsgId: () => {
     const seq = get()._tabSeq;
@@ -329,6 +287,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
 
   _activeTab: () => {
     const { tabs, activeTabId } = get();
-    return tabs.find((t) => t.id === activeTabId) || tabs[0];
+    return tabs.find((tab) => tab.id === activeTabId) || tabs[0];
   },
 }));
