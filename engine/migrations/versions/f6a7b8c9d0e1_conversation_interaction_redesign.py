@@ -54,23 +54,12 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column("status", sa.String(), nullable=False, server_default="completed"))
         batch_op.create_foreign_key("fk_agent_artifacts_message", "agent_messages", ["message_id"], ["id"], ondelete="SET NULL")
 
-    op.drop_table("chat_conversations")
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("chat_conversations"):
+        op.drop_table("chat_conversations")
 
 
 def downgrade() -> None:
-    op.create_table(
-        "chat_conversations",
-        sa.Column("id", sa.String(), nullable=False),
-        sa.Column("title", sa.String(), nullable=False),
-        sa.Column("created_at", sa.Integer(), nullable=False),
-        sa.Column("updated_at", sa.Integer(), nullable=False),
-        sa.Column("context_tables_json", sa.Text(), nullable=False),
-        sa.Column("messages_json", sa.Text(), nullable=False),
-        sa.Column("artifacts_json", sa.Text(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("ix_chat_conversations_updated_at", "chat_conversations", ["updated_at"])
-
     with op.batch_alter_table("agent_artifacts", schema=None) as batch_op:
         batch_op.drop_constraint("fk_agent_artifacts_message", type_="foreignkey")
         batch_op.drop_column("status")
