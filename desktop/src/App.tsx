@@ -15,6 +15,7 @@ import { WorkspaceRouter } from "./features/appShell/WorkspaceRouter";
 import { installClientErrorLogging } from "./lib/diagnostics/clientLog";
 import { useDatasourceStore } from "./stores/datasourceStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
+import { useConversationStore } from "./stores/conversationStore";
 
 export default function App() {
   const [treeSearch, setTreeSearch] = useState("");
@@ -28,12 +29,11 @@ export default function App() {
   useEffect(() => {
     installClientErrorLogging();
     useDatasourceStore.getState().loadDatasources();
-    useWorkspaceStore.getState().initConversations();
+    void useConversationStore.getState().initConversations();
   }, []);
 
   // ── Store selectors (minimal — children read from stores directly) ──
   const activeTab = useWorkspaceStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || s.tabs[0]);
-  const setTabs = useWorkspaceStore((s) => s.setTabs);
 
   const tables = useDatasourceStore((s) => s.tables);
   const tableColumns = useDatasourceStore((s) => s.tableColumns);
@@ -112,14 +112,14 @@ export default function App() {
     tables,
     tableColumns,
     openSqlConsole,
+    openSmartQueryTab: useWorkspaceStore.getState().openSmartQueryTab,
+    openConversationHistoryTab: useWorkspaceStore.getState().openConversationHistoryTab,
     openLlmConfigTab: useWorkspaceStore.getState().openLlmConfigTab,
     openConnectionManagerTab: useWorkspaceStore.getState().openConnectionManagerTab,
     openNewConnectionTab,
     openAgentEvalTab: useWorkspaceStore.getState().openAgentEvalTab,
     openDiagnosticsTab: useWorkspaceStore.getState().openDiagnosticsTab,
     openTableTab,
-    setTabs,
-    setActiveTabId: useWorkspaceStore.getState().setActiveTabId,
   });
 
   return (

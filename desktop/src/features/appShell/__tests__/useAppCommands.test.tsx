@@ -10,14 +10,14 @@ describe("useAppCommands", () => {
         tables: [],
         tableColumns: {},
         openSqlConsole: vi.fn(),
+        openSmartQueryTab: vi.fn(),
+        openConversationHistoryTab: vi.fn(),
         openLlmConfigTab: vi.fn(),
         openConnectionManagerTab: vi.fn(),
         openNewConnectionTab: vi.fn(),
         openAgentEvalTab: vi.fn(),
         openDiagnosticsTab,
         openTableTab: vi.fn(),
-        setTabs: vi.fn(),
-        setActiveTabId: vi.fn(),
       }),
     );
 

@@ -1,36 +1,34 @@
 import { useMemo } from "react";
-import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical, Bug } from "lucide-react";
+import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical, Bug, MessageSquare } from "lucide-react";
 import type { CommandItem } from "../../components/CommandPalette";
 import type { EngineSchemaTable, EngineColumn } from "../engine/engineApi";
-
-import type { WorkspaceTab } from "../../mock/dbfoxMock";
 
 interface UseAppCommandsProps {
   tables: EngineSchemaTable[];
   tableColumns: Record<string, EngineColumn[]>;
   openSqlConsole: () => void;
+  openSmartQueryTab: () => void;
+  openConversationHistoryTab: () => void;
   openLlmConfigTab: () => void;
   openConnectionManagerTab: () => void;
   openNewConnectionTab: () => void;
   openAgentEvalTab: () => void;
   openDiagnosticsTab: () => void;
   openTableTab: (tableName: string) => void;
-  setTabs: React.Dispatch<React.SetStateAction<WorkspaceTab[]>>;
-  setActiveTabId: (id: string) => void;
 }
 
 export function useAppCommands({
   tables,
   tableColumns,
   openSqlConsole,
+  openSmartQueryTab,
+  openConversationHistoryTab,
   openLlmConfigTab,
   openConnectionManagerTab,
   openNewConnectionTab,
   openAgentEvalTab,
   openDiagnosticsTab,
   openTableTab,
-  setTabs,
-  setActiveTabId,
 }: UseAppCommandsProps) {
   const commandItems = useMemo<CommandItem[]>(() => {
     const items: CommandItem[] = [
@@ -47,14 +45,14 @@ export function useAppCommands({
         name: "智能问数 (AI 问数)",
         category: "快捷入口",
         icon: <Sparkles size={13} className="text-purple-500" />,
-        action: () => {
-          setTabs((prev) =>
-            prev.some((t) => t.type === "smart-query")
-              ? prev
-              : [...prev, { id: "smart-query", title: "问数工作台", type: "smart-query" }]
-          );
-          setActiveTabId("smart-query");
-        },
+        action: () => openSmartQueryTab(),
+      },
+      {
+        id: "conversation-history",
+        name: "对话历史",
+        category: "快捷入口",
+        icon: <MessageSquare size={13} className="text-indigo-500" />,
+        action: () => openConversationHistoryTab(),
       },
       {
         id: "llm-config",
@@ -120,14 +118,14 @@ export function useAppCommands({
     tables,
     tableColumns,
     openSqlConsole,
+    openSmartQueryTab,
+    openConversationHistoryTab,
     openLlmConfigTab,
     openConnectionManagerTab,
     openNewConnectionTab,
     openAgentEvalTab,
     openDiagnosticsTab,
     openTableTab,
-    setTabs,
-    setActiveTabId,
   ]);
 
   return { commandItems };

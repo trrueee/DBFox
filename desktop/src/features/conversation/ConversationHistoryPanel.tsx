@@ -1,16 +1,11 @@
 import { Clock, MessageSquare, Trash2, ChevronRight } from "lucide-react";
-import type { Conversation } from "../../types/conversation";
+import type { ConversationSummary } from "../../types/conversation";
 
 interface ConversationHistoryPanelProps {
-  conversations: Conversation[];
+  conversations: ConversationSummary[];
   activeConversationId?: string;
-  onOpenConversation: (conversation: Conversation) => void;
+  onOpenConversation: (conversation: ConversationSummary) => void;
   onDeleteConversation: (conversationId: string) => void;
-}
-
-function firstUserMessage(conv: Conversation): string {
-  const msg = conv.messages.find(m => m.role === "user");
-  return msg?.content?.slice(0, 60) || "";
 }
 
 export function ConversationHistoryPanel({ conversations, activeConversationId, onOpenConversation, onDeleteConversation }: ConversationHistoryPanelProps) {
@@ -30,8 +25,7 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
         </div>
       ) : (
         conversations.map((conversation) => {
-          const preview = firstUserMessage(conversation);
-          const lastAssistant = conversation.messages.filter(m => m.role === "assistant").pop();
+          const preview = conversation.last_message?.slice(0, 100) || "";
           return (
             <button
               key={conversation.id}
@@ -48,20 +42,15 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
                   {preview && (
                     <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{preview}</div>
                   )}
-                  {lastAssistant && (
-                    <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 italic">
-                      {lastAssistant.content.slice(0, 80)}
-                    </div>
-                  )}
                   <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1.5">
                     <Clock size={10} />
-                    <span>{formatTime(conversation.updatedAt)}</span>
+                    <span>{formatTime(conversation.updated_at)}</span>
                     <span>·</span>
-                    <span>{conversation.messages.length} 条消息</span>
-                    {conversation.artifacts.length > 0 && (
+                    <span>{conversation.message_count} 条消息</span>
+                    {conversation.artifact_count > 0 && (
                       <>
                         <span>·</span>
-                        <span>{conversation.artifacts.length} 个产物</span>
+                        <span>{conversation.artifact_count} 个产物</span>
                       </>
                     )}
                   </div>
@@ -76,13 +65,6 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
                   <Trash2 size={12} />
                 </span>
               </div>
-              {conversation.contextTables.length > 0 && (
-                <div className="flex gap-1 flex-wrap mt-2">
-                  {conversation.contextTables.slice(0, 3).map((table) => (
-                    <span key={table} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-mono">{table}</span>
-                  ))}
-                </div>
-              )}
             </button>
           );
         })
@@ -91,9 +73,10 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
   );
 }
 
-function formatTime(value: number) {
+function formatTime(value: string | null) {
   if (!value) return "未知时间";
   const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未知时间";
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
