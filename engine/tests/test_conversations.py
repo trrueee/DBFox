@@ -179,3 +179,38 @@ def test_create_patch_and_delete_conversation(client, db_session):
 
     missing = client.get(f"/api/v1/conversations/{detail['id']}", headers=_hdrs())
     assert missing.status_code == 404
+
+
+def test_create_conversation_endpoint(client):
+    resp = client.post(
+        "/api/v1/conversations",
+        json={"datasource_id": "ds-1", "title": "New analysis", "context_tables": ["orders"]},
+        headers=_hdrs(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "New analysis"
+    assert data["datasource_id"] == "ds-1"
+    assert data["context_tables"] == ["orders"]
+    assert data["messages"] == []
+
+
+def test_prepare_conversation_message_creates_message_ids(client, db_session):
+    create = client.post(
+        "/api/v1/conversations",
+        json={"datasource_id": "ds-1", "title": "Message test", "context_tables": []},
+        headers=_hdrs(),
+    )
+    conv_id = create.json()["id"]
+
+    resp = client.post(
+        f"/api/v1/conversations/{conv_id}/messages",
+        json={"content": "Count users", "api_key": "test-key", "model_name": "test-model"},
+        headers=_hdrs(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["conversation_id"] == conv_id
+    assert data["user_message_id"].startswith("msg-user-")
+    assert data["assistant_message_id"].startswith("msg-assistant-")
+    assert data["run_id"] is None

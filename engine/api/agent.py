@@ -123,6 +123,18 @@ def _format_sse_event(event: AgentRuntimeEvent) -> str:
     return f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
 
 
+def attach_conversation_event_ids(event: AgentRuntimeEvent, req: AgentRunRequest) -> AgentRuntimeEvent:
+    conversation_id = req.conversation_id or req.session_id
+    if conversation_id:
+        event.conversation_id = conversation_id
+    if req.user_message_id:
+        event.user_message_id = req.user_message_id
+    if req.assistant_message_id:
+        event.assistant_message_id = req.assistant_message_id
+        event.message_id = event.message_id or req.assistant_message_id
+    return event
+
+
 def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str:
     """Build a formatted SSE error event string."""
     payload = {
@@ -315,6 +327,7 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
         try:
             _check_llm_credentials(req)
             for event in DBFoxAgentRuntime(db).run_iter(req):
+                attach_conversation_event_ids(event, req)
                 yield _format_sse_event(event)
         except DBFoxError as exc:
             db.rollback()
