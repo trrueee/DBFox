@@ -1,0 +1,198 @@
+.conv-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.conv-header {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.conv-header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.conv-header span {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.conv-header-actions,
+.conv-sql-actions,
+.conv-sql-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conv-header-actions button,
+.conv-composer button,
+.conv-sql-group button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  border-radius: 6px;
+  min-width: 32px;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.conv-message-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 24px 36px;
+}
+
+.conv-message-column {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.conv-message {
+  display: flex;
+}
+
+.conv-message-user {
+  justify-content: flex-end;
+}
+
+.conv-message-assistant {
+  justify-content: flex-start;
+}
+
+.conv-message-body {
+  max-width: min(760px, 100%);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.conv-message-user .conv-message-body {
+  max-width: min(560px, 85%);
+  padding: 10px 14px;
+  background: #eef2ff;
+  border: 1px solid #e0e7ff;
+  border-radius: 8px;
+}
+
+.conv-message-body p {
+  margin: 0;
+}
+
+.conv-error-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: 6px;
+}
+
+.conv-run-trace,
+.conv-evidence {
+  margin-top: 12px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 8px;
+}
+
+.conv-run-trace summary,
+.conv-evidence summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.conv-run-trace-body,
+.conv-evidence-body {
+  border-top: 1px solid #e5e7eb;
+  padding: 12px;
+}
+
+.conv-evidence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conv-sql-group {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.conv-sql-group header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #f9fafb;
+}
+
+.conv-sql-group pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #ffffff;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.conv-table-artifact,
+.conv-chart-artifact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.conv-composer {
+  flex-shrink: 0;
+  padding: 12px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.conv-composer-box {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: end;
+}
+
+.conv-composer textarea {
+  min-height: 42px;
+  max-height: 140px;
+  resize: vertical;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  padding: 10px 12px;
+  font: inherit;
+}
