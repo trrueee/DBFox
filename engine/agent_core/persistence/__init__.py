@@ -61,6 +61,13 @@ from engine.agent_core.persistence.checkpoints import (
     get_latest_checkpoint_payload,
     list_checkpoints,
 )
+from engine.agent_core.persistence.conversation_records import (
+    get_conversation_detail,
+    list_conversation_summaries,
+    serialize_artifact,
+    serialize_message,
+    serialize_run,
+)
 __all__ = [
     # _common
     "_safe_json", "_parse_json_any", "_parse_json", "_SENSITIVE_KEYS",
@@ -87,4 +94,7 @@ __all__ = [
     # checkpoints
     "save_checkpoint", "get_latest_checkpoint",
     "get_latest_checkpoint_payload", "list_checkpoints",
+    # conversation records
+    "get_conversation_detail", "list_conversation_summaries",
+    "serialize_artifact", "serialize_message", "serialize_run",
 ]

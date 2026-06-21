@@ -152,15 +152,6 @@ async def lifespan(application: FastAPI) -> Any:
 
     init_db()  # 初始化本地 SQLite 数据库（自动检查并运行表结构迁移）
 
-    # Self-healing: ensure all AgentSessions have a ChatConversation row (runs once at startup)
-    from engine.db import SessionLocal
-    from engine.api.conversations import heal_missing_conversations
-    startup_db = SessionLocal()
-    try:
-        heal_missing_conversations(startup_db)
-    finally:
-        startup_db.close()
-    
     port = os.environ.get("DBFOX_ENGINE_PORT", "18625")
     print("===========================================================")
     print("DBFox Local Engine 成功初始化并启动。")
