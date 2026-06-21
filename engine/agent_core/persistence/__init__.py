@@ -61,10 +61,6 @@ from engine.agent_core.persistence.checkpoints import (
     get_latest_checkpoint_payload,
     list_checkpoints,
 )
-from engine.agent_core.persistence.conversations import (
-    sync_chat_conversation_from_session,
-)
-
 __all__ = [
     # _common
     "_safe_json", "_parse_json_any", "_parse_json", "_SENSITIVE_KEYS",
@@ -91,6 +87,4 @@ __all__ = [
     # checkpoints
     "save_checkpoint", "get_latest_checkpoint",
     "get_latest_checkpoint_payload", "list_checkpoints",
-    # conversations
-    "sync_chat_conversation_from_session",
 ]
