@@ -71,6 +71,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
     set((state) => {
       const { [tabId]: _closed, ...sqlConsoleState } = state.sqlConsoleState;
+      void _closed;
       if (nextTabs.length === 0) {
         return { tabs: [HOME_TAB], activeTabId: HOME_TAB.id, sqlConsoleState };
       }
