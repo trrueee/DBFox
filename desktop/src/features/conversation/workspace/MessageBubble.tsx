@@ -16,18 +16,23 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, run, artifacts, onOpenSqlConsole }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const messageClass = isUser ? `conv-message conv-message-${message.role}` : "conv-message conv-message-answer";
   return (
-    <article className={`conv-message conv-message-${message.role}`}>
+    <article className={messageClass}>
       <div className="conv-message-body">
         {isUser ? (
           <p>{message.content}</p>
         ) : (
-          <MarkdownContent content={message.content || (message.status === "streaming" ? "Thinking..." : "")} />
+          <>
+            {run && <RunTracePanel run={run} />}
+            {run?.status === "failed" && (
+              <div className="conv-error-card">{run.error_message || "Agent stopped."}</div>
+            )}
+            <div className="conv-answer-document">
+              <MarkdownContent content={message.content || (message.status === "streaming" ? "Thinking..." : "")} />
+            </div>
+          </>
         )}
-        {!isUser && run?.status === "failed" && (
-          <div className="conv-error-card">{run.error_message || "Agent stopped."}</div>
-        )}
-        {!isUser && run && <RunTracePanel run={run} />}
         {!isUser && <ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
       </div>
     </article>

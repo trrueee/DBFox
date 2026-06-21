@@ -1,4 +1,5 @@
-import { BarChart2, Copy, Database, Play, Table2, Terminal } from "lucide-react";
+import { BarChart2, Copy, Database, LineChart, PieChart, Play, Table2, Terminal } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { ConversationArtifact } from "../../../types/conversation";
 
 interface ArtifactEvidencePanelProps {
@@ -76,6 +77,18 @@ function chartSeries(artifact: ConversationArtifact): { label: string; value: nu
     if (typeof label !== "string" || !Number.isFinite(value)) return [];
     return [{ label, value }];
   });
+}
+
+function chartType(artifact: ConversationArtifact): "bar" | "line" | "pie" {
+  const value = artifact.payload.type || artifact.payload.chart_type || artifact.payload.kind;
+  if (value === "line" || value === "pie") return value;
+  return "bar";
+}
+
+function chartIcon(type: "bar" | "line" | "pie") {
+  if (type === "line") return <LineChart size={13} />;
+  if (type === "pie") return <PieChart size={13} />;
+  return <BarChart2 size={13} />;
 }
 
 export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole }: ArtifactEvidencePanelProps) {
@@ -180,25 +193,70 @@ function TableArtifact({ artifact }: { artifact: ConversationArtifact }) {
 function ChartArtifact({ artifact }: { artifact: ConversationArtifact }) {
   const series = chartSeries(artifact);
   const maxValue = Math.max(...series.map((item) => item.value), 1);
+  const type = chartType(artifact);
   return (
     <div className="conv-chart-artifact">
       <div className="conv-artifact-heading">
-        <BarChart2 size={13} />
+        {chartIcon(type)}
         <strong>{artifact.title}</strong>
       </div>
       {series.length > 0 && (
-        <div className="conv-chart-preview">
-          {series.slice(0, 8).map((item) => (
-            <div className="conv-chart-row" key={item.label}>
-              <span className="conv-chart-label">{item.label}</span>
-              <span className="conv-chart-bar">
-                <span style={{ width: `${Math.max(6, (item.value / maxValue) * 100)}%` }} />
-              </span>
-              <span className="conv-chart-value">{item.value}</span>
-            </div>
-          ))}
+        <div className={`conv-chart-preview conv-chart-preview-${type}`}>
+          {type === "line" ? (
+            <LinePreview series={series} maxValue={maxValue} />
+          ) : type === "pie" ? (
+            <PiePreview series={series} />
+          ) : (
+            series.slice(0, 8).map((item) => (
+              <div className="conv-chart-row" key={item.label}>
+                <span className="conv-chart-label">{item.label}</span>
+                <span className="conv-chart-bar">
+                  <span style={{ width: `${Math.max(6, (item.value / maxValue) * 100)}%` }} />
+                </span>
+                <span className="conv-chart-value">{item.value}</span>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function LinePreview({ series, maxValue }: { series: { label: string; value: number }[]; maxValue: number }) {
+  const points = series.slice(0, 10).map((item, index, items) => {
+    const x = items.length === 1 ? 50 : (index / (items.length - 1)) * 100;
+    const y = 88 - (item.value / maxValue) * 72;
+    return `${x},${y}`;
+  }).join(" ");
+  return (
+    <>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Line chart preview">
+        <polyline points={points} />
+      </svg>
+      <div className="conv-chart-legend">
+        {series.slice(0, 4).map((item) => (
+          <span key={item.label}>{item.label}: {item.value}</span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PiePreview({ series }: { series: { label: string; value: number }[] }) {
+  const total = series.reduce((sum, item) => sum + item.value, 0) || 1;
+  const first = series[0];
+  const firstPercent = Math.round((first.value / total) * 100);
+  return (
+    <>
+      <div className="conv-pie-preview" style={{ "--pie-main": `${firstPercent}%` } as CSSProperties}>
+        <span>{firstPercent}%</span>
+      </div>
+      <div className="conv-chart-legend">
+        {series.slice(0, 4).map((item) => (
+          <span key={item.label}>{item.label}: {item.value}</span>
+        ))}
+      </div>
+    </>
   );
 }
