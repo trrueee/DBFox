@@ -129,6 +129,39 @@ function upsertMessage(
   };
 }
 
+function runEventKey(event: ConversationStreamEvent): string {
+  return event.event_id || `${event.type}:${event.sequence ?? 0}`;
+}
+
+function withRunEvent(run: ConversationRun, event: ConversationStreamEvent): ConversationRun {
+  const events = run.events || [];
+  const key = runEventKey(event);
+  if (events.some((item) => runEventKey(item as ConversationStreamEvent) === key)) return run;
+  return {
+    ...run,
+    events: [...events, event].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
+  };
+}
+
+function upsertRun(state: ConversationStore, conversationId: string, run: ConversationRun): ConversationStore {
+  const detail = conversationId ? state.detailById[conversationId] : undefined;
+  return {
+    ...state,
+    runsById: { ...state.runsById, [run.id]: run },
+    detailById: detail
+      ? {
+          ...state.detailById,
+          [conversationId]: {
+            ...detail,
+            runs: detail.runs.some((item) => item.id === run.id)
+              ? detail.runs.map((item) => (item.id === run.id ? run : item))
+              : [...detail.runs, run],
+          },
+        }
+      : state.detailById,
+  };
+}
+
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   summaries: [],
   activeConversationId: null,
@@ -224,8 +257,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       const messageId = event.message_id || event.assistant_message_id || event.response?.assistant_message_id || null;
       const text = answerText(event);
 
-      if (event.run_id && !next.runsById[event.run_id]) {
-        const run: ConversationRun = {
+      if (event.run_id) {
+        const current = next.runsById[event.run_id];
+        const run: ConversationRun = current || {
           id: event.run_id,
           conversation_id: conversationId,
           datasource_id: "",
@@ -233,15 +267,9 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           status: "running",
           user_message_id: event.user_message_id,
           assistant_message_id: event.assistant_message_id,
+          events: [],
         };
-        const detail = conversationId ? next.detailById[conversationId] : undefined;
-        next = {
-          ...next,
-          runsById: { ...next.runsById, [event.run_id]: run },
-          detailById: detail
-            ? { ...next.detailById, [conversationId]: { ...detail, runs: [...detail.runs, run] } }
-            : next.detailById,
-        };
+        next = upsertRun(next, conversationId, withRunEvent(run, event));
       }
 
       if (
@@ -256,10 +284,12 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
               ? "cancelled"
               : "failed";
         if (next.runsById[event.run_id]) {
-          next = {
-            ...next,
-            runsById: { ...next.runsById, [event.run_id]: { ...next.runsById[event.run_id], status } },
-          };
+          next = upsertRun(next, conversationId, {
+            ...next.runsById[event.run_id],
+            status,
+            error_message: event.error || next.runsById[event.run_id].error_message,
+            error_code: event.code || next.runsById[event.run_id].error_code,
+          });
         }
       }
 
@@ -280,7 +310,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           sequence: event.sequence,
           payload: event.artifact.payload || {},
           presentation: event.artifact.presentation as unknown as Record<string, unknown>,
-          depends_on: event.artifact.depends_on || [],
+          depends_on: Array.isArray(event.artifact.depends_on) ? event.artifact.depends_on : [],
           refs: event.artifact.refs || {},
           created_at: null,
         };
@@ -289,7 +319,15 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           ...next,
           artifactsById: { ...next.artifactsById, [artifact.id]: artifact },
           detailById: detail
-            ? { ...next.detailById, [conversationId]: { ...detail, artifacts: [...detail.artifacts, artifact] } }
+            ? {
+                ...next.detailById,
+                [conversationId]: {
+                  ...detail,
+                  artifacts: detail.artifacts.some((item) => item.id === artifact.id)
+                    ? detail.artifacts.map((item) => (item.id === artifact.id ? artifact : item))
+                    : [...detail.artifacts, artifact],
+                },
+              }
             : next.detailById,
         };
       }

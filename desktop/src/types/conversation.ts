@@ -43,6 +43,7 @@ export interface ConversationRun {
   started_at?: string | null;
   completed_at?: string | null;
   answer?: AgentAnswer | null;
+  events?: AgentRuntimeEvent[];
 }
 
 export interface ConversationArtifact {

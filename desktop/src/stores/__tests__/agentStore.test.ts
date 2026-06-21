@@ -31,7 +31,7 @@ vi.mock("../../features/workspace/agentBridge", () => ({
   toViewArtifacts: vi.fn(() => []),
 }));
 
-const { agentApi, resolveAgentApproval } = await import("../../lib/api/agent");
+const { agentApi } = await import("../../lib/api/agent");
 
 function resetAll() {
   useAgentStore.setState({

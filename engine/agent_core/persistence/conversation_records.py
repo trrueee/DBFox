@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
-from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentSession
+from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentRuntimeEventRecord, AgentSession
 
 
 def _dt(value: datetime | None) -> str | None:
@@ -35,6 +35,21 @@ def serialize_message(row: AgentMessage) -> dict[str, Any]:
     }
 
 
+def serialize_runtime_event(row: AgentRuntimeEventRecord) -> dict[str, Any]:
+    payload = _json(row.event_json, {})
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        **payload,
+        "event_id": payload.get("event_id") or row.id,
+        "run_id": payload.get("run_id") or row.run_id,
+        "conversation_id": payload.get("conversation_id") or row.session_id,
+        "sequence": payload.get("sequence") or row.sequence,
+        "created_at_ms": payload.get("created_at_ms") or row.created_at_ms,
+        "type": payload.get("type") or row.type,
+    }
+
+
 def serialize_run(row: AgentRun) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -51,7 +66,23 @@ def serialize_run(row: AgentRun) -> dict[str, Any]:
         "updated_at": _dt(row.updated_at),
         "started_at": _dt(row.started_at),
         "completed_at": _dt(row.completed_at),
+        "events": [
+            serialize_runtime_event(event)
+            for event in sorted(row.runtime_events, key=lambda item: item.sequence)
+        ],
     }
+
+
+def _depends_on_value(depends_on: Any) -> list[str]:
+    if isinstance(depends_on, dict):
+        depends_on = depends_on.get("depends_on", [])
+    if not isinstance(depends_on, list):
+        return []
+    return [str(item) for item in depends_on if isinstance(item, str)]
+
+
+def _depends_on(row: AgentArtifactRecord) -> list[str]:
+    return _depends_on_value(_json(row.depends_on_json, []))
 
 
 def serialize_artifact(row: AgentArtifactRecord) -> dict[str, Any]:
@@ -67,9 +98,44 @@ def serialize_artifact(row: AgentArtifactRecord) -> dict[str, Any]:
         "sequence": row.sequence,
         "payload": _json(row.payload_json, {}),
         "presentation": _json(row.presentation_json, {}),
-        "depends_on": _json(row.depends_on_json, []),
+        "depends_on": _depends_on(row),
         "refs": _json(row.refs_json, {}),
         "created_at": _dt(row.created_at),
+    }
+
+
+def serialize_response_artifact(
+    row: AgentRun,
+    artifact: Any,
+    sequence: int,
+) -> dict[str, Any] | None:
+    if not isinstance(artifact, dict):
+        return None
+    artifact_id = artifact.get("id")
+    artifact_type = artifact.get("type")
+    if not isinstance(artifact_id, str) or not isinstance(artifact_type, str):
+        return None
+    payload = artifact.get("payload")
+    presentation = artifact.get("presentation")
+    refs = artifact.get("refs")
+    title = artifact.get("title")
+    status = artifact.get("status")
+    artifact_sequence = artifact.get("sequence")
+    return {
+        "id": artifact_id,
+        "conversation_id": row.session_id,
+        "run_id": row.id,
+        "message_id": row.assistant_message_id,
+        "semantic_id": artifact.get("semantic_id") if isinstance(artifact.get("semantic_id"), str) else None,
+        "type": artifact_type,
+        "title": title if isinstance(title, str) else artifact_type,
+        "status": status if isinstance(status, str) else "completed",
+        "sequence": artifact_sequence if isinstance(artifact_sequence, int) else sequence,
+        "payload": payload if isinstance(payload, dict) else {},
+        "presentation": presentation if isinstance(presentation, dict) else {},
+        "depends_on": _depends_on_value(artifact.get("depends_on", [])),
+        "refs": refs if isinstance(refs, dict) else {},
+        "created_at": _dt(row.completed_at or row.updated_at),
     }
 
 
@@ -112,6 +178,7 @@ def get_conversation_detail(db: Session, conversation_id: str) -> dict[str, Any]
             selectinload(AgentSession.messages),
             selectinload(AgentSession.runs).selectinload(AgentRun.artifacts),
             selectinload(AgentSession.runs).selectinload(AgentRun.approvals),
+            selectinload(AgentSession.runs).selectinload(AgentRun.runtime_events),
             selectinload(AgentSession.runs).selectinload(AgentRun.trace_events),
         )
         .filter(AgentSession.id == conversation_id, AgentSession.deleted_at.is_(None))
@@ -125,6 +192,20 @@ def get_conversation_detail(db: Session, conversation_id: str) -> dict[str, Any]
         [artifact for run in runs for artifact in run.artifacts],
         key=lambda item: (item.sequence or 0, item.created_at),
     )
+    serialized_artifacts = [serialize_artifact(artifact) for artifact in artifacts]
+    artifact_ids = {artifact["id"] for artifact in serialized_artifacts}
+    for run in runs:
+        response = _json(run.response_json, {})
+        response_artifacts = response.get("artifacts") if isinstance(response, dict) else None
+        if not isinstance(response_artifacts, list):
+            continue
+        for index, artifact in enumerate(response_artifacts, start=1):
+            serialized = serialize_response_artifact(run, artifact, index)
+            if serialized is None or serialized["id"] in artifact_ids:
+                continue
+            artifact_ids.add(serialized["id"])
+            serialized_artifacts.append(serialized)
+    serialized_artifacts.sort(key=lambda item: (item.get("sequence") or 0, item.get("created_at") or ""))
     return {
         "id": session.id,
         "title": session.title or "",
@@ -137,6 +218,6 @@ def get_conversation_detail(db: Session, conversation_id: str) -> dict[str, Any]
             for message in sorted(session.messages, key=lambda item: item.sequence)
         ],
         "runs": [serialize_run(run) for run in runs],
-        "artifacts": [serialize_artifact(artifact) for artifact in artifacts],
+        "artifacts": serialized_artifacts,
         "approvals": [],
     }

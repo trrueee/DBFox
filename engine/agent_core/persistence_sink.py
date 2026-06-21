@@ -97,6 +97,10 @@ class SessionPersistenceSink(AgentPersistenceSink):
         from engine.agent_core import persistence as ap
         ap.record_runtime_event(self._db, session_id, event)
 
+    def record_artifact(self, session_id: str, run_id: str, artifact: Any, index: int) -> None:
+        from engine.agent_core import persistence as ap
+        ap.record_artifact(self._db, session_id, run_id, artifact, index)
+
     def complete_run(self, response: Any) -> None:
         from engine.agent_core import persistence as ap
         ap.complete_run(self._db, response)

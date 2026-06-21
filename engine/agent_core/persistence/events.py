@@ -67,9 +67,7 @@ def record_artifact(
             type=artifact.type,
             title=artifact.title,
             produced_by_step=artifact.produced_by_step,
-            depends_on_json=_safe_json(
-                {"depends_on": artifact.depends_on} if artifact.depends_on else None
-            ),
+            depends_on_json=_safe_json(artifact.depends_on) if artifact.depends_on else None,
             payload_json=_safe_json(artifact.payload),
             presentation_json=artifact.presentation.model_dump_json(),
             refs_json=_safe_json(artifact.refs) if artifact.refs else None,
