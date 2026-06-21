@@ -106,4 +106,44 @@ describe("ArtifactEvidencePanel", () => {
     expect(screen.getByText("user_count by user_type")).toBeTruthy();
     expect(screen.getAllByText("25").length).toBeGreaterThan(0);
   });
+
+  it("renders different chart previews for bar, line, and pie suggestions", () => {
+    const base = {
+      conversation_id: "conv",
+      run_id: "run",
+      message_id: "assistant",
+      status: "completed" as const,
+      sequence: 1,
+      depends_on: [],
+    };
+    const artifacts: ConversationArtifact[] = [
+      {
+        ...base,
+        id: "bar-chart",
+        type: "chart",
+        title: "Bar chart",
+        payload: { type: "bar", series: [{ label: "A", value: 10 }] },
+      },
+      {
+        ...base,
+        id: "line-chart",
+        type: "chart",
+        title: "Line chart",
+        payload: { type: "line", series: [{ label: "Jan", value: 8 }, { label: "Feb", value: 14 }] },
+      },
+      {
+        ...base,
+        id: "pie-chart",
+        type: "chart",
+        title: "Pie chart",
+        payload: { type: "pie", series: [{ label: "personal_user", value: 25 }, { label: "enterprise", value: 5 }] },
+      },
+    ];
+
+    const { container } = render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
+
+    expect(container.querySelector(".conv-chart-preview-bar")).toBeTruthy();
+    expect(container.querySelector(".conv-chart-preview-line")).toBeTruthy();
+    expect(container.querySelector(".conv-chart-preview-pie")).toBeTruthy();
+  });
 });
