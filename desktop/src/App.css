@@ -4133,10 +4133,31 @@
 }
 
 .hifi-diagnostics-page {
-  min-height: 0;
+  height: 100%;
+  padding: 20px 24px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
+}
+
+.hifi-diagnostics-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-right: 8px;
+  user-select: none;
+}
+
+.hifi-diagnostics-toggle-label input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
 }
 
 .hifi-diagnostics-actions {
@@ -4226,9 +4247,12 @@
 
 .hifi-diagnostics-sources {
   min-height: 0;
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-right: 4px;
 }
 
 .hifi-diagnostics-source {

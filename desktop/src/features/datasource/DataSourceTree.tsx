@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search } from "lucide-react";
+import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search, Sparkles, MessageSquare } from "lucide-react";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { EngineSchemaTable } from "../engine/engineApi";
@@ -37,6 +37,9 @@ export function DataSourceTree({
   const loading = useDatasourceStore((s) => s.loadingSchema);
   const error = useDatasourceStore((s) => s.schemaError);
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
+  const activeTabType = useWorkspaceStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.type);
+  const openSmartQueryTab = useWorkspaceStore((s) => s.openSmartQueryTab);
+  const openConversationHistoryTab = useWorkspaceStore((s) => s.openConversationHistoryTab);
 
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
   const [dbDropdownOpen, setDbDropdownOpen] = useState(false);
@@ -155,6 +158,27 @@ export function DataSourceTree({
             value={treeSearch}
             onChange={(event) => onTreeSearchChange(event.target.value)}
           />
+        </div>
+
+        <div className="ds-sidebar-quick-nav">
+          <button
+            type="button"
+            onClick={openSmartQueryTab}
+            className={`ds-quick-nav-item ${activeTabType === "smart-query" ? "active" : ""}`}
+            aria-current={activeTabType === "smart-query" ? "page" : undefined}
+          >
+            <Sparkles size={12} className="text-purple-500" />
+            <span>智能问数</span>
+          </button>
+          <button
+            type="button"
+            onClick={openConversationHistoryTab}
+            className={`ds-quick-nav-item ${activeTabType === "conversation-history" ? "active" : ""}`}
+            aria-current={activeTabType === "conversation-history" ? "page" : undefined}
+          >
+            <MessageSquare size={12} className="text-indigo-500" />
+            <span>对话历史</span>
+          </button>
         </div>
 
         <div className="hifi-tree-container">

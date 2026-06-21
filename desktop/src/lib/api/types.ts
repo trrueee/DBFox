@@ -88,7 +88,6 @@ export interface DataSourceCreateParams extends DataSourceTestParams {
   connection_mode?: string;
   is_read_only?: boolean;
   env?: string;
-  enable_embedding_recall?: boolean;
 }
 
 export type DataSourceUpdateParams = DataSourceCreateParams;
@@ -101,9 +100,6 @@ export interface DeleteConfirm {
 
 export interface SchemaSyncOptions {
   ai_enrich?: boolean;
-  api_key?: string;
-  api_base?: string;
-  model_name?: string;
 }
 
 /** Consolidated CRUD actions for datasource management. */
@@ -195,12 +191,6 @@ export interface SchemaSyncResult {
   syncedTables?: number;
   tablesSynced?: number;
   warnings?: string[];
-  aiEnrich?: {
-    ai_enriched?: boolean;
-    enriched_count?: number;
-    reason?: string;
-    errors?: string[];
-  };
   [key: string]: unknown;
 }
 

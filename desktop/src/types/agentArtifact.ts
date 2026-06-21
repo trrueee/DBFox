@@ -5,6 +5,8 @@ export type AgentArtifactBase = {
   type: AgentArtifactType;
   title: string;
   description?: string;
+  depends_on?: string[];
+  payload?: Record<string, unknown>;
 };
 
 export type ChartArtifact = AgentArtifactBase & {

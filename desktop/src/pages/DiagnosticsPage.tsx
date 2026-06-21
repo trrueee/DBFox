@@ -12,6 +12,7 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
   const [logs, setLogs] = useState<DiagnosticLogsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showEmptyLogs, setShowEmptyLogs] = useState(false);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -61,7 +62,14 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
     }
   };
 
-  const existingSources = logs?.sources.filter((source) => source.exists).length ?? 0;
+  const visibleSources = useMemo(() => {
+    if (!logs) return [];
+    if (showEmptyLogs) return logs.sources;
+    return logs.sources.filter((source) => source.exists && source.size_bytes > 0);
+  }, [logs, showEmptyLogs]);
+
+  const totalSourcesCount = logs?.sources.length ?? 0;
+  const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
 
   return (
     <div className="hifi-diagnostics-page">
@@ -71,6 +79,15 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
           <p>{logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取..."}</p>
         </div>
         <div className="hifi-diagnostics-actions">
+          <label className="hifi-diagnostics-toggle-label">
+            <input
+              type="checkbox"
+              checked={showEmptyLogs}
+              aria-label="显示空日志"
+              onChange={(e) => setShowEmptyLogs(e.target.checked)}
+            />
+            <span>显示空日志</span>
+          </label>
           <span className="hifi-diagnostics-badge">
             <CheckCircle2 size={14} />
             已脱敏
@@ -98,14 +115,14 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
       ) : null}
 
       <div className="hifi-diagnostics-summary">
-        <Metric label="日志源" value={`${existingSources}/${logs?.sources.length ?? 0}`} />
+        <Metric label="日志源" value={`${nonEmptySourcesCount}/${totalSourcesCount} 有内容`} />
         <Metric label="进程" value={String(logs?.environment.pid ?? "-")} />
         <Metric label="Python" value={String(logs?.environment.python ?? "-")} />
         <Metric label="模式" value={logs?.environment.frozen ? "分发版" : "开发版"} />
       </div>
 
       <div className="hifi-diagnostics-sources">
-        {(logs?.sources ?? []).map((source) => (
+        {visibleSources.map((source) => (
           <section className="hifi-diagnostics-source" key={source.name}>
             <div className="hifi-diagnostics-source-header">
               <div>
@@ -119,10 +136,10 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
             <pre>{source.content || (source.exists ? "无日志内容" : "日志文件不存在")}</pre>
           </section>
         ))}
-        {!loading && logs?.sources.length === 0 ? (
+        {!loading && visibleSources.length === 0 ? (
           <div className="hifi-diagnostics-empty">
             <FileWarning size={18} />
-            <span>暂无日志源</span>
+            <span>暂无有效日志（包含内容的日志源）</span>
           </div>
         ) : null}
       </div>

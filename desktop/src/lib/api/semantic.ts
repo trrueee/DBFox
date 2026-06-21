@@ -1,31 +1,28 @@
 import { request } from "./client";
-import type {
-  SemanticAlias,
-  SemanticAliasCreateParams,
-  SemanticAliasUpdateParams,
-} from "./types";
+
+export interface WorkspaceTableScopeResponse {
+  id: string;
+  project_id: string;
+  data_source_id: string;
+  table_id: string;
+  enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WorkspaceTableScopeUpdateRequest {
+  project_id: string;
+  datasource_id: string;
+  enabled_table_ids: string[];
+}
 
 export const semanticApi = {
-  listAliases: (datasourceId: string) =>
-    request<SemanticAlias[]>(`/semantic/aliases?datasource_id=${encodeURIComponent(datasourceId)}`),
+  getTableScope: (projectId: string, datasourceId: string) =>
+    request<WorkspaceTableScopeResponse[]>(`/semantic/table-scope?project_id=${encodeURIComponent(projectId)}&datasource_id=${encodeURIComponent(datasourceId)}`),
 
-  createAlias: (params: SemanticAliasCreateParams) =>
-    request<SemanticAlias>("/semantic/aliases", {
+  updateTableScope: (params: WorkspaceTableScopeUpdateRequest) =>
+    request<{ success: boolean; message: string }>("/semantic/table-scope", {
       method: "POST",
       body: JSON.stringify(params),
     }),
-
-  updateAlias: (id: string, params: SemanticAliasUpdateParams) =>
-    request<SemanticAlias>(`/semantic/aliases/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(params),
-    }),
-
-  deleteAlias: (id: string) =>
-    request<{ success: boolean; message: string }>(`/semantic/aliases/${id}`, {
-      method: "DELETE",
-    }),
-
-  // NOTE: syncEmbeddings and getSyncStatus were removed in MVP simplification (2026-06-20).
-  // AI enrichment is now triggered via datasource sync with ai_enrich: true.
 };

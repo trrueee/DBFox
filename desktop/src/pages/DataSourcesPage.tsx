@@ -6,12 +6,10 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { api } from "../lib/api";
-import { request } from "../lib/api/client";
-import type { DataSource, DataSourceActions, Project, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
+import type { DataSource, DataSourceActions, Project, SchemaSyncResult } from "../lib/api";
 import {
   buildDatasourceCreatePayload,
   buildDatasourceTestPayload,
@@ -21,7 +19,6 @@ import {
 import { StatusIndicator } from "../components/StatusIndicator";
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 import { useToast } from "../components/Toast";
-import { getStoredApiConfig } from "../components/SettingsDialog";
 
 type PageMode = "detail" | "create" | "edit";
 type ActionState = "idle" | "testing" | "saving" | "syncing" | "deleting";
@@ -85,23 +82,9 @@ const formFromDataSource = (ds: DataSource) => ({
   ssl_verify_identity: ds.ssl_verify_identity !== false,
 });
 
-const buildSchemaSyncOptions = (ai_enrich = false): SchemaSyncOptions => {
-  const config = getStoredApiConfig();
-  return {
-    ai_enrich,
-    api_key: config.apiKey.trim() || undefined,
-    api_base: config.apiBase.trim() || undefined,
-    model_name: config.modelName.trim() || undefined,
-  };
-};
-
 const firstSchemaSyncWarning = (result: unknown): string | null => {
   const syncResult = result as SchemaSyncResult | null | undefined;
   if (syncResult?.warnings?.length) return syncResult.warnings[0];
-  const reason = syncResult?.aiEnrich?.reason?.trim();
-  if (syncResult?.aiEnrich?.ai_enriched === false && reason && reason !== "no structural changes") {
-    return `AI 语义打分未完成：${reason}`;
-  }
   return null;
 };
 
@@ -119,7 +102,6 @@ export const DataSourcesPage = ({
   const updateDatasource = actions?.updateDatasource;
   const deleteDatasource = actions?.deleteDatasource;
   const syncSchema = actions?.syncSchema;
-  const checkHealth = actions?.checkHealth;
   const [selectedId, setSelectedId] = useState("");
   const [mode, setMode] = useState<PageMode>(initialShowAddForm ? "create" : "detail");
   const [form, setForm] = useState(emptyForm());
@@ -135,24 +117,22 @@ export const DataSourcesPage = ({
 
   // Semantic layer states
   const [activeTab, setActiveTab] = useState<"info">("info");
-  const [aiEnriching, setAiEnriching] = useState(false);
-
   const selected = datasources.find((d) => d.id === selectedId) || null;
 
-  const handleAiEnrich = async () => {
-    if (!selectedId) return;
+  const handleSyncSchema = async () => {
+    if (!selectedId || actionState !== "idle") return;
     try {
-      setAiEnriching(true);
+      setActionState("syncing");
       const syncFn = syncSchema || api.syncSchema;
-      const syncResult = await syncFn(selectedId, buildSchemaSyncOptions(true));
+      const syncResult = await syncFn(selectedId);
       await loadDatasources(selectedId);
       await onRefreshDatasources();
       const warning = firstSchemaSyncWarning(syncResult);
-      toast.toast(warning || "AI 语义增强完成", warning ? "warning" : "success");
+      toast.toast(warning || "表结构已同步", warning ? "warning" : "success");
     } catch (err: unknown) {
-      toast.toast((err as Error).message || "AI 语义增强失败", "error");
+      toast.toast((err as Error).message || "表结构同步失败", "error");
     } finally {
-      setAiEnriching(false);
+      setActionState("idle");
     }
   };
 
@@ -252,7 +232,7 @@ export const DataSourcesPage = ({
       const created = await createFn(
         buildDatasourceCreatePayload(form as DatasourceFormShape, activeProject?.id),
       );
-      const syncResult = await syncFn(created.id, buildSchemaSyncOptions());
+      const syncResult = await syncFn(created.id);
       setMode("detail");
       await loadDatasources(created.id);
       await onRefreshDatasources();
@@ -357,6 +337,8 @@ export const DataSourcesPage = ({
   const renderDetail = () => {
     if (!selected) return <div className="hifi-empty-state"><Database size={28} /><p>选择一个数据源查看详情</p></div>;
     const h = healthType(selected);
+    const syncingStructure = actionState === "syncing";
+    const detailActionBusy = actionState !== "idle";
     return (
       <div className="hifi-datasource-detail" style={{ padding: 20, overflow: "auto", display: "flex", flexDirection: "column", height: "100%" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -367,9 +349,13 @@ export const DataSourcesPage = ({
             </div>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }}>设为当前</button>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => startEdit(selected)}>编辑</button>
-            <button className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={actionState === "deleting"}><Trash2 size={12} /> 删除</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }} disabled={detailActionBusy}>设为当前</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => startEdit(selected)} disabled={detailActionBusy}>编辑</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleSyncSchema} disabled={detailActionBusy} title="重新读取表、字段、主外键和注释等结构信息">
+              <RefreshCw size={12} className={syncingStructure ? "animate-spin" : ""} />
+              {syncingStructure ? "同步中" : "同步结构"}
+            </button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={detailActionBusy}><Trash2 size={12} /> 删除</button>
           </div>
         </div>
         
@@ -418,28 +404,6 @@ export const DataSourcesPage = ({
             </div>
             {selected.last_test_error && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-danger)" }}>{selected.last_test_error}</div>}
 
-            {/* AI Semantic Enrichment */}
-            <div style={{ background: "var(--bg-secondary)", borderRadius: 10, padding: 16, border: "1px solid var(--border-light)", marginTop: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Sparkles size={14} style={{ color: "var(--color-primary)" }} />
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>AI 语义增强</span>
-                </div>
-                <button
-                  type="button"
-                  className="hifi-btn hifi-btn-primary"
-                  style={{ padding: "4px 12px", fontSize: "0.72rem" }}
-                  onClick={handleAiEnrich}
-                  disabled={aiEnriching}
-                >
-                  <RefreshCw size={12} className={aiEnriching ? "animate-spin" : ""} style={{ marginRight: 4 }} />
-                  {aiEnriching ? "增强中..." : "一键 AI 语义增强"}
-                </button>
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 8 }}>
-                调用 AI 模型为表和字段生成中文描述、业务术语和语义标签。需要配置 API Key。不影响基础 Schema 同步。
-              </div>
-            </div>
           </div>
         )}
 
