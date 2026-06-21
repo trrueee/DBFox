@@ -129,6 +129,9 @@ class AgentRunRequest(BaseModel):
     datasource_id: str
     question: str
     session_id: str | None = None
+    conversation_id: str | None = None
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
     parent_run_id: str | None = None
     follow_up_context: AgentFollowUpContext | None = None
     api_key: str | None = None
@@ -285,6 +288,9 @@ class AgentError(BaseModel):
 class AgentRunResponse(BaseModel):
     run_id: str
     session_id: str
+    conversation_id: str | None = None
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
     parent_run_id: str | None = None
     success: bool
     status: str | None = None
@@ -314,6 +320,10 @@ class AgentRunResponse(BaseModel):
 class AgentRuntimeEvent(BaseModel):
     event_id: str
     run_id: str
+    conversation_id: str | None = None
+    message_id: str | None = None
+    user_message_id: str | None = None
+    assistant_message_id: str | None = None
     sequence: int
     created_at_ms: int
     type: AgentRuntimeEventType

@@ -23,7 +23,7 @@ logger = logging.getLogger("dbfox.persistence_sink")
 class AgentPersistenceSink:
     """Abstract persistence sink. All methods return None and never raise."""
 
-    def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
+    def start_run(self, *args: Any, **kwargs: Any) -> None:
         pass
 
     def record_event(self, session_id: str, event: Any) -> None:
@@ -66,14 +66,30 @@ class NoopPersistenceSink(AgentPersistenceSink):
     """No-op sink: never touches SQLAlchemy, never raises."""
 
 
+def _request_with_session_id(req: Any, session_id: str) -> Any:
+    if getattr(req, "session_id", None) == session_id:
+        return req
+    if hasattr(req, "model_copy"):
+        return req.model_copy(update={"session_id": session_id})
+    try:
+        req.session_id = session_id
+    except Exception:
+        pass
+    return req
+
+
 class SessionPersistenceSink(AgentPersistenceSink):
     """Write persistence through the caller-owned SQLAlchemy session."""
 
     def __init__(self, db: Session):
         self._db = db
 
+    def start_run(self, req: Any, *, run_id: str, session_id: str) -> None:
+        self.init_run_session(req, run_id, session_id)
+
     def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
         from engine.agent_core import persistence as ap
+        req = _request_with_session_id(req, session_id)
         ap.create_or_get_session(self._db, req, run_id)
         ap.start_run(self._db, req, run_id, session_id)
 
@@ -126,19 +142,27 @@ class SyncPersistenceSink(AgentPersistenceSink):
             max_retries, last_error,
         )
 
-    def start_run(self, run_id: str, session_id: str, question: str, datasource_id: str) -> None:
-        import logging
-        _log = logging.getLogger("dbfox.persistence")
+    def start_run(self, *args: Any, **kwargs: Any) -> None:
         def _do(db: Session) -> None:
             from engine.agent_core import persistence as ap
             from engine.agent_core.types import AgentRunRequest
-            req = AgentRunRequest(
-                datasource_id=datasource_id,
-                question=question,
-                session_id=session_id,
-                parent_run_id=None,
-                max_steps=50,
-            )
+            if args and isinstance(args[0], AgentRunRequest):
+                req = args[0]
+                run_id = kwargs["run_id"]
+                session_id = kwargs["session_id"]
+            else:
+                run_id = args[0] if args else kwargs["run_id"]
+                session_id = args[1] if len(args) > 1 else kwargs["session_id"]
+                question = args[2] if len(args) > 2 else kwargs["question"]
+                datasource_id = args[3] if len(args) > 3 else kwargs["datasource_id"]
+                req = AgentRunRequest(
+                    datasource_id=datasource_id,
+                    question=question,
+                    session_id=session_id,
+                    parent_run_id=None,
+                    max_steps=50,
+                )
+            req = _request_with_session_id(req, session_id)
             ap.create_or_get_session(db, req, run_id)
             ap.start_run(db, req, run_id, session_id)
         self._write(_do)
@@ -146,8 +170,9 @@ class SyncPersistenceSink(AgentPersistenceSink):
     def init_run_session(self, req: Any, run_id: str, session_id: str) -> None:
         def _do(db: Session) -> None:
             from engine.agent_core import persistence as ap
-            ap.create_or_get_session(db, req, run_id)
-            ap.start_run(db, req, run_id, session_id)
+            req_with_session = _request_with_session_id(req, session_id)
+            ap.create_or_get_session(db, req_with_session, run_id)
+            ap.start_run(db, req_with_session, run_id, session_id)
         self._write(_do)
 
     def record_event(self, session_id: str, event: Any) -> None:
@@ -174,7 +199,7 @@ def create_persistence_sink(db: Session) -> AgentPersistenceSink:
     SQLite write-write lock contention that occurs when SyncPersistenceSink
     opens a second session concurrently with the agent's main session.
     """
-    mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync").lower()
+    mode = os.environ.get("AGENT_PERSISTENCE_MODE", "session").lower()
     if os.environ.get("DBFOX_TESTING") == "1":
         return SessionPersistenceSink(db)
     if mode == "disabled":

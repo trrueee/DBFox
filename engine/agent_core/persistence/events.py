@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from engine.agent_core.types import AgentArtifact, AgentRuntimeEvent
 from engine.models import (
     AgentArtifactRecord,
+    AgentRun,
     AgentRuntimeEventRecord,
     AgentTraceEventRecord,
 )
@@ -56,10 +57,12 @@ def record_artifact(
     sequence: int | None = None,
 ) -> None:
     try:
+        run = db.get(AgentRun, run_id)
         record = AgentArtifactRecord(
             id=artifact.id,
             run_id=run_id,
             session_id=session_id,
+            message_id=run.assistant_message_id if run else None,
             semantic_id=artifact.semantic_id,
             type=artifact.type,
             title=artifact.title,
@@ -70,6 +73,7 @@ def record_artifact(
             payload_json=_safe_json(artifact.payload),
             presentation_json=artifact.presentation.model_dump_json(),
             refs_json=_safe_json(artifact.refs) if artifact.refs else None,
+            status="completed",
             sequence=sequence,
             created_at=datetime.now(UTC),
         )
