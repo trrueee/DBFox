@@ -45,7 +45,7 @@ export function toViewArtifacts(artifacts: ApiAgentArtifact[]): ViewAgentArtifac
 }
 
 function mapArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ViewAgentArtifact | null {
-  switch (artifact.type) {
+  switch (artifact.type as string) {
     case "sql":
     case "sql_suggestion":
       return mapSqlArtifact(artifact);
@@ -74,6 +74,8 @@ function mapSqlArtifact(artifact: ApiAgentArtifact): SqlArtifact | null {
     title: artifact.type === "sql_suggestion" ? "SQL 修改建议" : "执行的 SQL",
     description: typeof payload.reason === "string" ? payload.reason : undefined,
     sql,
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
   };
 }
 
@@ -95,12 +97,14 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
     description: `${rowCount} 行 · ${columns.length} 列`,
     columns,
     rows,
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
   };
 }
 
 function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ChartArtifact | null {
   const payload = artifact.payload || {};
-  const chartType = payload.type;
+  const chartType = typeof payload.type === "string" ? payload.type : "";
   const x = typeof payload.x === "string" ? payload.x : "";
   const y = typeof payload.y === "string" ? payload.y : "";
   // All backend chart types rendered as bar (or line for time series)
@@ -120,8 +124,10 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
     type: "chart",
     title: `${y} 按 ${x} 分布`,
     description: typeof payload.reason === "string" ? payload.reason : undefined,
-    chartType,
+    chartType: (chartType === "line" ? "line" : "bar"),
     series,
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
   };
 }
 
