@@ -37,7 +37,7 @@ describe("SQL Console tab state isolation", () => {
     const tabsHook = read("stores/workspaceStore.ts");
 
     expect(tabsHook).toMatch(/closeTab[\s\S]*sqlConsoleState/);
-    expect(tabsHook).toContain("const { [tabId]: _, ...rest }");
+    expect(tabsHook).toMatch(/const \{ \[tabId\]: _\w+, \.\.\.sqlConsoleState \}/);
   });
 
   it("passes tabId and tab-scoped state to SqlConsoleWorkspace", () => {
@@ -83,18 +83,16 @@ describe("SQL Console tab state isolation", () => {
 
   it("onSetSqlQuery has been removed from the prop chain", () => {
     const ws = read("features/workspace/SqlConsoleWorkspace.tsx");
-    const queryResult = read("features/workspace/QueryResultWorkspace.tsx");
-    const taskView = read("features/agentTask/AgentTaskView.tsx");
-    const turnItem = read("features/agentTask/AgentTurnItem.tsx");
-    const finalAnswer = read("features/agentTask/FinalAnswerCard.tsx");
+    const conversationWorkspace = read("features/conversation/workspace/ConversationWorkspace.tsx");
+    const messageList = read("features/conversation/workspace/MessageList.tsx");
+    const artifactEvidence = read("features/conversation/workspace/ArtifactEvidencePanel.tsx");
     const artifactRenderer = read("features/workspace/artifacts/ArtifactRenderer.tsx");
     const sqlArtifact = read("features/workspace/artifacts/SqlArtifactView.tsx");
 
     expect(ws).not.toContain("onSetSqlQuery");
-    expect(queryResult).not.toContain("onSetSqlQuery");
-    expect(taskView).not.toContain("onSetSqlQuery");
-    expect(turnItem).not.toContain("onSetSqlQuery");
-    expect(finalAnswer).not.toContain("onSetSqlQuery");
+    expect(conversationWorkspace).not.toContain("onSetSqlQuery");
+    expect(messageList).not.toContain("onSetSqlQuery");
+    expect(artifactEvidence).not.toContain("onSetSqlQuery");
     expect(artifactRenderer).not.toContain("onSetSqlQuery");
     expect(sqlArtifact).not.toContain("onSetSqlQuery");
   });
