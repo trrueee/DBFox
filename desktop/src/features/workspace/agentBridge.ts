@@ -8,6 +8,7 @@ import type {
   AgentArtifact as ViewAgentArtifact,
   ChartArtifact,
   MarkdownArtifact,
+  ResultViewArtifact,
   SqlArtifact,
   TableArtifact,
 } from "../../types/agentArtifact";
@@ -18,17 +19,19 @@ import { normalizeAgentProgressText } from "./agentTimeline";
 // ---------------------------------------------------------------------------
 
 const TYPE_ORDER: Record<string, number> = {
-  table: 0,
-  chart: 1,
-  sql: 2,
-  sql_suggestion: 3,
-  insight: 4,
-  recommendation: 5,
-  error: 6,
+  sql: 0,
+  sql_suggestion: 1,
+  safety: 2,
+  result_view: 3,
+  table: 4,
+  chart: 5,
+  insight: 6,
+  recommendation: 7,
+  error: 8,
 };
 
 /** Artifact types that stay internal — progress is narrated in the chat stream instead. */
-const HIDDEN_TYPES = new Set(["agent_plan", "query_plan", "safety"]);
+const HIDDEN_TYPES = new Set(["agent_plan", "query_plan"]);
 
 export function toViewArtifacts(artifacts: ApiAgentArtifact[]): ViewAgentArtifact[] {
   const visible = artifacts.filter(
@@ -51,6 +54,10 @@ function mapArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ViewA
       return mapSqlArtifact(artifact);
     case "table":
       return mapTableArtifact(artifact);
+    case "result_view":
+      return mapResultViewArtifact(artifact);
+    case "safety":
+      return mapSafetyArtifact(artifact);
     case "chart":
       return mapChartArtifact(artifact, all);
     case "insight":
@@ -91,16 +98,7 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
   const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (columns.length === 0) return null;
 
-  const rows: string[][] = rawRows.flatMap((row) => {
-    if (Array.isArray(row)) {
-      return [columns.map((_, columnIndex) => formatCell(row[columnIndex]))];
-    }
-    if (row && typeof row === "object") {
-      const record = row as Record<string, unknown>;
-      return [columns.map((column) => formatCell(record[column]))];
-    }
-    return [];
-  });
+  const rows = rowsFromPayload(columns, rawRows);
 
   const rowCount = numberValue(payload, ["rowCount", "row_count"]) ?? rows.length;
   const returnedRows = numberValue(payload, ["returnedRows", "returned_rows"]) ?? rows.length;
@@ -121,6 +119,81 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
     truncated: Boolean(payload.truncated),
     warnings,
     notices,
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
+  };
+}
+
+function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact | null {
+  const payload = artifact.payload || {};
+  const columns = Array.isArray(payload.columns) ? payload.columns.map(String) : [];
+  const rawRows = Array.isArray(payload.previewRows)
+    ? payload.previewRows
+    : Array.isArray(payload.preview_rows)
+      ? payload.preview_rows
+      : Array.isArray(payload.rows)
+        ? payload.rows
+        : [];
+  if (columns.length === 0) return null;
+  const rows = rowsFromPayload(columns, rawRows);
+  const storageMode = firstString(payload, ["storageMode", "storage_mode"]) === "sql_backed" ? "sql_backed" : "payload";
+  return {
+    id: artifact.id,
+    type: "result_view",
+    title: artifact.title || "查询结果",
+    description: `${numberValue(payload, ["rowCount", "row_count"]) ?? rows.length} 行 · ${columns.length} 列`,
+    storageMode,
+    datasourceId: firstString(payload, ["datasourceId", "datasource_id"]),
+    sourceSqlSemanticId: firstString(payload, ["sourceSqlSemanticId", "source_sql_semantic_id"]),
+    sourceSql: firstString(payload, ["sourceSql", "source_sql"]),
+    safeSql: firstString(payload, ["safeSql", "safe_sql"]),
+    columns,
+    previewRows: rows,
+    previewRowCount: numberValue(payload, ["previewRowCount", "preview_row_count"]) ?? rows.length,
+    rows: storageMode === "payload" ? rows : undefined,
+    rowCount: numberValue(payload, ["rowCount", "row_count"]),
+    returnedRows: numberValue(payload, ["returnedRows", "returned_rows"]) ?? rows.length,
+    latencyMs: numberValue(payload, ["latencyMs", "latency_ms"]),
+    truncated: Boolean(payload.truncated),
+    warnings: stringArray(payload.warnings),
+    notices: stringArray(payload.notices),
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
+  };
+}
+
+function rowsFromPayload(columns: string[], rawRows: unknown[]): string[][] {
+  return rawRows.flatMap((row) => {
+    if (Array.isArray(row)) {
+      return [columns.map((_, columnIndex) => formatCell(row[columnIndex]))];
+    }
+    if (row && typeof row === "object") {
+      const record = row as Record<string, unknown>;
+      return [columns.map((column) => formatCell(record[column]))];
+    }
+    return [];
+  });
+}
+
+function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
+  const payload = artifact.payload || {};
+  const canExecute = Boolean(payload.can_execute ?? payload.canExecute);
+  const requiresConfirmation = Boolean(payload.requires_confirmation ?? payload.requiresConfirmation);
+  const passed = Boolean(payload.passed ?? canExecute);
+  const guardrail = firstString(payload, ["guardrail_result", "guardrailResult"]) || "unknown";
+  const schemaWarnings = numberValue(payload, ["schema_warnings_count", "schemaWarningsCount"]) ?? 0;
+  const lines = [
+    passed ? "状态：通过" : "状态：需注意",
+    canExecute ? "执行：可执行" : "执行：不可执行",
+    requiresConfirmation ? "确认：需要用户确认" : "确认：无需用户确认",
+    `Guardrail：${guardrail}`,
+    `Schema warnings：${schemaWarnings}`,
+  ];
+  return {
+    id: artifact.id,
+    type: "markdown",
+    title: "安全检查",
+    content: lines.join("\n"),
     depends_on: artifact.depends_on,
     payload: artifact.payload,
   };
