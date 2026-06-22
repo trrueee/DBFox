@@ -39,25 +39,25 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
         <span className="hifi-artifact-chip hifi-artifact-chip-sql">SQL</span>
       </div>
       <div className="hifi-ai-card-body">
-        {artifact.description && <p className="text-[10px] text-slate-500 px-3 pt-2">{artifact.description}</p>}
+        {artifact.description && <p className="hifi-artifact-description px-3 pt-2">{artifact.description}</p>}
         {metadata.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2 text-[10px] text-slate-500">
+          <div className="hifi-artifact-meta px-3 pt-2">
             {metadata.map((item) => (
-              <span key={item} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{item}</span>
+              <span key={item} className="hifi-artifact-pill">{item}</span>
             ))}
           </div>
         )}
-        <pre className="hifi-sql-card font-mono text-[10px] leading-relaxed p-3 text-slate-800">{artifact.sql}</pre>
+        <pre className="hifi-sql-card font-mono text-[10px] leading-relaxed p-3">{artifact.sql}</pre>
         <div className="hifi-sql-card-action flex gap-2">
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleCopy}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
             <Copy size={10} />
             复制 SQL
           </button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleDownload}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleDownload}>
             <Download size={10} />
             下载
           </button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={openInSqlConsole}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={openInSqlConsole}>
             <Terminal size={10} />
             在 SQL 工作台打开
           </button>

@@ -137,6 +137,11 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
     }
   };
 
+  const chartStyle = {
+    height: compact ? "180px" : "280px",
+    width: "100%",
+  };
+
   return (
     <div className={`hifi-ai-card hifi-chart-card mt-2 ${compact ? "is-compact" : ""}`}>
       <div className="hifi-ai-card-header flex justify-between items-center">
@@ -161,29 +166,29 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
                 </button>
               </>
             )}
-            <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "22px", fontSize: "9px" }} onClick={handleExportPng}>
+            <button className="hifi-guide-btn-secondary hifi-artifact-action-btn-sm flex items-center gap-1" onClick={handleExportPng}>
               <Download size={9} /> PNG
             </button>
           </div>
         )}
       </div>
       {artifact.description && (
-        <p className="text-[10px] text-slate-500 px-3 pt-1">{artifact.description}</p>
+        <p className="hifi-artifact-description px-3 pt-1">{artifact.description}</p>
       )}
       {artifact.sourceRefs && artifact.sourceRefs.length > 0 && (
-        <div className="grid gap-1 px-3 pt-2 text-[10px] text-slate-500">
+        <div className="hifi-artifact-meta grid px-3 pt-2">
           {artifact.sourceRefs.map((sourceRef) => (
             <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
-              <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">{sourceRef.label}</span>
+              <span className="hifi-artifact-pill">{sourceRef.label}</span>
               <span className="font-mono">{sourceRef.formula}</span>
-              <span className="text-slate-400">-&gt;</span>
+              <span className="hifi-artifact-muted-text">-&gt;</span>
               <span className="font-mono">{sourceRef.field}</span>
             </div>
           ))}
         </div>
       )}
       <div className="hifi-chart-body" data-chart-id={artifact.id}>
-        <ReactECharts option={option} style={{ height: compact ? "180px" : "280px", width: "100%" }} />
+        <ReactECharts option={option} style={chartStyle} />
       </div>
     </div>
   );

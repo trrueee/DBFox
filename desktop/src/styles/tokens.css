@@ -72,6 +72,42 @@
   --shadow-window: 0 14px 44px rgba(15, 23, 42, 0.10);
   --shadow-panel: 0 2px 10px rgba(15, 23, 42, 0.04);
 
+  /* Agent workspace tokens */
+  --agent-surface: var(--color-panel);
+  --agent-surface-muted: var(--color-bg);
+  --agent-surface-subtle: #EFF6FF;
+  --agent-surface-elevated: #FFFFFF;
+  --agent-border: var(--color-border);
+  --agent-border-strong: var(--color-border-hover);
+  --agent-text: var(--color-text-primary);
+  --agent-text-secondary: var(--color-text-secondary);
+  --agent-text-muted: var(--color-text-muted);
+  --agent-accent: var(--color-primary);
+  --agent-accent-soft: var(--color-primary-soft);
+  --agent-user-bg: #ECFDF5;
+  --agent-user-border: #BBF7D0;
+  --agent-user-text: #166534;
+  --agent-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --agent-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.08);
+  --agent-focus-ring: 0 0 0 3px rgba(94, 134, 247, 0.16);
+  --agent-stage-understanding: #5E86F7;
+  --agent-stage-searching: #0D9488;
+  --agent-stage-inspecting: #7C3AED;
+  --agent-stage-generating-sql: #D97706;
+  --agent-stage-validating: #7667F2;
+  --agent-stage-executing: #2563EB;
+  --agent-stage-repairing: #C84040;
+  --agent-stage-synthesizing: #28A987;
+  --trust-safe: #047857;
+  --trust-safe-bg: #ECFDF5;
+  --trust-safe-border: #A7F3D0;
+  --trust-warning: #B45309;
+  --trust-warning-bg: #FFFBEB;
+  --trust-warning-border: #FCD34D;
+  --trust-danger: #B91C1C;
+  --trust-danger-bg: #FEF2F2;
+  --trust-danger-border: #FECACA;
+
   /* ── shadcn/Radix HSL Bridge ──
      These exist only to satisfy imported UI primitives.
      New feature CSS should use DBFox semantic tokens above. */
@@ -121,6 +157,41 @@
   --hairline: rgba(255, 255, 255, 0.06);
   --hairline-strong: rgba(255, 255, 255, 0.10);
   --top-highlight: rgba(255, 255, 255, 0.05);
+
+  --agent-surface: var(--color-panel);
+  --agent-surface-muted: #0F1A38;
+  --agent-surface-subtle: #132045;
+  --agent-surface-elevated: #111A2E;
+  --agent-border: var(--color-border);
+  --agent-border-strong: var(--color-border-hover);
+  --agent-text: var(--color-text-primary);
+  --agent-text-secondary: var(--color-text-secondary);
+  --agent-text-muted: var(--color-text-muted);
+  --agent-accent: var(--color-primary);
+  --agent-accent-soft: var(--color-primary-soft);
+  --agent-user-bg: #0F2A24;
+  --agent-user-border: #1F6F5B;
+  --agent-user-text: #A7F3D0;
+  --agent-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --agent-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.28);
+  --agent-focus-ring: 0 0 0 3px rgba(222, 108, 73, 0.22);
+  --agent-stage-understanding: #93C5FD;
+  --agent-stage-searching: #5EEAD4;
+  --agent-stage-inspecting: #C4B5FD;
+  --agent-stage-generating-sql: #FBBF24;
+  --agent-stage-validating: #F0ABFC;
+  --agent-stage-executing: #60A5FA;
+  --agent-stage-repairing: #FCA5A5;
+  --agent-stage-synthesizing: #86EFAC;
+  --trust-safe: #34D399;
+  --trust-safe-bg: #062E25;
+  --trust-safe-border: #065F46;
+  --trust-warning: #FBBF24;
+  --trust-warning-bg: #2B2108;
+  --trust-warning-border: #92400E;
+  --trust-danger: #FCA5A5;
+  --trust-danger-bg: #2A1114;
+  --trust-danger-border: #7F1D1D;
 
   /* shadcn/Radix dark bridge */
   --primary: 14 70% 58%;
