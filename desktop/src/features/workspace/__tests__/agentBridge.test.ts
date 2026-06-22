@@ -107,4 +107,75 @@ describe("agentBridge", () => {
     if (chart?.type !== "chart") throw new Error("Expected chart artifact");
     expect(chart.sourceRefs).toEqual([{ label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" }]);
   });
+
+  it("maps result_view artifacts for sql-backed result tabs", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "result-view-1",
+        semantic_id: "result_view_1",
+        type: "result_view",
+        title: "Result view",
+        status: "completed",
+        presentation: { mode: "both", priority: 1, collapsed: false },
+        payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlSemanticId: "sql_candidate",
+          sourceSql: "SELECT id, amount FROM orders",
+          safeSql: "SELECT id, amount FROM orders",
+          columns: ["id", "amount"],
+          previewRows: [{ id: 1, amount: 20 }],
+          previewRowCount: 1,
+          rowCount: 128,
+          returnedRows: 1,
+          latencyMs: 42,
+        },
+        depends_on: ["sql_candidate"],
+        refs: [],
+      },
+    ];
+
+    const [resultView] = toViewArtifacts(artifacts);
+
+    expect(resultView?.type).toBe("result_view");
+    if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
+    expect(resultView.storageMode).toBe("sql_backed");
+    expect(resultView.datasourceId).toBe("ds-1");
+    expect(resultView.sourceSqlSemanticId).toBe("sql_candidate");
+    expect(resultView.safeSql).toBe("SELECT id, amount FROM orders");
+    expect(resultView.columns).toEqual(["id", "amount"]);
+    expect(resultView.previewRows).toEqual([["1", "20"]]);
+    expect(resultView.rowCount).toBe(128);
+    expect(resultView.depends_on).toEqual(["sql_candidate"]);
+  });
+
+  it("maps safety artifacts into visible markdown trust summaries", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "safety-1",
+        semantic_id: "safety_report",
+        type: "safety",
+        title: "Safety",
+        status: "completed",
+        presentation: { mode: "both", priority: 1, collapsed: true },
+        payload: {
+          passed: true,
+          can_execute: true,
+          requires_confirmation: false,
+          guardrail_result: "passed",
+          schema_warnings_count: 0,
+        },
+        depends_on: ["sql_candidate"],
+        refs: [],
+      },
+    ];
+
+    const [safety] = toViewArtifacts(artifacts);
+
+    expect(safety?.type).toBe("markdown");
+    if (safety?.type !== "markdown") throw new Error("Expected markdown artifact");
+    expect(safety.title).toBe("安全检查");
+    expect(safety.content).toContain("可执行");
+    expect(safety.depends_on).toEqual(["sql_candidate"]);
+  });
 });
