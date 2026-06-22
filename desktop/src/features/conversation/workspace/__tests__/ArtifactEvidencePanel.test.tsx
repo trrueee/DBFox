@@ -1,11 +1,24 @@
+import type { CSSProperties } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
 import { ArtifactEvidencePanel } from "../ArtifactEvidencePanel";
 
+const echartsMock = vi.hoisted(() => ({
+  options: [] as unknown[],
+}));
+
+vi.mock("echarts-for-react", () => ({
+  default: ({ option, style }: { option: unknown; style?: CSSProperties }) => {
+    echartsMock.options.push(option);
+    return <div data-testid="echarts-mock" style={style} />;
+  },
+}));
+
 describe("ArtifactEvidencePanel", () => {
   beforeEach(() => {
     cleanup();
+    echartsMock.options = [];
   });
 
   it("groups SQL, table, and chart by depends_on", () => {
@@ -111,7 +124,7 @@ describe("ArtifactEvidencePanel", () => {
     expect(screen.getAllByText("25").length).toBeGreaterThan(0);
   });
 
-  it("renders different chart previews for bar, line, and pie suggestions", () => {
+  it("renders chart artifacts through compact ChartArtifactView", () => {
     const base = {
       conversation_id: "conv",
       run_id: "run",
@@ -142,13 +155,23 @@ describe("ArtifactEvidencePanel", () => {
         title: "Pie chart",
         payload: { type: "pie", series: [{ label: "personal_user", value: 25 }, { label: "enterprise", value: 5 }] },
       },
+      {
+        ...base,
+        id: "scatter-chart",
+        type: "chart",
+        title: "Scatter chart",
+        payload: { chart_type: "scatter", series: [{ label: "10", value: 25 }, { label: "20", value: 55 }] },
+      },
     ];
 
     const { container } = render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
 
-    expect(container.querySelector(".conv-chart-preview-bar")).toBeTruthy();
-    expect(container.querySelector(".conv-chart-preview-line")).toBeTruthy();
-    expect(container.querySelector(".conv-chart-preview-pie")).toBeTruthy();
+    expect(container.querySelectorAll(".hifi-chart-card.is-compact")).toHaveLength(4);
+    expect(
+      echartsMock.options.map((option) => (
+        option as { series: Array<{ type: string }> }
+      ).series[0].type),
+    ).toEqual(["bar", "line", "pie", "scatter"]);
   });
 
   it("renders table previews with row counts and a 10-row limit", () => {

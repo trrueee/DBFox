@@ -211,10 +211,9 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
 
 function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ChartArtifact | null {
   const payload = artifact.payload || {};
-  const chartType = typeof payload.type === "string" ? payload.type : "";
+  const chartType = firstString(payload, ["chart_type", "chartType", "type", "kind"]).toLowerCase();
   const x = typeof payload.x === "string" ? payload.x : "";
   const y = typeof payload.y === "string" ? payload.y : "";
-  // All backend chart types rendered as bar (or line for time series)
   const supported = new Set(["line", "bar", "pie", "scatter", "area"]);
   if (!supported.has(chartType) || !x || !y) return null;
 
@@ -229,9 +228,9 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
   return {
     id: artifact.id,
     type: "chart",
-    title: `${y} 按 ${x} 分布`,
+    title: artifact.title || `${y} 按 ${x} 分布`,
     description: typeof payload.reason === "string" ? payload.reason : undefined,
-    chartType: (chartType === "line" ? "line" : "bar"),
+    chartType: chartType as ChartArtifact["chartType"],
     series,
     sourceRefs: sourceRefsFromPayload(payload),
     depends_on: artifact.depends_on,
@@ -242,17 +241,19 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
 /** Use the series already computed by the backend chart_builder. */
 function seriesFromPayload(
   payload: Record<string, unknown>,
-): Array<{ label: string; value: number }> | null {
+): ChartArtifact["series"] | null {
   const raw = payload.series;
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  const series: Array<{ label: string; value: number }> = [];
+  const series: ChartArtifact["series"] = [];
   for (const point of raw) {
     if (!point || typeof point !== "object") continue;
     const record = point as Record<string, unknown>;
-    const label = formatCell(record.label);
-    const value = Number(record.value);
+    const label = formatCell(record.label ?? record.name ?? record.x);
+    const value = Number(record.value ?? record.y);
     if (!Number.isFinite(value)) continue;
-    series.push({ label, value });
+    const rawX = record.x;
+    const x = typeof rawX === "string" || typeof rawX === "number" ? rawX : undefined;
+    series.push({ label, value, x });
     if (series.length >= 60) break;
   }
   return series.length > 0 ? series : null;
@@ -263,7 +264,7 @@ function seriesFromTableArtifact(
   all: ApiAgentArtifact[],
   x: string,
   y: string,
-): Array<{ label: string; value: number }> | null {
+): ChartArtifact["series"] | null {
   const tableArtifact = all.find((item) => item.type === "table");
   const rowsValue = tableArtifact?.payload?.rows;
   const rawRows = Array.isArray(rowsValue) ? rowsValue : [];

@@ -74,3 +74,32 @@ def test_chart_artifact_links_metrics_to_source_fields():
         {"label": "GMV", "formula": "SUM(orders.amount)", "field": "orders.amount"},
         {"label": "日期", "formula": "DATE(orders.created_at)", "field": "orders.created_at"},
     ]
+
+
+def test_chart_artifact_exposes_normalized_chart_contract_fields():
+    artifact = build_chart_artifact(
+        {
+            "type": "pie",
+            "x": "user_type",
+            "y": "gmv",
+            "aggregation": "sum",
+            "reason": "展示 GMV 构成",
+            "series": [
+                {"label": "personal", "value": 120},
+                {"label": "enterprise", "value": 80},
+            ],
+        },
+        safety={"can_execute": True},
+        execution={"sql": "SELECT user_type, SUM(amount) AS gmv FROM orders GROUP BY user_type"},
+    )
+
+    assert artifact.payload["type"] == "pie"
+    assert artifact.payload["chart_type"] == "pie"
+    assert artifact.payload["x"] == "user_type"
+    assert artifact.payload["y"] == "gmv"
+    assert artifact.payload["aggregation"] == "sum"
+    assert artifact.payload["reason"] == "展示 GMV 构成"
+    assert artifact.payload["series"] == [
+        {"label": "personal", "value": 120},
+        {"label": "enterprise", "value": 80},
+    ]
