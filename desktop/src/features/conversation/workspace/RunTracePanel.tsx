@@ -66,10 +66,20 @@ interface ContextReference {
   source: string;
 }
 
+interface RepairSummary {
+  key: string;
+  attemptLabel: string;
+  errorClass: string;
+  update: string;
+  rootCause: string;
+  recoveryStrategy: string;
+}
+
 export function RunTracePanel({ run }: { run: ConversationRun }) {
   const events = (run.events || []).filter((event) => String(event.type) !== "agent.answer.delta");
   const stages = buildTimelineStages(run, events);
   const contextReferences = contextReferenceCards(events);
+  const repairSummaries = repairSummaryCards(events);
   const summary = runSummary(run, events, stages);
 
   return (
@@ -96,6 +106,39 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
                     </span>
                   ))}
                 </div>
+              </section>
+            ))}
+          </div>
+        )}
+        {repairSummaries.length > 0 && (
+          <div className="conv-repair-summaries">
+            {repairSummaries.map((repair) => (
+              <section className="conv-repair-summary" key={repair.key}>
+                <header>
+                  <strong>
+                    <Wrench size={12} />
+                    SQL 修复
+                  </strong>
+                  {repair.attemptLabel && <span>{repair.attemptLabel}</span>}
+                  {repair.errorClass && <code>{repair.errorClass}</code>}
+                </header>
+                {repair.update && <p>{repair.update}</p>}
+                {(repair.rootCause || repair.recoveryStrategy) && (
+                  <div className="conv-repair-detail-grid">
+                    {repair.rootCause && (
+                      <span>
+                        <b>根因</b>
+                        <small>{repair.rootCause}</small>
+                      </span>
+                    )}
+                    {repair.recoveryStrategy && (
+                      <span>
+                        <b>修复策略</b>
+                        <small>{repair.recoveryStrategy}</small>
+                      </span>
+                    )}
+                  </div>
+                )}
               </section>
             ))}
           </div>
@@ -171,6 +214,37 @@ function dedupeReferences(items: ContextReference[]): ContextReference[] {
     result.push(item);
   }
   return result.slice(0, 5);
+}
+
+function repairSummaryCards(events: AgentRuntimeEvent[]): RepairSummary[] {
+  const seen = new Set<string>();
+  const cards: RepairSummary[] = [];
+  for (const event of events) {
+    const phase = stepValue(event, "phase");
+    const name = stepValue(event, "name");
+    const type = String(event.type);
+    if (phase !== "repairing" && name !== "sql_repair" && !type.includes("repair")) continue;
+
+    const attempt = stepNumber(event, "attempt");
+    const errorClass = stepValue(event, "error_class") || (name === "sql_repair" ? stepValue(event, "detail") : "");
+    const update = stepValue(event, "summary");
+    const rootCause = stepValue(event, "root_cause");
+    const recoveryStrategy = stepValue(event, "recovery_strategy");
+    if (!errorClass && !update && !rootCause && !recoveryStrategy) continue;
+
+    const key = `${attempt || 0}|${errorClass}|${rootCause}|${recoveryStrategy}|${update}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    cards.push({
+      key,
+      attemptLabel: attempt > 0 ? `第 ${attempt} 次修复` : "",
+      errorClass,
+      update,
+      rootCause,
+      recoveryStrategy,
+    });
+  }
+  return cards.slice(0, 3);
 }
 
 function runSummary(

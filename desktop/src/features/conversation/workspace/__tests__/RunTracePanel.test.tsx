@@ -224,4 +224,41 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("新注册用户")).toBeTruthy();
     expect(screen.getByText("users.created_at")).toBeTruthy();
   });
+
+  it("shows SQL repair root cause and recovery strategy outside debug details", () => {
+    const run: ConversationRun = {
+      id: "run-repair",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析退款金额",
+      status: "running",
+      events: [
+        {
+          event_id: "evt-repair",
+          run_id: "run-repair",
+          sequence: 1,
+          created_at_ms: 1,
+          type: "agent.progress.update",
+          step: {
+            name: "sql_repair",
+            phase: "repairing",
+            status: "running",
+            summary: "Column not found — looking up schema to fix the query.",
+            error_class: "missing_column",
+            root_cause: "column refund_amount not found in orders",
+            recovery_strategy: "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
+            attempt: 1,
+          },
+        },
+      ],
+    };
+
+    render(<RunTracePanel run={run} />);
+
+    expect(screen.getByText("SQL 修复")).toBeTruthy();
+    expect(screen.getByText("missing_column")).toBeTruthy();
+    expect(screen.getByText("第 1 次修复")).toBeTruthy();
+    expect(screen.getByText("column refund_amount not found in orders")).toBeTruthy();
+    expect(screen.getByText("Use schema.describe_table and fuzzy-match similar columns, then sql.revise.")).toBeTruthy();
+  });
 });

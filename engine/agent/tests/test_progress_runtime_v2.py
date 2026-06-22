@@ -15,7 +15,7 @@ from engine.agent.progress.clarification_policy import (
 )
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.context_pack import ContextPack, build_context_pack, build_streaming_context_summary, render_ui_summary
-from engine.agent.app.event_mapper import context_update_event
+from engine.agent.app.event_mapper import context_update_event, trace_to_events
 from engine.agent.graph.replan_policy import allow_replan, compute_max_replans
 from engine.agent.graph.routes import route_progress_output
 from engine.agent.repair.sql_repair import classify_sql_failure, plan_sql_repair
@@ -64,6 +64,26 @@ class TestSqlRepairModule:
         assert result.get("repair_trace")
         assert result["repair_trace"][0]["type"] == "agent.repair.attempted"
         assert result["repair_trace"][0]["error_class"] == "missing_column"
+        assert result["repair_trace"][0]["root_cause"] == "column foo not found in orders"
+
+    def test_repair_trace_event_exposes_root_cause_to_runtime_event(self):
+        def emit(event_type, **kwargs):
+            return {"type": event_type, **kwargs}
+
+        events = list(trace_to_events(emit, {
+            "type": "agent.repair.attempted",
+            "attempt": 1,
+            "error_class": "missing_column",
+            "root_cause": "column foo not found in orders",
+            "recovery_strategy": "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
+            "user_visible_update": "Column not found — looking up schema to fix the query.",
+        }))
+
+        assert events
+        step = events[0]["step"]
+        assert step["error_class"] == "missing_column"
+        assert step["root_cause"] == "column foo not found in orders"
+        assert "schema.describe_table" in step["recovery_strategy"]
 
     def test_permission_denied_no_retry_budget(self):
         plan = plan_sql_repair({
