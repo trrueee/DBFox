@@ -129,6 +129,18 @@ export function ChartArtifactView({ artifact, onToast }: ChartArtifactViewProps)
       {artifact.description && (
         <p className="text-[10px] text-slate-500 px-3 pt-1">{artifact.description}</p>
       )}
+      {artifact.sourceRefs && artifact.sourceRefs.length > 0 && (
+        <div className="grid gap-1 px-3 pt-2 text-[10px] text-slate-500">
+          {artifact.sourceRefs.map((sourceRef) => (
+            <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">{sourceRef.label}</span>
+              <span className="font-mono">{sourceRef.formula}</span>
+              <span className="text-slate-400">-&gt;</span>
+              <span className="font-mono">{sourceRef.field}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="hifi-chart-body" data-chart-id={artifact.id}>
         <ReactECharts option={option} style={{ height: "280px", width: "100%" }} />
       </div>

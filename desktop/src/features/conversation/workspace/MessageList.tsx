@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { TableArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -11,9 +12,10 @@ interface MessageListProps {
   runs: ConversationRun[];
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
+  onOpenResultTab: (artifact: TableArtifact) => void;
 }
 
-export function MessageList({ messages, runs, artifacts, onOpenSqlConsole }: MessageListProps) {
+export function MessageList({ messages, runs, artifacts, onOpenSqlConsole, onOpenResultTab }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
@@ -31,6 +33,7 @@ export function MessageList({ messages, runs, artifacts, onOpenSqlConsole }: Mes
               run={run}
               artifacts={messageArtifacts}
               onOpenSqlConsole={onOpenSqlConsole}
+              onOpenResultTab={onOpenResultTab}
             />
           );
         })}

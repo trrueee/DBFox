@@ -1,9 +1,13 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
 import { ArtifactEvidencePanel } from "../ArtifactEvidencePanel";
 
 describe("ArtifactEvidencePanel", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
   it("groups SQL, table, and chart by depends_on", () => {
     const artifacts: ConversationArtifact[] = [
       {
@@ -145,5 +149,89 @@ describe("ArtifactEvidencePanel", () => {
     expect(container.querySelector(".conv-chart-preview-bar")).toBeTruthy();
     expect(container.querySelector(".conv-chart-preview-line")).toBeTruthy();
     expect(container.querySelector(".conv-chart-preview-pie")).toBeTruthy();
+  });
+
+  it("renders table previews with row counts and a 10-row limit", () => {
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      day: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      order_count: (index + 1) * 10,
+    }));
+    const artifacts: ConversationArtifact[] = [
+      {
+        id: "table-preview",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "table",
+        title: "Daily orders",
+        status: "completed",
+        sequence: 1,
+        payload: {
+          columns: ["day", "order_count"],
+          rows,
+          rowCount: 128,
+          returnedRows: 12,
+          latencyMs: 42,
+          truncated: true,
+        },
+        depends_on: [],
+      },
+    ];
+
+    render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
+
+    expect(screen.getByText("预览 10 / 共 128 行")).toBeTruthy();
+    expect(screen.getByText("2 列")).toBeTruthy();
+    expect(screen.getByText("42ms")).toBeTruthy();
+    expect(screen.getByText("结果已截断")).toBeTruthy();
+    expect(screen.getByText("2026-06-10")).toBeTruthy();
+    expect(screen.queryByText("2026-06-11")).toBeNull();
+  });
+
+  it("opens a table preview as a full result tab with all loaded rows", () => {
+    const rows = Array.from({ length: 12 }, (_, index) => ({
+      day: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      order_count: (index + 1) * 10,
+    }));
+    const onOpenResultTab = vi.fn();
+    const artifacts: ConversationArtifact[] = [
+      {
+        id: "table-preview",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "table",
+        title: "Daily orders",
+        status: "completed",
+        sequence: 1,
+        payload: {
+          columns: ["day", "order_count"],
+          rows,
+          rowCount: 128,
+          returnedRows: 12,
+          sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+        },
+        depends_on: [],
+      },
+    ];
+
+    render(
+      <ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} onOpenResultTab={onOpenResultTab} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "打开为 Tab" }));
+
+    expect(onOpenResultTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "table-preview",
+        type: "table",
+        title: "Daily orders",
+        columns: ["day", "order_count"],
+        rowCount: 128,
+        returnedRows: 12,
+        sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+      }),
+    );
+    expect(onOpenResultTab.mock.calls[0][0].rows).toHaveLength(12);
   });
 });

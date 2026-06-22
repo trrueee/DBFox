@@ -74,6 +74,12 @@ function mapSqlArtifact(artifact: ApiAgentArtifact): SqlArtifact | null {
     title: artifact.type === "sql_suggestion" ? "SQL 修改建议" : "执行的 SQL",
     description: typeof payload.reason === "string" ? payload.reason : undefined,
     sql,
+    purpose: firstString(payload, ["purpose"]),
+    usedTables: stringArray(payload.used_tables),
+    validationStatus: firstString(payload, ["validation_status"]),
+    executionStatus: firstString(payload, ["execution_status"]),
+    rowCount: numberValue(payload, ["rowCount", "row_count"]),
+    latencyMs: numberValue(payload, ["latencyMs", "latency_ms"]),
     depends_on: artifact.depends_on,
     payload: artifact.payload,
   };
@@ -85,11 +91,22 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
   const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
   if (columns.length === 0) return null;
 
-  const rows: string[][] = rawRows
-    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
-    .map((row) => columns.map((column) => formatCell(row[column])));
+  const rows: string[][] = rawRows.flatMap((row) => {
+    if (Array.isArray(row)) {
+      return [columns.map((_, columnIndex) => formatCell(row[columnIndex]))];
+    }
+    if (row && typeof row === "object") {
+      const record = row as Record<string, unknown>;
+      return [columns.map((column) => formatCell(record[column]))];
+    }
+    return [];
+  });
 
-  const rowCount = typeof payload.rowCount === "number" ? payload.rowCount : rows.length;
+  const rowCount = numberValue(payload, ["rowCount", "row_count"]) ?? rows.length;
+  const returnedRows = numberValue(payload, ["returnedRows", "returned_rows"]) ?? rows.length;
+  const latencyMs = numberValue(payload, ["latencyMs", "latency_ms"]);
+  const warnings = stringArray(payload.warnings);
+  const notices = stringArray(payload.notices);
   return {
     id: artifact.id,
     type: "table",
@@ -97,6 +114,13 @@ function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
     description: `${rowCount} 行 · ${columns.length} 列`,
     columns,
     rows,
+    rowCount,
+    returnedRows,
+    latencyMs,
+    sql: firstString(payload, ["sql"]),
+    truncated: Boolean(payload.truncated),
+    warnings,
+    notices,
     depends_on: artifact.depends_on,
     payload: artifact.payload,
   };
@@ -126,6 +150,7 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
     description: typeof payload.reason === "string" ? payload.reason : undefined,
     chartType: (chartType === "line" ? "line" : "bar"),
     series,
+    sourceRefs: sourceRefsFromPayload(payload),
     depends_on: artifact.depends_on,
     payload: artifact.payload,
   };
@@ -233,6 +258,35 @@ function firstString(payload: Record<string, unknown>, keys: string[]): string {
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return "";
+}
+
+function numberValue(payload: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function sourceRefsFromPayload(
+  payload: Record<string, unknown>,
+): Array<{ label: string; formula: string; field: string }> {
+  const raw = payload.source_refs;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const label = typeof record.label === "string" ? record.label : "";
+    const formula = typeof record.formula === "string" ? record.formula : "";
+    const field = typeof record.field === "string" ? record.field : "";
+    return label && formula && field ? [{ label, formula, field }] : [];
+  });
 }
 
 function formatCell(value: unknown): string {

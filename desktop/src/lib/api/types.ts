@@ -576,7 +576,15 @@ export type AgentRuntimeEventType =
   | "agent.run.resumed"
   | "agent.run.completed"
   | "agent.run.failed"
-  | "agent.run.cancelled";
+  | "agent.run.cancelled"
+  | "agent.model.started"
+  | "agent.model.completed"
+  | "agent.tool.started"
+  | "agent.tool.completed"
+  | "agent.policy.allowed"
+  | "agent.policy.blocked"
+  | "agent.observe.applied"
+  | "agent.finalized";
 
 export interface AgentRuntimeEvent {
   event_id: string;

@@ -6,6 +6,7 @@ import { ConversationWorkspace } from "../conversation/workspace/ConversationWor
 import { TableWorkspace } from "../workspace/TableWorkspace";
 import { SqlConsoleWorkspace, type ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { MultiTableWorkspace } from "../workspace/MultiTableWorkspace";
+import { TableArtifactView } from "../workspace/artifacts/TableArtifactView";
 import { AgentEvalPage } from "../../pages/AgentEvalPage";
 import { DataSourcesPage } from "../../pages/DataSourcesPage";
 import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
@@ -50,6 +51,9 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
   }
   if (activeTab.type === "datasource-settings") {
     return <DatasourceSettingsTab activeTab={activeTab} showToast={showToast} />;
+  }
+  if (activeTab.type === "artifact-result") {
+    return <ArtifactResultTab activeTab={activeTab} showToast={showToast} />;
   }
   return <QueryResultTab activeTab={activeTab} />;
 }
@@ -223,11 +227,29 @@ function QueryResultTab({ activeTab }: { activeTab: WorkspaceTab }) {
       conversationId={conversationId}
       onOpenHistory={() => useWorkspaceStore.getState().openConversationHistoryTab()}
       onOpenSqlConsole={openSqlConsole}
+      onOpenResultTab={(artifact) => useWorkspaceStore.getState().openArtifactResultTab(artifact)}
       onDelete={() => {
         if (conversationId) void useConversationStore.getState().deleteConversationById(conversationId);
         useWorkspaceStore.getState().closeTab(activeTab.id);
       }}
     />
+  );
+}
+
+function ArtifactResultTab({
+  activeTab,
+  showToast,
+}: {
+  activeTab: WorkspaceTab;
+  showToast: WorkspaceRouterProps["showToast"];
+}) {
+  if (!activeTab.artifactResult) {
+    return <div className="hifi-tab-pane p-4 text-sm text-slate-500">Result artifact is no longer available.</div>;
+  }
+  return (
+    <div className="hifi-tab-pane p-4">
+      <TableArtifactView artifact={activeTab.artifactResult} onToast={showToast} mode="workspace" />
+    </div>
   );
 }
 

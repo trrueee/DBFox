@@ -1,3 +1,4 @@
+import type { TableArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -5,6 +6,7 @@ import type {
 } from "../../../types/conversation";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
 import { ArtifactEvidencePanel } from "./ArtifactEvidencePanel";
+import { DataReferencePanel } from "./DataReferencePanel";
 import { RunTracePanel } from "./RunTracePanel";
 
 interface MessageBubbleProps {
@@ -12,9 +14,10 @@ interface MessageBubbleProps {
   run?: ConversationRun;
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
+  onOpenResultTab?: (artifact: TableArtifact) => void;
 }
 
-export function MessageBubble({ message, run, artifacts, onOpenSqlConsole }: MessageBubbleProps) {
+export function MessageBubble({ message, run, artifacts, onOpenSqlConsole, onOpenResultTab }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const messageClass = isUser ? `conv-message conv-message-${message.role}` : "conv-message conv-message-answer";
   return (
@@ -33,7 +36,14 @@ export function MessageBubble({ message, run, artifacts, onOpenSqlConsole }: Mes
             </div>
           </>
         )}
-        {!isUser && <ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
+        {!isUser && <DataReferencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
+        {!isUser && (
+          <ArtifactEvidencePanel
+            artifacts={artifacts}
+            onOpenSqlConsole={onOpenSqlConsole}
+            onOpenResultTab={onOpenResultTab}
+          />
+        )}
       </div>
     </article>
   );

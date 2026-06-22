@@ -1,6 +1,6 @@
 /** Core workspace types extracted from mock/dbfoxMock.ts */
 
-import type { AgentArtifact } from "./agentArtifact";
+import type { AgentArtifact, TableArtifact } from "./agentArtifact";
 import type { AgentTimelineItem } from "../features/workspace/agentTimeline";
 import type { AgentAnswer, FollowUpSuggestion } from "../lib/api/types";
 
@@ -10,6 +10,7 @@ export type WorkspaceTabType =
   | "sql"
   | "multi-table"
   | "query-result"
+  | "artifact-result"
   | "conversation-history"
   | "llm-config"
   | "datasource-settings"
@@ -39,6 +40,7 @@ export interface WorkspaceTab {
   chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
   agentTimeline?: AgentTimelineItem[];
   artifacts?: AgentArtifact[];
+  artifactResult?: TableArtifact;
   agentRunId?: string;
   agentSessionId?: string;
   agentStatus?: AgentTabStatus;
