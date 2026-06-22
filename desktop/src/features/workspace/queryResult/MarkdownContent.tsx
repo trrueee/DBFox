@@ -6,9 +6,9 @@ type MarkdownSegment =
   | { type: "table"; headers: string[]; rows: string[][] };
 
 const MARKDOWN_COMPONENTS: Components = {
-  h1: ({ children }) => <h3 className="hifi-md-h1">{children}</h3>,
-  h2: ({ children }) => <h4 className="hifi-md-h2">{children}</h4>,
-  h3: ({ children }) => <h5 className="hifi-md-h3">{children}</h5>,
+  h1: ({ children }) => <h1 className="hifi-md-h1">{children}</h1>,
+  h2: ({ children }) => <h2 className="hifi-md-h2">{children}</h2>,
+  h3: ({ children }) => <h3 className="hifi-md-h3">{children}</h3>,
   p: ({ children }) => <p className="hifi-md-p">{children}</p>,
   ul: ({ children }) => <ul className="hifi-md-ul">{children}</ul>,
   ol: ({ children }) => <ol className="hifi-md-ol">{children}</ol>,

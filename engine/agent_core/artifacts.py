@@ -31,6 +31,7 @@ def build_agent_artifacts(
     chart_suggestion: dict[str, Any] | None,
     answer: AgentAnswer | None,
     error: str | None = None,
+    datasource_id: str | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> list[AgentArtifact]:
     artifacts: list[AgentArtifact] = []
@@ -45,7 +46,7 @@ def build_agent_artifacts(
         artifacts.append(build_safety_artifact(safety, identity=identity))
 
     if execution and execution.get("success"):
-        artifacts.append(build_table_artifact(execution, safety=safety, identity=identity))
+        artifacts.append(build_result_view_artifact(execution, datasource_id=datasource_id, safety=safety, identity=identity))
 
     if chart_suggestion and chart_suggestion.get("type") and chart_suggestion.get("type") != "table":
         artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, execution=execution, identity=identity))
@@ -175,32 +176,40 @@ def build_safety_artifact(
     )
 
 
-def build_table_artifact(
+def build_result_view_artifact(
     execution: dict[str, Any],
+    datasource_id: str | None = None,
     *,
     safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
-    # Fingerprint the SQL so each distinct query gets its own table artifact.
-    # Without this, every execution reuses semantic_id="result_table" and later
-    # queries clobber earlier ones (the UI would show the last query's rows
-    # even when the answer summarises an earlier, different result set).
+    # Fingerprint the SQL so each distinct query gets its own result view artifact.
     sql = _execution_sql(execution)
-    semantic_id = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
+    semantic_id = "result_view" if not sql else f"result_view_{_sql_fingerprint(sql)}"
+    
+    all_rows = execution.get("rows") or []
+    preview_rows = all_rows[:10]
+    
     return _artifact(
         semantic_id,
-        "table",
-        "Result table",
+        "result_view",
+        "Result view",
         {
+            "storageMode": "payload", # Legacy compatibility, switch to sql_backed later
+            "datasourceId": datasource_id or "",
+            "sourceSqlSemanticId": "sql_candidate",
+            "sourceSql": sql,
+            "safeSql": sql,
             "columns": execution.get("columns", []),
-            "rows": execution.get("rows", []),
-            "rowCount": execution.get("rowCount", len(execution.get("rows", []) or [])),
-            "returnedRows": execution.get("returnedRows", len(execution.get("rows", []) or [])),
+            "previewRows": preview_rows,
+            "previewRowCount": len(preview_rows),
+            "rows": all_rows, # Legacy compatibility
+            "rowCount": execution.get("rowCount", len(all_rows)),
+            "returnedRows": execution.get("returnedRows", len(all_rows)),
             "latencyMs": execution.get("latencyMs", 0),
             "truncated": bool(execution.get("truncated")),
             "warnings": _string_list(execution.get("warnings")),
             "notices": _string_list(execution.get("notices")),
-            "sql": sql,
             "used_tables": _used_tables(sql or ""),
             "safety_state": _safety_state(safety),
         },

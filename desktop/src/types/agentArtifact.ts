@@ -1,4 +1,4 @@
-export type AgentArtifactType = "chart" | "sql" | "table" | "markdown";
+export type AgentArtifactType = "chart" | "sql" | "table" | "result_view" | "markdown";
 
 export type AgentArtifactBase = {
   id: string;
@@ -42,12 +42,31 @@ export type TableArtifact = AgentArtifactBase & {
   notices?: string[];
 };
 
+export type ResultViewArtifact = AgentArtifactBase & {
+  type: "result_view";
+  storageMode: "payload" | "sql_backed";
+  datasourceId: string;
+  sourceSqlSemanticId: string;
+  sourceSql: string;
+  safeSql: string;
+  columns: string[];
+  previewRows: string[][];
+  previewRowCount: number;
+  rows?: string[][]; // For legacy compatibility
+  rowCount?: number;
+  returnedRows?: number;
+  latencyMs?: number;
+  truncated?: boolean;
+  warnings?: string[];
+  notices?: string[];
+};
+
 export type MarkdownArtifact = AgentArtifactBase & {
   type: "markdown";
   content: string;
 };
 
-export type AgentArtifact = ChartArtifact | SqlArtifact | TableArtifact | MarkdownArtifact;
+export type AgentArtifact = ChartArtifact | SqlArtifact | TableArtifact | ResultViewArtifact | MarkdownArtifact;
 
 export type DataReference =
   | { type: "table"; datasourceId?: string; schema?: string; table: string; label: string }

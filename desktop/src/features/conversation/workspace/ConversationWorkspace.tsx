@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useConversationStore } from "../../../stores/conversationStore";
-import type { TableArtifact } from "../../../types/agentArtifact";
+import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -21,7 +21,7 @@ export function ConversationWorkspace({
   conversationId: string;
   onOpenHistory: () => void;
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab: (artifact: TableArtifact) => void;
+  onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
   onDelete: () => void;
 }) {
   const store = useConversationStore();

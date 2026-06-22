@@ -134,7 +134,7 @@ class DBFoxAgentState(TypedDict, total=False):
     """Accumulated query execution results, one per distinct SQL statement.
 
     Each successful ``sql.execute_readonly`` appends a new unit.  Subsequent
-    ``result.profile`` and ``chart.suggest`` calls enrich the matching unit
+    ``chart.suggest`` calls enrich the matching unit
     (keyed by SQL fingerprint).  The final ``answer.synthesize`` can consume
     all units instead of only the latest execution.
     """

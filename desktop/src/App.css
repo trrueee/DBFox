@@ -448,19 +448,25 @@
 
 .hifi-ask-input {
   width: 100%;
-  height: 104px;
-  border-radius: 12px;
-  border: 2px solid var(--color-secondary);
-  background: #FFFFFF;
-  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.12);
-  padding: 16px 50px 16px 18px;
-  font-size: 13px;
+  height: 110px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05), inset 0 2px 4px rgba(0,0,0,0.01);
+  padding: 16px 50px 16px 20px;
+  font-size: 14px;
   color: var(--color-text-primary);
   outline: none;
   resize: none;
   box-sizing: border-box;
   font-family: inherit;
-  line-height: 1.5;
+  line-height: 1.6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hifi-ask-input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 8px 30px rgba(15, 23, 42, 0.08);
 }
 
 .hifi-ask-input::placeholder {
@@ -471,23 +477,24 @@
   position: absolute;
   right: 14px;
   bottom: 14px;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #6366f1 100%);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(196, 90, 60, 0.2);
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(118, 103, 242, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hifi-ask-send-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(196, 90, 60, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(118, 103, 242, 0.4);
+  background: linear-gradient(135deg, #8b7ef5 0%, #7578f3 100%);
 }
 
 /* Recommended questions styling */
@@ -2490,29 +2497,39 @@
 .hifi-eval-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
+  gap: 6px;
+  font-size: 0.8rem;
   font-weight: 600;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 0 14px;
+  height: 34px;
+  border-radius: 8px;
   border: 1px solid var(--color-border);
-  background: #FFFFFF;
+  background: #ffffff;
   color: #334155;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
 
-.hifi-eval-btn:hover {
-  background: #F1F5F9;
+.hifi-eval-btn:hover:not(:disabled) {
+  background: var(--color-bg);
+  color: var(--color-primary);
+  border-color: var(--color-border-hover);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
 }
 
 .hifi-eval-btn-primary {
-  background: #C45A3C;
-  border-color: #C45A3C;
-  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  border: none;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(118, 103, 242, 0.25);
 }
 
-.hifi-eval-btn-primary:hover {
-  background: #1D4ED8;
+.hifi-eval-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #8b7ef5, #7578f3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(118, 103, 242, 0.35);
+  color: #ffffff;
 }
 
 .hifi-eval-btn:disabled {
@@ -3957,59 +3974,96 @@
 }
 
 .hifi-page-desc {
-  margin: 4px 0 0;
-  font-size: 0.75rem;
+  margin: 6px 0 0;
+  font-size: 0.82rem;
   color: var(--color-text-secondary);
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .hifi-card {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03), 0 8px 24px rgba(15, 23, 42, 0.02);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.hifi-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05), 0 12px 32px rgba(15, 23, 42, 0.04);
+  border-color: var(--color-border-hover);
 }
 
 .hifi-card-title {
   margin: 0 0 16px;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--color-text-primary);
+  letter-spacing: -0.01em;
 }
 
 .hifi-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 0.72rem;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
   font-family: var(--font-family);
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.hifi-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .hifi-btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
+  background: linear-gradient(135deg, var(--color-primary), #6366f1);
   color: #fff;
   border: none;
+  box-shadow: 0 2px 8px rgba(118, 103, 242, 0.25);
 }
 
-.hifi-btn-primary:hover {
-  filter: brightness(1.05);
+.hifi-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(118, 103, 242, 0.35);
+  background: linear-gradient(135deg, #8b7ef5, #7578f3);
+}
+
+.hifi-btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(118, 103, 242, 0.2);
+}
+
+.hifi-btn-secondary {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.hifi-btn-secondary:hover:not(:disabled) {
+  background: var(--color-bg);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
 }
 
 .hifi-btn-outline {
   background: transparent;
   border-color: var(--color-border);
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
 }
 
-.hifi-btn-outline:hover {
+.hifi-btn-outline:hover:not(:disabled) {
   background: var(--color-bg);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-hover);
 }
 
 .hifi-form-actions {

@@ -89,3 +89,17 @@ def run_engine_server(*, reload: bool | None = None) -> None:
     from engine.main import app
 
     uvicorn.run(app, host=ENGINE_HOST, port=ENGINE_PORT)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="DBFox local engine dev server")
+    parser.add_argument(
+        "--reload",
+        action=argparse.BooleanOptionalAction,
+        default=default_reload_enabled(),
+        help="Watch engine/*.py and auto-restart on save (default: on in dev)",
+    )
+    args = parser.parse_args()
+    run_engine_server(reload=args.reload)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from engine.agent_core.artifacts import (
     build_chart_artifact,
     build_sql_artifact,
-    build_table_artifact,
+    build_result_view_artifact,
 )
 
 
@@ -25,8 +25,8 @@ def test_sql_artifact_includes_purpose_used_tables_and_status_metadata():
     assert artifact.payload["latencyMs"] == 42
 
 
-def test_table_artifact_preserves_result_browsing_metadata():
-    artifact = build_table_artifact(
+def test_result_view_artifact_preserves_result_browsing_metadata():
+    artifact = build_result_view_artifact(
         {
             "success": True,
             "columns": ["day", "order_count"],
@@ -42,6 +42,7 @@ def test_table_artifact_preserves_result_browsing_metadata():
             "notices": ["preview only"],
             "sql": "SELECT DATE(created_at) AS day, COUNT(*) AS order_count FROM orders GROUP BY DATE(created_at)",
         },
+        datasource_id="ds_123",
         safety=None,
     )
 
@@ -51,7 +52,9 @@ def test_table_artifact_preserves_result_browsing_metadata():
     assert artifact.payload["truncated"] is True
     assert artifact.payload["warnings"] == ["backend limit reached"]
     assert artifact.payload["notices"] == ["preview only"]
-    assert artifact.payload["used_tables"] == ["orders"]
+    assert artifact.payload["previewRowCount"] == 2
+    assert artifact.payload["datasourceId"] == "ds_123"
+    assert artifact.payload["storageMode"] == "payload"
 
 
 def test_chart_artifact_links_metrics_to_source_fields():

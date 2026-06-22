@@ -349,6 +349,50 @@ export interface AgentArtifact {
   depends_on?: string[];
 }
 
+export interface MetricObservationResult {
+  dimension: string;
+  metric: string;
+  value: number | string;
+  delta?: number | string;
+  context?: string;
+}
+
+export interface ResultSort {
+  column: string;
+  direction: "asc" | "desc";
+}
+
+export interface ResultFilter {
+  column: string;
+  operator: string;
+  value: unknown;
+}
+
+export interface ResultPageRequest {
+  datasourceId: string;
+  sourceSqlArtifactId: string;
+  safeSql: string;
+  page: number;
+  pageSize: number;
+  sort?: ResultSort[] | null;
+  filters?: ResultFilter[] | null;
+  search?: string | null;
+  countMode?: "none" | "exact" | "estimate";
+}
+
+export interface ResultPageResponse {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  page: number;
+  pageSize: number;
+  rowCount?: number | null;
+  hasNextPage: boolean;
+  executedSql: string;
+  latencyMs: number;
+  warnings?: string[] | null;
+  notices?: string[] | null;
+}
+
 export interface AgentApproval {
   id: string;
   run_id: string;

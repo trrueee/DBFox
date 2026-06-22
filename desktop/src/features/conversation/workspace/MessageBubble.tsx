@@ -1,4 +1,4 @@
-import type { TableArtifact } from "../../../types/agentArtifact";
+import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -14,7 +14,7 @@ interface MessageBubbleProps {
   run?: ConversationRun;
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact) => void;
+  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
 }
 
 export function MessageBubble({ message, run, artifacts, onOpenSqlConsole, onOpenResultTab }: MessageBubbleProps) {

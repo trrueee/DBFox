@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import time as _time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -380,4 +380,134 @@ def api_agent_run_resume_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+    )
+
+# ---------------------------------------------------------------------------
+# Agent Result Pagination API
+# ---------------------------------------------------------------------------
+
+class ResultSort(BaseModel):
+    column: str
+    direction: Literal["asc", "desc"]
+
+class ResultFilter(BaseModel):
+    column: str
+    operator: str
+    value: Any
+
+class ResultPageRequest(BaseModel):
+    datasourceId: str
+    sourceSqlArtifactId: str
+    safeSql: str
+    page: int
+    pageSize: int
+    sort: list[ResultSort] | None = None
+    filters: list[ResultFilter] | None = None
+    search: str | None = None
+    countMode: Literal["none", "exact", "estimate"] = "none"
+
+class ResultPageResponse(BaseModel):
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    page: int
+    pageSize: int
+    rowCount: int | None = None
+    hasNextPage: bool
+    executedSql: str
+    latencyMs: int
+    warnings: list[str] | None = None
+    notices: list[str] | None = None
+
+@router.post("/agent/results/page", response_model=ResultPageResponse)
+def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
+    from engine.sql.safety_gate import build_derived_sql, validate_derived_sql
+    from engine.sql.executor import execute_query
+    from engine.models import DataSource
+
+    ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
+    if not ds:
+        raise HTTPException(status_code=404, detail="Datasource not found.")
+        
+    dialect = ds.db_type or "mysql"
+
+    # Calculate limit and offset
+    limit = req.pageSize
+    offset = (req.page - 1) * req.pageSize
+
+    sorts = [{"column": s.column, "direction": s.direction} for s in req.sort] if req.sort else None
+    
+    # Optional search / filters can be added to build_derived_sql later
+    # For now, we handle limit/offset and sorts.
+
+    try:
+        derived_sql = build_derived_sql(
+            base_sql=req.safeSql,
+            dialect=dialect,
+            limit=limit + 1, # Fetch one extra to determine hasNextPage
+            offset=offset,
+            sorts=sorts,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_BUILD_FAILED", "message": f"Failed to build derived SQL: {e}"})
+
+    warnings = validate_derived_sql(derived_sql, dialect=dialect)
+    if warnings:
+        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_VALIDATION_FAILED", "message": warnings[0]})
+
+    try:
+        from engine.sql.trust_gate import ExecutionSafetyDecision
+        decision = ExecutionSafetyDecision(
+            can_execute=True,
+            safe_sql=derived_sql,
+            guardrail=None,
+            policy="readonly",
+            approval=None,
+        )
+        res = execute_query(db, req.datasourceId, derived_sql, safety_decision=decision)
+    except DBFoxError as e:
+        raise HTTPException(status_code=400, detail=_http_detail(e))
+    except Exception as e:
+        logger.exception("Failed to execute derived query")
+        raise HTTPException(status_code=500, detail={"code": "EXECUTION_ERROR", "message": str(e)})
+
+    rows = res.get("rows", [])
+    has_next = len(rows) > limit
+    returned_rows = rows[:limit]
+
+    # Handle exact count if requested
+    row_count = None
+    if req.countMode == "exact":
+        # build count query
+        import sqlglot
+        try:
+            base_expr = sqlglot.parse_one(req.safeSql, read=dialect)
+            count_sql = sqlglot.select("COUNT(*)").from_(base_expr.subquery("dbfox_count")).sql(dialect=dialect)
+            
+            count_decision = ExecutionSafetyDecision(
+                can_execute=True,
+                safe_sql=count_sql,
+                guardrail=None,
+                policy="readonly",
+                approval=None,
+            )
+            count_res = execute_query(db, req.datasourceId, count_sql, safety_decision=count_decision)
+            if count_res.get("rows") and len(count_res["rows"]) > 0:
+                # Get first value of first row
+                first_row = count_res["rows"][0]
+                if first_row:
+                    row_count = int(list(first_row.values())[0])
+        except Exception as e:
+            logger.warning(f"Failed to execute exact count query: {e}")
+
+    return ResultPageResponse(
+        columns=res.get("columns", []),
+        rows=returned_rows,
+        page=req.page,
+        pageSize=req.pageSize,
+        rowCount=row_count,
+        hasNextPage=has_next,
+        executedSql=derived_sql,
+        latencyMs=res.get("latencyMs", 0),
+        warnings=res.get("warnings"),
+        notices=res.get("notices"),
     )

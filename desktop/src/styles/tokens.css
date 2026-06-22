@@ -141,16 +141,17 @@
 /* ── Shared Input Primitives ── */
 .hifi-input {
   width: 100%;
-  height: 34px;
-  padding: 0 12px;
-  font-size: 0.78rem;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 0.82rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-panel);
+  border-radius: 10px;
+  background: var(--color-bg);
   color: var(--color-text-primary);
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .hifi-input::placeholder {
@@ -158,26 +159,27 @@
 }
 
 .hifi-input:hover {
-  border-color: var(--color-border-hover);
+  border-color: #93c5fd;
+  background: #ffffff;
 }
 
 .hifi-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-soft);
-  background: var(--color-panel);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), inset 0 1px 2px rgba(0,0,0,0.01);
+  background: #ffffff;
 }
 
 .hifi-select {
   width: 100%;
-  height: 34px;
-  padding: 0 12px;
-  font-size: 0.78rem;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 0.82rem;
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-panel);
+  border-radius: 10px;
+  background: var(--color-bg);
   color: var(--color-text-primary);
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-sizing: border-box;
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -185,15 +187,18 @@
   background-position: right 12px center;
   background-size: 14px;
   padding-right: 32px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .hifi-select:hover {
-  border-color: var(--color-border-hover);
+  border-color: #93c5fd;
+  background: #ffffff;
 }
 
 .hifi-select:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-soft);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), inset 0 1px 2px rgba(0,0,0,0.01);
+  background: #ffffff;
 }
 
 .hifi-textarea {
@@ -220,9 +225,10 @@
 
 .field-label {
   display: block;
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
-  margin-top: 10px;
-  margin-bottom: 5px;
+  color: var(--color-text-primary);
+  margin-top: 12px;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
 }

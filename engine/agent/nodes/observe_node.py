@@ -15,7 +15,7 @@ from engine.agent_core.artifacts import (
     build_query_plan_artifact,
     build_safety_artifact,
     build_sql_artifact,
-    build_table_artifact,
+    build_result_view_artifact,
 )
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.observe_node")
@@ -96,7 +96,7 @@ def emit_artifacts_from_observation(
 
     # Artifact emission for execution tools
     if step_name in ("db.query", "sql.execute_readonly") and state.get("execution") and state.get("execution", {}).get("success"):
-        artifacts.append(build_table_artifact(state["execution"], safety=state.get("safety"), identity=identity))
+        artifacts.append(build_result_view_artifact(state["execution"], datasource_id=state.get("datasource_id"), safety=state.get("safety"), identity=identity))
 
     if step_name in ("db.query", "sql.execute_readonly") and observation.output and observation.status == "success":
         payload = dict(observation.output)

@@ -15,6 +15,57 @@ from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, Trus
 
 logger = logging.getLogger("dbfox.sql.executor")
 
+class DerivedSqlError(Exception):
+    pass
+
+def build_derived_sql(
+    base_sql: str,
+    dialect: str = "mysql",
+    limit: int | None = None,
+    offset: int | None = None,
+    sorts: list[dict[str, str]] | None = None,
+) -> str:
+    """Build a derived SQL for pagination/sorting over a safe base query."""
+    try:
+        base_expr = sqlglot.parse_one(base_sql, read=dialect)
+    except Exception as e:
+        raise DerivedSqlError(f"Failed to parse base SQL: {e}")
+        
+    query = sqlglot.select("*").from_(base_expr.subquery("dbfox_result"))
+    
+    if sorts:
+        for sort in sorts:
+            col = sort.get("column")
+            direction = sort.get("direction", "asc").lower()
+            if not col:
+                continue
+            if direction not in ("asc", "desc"):
+                direction = "asc"
+            # To be strictly safe against injection in column names, use identifier
+            query = query.order_by(exp.Ordered(this=exp.Identifier(this=col, quoted=True), desc=(direction == "desc")))
+            
+    if limit is not None:
+        query = query.limit(limit)
+    if offset is not None:
+        query = query.offset(offset)
+        
+    return query.sql(dialect=dialect)
+
+def validate_derived_sql(derived_sql: str, dialect: str = "mysql") -> list[str]:
+    """Lightweight validation for derived SQLs (paging/sorting).
+    Ensures it is a SELECT without dangerous operations.
+    """
+    warnings = []
+    try:
+        exprs = sqlglot.parse(derived_sql, read=dialect)
+        if len(exprs) != 1:
+            return ["Derived SQL must be a single statement."]
+        expr = exprs[0]
+        if not isinstance(expr, exp.Select):
+            return ["Derived SQL must be a SELECT statement."]
+    except Exception as e:
+        warnings.append(f"Derived SQL validation parse error: {e}")
+    return warnings
 
 def guardrail_bypass_allowed() -> bool:
     """Centralized check for guardrail bypass availability.

@@ -12,6 +12,8 @@ import type {
   AgentRuntimeEventRecord,
   AgentSessionRunSummary,
   AgentTraceEventRecord,
+  ResultPageRequest,
+  ResultPageResponse,
 } from "./types";
 
 export function createAgentRunDraft(question: string): AgentRunDraftState {
@@ -418,6 +420,12 @@ export const agentApi = {
   cancelAgentRun,
 
   streamResumeAgentRun,
+
+  fetchResultPage: (req: ResultPageRequest) =>
+    request<ResultPageResponse>("/agent/results/page", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
 };
 
 // ---------------------------------------------------------------------------
