@@ -69,6 +69,34 @@ describe("MessageBubble", () => {
     expect(onResolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", false);
   });
 
+  it("renders a read-only approval audit card for resolved approvals", () => {
+    const run = approvalRun();
+    run.status = "completed";
+    run.approval = {
+      ...run.approval!,
+      status: "approved",
+      decided_at: "2026-06-22T02:30:00Z",
+      decided_by: "local-user",
+      decision_note: "确认只读执行",
+    };
+
+    render(
+      <MessageBubble
+        message={{ ...assistantMessage, content: "查询已继续。", status: "completed" }}
+        run={run}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("审批已批准")).toBeTruthy();
+    expect(screen.getByText("决定人：local-user")).toBeTruthy();
+    expect(screen.getByText("审批时间：2026-06-22 02:30:00 UTC")).toBeTruthy();
+    expect(screen.getByText("确认只读执行")).toBeTruthy();
+    expect(screen.getByText("SELECT * FROM orders")).toBeTruthy();
+  });
+
   it("renders clickable evidence chips for grounded answers", () => {
     const onOpenSqlConsole = vi.fn();
     const onSelectArtifact = vi.fn();
