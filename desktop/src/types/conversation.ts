@@ -1,4 +1,4 @@
-import type { AgentAnswer, AgentRuntimeEvent } from "../lib/api/types";
+import type { AgentAnswer, AgentApproval, AgentRuntimeEvent } from "../lib/api/types";
 
 export type ConversationRole = "user" | "assistant" | "system";
 export type ConversationMessageStatus = "created" | "streaming" | "completed" | "failed" | "cancelled";
@@ -43,6 +43,7 @@ export interface ConversationRun {
   started_at?: string | null;
   completed_at?: string | null;
   answer?: AgentAnswer | null;
+  approval?: AgentApproval | null;
   events?: AgentRuntimeEvent[];
 }
 

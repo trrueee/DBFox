@@ -1,49 +1,71 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationMessage, ConversationRun } from "../../../../types/conversation";
 import { MessageBubble } from "../MessageBubble";
 
-describe("MessageBubble", () => {
-  it("renders assistant answers as document content with the trace above the answer", () => {
-    const message: ConversationMessage = {
-      id: "assistant-1",
-      conversation_id: "conv-1",
-      role: "assistant",
-      content: "## 用户注册数据分析报告\n\n这里是正文。",
-      status: "completed",
-      sequence: 2,
-      created_at: null,
-      updated_at: null,
-    };
-    const run: ConversationRun = {
-      id: "run-1",
-      conversation_id: "conv-1",
-      datasource_id: "ds-1",
-      question: "分析用户注册的数据",
-      status: "completed",
-      assistant_message_id: message.id,
-      events: [
-        {
-          event_id: "evt-1",
-          run_id: "run-1",
-          sequence: 1,
-          created_at_ms: 1,
-          type: "agent.run.completed",
-          step: { name: "progress", summary: "Run completed" },
-        },
-      ],
-    };
+const assistantMessage: ConversationMessage = {
+  id: "assistant-approval",
+  conversation_id: "conv-approval",
+  role: "assistant",
+  content: "需要确认后继续。",
+  status: "streaming",
+  sequence: 1,
+  created_at: null,
+  updated_at: null,
+};
 
-    const { container } = render(
-      <MessageBubble message={message} run={run} artifacts={[]} onOpenSqlConsole={vi.fn()} />,
+function approvalRun(): ConversationRun {
+  return {
+    id: "run-approval",
+    conversation_id: "conv-approval",
+    datasource_id: "ds-1",
+    question: "orders",
+    assistant_message_id: "assistant-approval",
+    status: "waiting_approval",
+    approval: {
+      id: "approval-1",
+      run_id: "run-approval",
+      session_id: "conv-approval",
+      step_name: "sql.execute_readonly",
+      tool_name: "sql.execute_readonly",
+      status: "pending",
+      risk_level: "warning",
+      reason: "生产环境需要确认",
+      policy_decision: {},
+      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      created_at: "2026-06-22T00:00:00Z",
+    },
+    events: [],
+  };
+}
+
+describe("MessageBubble", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
+  it("renders an approval card for pending approvals", () => {
+    const onResolveApproval = vi.fn();
+    render(
+      <MessageBubble
+        message={assistantMessage}
+        run={approvalRun()}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+        onResolveApproval={onResolveApproval}
+      />,
     );
 
-    const article = container.querySelector(".conv-message");
-    const trace = container.querySelector(".conv-run-trace");
-    const answerTitle = screen.getByText("用户注册数据分析报告");
+    expect(screen.getByText("需要审批")).toBeTruthy();
+    expect(screen.getByText("风险级别：warning")).toBeTruthy();
+    expect(screen.getByText("生产环境需要确认")).toBeTruthy();
+    expect(screen.getByText("SELECT * FROM orders")).toBeTruthy();
 
-    expect(article?.classList.contains("conv-message-answer")).toBe(true);
-    expect(trace).toBeTruthy();
-    expect(trace!.compareDocumentPosition(answerTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
+    expect(onResolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
+    expect(onResolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", false);
   });
 });

@@ -13,9 +13,17 @@ interface MessageListProps {
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onResolveApproval: (runId: string, approvalId: string, approved: boolean) => void;
 }
 
-export function MessageList({ messages, runs, artifacts, onOpenSqlConsole, onOpenResultTab }: MessageListProps) {
+export function MessageList({
+  messages,
+  runs,
+  artifacts,
+  onOpenSqlConsole,
+  onOpenResultTab,
+  onResolveApproval,
+}: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
@@ -34,6 +42,7 @@ export function MessageList({ messages, runs, artifacts, onOpenSqlConsole, onOpe
               artifacts={messageArtifacts}
               onOpenSqlConsole={onOpenSqlConsole}
               onOpenResultTab={onOpenResultTab}
+              onResolveApproval={onResolveApproval}
             />
           );
         })}
