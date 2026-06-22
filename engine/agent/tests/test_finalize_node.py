@@ -126,3 +126,41 @@ class TestFinalizeNode:
         assert result["status"] == "completed"
         assert result["answer"]["answer"] == "小红书工具调用共 8 条，主要集中在内容生成和发布流程。"
         assert "[answer.synthesize]" not in result["answer"]["answer"]
+
+    def test_finalize_adds_artifact_evidence_when_answer_has_none(self):
+        state: DBFoxAgentState = {
+            "messages": [AIMessage(content="订单查询完成。")],
+            "answer": {
+                "answer": "订单查询完成。",
+                "key_findings": [],
+                "evidence": [],
+                "caveats": [],
+                "recommendations": [],
+                "follow_up_questions": [],
+            },
+            "artifacts": [
+                {
+                    "id": "artifact-sql",
+                    "semantic_id": "sql_candidate",
+                    "type": "sql",
+                    "title": "SQL",
+                    "payload": {"sql": "SELECT id FROM orders"},
+                },
+                {
+                    "id": "artifact-result",
+                    "semantic_id": "result_view_1",
+                    "type": "result_view",
+                    "title": "订单结果",
+                    "payload": {"rowCount": 128},
+                },
+            ],
+            "status": "running",
+            "error": None,
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(state, {})
+
+        evidence = result["answer"]["evidence"]
+        assert {"artifact_id": "sql_candidate", "label": "SQL #1", "value": None} in evidence
+        assert {"artifact_id": "result_view_1", "label": "结果 128 行", "value": 128} in evidence

@@ -93,6 +93,7 @@ describe("conversationStore", () => {
     expect(state.messagesById["user-1"].content).toBe("hello");
     expect(state.messagesById["assistant-1"].content).toBe("world");
     expect(state.messagesById["assistant-1"].status).toBe("completed");
+    expect(state.runsById["run-1"].answer?.answer).toBe("world");
   });
 
   it("stores pending approval details from stream events", () => {

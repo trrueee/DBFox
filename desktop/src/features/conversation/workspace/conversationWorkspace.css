@@ -197,6 +197,42 @@
   border-radius: 3px;
 }
 
+.conv-answer-evidence {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.conv-answer-evidence-chip,
+.conv-answer-evidence-note {
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.conv-answer-evidence-chip {
+  cursor: pointer;
+}
+
+.conv-answer-evidence-chip:hover {
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.conv-answer-evidence-note {
+  display: inline-flex;
+  align-items: center;
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+}
+
 .conv-error-card {
   margin-top: 10px;
   padding: 10px 12px;

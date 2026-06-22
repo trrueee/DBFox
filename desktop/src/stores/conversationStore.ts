@@ -321,6 +321,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         const current = next.runsById[event.run_id];
         const approval = event.approval || event.response?.approval || current?.approval || null;
         const approvalStatus = runStatusForApprovalEvent(event);
+        const answer = event.answer || event.response?.answer || current?.answer || null;
         const run: ConversationRun = current || {
           id: event.run_id,
           conversation_id: conversationId,
@@ -335,6 +336,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           ...run,
           status: approvalStatus || run.status,
           approval,
+          answer,
         }, event));
       }
 
