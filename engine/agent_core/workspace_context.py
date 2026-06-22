@@ -13,8 +13,6 @@ from engine.models import (
     DataSource,
     SchemaTable,
     SemanticAlias,
-    SemanticDimension,
-    SemanticMetric,
     WorkspaceTableScope,
 )
 from engine.semantic import SchemaContextBuilder, SchemaLinker
@@ -209,20 +207,6 @@ def _semantic_context(
         .limit(32)
         .all()
     )
-    metrics = (
-        db.query(SemanticMetric)
-        .filter(SemanticMetric.data_source_id == datasource_id)
-        .order_by(SemanticMetric.created_at.desc())
-        .limit(32)
-        .all()
-    )
-    dimensions = (
-        db.query(SemanticDimension)
-        .filter(SemanticDimension.data_source_id == datasource_id)
-        .order_by(SemanticDimension.created_at.desc())
-        .limit(32)
-        .all()
-    )
     scopes = []
     if workspace.project_id:
         scopes = (
@@ -240,24 +224,8 @@ def _semantic_context(
             {"alias": item.alias, "target_type": item.target_type, "target": item.target, "description": item.description}
             for item in aliases
         ],
-        "metrics": [
-            {
-                "name": item.name,
-                "expression": item.expression,
-                "source_columns_json": item.source_columns_json,
-                "description": item.description,
-            }
-            for item in metrics
-        ],
-        "dimensions": [
-            {
-                "name": item.name,
-                "column_ref": item.column_ref,
-                "transform": item.transform,
-                "description": item.description,
-            }
-            for item in dimensions
-        ],
+        "metrics": [],
+        "dimensions": [],
         "table_scope": [
             {"table_id": item.table_id, "enabled": bool(item.enabled)}
             for item in scopes

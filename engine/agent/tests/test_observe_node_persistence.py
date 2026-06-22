@@ -17,6 +17,7 @@ from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import (
     AgentArtifact,
     AgentArtifactPresentation,
+    AgentRunRequest,
     AgentRuntimeEvent,
     ToolObservation,
 )
@@ -289,3 +290,33 @@ def test_service_persists_artifact_created_events_via_sink():
     service._persist_artifact_event("session-1", event, index=3)
 
     assert sink.artifacts == [("session-1", "run-1", artifact, 3)]
+
+
+def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypatch):
+    def fake_context_bundle(_db, _req):
+        return {
+            "context_summary": "Datasource demo",
+            "schema_linking": {
+                "selected_tables": ["users"],
+                "semantic_aliases_used": [
+                    {"alias": "新注册用户", "target": "users.created_at", "source": "db"}
+                ],
+            },
+            "semantic_context": {"aliases": []},
+        }
+
+    monkeypatch.setattr("engine.agent_core.workspace_context.build_agent_context_bundle", fake_context_bundle)
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    service.db = object()
+
+    state = service._initial_state(
+        AgentRunRequest(datasource_id="ds-test", question="分析新注册用户"),
+        "run-semantic",
+        "session-semantic",
+    )
+
+    assert state["context_summary"] == "Datasource demo"
+    assert state["schema_context"]["selected_tables"] == ["users"]
+    assert state["semantic_resolution"]["semantic_aliases_used"] == [
+        {"alias": "新注册用户", "target": "users.created_at", "source": "db"}
+    ]

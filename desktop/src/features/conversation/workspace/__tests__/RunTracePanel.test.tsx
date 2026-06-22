@@ -177,4 +177,51 @@ describe("RunTracePanel", () => {
     expect(screen.getAllByText("SQL 语法错误").length).toBeGreaterThan(0);
     expect(container.querySelector("details")?.hasAttribute("open")).toBe(true);
   });
+
+  it("shows memory and semantic references from context updates", () => {
+    const run: ConversationRun = {
+      id: "run-context",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析新注册用户 GMV",
+      status: "running",
+      events: [
+        {
+          event_id: "evt-context",
+          run_id: "run-context",
+          sequence: 1,
+          created_at_ms: 1,
+          type: "agent.context.update",
+          step: {
+            summary: "Using semantic context",
+            task_lens: {
+              memory_references: [
+                {
+                  label: "GMV definition",
+                  summary: "GMV = paid_amount - refund_amount",
+                  source: "memory",
+                },
+              ],
+              semantic_references: [
+                {
+                  label: "新注册用户",
+                  summary: "users.created_at",
+                  source: "db",
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    render(<RunTracePanel run={run} />);
+
+    expect(screen.getByText("参考业务记忆")).toBeTruthy();
+    expect(screen.getByText("GMV definition")).toBeTruthy();
+    expect(screen.getByText("GMV = paid_amount - refund_amount")).toBeTruthy();
+    expect(screen.getByText("字段理解")).toBeTruthy();
+    expect(screen.getByText("新注册用户")).toBeTruthy();
+    expect(screen.getByText("users.created_at")).toBeTruthy();
+  });
 });

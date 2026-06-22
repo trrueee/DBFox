@@ -60,6 +60,51 @@ def _runtime_error_message(exc: Exception) -> str:
     return f"Internal agent error: {exc}"
 
 
+def _build_context_bundle(db: Session, req: AgentRunRequest) -> dict[str, Any]:
+    try:
+        from engine.agent_core.workspace_context import build_agent_context_bundle
+
+        bundle = build_agent_context_bundle(db, req)
+    except Exception:
+        logger.warning("Failed to build agent workspace context bundle", exc_info=True)
+        return {}
+    return bundle if isinstance(bundle, dict) else {}
+
+
+def _workspace_context_payload(
+    req: AgentRunRequest,
+    context_bundle: dict[str, Any],
+) -> dict[str, Any] | None:
+    workspace = context_bundle.get("workspace")
+    if isinstance(workspace, dict):
+        return workspace
+    return req.workspace_context.model_dump(mode="json") if req.workspace_context else None
+
+
+def _schema_context_payload(context_bundle: dict[str, Any]) -> dict[str, Any] | None:
+    schema_linking = context_bundle.get("schema_linking")
+    return schema_linking if isinstance(schema_linking, dict) else None
+
+
+def _semantic_resolution_payload(context_bundle: dict[str, Any]) -> dict[str, Any] | None:
+    semantic_context = context_bundle.get("semantic_context")
+    schema_linking = context_bundle.get("schema_linking")
+    payload: dict[str, Any] = {}
+    if isinstance(semantic_context, dict):
+        payload.update(semantic_context)
+    if isinstance(schema_linking, dict):
+        for key in (
+            "semantic_aliases_used",
+            "schema_linking_reasons",
+            "selected_tables",
+            "selected_columns",
+        ):
+            value = schema_linking.get(key)
+            if value:
+                payload[key] = value
+    return payload or None
+
+
 class DBFoxAgentService:
     """Next-generation DBFox agent service built on a pure ReAct graph.
 
@@ -344,6 +389,8 @@ class DBFoxAgentService:
         self, req: AgentRunRequest, run_id: str, session_id: str
     ) -> DBFoxAgentState:
         pending_approval = pending_approval_from_workspace(self.db, req)
+        context_bundle = _build_context_bundle(self.db, req)
+        context_summary = context_bundle.get("context_summary")
         if req.execution_mode:
             execution_mode = req.execution_mode
         else:
@@ -355,8 +402,9 @@ class DBFoxAgentService:
             execute=req.execute,
             status="running",
             messages=[{"role": "user", "content": req.question}],
-            workspace_context=req.workspace_context.model_dump(mode="json") if req.workspace_context else None,
+            workspace_context=_workspace_context_payload(req, context_bundle),
             follow_up_context=req.follow_up_context.model_dump(mode="json") if req.follow_up_context else None,
+            context_summary=context_summary if isinstance(context_summary, str) else None,
             max_steps=req.max_steps,
             step_count=0,
             # ---- Progress Judge state ----
@@ -368,7 +416,7 @@ class DBFoxAgentService:
             # ---- Environment / Semantic layers ----
             environment_profile=None,
             database_map=None,
-            semantic_resolution=None,
+            semantic_resolution=_semantic_resolution_payload(context_bundle),
             db_search_results=None,
             db_inspection=None,
             db_preview=None,
@@ -396,7 +444,7 @@ class DBFoxAgentService:
             sql=None,
             safety=None,
             execution=None,
-            schema_context=None,
+            schema_context=_schema_context_payload(context_bundle),
             query_plan=None,
             chart_suggestion=None,
             answer=None,
