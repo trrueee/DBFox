@@ -140,8 +140,8 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
 
   if (mode === "workspace") {
     return (
-      <div className="flex flex-col h-full overflow-hidden w-full bg-white">
-        <div className="hifi-panel-toolbar border-b border-slate-200 bg-white px-2">
+      <div className="hifi-result-workspace flex flex-col h-full overflow-hidden w-full">
+        <div className="hifi-panel-toolbar hifi-result-toolbar px-2">
           <div className="hifi-toolbar-left flex items-center gap-1">
             <button className="hifi-toolbar-btn" onClick={() => isSqlBackedWorkspace ? setPage(page) : undefined} disabled={isLoading || !isSqlBackedWorkspace}>
               <RefreshCw size={10} className={isLoading ? "animate-spin" : ""} /> 刷新
@@ -153,9 +153,9 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           </div>
           <div className="hifi-toolbar-right flex items-center gap-2">
             <div className="relative flex items-center">
-              <Search size={12} className="absolute left-2 text-gray-400" />
+              <Search size={12} className="hifi-result-search-icon absolute left-2" />
               <input
-                className="hifi-input h-6 w-32 pl-6 pr-2 rounded border border-gray-200 text-[11px]"
+                className="hifi-input hifi-result-search h-6 w-32 pl-6 pr-2 rounded text-[11px]"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="本地搜索..."
@@ -177,7 +177,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           </div>
         )}
 
-        <div className="hifi-table-container flex-1 overflow-auto bg-white relative">
+        <div className="hifi-table-container hifi-result-table-wrap flex-1 overflow-auto relative">
           {isLoading && <div className="hifi-preview-loading-bar absolute top-0 left-0 right-0" />}
           <table className="hifi-table min-w-full">
             <thead>
@@ -192,7 +192,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
                     >
                       {column}
                       {sort?.columnIndex === columnIndex && (
-                        <span className="text-[10px] text-blue-500">{sort.direction === "asc" ? "↑" : "↓"}</span>
+                        <span className="hifi-artifact-sort-indicator">{sort.direction === "asc" ? "↑" : "↓"}</span>
                       )}
                     </button>
                   </th>
@@ -217,7 +217,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
                 ))
               ) : (
                 <tr>
-                  <td colSpan={artifact.columns.length} className="text-center text-slate-400 py-8">
+                  <td colSpan={artifact.columns.length} className="hifi-result-empty py-8">
                     无匹配结果
                   </td>
                 </tr>
@@ -226,30 +226,28 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           </table>
         </div>
 
-        <div className="hifi-table-footer border-t border-slate-200 bg-slate-50 px-2 py-1">
-          <span className="text-slate-500">
+        <div className="hifi-table-footer px-2 py-1">
+          <span className="hifi-result-footer-text">
             {isLoading
               ? "加载中..."
               : `第 ${page} 页 · 本页 ${visibleRows.length} 行${latencyMs !== undefined ? ` · ${latencyMs}ms` : ""}`}
             {totalRows !== undefined && ` · 总计约 ${totalRows} 行`}
-            {artifact.truncated && <span className="text-amber-600"> · 结果已截断</span>}
+            {artifact.truncated && <span className="hifi-result-truncated"> · 结果已截断</span>}
           </span>
           
           <div className="flex items-center gap-2">
             {isSqlBackedWorkspace && (
               <div className="hifi-pagination flex items-center gap-1">
                 <button
-                  className={`hifi-toolbar-btn flex items-center justify-center ${page <= 1 ? "opacity-40 cursor-not-allowed" : ""}`}
-                  style={{ height: "20px", padding: "0 6px" }}
+                  className={`hifi-toolbar-btn hifi-result-page-btn flex items-center justify-center ${page <= 1 ? "opacity-40 cursor-not-allowed" : ""}`}
                   disabled={page <= 1 || isLoading}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                 >
                   &lt;
                 </button>
-                <span className="hifi-page-num active flex items-center justify-center h-5 px-2 bg-blue-50 text-blue-600 rounded text-[11px] font-medium">{page}</span>
+                <span className="hifi-page-num active flex items-center justify-center h-5 px-2 rounded text-[11px] font-medium">{page}</span>
                 <button
-                  className={`hifi-toolbar-btn flex items-center justify-center ${!backendData?.hasNextPage ? "opacity-40 cursor-not-allowed" : ""}`}
-                  style={{ height: "20px", padding: "0 6px" }}
+                  className={`hifi-toolbar-btn hifi-result-page-btn flex items-center justify-center ${!backendData?.hasNextPage ? "opacity-40 cursor-not-allowed" : ""}`}
                   disabled={(!backendData?.hasNextPage) || isLoading}
                   onClick={() => setPage(p => p + 1)}
                 >
@@ -258,7 +256,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
               </div>
             )}
             <select
-              className="border border-slate-200 bg-white rounded px-1 h-5 text-[10px] text-slate-600 focus:outline-none"
+              className="hifi-result-page-size px-1 focus:outline-none"
               value={pageSize}
               disabled={!isSqlBackedWorkspace}
               onChange={(event) => {
@@ -285,14 +283,14 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
         <span className="hifi-artifact-chip hifi-artifact-chip-table">结果表</span>
       </div>
       <div className="hifi-ai-card-body p-3">
-        {artifact.description && <p className="text-[10px] text-slate-500 mb-2">{artifact.description}</p>}
+        {artifact.description && <p className="hifi-artifact-description mb-2">{artifact.description}</p>}
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor={`${artifact.id}-table-search`}>
             搜索结果
           </label>
           <input
             id={`${artifact.id}-table-search`}
-            className="hifi-input h-7 min-w-[180px] flex-1 rounded border border-slate-200 px-2 text-[11px]"
+            className="hifi-input h-7 min-w-[180px] flex-1 rounded px-2 text-[11px]"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索结果"
@@ -300,8 +298,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           {(!isSqlBackedWorkspace && rowsToUse.length > PREVIEW_ROW_LIMIT && !isSearching) && (
             <button
               type="button"
-              className="hifi-guide-btn-secondary"
-              style={{ height: "28px", fontSize: "10px" }}
+              className="hifi-guide-btn-secondary hifi-artifact-action-btn"
               onClick={() => setExpanded((value) => !value)}
             >
               {expanded ? "收起预览" : `查看全部已载入 ${rowsToUse.length} 行`}
@@ -309,55 +306,52 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           )}
         </div>
         {fetchError && (
-          <div className="mb-2 p-2 rounded bg-red-50 text-red-700 text-[11px] flex items-center gap-1">
+          <div className="hifi-result-error mb-2 p-2 rounded text-[11px] flex items-center gap-1">
             <AlertCircle size={12} />
             获取分页数据失败: {fetchError}
           </div>
         )}
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-          <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+        <div className="hifi-artifact-meta mb-2 flex flex-wrap items-center gap-2">
+          <span className="hifi-artifact-pill">
             预览 {previewCount} / 共 {totalRows} 行
           </span>
           {shouldUseWindow && (
-            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+            <span className="hifi-artifact-pill">
               窗口 1-{visibleRows.length} / {filteredAndSortedRows.length}
             </span>
           )}
-          <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{artifact.columns.length} 列</span>
+          <span className="hifi-artifact-pill">{artifact.columns.length} 列</span>
           {latencyMs !== undefined && (
-            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{latencyMs}ms</span>
+            <span className="hifi-artifact-pill">{latencyMs}ms</span>
           )}
           {!isSqlBackedWorkspace && returnedRows > previewCount && (
-            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">已载入 {returnedRows} 行</span>
+            <span className="hifi-artifact-pill">已载入 {returnedRows} 行</span>
           )}
           {artifact.truncated && (
-            <span className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">结果已截断</span>
+            <span className="hifi-artifact-pill hifi-artifact-pill-warning">结果已截断</span>
           )}
         </div>
         {(warnings.length > 0 || notices.length > 0) && (
           <div className="mb-2 grid gap-1 text-[10px]">
-            {warnings.map((warning) => <span key={`warning-${warning}`} className="text-amber-700">{warning}</span>)}
-            {notices.map((notice) => <span key={`notice-${notice}`} className="text-slate-500">{notice}</span>)}
+            {warnings.map((warning) => <span key={`warning-${warning}`} className="hifi-artifact-warning-text">{warning}</span>)}
+            {notices.map((notice) => <span key={`notice-${notice}`} className="hifi-artifact-muted-text">{notice}</span>)}
           </div>
         )}
-        <div
-          className="overflow-auto rounded border border-slate-200"
-          style={{ maxHeight: "320px" }}
-        >
+        <div className="hifi-result-inline-table overflow-auto">
           <table className="hifi-table min-w-full">
             <thead>
               <tr>
                 {artifact.columns.map((column, columnIndex) => (
-                  <th key={`${column}-${columnIndex}`} className="sticky top-0 z-10 bg-slate-50">
+                  <th key={`${column}-${columnIndex}`} className="hifi-result-table-head sticky top-0 z-10">
                     <button
                       type="button"
-                      className="w-full text-left font-semibold text-slate-600 flex items-center gap-1"
+                      className="hifi-result-table-head-button w-full text-left font-semibold flex items-center gap-1"
                       onClick={() => handleSort(columnIndex)}
                       title={sort?.columnIndex === columnIndex ? `当前${sort.direction === "desc" ? "降序" : "升序"}` : "点击排序"}
                     >
                       {column}
                       {sort?.columnIndex === columnIndex && (
-                        <span className="text-[10px] text-blue-500">{sort.direction === "asc" ? "↑" : "↓"}</span>
+                        <span className="hifi-artifact-sort-indicator">{sort.direction === "asc" ? "↑" : "↓"}</span>
                       )}
                     </button>
                   </th>
@@ -382,7 +376,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
                 ))
               ) : (
                 <tr>
-                  <td colSpan={artifact.columns.length} className="text-center text-slate-400">
+                  <td colSpan={artifact.columns.length} className="hifi-result-empty">
                     无匹配结果
                   </td>
                 </tr>
@@ -394,19 +388,18 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           {onOpenResultTab && (
             <button
               type="button"
-              className="hifi-guide-btn-secondary flex items-center gap-1"
-              style={{ height: "24px", fontSize: "10px" }}
+              className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1"
               onClick={() => onOpenResultTab(artifact)}
             >
               <ExternalLink size={10} />
               打开为 Tab
             </button>
           )}
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleCopy}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
             <Copy size={10} />
             复制 CSV
           </button>
-          <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleExport}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleExport}>
             <Download size={10} />
             导出 CSV
           </button>
@@ -429,7 +422,7 @@ function compareCells(left: string, right: string, direction: SortDirection): nu
 
 function cellClassName(value: string): string {
   const classes = ["cursor-copy"];
-  if (value === "NULL") classes.push("text-slate-400", "italic");
+  if (value === "NULL") classes.push("hifi-cell-null", "italic");
   if (value.trim() !== "" && Number.isFinite(Number(value))) {
     classes.push("text-right", "tabular-nums");
   }
