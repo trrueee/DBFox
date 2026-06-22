@@ -1,11 +1,15 @@
 """Test Conversations API endpoints."""
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
+import engine.api.conversations as conversations_module
+from engine.agent_core.types import AgentRunRequest, AgentRuntimeEvent
 from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
 from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentSession
@@ -24,6 +28,15 @@ def client(db_session):
 
 def _hdrs():
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
+
+
+async def _streaming_response_text(response) -> str:
+    if not hasattr(response, "body_iterator"):
+        return response.text
+    chunks: list[str] = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
+    return "".join(chunks)
 
 
 def test_list_conversations_empty(client):
@@ -214,3 +227,85 @@ def test_prepare_conversation_message_creates_message_ids(client, db_session):
     assert data["user_message_id"].startswith("msg-user-")
     assert data["assistant_message_id"].startswith("msg-assistant-")
     assert data["run_id"] is None
+
+
+def test_stream_conversation_message_passes_context_tables_to_agent(monkeypatch, client, db_session):
+    captured: dict[str, AgentRunRequest] = {}
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run_iter(self, req: AgentRunRequest):
+            captured["req"] = req
+            yield AgentRuntimeEvent(
+                event_id="evt-context",
+                run_id="run-context",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.started",
+            )
+
+    monkeypatch.setattr(conversations_module, "DBFoxAgentRuntime", FakeRuntime)
+    session = AgentSession(
+        id="conv-context",
+        datasource_id="ds-1",
+        title="Context test",
+        context_tables_json=json.dumps(["orders", "orders", " customers ", "", 123], ensure_ascii=False),
+    )
+    db_session.add(session)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/conversations/conv-context/messages/stream",
+        json={"content": "Count orders", "api_key": "test-key", "model_name": "test-model"},
+        headers=_hdrs(),
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert response.status_code == 200
+    assert "agent.run.started" in body
+    req = captured["req"]
+    assert req.workspace_context is not None
+    assert req.workspace_context.datasource_id == "ds-1"
+    assert req.workspace_context.selected_table_names == ["orders", "customers"]
+
+
+def test_stream_conversation_message_ignores_malformed_context_tables(monkeypatch, client, db_session):
+    captured: dict[str, AgentRunRequest] = {}
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run_iter(self, req: AgentRunRequest):
+            captured["req"] = req
+            yield AgentRuntimeEvent(
+                event_id="evt-context-bad-json",
+                run_id="run-context-bad-json",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.started",
+            )
+
+    monkeypatch.setattr(conversations_module, "DBFoxAgentRuntime", FakeRuntime)
+    session = AgentSession(
+        id="conv-bad-context",
+        datasource_id="ds-1",
+        title="Bad context",
+        context_tables_json="{not-json",
+    )
+    db_session.add(session)
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/conversations/conv-bad-context/messages/stream",
+        json={"content": "Count orders", "api_key": "test-key", "model_name": "test-model"},
+        headers=_hdrs(),
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert response.status_code == 200
+    assert "agent.run.started" in body
+    assert captured["req"].workspace_context is not None
+    assert captured["req"].workspace_context.selected_table_names == []
