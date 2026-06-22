@@ -56,11 +56,15 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
 
     # Ensure answer has evidence from analysis_units if missing
     if has_answer and not answer_dict.get("evidence"):
-        from engine.agent_core.answer import _build_evidence
-        units = state.get("analysis_units") or []
-        answer_dict["evidence"] = [
-            ev.model_dump() for ev in _build_evidence(units)
-        ]
+        artifact_evidence = _build_artifact_evidence(state.get("artifacts") or [])
+        if artifact_evidence:
+            answer_dict["evidence"] = artifact_evidence
+        else:
+            from engine.agent_core.answer import _build_evidence
+            units = state.get("analysis_units") or []
+            answer_dict["evidence"] = [
+                ev.model_dump() for ev in _build_evidence(units)
+            ]
 
     trace_event: dict[str, Any] = {
         "type": "agent.finalized",
@@ -86,6 +90,60 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
             result["artifacts"] = [error_artifact]
 
     return result
+
+
+def _build_artifact_evidence(artifacts: list[Any]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    sql_count = 0
+    result_count = 0
+    for artifact in artifacts:
+        artifact_type = _artifact_field(artifact, "type")
+        artifact_id = _artifact_field(artifact, "semantic_id") or _artifact_field(artifact, "id")
+        if not artifact_id:
+            continue
+        if artifact_type in {"sql", "sql_suggestion"}:
+            sql_count += 1
+            evidence.append({"artifact_id": artifact_id, "label": f"SQL #{sql_count}", "value": None})
+            continue
+        if artifact_type in {"result_view", "table"}:
+            result_count += 1
+            payload = _artifact_payload(artifact)
+            row_count = _payload_number(payload, "rowCount", "row_count", "returnedRows", "returned_rows")
+            label = f"结果 {row_count} 行" if row_count is not None else f"结果 #{result_count}"
+            evidence.append({"artifact_id": artifact_id, "label": label, "value": row_count})
+    return evidence
+
+
+def _artifact_field(artifact: Any, key: str) -> str:
+    if isinstance(artifact, dict):
+        value = artifact.get(key)
+    else:
+        value = getattr(artifact, key, None)
+    return str(value) if value else ""
+
+
+def _artifact_payload(artifact: Any) -> dict[str, Any]:
+    if isinstance(artifact, dict):
+        payload = artifact.get("payload")
+    else:
+        payload = getattr(artifact, "payload", None)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _payload_number(payload: dict[str, Any], *keys: str) -> int | float | None:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                try:
+                    return float(value)
+                except ValueError:
+                    pass
+    return None
 
 
 def _build_and_persist_error_artifact(

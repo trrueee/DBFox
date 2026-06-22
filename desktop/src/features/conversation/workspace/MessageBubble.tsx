@@ -1,5 +1,5 @@
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
-import type { AgentApproval } from "../../../lib/api/types";
+import type { AgentAnswer, AgentApproval } from "../../../lib/api/types";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -51,6 +51,11 @@ export function MessageBubble({
             <div className="conv-answer-document">
               <MarkdownContent content={message.content || (message.status === "streaming" ? "Thinking..." : "")} />
             </div>
+            <AnswerEvidenceChips
+              answer={run?.answer || null}
+              artifacts={artifacts}
+              onOpenSqlConsole={onOpenSqlConsole}
+            />
           </>
         )}
         {!isUser && <DataReferencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
@@ -63,6 +68,46 @@ export function MessageBubble({
         )}
       </div>
     </article>
+  );
+}
+
+function AnswerEvidenceChips({
+  answer,
+  artifacts,
+  onOpenSqlConsole,
+}: {
+  answer: AgentAnswer | null;
+  artifacts: ConversationArtifact[];
+  onOpenSqlConsole: (sql?: string) => void;
+}) {
+  if (!answer) return null;
+  const chips = answer.evidence.map((item) => {
+    const artifact = findEvidenceArtifact(artifacts, item.artifact_id);
+    return { evidence: item, artifact };
+  });
+  const grounded = chips.some(({ artifact }) => artifact && isGroundedArtifact(artifact));
+  if (!grounded) {
+    return <div className="conv-answer-evidence-note">未执行查询，仅基于 schema 推断</div>;
+  }
+  return (
+    <div className="conv-answer-evidence" aria-label="Answer evidence">
+      {chips.map(({ evidence, artifact }) => {
+        const label = evidence.label || evidence.artifact_id;
+        const sql = artifact ? sqlText(artifact) : "";
+        return (
+          <button
+            key={`${evidence.artifact_id}-${label}`}
+            type="button"
+            className={`conv-answer-evidence-chip ${artifact?.type ? `conv-answer-evidence-${artifact.type}` : ""}`}
+            onClick={() => {
+              if (sql) onOpenSqlConsole(sql);
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -118,4 +163,17 @@ function approvalSql(approval: AgentApproval): string {
     return (args as Record<string, string>).sql;
   }
   return "";
+}
+
+function findEvidenceArtifact(artifacts: ConversationArtifact[], artifactId: string): ConversationArtifact | undefined {
+  return artifacts.find((artifact) => artifact.id === artifactId || artifact.semantic_id === artifactId);
+}
+
+function isGroundedArtifact(artifact: ConversationArtifact): boolean {
+  return artifact.type === "sql" || artifact.type === "sql_suggestion" || artifact.type === "table" || artifact.type === "result_view";
+}
+
+function sqlText(artifact: ConversationArtifact): string {
+  const value = artifact.payload.sql || artifact.payload.proposed_sql || artifact.payload.safeSql || artifact.payload.safe_sql;
+  return typeof value === "string" ? value : "";
 }
