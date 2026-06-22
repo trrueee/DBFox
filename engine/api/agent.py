@@ -440,6 +440,30 @@ def _safe_sql_from_artifact(record: AgentArtifactRecord) -> str:
     return ""
 
 
+def _result_columns_from_artifact(record: AgentArtifactRecord) -> set[str]:
+    payload = _artifact_payload(record)
+    raw_columns = payload.get("columns")
+    if not isinstance(raw_columns, list):
+        return set()
+
+    columns: set[str] = set()
+    for item in raw_columns:
+        name = ""
+        if isinstance(item, str):
+            name = item
+        elif isinstance(item, dict):
+            raw_name = item.get("name") or item.get("field") or item.get("column")
+            name = raw_name if isinstance(raw_name, str) else ""
+        name = name.strip()
+        if name:
+            columns.add(_normalize_result_column_name(name))
+    return columns
+
+
+def _normalize_result_column_name(column: str) -> str:
+    return column.strip().strip('`"[]').lower()
+
+
 def _load_source_artifact(
     db: Session,
     *,
@@ -462,7 +486,11 @@ def _load_source_artifact(
     )
 
 
-def _verified_pagination_source_sql(db: Session, req: ResultPageRequest, dialect: str) -> str:
+def _verified_pagination_source(
+    db: Session,
+    req: ResultPageRequest,
+    dialect: str,
+) -> tuple[str, AgentArtifactRecord]:
     source = _load_source_artifact(
         db,
         datasource_id=req.datasourceId,
@@ -499,7 +527,44 @@ def _verified_pagination_source_sql(db: Session, req: ResultPageRequest, dialect
             status_code=400,
             detail={"code": "SOURCE_SQL_VALIDATION_FAILED", "message": warnings[0]},
         )
-    return persisted_safe_sql
+    return persisted_safe_sql, source
+
+
+def _verified_pagination_source_sql(db: Session, req: ResultPageRequest, dialect: str) -> str:
+    source_sql, _ = _verified_pagination_source(db, req, dialect)
+    return source_sql
+
+
+def _validated_result_page_sorts(
+    req: ResultPageRequest,
+    source: AgentArtifactRecord,
+) -> list[dict[str, str]] | None:
+    if not req.sort:
+        return None
+
+    allowed_columns = _result_columns_from_artifact(source)
+    if not allowed_columns:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "SOURCE_COLUMNS_MISSING",
+                "message": "Source result artifact does not list sortable columns.",
+            },
+        )
+
+    sorts: list[dict[str, str]] = []
+    for sort in req.sort:
+        normalized = _normalize_result_column_name(sort.column)
+        if normalized not in allowed_columns:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "SORT_COLUMN_NOT_ALLOWED",
+                    "message": f"Sort column '{sort.column}' is not present in the source result.",
+                },
+            )
+        sorts.append({"column": sort.column.strip(), "direction": sort.direction})
+    return sorts
 
 
 def _pagination_execution_decision(datasource_id: str, original_sql: str, safe_sql: str):
@@ -543,12 +608,8 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
     limit = req.pageSize
     offset = (req.page - 1) * req.pageSize
 
-    sorts = [{"column": s.column, "direction": s.direction} for s in req.sort] if req.sort else None
-    
-    # Optional search / filters can be added to build_derived_sql later
-    # For now, we handle limit/offset and sorts.
-
-    source_sql = _verified_pagination_source_sql(db, req, dialect)
+    source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
+    sorts = _validated_result_page_sorts(req, source_artifact)
 
     try:
         derived_sql = build_derived_sql(

@@ -144,6 +144,31 @@ def test_result_page_rejects_persisted_non_select_source_sql(db_session):
     assert exc_info.value.detail["code"] == "SOURCE_SQL_VALIDATION_FAILED"
 
 
+def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, db_session):
+    _add_pagination_source(db_session)
+
+    def fail_execute_query(*_args, **_kwargs):
+        raise AssertionError("sort validation must run before execution")
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fail_execute_query)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="SELECT id, amount FROM orders",
+                page=1,
+                pageSize=20,
+                sort=[agent_module.ResultSort(column="users.password", direction="asc")],
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "SORT_COLUMN_NOT_ALLOWED"
+
+
 def test_sse_failed_event() -> None:
     event_str = sse_failed_event("evt_123", "run_456", "Test error message", "ERR_CODE")
     assert event_str.startswith("event: agent.run.failed\n")
