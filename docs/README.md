@@ -4,9 +4,9 @@
 
 ```
 docs/
-├── adr/         架构决策记录 —— "为什么这样做"
 ├── designs/     功能设计文档 —— "要做什么，怎么做"
 ├── plans/       实现计划     —— "分几步做，每一步产出什么"
+├── superpowers/ 补充规格与计划 —— 由 superpowers 技能生成的 specs + plans
 ├── reviews/     审查报告     —— "有哪些问题，严重程度如何"
 ├── qa/          测试与质量   —— "怎么测，测什么，质量标准"
 ├── reports/     调研报告     —— "调研了什么，结论是什么"
@@ -16,32 +16,6 @@ docs/
 ---
 
 ## 每个目录的使用方式
-
-### `adr/` — 架构决策记录
-
-**何时创建**：当做出一个会影响后续所有开发的架构选择时。
-
-| 触发条件 | 举例 |
-|----------|------|
-| 选择了一个技术栈/库/框架 | 选 Pydantic v2 还是 dataclasses |
-| 确定了一种分层/模块化方式 | 按方言拆分 executor vs 统一入口 |
-| 否决了一个常见方案 | 为什么不用 ORM 的 relationship |
-
-**命名**：`NNN-{做了什么选择}.md`
-
-```
-001-use-pydantic-v2-for-schemas.md
-002-split-executor-by-dialect.md
-003-ssh-tunnel-connection-pooling.md
-```
-
-**内容要求**：
-- 标题即决策（`Title: Use Pydantic v2 for request/response schemas`）
-- 必须包含：背景 → 选项 → 决策 → 后果
-- 一旦 merge，**序号和内容不可改**；新决策追加新序号，不插入中间
-
-**生命周期**：创建 → review → merge → 永久保留（即使后来被取代，也不删除，而是新写一个 ADR 说明取代）
-
 
 ### `designs/` — 功能设计文档
 
@@ -87,15 +61,28 @@ plans/2026-06-17-datasource-split.md     ← 实现计划
 **生命周期**：创建 → 执行（逐个勾掉 task）→ 全部完成后标记完成
 
 
+### `superpowers/` — 补充规格与计划
+
+由 superpowers 技能自动生成的规格和计划文件，作为 `designs/` + `plans/` 的补充。
+
+```
+superpowers/
+├── specs/    规格文档（与 designs/ 同等内容标准）
+└── plans/    实现计划（与 plans/ 同等内容标准）
+```
+
+当 superpowers specs 与 designs 内容重叠时，以 designs 为准。完成后手工整理合并到标准目录。
+
+
 ### `reviews/` — 审查报告
 
 **何时创建**：对代码库进行了系统性审查（架构审查、安全审查、代码质量审查）后。
 
-**子目录按审查类型分**：
+**子目录**：
 
 ```
-reviews/architecture/    ← 架构审查
-reviews/security/        ← 安全审查（待建）
+reviews/architecture/    ← 架构审查（16 篇）
+reviews/codegraph/       ← CodeGraph 自动化审查
 ```
 
 **命名**：`NN-{子系统或问题域}.md`
@@ -124,9 +111,11 @@ reviews/security/        ← 安全审查（待建）
 04-integration-test.md    ← 集成测试怎么写
 05-defect-reports.md       ← 缺陷报告规范
 06-whitebox-test.md        ← 白盒测试策略
+07-blackbox-test.md        ← 黑盒测试策略
+08-nonfunctional.md        ← 非功能需求
+09-refactoring.md          ← 安全重构计划
+10-frontend-ux-issues.md   ← 前端 UX 问题追踪
 ```
-
-**内容要求**：规范类文档，描述"怎么测"和"标准是什么"，不描述具体测试用例。
 
 **生命周期**：创建 → review → merge → 随项目演进持续更新
 
@@ -137,14 +126,9 @@ reviews/security/        ← 安全审查（待建）
 
 **命名**：`YYYY-MM-DD-{主题}.md`
 
-```
-2026-06-14-deep-research.md    ← 某次深度调研
-2026-06-20-orm-vs-raw-sql.md   ← 技术选型分析
-```
-
 **内容要求**：调研目的 → 方法 → 发现 → 结论 → 建议
 
-**生命周期**：创建 → review → 结论明确后可提炼为 ADR
+**生命周期**：创建 → review → 结论明确后可作为设计输入
 
 
 ### `reference/` — 长期参考
@@ -174,16 +158,15 @@ reviews/security/        ← 安全审查（待建）
 | **不重复后缀** | 目录已表达类型，文件名不再加 `-design` `-spec` `-report` |
 | **design ↔ plan 同名** | 同名文件分别放 `designs/` 和 `plans/` |
 | **一个文档一个主题** | 标题出现 "and" 通常是两个文档强行合并的信号 |
-| **ADR 序号不可变** | 三位数字 `001-`，merge 后不重排、不插入 |
 
+---
 
 ## 典型工作流
 
 ```
 1. 新功能启动
    ├─ 需要调研？ → reports/YYYY-MM-DD-{调研主题}.md
-   └─ 调研结论 → adr/（如有架构决策）
-                → designs/YYYY-MM-DD-{功能名}.md
+   └─ 设计方案 → designs/YYYY-MM-DD-{功能名}.md
 
 2. 设计完成
    └─ plans/YYYY-MM-DD-{功能名}.md  （与 design 同名）
