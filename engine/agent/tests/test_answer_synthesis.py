@@ -6,31 +6,45 @@ from engine.agent_core.answer import synthesize_agent_answer
 
 def test_synthesize_agent_answer_no_analysis_units_no_credentials():
     """No analysis units, no credentials — should fallback to default behavior."""
-    result = synthesize_agent_answer(
-        question="What is the total sales?",
-        analysis_units=[],
-    )
+    with patch.dict("os.environ", {
+        "OPENAI_API_KEY": "",
+        "QWEN_API_KEY": "",
+        "DBFOX_LLM_API_KEY": "",
+        "DBFOX_TESTING": "",
+    }):
+        result = synthesize_agent_answer(
+            question="What is the total sales?",
+            analysis_units=[],
+        )
     assert "total sales" in result.answer.lower()
-    assert len(result.key_findings) >= 1
+    assert result.key_findings == []
+    assert result.evidence[0].value == 0
 
 
 def test_synthesize_agent_answer_empty_result_set():
     """Empty result set — should still produce a fallback answer."""
-    result = synthesize_agent_answer(
-        question="How many orders?",
-        analysis_units=[{
-            "id": "unit1",
-            "sql": "SELECT COUNT(*) FROM orders",
-            "execution": {
-                "success": True,
-                "rowCount": 0,
-                "columns": ["count"],
-                "rows": [],
-            },
-        }],
+    with patch.dict("os.environ", {
+        "OPENAI_API_KEY": "",
+        "QWEN_API_KEY": "",
+        "DBFOX_LLM_API_KEY": "",
+        "DBFOX_TESTING": "",
+    }):
+        result = synthesize_agent_answer(
+            question="How many orders?",
+            analysis_units=[{
+                "id": "unit1",
+                "sql": "SELECT COUNT(*) FROM orders",
+                "execution": {
+                    "success": True,
+                    "rowCount": 0,
+                    "columns": ["count"],
+                    "rows": [],
+                },
+            }],
     )
     assert result.answer is not None
-    assert len(result.key_findings) >= 1
+    assert result.key_findings == []
+    assert result.evidence[0].value == 0
 
 
 @patch("engine.llm.get_chat_model")
@@ -67,3 +81,9 @@ def test_synthesize_agent_answer_with_llm(mock_get_chat_model):
     assert "10,000" in result.answer
     assert len(result.key_findings) >= 1
     mock_model.invoke.assert_called_once()
+    messages = mock_model.invoke.call_args.args[0]
+    system_content = messages[0].content
+    assert "自适应 Markdown" in system_content
+    assert "不要强制使用固定章节" in system_content
+    assert "## 结论" not in system_content
+    assert "## 建议" not in system_content

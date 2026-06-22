@@ -1,10 +1,12 @@
-import { BarChart2, Copy, Database, LineChart, PieChart, Play, Table2, Terminal } from "lucide-react";
+import { BarChart2, Copy, Database, ExternalLink, LineChart, PieChart, Play, Table2, Terminal } from "lucide-react";
 import type { CSSProperties } from "react";
+import type { TableArtifact as TableArtifactModel } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 
 interface ArtifactEvidencePanelProps {
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
+  onOpenResultTab?: (artifact: TableArtifactModel) => void;
 }
 
 function sqlText(artifact: ConversationArtifact): string {
@@ -66,6 +68,57 @@ function cellText(row: unknown, column: string, index: number): string {
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
+function payloadNumber(payload: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return undefined;
+}
+
+function payloadString(payload: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function payloadStringList(payload: Record<string, unknown>, keys: string[]): string[] | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+      if (items.length > 0) return items;
+    }
+  }
+  return undefined;
+}
+
+function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactModel {
+  const columns = tableColumns(artifact);
+  const rows = tableRows(artifact).map((row) => columns.map((column, index) => cellText(row, column, index)));
+  const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? rows.length;
+  const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? rows.length;
+  return {
+    id: artifact.id,
+    type: "table",
+    title: artifact.title,
+    columns,
+    rows,
+    rowCount,
+    returnedRows,
+    latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
+    sql: payloadString(artifact.payload, ["sql", "safe_sql"]),
+    truncated: Boolean(artifact.payload.truncated),
+    warnings: payloadStringList(artifact.payload, ["warnings"]),
+    notices: payloadStringList(artifact.payload, ["notices"]),
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
+  };
+}
+
 function chartSeries(artifact: ConversationArtifact): { label: string; value: number }[] {
   const series = artifact.payload.series;
   if (!Array.isArray(series)) return [];
@@ -91,7 +144,7 @@ function chartIcon(type: "bar" | "line" | "pie") {
   return <BarChart2 size={13} />;
 }
 
-export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole }: ArtifactEvidencePanelProps) {
+export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResultTab }: ArtifactEvidencePanelProps) {
   const groups = groupedArtifacts(artifacts);
   const groupedIds = new Set(groups.flatMap((group) => [group.sql.id, ...group.tables.map((item) => item.id), ...group.charts.map((item) => item.id)]));
   const orphanArtifacts = artifacts
@@ -128,13 +181,13 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole }: ArtifactE
                 </span>
               </header>
               <pre>{sql}</pre>
-              {group.tables.map((table) => <TableArtifact key={table.id} artifact={table} />)}
+              {group.tables.map((table) => <TableArtifact key={table.id} artifact={table} onOpenResultTab={onOpenResultTab} />)}
               {group.charts.map((chart) => <ChartArtifact key={chart.id} artifact={chart} />)}
             </section>
           );
         })}
         {orphanArtifacts.map((artifact) => {
-          if (artifact.type === "table") return <TableArtifact key={artifact.id} artifact={artifact} />;
+          if (artifact.type === "table") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
           if (artifact.type === "chart") return <ChartArtifact key={artifact.id} artifact={artifact} />;
           if (isSqlArtifact(artifact)) {
             const sql = sqlText(artifact);
@@ -157,34 +210,64 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole }: ArtifactE
   );
 }
 
-function TableArtifact({ artifact }: { artifact: ConversationArtifact }) {
+function TableArtifact({
+  artifact,
+  onOpenResultTab,
+}: {
+  artifact: ConversationArtifact;
+  onOpenResultTab?: (artifact: TableArtifactModel) => void;
+}) {
   const columns = tableColumns(artifact);
-  const rows = tableRows(artifact).slice(0, 6);
+  const allRows = tableRows(artifact);
+  const rows = allRows.slice(0, 10);
+  const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? allRows.length;
+  const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? allRows.length;
+  const latencyMs = payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]);
+  const truncated = Boolean(artifact.payload.truncated);
   return (
     <div className="conv-table-artifact">
       <div className="conv-artifact-heading">
         <Table2 size={13} />
         <strong>{artifact.title}</strong>
+        {onOpenResultTab && (
+          <button
+            type="button"
+            className="conv-artifact-open"
+            onClick={() => onOpenResultTab(toTableArtifactModel(artifact))}
+          >
+            <ExternalLink size={12} />
+            打开为 Tab
+          </button>
+        )}
       </div>
       {columns.length > 0 && rows.length > 0 && (
-        <div className="conv-table-preview">
-          <table>
-            <thead>
-              <tr>
-                {columns.map((column) => <th key={column}>{column}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {columns.map((column, columnIndex) => (
-                    <td key={column}>{cellText(row, column, columnIndex)}</td>
-                  ))}
+        <>
+          <div className="conv-table-meta">
+            <span>预览 {rows.length} / 共 {rowCount} 行</span>
+            <span>{columns.length} 列</span>
+            {latencyMs !== undefined && <span>{latencyMs}ms</span>}
+            {returnedRows > rows.length && <span>已载入 {returnedRows} 行</span>}
+            {truncated && <span className="conv-table-warning">结果已截断</span>}
+          </div>
+          <div className="conv-table-preview">
+            <table>
+              <thead>
+                <tr>
+                  {columns.map((column) => <th key={column}>{column}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {columns.map((column, columnIndex) => (
+                      <td key={column}>{cellText(row, column, columnIndex)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

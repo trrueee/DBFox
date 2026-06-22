@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation
 
@@ -38,7 +39,7 @@ def build_agent_artifacts(
         artifacts.append(build_query_plan_artifact(query_plan, identity=identity))
 
     if sql:
-        artifacts.append(build_sql_artifact(sql, safety=safety, identity=identity))
+        artifacts.append(build_sql_artifact(sql, safety=safety, execution=execution, identity=identity))
 
     if safety:
         artifacts.append(build_safety_artifact(safety, identity=identity))
@@ -125,9 +126,19 @@ def build_sql_artifact(
     sql: str,
     *,
     safety: dict[str, Any] | None,
+    execution: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
-    payload: dict[str, Any] = {"sql": sql, "safety_state": _safety_state(safety)}
+    execution_meta = _execution_meta(execution or (safety or {}).get("execution"))
+    payload: dict[str, Any] = {
+        "purpose": "分析查询",
+        "sql": sql,
+        "used_tables": _used_tables(sql),
+        "validation_status": "passed" if _safety_state(safety).get("can_execute") else "unknown",
+        "execution_status": "completed" if execution_meta else "not_executed",
+        "safety_state": _safety_state(safety),
+        **execution_meta,
+    }
     generation_metadata = safety.get("generation_metadata") if isinstance(safety, dict) else None
     if isinstance(generation_metadata, dict):
         payload["generation_metadata"] = generation_metadata
@@ -184,8 +195,13 @@ def build_table_artifact(
             "columns": execution.get("columns", []),
             "rows": execution.get("rows", []),
             "rowCount": execution.get("rowCount", len(execution.get("rows", []) or [])),
+            "returnedRows": execution.get("returnedRows", len(execution.get("rows", []) or [])),
             "latencyMs": execution.get("latencyMs", 0),
+            "truncated": bool(execution.get("truncated")),
+            "warnings": _string_list(execution.get("warnings")),
+            "notices": _string_list(execution.get("notices")),
             "sql": sql,
+            "used_tables": _used_tables(sql or ""),
             "safety_state": _safety_state(safety),
         },
         mode="both",
@@ -210,7 +226,11 @@ def build_chart_artifact(
         sem_id,
         "chart",
         "Chart suggestion",
-        {**chart_suggestion, "safety_state": _safety_state(safety)},
+        {
+            **chart_suggestion,
+            "source_refs": _chart_source_refs(chart_suggestion),
+            "safety_state": _safety_state(safety),
+        },
         mode="inline",
         priority=30,
         identity=identity,
@@ -254,6 +274,57 @@ def _safety_state(safety: dict[str, Any] | None) -> dict[str, Any]:
         "guardrail_result": (safety.get("guardrail") or {}).get("result") if isinstance(safety.get("guardrail"), dict) else None,
         "schema_warnings_count": len(safety.get("schema_warnings") or []),
     }
+
+
+def _execution_meta(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    meta: dict[str, Any] = {}
+    if isinstance(value.get("rowCount"), int):
+        meta["rowCount"] = value["rowCount"]
+    if isinstance(value.get("latencyMs"), int | float):
+        meta["latencyMs"] = value["latencyMs"]
+    if isinstance(value.get("status"), str):
+        meta["execution_status"] = value["status"]
+    return meta
+
+
+def _used_tables(sql: str) -> list[str]:
+    tables: list[str] = []
+    for match in re.finditer(r"\b(?:from|join)\s+([`\"\[]?[\w.]+[`\"\]]?)", sql, flags=re.IGNORECASE):
+        raw = match.group(1).strip("`\"[]")
+        table = raw.split(".")[-1]
+        if table and table not in tables:
+            tables.append(table)
+    return tables
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
+def _chart_source_refs(chart_suggestion: dict[str, Any]) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for metric in chart_suggestion.get("metrics") or []:
+        if not isinstance(metric, dict):
+            continue
+        label = str(metric.get("name") or metric.get("label") or metric.get("source_column") or "")
+        formula = str(metric.get("expression") or metric.get("formula") or metric.get("source_column") or "")
+        field = str(metric.get("source_column") or metric.get("field") or "")
+        if label and formula and field:
+            refs.append({"label": label, "formula": formula, "field": field})
+    for dimension in chart_suggestion.get("dimensions") or []:
+        if not isinstance(dimension, dict):
+            continue
+        field = str(dimension.get("column") or dimension.get("field") or "")
+        label = str(dimension.get("name") or dimension.get("label") or field)
+        transform = dimension.get("transform")
+        formula = f"{transform}({field})" if transform and field else field
+        if label and formula and field:
+            refs.append({"label": label, "formula": formula, "field": field})
+    return refs
 
 
 def _recovery_guidance(
@@ -313,4 +384,3 @@ def _execution_sql(execution: dict[str, Any] | None) -> str | None:
 def _sql_fingerprint(sql: str) -> str:
     import hashlib
     return hashlib.md5(sql.encode("utf-8")).hexdigest()[:8]
-

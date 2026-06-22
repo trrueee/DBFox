@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { TableArtifact } from "../../types/agentArtifact";
 import { useWorkspaceStore } from "../workspaceStore";
 
 const INITIAL = {
@@ -127,5 +128,32 @@ describe("workspaceStore — conversations", () => {
     expect(tabs[0].type).toBe("query-result");
     expect(tabs[0].conversationId).toBe("conv-1");
     expect(state.activeTabId).toBe("conversation-conv-1");
+  });
+});
+
+describe("workspaceStore - artifact results", () => {
+  beforeEach(reset);
+
+  it("opens a table artifact as a dedicated result tab", () => {
+    const artifact: TableArtifact = {
+      id: "result-table-1",
+      type: "table",
+      title: "Query result",
+      columns: ["day", "count"],
+      rows: [["2026-06-01", "12"]],
+      rowCount: 1,
+      returnedRows: 1,
+    };
+
+    useWorkspaceStore.getState().openArtifactResultTab(artifact);
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeTabId).toBe("artifact-result-result-table-1");
+    expect(state.tabs.at(-1)).toMatchObject({
+      id: "artifact-result-result-table-1",
+      title: "Query result",
+      type: "artifact-result",
+      artifactResult: artifact,
+    });
   });
 });

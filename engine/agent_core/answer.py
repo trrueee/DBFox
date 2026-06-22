@@ -54,22 +54,22 @@ def synthesize_agent_answer(
     )
 
     system_prompt = (
-        "你是一个专业的数据分析专家。你会收到用户问题和已执行的查询结果，"
-        "需要生成一份结构化的 Markdown 分析报告。\n\n"
-        "注意：这些查询结果是经过你（作为数据工程师）多次探索和分析的结果，"
-        "包含了原始数据查询和统计分析查询。\n\n"
-        "格式要求：\n"
-        "## 结论\n1-2 句话总结核心发现\n\n"
-        "## 关键指标\n用**粗体数字**列出最重要的指标，"
-        "例如 **发布总数：11**、**成功率：0%**\n\n"
-        "## 分析\n说明趋势、占比、异常、规律，解释数据背后的含义\n\n"
-        "## 数据口径\n说明覆盖的数据范围、时间跨度、过滤条件\n\n"
-        "## 建议\n2-3 条可操作的下一步\n\n"
-        "规则：\n"
-        "- 如果结果是空集，直接说明，不要编造数据\n"
-        "- **加粗关键数字**\n"
-        "- 控制在 200-500 字\n"
-        "- 使用中文，语气客观专业\n"
+        "你是一个专业的数据分析专家。你会收到用户问题和已经执行的查询结果，"
+        "需要生成自适应 Markdown 答案。\n\n"
+        "注意：这些查询结果是经过数据工程式探索和分析得到的结果，"
+        "可能包含原始样例查询、统计分析查询、钻取查询和图表建议。\n\n"
+        "答案规则：\n"
+        "- 简单事实：直接用 1-3 句话回答。\n"
+        "- 复杂分析：先给结论，再概括关键发现。\n"
+        "- SQL 任务：给出 SQL 和简短说明。\n"
+        "- Schema 任务：解释表、字段、关系和使用方式。\n"
+        "- 空结果：明确说明没有匹配数据，并给出可能原因。\n"
+        "- 证据不足：明确说不能可靠判断，并说明最有价值的下一步查询。\n"
+        "- 不要强制使用固定章节，不要强制给建议。\n"
+        "- 不要重复执行过程，不要编造没有查询支持的事实。\n"
+        "- 小型汇总可以用 Markdown 表；大型原始结果不要写成 Markdown 表。\n"
+        "- 优先基于聚合、分组、对比、排名、比例等分析 SQL 结果下结论。\n"
+        "- 使用中文，关键数字可加粗，语气客观专业。\n"
     )
 
     user_parts = [f"用户问题: {question}\n"]
@@ -218,13 +218,67 @@ def _fallback_answer(
     if total_rows == 0:
         text = f"已完成查询，但没有找到符合「{question}」的记录。"
     else:
-        text = f"已完成 {len(units)} 次查询，共返回 {total_rows} 行结果。明细请查看下方数据。"
+        text = f"已完成查询，共返回 {total_rows} 行结果。明细请查看下方数据。"
+    key_findings = _fallback_key_findings(units, total_rows)
 
     return AgentAnswer(
         answer=text,
-        key_findings=[f"共 {total_rows} 行结果"] if total_rows > 0 else [],
+        key_findings=key_findings,
         evidence=_build_evidence(units),
         caveats=["本次未使用 AI 生成分析，仅展示基础数据。"] if error else [],
         recommendations=[],
         follow_up_questions=[],
     )
+
+
+def _fallback_key_findings(
+    units: list[dict[str, Any]],
+    total_rows: int,
+) -> list[str]:
+    if total_rows <= 0:
+        return []
+
+    findings: list[str] = []
+    first_unit = units[0] if units else {}
+    exec_data = first_unit.get("execution") or {}
+    columns = exec_data.get("columns") or []
+    rows = exec_data.get("rows") or []
+
+    if len(columns) >= 2 and isinstance(rows, list) and rows:
+        label_col = str(columns[0])
+        value_col = str(columns[1])
+        best_label = ""
+        best_value: float | None = None
+        for row in rows:
+            if isinstance(row, dict):
+                label = str(row.get(label_col) or "")
+                raw_value = row.get(value_col)
+            elif isinstance(row, list) and len(row) >= 2:
+                label = str(row[0] or "")
+                raw_value = row[1]
+            else:
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if best_value is None or value > best_value:
+                best_label = label
+                best_value = value
+        if best_label and best_value is not None:
+            findings.append(f"{best_label} {_metric_leader_phrase(value_col)}。")
+
+    if not findings:
+        findings.append(f"共 {total_rows} 行结果")
+    return findings
+
+
+def _metric_leader_phrase(column: str) -> str:
+    normalized = column.lower()
+    if "usage" in normalized or "use" in normalized:
+        return "使用次数最高"
+    if "amount" in normalized or "gmv" in normalized or "revenue" in normalized or "sales" in normalized:
+        return "金额最高"
+    if "count" in normalized or "total" in normalized or "num" in normalized:
+        return "数量最高"
+    return "数值最高"

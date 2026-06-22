@@ -3,6 +3,7 @@ import type { WorkspaceTab } from "../mock/dbfoxMock";
 import { defaultSql } from "../mock/dbfoxMock";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
+import type { TableArtifact } from "../types/agentArtifact";
 
 interface WorkspaceState {
   tabs: WorkspaceTab[];
@@ -27,6 +28,7 @@ interface WorkspaceActions {
   openAgentEvalTab: () => void;
   openDiagnosticsTab: () => void;
   openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
+  openArtifactResultTab: (artifact: TableArtifact) => void;
   openTableTab: (tableName: string, initialSubtab?: string) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;
@@ -170,6 +172,18 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
         : [...state.tabs, { id: tabId, title: conv.title, type: "query-result", conversationId: conv.id }],
+      activeTabId: tabId,
+    }));
+  },
+
+  openArtifactResultTab: (artifact) => {
+    const tabId = `artifact-result-${artifact.id}`;
+    set((state) => ({
+      tabs: state.tabs.some((tab) => tab.id === tabId)
+        ? state.tabs.map((tab) =>
+            tab.id === tabId ? { ...tab, title: artifact.title, artifactResult: artifact } : tab,
+          )
+        : [...state.tabs, { id: tabId, title: artifact.title, type: "artifact-result", artifactResult: artifact }],
       activeTabId: tabId,
     }));
   },

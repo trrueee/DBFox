@@ -9,6 +9,15 @@ interface SqlArtifactViewProps {
 }
 
 export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArtifactViewProps) {
+  const metadata = [
+    artifact.purpose,
+    ...(artifact.usedTables || []),
+    artifact.validationStatus ? `校验 ${artifact.validationStatus}` : "",
+    artifact.executionStatus ? `执行 ${artifact.executionStatus}` : "",
+    artifact.rowCount !== undefined ? `${artifact.rowCount} 行` : "",
+    artifact.latencyMs !== undefined ? `${artifact.latencyMs}ms` : "",
+  ].filter(Boolean);
+
   const openInSqlConsole = () => {
     onOpenSqlConsole(artifact.sql);
   };
@@ -31,6 +40,13 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
       </div>
       <div className="hifi-ai-card-body">
         {artifact.description && <p className="text-[10px] text-slate-500 px-3 pt-2">{artifact.description}</p>}
+        {metadata.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 text-[10px] text-slate-500">
+            {metadata.map((item) => (
+              <span key={item} className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{item}</span>
+            ))}
+          </div>
+        )}
         <pre className="hifi-sql-card font-mono text-[10px] leading-relaxed p-3 text-slate-800">{artifact.sql}</pre>
         <div className="hifi-sql-card-action flex gap-2">
           <button className="hifi-guide-btn-secondary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={handleCopy}>

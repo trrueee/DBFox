@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useConversationStore } from "../../../stores/conversationStore";
+import type { TableArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -14,11 +15,13 @@ export function ConversationWorkspace({
   conversationId,
   onOpenHistory,
   onOpenSqlConsole,
+  onOpenResultTab,
   onDelete,
 }: {
   conversationId: string;
   onOpenHistory: () => void;
   onOpenSqlConsole: (sql?: string) => void;
+  onOpenResultTab: (artifact: TableArtifact) => void;
   onDelete: () => void;
 }) {
   const store = useConversationStore();
@@ -45,7 +48,13 @@ export function ConversationWorkspace({
   return (
     <div className="conv-workspace">
       <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
-      <MessageList messages={messages} runs={runs} artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />
+      <MessageList
+        messages={messages}
+        runs={runs}
+        artifacts={artifacts}
+        onOpenSqlConsole={onOpenSqlConsole}
+        onOpenResultTab={onOpenResultTab}
+      />
       <Composer
         running={Boolean(runningRun)}
         onSend={(text) => void store.sendMessage(conversationId, text)}

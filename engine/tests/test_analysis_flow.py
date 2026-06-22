@@ -241,8 +241,12 @@ class TestSystemPrompt:
         """The prompt must instruct the model to include Chinese text alongside tool calls.
         Without this, Qwen returns empty content when tools are bound."""
         from engine.agent.model.system_prompt import SYSTEM_PROMPT
-        assert "Always speak" in SYSTEM_PROMPT
+
+        assert "Stage Narration" in SYSTEM_PROMPT
+        assert "one short Chinese sentence" in SYSTEM_PROMPT
+        assert "Do not narrate every tiny internal step" in SYSTEM_PROMPT
         assert "Never send an empty message" in SYSTEM_PROMPT
+        assert "Always speak" not in SYSTEM_PROMPT
 
     def test_prompt_requires_semantic_expansion_for_schema_search(self):
         from engine.agent.model.system_prompt import SYSTEM_PROMPT
@@ -255,3 +259,10 @@ class TestSystemPrompt:
         assert "state your semantic search plan in Chinese" in SYSTEM_PROMPT
         assert "issue at least two db.search calls" in SYSTEM_PROMPT
         assert "Never claim a table was found unless it appears in a tool result" in SYSTEM_PROMPT
+
+    def test_prompt_requires_followup_sql_after_raw_preview_for_analysis(self):
+        from engine.agent.model.system_prompt import SYSTEM_PROMPT
+
+        assert "After db.preview" in SYSTEM_PROMPT
+        assert "follow-up analytical SQL" in SYSTEM_PROMPT
+        assert "do not synthesize analytical conclusions from raw preview rows" in SYSTEM_PROMPT
