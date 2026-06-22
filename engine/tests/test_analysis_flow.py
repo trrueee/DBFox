@@ -130,8 +130,8 @@ class TestDatabinding:
 
 class TestProgressGuard:
     def test_guard_does_not_block_single_query_without_profile(self):
-        """With relaxed guard, a single db.query without profile does NOT trigger
-        the analysis guard. The model is free to answer directly or call result.profile."""
+        """With relaxed guard, a single db.query without analysis does NOT trigger
+        the analysis guard. The model is free to answer directly or call answer.synthesize."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
             "status": "running",
@@ -166,7 +166,7 @@ class TestProgressGuard:
         result = deterministic_progress_fastpath(state)
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "result.profile" in result["progress_decision"]["next_action_hint"]
+        assert "answer.synthesize" in result["progress_decision"]["next_action_hint"]
 
     def test_guard_allows_finalize_with_answer(self):
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
@@ -204,7 +204,7 @@ class TestProgressGuard:
 
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "result.profile" in result["progress_decision"]["next_action_hint"]
+        assert "answer.synthesize" in result["progress_decision"]["next_action_hint"]
         assert "error" not in result
 
     def test_guard_final_text_wins_over_max_steps_without_error(self):
