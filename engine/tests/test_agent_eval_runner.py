@@ -135,6 +135,104 @@ def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, tes
     assert "sql.validate" in json.loads(case.actual_tools_json)
 
 
+def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, test_datasource, monkeypatch):
+    task = _make_task(db_session, test_datasource.id)
+
+    class FakeRuntime:
+        def __init__(self, _db):
+            pass
+
+        def run_iter(self, _req):
+            response = AgentRunResponse(
+                run_id="eval-run-telemetry",
+                session_id="eval-session-telemetry",
+                success=True,
+                status="success",
+                question="say hello",
+                sql="SELECT 1",
+                steps=[],
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-1",
+                run_id="eval-run-telemetry",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.step.completed",
+                step={
+                    "name": "sql.generate",
+                    "phase": "generating",
+                    "status": "success",
+                    "durationMs": 35,
+                },
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-2",
+                run_id="eval-run-telemetry",
+                sequence=2,
+                created_at_ms=2,
+                type="agent.progress.update",
+                step={
+                    "name": "sql_repair",
+                    "phase": "repairing",
+                    "status": "success",
+                    "duration_ms": 120,
+                    "attempt": 1,
+                    "failure_layer": "execution",
+                    "error_class": "missing_column",
+                    "root_cause": "orders.total missing",
+                    "recovery_strategy": "describe table and regenerate sql",
+                },
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-3",
+                run_id="eval-run-telemetry",
+                sequence=3,
+                created_at_ms=3,
+                type="agent.step.completed",
+                step={
+                    "name": "sql.execute",
+                    "phase": "executing",
+                    "status": "success",
+                    "latency_ms": 80,
+                },
+            )
+            yield AgentRuntimeEvent(
+                event_id="event-4",
+                run_id="eval-run-telemetry",
+                sequence=4,
+                created_at_ms=4,
+                type="agent.run.completed",
+                response=response,
+            )
+
+    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FakeRuntime)
+
+    result = AgentEvalRunner(db_session).run(
+        AgentEvalRunRequest(datasource_id=test_datasource.id, task_ids=[task.id], execute=False)
+    )
+
+    case_payload = json.loads(result.case_results[0].response_json)
+    telemetry = case_payload["eval_telemetry"]
+    assert telemetry["stage_counts"] == {"generating": 1, "repairing": 1, "executing": 1}
+    assert telemetry["stage_durations_ms"] == {"generating": 35, "repairing": 120, "executing": 80}
+    assert telemetry["repair_count"] == 1
+    assert telemetry["failure_layer"] == "execution"
+    assert telemetry["error_classes"] == ["missing_column"]
+    assert telemetry["root_causes"] == ["orders.total missing"]
+    assert telemetry["final_status"] == "success"
+    assert telemetry["final_success"] is True
+
+    summary = json.loads(result.summary_json)
+    assert summary["runtime_telemetry"] == {
+        "final_success_cases": 1,
+        "repair_count": 1,
+        "stage_counts": {"generating": 1, "repairing": 1, "executing": 1},
+        "stage_durations_ms": {"generating": 35, "repairing": 120, "executing": 80},
+        "failure_layers": {"execution": 1},
+        "error_classes": {"missing_column": 1},
+    }
+
+
 def test_eval_runner_execute_defaults_false(db_session, test_datasource):
     task = _make_task(db_session, test_datasource.id)
     req = AgentEvalRunRequest(
