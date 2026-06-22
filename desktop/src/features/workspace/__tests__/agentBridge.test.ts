@@ -178,4 +178,32 @@ describe("agentBridge", () => {
     expect(safety.content).toContain("可执行");
     expect(safety.depends_on).toEqual(["sql_candidate"]);
   });
+
+  it("maps nested safety payload details into markdown trust summaries", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "safety-2",
+        semantic_id: "safety_report",
+        type: "safety",
+        title: "Safety",
+        status: "completed",
+        presentation: { mode: "both", priority: 1, collapsed: true },
+        payload: {
+          can_execute: true,
+          requires_confirmation: false,
+          guardrail: { result: "passed" },
+          schema_warnings: ["ambiguous column"],
+        },
+        depends_on: ["sql_candidate"],
+        refs: [],
+      },
+    ];
+
+    const [safety] = toViewArtifacts(artifacts);
+
+    expect(safety?.type).toBe("markdown");
+    if (safety?.type !== "markdown") throw new Error("Expected markdown artifact");
+    expect(safety.content).toContain("Guardrail：passed");
+    expect(safety.content).toContain("Schema warnings：1");
+  });
 });

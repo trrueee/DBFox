@@ -180,8 +180,18 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
   const canExecute = Boolean(payload.can_execute ?? payload.canExecute);
   const requiresConfirmation = Boolean(payload.requires_confirmation ?? payload.requiresConfirmation);
   const passed = Boolean(payload.passed ?? canExecute);
-  const guardrail = firstString(payload, ["guardrail_result", "guardrailResult"]) || "unknown";
-  const schemaWarnings = numberValue(payload, ["schema_warnings_count", "schemaWarningsCount"]) ?? 0;
+  const guardrailPayload = payload.guardrail;
+  const guardrail = firstString(payload, ["guardrail_result", "guardrailResult"])
+    || (guardrailPayload && typeof guardrailPayload === "object"
+      ? firstString(guardrailPayload as Record<string, unknown>, ["result"])
+      : "")
+    || "unknown";
+  const schemaWarnings = numberValue(payload, ["schema_warnings_count", "schemaWarningsCount"])
+    ?? (Array.isArray(payload.schema_warnings)
+      ? payload.schema_warnings.length
+      : Array.isArray(payload.schemaWarnings)
+        ? payload.schemaWarnings.length
+        : 0);
   const lines = [
     passed ? "状态：通过" : "状态：需注意",
     canExecute ? "执行：可执行" : "执行：不可执行",
