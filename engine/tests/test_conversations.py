@@ -249,7 +249,7 @@ def test_stream_conversation_message_passes_context_tables_to_agent(monkeypatch,
     monkeypatch.setattr(conversations_module, "DBFoxAgentRuntime", FakeRuntime)
     session = AgentSession(
         id="conv-context",
-        datasource_id="ds-1",
+        datasource_id="ds-context-source",
         title="Context test",
         context_tables_json=json.dumps(["orders", "orders", " customers ", "", 123], ensure_ascii=False),
     )
@@ -267,7 +267,7 @@ def test_stream_conversation_message_passes_context_tables_to_agent(monkeypatch,
     assert "agent.run.started" in body
     req = captured["req"]
     assert req.workspace_context is not None
-    assert req.workspace_context.datasource_id == "ds-1"
+    assert req.workspace_context.datasource_id == session.datasource_id
     assert req.workspace_context.selected_table_names == ["orders", "customers"]
 
 
@@ -291,7 +291,7 @@ def test_stream_conversation_message_ignores_malformed_context_tables(monkeypatc
     monkeypatch.setattr(conversations_module, "DBFoxAgentRuntime", FakeRuntime)
     session = AgentSession(
         id="conv-bad-context",
-        datasource_id="ds-1",
+        datasource_id="ds-bad-context-source",
         title="Bad context",
         context_tables_json="{not-json",
     )
@@ -308,4 +308,5 @@ def test_stream_conversation_message_ignores_malformed_context_tables(monkeypatc
     assert response.status_code == 200
     assert "agent.run.started" in body
     assert captured["req"].workspace_context is not None
+    assert captured["req"].workspace_context.datasource_id == session.datasource_id
     assert captured["req"].workspace_context.selected_table_names == []
