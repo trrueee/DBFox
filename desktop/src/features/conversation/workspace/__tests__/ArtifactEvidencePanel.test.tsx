@@ -234,4 +234,112 @@ describe("ArtifactEvidencePanel", () => {
     );
     expect(onOpenResultTab.mock.calls[0][0].rows).toHaveLength(12);
   });
+
+  it("groups SQL, safety, result_view, and chart by semantic ids", () => {
+    const artifacts: ConversationArtifact[] = [
+      {
+        id: "artifact-sql",
+        semantic_id: "sql_candidate",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "sql",
+        title: "SQL",
+        status: "completed",
+        sequence: 1,
+        payload: { sql: "SELECT id, amount FROM orders" },
+        depends_on: [],
+      },
+      {
+        id: "artifact-safety",
+        semantic_id: "safety_report",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "safety",
+        title: "Safety",
+        status: "completed",
+        sequence: 2,
+        payload: {
+          passed: true,
+          can_execute: true,
+          requires_confirmation: false,
+          guardrail_result: "passed",
+          schema_warnings_count: 0,
+        },
+        depends_on: ["sql_candidate"],
+      },
+      {
+        id: "artifact-result",
+        semantic_id: "result_view_1",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "result_view",
+        title: "Result view",
+        status: "completed",
+        sequence: 3,
+        payload: {
+          columns: ["id", "amount"],
+          previewRows: [{ id: 1, amount: 20 }],
+          rowCount: 1,
+          storageMode: "sql_backed",
+          safeSql: "SELECT id, amount FROM orders",
+        },
+        depends_on: ["sql_candidate"],
+      },
+      {
+        id: "artifact-chart",
+        semantic_id: "chart_1",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "chart",
+        title: "Amount chart",
+        status: "completed",
+        sequence: 4,
+        payload: { type: "bar", series: [{ label: "1", value: 20 }] },
+        depends_on: ["result_view_1"],
+      },
+    ];
+
+    const { container } = render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
+
+    const group = container.querySelector(".conv-sql-group");
+    expect(group).toBeTruthy();
+    expect(group?.textContent).toContain("SQL");
+    expect(group?.textContent).toContain("安全检查");
+    expect(group?.textContent).toContain("Result view");
+    expect(group?.textContent).toContain("Amount chart");
+  });
+
+  it("keeps ungrouped safety artifacts visible", () => {
+    const artifacts: ConversationArtifact[] = [
+      {
+        id: "orphan-safety",
+        semantic_id: "safety_orphan",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "safety",
+        title: "Safety",
+        status: "completed",
+        sequence: 1,
+        payload: {
+          passed: false,
+          can_execute: false,
+          requires_confirmation: true,
+          guardrail_result: "blocked",
+          schema_warnings_count: 2,
+        },
+        depends_on: ["missing_sql"],
+      },
+    ];
+
+    render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
+
+    expect(screen.getByText("安全检查")).toBeTruthy();
+    expect(screen.getByText("不可执行")).toBeTruthy();
+    expect(screen.getByText("需要确认")).toBeTruthy();
+  });
 });
