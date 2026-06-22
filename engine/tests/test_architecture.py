@@ -130,6 +130,25 @@ def test_agent_state_declares_each_field_once() -> None:
     assert not duplicates, f"DBFoxAgentState declares duplicate fields: {duplicates}"
 
 
+def test_sql_lifecycle_tools_have_one_model_visible_path() -> None:
+    """Model-authored SQL must use validate -> execute, while db.query stays internal."""
+    from engine.agent.model.system_prompt import SYSTEM_PROMPT
+    from engine.tools.dbfox_tools import register_dbfox_tools
+
+    registry = register_dbfox_tools()
+    db_query = registry.require("db.query").spec
+    validate = registry.require("sql.validate").spec
+    execute = registry.require("sql.execute_readonly").spec
+
+    assert db_query.policy.visible_to_model is False
+    assert validate.policy.visible_to_model is True
+    assert execute.policy.visible_to_model is True
+    assert execute.policy.requires_validated_sql is True
+    assert "db.query is an internal backend fast path" in SYSTEM_PROMPT
+    assert "sql.validate" in SYSTEM_PROMPT
+    assert "sql.execute_readonly" in SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # __init__.py PUBLIC API TESTS
 # ---------------------------------------------------------------------------
