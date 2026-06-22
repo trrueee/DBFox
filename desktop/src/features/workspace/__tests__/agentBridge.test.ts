@@ -242,6 +242,10 @@ describe("agentBridge", () => {
           requires_confirmation: false,
           guardrail: { result: "passed" },
           schema_warnings: ["ambiguous column"],
+          redaction: {
+            redacted_count: 2,
+            fields: ["users.phone", "users.email"],
+          },
         },
         depends_on: ["sql_candidate"],
         refs: [],
@@ -254,5 +258,7 @@ describe("agentBridge", () => {
     if (safety?.type !== "markdown") throw new Error("Expected markdown artifact");
     expect(safety.content).toContain("Guardrail：passed");
     expect(safety.content).toContain("Schema warnings：1");
+    expect(safety.content).toContain("已脱敏 2 个字段");
+    expect(safety.content).toContain("users.phone, users.email");
   });
 });

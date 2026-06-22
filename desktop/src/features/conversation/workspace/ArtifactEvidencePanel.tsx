@@ -15,6 +15,7 @@ import {
   isSqlConversationArtifact,
   payloadBoolean,
   payloadNumber,
+  safetyRedactionSummary,
   safetyGuardrailResult,
   safetySchemaWarningsCount,
   sortConversationArtifacts,
@@ -127,6 +128,7 @@ function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
   const passed = payloadBoolean(artifact.payload, ["passed"]) || canExecute;
   const guardrail = safetyGuardrailResult(artifact.payload);
   const schemaWarnings = safetySchemaWarningsCount(artifact.payload);
+  const redaction = safetyRedactionSummary(artifact.payload);
   return (
     <div className={`conv-safety-artifact ${passed ? "is-safe" : "is-warning"}`}>
       <div className="conv-artifact-heading">
@@ -138,6 +140,12 @@ function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
         <span>Guardrail: {guardrail}</span>
         <span>Schema warnings: {schemaWarnings}</span>
       </div>
+      {redaction.count > 0 && (
+        <div className="conv-safety-redaction">
+          <strong>已脱敏 {redaction.count} 个字段</strong>
+          {redaction.fields.length > 0 && <span>{redaction.fields.join(", ")}</span>}
+        </div>
+      )}
     </div>
   );
 }
