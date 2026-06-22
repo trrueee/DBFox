@@ -115,7 +115,7 @@ def check_sql_repair_fastpath(state: DBFoxAgentState) -> dict[str, Any] | None:
         return None
 
     attempt = int(state.get("revision_count") or 0) + 1
-    repair_trace = build_repair_trace_event(plan, attempt)
+    repair_trace = build_repair_trace_event(plan, attempt, state)
     decision_dump = repair_plan_to_progress_decision(plan)
 
     progress_trace: dict[str, Any] = {

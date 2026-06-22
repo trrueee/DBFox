@@ -71,6 +71,7 @@ interface RepairSummary {
   attemptLabel: string;
   errorClass: string;
   update: string;
+  failedSql: string;
   rootCause: string;
   recoveryStrategy: string;
 }
@@ -123,6 +124,12 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
                   {repair.errorClass && <code>{repair.errorClass}</code>}
                 </header>
                 {repair.update && <p>{repair.update}</p>}
+                {repair.failedSql && (
+                  <div className="conv-repair-failed-sql">
+                    <b>失败 SQL</b>
+                    <pre>{repair.failedSql}</pre>
+                  </div>
+                )}
                 {(repair.rootCause || repair.recoveryStrategy) && (
                   <div className="conv-repair-detail-grid">
                     {repair.rootCause && (
@@ -228,11 +235,12 @@ function repairSummaryCards(events: AgentRuntimeEvent[]): RepairSummary[] {
     const attempt = stepNumber(event, "attempt");
     const errorClass = stepValue(event, "error_class") || (name === "sql_repair" ? stepValue(event, "detail") : "");
     const update = stepValue(event, "summary");
+    const failedSql = stepValue(event, "failed_sql") || stepValue(event, "failedSql");
     const rootCause = stepValue(event, "root_cause");
     const recoveryStrategy = stepValue(event, "recovery_strategy");
-    if (!errorClass && !update && !rootCause && !recoveryStrategy) continue;
+    if (!errorClass && !update && !failedSql && !rootCause && !recoveryStrategy) continue;
 
-    const key = `${attempt || 0}|${errorClass}|${rootCause}|${recoveryStrategy}|${update}`;
+    const key = `${attempt || 0}|${errorClass}|${failedSql}|${rootCause}|${recoveryStrategy}|${update}`;
     if (seen.has(key)) continue;
     seen.add(key);
     cards.push({
@@ -240,6 +248,7 @@ function repairSummaryCards(events: AgentRuntimeEvent[]): RepairSummary[] {
       attemptLabel: attempt > 0 ? `第 ${attempt} 次修复` : "",
       errorClass,
       update,
+      failedSql,
       rootCause,
       recoveryStrategy,
     });

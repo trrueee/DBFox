@@ -58,6 +58,7 @@ class TestSqlRepairModule:
         result = _check_sql_repair_fastpath({
             "messages": [HumanMessage(content="q")],
             "revision_count": 0,
+            "sql": "SELECT foo FROM orders",
             "execution": {"success": False, "error": "column foo not found in orders"},
         })
         assert result is not None
@@ -65,6 +66,7 @@ class TestSqlRepairModule:
         assert result["repair_trace"][0]["type"] == "agent.repair.attempted"
         assert result["repair_trace"][0]["error_class"] == "missing_column"
         assert result["repair_trace"][0]["root_cause"] == "column foo not found in orders"
+        assert result["repair_trace"][0]["failed_sql"] == "SELECT foo FROM orders"
 
     def test_repair_trace_event_exposes_root_cause_to_runtime_event(self):
         def emit(event_type, **kwargs):
@@ -74,6 +76,7 @@ class TestSqlRepairModule:
             "type": "agent.repair.attempted",
             "attempt": 1,
             "error_class": "missing_column",
+            "failed_sql": "SELECT foo FROM orders",
             "root_cause": "column foo not found in orders",
             "recovery_strategy": "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
             "user_visible_update": "Column not found — looking up schema to fix the query.",
@@ -82,8 +85,20 @@ class TestSqlRepairModule:
         assert events
         step = events[0]["step"]
         assert step["error_class"] == "missing_column"
+        assert step["failed_sql"] == "SELECT foo FROM orders"
         assert step["root_cause"] == "column foo not found in orders"
         assert "schema.describe_table" in step["recovery_strategy"]
+
+    def test_repair_trace_uses_validated_sql_when_generation_sql_missing(self):
+        result = _check_sql_repair_fastpath({
+            "messages": [HumanMessage(content="q")],
+            "revision_count": 0,
+            "safety": {"safe_sql": "SELECT safe_foo FROM orders"},
+            "execution": {"success": False, "error": "column safe_foo not found in orders"},
+        })
+
+        assert result is not None
+        assert result["repair_trace"][0]["failed_sql"] == "SELECT safe_foo FROM orders"
 
     def test_permission_denied_no_retry_budget(self):
         plan = plan_sql_repair({

@@ -245,6 +245,7 @@ describe("RunTracePanel", () => {
             status: "running",
             summary: "Column not found — looking up schema to fix the query.",
             error_class: "missing_column",
+            failed_sql: "SELECT refund_amount FROM orders",
             root_cause: "column refund_amount not found in orders",
             recovery_strategy: "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
             attempt: 1,
@@ -258,6 +259,8 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("SQL 修复")).toBeTruthy();
     expect(screen.getByText("missing_column")).toBeTruthy();
     expect(screen.getByText("第 1 次修复")).toBeTruthy();
+    expect(screen.getByText("失败 SQL")).toBeTruthy();
+    expect(screen.getByText("SELECT refund_amount FROM orders")).toBeTruthy();
     expect(screen.getByText("column refund_amount not found in orders")).toBeTruthy();
     expect(screen.getByText("Use schema.describe_table and fuzzy-match similar columns, then sql.revise.")).toBeTruthy();
   });
