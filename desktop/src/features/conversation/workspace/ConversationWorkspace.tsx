@@ -54,6 +54,7 @@ export function ConversationWorkspace({
         artifacts={artifacts}
         onOpenSqlConsole={onOpenSqlConsole}
         onOpenResultTab={onOpenResultTab}
+        onResolveApproval={(runId, approvalId, approved) => void store.resolveApproval(runId, approvalId, approved)}
       />
       <Composer
         running={Boolean(runningRun)}

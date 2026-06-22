@@ -7,6 +7,7 @@ import {
   listConversations,
   startConversationMessageStream,
 } from "../features/conversation/conversationRepository";
+import { agentApi } from "../lib/api/agent";
 import type {
   ConversationArtifact,
   ConversationDetail,
@@ -35,6 +36,7 @@ interface ConversationActions {
   loadConversation: (detail: ConversationDetail) => void;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   cancelRun: (runId: string) => void;
+  resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
   applyStreamEvent: (event: ConversationStreamEvent) => void;
 }
 
@@ -140,6 +142,23 @@ function withRunEvent(run: ConversationRun, event: ConversationStreamEvent): Con
   return {
     ...run,
     events: [...events, event].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
+  };
+}
+
+function runStatusForApprovalEvent(event: ConversationStreamEvent): ConversationRun["status"] | null {
+  if (event.type === "agent.approval.required" || event.type === "agent.run.waiting_approval") return "waiting_approval";
+  if (event.type === "agent.run.resumed") return "running";
+  if (event.type === "agent.approval.resolved" && event.approval?.status === "rejected") return "failed";
+  return null;
+}
+
+function withConversationRunContext(event: ConversationStreamEvent, run: ConversationRun): ConversationStreamEvent {
+  return {
+    ...event,
+    conversation_id: event.conversation_id || run.conversation_id,
+    user_message_id: event.user_message_id || run.user_message_id,
+    assistant_message_id: event.assistant_message_id || run.assistant_message_id,
+    message_id: event.message_id || run.assistant_message_id || undefined,
   };
 }
 
@@ -250,6 +269,47 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
     }));
   },
 
+  resolveApproval: async (runId, approvalId, approved) => {
+    const run = get().runsById[runId];
+    if (!run) return;
+    if (approved) {
+      await agentApi.streamResumeAgentRun(runId, approvalId, {
+        note: "Approved in DBFox UI",
+        onEvent: (event) => get().applyStreamEvent(withConversationRunContext(event, run)),
+      });
+      await get().openConversation(run.conversation_id);
+      await get().initConversations();
+      return;
+    }
+
+    const response = await agentApi.rejectAgentApproval(runId, approvalId, "Rejected in DBFox UI");
+    const rejectedApproval =
+      response.approval || run.approval
+        ? {
+            ...(run.approval || response.approval!),
+            ...(response.approval || {}),
+            status: "rejected" as const,
+          }
+        : null;
+    set((state) => {
+      const current = state.runsById[runId];
+      if (!current) return state;
+      let next = upsertRun(state, current.conversation_id, {
+        ...current,
+        status: "failed",
+        approval: rejectedApproval,
+        error_message: "用户拒绝执行此操作。",
+      });
+      if (current.assistant_message_id) {
+        next = upsertMessage(next, current.assistant_message_id, {
+          content: "已拒绝执行操作。",
+          status: "failed",
+        });
+      }
+      return next;
+    });
+  },
+
   applyStreamEvent: (event) => {
     set((state) => {
       let next = ensureStreamMessages(state, event);
@@ -259,6 +319,8 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
 
       if (event.run_id) {
         const current = next.runsById[event.run_id];
+        const approval = event.approval || event.response?.approval || current?.approval || null;
+        const approvalStatus = runStatusForApprovalEvent(event);
         const run: ConversationRun = current || {
           id: event.run_id,
           conversation_id: conversationId,
@@ -269,7 +331,11 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           assistant_message_id: event.assistant_message_id,
           events: [],
         };
-        next = upsertRun(next, conversationId, withRunEvent(run, event));
+        next = upsertRun(next, conversationId, withRunEvent({
+          ...run,
+          status: approvalStatus || run.status,
+          approval,
+        }, event));
       }
 
       if (
