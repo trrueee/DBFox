@@ -25,27 +25,75 @@ const EVENT_LABELS: Record<string, string> = {
   "agent.answer.completed": "整理最终答案",
 };
 
+const PHASE_ORDER = [
+  "understanding",
+  "searching_schema",
+  "inspecting",
+  "generating_sql",
+  "validating",
+  "executing",
+  "repairing",
+  "synthesizing",
+  "completed",
+] as const;
+
+type TimelinePhase = (typeof PHASE_ORDER)[number] | "approval";
+
+const PHASE_LABELS: Record<TimelinePhase, string> = {
+  understanding: "理解问题",
+  searching_schema: "搜索结构",
+  inspecting: "检查数据",
+  generating_sql: "生成 SQL",
+  validating: "安全校验",
+  executing: "执行查询",
+  repairing: "自动修复",
+  synthesizing: "整理回答",
+  completed: "完成",
+  approval: "等待确认",
+};
+
+interface TimelineStage {
+  phase: TimelinePhase;
+  label: string;
+  status: "running" | "success" | "failed";
+  summary: string;
+  events: AgentRuntimeEvent[];
+}
+
 export function RunTracePanel({ run }: { run: ConversationRun }) {
   const events = (run.events || []).filter((event) => String(event.type) !== "agent.answer.delta");
-  const lastEvent = events[events.length - 1];
-  const summary = runSummary(run, events, lastEvent);
+  const stages = buildTimelineStages(run, events);
+  const summary = runSummary(run, events, stages);
 
   return (
     <details className="conv-run-trace" open={run.status === "running" || run.status === "failed"}>
       <summary>
         {run.status === "failed" ? <XCircle size={14} /> : <Activity size={14} />}
         <span>{summary}</span>
-        {events.length > 0 && <span className="conv-run-count">{events.length}</span>}
+        {stages.length > 0 && <span className="conv-run-count">{stages.length}</span>}
       </summary>
       <div className="conv-run-trace-body">
-        {events.length > 0 ? (
-          <ol className="conv-run-events">
-            {events.map((event) => (
-              <li key={event.event_id || `${event.type}-${event.sequence}`}>
-                <span className="conv-run-event-icon">{eventIcon(event)}</span>
+        {stages.length > 0 ? (
+          <ol className="conv-run-events conv-run-stages">
+            {stages.map((stage) => (
+              <li className={`conv-run-stage conv-run-stage-${stage.status}`} key={stage.phase}>
+                <span className="conv-run-event-icon">{phaseIcon(stage.phase, stage.status)}</span>
                 <span className="conv-run-event-copy">
-                  <strong>{eventTitle(event)}</strong>
-                  {eventSummary(event) && <span>{eventSummary(event)}</span>}
+                  <strong>{stage.label}</strong>
+                  {stage.summary && <span>{stage.summary}</span>}
+                  {stage.events.length > 0 && (
+                    <details className="conv-run-stage-debug">
+                      <summary>调试细节</summary>
+                      <ol>
+                        {stage.events.map((event) => (
+                          <li key={event.event_id || `${event.type}-${event.sequence}`}>
+                            <strong>{eventTitle(event)}</strong>
+                            {eventSummary(event) && <span>{eventSummary(event)}</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
+                  )}
                 </span>
               </li>
             ))}
@@ -53,7 +101,6 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
         ) : (
           <div className="conv-run-empty">Waiting for runtime events...</div>
         )}
-        <div className="conv-run-id">Run ID: {run.id}</div>
         {run.error_message && <div>{run.error_message}</div>}
       </div>
     </details>
@@ -63,9 +110,10 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
 function runSummary(
   run: ConversationRun,
   events: AgentRuntimeEvent[],
-  lastEvent: AgentRuntimeEvent | undefined,
+  stages: TimelineStage[],
 ): string {
-  if (run.status === "running") return lastEvent ? eventTitle(lastEvent) : "DBFox 正在分析...";
+  const lastStage = stages[stages.length - 1];
+  if (run.status === "running") return lastStage ? lastStage.label : "DBFox 正在分析...";
   if (run.status === "failed") return "执行失败";
   if (run.status === "cancelled") return "执行已取消";
   if (run.status === "waiting_approval") return "等待确认";
@@ -74,7 +122,7 @@ function runSummary(
   const sqlCount = events.filter((event) => toolName(event) === "sql.execute_readonly").length;
   const rowCount = sumNumeric(events, ["rowCount", "row_count", "rows"]);
   const durationMs = sumNumeric(events, ["durationMs", "duration_ms", "latencyMs", "latency_ms"]);
-  const parts = [`执行过程`, `${events.length} 步`];
+  const parts = [`执行过程`, `${stages.length || events.length} 阶段`];
   if (sqlCount > 0) parts.push(`${sqlCount} 条 SQL`);
   if (rowCount > 0) parts.push(`${rowCount} 行`);
   if (durationMs > 0) parts.push(`${durationMs}ms`);
@@ -116,6 +164,88 @@ function toolName(event: AgentRuntimeEvent): string {
   return stepValue(event, "tool_name") || stepValue(event, "tool");
 }
 
+function buildTimelineStages(run: ConversationRun, events: AgentRuntimeEvent[]): TimelineStage[] {
+  const byPhase = new Map<TimelinePhase, TimelineStage>();
+  for (const event of events) {
+    const phase = phaseForEvent(event);
+    const current = byPhase.get(phase);
+    const status = eventStatus(event);
+    const summary = eventSummary(event);
+    if (!current) {
+      byPhase.set(phase, {
+        phase,
+        label: PHASE_LABELS[phase],
+        status,
+        summary,
+        events: [event],
+      });
+      continue;
+    }
+    current.events.push(event);
+    current.status = mergeStageStatus(current.status, status);
+    if (summary) current.summary = summary;
+  }
+
+  if (run.status === "waiting_approval" && !byPhase.has("approval")) {
+    byPhase.set("approval", {
+      phase: "approval",
+      label: PHASE_LABELS.approval,
+      status: "running",
+      summary: run.error_message || "",
+      events: [],
+    });
+  }
+
+  return Array.from(byPhase.values()).sort((left, right) => phaseSort(left.phase) - phaseSort(right.phase));
+}
+
+function phaseSort(phase: TimelinePhase): number {
+  if (phase === "approval") return PHASE_ORDER.indexOf("validating") + 0.5;
+  const index = PHASE_ORDER.indexOf(phase as (typeof PHASE_ORDER)[number]);
+  return index === -1 ? PHASE_ORDER.length : index;
+}
+
+function phaseForEvent(event: AgentRuntimeEvent): TimelinePhase {
+  const explicit = stepValue(event, "phase");
+  if (isTimelinePhase(explicit)) return explicit;
+  const type = String(event.type);
+  if (type.includes("approval") || type.includes("waiting_approval")) return "approval";
+  if (type.includes("completed") && type === "agent.run.completed") return "completed";
+  if (type === "agent.answer.completed") return "synthesizing";
+  if (type.includes("failed")) return "repairing";
+  return phaseForTool(toolName(event), stepValue(event, "name"));
+}
+
+function isTimelinePhase(value: string): value is TimelinePhase {
+  return value === "approval" || (PHASE_ORDER as readonly string[]).includes(value);
+}
+
+function phaseForTool(tool: string, name: string): TimelinePhase {
+  const value = `${tool} ${name}`.toLowerCase();
+  if (value.includes("repair")) return "repairing";
+  if (value.includes("db.search") || (value.includes("schema") && !value.includes("inspect"))) return "searching_schema";
+  if (value.includes("db.inspect") || value.includes("db.preview") || value.includes("inspect")) return "inspecting";
+  if (value.includes("sql.validate") || value.includes("safety") || value.includes("guardrail")) return "validating";
+  if (value.includes("sql.execute") || value.includes("readonly") || value.includes("db.query")) return "executing";
+  if (value.includes("chart") || value.includes("answer") || value.includes("memory")) return "synthesizing";
+  if (value.includes("sql")) return "generating_sql";
+  return "understanding";
+}
+
+function eventStatus(event: AgentRuntimeEvent): TimelineStage["status"] {
+  const rawType = String(event.type);
+  const status = stepValue(event, "status").toLowerCase();
+  if (rawType.includes("failed") || status === "failed" || status === "error") return "failed";
+  if (rawType.includes("started") || status === "running") return "running";
+  return "success";
+}
+
+function mergeStageStatus(current: TimelineStage["status"], next: TimelineStage["status"]): TimelineStage["status"] {
+  if (current === "failed" || next === "failed") return "failed";
+  if (current === "running" || next === "running") return "running";
+  return "success";
+}
+
 function eventTitle(event: AgentRuntimeEvent): string {
   const tool = toolName(event);
   if (tool) return TOOL_LABELS[tool] || tool;
@@ -135,15 +265,13 @@ function eventSummary(event: AgentRuntimeEvent): string {
   );
 }
 
-function eventIcon(event: AgentRuntimeEvent) {
-  const rawType = String(event.type);
-  const tool = toolName(event);
-  if (rawType.includes("failed")) return <XCircle size={13} />;
-  if (rawType.includes("completed")) return <CheckCircle2 size={13} />;
-  if (tool.includes("search") || tool.includes("schema")) return <Search size={13} />;
-  if (tool.includes("sql") || tool.includes("db") || tool.includes("database")) return <Database size={13} />;
-  if (tool.includes("policy") || tool.includes("safety")) return <ShieldCheck size={13} />;
-  if (event.type === "agent.artifact.created") return <MessageSquare size={13} />;
-  if (rawType.includes("step") || rawType.includes("tool")) return <Wrench size={13} />;
+function phaseIcon(phase: TimelinePhase, status: TimelineStage["status"]) {
+  if (status === "failed") return <XCircle size={13} />;
+  if (phase === "searching_schema") return <Search size={13} />;
+  if (phase === "inspecting" || phase === "executing") return <Database size={13} />;
+  if (phase === "validating" || phase === "approval") return <ShieldCheck size={13} />;
+  if (phase === "repairing") return <Wrench size={13} />;
+  if (phase === "synthesizing") return <MessageSquare size={13} />;
+  if (status === "success") return <CheckCircle2 size={13} />;
   return <Circle size={13} />;
 }
