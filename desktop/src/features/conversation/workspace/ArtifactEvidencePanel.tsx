@@ -28,21 +28,33 @@ function isSqlArtifact(artifact: ConversationArtifact): boolean {
   return artifact.type === "sql" || artifact.type === "sql_suggestion";
 }
 
+function artifactKeys(artifact: ConversationArtifact): string[] {
+  return [artifact.id, artifact.semantic_id].filter((item): item is string => Boolean(item));
+}
+
+function dependsOnAny(artifact: ConversationArtifact, keys: Set<string>): boolean {
+  return dependsOn(artifact).some((id) => keys.has(id));
+}
+
 function groupedArtifacts(artifacts: ConversationArtifact[]) {
   const sql = artifacts
     .filter(isSqlArtifact)
     .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   return sql.map((sqlArtifact) => {
-    const tables = artifacts.filter(
-      (item) => (item.type === "table" || item.type === "result_view") && dependsOn(item).includes(sqlArtifact.id),
+    const sqlKeys = new Set(artifactKeys(sqlArtifact));
+    const safety = artifacts.filter(
+      (item) => item.type === "safety" && dependsOnAny(item, sqlKeys),
     );
-    const tableIds = new Set(tables.map((item) => item.id));
+    const tables = artifacts.filter(
+      (item) => (item.type === "table" || item.type === "result_view") && dependsOnAny(item, sqlKeys),
+    );
+    const tableIds = new Set(tables.flatMap(artifactKeys));
     const charts = artifacts.filter(
       (item) =>
         item.type === "chart" &&
-        (dependsOn(item).includes(sqlArtifact.id) || dependsOn(item).some((id) => tableIds.has(id))),
+        (dependsOnAny(item, sqlKeys) || dependsOnAny(item, tableIds)),
     );
-    return { sql: sqlArtifact, tables, charts };
+    return { sql: sqlArtifact, safety, tables, charts };
   });
 }
 
@@ -94,6 +106,32 @@ function payloadStringList(payload: Record<string, unknown>, keys: string[]): st
     }
   }
   return undefined;
+}
+
+function payloadBoolean(payload: Record<string, unknown>, keys: string[]): boolean {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "boolean") return value;
+  }
+  return false;
+}
+
+function safetyGuardrailResult(payload: Record<string, unknown>): string {
+  const flattened = payloadString(payload, ["guardrail_result", "guardrailResult"]);
+  if (flattened) return flattened;
+  const guardrail = payload.guardrail;
+  if (guardrail && typeof guardrail === "object") {
+    return payloadString(guardrail as Record<string, unknown>, ["result"]) || "unknown";
+  }
+  return "unknown";
+}
+
+function safetySchemaWarningsCount(payload: Record<string, unknown>): number {
+  const count = payloadNumber(payload, ["schema_warnings_count", "schemaWarningsCount"]);
+  if (count !== undefined) return count;
+  if (Array.isArray(payload.schema_warnings)) return payload.schema_warnings.length;
+  if (Array.isArray(payload.schemaWarnings)) return payload.schemaWarnings.length;
+  return 0;
 }
 
 function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactModel | ResultViewArtifactModel {
@@ -172,7 +210,12 @@ function chartIcon(type: "bar" | "line" | "pie") {
 
 export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResultTab }: ArtifactEvidencePanelProps) {
   const groups = groupedArtifacts(artifacts);
-  const groupedIds = new Set(groups.flatMap((group) => [group.sql.id, ...group.tables.map((item) => item.id), ...group.charts.map((item) => item.id)]));
+  const groupedIds = new Set(groups.flatMap((group) => [
+    group.sql.id,
+    ...group.safety.map((item) => item.id),
+    ...group.tables.map((item) => item.id),
+    ...group.charts.map((item) => item.id),
+  ]));
   const orphanArtifacts = artifacts
     .filter((artifact) => !groupedIds.has(artifact.id))
     .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
@@ -207,6 +250,7 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
                 </span>
               </header>
               <pre>{sql}</pre>
+              {group.safety.map((safety) => <SafetyArtifact key={safety.id} artifact={safety} />)}
               {group.tables.map((table) => <TableArtifact key={table.id} artifact={table} onOpenResultTab={onOpenResultTab} />)}
               {group.charts.map((chart) => <ChartArtifact key={chart.id} artifact={chart} />)}
             </section>
@@ -215,6 +259,7 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
         {orphanArtifacts.map((artifact) => {
           if (artifact.type === "table" || artifact.type === "result_view") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
           if (artifact.type === "chart") return <ChartArtifact key={artifact.id} artifact={artifact} />;
+          if (artifact.type === "safety") return <SafetyArtifact key={artifact.id} artifact={artifact} />;
           if (isSqlArtifact(artifact)) {
             const sql = sqlText(artifact);
             return (
@@ -233,6 +278,27 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
         })}
       </div>
     </details>
+  );
+}
+
+function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
+  const canExecute = payloadBoolean(artifact.payload, ["can_execute", "canExecute"]);
+  const requiresConfirmation = payloadBoolean(artifact.payload, ["requires_confirmation", "requiresConfirmation"]);
+  const passed = payloadBoolean(artifact.payload, ["passed"]) || canExecute;
+  const guardrail = safetyGuardrailResult(artifact.payload);
+  const schemaWarnings = safetySchemaWarningsCount(artifact.payload);
+  return (
+    <div className={`conv-safety-artifact ${passed ? "is-safe" : "is-warning"}`}>
+      <div className="conv-artifact-heading">
+        <strong>安全检查</strong>
+        <span>{canExecute ? "可执行" : "不可执行"}</span>
+        <span>{requiresConfirmation ? "需要确认" : "无需确认"}</span>
+      </div>
+      <div className="conv-table-meta">
+        <span>Guardrail: {guardrail}</span>
+        <span>Schema warnings: {schemaWarnings}</span>
+      </div>
+    </div>
   );
 }
 
