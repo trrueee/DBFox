@@ -48,6 +48,9 @@ export function MessageBubble({
                 onResolveApproval={onResolveApproval}
               />
             )}
+            {run?.approval && run.approval.status !== "pending" && (
+              <ApprovalAuditCard approval={run.approval} onOpenSqlConsole={onOpenSqlConsole} />
+            )}
             <div className="conv-answer-document">
               <MarkdownContent content={message.content || (message.status === "streaming" ? "Thinking..." : "")} />
             </div>
@@ -150,6 +153,44 @@ function ApprovalCard({
   );
 }
 
+function ApprovalAuditCard({
+  approval,
+  onOpenSqlConsole,
+}: {
+  approval: AgentApproval;
+  onOpenSqlConsole: (sql?: string) => void;
+}) {
+  const sql = approvalSql(approval);
+  return (
+    <section
+      className={`conv-approval-card conv-approval-audit conv-approval-${approval.status}`}
+      aria-label="Approval audit"
+    >
+      <div className="conv-approval-heading">
+        <strong>{approvalStatusLabel(approval.status)}</strong>
+        <span>风险级别：{approval.risk_level}</span>
+      </div>
+      <div className="conv-approval-meta">
+        {approval.decided_by && <span>决定人：{approval.decided_by}</span>}
+        <span>审批时间：{formatApprovalTime(approval.decided_at)}</span>
+      </div>
+      {approval.decision_note && <p>{approval.decision_note}</p>}
+      {approval.reason && <p>原始原因：{approval.reason}</p>}
+      {sql && <pre>{sql}</pre>}
+      {sql && (
+        <div className="conv-approval-actions">
+          <button type="button" onClick={() => void navigator.clipboard?.writeText(sql)}>
+            复制 SQL
+          </button>
+          <button type="button" onClick={() => onOpenSqlConsole(sql)}>
+            在 SQL Console 查看
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function approvalSql(approval: AgentApproval): string {
   const action = approval.requested_action;
   if (!action || typeof action !== "object") return "";
@@ -160,6 +201,20 @@ function approvalSql(approval: AgentApproval): string {
     return (args as Record<string, string>).sql;
   }
   return "";
+}
+
+function approvalStatusLabel(status: AgentApproval["status"]): string {
+  if (status === "approved") return "审批已批准";
+  if (status === "rejected") return "审批已拒绝";
+  if (status === "expired") return "审批已过期";
+  return "审批已处理";
+}
+
+function formatApprovalTime(value?: string | null): string {
+  if (!value) return "未知时间";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未知时间";
+  return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
 }
 
 function findEvidenceArtifact(artifacts: ConversationArtifact[], artifactId: string): ConversationArtifact | undefined {

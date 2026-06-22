@@ -290,6 +290,44 @@
   color: var(--agent-text-secondary);
 }
 
+.conv-approval-audit {
+  color: var(--agent-text);
+}
+
+.conv-approval-approved {
+  border-color: var(--trust-safe-border);
+  background: var(--trust-safe-bg);
+}
+
+.conv-approval-rejected {
+  border-color: var(--trust-danger-border);
+  background: var(--trust-danger-bg);
+}
+
+.conv-approval-expired {
+  border-color: var(--trust-warning-border);
+  background: var(--trust-warning-bg);
+}
+
+.conv-approval-approved .conv-approval-heading strong,
+.conv-approval-approved .conv-approval-actions button {
+  color: var(--trust-safe);
+}
+
+.conv-approval-rejected .conv-approval-heading strong,
+.conv-approval-rejected .conv-approval-actions button {
+  color: var(--trust-danger);
+}
+
+.conv-approval-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--agent-text-secondary);
+}
+
 .conv-approval-card pre {
   max-height: 160px;
   overflow: auto;
