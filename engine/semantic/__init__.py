@@ -4,7 +4,6 @@ Modules:
   alias            — SemanticAliasResolver
   schema_linker    — SchemaLinker, SchemaLinkingResult
   semantic_context — SchemaContextBuilder (renders DDL-style context)
-  embeddings       — EmbeddingService for vector search
 """
 
 from engine.semantic.alias import AliasMatch, SemanticAliasResolver

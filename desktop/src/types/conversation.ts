@@ -3,7 +3,7 @@ import type { AgentAnswer, AgentRuntimeEvent } from "../lib/api/types";
 export type ConversationRole = "user" | "assistant" | "system";
 export type ConversationMessageStatus = "created" | "streaming" | "completed" | "failed" | "cancelled";
 export type AgentRunStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
-export type ConversationArtifactType = "sql" | "table" | "chart" | "markdown" | "agent_plan" | "query_plan" | "sql_suggestion" | "safety" | "error";
+export type ConversationArtifactType = "sql" | "table" | "result_view" | "chart" | "markdown" | "agent_plan" | "query_plan" | "sql_suggestion" | "safety" | "error";
 
 export interface ConversationSummary {
   id: string;

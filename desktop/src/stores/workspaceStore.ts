@@ -3,7 +3,7 @@ import type { WorkspaceTab } from "../mock/dbfoxMock";
 import { defaultSql } from "../mock/dbfoxMock";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
-import type { TableArtifact } from "../types/agentArtifact";
+import type { TableArtifact, ResultViewArtifact } from "../types/agentArtifact";
 
 interface WorkspaceState {
   tabs: WorkspaceTab[];
@@ -28,7 +28,7 @@ interface WorkspaceActions {
   openAgentEvalTab: () => void;
   openDiagnosticsTab: () => void;
   openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
-  openArtifactResultTab: (artifact: TableArtifact) => void;
+  openArtifactResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
   openTableTab: (tableName: string, initialSubtab?: string) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;

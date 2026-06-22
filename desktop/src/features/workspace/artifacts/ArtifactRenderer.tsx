@@ -1,4 +1,4 @@
-import type { AgentArtifact, TableArtifact } from "../../../types/agentArtifact";
+import type { AgentArtifact, TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import { ChartArtifactView } from "./ChartArtifactView";
 import { EmptyArtifactsState } from "./EmptyArtifactsState";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
@@ -8,7 +8,7 @@ import { TableArtifactView } from "./TableArtifactView";
 interface ArtifactRendererProps {
   artifacts: AgentArtifact[];
   onOpenSqlConsole: (initialSql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact) => void;
+  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
   onToast: (message: string) => void;
 }
 
@@ -26,7 +26,7 @@ export function ArtifactRenderer({ artifacts, onOpenSqlConsole, onOpenResultTab,
         if (artifact.type === "sql") {
           return <SqlArtifactView key={artifact.id} artifact={artifact} onOpenSqlConsole={onOpenSqlConsole} onToast={onToast} />;
         }
-        if (artifact.type === "table") {
+        if (artifact.type === "table" || artifact.type === "result_view") {
           return <TableArtifactView key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} onToast={onToast} />;
         }
         return <MarkdownArtifactView key={artifact.id} artifact={artifact} onToast={onToast} />;

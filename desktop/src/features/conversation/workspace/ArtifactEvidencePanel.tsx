@@ -1,12 +1,12 @@
 import { BarChart2, Copy, Database, ExternalLink, LineChart, PieChart, Play, Table2, Terminal } from "lucide-react";
 import type { CSSProperties } from "react";
-import type { TableArtifact as TableArtifactModel } from "../../../types/agentArtifact";
+import type { TableArtifact as TableArtifactModel, ResultViewArtifact as ResultViewArtifactModel } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 
 interface ArtifactEvidencePanelProps {
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifactModel) => void;
+  onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
 }
 
 function sqlText(artifact: ConversationArtifact): string {
@@ -34,7 +34,7 @@ function groupedArtifacts(artifacts: ConversationArtifact[]) {
     .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
   return sql.map((sqlArtifact) => {
     const tables = artifacts.filter(
-      (item) => item.type === "table" && dependsOn(item).includes(sqlArtifact.id),
+      (item) => (item.type === "table" || item.type === "result_view") && dependsOn(item).includes(sqlArtifact.id),
     );
     const tableIds = new Set(tables.map((item) => item.id));
     const charts = artifacts.filter(
@@ -47,7 +47,7 @@ function groupedArtifacts(artifacts: ConversationArtifact[]) {
 }
 
 function tableRows(artifact: ConversationArtifact): unknown[] {
-  const rows = artifact.payload.rows || artifact.payload.data;
+  const rows = artifact.payload.rows || artifact.payload.data || artifact.payload.previewRows;
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -96,11 +96,37 @@ function payloadStringList(payload: Record<string, unknown>, keys: string[]): st
   return undefined;
 }
 
-function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactModel {
+function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactModel | ResultViewArtifactModel {
   const columns = tableColumns(artifact);
   const rows = tableRows(artifact).map((row) => columns.map((column, index) => cellText(row, column, index)));
   const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? rows.length;
   const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? rows.length;
+  
+  if (artifact.type === "result_view") {
+    return {
+      id: artifact.id,
+      type: "result_view",
+      title: artifact.title,
+      storageMode: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? "sql_backed" : "payload",
+      datasourceId: payloadString(artifact.payload, ["datasourceId"]) || "",
+      sourceSqlSemanticId: payloadString(artifact.payload, ["sourceSqlSemanticId"]) || "",
+      sourceSql: payloadString(artifact.payload, ["sourceSql"]) || "",
+      safeSql: payloadString(artifact.payload, ["safeSql"]) || "",
+      columns,
+      previewRows: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? rows : rows.slice(0, 10),
+      previewRowCount: payloadNumber(artifact.payload, ["previewRowCount"]) || Math.min(rows.length, 10),
+      rows,
+      rowCount,
+      returnedRows,
+      latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
+      truncated: Boolean(artifact.payload.truncated),
+      warnings: payloadStringList(artifact.payload, ["warnings"]),
+      notices: payloadStringList(artifact.payload, ["notices"]),
+      depends_on: artifact.depends_on,
+      payload: artifact.payload,
+    };
+  }
+  
   return {
     id: artifact.id,
     type: "table",
@@ -187,7 +213,7 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
           );
         })}
         {orphanArtifacts.map((artifact) => {
-          if (artifact.type === "table") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
+          if (artifact.type === "table" || artifact.type === "result_view") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
           if (artifact.type === "chart") return <ChartArtifact key={artifact.id} artifact={artifact} />;
           if (isSqlArtifact(artifact)) {
             const sql = sqlText(artifact);
@@ -215,7 +241,7 @@ function TableArtifact({
   onOpenResultTab,
 }: {
   artifact: ConversationArtifact;
-  onOpenResultTab?: (artifact: TableArtifactModel) => void;
+  onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
 }) {
   const columns = tableColumns(artifact);
   const allRows = tableRows(artifact);
