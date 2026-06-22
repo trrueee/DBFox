@@ -6,7 +6,6 @@ import type {
   ConversationRun,
 } from "../../../types/conversation";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
-import { ArtifactEvidencePanel } from "./ArtifactEvidencePanel";
 import { DataReferencePanel } from "./DataReferencePanel";
 import { RunTracePanel } from "./RunTracePanel";
 
@@ -17,6 +16,7 @@ interface MessageBubbleProps {
   onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
   onResolveApproval?: (runId: string, approvalId: string, approved: boolean) => void;
+  onSelectArtifact?: (artifactId: string) => void;
 }
 
 export function MessageBubble({
@@ -24,8 +24,8 @@ export function MessageBubble({
   run,
   artifacts,
   onOpenSqlConsole,
-  onOpenResultTab,
   onResolveApproval,
+  onSelectArtifact,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const messageClass = isUser ? `conv-message conv-message-${message.role}` : "conv-message conv-message-answer";
@@ -55,17 +55,11 @@ export function MessageBubble({
               answer={run?.answer || null}
               artifacts={artifacts}
               onOpenSqlConsole={onOpenSqlConsole}
+              onSelectArtifact={onSelectArtifact}
             />
           </>
         )}
         {!isUser && <DataReferencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
-        {!isUser && (
-          <ArtifactEvidencePanel
-            artifacts={artifacts}
-            onOpenSqlConsole={onOpenSqlConsole}
-            onOpenResultTab={onOpenResultTab}
-          />
-        )}
       </div>
     </article>
   );
@@ -75,10 +69,12 @@ function AnswerEvidenceChips({
   answer,
   artifacts,
   onOpenSqlConsole,
+  onSelectArtifact,
 }: {
   answer: AgentAnswer | null;
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
+  onSelectArtifact?: (artifactId: string) => void;
 }) {
   if (!answer) return null;
   const chips = answer.evidence.map((item) => {
@@ -100,6 +96,7 @@ function AnswerEvidenceChips({
             type="button"
             className={`conv-answer-evidence-chip ${artifact?.type ? `conv-answer-evidence-${artifact.type}` : ""}`}
             onClick={() => {
+              if (artifact) onSelectArtifact?.(artifact.id);
               if (sql) onOpenSqlConsole(sql);
             }}
           >

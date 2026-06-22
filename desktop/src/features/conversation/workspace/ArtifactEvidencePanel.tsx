@@ -1,11 +1,26 @@
 import { Copy, Database, ExternalLink, Play, Table2, Terminal } from "lucide-react";
 import type {
-  ChartArtifact as ChartArtifactModel,
   TableArtifact as TableArtifactModel,
   ResultViewArtifact as ResultViewArtifactModel,
 } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
+import {
+  conversationArtifactKeys,
+  conversationCellText,
+  conversationSqlText,
+  conversationTableColumns,
+  conversationTableRows,
+  dependsOnAnyConversationArtifact,
+  isSqlConversationArtifact,
+  payloadBoolean,
+  payloadNumber,
+  safetyGuardrailResult,
+  safetySchemaWarningsCount,
+  sortConversationArtifacts,
+  toChartArtifactModel,
+  toTableArtifactModel,
+} from "./conversationArtifactModels";
 
 interface ArtifactEvidencePanelProps {
   artifacts: ConversationArtifact[];
@@ -13,227 +28,24 @@ interface ArtifactEvidencePanelProps {
   onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
 }
 
-function sqlText(artifact: ConversationArtifact): string {
-  const value = artifact.payload.sql || artifact.payload.proposed_sql || artifact.payload.safe_sql;
-  return typeof value === "string" ? value : "";
-}
-
-function dependsOn(artifact: ConversationArtifact): string[] {
-  const raw = artifact.depends_on as unknown;
-  if (Array.isArray(raw)) return raw.filter((item): item is string => typeof item === "string");
-  if (raw && typeof raw === "object" && "depends_on" in raw) {
-    const nested = (raw as { depends_on?: unknown }).depends_on;
-    return Array.isArray(nested) ? nested.filter((item): item is string => typeof item === "string") : [];
-  }
-  return [];
-}
-
-function isSqlArtifact(artifact: ConversationArtifact): boolean {
-  return artifact.type === "sql" || artifact.type === "sql_suggestion";
-}
-
-function artifactKeys(artifact: ConversationArtifact): string[] {
-  return [artifact.id, artifact.semantic_id].filter((item): item is string => Boolean(item));
-}
-
-function dependsOnAny(artifact: ConversationArtifact, keys: Set<string>): boolean {
-  return dependsOn(artifact).some((id) => keys.has(id));
-}
-
 function groupedArtifacts(artifacts: ConversationArtifact[]) {
-  const sql = artifacts
-    .filter(isSqlArtifact)
-    .sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  const sql = sortConversationArtifacts(artifacts.filter(isSqlConversationArtifact));
   return sql.map((sqlArtifact) => {
-    const sqlKeys = new Set(artifactKeys(sqlArtifact));
+    const sqlKeys = new Set(conversationArtifactKeys(sqlArtifact));
     const safety = artifacts.filter(
-      (item) => item.type === "safety" && dependsOnAny(item, sqlKeys),
+      (item) => item.type === "safety" && dependsOnAnyConversationArtifact(item, sqlKeys),
     );
     const tables = artifacts.filter(
-      (item) => (item.type === "table" || item.type === "result_view") && dependsOnAny(item, sqlKeys),
+      (item) => (item.type === "table" || item.type === "result_view") && dependsOnAnyConversationArtifact(item, sqlKeys),
     );
-    const tableIds = new Set(tables.flatMap(artifactKeys));
+    const tableIds = new Set(tables.flatMap(conversationArtifactKeys));
     const charts = artifacts.filter(
       (item) =>
         item.type === "chart" &&
-        (dependsOnAny(item, sqlKeys) || dependsOnAny(item, tableIds)),
+        (dependsOnAnyConversationArtifact(item, sqlKeys) || dependsOnAnyConversationArtifact(item, tableIds)),
     );
     return { sql: sqlArtifact, safety, tables, charts };
   });
-}
-
-function tableRows(artifact: ConversationArtifact): unknown[] {
-  const rows = artifact.payload.rows || artifact.payload.data || artifact.payload.previewRows;
-  return Array.isArray(rows) ? rows : [];
-}
-
-function tableColumns(artifact: ConversationArtifact): string[] {
-  const columns = artifact.payload.columns;
-  if (Array.isArray(columns)) return columns.filter((item): item is string => typeof item === "string");
-  const first = tableRows(artifact)[0];
-  return first && typeof first === "object" && !Array.isArray(first) ? Object.keys(first) : [];
-}
-
-function cellText(row: unknown, column: string, index: number): string {
-  const value = Array.isArray(row)
-    ? row[index]
-    : row && typeof row === "object"
-      ? (row as Record<string, unknown>)[column]
-      : "";
-  if (value == null) return "";
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
-
-function payloadNumber(payload: Record<string, unknown>, keys: string[]): number | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
-  }
-  return undefined;
-}
-
-function payloadString(payload: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return undefined;
-}
-
-function payloadStringList(payload: Record<string, unknown>, keys: string[]): string[] | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (Array.isArray(value)) {
-      const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-      if (items.length > 0) return items;
-    }
-  }
-  return undefined;
-}
-
-function payloadBoolean(payload: Record<string, unknown>, keys: string[]): boolean {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "boolean") return value;
-  }
-  return false;
-}
-
-function safetyGuardrailResult(payload: Record<string, unknown>): string {
-  const flattened = payloadString(payload, ["guardrail_result", "guardrailResult"]);
-  if (flattened) return flattened;
-  const guardrail = payload.guardrail;
-  if (guardrail && typeof guardrail === "object") {
-    return payloadString(guardrail as Record<string, unknown>, ["result"]) || "unknown";
-  }
-  return "unknown";
-}
-
-function safetySchemaWarningsCount(payload: Record<string, unknown>): number {
-  const count = payloadNumber(payload, ["schema_warnings_count", "schemaWarningsCount"]);
-  if (count !== undefined) return count;
-  if (Array.isArray(payload.schema_warnings)) return payload.schema_warnings.length;
-  if (Array.isArray(payload.schemaWarnings)) return payload.schemaWarnings.length;
-  return 0;
-}
-
-function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactModel | ResultViewArtifactModel {
-  const columns = tableColumns(artifact);
-  const rows = tableRows(artifact).map((row) => columns.map((column, index) => cellText(row, column, index)));
-  const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? rows.length;
-  const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? rows.length;
-  
-  if (artifact.type === "result_view") {
-    return {
-      id: artifact.id,
-      type: "result_view",
-      title: artifact.title,
-      storageMode: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? "sql_backed" : "payload",
-      datasourceId: payloadString(artifact.payload, ["datasourceId"]) || "",
-      sourceSqlSemanticId: payloadString(artifact.payload, ["sourceSqlSemanticId"]) || "",
-      sourceSql: payloadString(artifact.payload, ["sourceSql"]) || "",
-      safeSql: payloadString(artifact.payload, ["safeSql"]) || "",
-      columns,
-      previewRows: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? rows : rows.slice(0, 10),
-      previewRowCount: payloadNumber(artifact.payload, ["previewRowCount"]) || Math.min(rows.length, 10),
-      rows,
-      rowCount,
-      returnedRows,
-      latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
-      truncated: Boolean(artifact.payload.truncated),
-      warnings: payloadStringList(artifact.payload, ["warnings"]),
-      notices: payloadStringList(artifact.payload, ["notices"]),
-      depends_on: artifact.depends_on,
-      payload: artifact.payload,
-    };
-  }
-  
-  return {
-    id: artifact.id,
-    type: "table",
-    title: artifact.title,
-    columns,
-    rows,
-    rowCount,
-    returnedRows,
-    latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
-    sql: payloadString(artifact.payload, ["sql", "safe_sql"]),
-    truncated: Boolean(artifact.payload.truncated),
-    warnings: payloadStringList(artifact.payload, ["warnings"]),
-    notices: payloadStringList(artifact.payload, ["notices"]),
-    depends_on: artifact.depends_on,
-    payload: artifact.payload,
-  };
-}
-
-function chartSeries(artifact: ConversationArtifact): ChartArtifactModel["series"] {
-  const series = artifact.payload.series;
-  if (!Array.isArray(series)) return [];
-  return series.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-    const label = record.label ?? record.name ?? record.x;
-    const value = Number(record.value ?? record.y);
-    if (typeof label !== "string" || !Number.isFinite(value)) return [];
-    const rawX = record.x;
-    const x = typeof rawX === "string" || typeof rawX === "number" ? rawX : undefined;
-    return [{ label, value, x }];
-  });
-}
-
-function chartType(artifact: ConversationArtifact): ChartArtifactModel["chartType"] {
-  const value = artifact.payload.type || artifact.payload.chart_type || artifact.payload.kind;
-  if (value === "line" || value === "pie" || value === "scatter" || value === "area") return value;
-  return "bar";
-}
-
-function chartSourceRefs(payload: Record<string, unknown>): ChartArtifactModel["sourceRefs"] {
-  const raw = payload.source_refs;
-  if (!Array.isArray(raw)) return undefined;
-  const refs = raw.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as Record<string, unknown>;
-    const label = typeof record.label === "string" ? record.label : "";
-    const formula = typeof record.formula === "string" ? record.formula : "";
-    const field = typeof record.field === "string" ? record.field : "";
-    return label && formula && field ? [{ label, formula, field }] : [];
-  });
-  return refs.length > 0 ? refs : undefined;
-}
-
-function toChartArtifactModel(artifact: ConversationArtifact): ChartArtifactModel {
-  return {
-    id: artifact.id,
-    type: "chart",
-    title: artifact.title,
-    description: payloadString(artifact.payload, ["reason", "description"]),
-    chartType: chartType(artifact),
-    series: chartSeries(artifact),
-    sourceRefs: chartSourceRefs(artifact.payload),
-    depends_on: artifact.depends_on,
-    payload: artifact.payload,
-  };
 }
 
 export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResultTab }: ArtifactEvidencePanelProps) {
@@ -256,7 +68,7 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
       </summary>
       <div className="conv-evidence-body">
         {groups.map((group, index) => {
-          const sql = sqlText(group.sql);
+          const sql = conversationSqlText(group.sql);
           return (
             <section className="conv-sql-group" key={group.sql.id}>
               <header>
@@ -288,8 +100,8 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
           if (artifact.type === "table" || artifact.type === "result_view") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
           if (artifact.type === "chart") return <ChartArtifact key={artifact.id} artifact={artifact} />;
           if (artifact.type === "safety") return <SafetyArtifact key={artifact.id} artifact={artifact} />;
-          if (isSqlArtifact(artifact)) {
-            const sql = sqlText(artifact);
+          if (isSqlConversationArtifact(artifact)) {
+            const sql = conversationSqlText(artifact);
             return (
               <section className="conv-sql-group" key={artifact.id}>
                 <header>
@@ -337,8 +149,8 @@ function TableArtifact({
   artifact: ConversationArtifact;
   onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
 }) {
-  const columns = tableColumns(artifact);
-  const allRows = tableRows(artifact);
+  const columns = conversationTableColumns(artifact);
+  const allRows = conversationTableRows(artifact);
   const rows = allRows.slice(0, 10);
   const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? allRows.length;
   const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? allRows.length;
@@ -380,7 +192,7 @@ function TableArtifact({
                 {rows.map((row, rowIndex) => (
                   <tr key={rowIndex}>
                     {columns.map((column, columnIndex) => (
-                      <td key={column}>{cellText(row, column, columnIndex)}</td>
+                      <td key={column}>{conversationCellText(row, column, columnIndex)}</td>
                     ))}
                   </tr>
                 ))}

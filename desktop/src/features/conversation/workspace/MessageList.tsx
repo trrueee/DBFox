@@ -14,6 +14,7 @@ interface MessageListProps {
   onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
   onResolveApproval: (runId: string, approvalId: string, approved: boolean) => void;
+  onSelectArtifact?: (artifactId: string) => void;
 }
 
 export function MessageList({
@@ -23,6 +24,7 @@ export function MessageList({
   onOpenSqlConsole,
   onOpenResultTab,
   onResolveApproval,
+  onSelectArtifact,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -43,6 +45,7 @@ export function MessageList({
               onOpenSqlConsole={onOpenSqlConsole}
               onOpenResultTab={onOpenResultTab}
               onResolveApproval={onResolveApproval}
+              onSelectArtifact={onSelectArtifact}
             />
           );
         })}
