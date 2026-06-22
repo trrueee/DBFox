@@ -53,8 +53,8 @@ export function buildDataReferences(artifacts: ConversationArtifact[]): DataRefe
       add({ type: "sql", artifactId: artifact.id, label: `SQL: ${artifact.title}`, sql });
     }
 
-    if (artifact.type === "table") {
-      const rowCount = numberValue(artifact.payload.rowCount);
+    if (artifact.type === "table" || artifact.type === "result_view") {
+      const rowCount = numberValue(artifact.payload.rowCount ?? artifact.payload.row_count);
       add({ type: "result", artifactId: artifact.id, rowCount, label: artifact.title || "结果表" });
     }
 
@@ -75,7 +75,7 @@ export function buildDataReferences(artifacts: ConversationArtifact[]): DataRefe
 }
 
 function sqlText(artifact: ConversationArtifact): string {
-  const value = artifact.payload.sql || artifact.payload.proposed_sql || artifact.payload.safe_sql;
+  const value = artifact.payload.sql || artifact.payload.proposed_sql || artifact.payload.safe_sql || artifact.payload.safeSql;
   return typeof value === "string" ? value : "";
 }
 
