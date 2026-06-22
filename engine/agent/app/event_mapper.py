@@ -31,13 +31,14 @@ def observe_events(
             step_name = _artifact_timeline_step(artifact.type)
             if step_name:
                 yield emit(
-                    "agent.step.completed",
-                    step={
-                        "name": step_name,
-                        "status": "success",
-                        "artifact_id": artifact.id,
-                        "artifact_type": artifact.type,
-                        "summary": artifact.title,
+            "agent.step.completed",
+            step={
+                "name": step_name,
+                "phase": _artifact_phase(artifact.type),
+                "status": "success",
+                "artifact_id": artifact.id,
+                "artifact_type": artifact.type,
+                "summary": artifact.title,
                     },
                 )
 
@@ -58,6 +59,7 @@ def trace_to_events(
             step={
                 "name": mapped_name,
                 "tool_name": tool_name,
+                "phase": _phase_for_tool(tool_name),
                 "input": trace.get("input"),
             },
         )
@@ -68,6 +70,7 @@ def trace_to_events(
             step={
                 "name": mapped_name,
                 "tool_name": tool_name,
+                "phase": _phase_for_tool(tool_name),
                 "status": payload.get("status") if isinstance(payload, dict) else trace.get("status"),
                 "latency_ms": payload.get("latency_ms") if isinstance(payload, dict) else trace.get("latency_ms"),
                 "input": payload.get("input") if isinstance(payload, dict) else trace.get("input"),
@@ -82,6 +85,7 @@ def trace_to_events(
             "agent.progress.update",
             step={
                 "name": "sql_repair",
+                "phase": "repairing",
                 "status": "running",
                 "summary": summary,
                 "detail": trace.get("error_class"),
@@ -95,6 +99,7 @@ def trace_to_events(
                 "agent.progress.update",
                 step={
                     "name": "sql_repair",
+                    "phase": "repairing",
                     "status": "running",
                     "summary": summary,
                     "detail": trace.get("error_class"),
@@ -108,6 +113,7 @@ def trace_to_events(
                 "agent.progress.update",
                 step={
                     "name": trace.get("failure_layer") or "progress",
+                    "phase": _phase_for_progress(trace),
                     "status": trace.get("status") or "running",
                     "summary": summary,
                     "detail": trace.get("root_cause"),
@@ -123,13 +129,14 @@ def trace_to_events(
                 "agent.progress.update",
                 step={
                     "name": "model",
+                    "phase": "understanding",
                     "status": "running" if tool_names else "success",
                     "summary": summary,
                     "tool_calls": tool_names,
                 },
             )
     elif trace_type == "agent.approval.required":
-        yield emit("agent.approval.required", step={"name": mapped_name})
+        yield emit("agent.approval.required", step={"name": mapped_name, "phase": "validating"})
 
 
 def context_update_event(
@@ -204,6 +211,54 @@ def _artifact_timeline_step(artifact_type: str) -> str | None:
         "agent_plan": "planner",
     }
     return mapping.get(artifact_type)
+
+
+def _artifact_phase(artifact_type: str) -> str:
+    mapping = {
+        "sql": "generating_sql",
+        "sql_suggestion": "generating_sql",
+        "safety": "validating",
+        "table": "executing",
+        "result_view": "executing",
+        "chart": "synthesizing",
+        "error": "repairing",
+        "query_plan": "understanding",
+        "agent_plan": "understanding",
+    }
+    return mapping.get(artifact_type, "synthesizing")
+
+
+def _phase_for_tool(tool_name: str) -> str:
+    lowered = (tool_name or "").lower()
+    if "repair" in lowered:
+        return "repairing"
+    if lowered.startswith("db.search") or "schema" in lowered and "inspect" not in lowered:
+        return "searching_schema"
+    if lowered.startswith("db.inspect") or lowered.startswith("db.preview"):
+        return "inspecting"
+    if "sql.validate" in lowered or "safety" in lowered or "guardrail" in lowered:
+        return "validating"
+    if "sql.execute" in lowered or lowered.startswith("db.query") or "readonly" in lowered:
+        return "executing"
+    if "chart" in lowered or "answer" in lowered or "memory" in lowered:
+        return "synthesizing"
+    if "sql" in lowered:
+        return "generating_sql"
+    return "understanding"
+
+
+def _phase_for_progress(trace: dict[str, Any]) -> str:
+    name = str(trace.get("failure_layer") or trace.get("name") or "").lower()
+    status = str(trace.get("status") or "").lower()
+    if "repair" in name or "repair" in status:
+        return "repairing"
+    if "sql" in name and "valid" in name:
+        return "validating"
+    if "execute" in name or "query" in name:
+        return "executing"
+    if "answer" in name or "final" in name:
+        return "synthesizing"
+    return "understanding"
 
 
 def _safe_model_progress_text(value: Any) -> str:

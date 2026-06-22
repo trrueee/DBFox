@@ -349,6 +349,29 @@
   font-weight: 650;
 }
 
+.conv-run-stage-debug {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.conv-run-stage-debug summary {
+  padding: 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.conv-run-stage-debug ol {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.conv-run-stage-debug li {
+  display: grid;
+  grid-template-columns: minmax(96px, 160px) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+
 .conv-run-id,
 .conv-run-empty {
   margin-top: 10px;
