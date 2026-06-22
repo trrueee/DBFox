@@ -1,9 +1,121 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { ConversationRun } from "../../../../types/conversation";
 import { RunTracePanel } from "../RunTracePanel";
 
 describe("RunTracePanel", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
+  it("groups runtime events into a compact stage timeline", () => {
+    const run: ConversationRun = {
+      id: "run-stage",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析订单趋势",
+      status: "completed",
+      events: [
+        {
+          event_id: "evt-understanding",
+          run_id: "run-stage",
+          sequence: 1,
+          created_at_ms: 1,
+          type: "agent.progress.update",
+          step: {
+            name: "model",
+            phase: "understanding",
+            status: "success",
+            summary: "理解问题并准备检索相关表。",
+          },
+        },
+        {
+          event_id: "evt-search",
+          run_id: "run-stage",
+          sequence: 2,
+          created_at_ms: 2,
+          type: "agent.step.completed",
+          step: {
+            name: "搜索相关表和字段",
+            tool_name: "db.search",
+            phase: "searching_schema",
+            status: "success",
+            summary: "命中 orders 和 users。",
+          },
+        },
+        {
+          event_id: "evt-validate",
+          run_id: "run-stage",
+          sequence: 3,
+          created_at_ms: 3,
+          type: "agent.step.completed",
+          step: {
+            name: "校验 SQL 安全性",
+            tool_name: "sql.validate",
+            phase: "validating",
+            status: "success",
+            summary: "只读 SQL，可执行。",
+          },
+        },
+        {
+          event_id: "evt-execute",
+          run_id: "run-stage",
+          sequence: 4,
+          created_at_ms: 4,
+          type: "agent.step.completed",
+          step: {
+            name: "执行只读查询",
+            tool_name: "sql.execute_readonly",
+            phase: "executing",
+            status: "success",
+            summary: "查询返回 128 行。",
+            rowCount: 128,
+            durationMs: 42,
+          },
+        },
+        {
+          event_id: "evt-answer",
+          run_id: "run-stage",
+          sequence: 5,
+          created_at_ms: 5,
+          type: "agent.answer.completed",
+          step: {
+            name: "answer",
+            phase: "synthesizing",
+            status: "success",
+            summary: "整理最终答案。",
+          },
+        },
+        {
+          event_id: "evt-completed",
+          run_id: "run-stage",
+          sequence: 6,
+          created_at_ms: 6,
+          type: "agent.run.completed",
+          step: {
+            name: "completed",
+            phase: "completed",
+            status: "success",
+            summary: "任务完成。",
+          },
+        },
+      ],
+    };
+
+    const { container } = render(<RunTracePanel run={run} />);
+
+    expect(screen.getByText("执行过程 · 6 阶段 · 1 条 SQL · 128 行 · 42ms")).toBeTruthy();
+    expect(screen.getByText("理解问题")).toBeTruthy();
+    expect(screen.getByText("搜索结构")).toBeTruthy();
+    expect(screen.getByText("安全校验")).toBeTruthy();
+    expect(screen.getByText("执行查询")).toBeTruthy();
+    expect(screen.getByText("整理回答")).toBeTruthy();
+    expect(screen.getByText("完成")).toBeTruthy();
+    expect(container.querySelectorAll(".conv-run-stage")).toHaveLength(6);
+    expect(container.textContent).not.toContain("Run ID:");
+    expect(container.textContent).not.toContain("sql.execute_readonly");
+  });
+
   it("renders completed runtime events with product labels and a compact summary", () => {
     const run: ConversationRun = {
       id: "run-1",
@@ -32,9 +144,9 @@ describe("RunTracePanel", () => {
 
     const { container } = render(<RunTracePanel run={run} />);
 
-    expect(screen.getByText("执行过程 · 1 步 · 1 条 SQL · 128 行 · 42ms")).toBeTruthy();
+    expect(screen.getByText("执行过程 · 1 阶段 · 1 条 SQL · 128 行 · 42ms")).toBeTruthy();
     expect(screen.getByText("执行只读查询")).toBeTruthy();
-    expect(screen.getByText("查询返回 128 行，正在整理结论。")).toBeTruthy();
+    expect(screen.getAllByText("查询返回 128 行，正在整理结论。").length).toBeGreaterThan(0);
     expect(screen.queryByText("sql.execute_readonly")).toBeNull();
     expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
   });
