@@ -237,8 +237,42 @@ def repair_plan_to_progress_decision(plan: SqlRepairPlan) -> dict[str, Any]:
     return decision.model_dump(mode="json")
 
 
-def build_repair_trace_event(plan: SqlRepairPlan, attempt: int) -> dict[str, Any]:
-    return {
+def _first_text_value(mapping: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _failed_sql_from_state(state: dict[str, Any] | None) -> str:
+    if not state:
+        return ""
+
+    failed_sql = _first_text_value(state, ("sql", "current_sql", "generated_sql"))
+    if failed_sql:
+        return failed_sql
+
+    for nested_key in ("safety", "execution"):
+        nested = state.get(nested_key)
+        if not isinstance(nested, dict):
+            continue
+        failed_sql = _first_text_value(
+            nested,
+            ("safe_sql", "sql", "executed_sql", "query_sql", "original_sql"),
+        )
+        if failed_sql:
+            return failed_sql
+
+    return ""
+
+
+def build_repair_trace_event(
+    plan: SqlRepairPlan,
+    attempt: int,
+    state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    event = {
         "type": "agent.repair.attempted",
         "attempt": attempt,
         "error_class": plan.error_class,
@@ -248,3 +282,7 @@ def build_repair_trace_event(plan: SqlRepairPlan, attempt: int) -> dict[str, Any
         "user_visible_update": plan.user_visible_update,
         "next_tool_groups": plan.next_tool_groups,
     }
+    failed_sql = _failed_sql_from_state(state)
+    if failed_sql:
+        event["failed_sql"] = failed_sql
+    return event

@@ -543,6 +543,30 @@
   font-size: 12px;
 }
 
+.conv-repair-failed-sql {
+  display: grid;
+  gap: 4px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: var(--agent-surface);
+}
+
+.conv-repair-failed-sql b {
+  color: var(--agent-text-secondary);
+  font-size: 10px;
+}
+
+.conv-repair-failed-sql pre {
+  max-height: 96px;
+  margin: 0;
+  overflow: auto;
+  color: var(--agent-text);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .conv-repair-detail-grid {
   display: grid;
   gap: 6px;
