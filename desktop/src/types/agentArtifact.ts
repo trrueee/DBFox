@@ -10,11 +10,13 @@ export type AgentArtifactBase = {
   references?: DataReference[];
 };
 
+export type ChartArtifactType = "line" | "bar" | "pie" | "scatter" | "area";
+
 export type ChartArtifact = AgentArtifactBase & {
   type: "chart";
-  chartType: "line" | "bar";
+  chartType: ChartArtifactType;
   unit?: string;
-  series: Array<{ label: string; value: number }>;
+  series: Array<{ label: string; value: number; x?: string | number; y?: number }>;
   sourceRefs?: Array<{ label: string; formula: string; field: string }>;
 };
 

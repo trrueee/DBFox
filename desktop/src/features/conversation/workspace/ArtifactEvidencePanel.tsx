@@ -1,7 +1,11 @@
-import { BarChart2, Copy, Database, ExternalLink, LineChart, PieChart, Play, Table2, Terminal } from "lucide-react";
-import type { CSSProperties } from "react";
-import type { TableArtifact as TableArtifactModel, ResultViewArtifact as ResultViewArtifactModel } from "../../../types/agentArtifact";
+import { Copy, Database, ExternalLink, Play, Table2, Terminal } from "lucide-react";
+import type {
+  ChartArtifact as ChartArtifactModel,
+  TableArtifact as TableArtifactModel,
+  ResultViewArtifact as ResultViewArtifactModel,
+} from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
+import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
 
 interface ArtifactEvidencePanelProps {
   artifacts: ConversationArtifact[];
@@ -183,7 +187,7 @@ function toTableArtifactModel(artifact: ConversationArtifact): TableArtifactMode
   };
 }
 
-function chartSeries(artifact: ConversationArtifact): { label: string; value: number }[] {
+function chartSeries(artifact: ConversationArtifact): ChartArtifactModel["series"] {
   const series = artifact.payload.series;
   if (!Array.isArray(series)) return [];
   return series.flatMap((item) => {
@@ -192,20 +196,44 @@ function chartSeries(artifact: ConversationArtifact): { label: string; value: nu
     const label = record.label ?? record.name ?? record.x;
     const value = Number(record.value ?? record.y);
     if (typeof label !== "string" || !Number.isFinite(value)) return [];
-    return [{ label, value }];
+    const rawX = record.x;
+    const x = typeof rawX === "string" || typeof rawX === "number" ? rawX : undefined;
+    return [{ label, value, x }];
   });
 }
 
-function chartType(artifact: ConversationArtifact): "bar" | "line" | "pie" {
+function chartType(artifact: ConversationArtifact): ChartArtifactModel["chartType"] {
   const value = artifact.payload.type || artifact.payload.chart_type || artifact.payload.kind;
-  if (value === "line" || value === "pie") return value;
+  if (value === "line" || value === "pie" || value === "scatter" || value === "area") return value;
   return "bar";
 }
 
-function chartIcon(type: "bar" | "line" | "pie") {
-  if (type === "line") return <LineChart size={13} />;
-  if (type === "pie") return <PieChart size={13} />;
-  return <BarChart2 size={13} />;
+function chartSourceRefs(payload: Record<string, unknown>): ChartArtifactModel["sourceRefs"] {
+  const raw = payload.source_refs;
+  if (!Array.isArray(raw)) return undefined;
+  const refs = raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const label = typeof record.label === "string" ? record.label : "";
+    const formula = typeof record.formula === "string" ? record.formula : "";
+    const field = typeof record.field === "string" ? record.field : "";
+    return label && formula && field ? [{ label, formula, field }] : [];
+  });
+  return refs.length > 0 ? refs : undefined;
+}
+
+function toChartArtifactModel(artifact: ConversationArtifact): ChartArtifactModel {
+  return {
+    id: artifact.id,
+    type: "chart",
+    title: artifact.title,
+    description: payloadString(artifact.payload, ["reason", "description"]),
+    chartType: chartType(artifact),
+    series: chartSeries(artifact),
+    sourceRefs: chartSourceRefs(artifact.payload),
+    depends_on: artifact.depends_on,
+    payload: artifact.payload,
+  };
 }
 
 export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResultTab }: ArtifactEvidencePanelProps) {
@@ -366,72 +394,5 @@ function TableArtifact({
 }
 
 function ChartArtifact({ artifact }: { artifact: ConversationArtifact }) {
-  const series = chartSeries(artifact);
-  const maxValue = Math.max(...series.map((item) => item.value), 1);
-  const type = chartType(artifact);
-  return (
-    <div className="conv-chart-artifact">
-      <div className="conv-artifact-heading">
-        {chartIcon(type)}
-        <strong>{artifact.title}</strong>
-      </div>
-      {series.length > 0 && (
-        <div className={`conv-chart-preview conv-chart-preview-${type}`}>
-          {type === "line" ? (
-            <LinePreview series={series} maxValue={maxValue} />
-          ) : type === "pie" ? (
-            <PiePreview series={series} />
-          ) : (
-            series.slice(0, 8).map((item) => (
-              <div className="conv-chart-row" key={item.label}>
-                <span className="conv-chart-label">{item.label}</span>
-                <span className="conv-chart-bar">
-                  <span style={{ width: `${Math.max(6, (item.value / maxValue) * 100)}%` }} />
-                </span>
-                <span className="conv-chart-value">{item.value}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LinePreview({ series, maxValue }: { series: { label: string; value: number }[]; maxValue: number }) {
-  const points = series.slice(0, 10).map((item, index, items) => {
-    const x = items.length === 1 ? 50 : (index / (items.length - 1)) * 100;
-    const y = 88 - (item.value / maxValue) * 72;
-    return `${x},${y}`;
-  }).join(" ");
-  return (
-    <>
-      <svg viewBox="0 0 100 100" role="img" aria-label="Line chart preview">
-        <polyline points={points} />
-      </svg>
-      <div className="conv-chart-legend">
-        {series.slice(0, 4).map((item) => (
-          <span key={item.label}>{item.label}: {item.value}</span>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function PiePreview({ series }: { series: { label: string; value: number }[] }) {
-  const total = series.reduce((sum, item) => sum + item.value, 0) || 1;
-  const first = series[0];
-  const firstPercent = Math.round((first.value / total) * 100);
-  return (
-    <>
-      <div className="conv-pie-preview" style={{ "--pie-main": `${firstPercent}%` } as CSSProperties}>
-        <span>{firstPercent}%</span>
-      </div>
-      <div className="conv-chart-legend">
-        {series.slice(0, 4).map((item) => (
-          <span key={item.label}>{item.label}: {item.value}</span>
-        ))}
-      </div>
-    </>
-  );
+  return <ChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} compact />;
 }

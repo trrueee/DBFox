@@ -149,6 +149,55 @@ describe("agentBridge", () => {
     expect(resultView.depends_on).toEqual(["sql_candidate"]);
   });
 
+  it("preserves backend pie and scatter chart types with metadata", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "pie-chart",
+        semantic_id: "chart_pie",
+        type: "chart",
+        title: "GMV share",
+        status: "completed",
+        presentation: { mode: "inline", priority: 1, collapsed: false },
+        payload: {
+          chart_type: "pie",
+          x: "user_type",
+          y: "gmv",
+          aggregation: "sum",
+          reason: "展示 GMV 构成",
+          series: [{ label: "personal", value: 120 }],
+        },
+        depends_on: ["result_view"],
+        refs: [],
+      },
+      {
+        id: "scatter-chart",
+        semantic_id: "chart_scatter",
+        type: "chart",
+        title: "Order scatter",
+        status: "completed",
+        presentation: { mode: "inline", priority: 2, collapsed: false },
+        payload: {
+          type: "scatter",
+          x: "order_count",
+          y: "gmv",
+          aggregation: "none",
+          reason: "展示订单数与 GMV 关系",
+          series: [{ label: "10", value: 120 }],
+        },
+        depends_on: ["result_view"],
+        refs: [],
+      },
+    ];
+
+    const charts = toViewArtifacts(artifacts).filter((artifact) => artifact.type === "chart");
+
+    expect(charts).toHaveLength(2);
+    expect(charts.map((chart) => chart.chartType)).toEqual(["pie", "scatter"]);
+    expect(charts[0].description).toBe("展示 GMV 构成");
+    expect(charts[0].payload?.aggregation).toBe("sum");
+    expect(charts[1].description).toBe("展示订单数与 GMV 关系");
+  });
+
   it("maps safety artifacts into visible markdown trust summaries", () => {
     const artifacts: AgentArtifact[] = [
       {

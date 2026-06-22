@@ -231,12 +231,20 @@ def build_chart_artifact(
     sql = _execution_sql(execution) if execution else None
     table_sem = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
     sem_id = "chart_suggestion" if not sql else f"chart_suggestion_{_sql_fingerprint(sql)}"
+    chart_type = str(chart_suggestion.get("chart_type") or chart_suggestion.get("type") or "bar").strip().lower()
     return _artifact(
         sem_id,
         "chart",
         "Chart suggestion",
         {
             **chart_suggestion,
+            "type": chart_type,
+            "chart_type": chart_type,
+            "x": chart_suggestion.get("x") or "",
+            "y": chart_suggestion.get("y") or "",
+            "aggregation": chart_suggestion.get("aggregation") or "",
+            "reason": chart_suggestion.get("reason") or "",
+            "series": chart_suggestion.get("series") or [],
             "source_refs": _chart_source_refs(chart_suggestion),
             "safety_state": _safety_state(safety),
         },
