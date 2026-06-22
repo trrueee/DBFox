@@ -219,11 +219,3 @@ class DBFoxAgentState(TypedDict, total=False):
     """[UI/Eval Compatibility] Tool namespaces the agent is permitted to query."""
     selected_skill_ids: list[str]
     """[UI/Eval Compatibility] List of registered custom agent skills active in this context."""
-    # =========================================================================
-    # 9. MULTI-QUERY ANALYSIS UNITS
-    # =========================================================================
-    analysis_units: list[dict[str, Any]]
-    """Collection of AnalysisUnits capturing details of each significant SQL execution."""
-    current_analysis_unit_id: str | None
-    """ID of the active/latest AnalysisUnit."""
-

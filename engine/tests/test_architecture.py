@@ -112,6 +112,24 @@ def test_no_agent_persistence_imports() -> None:
         assert not violations, f"{dirname} still imports engine.agent.persistence: {violations}"
 
 
+def test_agent_state_declares_each_field_once() -> None:
+    """DBFoxAgentState should not silently override TypedDict fields."""
+    filepath = ENGINE_DIR / "agent" / "graph" / "state.py"
+    tree = ast.parse(filepath.read_text(encoding="utf-8"))
+    state_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "DBFoxAgentState"
+    )
+    counts: dict[str, int] = {}
+    for node in state_class.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            counts[node.target.id] = counts.get(node.target.id, 0) + 1
+
+    duplicates = sorted(name for name, count in counts.items() if count > 1)
+    assert not duplicates, f"DBFoxAgentState declares duplicate fields: {duplicates}"
+
+
 # ---------------------------------------------------------------------------
 # __init__.py PUBLIC API TESTS
 # ---------------------------------------------------------------------------
