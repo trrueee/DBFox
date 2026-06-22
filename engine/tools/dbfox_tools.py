@@ -407,11 +407,11 @@ class DbQueryTool(BaseTool[QueryInput, LooseOutput]):
     name = "db.query"
     group = "db"
     description = (
-        "Execute a read-only SELECT SQL statement through the full safety "
-        "pipeline: Guardrail (AST-level validation), TrustGate (schema "
-        "verification + EXPLAIN dry-run), and PolicyEngine (environment rules). "
-        "Results are automatically redacted for sensitive columns. "
-        "Write the SQL yourself based on what you learned from observe/search/inspect/preview."
+        "Internal fast path for backend-owned read-only SELECT execution. "
+        "This tool is not model-visible; model-authored SQL must use the "
+        "explicit sql.validate then sql.execute_readonly lifecycle. "
+        "The internal path still runs Guardrail, TrustGate, PolicyEngine, "
+        "and sensitive-column redaction."
     )
     input_model = QueryInput
     output_model = LooseOutput
