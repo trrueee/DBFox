@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
 from engine.agent_core.persistence import get_conversation_detail, list_conversation_summaries
-from engine.agent_core.types import AgentRunRequest
+from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
 from engine.api.agent import _format_sse_event, attach_conversation_event_ids, sse_failed_event
 from engine.db import get_db
 from engine.errors import DBFoxError
@@ -110,6 +110,27 @@ def prepare_conversation_message(
     )
 
 
+def _context_table_names_from_session(session: AgentSession) -> list[str]:
+    try:
+        raw = json.loads(session.context_tables_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(raw, list):
+        return []
+
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
 @router.post("/conversations/{conversation_id}/messages/stream")
 def stream_conversation_message(
     conversation_id: str,
@@ -128,6 +149,12 @@ def stream_conversation_message(
             detail={"code": "EMPTY_MESSAGE", "message": "Message content is required."},
         )
 
+    context_table_names = _context_table_names_from_session(session)
+    workspace_context = AgentWorkspaceContext(
+        datasource_id=session.datasource_id,
+        selected_table_names=context_table_names,
+    )
+
     req = AgentRunRequest(
         datasource_id=session.datasource_id,
         question=payload.content,
@@ -138,6 +165,7 @@ def stream_conversation_message(
         api_key=payload.api_key,
         api_base=payload.api_base,
         model_name=payload.model_name,
+        workspace_context=workspace_context,
         execute=payload.execute,
     )
 
