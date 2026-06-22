@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { Copy, Download, ExternalLink, ChevronLeft, ChevronRight, Loader2, AlertCircle, RefreshCw, Filter, ArrowUpDown, Search, AlertTriangle } from "lucide-react";
+import { Copy, Download, ExternalLink, AlertCircle, RefreshCw, Filter, ArrowUpDown, Search, AlertTriangle } from "lucide-react";
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import { agentApi } from "../../../lib/api/agent";
 import type { ResultPageRequest, ResultPageResponse } from "../../../lib/api/types";
@@ -318,6 +318,11 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
             预览 {previewCount} / 共 {totalRows} 行
           </span>
+          {shouldUseWindow && (
+            <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+              窗口 1-{visibleRows.length} / {filteredAndSortedRows.length}
+            </span>
+          )}
           <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{artifact.columns.length} 列</span>
           {latencyMs !== undefined && (
             <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1">{latencyMs}ms</span>
