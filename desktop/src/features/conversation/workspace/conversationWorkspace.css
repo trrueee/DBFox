@@ -410,6 +410,56 @@
   padding: 4px 0 0;
 }
 
+.conv-context-reference-groups {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.conv-context-reference-group {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  background: var(--agent-surface-muted);
+}
+
+.conv-context-reference-group strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--agent-text);
+  font-size: 12px;
+}
+
+.conv-context-reference-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.conv-context-reference {
+  display: inline-grid;
+  gap: 2px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--agent-border);
+  border-radius: 7px;
+  background: var(--agent-surface);
+  color: var(--agent-text-secondary);
+}
+
+.conv-context-reference b {
+  font-size: 11px;
+  color: var(--agent-accent);
+}
+
+.conv-context-reference small {
+  font-size: 10px;
+  color: var(--agent-text-muted);
+}
+
 .conv-run-count {
   margin-left: auto;
   min-width: 22px;

@@ -102,11 +102,14 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         build_context_message(state),
     ]
 
+    memory_ctx = ""
+    memory_references: list[dict[str, str]] = []
     # Auto-inject memory context on first model turn (migrated from deleted planner).
     # Subsequent turns already have this context in the conversation history.
     if int(state.get("step_count", 0)) == 0:
         memory_ctx = _get_memory_context(state)
         if memory_ctx:
+            memory_references = _memory_references_from_context(memory_ctx)
             messages.append(SystemMessage(content=memory_ctx))
 
     progress_msg = build_progress_guidance_message(state)
@@ -125,7 +128,7 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
 
     ai_msg = model_with_tools.invoke(messages, config)
 
-    return {
+    result: dict[str, Any] = {
         "messages": [ai_msg],
         "trace_events": [
             {
@@ -136,6 +139,11 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         ],
         "step_count": state.get("step_count", 0) + 1,
     }
+    if memory_ctx:
+        result["memory_context"] = memory_ctx
+    if memory_references:
+        result["memory_references"] = memory_references
+    return result
 
 
 def _build_escalate_tool(registry: Any) -> Any | None:
@@ -202,3 +210,27 @@ def _get_memory_context(state: DBFoxAgentState) -> str:
     except Exception as exc:
         logger.warning("Failed to retrieve memory context for model: %s", exc)
         return ""
+
+
+def _memory_references_from_context(memory_context: str) -> list[dict[str, str]]:
+    references: list[dict[str, str]] = []
+    current: dict[str, str] | None = None
+    for raw_line in memory_context.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("- "):
+            label = line[2:].strip()
+            if label.startswith("**") and "**:" in label:
+                label = label.split("**:", 1)[1].strip()
+            current = {"label": label, "summary": "", "source": "memory"}
+            references.append(current)
+            continue
+        if current and line.startswith("(") and line.endswith(")"):
+            detail = line[1:-1].strip()
+            if ":" in detail:
+                _, value = detail.split(":", 1)
+                current["summary"] = value.strip()
+            else:
+                current["summary"] = detail
+    return [item for item in references if item.get("label")][:5]

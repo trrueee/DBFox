@@ -15,6 +15,7 @@ from engine.agent.progress.clarification_policy import (
 )
 from engine.agent.progress.schemas import ProgressDecision
 from engine.agent.context_pack import ContextPack, build_context_pack, build_streaming_context_summary, render_ui_summary
+from engine.agent.app.event_mapper import context_update_event
 from engine.agent.graph.replan_policy import allow_replan, compute_max_replans
 from engine.agent.graph.routes import route_progress_output
 from engine.agent.repair.sql_repair import classify_sql_failure, plan_sql_repair
@@ -101,6 +102,39 @@ class TestStreamingContext:
         assert "sql_repair" in enriched.get("allowed_tool_groups", [])
         assert "schema" in enriched.get("allowed_tool_groups", [])
 
+    def test_context_update_exposes_memory_and_semantic_references(self):
+        sequence = 0
+
+        def emit(event_type, **kwargs):
+            nonlocal sequence
+            sequence += 1
+            return {"type": event_type, "sequence": sequence, **kwargs}
+
+        event, _ = context_update_event(
+            emit,
+            {
+                "context_pack": {"ui_summary": "Using semantic context"},
+                "memory_references": [
+                    {"label": "GMV definition", "summary": "GMV = paid_amount - refund_amount", "source": "memory"}
+                ],
+                "semantic_resolution": {
+                    "semantic_aliases_used": [
+                        {"alias": "新注册用户", "target": "users.created_at", "source": "db"}
+                    ]
+                },
+            },
+            "",
+        )
+
+        assert event is not None
+        task_lens = event["step"]["task_lens"]
+        assert task_lens["memory_references"] == [
+            {"label": "GMV definition", "summary": "GMV = paid_amount - refund_amount", "source": "memory"}
+        ]
+        assert task_lens["semantic_references"] == [
+            {"label": "新注册用户", "summary": "users.created_at", "source": "db"}
+        ]
+
 
 class TestModelNodeStepLimit:
     def test_allows_post_query_analysis_after_max_steps(self, monkeypatch):
@@ -148,6 +182,57 @@ class TestModelNodeStepLimit:
         assert calls
         assert result["trace_events"][0]["type"] == "agent.model.completed"
         assert "error" not in result
+
+    def test_exposes_injected_memory_context_to_ui_state(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from engine.agent.nodes import model_node
+
+        class FakeModel:
+            def bind_tools(self, tools):
+                return self
+
+            def invoke(self, messages, config):
+                return AIMessage(content="继续。")
+
+        monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
+        monkeypatch.setattr(
+            model_node,
+            "_get_memory_context",
+            lambda state: "## Relevant Memory Context\n### Metric Definitions\n- GMV definition\n  (definition: GMV = paid_amount - refund_amount)",
+        )
+        registry = MagicMock()
+        registry.get.return_value = None
+
+        result = model_node.call_model(
+            {
+                "messages": [HumanMessage(content="分析 GMV")],
+                "status": "running",
+                "step_count": 0,
+                "max_steps": 20,
+                "allowed_tool_groups": [],
+            },
+            {
+                "configurable": {
+                    "thread_id": "run-1",
+                    "model_name": "test-model",
+                    "api_key": "sk-test",
+                    "api_base": "http://example.test/v1",
+                    "registry": registry,
+                    "db": MagicMock(),
+                    "request": MagicMock(),
+                }
+            },
+        )
+
+        assert result["memory_context"]
+        assert result["memory_references"] == [
+            {
+                "label": "GMV definition",
+                "summary": "GMV = paid_amount - refund_amount",
+                "source": "memory",
+            }
+        ]
 
 
 class TestContextSummaryMerge:

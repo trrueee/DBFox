@@ -1,4 +1,4 @@
-import { Activity, CheckCircle2, Circle, Database, MessageSquare, Search, ShieldCheck, Wrench, XCircle } from "lucide-react";
+import { Activity, BookOpen, CheckCircle2, Circle, Database, MessageSquare, Search, ShieldCheck, Tags, Wrench, XCircle } from "lucide-react";
 import type { AgentRuntimeEvent } from "../../../lib/api/types";
 import type { ConversationRun } from "../../../types/conversation";
 
@@ -60,9 +60,16 @@ interface TimelineStage {
   events: AgentRuntimeEvent[];
 }
 
+interface ContextReference {
+  label: string;
+  summary: string;
+  source: string;
+}
+
 export function RunTracePanel({ run }: { run: ConversationRun }) {
   const events = (run.events || []).filter((event) => String(event.type) !== "agent.answer.delta");
   const stages = buildTimelineStages(run, events);
+  const contextReferences = contextReferenceCards(events);
   const summary = runSummary(run, events, stages);
 
   return (
@@ -73,6 +80,26 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
         {stages.length > 0 && <span className="conv-run-count">{stages.length}</span>}
       </summary>
       <div className="conv-run-trace-body">
+        {contextReferences.length > 0 && (
+          <div className="conv-context-reference-groups">
+            {contextReferences.map((group) => (
+              <section className="conv-context-reference-group" key={group.kind}>
+                <strong>
+                  {group.kind === "memory" ? <BookOpen size={12} /> : <Tags size={12} />}
+                  {group.title}
+                </strong>
+                <div>
+                  {group.items.map((item) => (
+                    <span className="conv-context-reference" key={`${group.kind}-${item.label}-${item.summary}`}>
+                      <b>{item.label}</b>
+                      {item.summary && <small>{item.summary}</small>}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
         {stages.length > 0 ? (
           <ol className="conv-run-events conv-run-stages">
             {stages.map((stage) => (
@@ -105,6 +132,45 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
       </div>
     </details>
   );
+}
+
+function contextReferenceCards(events: AgentRuntimeEvent[]): Array<{ kind: "memory" | "semantic"; title: string; items: ContextReference[] }> {
+  const memory = dedupeReferences(events.flatMap((event) => taskLensReferences(event, "memory_references")));
+  const semantic = dedupeReferences(events.flatMap((event) => taskLensReferences(event, "semantic_references")));
+  const groups: Array<{ kind: "memory" | "semantic"; title: string; items: ContextReference[] }> = [];
+  if (memory.length > 0) groups.push({ kind: "memory", title: "参考业务记忆", items: memory });
+  if (semantic.length > 0) groups.push({ kind: "semantic", title: "字段理解", items: semantic });
+  return groups;
+}
+
+function taskLensReferences(event: AgentRuntimeEvent, key: "memory_references" | "semantic_references"): ContextReference[] {
+  const taskLens = event.step?.task_lens;
+  if (!taskLens || typeof taskLens !== "object") return [];
+  const raw = (taskLens as Record<string, unknown>)[key];
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const label = typeof record.label === "string" ? record.label.trim() : "";
+    if (!label) return [];
+    return [{
+      label,
+      summary: typeof record.summary === "string" ? record.summary.trim() : "",
+      source: typeof record.source === "string" ? record.source.trim() : "",
+    }];
+  });
+}
+
+function dedupeReferences(items: ContextReference[]): ContextReference[] {
+  const seen = new Set<string>();
+  const result: ContextReference[] = [];
+  for (const item of items) {
+    const key = `${item.label}|${item.summary}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result.slice(0, 5);
 }
 
 function runSummary(

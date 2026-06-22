@@ -80,6 +80,8 @@ class DBFoxAgentState(TypedDict, total=False):
     """Prior messages and artifacts from preceding runs to maintain context."""
     context_pack: dict[str, Any] | None
     """Agent v2 consolidated metadata pack sent to the LLM and the frontend."""
+    context_summary: str | None
+    """Human-readable summary of the active datasource, workspace, and linked schema context."""
 
     # ── Large Catalog Exploration State ──
     candidate_tables: list[str]
