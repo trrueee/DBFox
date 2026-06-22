@@ -8,6 +8,7 @@ from engine.agent_core.types import ToolObservation
 from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
+from engine.agent.progress.fast_path import _arg_signature
 from engine.agent_core.artifacts import (
     AgentArtifactIdentity,
     build_chart_artifact,
@@ -141,6 +142,155 @@ def emit_artifacts_from_observation(
     return artifacts
 
 
+def make_observe_working_state(state: dict[str, Any]) -> dict[str, Any]:
+    working_state: dict[str, Any] = {}
+    for key, value in state.items():
+        if isinstance(value, list):
+            working_state[key] = list(value)
+        elif isinstance(value, dict):
+            working_state[key] = dict(value)
+        else:
+            working_state[key] = value
+    return working_state
+
+
+def bind_observation_to_state(
+    *,
+    state: dict[str, Any],
+    tool_name: str,
+    observation: ToolObservation,
+    merge_strategy: str,
+) -> dict[str, Any]:
+    updates = apply_tool_result_to_state(
+        state=state,
+        tool_name=tool_name,
+        observation=observation,
+        merge_strategy=merge_strategy,
+    )
+    updates = dict(updates)
+    # observe_node emits typed AgentArtifacts; legacy reducer artifacts stay out.
+    updates.pop("artifacts", None)
+    return updates
+
+
+def build_tool_history_entry(tool_name: str, observation: ToolObservation) -> dict[str, Any]:
+    entry = {
+        "name": tool_name,
+        "input": observation.input or {},
+        "status": observation.status,
+        "error": observation.error,
+    }
+    if not isinstance(observation.output, dict):
+        return entry
+
+    entry["output_keys"] = list(observation.output.keys())
+    if "results" in observation.output and isinstance(observation.output["results"], list):
+        entry["results_count"] = len(observation.output["results"])
+    if "tables" in observation.output and isinstance(observation.output["tables"], list):
+        entry["results_count"] = len(observation.output["tables"])
+    if "related_tables" in observation.output and isinstance(observation.output["related_tables"], list):
+        entry["results_count"] = len(observation.output["related_tables"])
+    if "columns" in observation.output and isinstance(observation.output["columns"], list):
+        entry["columns_count"] = len(observation.output["columns"])
+    if "blocked_reasons" in observation.output and isinstance(observation.output["blocked_reasons"], list):
+        entry["blocked_reasons"] = observation.output["blocked_reasons"]
+    if "rowCount" in observation.output:
+        entry["returned_rows"] = observation.output["rowCount"]
+    elif "returned_rows" in observation.output:
+        entry["returned_rows"] = observation.output["returned_rows"]
+    return entry
+
+
+def derive_catalog_exploration_state(tool_name: str, observation: ToolObservation) -> dict[str, list[str]]:
+    candidate_tables: list[str] = []
+    searched_terms: list[str] = []
+    exhausted_paths: list[str] = []
+
+    output = observation.output
+    if isinstance(output, dict):
+        results = output.get("results") or output.get("tables") or []
+        if isinstance(results, list):
+            for item in results:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or item.get("table_name") or "").strip()
+                if name:
+                    candidate_tables.append(name)
+
+        seed = output.get("seed_table") or {}
+        if isinstance(seed, dict) and seed.get("table_name"):
+            candidate_tables.append(str(seed["table_name"]))
+
+        related = output.get("related_tables") or []
+        if isinstance(related, list):
+            for item in related:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("table_name") or "").strip()
+                if name:
+                    candidate_tables.append(name)
+
+        if tool_name == "db.search" and isinstance(observation.input, dict):
+            query = str(observation.input.get("query") or "").strip().lower()
+            if query:
+                searched_terms.append(query)
+
+    arg_sig = _arg_signature(tool_name, observation.input or {})
+    if observation.status == "failed" or _is_empty_result(tool_name, observation.output):
+        exhausted_paths.append(f"{tool_name}::{arg_sig}")
+
+    return {
+        "candidate_tables": candidate_tables,
+        "searched_terms": searched_terms,
+        "exhausted_paths": exhausted_paths,
+    }
+
+
+def merge_catalog_exploration_state(
+    state: dict[str, Any],
+    catalog_updates: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    candidate_tables_new = catalog_updates.get("candidate_tables") or []
+    searched_terms_new = catalog_updates.get("searched_terms") or []
+    exhausted_paths_new = catalog_updates.get("exhausted_paths") or []
+
+    if candidate_tables_new:
+        existing = list(state.get("candidate_tables") or [])
+        seen = set(existing)
+        for name in candidate_tables_new:
+            if name not in seen:
+                existing.append(name)
+                seen.add(name)
+        merged["candidate_tables"] = existing
+
+    if searched_terms_new:
+        existing = [str(term).lower() for term in (state.get("searched_terms") or [])]
+        for term in searched_terms_new:
+            if term not in existing:
+                existing.append(term)
+        merged["searched_terms"] = existing
+
+    if exhausted_paths_new:
+        existing = list(state.get("exhausted_paths") or [])
+        seen = set(existing)
+        for path in exhausted_paths_new:
+            if path not in seen:
+                existing.append(path)
+                seen.add(path)
+        merged["exhausted_paths"] = existing
+
+    return merged
+
+
+def rebuild_context_pack(state: dict[str, Any], state_updates: dict[str, Any]) -> dict[str, Any]:
+    from engine.agent.context_pack import build_context_pack
+
+    merged_state = dict(state)
+    merged_state.update(state_updates)
+    return {"context_pack": build_context_pack(merged_state).model_dump(mode="json")}
+
+
 def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     ctx = graph_context(config)
     run_id = state.get("run_id") or ""
@@ -148,23 +298,18 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
     last_tool_results = state.get("last_tool_results") or []
 
     state_updates: dict[str, Any] = {}
-    # Shallow-copy each top-level key individually to avoid RecursionError
-    # from deepcopy of deeply nested LangChain messages / artifacts.
-    temp_state: dict[str, Any] = {}
-    for k, v in state.items():
-        if isinstance(v, list):
-            temp_state[k] = list(v)
-        elif isinstance(v, dict):
-            temp_state[k] = dict(v)
-        else:
-            temp_state[k] = v
+    # Shallow-copy top-level keys to avoid RecursionError from deepcopy of
+    # deeply nested LangChain messages / artifacts.
+    temp_state = make_observe_working_state(state)
 
     new_artifacts_dicts = []
 
     tool_history_entries = []
-    candidate_tables_new: list[str] = []
-    searched_terms_new: list[str] = []
-    exhausted_paths_new: list[str] = []
+    catalog_updates: dict[str, list[str]] = {
+        "candidate_tables": [],
+        "searched_terms": [],
+        "exhausted_paths": [],
+    }
 
     for result_dict in last_tool_results:
         try:
@@ -174,15 +319,12 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
             tool = ctx.registry.get(tool_name)
             merge_strategy = tool.spec.state.merge_strategy if tool is not None else "reuse"
 
-            databinding_updates = apply_tool_result_to_state(
+            databinding_updates = bind_observation_to_state(
                 state=temp_state,
                 tool_name=tool_name,
                 observation=obs,
                 merge_strategy=merge_strategy,
             )
-
-            # Remove the legacy dict artifacts built by standard databinding
-            databinding_updates.pop("artifacts", None)
 
             temp_state.update(databinding_updates)
             
@@ -193,65 +335,11 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
                 else:
                     state_updates[k] = v
 
-            history_entry = {
-                "name": tool_name,
-                "input": obs.input or {},
-                "status": obs.status,
-                "error": obs.error,
-            }
-            if isinstance(obs.output, dict):
-                history_entry["output_keys"] = list(obs.output.keys())
-                if "results" in obs.output and isinstance(obs.output["results"], list):
-                    history_entry["results_count"] = len(obs.output["results"])
-                if "tables" in obs.output and isinstance(obs.output["tables"], list):
-                    history_entry["results_count"] = len(obs.output["tables"])
-                if "related_tables" in obs.output and isinstance(obs.output["related_tables"], list):
-                    history_entry["results_count"] = len(obs.output["related_tables"])
-                if "columns" in obs.output and isinstance(obs.output["columns"], list):
-                    history_entry["columns_count"] = len(obs.output["columns"])
-                if "blocked_reasons" in obs.output and isinstance(obs.output["blocked_reasons"], list):
-                    history_entry["blocked_reasons"] = obs.output["blocked_reasons"]
-                if "rowCount" in obs.output:
-                    history_entry["returned_rows"] = obs.output["rowCount"]
-                elif "returned_rows" in obs.output:
-                    history_entry["returned_rows"] = obs.output["returned_rows"]
-            
-            tool_history_entries.append(history_entry)
+            tool_history_entries.append(build_tool_history_entry(tool_name, obs))
 
-            # ── Large Catalog Exploration: track candidate_tables ──────────
-            if isinstance(obs.output, dict):
-                # db.search / schema.list_tables_page → collect table names
-                results = obs.output.get("results") or obs.output.get("tables") or []
-                if isinstance(results, list):
-                    for item in results:
-                        name = (item.get("name") or item.get("table_name") or "").strip()
-                        if name:
-                            candidate_tables_new.append(name)
-                # schema.expand_related_tables → seed + related
-                seed = obs.output.get("seed_table") or {}
-                if isinstance(seed, dict) and seed.get("table_name"):
-                    candidate_tables_new.append(str(seed["table_name"]))
-                related = obs.output.get("related_tables") or []
-                if isinstance(related, list):
-                    for r in related:
-                        n = (r.get("table_name") or "").strip()
-                        if n:
-                            candidate_tables_new.append(n)
-
-                # Track searched terms (db.search)
-                if tool_name == "db.search" and isinstance(obs.input, dict):
-                    q = str(obs.input.get("query") or "").strip().lower()
-                    if q:
-                        searched_terms_new.append(q)
-
-            # Track exhausted paths for empty/failed results.
-            # Use the same SHA-based signature as check_loop_prevention so the
-            # exhausted_paths pre-check in fast_path can match.
-            from engine.agent.progress.fast_path import _arg_signature
-            arg_sig = _arg_signature(tool_name, obs.input or {})
-
-            if obs.status == "failed" or _is_empty_result(tool_name, obs.output):
-                exhausted_paths_new.append(f"{tool_name}::{arg_sig}")
+            derived_catalog = derive_catalog_exploration_state(tool_name, obs)
+            for key, values in derived_catalog.items():
+                catalog_updates[key].extend(values)
 
             artifacts = emit_artifacts_from_observation(step_name, obs, temp_state, run_id)
             if artifacts:
@@ -265,41 +353,14 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
     if tool_history_entries:
         state_updates["tool_call_history"] = tool_history_entries
 
-    # ── Large Catalog Exploration: dedup and merge ────────────────────────
-    if candidate_tables_new:
-        existing_ct = list(temp_state.get("candidate_tables") or [])
-        seen_ct = set(existing_ct)
-        for n in candidate_tables_new:
-            if n not in seen_ct:
-                existing_ct.append(n)
-                seen_ct.add(n)
-        state_updates["candidate_tables"] = existing_ct
-
-    if searched_terms_new:
-        existing_st = [s.lower() for s in (temp_state.get("searched_terms") or [])]
-        for t in searched_terms_new:
-            if t not in existing_st:
-                existing_st.append(t)
-        state_updates["searched_terms"] = existing_st
-
-    if exhausted_paths_new:
-        existing_ep = list(temp_state.get("exhausted_paths") or [])
-        seen_ep = set(existing_ep)
-        for p in exhausted_paths_new:
-            if p not in seen_ep:
-                existing_ep.append(p)
-                seen_ep.add(p)
-        state_updates["exhausted_paths"] = existing_ep
+    state_updates.update(merge_catalog_exploration_state(temp_state, catalog_updates))
 
     if new_artifacts_dicts:
         state_updates["artifacts"] = new_artifacts_dicts
 
     # ---- Rebuild ContextPack (Agent v2) ------------------------------------
     try:
-        from engine.agent.context_pack import build_context_pack
-        merged_state = dict(state)
-        merged_state.update(state_updates)
-        state_updates["context_pack"] = build_context_pack(merged_state).model_dump(mode="json")
+        state_updates.update(rebuild_context_pack(state, state_updates))
     except Exception as exc:
         logger.warning("Failed to build ContextPack: %s", exc)
 
