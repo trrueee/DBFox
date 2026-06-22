@@ -192,6 +192,7 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
       : Array.isArray(payload.schemaWarnings)
         ? payload.schemaWarnings.length
         : 0);
+  const redaction = redactionSummary(payload);
   const lines = [
     passed ? "状态：通过" : "状态：需注意",
     canExecute ? "执行：可执行" : "执行：不可执行",
@@ -199,6 +200,10 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
     `Guardrail：${guardrail}`,
     `Schema warnings：${schemaWarnings}`,
   ];
+  if (redaction.count > 0) {
+    lines.push(`脱敏：已脱敏 ${redaction.count} 个字段`);
+    if (redaction.fields.length > 0) lines.push(`脱敏字段：${redaction.fields.join(", ")}`);
+  }
   return {
     id: artifact.id,
     type: "markdown",
@@ -356,6 +361,39 @@ function numberValue(payload: Record<string, unknown>, keys: string[]): number |
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function stringArrayFromKeys(payload: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const items = stringArray(payload[key]);
+    if (items.length > 0) return items;
+  }
+  return [];
+}
+
+function redactionSummary(payload: Record<string, unknown>): { count: number; fields: string[] } {
+  const candidates = [
+    payload.redaction,
+    payload.redaction_audit,
+    payload.redactionAudit,
+    payload.audit,
+    payload.execution_safety_decision,
+    payload.executionSafetyDecision,
+  ];
+  let count = numberValue(payload, ["redacted_count", "redactedCount", "redaction_count", "redactionCount"]) ?? 0;
+  const fields = new Set(stringArrayFromKeys(payload, ["redacted_fields", "redactedFields", "fields", "sensitive_fields", "sensitiveFields"]));
+  for (const item of candidates) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    count = Math.max(
+      count,
+      numberValue(record, ["redacted_count", "redactedCount", "count", "field_count", "fieldCount"]) ?? 0,
+    );
+    for (const field of stringArrayFromKeys(record, ["fields", "redacted_fields", "redactedFields", "sensitive_fields", "sensitiveFields"])) {
+      fields.add(field);
+    }
+  }
+  return { count: Math.max(count, fields.size), fields: Array.from(fields).slice(0, 8) };
 }
 
 function sourceRefsFromPayload(

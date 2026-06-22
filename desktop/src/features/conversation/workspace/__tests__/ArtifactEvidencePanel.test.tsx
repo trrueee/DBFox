@@ -365,4 +365,49 @@ describe("ArtifactEvidencePanel", () => {
     expect(screen.getByText("不可执行")).toBeTruthy();
     expect(screen.getByText("需要确认")).toBeTruthy();
   });
+
+  it("shows redaction audit details on safety artifacts", () => {
+    const artifacts: ConversationArtifact[] = [
+      {
+        id: "sql-redaction",
+        semantic_id: "sql_candidate",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "sql",
+        title: "SQL",
+        status: "completed",
+        sequence: 1,
+        payload: { sql: "SELECT name, phone, email FROM users" },
+        depends_on: [],
+      },
+      {
+        id: "safety-redaction",
+        semantic_id: "safety_report",
+        conversation_id: "conv",
+        run_id: "run",
+        message_id: "assistant",
+        type: "safety",
+        title: "Safety",
+        status: "completed",
+        sequence: 2,
+        payload: {
+          passed: true,
+          can_execute: true,
+          requires_confirmation: false,
+          guardrail_result: "pass",
+          redaction: {
+            redacted_count: 3,
+            fields: ["users.name", "users.phone", "users.email"],
+          },
+        },
+        depends_on: ["sql_candidate"],
+      },
+    ];
+
+    render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
+
+    expect(screen.getByText("已脱敏 3 个字段")).toBeTruthy();
+    expect(screen.getByText("users.name, users.phone, users.email")).toBeTruthy();
+  });
 });

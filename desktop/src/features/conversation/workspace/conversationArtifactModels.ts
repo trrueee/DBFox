@@ -114,6 +114,34 @@ export function safetySchemaWarningsCount(payload: Record<string, unknown>): num
   return 0;
 }
 
+export function safetyRedactionSummary(payload: Record<string, unknown>): { count: number; fields: string[] } {
+  const candidates = [
+    payload.redaction,
+    payload.redaction_audit,
+    payload.redactionAudit,
+    payload.audit,
+    payload.execution_safety_decision,
+    payload.executionSafetyDecision,
+  ];
+
+  let count = payloadNumber(payload, ["redacted_count", "redactedCount", "redaction_count", "redactionCount"]) ?? 0;
+  const fields = new Set(payloadStringList(payload, ["redacted_fields", "redactedFields", "fields", "sensitive_fields", "sensitiveFields"]) || []);
+
+  for (const item of candidates) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    count = Math.max(
+      count,
+      payloadNumber(record, ["redacted_count", "redactedCount", "count", "field_count", "fieldCount"]) ?? 0,
+    );
+    for (const field of payloadStringList(record, ["fields", "redacted_fields", "redactedFields", "sensitive_fields", "sensitiveFields"]) || []) {
+      fields.add(field);
+    }
+  }
+
+  return { count: Math.max(count, fields.size), fields: Array.from(fields).slice(0, 8) };
+}
+
 export function toTableArtifactModel(artifact: ConversationArtifact): TableArtifact | ResultViewArtifact {
   const columns = conversationTableColumns(artifact);
   const rows = conversationTableRows(artifact).map((row) =>

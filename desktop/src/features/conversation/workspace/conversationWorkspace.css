@@ -735,6 +735,27 @@
   color: var(--trust-warning);
 }
 
+.conv-safety-redaction {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--trust-safe-border);
+  border-radius: 6px;
+  background: var(--trust-safe-bg);
+  color: var(--agent-text);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.conv-safety-redaction strong {
+  color: var(--trust-safe);
+}
+
+.conv-safety-redaction span {
+  color: var(--agent-text-secondary);
+}
+
 .conv-table-preview {
   margin-top: 8px;
   overflow-x: auto;
