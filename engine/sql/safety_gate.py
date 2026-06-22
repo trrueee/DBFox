@@ -51,6 +51,18 @@ def build_derived_sql(
         
     return query.sql(dialect=dialect)
 
+def validate_pagination_base_sql(base_sql: str, dialect: str = "mysql") -> list[str]:
+    """Validate the persisted source SQL before deriving a paginated query."""
+    try:
+        exprs = sqlglot.parse(base_sql, read=dialect)
+    except Exception as exc:
+        return [f"Source SQL validation parse error: {exc}"]
+    if len(exprs) != 1:
+        return ["Source SQL must be a single statement."]
+    if not isinstance(exprs[0], exp.Select):
+        return ["Source SQL must be a SELECT statement."]
+    return []
+
 def validate_derived_sql(derived_sql: str, dialect: str = "mysql") -> list[str]:
     """Lightweight validation for derived SQLs (paging/sorting).
     Ensures it is a SELECT without dangerous operations.

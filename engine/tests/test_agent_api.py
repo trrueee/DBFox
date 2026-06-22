@@ -1,5 +1,7 @@
 import json
 import asyncio
+from datetime import UTC, datetime
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -7,10 +9,139 @@ import engine.api.agent as agent_module
 from fastapi import HTTPException
 
 from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRuntimeEvent
-from engine.api.agent import sse_failed_event
+from engine.api.agent import ResultPageRequest, sse_failed_event
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
-from engine.models import DEFAULT_PROJECT_ID
+from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource
+
+
+def _add_pagination_source(db_session, *, safe_sql: str = "SELECT id, amount FROM orders") -> None:
+    now = datetime.now(UTC)
+    datasource = DataSource(
+        id="ds-page",
+        name="Page DS",
+        db_type="mysql",
+        host="localhost",
+        port=3306,
+        database_name="dbfox",
+        username="root",
+        password_ciphertext="cipher",
+        password_nonce="nonce",
+    )
+    session = AgentSession(
+        id="conv-page",
+        datasource_id="ds-page",
+        title="Page",
+        context_tables_json="[]",
+        created_at=now,
+        updated_at=now,
+    )
+    run = AgentRun(
+        id="run-page",
+        session_id="conv-page",
+        datasource_id="ds-page",
+        question="Orders",
+        status="completed",
+        created_at=now,
+        updated_at=now,
+    )
+    artifact = AgentArtifactRecord(
+        id="artifact-result-page",
+        run_id="run-page",
+        session_id="conv-page",
+        semantic_id="result_view_1",
+        type="result_view",
+        title="Orders result",
+        payload_json=json.dumps(
+            {
+                "safeSql": safe_sql,
+                "columns": ["id", "amount"],
+                "storageMode": "sql_backed",
+            }
+        ),
+        presentation_json=json.dumps({"mode": "both", "priority": 1, "collapsed": False}),
+        depends_on_json=json.dumps(["sql_candidate"]),
+        status="completed",
+        sequence=1,
+        created_at=now,
+    )
+    db_session.add_all([datasource, session, run, artifact])
+    db_session.commit()
+
+
+def test_result_page_rejects_safe_sql_that_differs_from_source_artifact(db_session):
+    _add_pagination_source(db_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="SELECT id FROM users",
+                page=1,
+                pageSize=20,
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "SOURCE_SQL_MISMATCH"
+
+
+def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_session):
+    _add_pagination_source(db_session)
+    executed_sql: dict[str, str] = {}
+
+    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+        executed_sql["datasource_id"] = datasource_id
+        executed_sql["sql"] = sql
+        assert safety_decision.can_execute is True
+        return {
+            "columns": ["id", "amount"],
+            "rows": [{"id": 1, "amount": 20}],
+            "latencyMs": 3,
+            "warnings": [],
+            "notices": [],
+        }
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = agent_module.api_agent_result_page(
+        ResultPageRequest(
+            datasourceId="ds-page",
+            sourceSqlArtifactId="artifact-result-page",
+            safeSql="SELECT id, amount FROM orders",
+            page=1,
+            pageSize=20,
+            sort=[agent_module.ResultSort(column="id", direction="desc")],
+        ),
+        db_session,
+    )
+
+    assert response.columns == ["id", "amount"]
+    assert response.rows == [{"id": 1, "amount": 20}]
+    assert response.hasNextPage is False
+    assert "orders" in executed_sql["sql"]
+    assert "LIMIT" in executed_sql["sql"].upper()
+
+
+def test_result_page_rejects_persisted_non_select_source_sql(db_session):
+    _add_pagination_source(db_session, safe_sql="DELETE FROM orders")
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="DELETE FROM orders",
+                page=1,
+                pageSize=20,
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "SOURCE_SQL_VALIDATION_FAILED"
 
 
 def test_sse_failed_event() -> None:
