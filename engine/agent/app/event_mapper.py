@@ -105,6 +105,7 @@ def trace_to_events(
                     "detail": trace.get("error_class"),
                     "attempt": trace.get("attempt"),
                     "error_class": trace.get("error_class"),
+                    "failed_sql": trace.get("failed_sql"),
                     "failure_layer": trace.get("failure_layer"),
                     "root_cause": trace.get("root_cause"),
                     "recovery_strategy": trace.get("recovery_strategy"),
