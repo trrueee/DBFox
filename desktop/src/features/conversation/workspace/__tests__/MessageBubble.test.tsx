@@ -71,6 +71,7 @@ describe("MessageBubble", () => {
 
   it("renders clickable evidence chips for grounded answers", () => {
     const onOpenSqlConsole = vi.fn();
+    const onSelectArtifact = vi.fn();
     render(
       <MessageBubble
         message={{ ...assistantMessage, content: "订单查询完成。", status: "completed" }}
@@ -107,12 +108,14 @@ describe("MessageBubble", () => {
         ]}
         onOpenSqlConsole={onOpenSqlConsole}
         onOpenResultTab={vi.fn()}
+        onSelectArtifact={onSelectArtifact}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "SQL #1" }));
 
     expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT id FROM orders");
+    expect(onSelectArtifact).toHaveBeenCalledWith("artifact-sql");
   });
 
   it("marks answers without result evidence as schema-only", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useConversationStore } from "../../../stores/conversationStore";
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
@@ -7,6 +7,7 @@ import type {
   ConversationRun,
 } from "../../../types/conversation";
 import { Composer } from "./Composer";
+import { ArtifactDock } from "./ArtifactDock";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageList } from "./MessageList";
 import "./conversationWorkspace.css";
@@ -25,6 +26,7 @@ export function ConversationWorkspace({
   onDelete: () => void;
 }) {
   const store = useConversationStore();
+  const [selectedArtifact, setSelectedArtifact] = useState<{ conversationId: string; artifactId: string } | null>(null);
   const detail = store.detailById[conversationId];
   useEffect(() => {
     if (!detail && conversationId) void store.openConversation(conversationId);
@@ -45,17 +47,32 @@ export function ConversationWorkspace({
   );
   const runningRun = runs.find((run) => run.status === "running" || run.status === "waiting_approval");
   if (!detail) return <div className="conv-workspace">Loading...</div>;
+  const hasArtifacts = artifacts.length > 0;
+  const selectedArtifactId = selectedArtifact?.conversationId === conversationId ? selectedArtifact.artifactId : null;
+  const selectArtifact = (artifactId: string) => setSelectedArtifact({ conversationId, artifactId });
   return (
     <div className="conv-workspace">
       <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
-      <MessageList
-        messages={messages}
-        runs={runs}
-        artifacts={artifacts}
-        onOpenSqlConsole={onOpenSqlConsole}
-        onOpenResultTab={onOpenResultTab}
-        onResolveApproval={(runId, approvalId, approved) => void store.resolveApproval(runId, approvalId, approved)}
-      />
+      <div className={`conv-workspace-main ${hasArtifacts ? "has-artifact-dock" : ""}`}>
+        <MessageList
+          messages={messages}
+          runs={runs}
+          artifacts={artifacts}
+          onOpenSqlConsole={onOpenSqlConsole}
+          onOpenResultTab={onOpenResultTab}
+          onResolveApproval={(runId, approvalId, approved) => void store.resolveApproval(runId, approvalId, approved)}
+          onSelectArtifact={selectArtifact}
+        />
+        {hasArtifacts && (
+          <ArtifactDock
+            artifacts={artifacts}
+            selectedArtifactId={selectedArtifactId}
+            onSelectArtifact={selectArtifact}
+            onOpenSqlConsole={onOpenSqlConsole}
+            onOpenResultTab={onOpenResultTab}
+          />
+        )}
+      </div>
       <Composer
         running={Boolean(runningRun)}
         onSend={(text) => void store.sendMessage(conversationId, text)}
