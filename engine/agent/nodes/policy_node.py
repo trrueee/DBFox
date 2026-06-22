@@ -15,6 +15,16 @@ from engine.agent.tools.tool_aliases import STEP_NAME_MAP, to_internal
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.policy_node")
 
 
+_BATCHABLE_DISCOVERY_TOOLS = {
+    "db.search",
+    "db.inspect",
+    "schema.describe_table",
+    "schema.expand_related_tables",
+    "schema.list_tables_page",
+    "memory.search",
+}
+
+
 def _step_name(tool_name: str) -> str:
     """Return a human-readable step label for trace events.
 
@@ -39,11 +49,10 @@ def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, An
     policy_gate = PolicyGate(registry)
     execution_mode = state.get("execution_mode", "user_requested_read")
 
-    # Enforce one-tool-per-turn: when the model issues multiple tool_calls
-    # in a single response, later tools may depend on state produced by
-    # earlier tools that hasn't been written back yet.  Only allow the
-    # first call; the model will receive the result and continue.
-    if len(tool_calls) > 1:
+    # Most tool calls stay one-per-turn because later calls may depend on
+    # state produced by earlier calls. Independent discovery reads can be
+    # grouped so schema search does not become a slow multi-turn loop.
+    if len(tool_calls) > 1 and not _can_batch_tool_calls(tool_calls, registry):
         first = tool_calls[0]
         others = tool_calls[1:]
         for c in others:
@@ -181,6 +190,7 @@ def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, An
 
     return {
         "allowed_tool_calls": allowed,
+        "messages": list(deferred_messages),
         "consecutive_blocks": 0,
         "trace_events": [
             {
@@ -189,3 +199,23 @@ def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, An
             }
         ],
     }
+
+
+def _can_batch_tool_calls(tool_calls: list[Any], registry: Any) -> bool:
+    groups: set[str] = set()
+    for call in tool_calls:
+        internal_name = to_internal(call["name"])
+        if internal_name not in _BATCHABLE_DISCOVERY_TOOLS:
+            return False
+
+        tool = registry.get(internal_name)
+        if tool is None:
+            return False
+
+        spec = tool.spec
+        policy = spec.policy
+        if policy.side_effect != "none" or policy.requires_approval or policy.requires_validated_sql:
+            return False
+        groups.add(spec.group)
+
+    return len(groups) == 1
