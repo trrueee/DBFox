@@ -34,6 +34,7 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.llm.errors import llm_error_from_exception
 from engine.llm.providers.openai import create_openai_client
+from engine.models import AgentArtifactRecord, AgentRun
 
 logger = logging.getLogger("dbfox.api.agent")
 router = APIRouter()
@@ -418,6 +419,114 @@ class ResultPageResponse(BaseModel):
     warnings: list[str] | None = None
     notices: list[str] | None = None
 
+def _normalize_sql_for_source_match(sql: str) -> str:
+    return " ".join(sql.strip().split())
+
+
+def _artifact_payload(record: AgentArtifactRecord) -> dict[str, object]:
+    try:
+        payload = json.loads(record.payload_json or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _safe_sql_from_artifact(record: AgentArtifactRecord) -> str:
+    payload = _artifact_payload(record)
+    for key in ("safeSql", "safe_sql", "sourceSql", "source_sql", "sql"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _load_source_artifact(
+    db: Session,
+    *,
+    datasource_id: str,
+    source_artifact_id: str,
+) -> AgentArtifactRecord | None:
+    base_query = (
+        db.query(AgentArtifactRecord)
+        .join(AgentRun, AgentRun.id == AgentArtifactRecord.run_id)
+        .filter(AgentRun.datasource_id == datasource_id)
+    )
+    by_id = base_query.filter(AgentArtifactRecord.id == source_artifact_id).first()
+    if by_id is not None:
+        return by_id
+    return (
+        base_query
+        .filter(AgentArtifactRecord.semantic_id == source_artifact_id)
+        .order_by(AgentArtifactRecord.created_at.desc())
+        .first()
+    )
+
+
+def _verified_pagination_source_sql(db: Session, req: ResultPageRequest, dialect: str) -> str:
+    source = _load_source_artifact(
+        db,
+        datasource_id=req.datasourceId,
+        source_artifact_id=req.sourceSqlArtifactId,
+    )
+    if source is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "SOURCE_ARTIFACT_NOT_FOUND", "message": "Source result artifact was not found."},
+        )
+    if source.type not in {"result_view", "table", "sql"}:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "SOURCE_ARTIFACT_UNSUPPORTED", "message": "Source artifact cannot back pagination."},
+        )
+
+    persisted_safe_sql = _safe_sql_from_artifact(source)
+    if not persisted_safe_sql:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "SOURCE_SQL_MISSING", "message": "Source artifact does not contain safe SQL."},
+        )
+    if _normalize_sql_for_source_match(persisted_safe_sql) != _normalize_sql_for_source_match(req.safeSql):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "SOURCE_SQL_MISMATCH", "message": "Requested SQL does not match the source artifact."},
+        )
+
+    from engine.sql.safety_gate import validate_pagination_base_sql
+
+    warnings = validate_pagination_base_sql(persisted_safe_sql, dialect=dialect)
+    if warnings:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "SOURCE_SQL_VALIDATION_FAILED", "message": warnings[0]},
+        )
+    return persisted_safe_sql
+
+
+def _pagination_execution_decision(datasource_id: str, original_sql: str, safe_sql: str):
+    from engine.sql.trust_gate import ExecutionSafetyDecision
+
+    guardrail = {
+        "result": "pass",
+        "originalSql": original_sql,
+        "safeSql": safe_sql,
+        "checks": [],
+        "message": "Pagination derived from persisted safe SQL artifact.",
+    }
+    return ExecutionSafetyDecision(
+        datasource_id=datasource_id,
+        policy="readonly",
+        original_sql=original_sql,
+        safe_sql=safe_sql,
+        passed=True,
+        can_execute=True,
+        requires_confirmation=False,
+        guardrail=guardrail,
+        schema_warnings=[],
+        scope_state={"source": "pagination"},
+        messages=[],
+    )
+
+
 @router.post("/agent/results/page", response_model=ResultPageResponse)
 def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
     from engine.sql.safety_gate import build_derived_sql, validate_derived_sql
@@ -439,9 +548,11 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
     # Optional search / filters can be added to build_derived_sql later
     # For now, we handle limit/offset and sorts.
 
+    source_sql = _verified_pagination_source_sql(db, req, dialect)
+
     try:
         derived_sql = build_derived_sql(
-            base_sql=req.safeSql,
+            base_sql=source_sql,
             dialect=dialect,
             limit=limit + 1, # Fetch one extra to determine hasNextPage
             offset=offset,
@@ -455,13 +566,10 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_VALIDATION_FAILED", "message": warnings[0]})
 
     try:
-        from engine.sql.trust_gate import ExecutionSafetyDecision
-        decision = ExecutionSafetyDecision(
-            can_execute=True,
+        decision = _pagination_execution_decision(
+            req.datasourceId,
+            original_sql=source_sql,
             safe_sql=derived_sql,
-            guardrail=None,
-            policy="readonly",
-            approval=None,
         )
         res = execute_query(db, req.datasourceId, derived_sql, safety_decision=decision)
     except DBFoxError as e:
@@ -480,15 +588,13 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
         # build count query
         import sqlglot
         try:
-            base_expr = sqlglot.parse_one(req.safeSql, read=dialect)
+            base_expr = sqlglot.parse_one(source_sql, read=dialect)
             count_sql = sqlglot.select("COUNT(*)").from_(base_expr.subquery("dbfox_count")).sql(dialect=dialect)
             
-            count_decision = ExecutionSafetyDecision(
-                can_execute=True,
+            count_decision = _pagination_execution_decision(
+                req.datasourceId,
+                original_sql=source_sql,
                 safe_sql=count_sql,
-                guardrail=None,
-                policy="readonly",
-                approval=None,
             )
             count_res = execute_query(db, req.datasourceId, count_sql, safety_decision=count_decision)
             if count_res.get("rows") and len(count_res["rows"]) > 0:
