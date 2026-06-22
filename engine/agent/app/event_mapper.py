@@ -104,6 +104,10 @@ def trace_to_events(
                     "summary": summary,
                     "detail": trace.get("error_class"),
                     "attempt": trace.get("attempt"),
+                    "error_class": trace.get("error_class"),
+                    "failure_layer": trace.get("failure_layer"),
+                    "root_cause": trace.get("root_cause"),
+                    "recovery_strategy": trace.get("recovery_strategy"),
                 },
             )
     elif trace_type == "agent.progress.judged":

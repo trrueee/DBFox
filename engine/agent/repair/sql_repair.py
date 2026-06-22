@@ -243,6 +243,7 @@ def build_repair_trace_event(plan: SqlRepairPlan, attempt: int) -> dict[str, Any
         "attempt": attempt,
         "error_class": plan.error_class,
         "failure_layer": plan.failure_layer,
+        "root_cause": plan.root_cause,
         "recovery_strategy": plan.recovery_strategy,
         "user_visible_update": plan.user_visible_update,
         "next_tool_groups": plan.next_tool_groups,
