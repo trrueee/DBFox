@@ -320,3 +320,85 @@ def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypat
     assert state["semantic_resolution"]["semantic_aliases_used"] == [
         {"alias": "新注册用户", "target": "users.created_at", "source": "db"}
     ]
+
+
+def test_service_initial_state_exposes_state_namespaces(monkeypatch):
+    monkeypatch.setattr(
+        "engine.agent_core.workspace_context.build_agent_context_bundle",
+        lambda _db, _req: {"context_summary": "Datasource demo"},
+    )
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    service.db = object()
+
+    state = service._initial_state(
+        AgentRunRequest(datasource_id="ds-test", question="分析订单", execute=False),
+        "run-namespaced",
+        "session-namespaced",
+    )
+
+    assert state["run"] == {
+        "run_id": "run-namespaced",
+        "thread_id": "session-namespaced",
+        "session_id": "session-namespaced",
+        "datasource_id": "ds-test",
+        "parent_run_id": None,
+        "execute": False,
+        "max_steps": 50,
+        "step_count": 0,
+        "status": "running",
+        "error": None,
+    }
+    assert state["working"]["context_summary"] == "Datasource demo"
+    assert state["working"]["semantic_resolution"] is None
+    assert state["working"]["analysis_units"] == []
+    assert state["tools"]["execution_mode"] == "suggest_only"
+    assert state["tools"]["allowed_tool_groups"]
+    assert state["tools"]["last_tool_results"] == []
+    assert state["ui"]["artifacts"] == []
+    assert state["ui"]["runtime_events"] == []
+
+
+def test_service_merge_state_keeps_namespaces_in_sync():
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    state = {
+        "run_id": "run-sync",
+        "thread_id": "session-sync",
+        "session_id": "session-sync",
+        "datasource_id": "ds-test",
+        "execute": True,
+        "max_steps": 50,
+        "step_count": 0,
+        "status": "running",
+        "error": None,
+        "semantic_resolution": None,
+        "analysis_units": [],
+        "allowed_tool_groups": ["db"],
+        "allowed_tool_calls": [],
+        "blocked_tool_calls": [],
+        "pending_tool_calls": [],
+        "last_tool_results": [],
+        "artifacts": [],
+        "trace_events": [],
+        "runtime_events": [],
+        "context_summary": "initial",
+    }
+    service._merge_state(
+        state,
+        {
+            "step_count": 2,
+            "status": "waiting_approval",
+            "error": "needs approval",
+            "allowed_tool_calls": [{"name": "sql.execute_readonly"}],
+            "last_tool_results": [{"name": "sql.validate", "status": "success"}],
+            "artifacts": [{"id": "artifact-1", "type": "sql"}],
+            "runtime_events": [{"type": "agent.approval.required"}],
+        },
+    )
+
+    assert state["run"]["step_count"] == 2
+    assert state["run"]["status"] == "waiting_approval"
+    assert state["run"]["error"] == "needs approval"
+    assert state["tools"]["allowed_tool_calls"] == [{"name": "sql.execute_readonly"}]
+    assert state["tools"]["last_tool_results"] == [{"name": "sql.validate", "status": "success"}]
+    assert state["ui"]["artifacts"] == [{"id": "artifact-1", "type": "sql"}]
+    assert state["ui"]["runtime_events"] == [{"type": "agent.approval.required"}]

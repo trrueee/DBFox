@@ -219,3 +219,116 @@ class DBFoxAgentState(TypedDict, total=False):
     """[UI/Eval Compatibility] Tool namespaces the agent is permitted to query."""
     selected_skill_ids: list[str]
     """[UI/Eval Compatibility] List of registered custom agent skills active in this context."""
+
+    # =========================================================================
+    # 9. NAMESPACED STATE PROJECTIONS
+    # =========================================================================
+    run: dict[str, Any]
+    """RunState projection: IDs, status, execution budget, and terminal error."""
+    working: dict[str, Any]
+    """WorkingMemoryState projection: context, semantic/schema/SQL, progress, and repair fields."""
+    tools: dict[str, Any]
+    """ToolExchangeState projection: pending/allowed/blocked calls, results, and policy controls."""
+    ui: dict[str, Any]
+    """PresentationState projection: artifacts, runtime/trace events, and user-visible summaries."""
+
+
+_RUN_NAMESPACE_KEYS = (
+    "run_id",
+    "thread_id",
+    "session_id",
+    "datasource_id",
+    "parent_run_id",
+    "execute",
+    "max_steps",
+    "step_count",
+    "status",
+    "error",
+)
+
+_WORKING_NAMESPACE_KEYS = (
+    "environment_profile",
+    "database_map",
+    "semantic_resolution",
+    "db_search_results",
+    "db_inspection",
+    "db_preview",
+    "workspace_context",
+    "follow_up_context",
+    "context_pack",
+    "context_summary",
+    "candidate_tables",
+    "searched_terms",
+    "exhausted_paths",
+    "schema_context",
+    "schema_metadata",
+    "query_plan",
+    "sql_candidate",
+    "sql",
+    "safety",
+    "execution",
+    "chart_suggestion",
+    "suggestions",
+    "analysis_units",
+    "current_analysis_unit_id",
+    "answer",
+    "final_answer",
+    "revision_attempted",
+    "revision_count",
+    "repair_mode",
+    "repair_stats",
+    "repair_trace",
+    "progress_decision",
+    "replan_count",
+    "consecutive_blocks",
+)
+
+_TOOLS_NAMESPACE_KEYS = (
+    "pending_tool_calls",
+    "allowed_tool_calls",
+    "blocked_tool_calls",
+    "last_tool_results",
+    "last_observation",
+    "last_tool_name",
+    "last_tool_metadata",
+    "pending_approval",
+    "approval_result",
+    "tool_call_history",
+    "plan_directive",
+    "execution_mode",
+    "allowed_tool_groups",
+    "selected_skill_ids",
+)
+
+_UI_NAMESPACE_KEYS = (
+    "artifacts",
+    "trace_events",
+    "runtime_events",
+    "plan_events",
+    "visible_plan",
+    "context_summary",
+)
+
+
+def sync_state_namespaces(state: dict[str, Any]) -> dict[str, Any]:
+    """Refresh namespaced state projections from the flat LangGraph state.
+
+    The flat fields remain the authoritative compatibility layer while nodes are
+    migrated gradually. These projections make state diffs readable and give new
+    code a stable sectioned contract to consume.
+    """
+    state["run"] = _project_namespace(state, _RUN_NAMESPACE_KEYS)
+    state["working"] = _project_namespace(state, _WORKING_NAMESPACE_KEYS)
+    state["tools"] = _project_namespace(state, _TOOLS_NAMESPACE_KEYS)
+    state["ui"] = _project_namespace(state, _UI_NAMESPACE_KEYS)
+    return state
+
+
+def _project_namespace(state: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    return {key: _project_value(state.get(key)) for key in keys if key in state}
+
+
+def _project_value(value: Any) -> Any:
+    if isinstance(value, list) and value and isinstance(value[0], dict) and value[0].get("__clear__"):
+        return list(value[1:])
+    return value

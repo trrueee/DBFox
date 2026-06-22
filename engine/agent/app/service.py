@@ -22,7 +22,7 @@ from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.events import EventEmitter
 
 from engine.agent.graph.react_graph import build_dbfox_react_graph
-from engine.agent.graph.state import DBFoxAgentState
+from engine.agent.graph.state import DBFoxAgentState, sync_state_namespaces
 from engine.agent.app.request_context import RequestContext
 from engine.agent.app.response_builder import build_response
 
@@ -395,9 +395,10 @@ class DBFoxAgentService:
             execution_mode = req.execution_mode
         else:
             execution_mode = "user_requested_read" if req.execute else "suggest_only"
-        return DBFoxAgentState(
+        state = DBFoxAgentState(
             run_id=run_id,
             thread_id=session_id,
+            session_id=session_id,
             datasource_id=req.datasource_id,
             execute=req.execute,
             status="running",
@@ -454,6 +455,8 @@ class DBFoxAgentService:
             repair_mode=False,
             repair_stats=None,
         )
+        sync_state_namespaces(state)
+        return state
 
     def _new_agent_state(self, run_id: str, session_id: str, req: AgentRunRequest) -> Any:
         from engine.agent_core.state import AgentState
@@ -511,7 +514,6 @@ class DBFoxAgentService:
                             yield from trace_to_events(emit, te)
 
     def _merge_state(self, target: dict[str, Any], update: dict[str, Any]) -> None:
-        from engine.agent.graph.state import DBFoxAgentState
         from typing import get_origin, get_args
         import typing
 
@@ -552,6 +554,7 @@ class DBFoxAgentService:
                 target[key] = {**target[key], **value}
             else:
                 target[key] = value
+        sync_state_namespaces(target)
 
     def _build_emitter(self, run_id: str, session_id: str, start_sequence: int) -> EventEmitter:
         def save(event: AgentRuntimeEvent) -> None:
