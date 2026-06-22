@@ -70,6 +70,7 @@ class AgentEvalRunner:
         passed = 0
         failed = 0
         total_latency = 0
+        case_telemetries: list[dict[str, Any]] = []
         case_responses: list[AgentEvalCaseResultResponse] = []
         runtime = DBFoxAgentRuntime(self.db)
 
@@ -100,6 +101,8 @@ class AgentEvalRunner:
 
                 trace_payload = [event.model_dump(mode="json") for event in response.trace_events]
                 actual_sql = _actual_sql_values(response, events_payload)
+                runtime_telemetry = _runtime_product_telemetry(events_payload, response)
+                case_telemetries.append(runtime_telemetry)
                 evaluation = self.evaluator.evaluate(task, response, events=events_payload, trace=trace_payload)
 
                 case_result = AgentEvalCaseResult(
@@ -115,7 +118,7 @@ class AgentEvalRunner:
                     actual_approval_state=evaluation.actual.get("actual_approval_state"),
                     actual_sql_json=json.dumps(actual_sql),
                     failure_reasons_json=json.dumps(evaluation.failure_reasons),
-                    response_json=_safe_response_json(response),
+                    response_json=_safe_response_json(response, eval_telemetry=runtime_telemetry),
                     created_at=datetime.now(UTC),
                 )
                 self.db.add(case_result)
@@ -196,6 +199,7 @@ class AgentEvalRunner:
             "failed": failed,
             "pass_rate": pass_rate_value,
             "avg_latency_ms": avg_latency_value,
+            "runtime_telemetry": _summarize_runtime_telemetry(case_telemetries),
         })
         eval_run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
 
@@ -237,13 +241,151 @@ def _build_workspace_context(task: AgentGoldenTask) -> AgentWorkspaceContext | N
     )
 
 
-def _safe_response_json(response: Any) -> str:
+def _safe_response_json(response: Any, *, eval_telemetry: dict[str, Any] | None = None) -> str:
     try:
         data = response.model_dump()
         data.pop("api_key", None)
+        if eval_telemetry is not None:
+            data["eval_telemetry"] = eval_telemetry
         return json.dumps(data, ensure_ascii=False, default=str)
     except Exception:
         return "{}"
+
+
+def _runtime_product_telemetry(events: list[dict[str, Any]], response: Any) -> dict[str, Any]:
+    stage_counts: dict[str, int] = {}
+    stage_durations_ms: dict[str, int] = {}
+    error_classes: list[str] = []
+    root_causes: list[str] = []
+    recovery_strategies: list[str] = []
+    failure_layer: str | None = None
+    repair_attempts: set[str] = set()
+    repair_events_without_attempt = 0
+
+    for event in events:
+        step = event.get("step")
+        if not isinstance(step, dict):
+            continue
+
+        phase = _clean_string(step.get("phase") or step.get("stage"))
+        if phase:
+            stage_counts[phase] = stage_counts.get(phase, 0) + 1
+            duration_ms = _step_duration_ms(step)
+            if duration_ms is not None:
+                stage_durations_ms[phase] = stage_durations_ms.get(phase, 0) + duration_ms
+
+        step_failure_layer = _clean_string(step.get("failure_layer"))
+        if failure_layer is None and step_failure_layer:
+            failure_layer = step_failure_layer
+        _append_unique(error_classes, step.get("error_class"))
+        _append_unique(root_causes, step.get("root_cause"))
+        _append_unique(recovery_strategies, step.get("recovery_strategy"))
+
+        if _is_repair_step(step):
+            attempt = step.get("attempt")
+            if attempt is None:
+                repair_events_without_attempt += 1
+            else:
+                repair_attempts.add(str(attempt))
+
+    final_status = _clean_string(getattr(response, "status", None))
+    response_success = getattr(response, "success", None)
+    if isinstance(response_success, bool):
+        final_success = response_success
+    else:
+        final_success = final_status in {"success", "completed", "complete"}
+
+    return {
+        "stage_counts": stage_counts,
+        "stage_durations_ms": stage_durations_ms,
+        "repair_count": len(repair_attempts) + repair_events_without_attempt,
+        "failure_layer": failure_layer,
+        "error_classes": error_classes,
+        "root_causes": root_causes,
+        "recovery_strategies": recovery_strategies,
+        "final_status": final_status,
+        "final_success": final_success,
+    }
+
+
+def _summarize_runtime_telemetry(case_telemetries: list[dict[str, Any]]) -> dict[str, Any]:
+    stage_counts: dict[str, int] = {}
+    stage_durations_ms: dict[str, int] = {}
+    failure_layers: dict[str, int] = {}
+    error_classes: dict[str, int] = {}
+    final_success_cases = 0
+    repair_count = 0
+
+    for telemetry in case_telemetries:
+        if telemetry.get("final_success") is True:
+            final_success_cases += 1
+        repair_count += int(telemetry.get("repair_count") or 0)
+        _merge_int_map(stage_counts, telemetry.get("stage_counts"))
+        _merge_int_map(stage_durations_ms, telemetry.get("stage_durations_ms"))
+
+        failure_layer = _clean_string(telemetry.get("failure_layer"))
+        if failure_layer:
+            failure_layers[failure_layer] = failure_layers.get(failure_layer, 0) + 1
+        for error_class in telemetry.get("error_classes") or []:
+            value = _clean_string(error_class)
+            if value:
+                error_classes[value] = error_classes.get(value, 0) + 1
+
+    return {
+        "final_success_cases": final_success_cases,
+        "repair_count": repair_count,
+        "stage_counts": stage_counts,
+        "stage_durations_ms": stage_durations_ms,
+        "failure_layers": failure_layers,
+        "error_classes": error_classes,
+    }
+
+
+def _step_duration_ms(step: dict[str, Any]) -> int | None:
+    for container in (step, step.get("output")):
+        if not isinstance(container, dict):
+            continue
+        for key in ("duration_ms", "durationMs", "latency_ms", "latencyMs"):
+            value = container.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int | float):
+                return int(value)
+            if isinstance(value, str):
+                try:
+                    return int(float(value))
+                except ValueError:
+                    continue
+    return None
+
+
+def _is_repair_step(step: dict[str, Any]) -> bool:
+    phase = _clean_string(step.get("phase") or step.get("stage"))
+    name = _clean_string(step.get("name") or step.get("tool_name"))
+    return phase == "repairing" or name in {"sql_repair", "sql.repair"} or bool(step.get("recovery_strategy"))
+
+
+def _append_unique(values: list[str], raw: Any) -> None:
+    value = _clean_string(raw)
+    if value and value not in values:
+        values.append(value)
+
+
+def _merge_int_map(target: dict[str, int], raw: Any) -> None:
+    if not isinstance(raw, dict):
+        return
+    for key, value in raw.items():
+        cleaned_key = _clean_string(key)
+        if not cleaned_key or isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        target[cleaned_key] = target.get(cleaned_key, 0) + int(value)
+
+
+def _clean_string(value: Any) -> str | None:
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    return None
 
 
 def _actual_sql_values(response: Any, events: list[dict[str, Any]]) -> list[str]:
