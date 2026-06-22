@@ -150,6 +150,33 @@ def test_builtin_registry_loads_base_tools_without_yaml():
     assert "analyze_data" not in names
 
 
+def test_model_visible_sql_lifecycle_excludes_internal_db_query():
+    from engine.tools.dbfox_tools import register_dbfox_tools
+    from engine.tools.runtime.manifest import build_langchain_tools
+
+    tools = build_langchain_tools(register_dbfox_tools(), allowed_groups=["db", "sql"])
+    names = {tool.name for tool in tools}
+
+    assert "db_query" not in names
+    assert "sql_validate" in names
+    assert "sql_execute_readonly" in names
+
+
+def test_internal_db_query_is_documented_as_backend_fast_path():
+    from engine.agent.model.system_prompt import SYSTEM_PROMPT
+    from engine.tools.dbfox_tools import register_dbfox_tools
+
+    registry = register_dbfox_tools()
+    db_query = registry.get("db.query")
+    assert db_query is not None
+
+    assert db_query.spec.policy.visible_to_model is False
+    assert "internal fast path" in db_query.spec.description.lower()
+    assert "db.query is an internal backend fast path" in SYSTEM_PROMPT
+    assert "sql.validate" in SYSTEM_PROMPT
+    assert "sql.execute_readonly" in SYSTEM_PROMPT
+
+
 def test_wrapped_memory_tools_consume_identity_state():
     from engine.tools.dbfox_tools import register_dbfox_tools
 
