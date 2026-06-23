@@ -594,9 +594,15 @@ def _pagination_execution_decision(datasource_id: str, original_sql: str, safe_s
 
 @router.post("/agent/results/page", response_model=ResultPageResponse)
 def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
-    from engine.sql.safety_gate import build_derived_sql, validate_derived_sql
+    from engine.sql.safety_gate import validate_derived_sql
     from engine.sql.executor import execute_query
     from engine.models import DataSource
+    from engine.sql.sql_backed_view import (
+        SqlBackedFilter,
+        SqlBackedSort,
+        SqlBackedViewError,
+        build_sql_backed_page_sql,
+    )
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
@@ -609,16 +615,23 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
     offset = (req.page - 1) * req.pageSize
 
     source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
-    sorts = _validated_result_page_sorts(req, source_artifact)
+    source_columns = sorted(_result_columns_from_artifact(source_artifact))
 
     try:
-        derived_sql = build_derived_sql(
+        derived = build_sql_backed_page_sql(
             base_sql=source_sql,
             dialect=dialect,
+            columns=source_columns,
+            filters=[SqlBackedFilter.model_validate(item.model_dump()) for item in (req.filters or [])],
+            search=req.search,
+            searchable_columns=source_columns,
+            sorts=[SqlBackedSort.model_validate(item.model_dump()) for item in (req.sort or [])],
             limit=limit + 1, # Fetch one extra to determine hasNextPage
             offset=offset,
-            sorts=sorts,
         )
+        derived_sql = derived.sql
+    except SqlBackedViewError as e:
+        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
     except Exception as e:
         raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_BUILD_FAILED", "message": f"Failed to build derived SQL: {e}"})
 
