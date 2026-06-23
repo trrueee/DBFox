@@ -1,7 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TableArtifact } from "../../../../types/agentArtifact";
+import { agentApi } from "../../../../lib/api/agent";
+import type { ResultViewArtifact, TableArtifact } from "../../../../types/agentArtifact";
 import { TableArtifactView } from "../TableArtifactView";
+
+vi.mock("../../../../lib/api/agent", () => ({
+  agentApi: {
+    fetchResultPage: vi.fn(),
+    exportResultCsv: vi.fn(),
+  },
+}));
 
 function makeArtifact(): TableArtifact {
   return {
@@ -40,13 +48,53 @@ function makeLargeArtifact(): TableArtifact {
   };
 }
 
+function makeSqlBackedArtifact(): ResultViewArtifact {
+  return {
+    id: "result-view-1",
+    type: "result_view",
+    title: "SQL-backed result",
+    description: "Agent result view",
+    storageMode: "sql_backed",
+    datasourceId: "ds-1",
+    sourceSqlSemanticId: "sql-artifact-1",
+    sourceSql: "SELECT day, order_count FROM daily_orders",
+    safeSql: "SELECT day, order_count FROM daily_orders",
+    columns: ["day", "order_count"],
+    previewRows: [["2026-06-01", "10"]],
+    previewRowCount: 1,
+    rowCount: 128,
+    returnedRows: 1,
+    latencyMs: 42,
+    truncated: false,
+  };
+}
+
 describe("TableArtifactView", () => {
   beforeEach(() => {
     cleanup();
+    vi.mocked(agentApi.fetchResultPage).mockReset();
+    vi.mocked(agentApi.exportResultCsv).mockReset();
+    vi.mocked(agentApi.fetchResultPage).mockResolvedValue({
+      columns: ["day", "order_count"],
+      rows: [{ day: "2026-06-01", order_count: 10 }],
+      page: 1,
+      pageSize: 50,
+      rowCount: 128,
+      hasNextPage: true,
+      executedSql: "SELECT day, order_count FROM daily_orders LIMIT 50 OFFSET 0",
+      latencyMs: 38,
+      warnings: [],
+      notices: [],
+    });
+    vi.mocked(agentApi.exportResultCsv).mockResolvedValue(new Blob(["day,order_count\n2026-06-01,10\n"]));
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
       },
+    });
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => "blob:csv"),
+      revokeObjectURL: vi.fn(),
     });
   });
 
@@ -134,5 +182,38 @@ describe("TableArtifactView", () => {
     expect(screen.getByText("窗口 1-200 / 620")).toBeTruthy();
     expect(screen.getByText("2026-07-200")).toBeTruthy();
     expect(screen.queryByText("2026-07-201")).toBeNull();
+  });
+
+  it("exports sql-backed workspace results through the result export API", async () => {
+    const artifact = makeSqlBackedArtifact();
+    const onToast = vi.fn();
+
+    render(<TableArtifactView artifact={artifact} onToast={onToast} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+    fireEvent.change(screen.getByPlaceholderText("搜索 SQL 结果..."), { target: { value: "daily" } });
+    fireEvent.click(screen.getByRole("button", { name: "order_count" }));
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "daily",
+          sort: [{ column: "order_count", direction: "desc" }],
+        }),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "导出" }));
+
+    await waitFor(() =>
+      expect(agentApi.exportResultCsv).toHaveBeenCalledWith({
+        datasourceId: "ds-1",
+        sourceSqlArtifactId: "sql-artifact-1",
+        safeSql: "SELECT day, order_count FROM daily_orders",
+        search: "daily",
+        sort: [{ column: "order_count", direction: "desc" }],
+      }),
+    );
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
 });
