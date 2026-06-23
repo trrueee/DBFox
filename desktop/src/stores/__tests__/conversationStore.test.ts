@@ -251,4 +251,109 @@ describe("conversationStore", () => {
     const state = useConversationStore.getState();
     expect(state.messagesById["assistant-approval"].content).toBe("已完成");
   });
+
+  it("does not replace a run when a duplicate event is ignored", () => {
+    const store = useConversationStore.getState();
+    store.loadConversation({
+      id: "conv-events",
+      title: "Events",
+      datasource_id: "ds-1",
+      context_tables: [],
+      created_at: null,
+      updated_at: null,
+      messages: [
+        {
+          id: "assistant-events",
+          conversation_id: "conv-events",
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          sequence: 1,
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+      runs: [],
+      artifacts: [],
+      approvals: [],
+    });
+    const event = {
+      event_id: "event-same",
+      run_id: "run-events",
+      sequence: 1,
+      created_at_ms: 1,
+      type: "agent.progress.update",
+      conversation_id: "conv-events",
+      assistant_message_id: "assistant-events",
+      step: { phase: "understanding", status: "running", summary: "理解问题" },
+    } as const;
+
+    store.applyStreamEvent(event);
+    const firstRun = useConversationStore.getState().runsById["run-events"];
+    store.applyStreamEvent(event);
+
+    expect(useConversationStore.getState().runsById["run-events"]).toBe(firstRun);
+  });
+
+  it("applies a batch of stream events in order", () => {
+    const store = useConversationStore.getState();
+    store.loadConversation({
+      id: "conv-batch",
+      title: "Batch",
+      datasource_id: "ds-1",
+      context_tables: [],
+      created_at: null,
+      updated_at: null,
+      messages: [
+        {
+          id: "assistant-batch",
+          conversation_id: "conv-batch",
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          sequence: 1,
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+      runs: [],
+      artifacts: [],
+      approvals: [],
+    });
+
+    store.applyStreamEvents([
+      {
+        event_id: "event-1",
+        run_id: "run-batch",
+        sequence: 1,
+        created_at_ms: 1,
+        type: "agent.progress.update",
+        conversation_id: "conv-batch",
+        assistant_message_id: "assistant-batch",
+        step: { phase: "understanding", status: "running", summary: "理解问题" },
+      },
+      {
+        event_id: "event-2",
+        run_id: "run-batch",
+        sequence: 2,
+        created_at_ms: 2,
+        type: "agent.answer.completed",
+        conversation_id: "conv-batch",
+        assistant_message_id: "assistant-batch",
+        message_id: "assistant-batch",
+        answer: {
+          answer: "完成",
+          key_findings: [],
+          evidence: [],
+          caveats: [],
+          recommendations: [],
+          follow_up_questions: [],
+        },
+      },
+    ]);
+
+    const state = useConversationStore.getState();
+    expect(state.runsById["run-batch"].events).toHaveLength(2);
+    expect(state.messagesById["assistant-batch"].content).toBe("完成");
+  });
 });
