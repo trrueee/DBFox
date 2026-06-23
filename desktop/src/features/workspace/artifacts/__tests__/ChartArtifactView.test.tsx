@@ -1,24 +1,55 @@
 import type { CSSProperties } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChartArtifact } from "../../../../types/agentArtifact";
 import { ChartArtifactView } from "../ChartArtifactView";
 
 const echartsMock = vi.hoisted(() => ({
   options: [] as unknown[],
+  resize: vi.fn(),
+  getDataURL: vi.fn(() => "data:image/png;base64,test"),
 }));
 
-vi.mock("echarts-for-react", () => ({
-  default: ({ option, style }: { option: unknown; style?: CSSProperties }) => {
-    echartsMock.options.push(option);
+vi.mock("echarts-for-react", async () => {
+  const React = await import("react");
+
+  return {
+    default: React.forwardRef(
+      ({ option, style }: { option: unknown; style?: CSSProperties }, ref) => {
+        echartsMock.options.push(option);
+        React.useImperativeHandle(ref, () => ({
+          getEchartsInstance: () => ({
+            resize: echartsMock.resize,
+            getDataURL: echartsMock.getDataURL,
+          }),
+        }));
+
     return <div data-testid="echarts-mock" style={style} />;
-  },
-}));
+      },
+    ),
+  };
+});
+
+function makeChartArtifact(chartType: ChartArtifact["chartType"]): ChartArtifact {
+  return {
+    id: `chart-${chartType}`,
+    type: "chart",
+    title: "GMV 趋势",
+    chartType,
+    series: [
+      { label: "2026-06-01", value: 120 },
+      { label: "2026-06-02", value: 260 },
+    ],
+  };
+}
 
 describe("ChartArtifactView", () => {
   beforeEach(() => {
     cleanup();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     echartsMock.options = [];
+    echartsMock.resize.mockClear();
+    echartsMock.getDataURL.mockClear();
     const style = document.documentElement.style;
     style.setProperty("--color-text-primary", "rgb(15, 23, 42)");
     style.setProperty("--color-text-muted", "rgb(100, 116, 139)");
@@ -37,6 +68,10 @@ describe("ChartArtifactView", () => {
     style.setProperty("--agent-chart-area-start", "rgba(79, 70, 229, 0.15)");
     style.setProperty("--agent-chart-area-end", "rgba(79, 70, 229, 0)");
     style.setProperty("--agent-chart-tooltip-shadow", "0 4px 12px rgba(15, 23, 42, 0.14)");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("renders chart source field formulas", () => {
@@ -156,5 +191,28 @@ describe("ChartArtifactView", () => {
     expect(option.yAxis.axisLabel.fontSize).toBe(10);
     expect(option.yAxis.nameTextStyle.fontSize).toBe(10);
     expect(option.yAxis.splitLine.lineStyle.color).toBe("rgb(241, 245, 249)");
+  });
+
+  it("can expand chart analysis height", () => {
+    render(<ChartArtifactView artifact={makeChartArtifact("area")} onToast={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "展开分析" }));
+
+    expect(screen.getByTestId("echarts-mock").parentElement?.className).toContain("is-expanded");
+    expect(echartsMock.resize).toHaveBeenCalled();
+  });
+
+  it("exports chart png from the ECharts ref", () => {
+    const onToast = vi.fn();
+    render(<ChartArtifactView artifact={makeChartArtifact("bar")} onToast={onToast} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "PNG" }));
+
+    expect(echartsMock.getDataURL).toHaveBeenCalledWith({
+      type: "png",
+      pixelRatio: 2,
+      backgroundColor: "rgb(255, 255, 255)",
+    });
+    expect(onToast).toHaveBeenCalledWith("已下载图表 PNG");
   });
 });
