@@ -15,7 +15,12 @@ from engine.projects.service import resolve_project_id, get_or_create_default_pr
 from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource
 
 
-def _add_pagination_source(db_session, *, safe_sql: str = "SELECT id, amount FROM orders") -> None:
+def _add_pagination_source(
+    db_session,
+    *,
+    safe_sql: str = "SELECT id, amount FROM orders",
+    columns: list[str] | None = None,
+) -> None:
     now = datetime.now(UTC)
     datasource = DataSource(
         id="ds-page",
@@ -55,7 +60,7 @@ def _add_pagination_source(db_session, *, safe_sql: str = "SELECT id, amount FRO
         payload_json=json.dumps(
             {
                 "safeSql": safe_sql,
-                "columns": ["id", "amount"],
+                "columns": columns or ["id", "amount"],
                 "storageMode": "sql_backed",
             }
         ),
@@ -167,6 +172,72 @@ def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, d
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "SORT_COLUMN_NOT_ALLOWED"
+
+
+def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db_session):
+    _add_pagination_source(
+        db_session,
+        safe_sql="SELECT id, name, status, amount FROM orders",
+        columns=["id", "name", "status", "amount"],
+    )
+    executed_sql: dict[str, str] = {}
+
+    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+        executed_sql["datasource_id"] = datasource_id
+        executed_sql["sql"] = sql
+        assert safety_decision.can_execute is True
+        return {
+            "columns": ["id", "name", "status", "amount"],
+            "rows": [{"id": 1, "name": "Acme", "status": "paid", "amount": 20}],
+            "latencyMs": 3,
+            "warnings": [],
+            "notices": [],
+        }
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = agent_module.api_agent_result_page(
+        ResultPageRequest(
+            datasourceId="ds-page",
+            sourceSqlArtifactId="artifact-result-page",
+            safeSql="SELECT id, name, status, amount FROM orders",
+            page=1,
+            pageSize=20,
+            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            search="Acme",
+        ),
+        db_session,
+    )
+
+    sql = executed_sql["sql"]
+    assert response.rows == [{"id": 1, "name": "Acme", "status": "paid", "amount": 20}]
+    assert "`status` = 'paid'" in sql
+    assert "LIKE '%Acme%'" in sql
+
+
+def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):
+    _add_pagination_source(db_session)
+
+    def fail_execute_query(*_args, **_kwargs):
+        raise AssertionError("filter validation must run before execution")
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fail_execute_query)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="SELECT id, amount FROM orders",
+                page=1,
+                pageSize=20,
+                filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "FILTER_COLUMN_NOT_ALLOWED"
 
 
 def test_sse_failed_event() -> None:
