@@ -35,6 +35,7 @@ const { agentApi } = await import("../../lib/api/agent");
 
 function resetAll() {
   useAgentStore.setState({
+    ...useAgentStore.getInitialState(),
     _abortControllers: new Map(),
     _runIds: new Map(),
     _cancelledTabs: new Set(),
@@ -132,6 +133,61 @@ describe("agentStore — sendFollowUp", () => {
     useAgentStore.getState().sendFollowUp("smart-query", "");
 
     expect(runSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("agentStore — stream event rendering guards", () => {
+  beforeEach(resetAll);
+
+  it("does not patch the timeline when a runtime event leaves it unchanged", async () => {
+    let emittedEvent = false;
+    vi.mocked(agentApi.streamAgentQuery).mockImplementation(async (_datasourceId, question, _request, options) => {
+      emittedEvent = true;
+      options?.onEvent?.({
+        event_id: "answer-completed",
+        run_id: "run-noop",
+        sequence: 1,
+        created_at_ms: 1,
+        type: "agent.answer.completed",
+        answer: {
+          answer: "done",
+          key_findings: [],
+          evidence: [],
+          caveats: [],
+          recommendations: [],
+          follow_up_questions: [],
+        },
+      });
+      return {
+        run_id: "run-noop",
+        session_id: "session-noop",
+        success: true,
+        status: "completed",
+        question,
+        artifacts: [],
+        answer: {
+          answer: "done",
+          key_findings: [],
+          evidence: [],
+          caveats: [],
+          recommendations: [],
+          follow_up_questions: [],
+        },
+      };
+    });
+    const originalPatchTabTimeline = useWorkspaceStore.getState().patchTabTimeline;
+    const patchTimelineSpy = vi.fn(originalPatchTabTimeline);
+    useWorkspaceStore.setState({ patchTabTimeline: patchTimelineSpy });
+
+    try {
+      await useAgentStore.getState().runAgentForTab("smart-query", "hello");
+
+      expect(agentApi.streamAgentQuery).toHaveBeenCalled();
+      expect(emittedEvent).toBe(true);
+      expect(patchTimelineSpy).not.toHaveBeenCalled();
+    } finally {
+      useWorkspaceStore.setState({ patchTabTimeline: originalPatchTabTimeline });
+    }
   });
 });
 

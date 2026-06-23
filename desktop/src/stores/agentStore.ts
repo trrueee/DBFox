@@ -264,8 +264,11 @@ function makeAgentEventHandler(
     if (event.run_id && !store.getState()._runIds.has(tabId)) {
       store.getState()._runIds.set(tabId, event.run_id);
     }
-    timelineBox.list = appendAgentRuntimeEvent(timelineBox.list, event);
-    ws().patchTabTimeline(tabId, () => timelineBox.list);
+    const nextTimeline = appendAgentRuntimeEvent(timelineBox.list, event);
+    if (nextTimeline !== timelineBox.list) {
+      timelineBox.list = nextTimeline;
+      ws().patchTabTimeline(tabId, () => nextTimeline);
+    }
     const progressText = describeRuntimeEvent(event);
     if (progressText) ws().updateTabMessage(tabId, progressId, progressText);
     if (event.type === "agent.artifact.created" && event.artifact) {
@@ -278,12 +281,15 @@ function makeAgentEventHandler(
         payload_merge?: Record<string, unknown>;
       };
       if (delta.artifact_id && delta.payload_merge) {
-        artifactsBox.list = mergeArtifactDelta(
+        const nextArtifacts = mergeArtifactDelta(
           artifactsBox.list,
           delta.artifact_id,
           delta.payload_merge,
         );
-        ws().patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });
+        if (nextArtifacts !== artifactsBox.list) {
+          artifactsBox.list = nextArtifacts;
+          ws().patchTab(tabId, { artifacts: toViewArtifacts(nextArtifacts) });
+        }
       }
     }
   };

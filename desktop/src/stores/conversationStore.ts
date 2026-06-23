@@ -7,6 +7,7 @@ import {
   listConversations,
   startConversationMessageStream,
 } from "../features/conversation/conversationRepository";
+import { createStreamEventBatcher } from "../features/conversation/streamEventBatcher";
 import { agentApi } from "../lib/api/agent";
 import type {
   ConversationArtifact,
@@ -38,6 +39,7 @@ interface ConversationActions {
   cancelRun: (runId: string) => void;
   resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
   applyStreamEvent: (event: ConversationStreamEvent) => void;
+  applyStreamEvents: (events: ConversationStreamEvent[]) => void;
 }
 
 export type ConversationStore = ConversationState & ConversationActions;
@@ -100,11 +102,17 @@ function ensureStreamMessages(state: ConversationStore, event: ConversationStrea
     });
   }
 
+  if (nextMessagesById === state.messagesById && nextDetail === detail) return state;
+
   return {
     ...state,
     detailById: { ...state.detailById, [conversationId]: nextDetail },
     messagesById: nextMessagesById,
   };
+}
+
+function sameMessagePatch(current: ConversationMessage, patch: Partial<ConversationMessage>): boolean {
+  return Object.entries(patch).every(([key, value]) => current[key as keyof ConversationMessage] === value);
 }
 
 function upsertMessage(
@@ -114,6 +122,7 @@ function upsertMessage(
 ): ConversationStore {
   const current = state.messagesById[messageId];
   if (!current) return state;
+  if (sameMessagePatch(current, patch)) return state;
   const nextMessage = { ...current, ...patch };
   const detail = state.detailById[nextMessage.conversation_id];
   return {
@@ -163,6 +172,8 @@ function withConversationRunContext(event: ConversationStreamEvent, run: Convers
 }
 
 function upsertRun(state: ConversationStore, conversationId: string, run: ConversationRun): ConversationStore {
+  const current = state.runsById[run.id];
+  if (current === run) return state;
   const detail = conversationId ? state.detailById[conversationId] : undefined;
   return {
     ...state,
@@ -179,6 +190,114 @@ function upsertRun(state: ConversationStore, conversationId: string, run: Conver
         }
       : state.detailById,
   };
+}
+
+function sameRunPatch(current: ConversationRun, patch: Partial<ConversationRun>): boolean {
+  return Object.entries(patch).every(([key, value]) => current[key as keyof ConversationRun] === value);
+}
+
+function reduceStreamEvent(state: ConversationStore, event: ConversationStreamEvent): ConversationStore {
+  let next = ensureStreamMessages(state, event);
+  const conversationId = event.conversation_id || event.response?.conversation_id || "";
+  const messageId = event.message_id || event.assistant_message_id || event.response?.assistant_message_id || null;
+  const text = answerText(event);
+
+  if (event.run_id) {
+    const current = next.runsById[event.run_id];
+    const approval = event.approval || event.response?.approval || current?.approval || null;
+    const approvalStatus = runStatusForApprovalEvent(event);
+    const answer = event.answer || event.response?.answer || current?.answer || null;
+    const run: ConversationRun = current || {
+      id: event.run_id,
+      conversation_id: conversationId,
+      datasource_id: "",
+      question: typeof event.step?.question === "string" ? event.step.question : "",
+      status: "running",
+      user_message_id: event.user_message_id,
+      assistant_message_id: event.assistant_message_id,
+      events: [],
+    };
+    const runPatch: Partial<ConversationRun> = {
+      status: approvalStatus || run.status,
+      approval,
+      answer,
+    };
+    const candidateBase = { ...run, ...runPatch };
+    const candidate = withRunEvent(candidateBase, event);
+    if (!current || candidate !== candidateBase || !sameRunPatch(current, runPatch)) {
+      next = upsertRun(next, conversationId, candidate);
+    }
+  }
+
+  if (
+    event.type === "agent.run.completed" ||
+    event.type === "agent.run.failed" ||
+    event.type === "agent.run.cancelled"
+  ) {
+    const status =
+      event.type === "agent.run.completed"
+        ? "completed"
+        : event.type === "agent.run.cancelled"
+          ? "cancelled"
+          : "failed";
+    const currentRun = next.runsById[event.run_id];
+    if (
+      currentRun &&
+      !sameRunPatch(currentRun, {
+        status,
+        error_message: event.error || currentRun.error_message,
+        error_code: event.code || currentRun.error_code,
+      })
+    ) {
+      next = upsertRun(next, conversationId, {
+        ...currentRun,
+        status,
+        error_message: event.error || currentRun.error_message,
+        error_code: event.code || currentRun.error_code,
+      });
+    }
+  }
+
+  if (messageId && text) {
+    next = upsertMessage(next, messageId, { content: text, status: messageStatusForEvent(event) });
+  }
+
+  if (event.artifact) {
+    const artifact: ConversationArtifact = {
+      id: event.artifact.id,
+      conversation_id: conversationId,
+      run_id: event.run_id,
+      message_id: messageId,
+      semantic_id: event.artifact.semantic_id || null,
+      type: event.artifact.type as ConversationArtifact["type"],
+      title: event.artifact.title,
+      status: "completed",
+      sequence: event.sequence,
+      payload: event.artifact.payload || {},
+      presentation: event.artifact.presentation as unknown as Record<string, unknown>,
+      depends_on: Array.isArray(event.artifact.depends_on) ? event.artifact.depends_on : [],
+      refs: event.artifact.refs || {},
+      created_at: null,
+    };
+    const detail = conversationId ? next.detailById[conversationId] : undefined;
+    next = {
+      ...next,
+      artifactsById: { ...next.artifactsById, [artifact.id]: artifact },
+      detailById: detail
+        ? {
+            ...next.detailById,
+            [conversationId]: {
+              ...detail,
+              artifacts: detail.artifacts.some((item) => item.id === artifact.id)
+                ? detail.artifacts.map((item) => (item.id === artifact.id ? artifact : item))
+                : [...detail.artifacts, artifact],
+            },
+          }
+        : next.detailById,
+    };
+  }
+
+  return next;
 }
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
@@ -240,6 +359,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   sendMessage: async (conversationId, content) => {
     const llm = getStoredApiConfig();
     const abortController = new AbortController();
+    const batchEvent = createStreamEventBatcher<ConversationStreamEvent>((events) => get().applyStreamEvents(events));
     get().abortControllers.set(conversationId, abortController);
     try {
       await startConversationMessageStream(
@@ -251,7 +371,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
           model_name: llm.modelName || undefined,
           execute: true,
         },
-        { signal: abortController.signal, onEvent: (event) => get().applyStreamEvent(event) },
+        { signal: abortController.signal, onEvent: batchEvent },
       );
       await get().openConversation(conversationId);
       await get().initConversations();
@@ -311,96 +431,11 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   applyStreamEvent: (event) => {
-    set((state) => {
-      let next = ensureStreamMessages(state, event);
-      const conversationId = event.conversation_id || event.response?.conversation_id || "";
-      const messageId = event.message_id || event.assistant_message_id || event.response?.assistant_message_id || null;
-      const text = answerText(event);
+    set((state) => reduceStreamEvent(state, event));
+  },
 
-      if (event.run_id) {
-        const current = next.runsById[event.run_id];
-        const approval = event.approval || event.response?.approval || current?.approval || null;
-        const approvalStatus = runStatusForApprovalEvent(event);
-        const answer = event.answer || event.response?.answer || current?.answer || null;
-        const run: ConversationRun = current || {
-          id: event.run_id,
-          conversation_id: conversationId,
-          datasource_id: "",
-          question: typeof event.step?.question === "string" ? event.step.question : "",
-          status: "running",
-          user_message_id: event.user_message_id,
-          assistant_message_id: event.assistant_message_id,
-          events: [],
-        };
-        next = upsertRun(next, conversationId, withRunEvent({
-          ...run,
-          status: approvalStatus || run.status,
-          approval,
-          answer,
-        }, event));
-      }
-
-      if (
-        event.type === "agent.run.completed" ||
-        event.type === "agent.run.failed" ||
-        event.type === "agent.run.cancelled"
-      ) {
-        const status =
-          event.type === "agent.run.completed"
-            ? "completed"
-            : event.type === "agent.run.cancelled"
-              ? "cancelled"
-              : "failed";
-        if (next.runsById[event.run_id]) {
-          next = upsertRun(next, conversationId, {
-            ...next.runsById[event.run_id],
-            status,
-            error_message: event.error || next.runsById[event.run_id].error_message,
-            error_code: event.code || next.runsById[event.run_id].error_code,
-          });
-        }
-      }
-
-      if (messageId && text) {
-        next = upsertMessage(next, messageId, { content: text, status: messageStatusForEvent(event) });
-      }
-
-      if (event.artifact) {
-        const artifact: ConversationArtifact = {
-          id: event.artifact.id,
-          conversation_id: conversationId,
-          run_id: event.run_id,
-          message_id: messageId,
-          semantic_id: event.artifact.semantic_id || null,
-          type: event.artifact.type as ConversationArtifact["type"],
-          title: event.artifact.title,
-          status: "completed",
-          sequence: event.sequence,
-          payload: event.artifact.payload || {},
-          presentation: event.artifact.presentation as unknown as Record<string, unknown>,
-          depends_on: Array.isArray(event.artifact.depends_on) ? event.artifact.depends_on : [],
-          refs: event.artifact.refs || {},
-          created_at: null,
-        };
-        const detail = conversationId ? next.detailById[conversationId] : undefined;
-        next = {
-          ...next,
-          artifactsById: { ...next.artifactsById, [artifact.id]: artifact },
-          detailById: detail
-            ? {
-                ...next.detailById,
-                [conversationId]: {
-                  ...detail,
-                  artifacts: detail.artifacts.some((item) => item.id === artifact.id)
-                    ? detail.artifacts.map((item) => (item.id === artifact.id ? artifact : item))
-                    : [...detail.artifacts, artifact],
-                },
-              }
-            : next.detailById,
-        };
-      }
-
-      return next;
-    });
+  applyStreamEvents: (events) => {
+    if (events.length === 0) return;
+    set((state) => events.reduce(reduceStreamEvent, state));
   },
 }));
