@@ -46,14 +46,14 @@ export function JsonTree({ data, depth = 0 }: { data: JsonValue; depth?: number 
               {expandable && (
                 <button
                   type="button"
-                  className="mr-1 border-0 bg-transparent px-1 font-mono text-[0.68rem] text-[var(--text-muted)] cursor-pointer"
+                  className="mr-1 border-0 bg-transparent px-1 font-mono text-[var(--ui-font-label)] text-[var(--text-muted)] cursor-pointer"
                   onClick={() => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))}
                 >
                   {isCollapsed ? "▶" : "▼"}
                 </button>
               )}
               {expandable && isCollapsed ? (
-                <span className="text-[0.74rem] text-[var(--text-muted)]">{compactJsonPreview(value)}</span>
+                <span className="text-[var(--ui-font-control)] text-[var(--text-muted)]">{compactJsonPreview(value)}</span>
               ) : expandable ? (
                 <JsonTree data={value} depth={depth + 1} />
               ) : (

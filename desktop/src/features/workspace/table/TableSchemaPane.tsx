@@ -47,9 +47,9 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
 
   return (
     <div className="flex flex-col p-3 h-full overflow-auto">
-      <span className="text-[10px] text-gray-400 block mb-1">字段列表 (Schema Structure) &gt; {tableId}</span>
-      {loading && <div className="text-[11px] text-slate-400 mt-4">正在读取字段结构...</div>}
-      {error && <div className="text-[11px] text-red-500 bg-red-50 rounded-lg p-3 mt-3">{error}</div>}
+      <span className="text-[var(--ui-font-caption)] text-gray-400 block mb-1">字段列表 (Schema Structure) &gt; {tableId}</span>
+      {loading && <div className="text-[var(--ui-font-label)] text-slate-400 mt-4">正在读取字段结构...</div>}
+      {error && <div className="text-[var(--ui-font-label)] text-red-500 bg-red-50 rounded-lg p-3 mt-3">{error}</div>}
       {!loading && !error && (
         <table className="hifi-table">
           <thead>

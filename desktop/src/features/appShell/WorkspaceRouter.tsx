@@ -244,7 +244,7 @@ function ArtifactResultTab({
   showToast: WorkspaceRouterProps["showToast"];
 }) {
   if (!activeTab.artifactResult) {
-    return <div className="hifi-tab-pane p-4 text-sm text-slate-500">Result artifact is no longer available.</div>;
+    return <div className="hifi-tab-pane p-4 text-[var(--ui-font-body)] text-slate-500">Result artifact is no longer available.</div>;
   }
   return (
     <div className="hifi-tab-pane p-4">

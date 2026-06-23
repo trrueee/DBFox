@@ -48,7 +48,7 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="whitespace-pre-wrap text-sm leading-relaxed p-3.5 rounded border bg-[hsl(var(--muted))] max-h-[250px] overflow-auto">
+          <div className="whitespace-pre-wrap text-[var(--ui-font-body)] leading-relaxed p-3.5 rounded border bg-[hsl(var(--muted))] max-h-[250px] overflow-auto">
             {details.impact_summary}
           </div>
 
@@ -66,7 +66,7 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
           </div>
 
           {error && (
-            <div className="flex items-center gap-1.5 text-sm text-[hsl(var(--destructive))]">
+            <div className="flex items-center gap-1.5 text-[var(--ui-font-body)] text-[hsl(var(--destructive))]">
               <ShieldAlert size={14} /> {error}
             </div>
           )}

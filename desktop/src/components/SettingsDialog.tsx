@@ -76,13 +76,13 @@ export function SettingsDialog({ open, onOpenChange, config, onChange, onSave, s
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[520px] p-0 gap-0 overflow-hidden border-[hsl(var(--border))]">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-[hsl(var(--border))]">
-          <DialogTitle className="flex items-center gap-2.5 text-[0.95rem] font-semibold">
+          <DialogTitle className="flex items-center gap-2.5 text-[var(--ui-font-section-title)] font-semibold">
             <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[hsl(var(--primary))]">
               <Zap size={13} className="text-white" />
             </div>
             设置
           </DialogTitle>
-          <DialogDescription className="text-[0.72rem] text-[hsl(var(--muted-foreground))] mt-1">
+          <DialogDescription className="text-[var(--ui-font-label)] text-[hsl(var(--muted-foreground))] mt-1">
             配置 LLM 服务连接与模型偏好
           </DialogDescription>
         </DialogHeader>
@@ -95,7 +95,7 @@ export function SettingsDialog({ open, onOpenChange, config, onChange, onSave, s
         />
 
         <div className="px-6 py-4 border-t border-[hsl(var(--border))] flex items-center justify-between bg-[hsl(var(--secondary)/0.4)]">
-          <p className="text-[0.62rem] text-[hsl(var(--muted-foreground))]">
+          <p className="text-[var(--ui-font-caption)] text-[hsl(var(--muted-foreground))]">
             配置保存在本地浏览器
           </p>
           <div className="flex items-center gap-2">

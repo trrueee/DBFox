@@ -31,6 +31,28 @@
 
   /* ── Typography ── */
   --font-family: 'Fira Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-font-nano: 8px;
+  --ui-font-micro: 9px;
+  --ui-font-caption: 10px;
+  --ui-font-label: 11px;
+  --ui-font-control: 12px;
+  --ui-font-body: 13px;
+  --ui-font-input: 14px;
+  --ui-font-section-title: 15px;
+  --ui-font-title: 18px;
+  --ui-font-display: 24px;
+  --ui-font-code: var(--ui-font-control);
+  --ui-font-data: var(--ui-font-label);
+  --agent-font-display: 20px;
+  --agent-font-subtitle: 17px;
+  --agent-font-title: var(--ui-font-section-title);
+  --agent-font-body: var(--ui-font-section-title);
+  --agent-font-input: var(--ui-font-input);
+  --agent-font-ui: var(--ui-font-control);
+  --agent-font-label: var(--ui-font-label);
+  --agent-font-caption: var(--ui-font-caption);
+  --agent-font-micro: var(--ui-font-micro);
+  --agent-font-code: var(--ui-font-code);
 
   /* ── Semantic Aliases (legacy compat) ── */
   --accent-indigo: var(--color-primary);
@@ -98,6 +120,16 @@
   --agent-stage-executing: #2563EB;
   --agent-stage-repairing: #C84040;
   --agent-stage-synthesizing: #28A987;
+  --agent-chart-1: var(--color-primary);
+  --agent-chart-2: #0D7377;
+  --agent-chart-3: var(--color-warning);
+  --agent-chart-4: var(--trust-safe);
+  --agent-chart-5: #DB2777;
+  --agent-chart-6: #7C3AED;
+  --agent-chart-grid: #F1F5F9;
+  --agent-chart-area-start: rgba(118, 103, 242, 0.15);
+  --agent-chart-area-end: rgba(118, 103, 242, 0);
+  --agent-chart-tooltip-shadow: 0 4px 12px rgba(15, 23, 42, 0.14);
   --trust-safe: #047857;
   --trust-safe-bg: #ECFDF5;
   --trust-safe-border: #A7F3D0;
@@ -130,6 +162,28 @@
   --color-primary: #DE6C49;
   --color-secondary: #2B2926;
   --color-warning: #F59E0B;
+  --ui-font-nano: 8px;
+  --ui-font-micro: 9px;
+  --ui-font-caption: 10px;
+  --ui-font-label: 11px;
+  --ui-font-control: 12px;
+  --ui-font-body: 13px;
+  --ui-font-input: 14px;
+  --ui-font-section-title: 15px;
+  --ui-font-title: 18px;
+  --ui-font-display: 24px;
+  --ui-font-code: var(--ui-font-control);
+  --ui-font-data: var(--ui-font-label);
+  --agent-font-display: 20px;
+  --agent-font-subtitle: 17px;
+  --agent-font-title: var(--ui-font-section-title);
+  --agent-font-body: var(--ui-font-section-title);
+  --agent-font-input: var(--ui-font-input);
+  --agent-font-ui: var(--ui-font-control);
+  --agent-font-label: var(--ui-font-label);
+  --agent-font-caption: var(--ui-font-caption);
+  --agent-font-micro: var(--ui-font-micro);
+  --agent-font-code: var(--ui-font-code);
 
   --color-text-primary: #F8FAFC;
   --color-text-secondary: #94A3B8;
@@ -183,6 +237,16 @@
   --agent-stage-executing: #60A5FA;
   --agent-stage-repairing: #FCA5A5;
   --agent-stage-synthesizing: #86EFAC;
+  --agent-chart-1: var(--color-primary);
+  --agent-chart-2: #38BDF8;
+  --agent-chart-3: var(--color-warning);
+  --agent-chart-4: var(--trust-safe);
+  --agent-chart-5: #F472B6;
+  --agent-chart-6: #A78BFA;
+  --agent-chart-grid: #15233D;
+  --agent-chart-area-start: rgba(222, 108, 73, 0.2);
+  --agent-chart-area-end: rgba(222, 108, 73, 0);
+  --agent-chart-tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   --trust-safe: #34D399;
   --trust-safe-bg: #062E25;
   --trust-safe-border: #065F46;
@@ -214,7 +278,7 @@
   width: 100%;
   height: 38px;
   padding: 0 14px;
-  font-size: 0.82rem;
+  font-size: var(--ui-font-body);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg);
@@ -244,7 +308,7 @@
   width: 100%;
   height: 38px;
   padding: 0 14px;
-  font-size: 0.82rem;
+  font-size: var(--ui-font-body);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg);
@@ -296,7 +360,7 @@
 
 .field-label {
   display: block;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-primary);
   margin-top: 12px;

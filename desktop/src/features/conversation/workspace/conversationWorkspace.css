@@ -24,14 +24,14 @@
 
 .conv-header h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--agent-font-body);
   font-weight: 600;
   letter-spacing: 0;
   color: var(--agent-text);
 }
 
 .conv-header span {
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   color: var(--agent-text-muted);
 }
 
@@ -119,7 +119,7 @@
 }
 
 .conv-message-body {
-  font-size: 15px;
+  font-size: var(--agent-font-body);
   line-height: 1.8;
   color: var(--agent-text-secondary);
   letter-spacing: 0;
@@ -153,7 +153,7 @@
 }
 
 .conv-answer-document {
-  font-size: 15px;
+  font-size: var(--agent-font-body);
   line-height: 1.75;
   color: var(--agent-text-secondary);
 }
@@ -172,7 +172,7 @@
 .conv-answer-document h1,
 .conv-answer-document .hifi-md-h1 {
   margin: 0 0 14px;
-  font-size: 20px;
+  font-size: var(--agent-font-display);
   line-height: 1.35;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--agent-border);
@@ -181,14 +181,14 @@
 .conv-answer-document h2,
 .conv-answer-document .hifi-md-h2 {
   margin: 20px 0 10px;
-  font-size: 17px;
+  font-size: var(--agent-font-subtitle);
   line-height: 1.4;
 }
 
 .conv-answer-document h3,
 .conv-answer-document .hifi-md-h3 {
   margin: 16px 0 8px;
-  font-size: 15px;
+  font-size: var(--agent-font-body);
   line-height: 1.45;
 }
 
@@ -228,7 +228,7 @@
   border-radius: 999px;
   background: var(--agent-surface-subtle);
   color: var(--agent-accent);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   font-weight: 600;
 }
 
@@ -268,7 +268,7 @@
 
 .conv-approval-card p {
   margin: 8px 0;
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
   line-height: 1.5;
 }
 
@@ -282,11 +282,11 @@
 
 .conv-approval-heading strong {
   color: var(--trust-warning);
-  font-size: 13px;
+  font-size: var(--agent-font-title);
 }
 
 .conv-approval-heading span {
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   color: var(--agent-text-secondary);
 }
 
@@ -324,7 +324,7 @@
   flex-wrap: wrap;
   gap: 6px 10px;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   color: var(--agent-text-secondary);
 }
 
@@ -337,7 +337,7 @@
   border-radius: 6px;
   background: var(--agent-surface-elevated);
   color: var(--agent-text);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
   line-height: 1.5;
 }
 
@@ -348,7 +348,7 @@
   border-radius: 6px;
   background: var(--agent-surface-elevated);
   color: var(--trust-warning);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   font-weight: 600;
   cursor: pointer;
 }
@@ -370,7 +370,7 @@
   align-items: flex-start;
   gap: 8px;
   color: var(--agent-text-secondary);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-data-refs-label {
@@ -396,7 +396,7 @@
   border-radius: 8px;
   background: var(--agent-surface-elevated);
   color: var(--agent-text-secondary);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   font-weight: 500;
   cursor: pointer;
   box-shadow: var(--agent-shadow-soft);
@@ -427,13 +427,13 @@
   gap: 8px;
   padding: 9px 12px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
   color: var(--agent-text-secondary);
 }
 
 .conv-run-trace summary {
   padding: 0 0 8px;
-  font-size: 13px;
+  font-size: var(--agent-font-title);
   color: var(--agent-text-muted);
 }
 
@@ -468,7 +468,7 @@
   align-items: center;
   gap: 6px;
   color: var(--agent-text);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-context-reference-group > div {
@@ -489,12 +489,12 @@
 }
 
 .conv-context-reference b {
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   color: var(--agent-accent);
 }
 
 .conv-context-reference small {
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
   color: var(--agent-text-muted);
 }
 
@@ -525,7 +525,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-repair-summary header span,
@@ -534,13 +534,13 @@
   padding: 2px 7px;
   background: var(--agent-surface);
   color: var(--agent-text-secondary);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-repair-summary p {
   margin: 0;
   color: var(--agent-text-secondary);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-repair-failed-sql {
@@ -553,7 +553,7 @@
 
 .conv-repair-failed-sql b {
   color: var(--agent-text-secondary);
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
 }
 
 .conv-repair-failed-sql pre {
@@ -562,7 +562,7 @@
   overflow: auto;
   color: var(--agent-text);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -582,12 +582,12 @@
 
 .conv-repair-detail-grid b {
   color: var(--agent-text-secondary);
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
 }
 
 .conv-repair-detail-grid small {
   color: var(--agent-text-muted);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-run-count {
@@ -600,7 +600,7 @@
   justify-content: center;
   background: var(--agent-accent-soft);
   color: var(--agent-accent);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-run-events {
@@ -634,7 +634,7 @@
   display: grid;
   gap: 2px;
   color: var(--agent-text-muted);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-run-event-copy strong {
@@ -649,7 +649,7 @@
 
 .conv-run-stage-debug summary {
   padding: 0;
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   color: var(--agent-text-muted);
 }
 
@@ -662,14 +662,14 @@
   display: grid;
   grid-template-columns: minmax(96px, 160px) minmax(0, 1fr);
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-run-id,
 .conv-run-empty {
   margin-top: 10px;
   color: var(--agent-text-muted);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-evidence-body {
@@ -699,7 +699,7 @@
   overflow-x: auto;
   background: var(--agent-surface-elevated);
   color: var(--agent-text);
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
   line-height: 1.55;
 }
 
@@ -727,7 +727,7 @@
   border-radius: 6px;
   background: var(--agent-surface-elevated);
   color: var(--agent-text-secondary);
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
   cursor: pointer;
 }
 
@@ -743,7 +743,7 @@
   flex-wrap: wrap;
   gap: 6px;
   color: var(--agent-text-muted);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-table-meta span {
@@ -768,7 +768,7 @@
   border-radius: 6px;
   background: var(--trust-safe-bg);
   color: var(--agent-text);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   line-height: 1.45;
 }
 
@@ -792,7 +792,7 @@
 .conv-table-preview table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-table-preview th,
@@ -843,12 +843,12 @@
 
 .conv-artifact-dock-header strong {
   color: var(--agent-text);
-  font-size: 13px;
+  font-size: var(--agent-font-title);
 }
 
 .conv-artifact-dock-header span {
   color: var(--agent-text-muted);
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
 }
 
 .conv-artifact-dock-body {
@@ -893,13 +893,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   font-weight: 650;
 }
 
 .conv-artifact-dock-item em {
   color: var(--agent-text-muted);
-  font-size: 9px;
+  font-size: var(--agent-font-micro);
   font-style: normal;
 }
 
@@ -933,7 +933,7 @@
   border-radius: 8px;
   color: var(--agent-text-muted);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--agent-font-ui);
 }
 
 .conv-dock-safety-card {
@@ -964,12 +964,12 @@
 }
 
 .conv-dock-safety-card strong {
-  font-size: 13px;
+  font-size: var(--agent-font-title);
 }
 
 .conv-dock-safety-card header span {
   color: var(--agent-text-secondary);
-  font-size: 10px;
+  font-size: var(--agent-font-caption);
 }
 
 .conv-dock-safety-grid {
@@ -985,7 +985,7 @@
   border-radius: 6px;
   background: var(--agent-surface);
   color: var(--agent-text-secondary);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
 }
 
 .conv-dock-safety-card pre {
@@ -996,7 +996,7 @@
   border-radius: 6px;
   background: var(--agent-surface);
   color: var(--agent-text);
-  font-size: 11px;
+  font-size: var(--agent-font-label);
   line-height: 1.5;
 }
 
@@ -1024,7 +1024,7 @@
   border: 1px solid var(--agent-border);
   border-radius: 12px;
   padding: 12px 16px;
-  font-size: 14px;
+  font-size: var(--agent-font-input);
   font-family: inherit;
   color: var(--agent-text);
   background: var(--agent-surface-muted);
