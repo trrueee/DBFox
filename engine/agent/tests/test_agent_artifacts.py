@@ -54,7 +54,35 @@ def test_result_view_artifact_preserves_result_browsing_metadata():
     assert artifact.payload["notices"] == ["preview only"]
     assert artifact.payload["previewRowCount"] == 2
     assert artifact.payload["datasourceId"] == "ds_123"
-    assert artifact.payload["storageMode"] == "payload"
+    assert artifact.payload["storageMode"] == "sql_backed"
+    assert artifact.payload["previewRows"] == [
+        {"day": "2026-06-01", "order_count": 10},
+        {"day": "2026-06-02", "order_count": 20},
+    ]
+    assert "rows" not in artifact.payload
+
+
+def test_result_view_artifact_keeps_preview_not_full_rows():
+    artifact = build_result_view_artifact(
+        {
+            "success": True,
+            "columns": ["id"],
+            "rows": [{"id": index} for index in range(100)],
+            "rowCount": 100,
+            "returnedRows": 100,
+            "latencyMs": 12,
+            "sql": "SELECT id FROM users",
+        },
+        datasource_id="ds_123",
+        safety={"can_execute": True},
+    )
+
+    assert artifact.payload["storageMode"] == "sql_backed"
+    assert len(artifact.payload["previewRows"]) == 10
+    assert artifact.payload["previewRowCount"] == 10
+    assert artifact.payload["rowCount"] == 100
+    assert artifact.payload["returnedRows"] == 100
+    assert "rows" not in artifact.payload
 
 
 def test_chart_artifact_links_metrics_to_source_fields():
