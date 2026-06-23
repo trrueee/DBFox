@@ -18,6 +18,7 @@ class TestGraphCompilation:
         graph = build_dbfox_react_graph()
         nodes = list(graph.nodes.keys())
         assert "__start__" in nodes
+        assert "start_turn" in nodes
         assert "model" in nodes
         assert "policy" in nodes
         assert "tools" in nodes
@@ -26,6 +27,7 @@ class TestGraphCompilation:
         assert "repair" in nodes
         assert "approval" in nodes
         assert "finalize" in nodes
+        assert "finalize_turn" in nodes
 
 
 class TestModelRoute:

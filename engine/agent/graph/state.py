@@ -45,6 +45,8 @@ class DBFoxAgentState(TypedDict, total=False):
     """Optional workspace project ID."""
     parent_run_id: str | None
     """Parent run ID if this is a resumed or follow-up execution."""
+    question: str
+    """Current turn user question; start_turn appends it to messages."""
 
     execute: bool
     """Whether the agent is permitted to execute write/read queries on the DB."""
@@ -82,6 +84,20 @@ class DBFoxAgentState(TypedDict, total=False):
     """Agent v2 consolidated metadata pack sent to the LLM and the frontend."""
     context_summary: str | None
     """Human-readable summary of the active datasource, workspace, and linked schema context."""
+    conversation_summary: str | None
+    """Durable session-thread summary for messages outside the recent window."""
+    summary_cursor_message_id: str | None
+    """Last message id covered by conversation_summary."""
+    recent_turns: Annotated[list[dict[str, Any]], _add_list]
+    """Compact durable summaries of recent completed user/assistant turns."""
+    artifact_ref_index: Annotated[list[dict[str, Any]], _add_list]
+    """LRU index of SQL-backed artifacts available for follow-up operations."""
+    sql_ref_index: Annotated[list[dict[str, Any]], _add_list]
+    """LRU index of verified SQL refs available for follow-up derived analysis."""
+    active_task: dict[str, Any] | None
+    """Durable session task anchor used to resolve references like 'this result'."""
+    reusable_sql_candidates: list[dict[str, Any]]
+    """Datasource-scoped reusable SQL candidates recalled for this turn."""
 
     # ── Large Catalog Exploration State ──
     candidate_tables: list[str]
@@ -257,6 +273,13 @@ _WORKING_NAMESPACE_KEYS = (
     "follow_up_context",
     "context_pack",
     "context_summary",
+    "conversation_summary",
+    "summary_cursor_message_id",
+    "recent_turns",
+    "artifact_ref_index",
+    "sql_ref_index",
+    "active_task",
+    "reusable_sql_candidates",
     "candidate_tables",
     "searched_terms",
     "exhausted_paths",

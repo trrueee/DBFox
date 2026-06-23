@@ -105,6 +105,58 @@ def _semantic_resolution_payload(context_bundle: dict[str, Any]) -> dict[str, An
     return payload or None
 
 
+def _memory_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict) and not item.get("__clear__")]
+
+
+def _restore_session_memory(
+    state: dict[str, Any],
+    memory: dict[str, Any] | None,
+    *,
+    datasource_id: str,
+) -> None:
+    if not isinstance(memory, dict):
+        return
+    memory_datasource_id = str(memory.get("datasource_id") or "")
+    if memory_datasource_id and memory_datasource_id != datasource_id:
+        return
+
+    conversation_summary = memory.get("conversation_summary")
+    if isinstance(conversation_summary, str) and conversation_summary.strip():
+        state["conversation_summary"] = conversation_summary
+
+    summary_cursor_message_id = memory.get("summary_cursor_message_id")
+    if isinstance(summary_cursor_message_id, str) and summary_cursor_message_id.strip():
+        state["summary_cursor_message_id"] = summary_cursor_message_id
+
+    for key in ("recent_turns", "artifact_ref_index", "sql_ref_index"):
+        restored = _memory_list(memory.get(key))
+        if restored:
+            state[key] = restored
+
+    active_task = memory.get("active_task")
+    if isinstance(active_task, dict) and active_task:
+        state["active_task"] = active_task
+
+
+def _load_session_memory_safe(db: Session, session_id: str) -> dict[str, Any] | None:
+    try:
+        return agent_persistence.load_session_memory(db, session_id)
+    except Exception:
+        logger.warning("Failed to load agent session memory", exc_info=True)
+        return None
+
+
+def _list_reusable_sqls_safe(db: Session, datasource_id: str) -> list[dict[str, Any]]:
+    try:
+        return agent_persistence.list_reusable_sqls(db, datasource_id=datasource_id, limit=5)
+    except Exception:
+        logger.warning("Failed to list datasource reusable SQL candidates", exc_info=True)
+        return []
+
+
 class DBFoxAgentService:
     """Next-generation DBFox agent service built on a pure ReAct graph.
 
@@ -166,10 +218,10 @@ class DBFoxAgentService:
         # Build initial state
         initial_state = self._initial_state(req, run_id, session_id)
 
-        # Build and run graph. The LangGraph checkpoint thread is keyed by
-        # run_id (not session_id).
+        # Build and run graph. The LangGraph checkpoint thread is keyed by the
+        # conversation/session id so runtime memory spans turns.
         app = build_dbfox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(run_id)
+        config = ctx.graph_config(session_id)
 
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
@@ -259,7 +311,12 @@ class DBFoxAgentService:
                 index=len(emitted_artifact_ids),
             )
             yield event
-        yield self._finalize_persistence(emit, response)
+        yield self._finalize_persistence(
+            emit,
+            response,
+            final_state=final_state,
+            datasource_id=req.datasource_id,
+        )
 
     def resume_approval_iter(
         self,
@@ -316,7 +373,7 @@ class DBFoxAgentService:
             yield emit("agent.run.resumed", step={"name": approval.step_name}, approval=approval)
 
         app = build_dbfox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(run_id)
+        config = ctx.graph_config(session_id)
         artifact_identity = AgentArtifactIdentity(run_id)
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
@@ -381,7 +438,12 @@ class DBFoxAgentService:
                 index=len(emitted_artifact_ids),
             )
             yield event
-        yield self._finalize_persistence(emit, response)
+        yield self._finalize_persistence(
+            emit,
+            response,
+            final_state=final_state,
+            datasource_id=req.datasource_id,
+        )
 
     # ---- Internal helpers ----------------------------------------------------
 
@@ -400,9 +462,10 @@ class DBFoxAgentService:
             thread_id=session_id,
             session_id=session_id,
             datasource_id=req.datasource_id,
+            question=req.question,
             execute=req.execute,
             status="running",
-            messages=[{"role": "user", "content": req.question}],
+            messages=[],
             workspace_context=_workspace_context_payload(req, context_bundle),
             follow_up_context=req.follow_up_context.model_dump(mode="json") if req.follow_up_context else None,
             context_summary=context_summary if isinstance(context_summary, str) else None,
@@ -454,6 +517,12 @@ class DBFoxAgentService:
             revision_count=0,
             repair_mode=False,
             repair_stats=None,
+            reusable_sql_candidates=_list_reusable_sqls_safe(self.db, req.datasource_id),
+        )
+        _restore_session_memory(
+            state,
+            _load_session_memory_safe(self.db, session_id),
+            datasource_id=req.datasource_id,
         )
         sync_state_namespaces(state)
         return state
@@ -586,8 +655,60 @@ class DBFoxAgentService:
                 exc,
             )
 
+    def _persist_memory_projection(
+        self,
+        response: AgentRunResponse,
+        *,
+        final_state: dict[str, Any],
+        datasource_id: str,
+    ) -> None:
+        artifact_refs = _memory_list(final_state.get("artifact_ref_index"))
+        sql_refs = _memory_list(final_state.get("sql_ref_index"))
+        recent_turns = _memory_list(final_state.get("recent_turns"))
+
+        payload: dict[str, Any] = {
+            "session_id": response.session_id,
+            "datasource_id": datasource_id,
+            "last_run_id": response.run_id,
+            "conversation_summary": final_state.get("conversation_summary") or response.context_summary,
+            "summary_cursor_message_id": final_state.get("summary_cursor_message_id"),
+            "recent_turns": recent_turns,
+            "artifact_ref_index": artifact_refs,
+            "sql_ref_index": sql_refs,
+            "active_task": final_state.get("active_task"),
+        }
+        agent_persistence.save_session_memory(
+            self.db,
+            session_id=response.session_id,
+            datasource_id=datasource_id,
+            payload=payload,
+        )
+
+        for ref in sql_refs:
+            safe_sql = str(ref.get("safe_sql") or "").strip()
+            ref_datasource_id = str(ref.get("datasource_id") or datasource_id)
+            if not safe_sql or not ref_datasource_id:
+                continue
+            agent_persistence.upsert_reusable_sql(
+                self.db,
+                datasource_id=ref_datasource_id,
+                question=str(ref.get("question") or response.question),
+                safe_sql=safe_sql,
+                purpose=ref.get("purpose"),
+                involved_tables=list(ref.get("tables") or ref.get("involved_tables") or []),
+                result_columns=list(ref.get("columns") or ref.get("result_columns") or []),
+                source_artifact_id=ref.get("artifact_id"),
+                source_sql_artifact_id=ref.get("source_sql_artifact_id"),
+                verified=bool(ref.get("verified")),
+            )
+
     def _finalize_persistence(
-        self, emit: Any, response: AgentRunResponse
+        self,
+        emit: Any,
+        response: AgentRunResponse,
+        *,
+        final_state: dict[str, Any] | None = None,
+        datasource_id: str | None = None,
     ) -> AgentRuntimeEvent:
         if response.success:
             event = emit("agent.run.completed", response=response)
@@ -598,6 +719,12 @@ class DBFoxAgentService:
             try:
                 if response.success:
                     self.persistence_sink.complete_run(response)
+                    if final_state is not None and datasource_id:
+                        self._persist_memory_projection(
+                            response,
+                            final_state=final_state,
+                            datasource_id=datasource_id,
+                        )
                 else:
                     self.persistence_sink.fail_run(
                         response.run_id, response.session_id,

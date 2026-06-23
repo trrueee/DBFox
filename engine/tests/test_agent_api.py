@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 from unittest.mock import MagicMock
+from pydantic import ValidationError
 
 import engine.api.agent as agent_module
 from fastapi import HTTPException
@@ -213,6 +214,78 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
     assert response.rows == [{"id": 1, "name": "Acme", "status": "paid", "amount": 20}]
     assert "`status` = 'paid'" in sql
     assert "LIKE '%Acme%'" in sql
+
+
+def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_session):
+    _add_pagination_source(
+        db_session,
+        safe_sql="SELECT id, name, status, amount FROM orders",
+        columns=["id", "name", "status", "amount"],
+    )
+    executed_sql: list[str] = []
+
+    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+        executed_sql.append(sql)
+        assert datasource_id == "ds-page"
+        assert safety_decision.can_execute is True
+        if "COUNT" in sql.upper():
+            return {
+                "columns": ["count"],
+                "rows": [{"count": 1}],
+                "latencyMs": 2,
+                "warnings": [],
+                "notices": [],
+            }
+        return {
+            "columns": ["id", "name", "status", "amount"],
+            "rows": [{"id": 1, "name": "Acme", "status": "paid", "amount": 20}],
+            "latencyMs": 3,
+            "warnings": [],
+            "notices": [],
+        }
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = agent_module.api_agent_result_page(
+        ResultPageRequest(
+            datasourceId="ds-page",
+            sourceSqlArtifactId="artifact-result-page",
+            safeSql="SELECT id, name, status, amount FROM orders",
+            page=1,
+            pageSize=20,
+            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            search="Acme",
+            countMode="exact",
+        ),
+        db_session,
+    )
+
+    assert response.rowCount == 1
+    assert len(executed_sql) == 2
+    count_sql = executed_sql[1]
+    assert "COUNT" in count_sql.upper()
+    assert "`status` = 'paid'" in count_sql
+    assert "LIKE '%Acme%'" in count_sql
+
+
+@pytest.mark.parametrize(
+    ("page", "page_size"),
+    [
+        (0, 20),
+        (-1, 20),
+        (1, 0),
+        (1, 501),
+    ],
+)
+def test_result_page_request_rejects_invalid_pagination_bounds(page, page_size):
+    with pytest.raises(ValidationError):
+        ResultPageRequest(
+            datasourceId="ds-page",
+            sourceSqlArtifactId="artifact-result-page",
+            safeSql="SELECT id, amount FROM orders",
+            page=page,
+            pageSize=page_size,
+        )
 
 
 def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):

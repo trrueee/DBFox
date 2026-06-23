@@ -392,9 +392,16 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   resolveApproval: async (runId, approvalId, approved) => {
     const run = get().runsById[runId];
     if (!run) return;
+    const note = approved ? "Approved in DBFox UI" : "Rejected in DBFox UI";
+    const resolvedApproval = await agentApi.resolveAgentApproval(
+      runId,
+      approvalId,
+      approved ? "approved" : "rejected",
+      note,
+    );
     if (approved) {
       await agentApi.streamResumeAgentRun(runId, approvalId, {
-        note: "Approved in DBFox UI",
+        note,
         onEvent: (event) => get().applyStreamEvent(withConversationRunContext(event, run)),
       });
       await get().openConversation(run.conversation_id);
@@ -402,12 +409,11 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
       return;
     }
 
-    const response = await agentApi.rejectAgentApproval(runId, approvalId, "Rejected in DBFox UI");
     const rejectedApproval =
-      response.approval || run.approval
+      resolvedApproval || run.approval
         ? {
-            ...(run.approval || response.approval!),
-            ...(response.approval || {}),
+            ...(run.approval || resolvedApproval),
+            ...(resolvedApproval || {}),
             status: "rejected" as const,
           }
         : null;
