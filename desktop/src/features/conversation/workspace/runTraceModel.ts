@@ -256,7 +256,16 @@ function buildTimelineStages(run: ConversationRun, events: AgentRuntimeEvent[]):
     });
   }
 
-  return Array.from(byPhase.values()).sort((left, right) => phaseSort(left.phase) - phaseSort(right.phase));
+  const stages = Array.from(byPhase.values()).sort((left, right) => phaseSort(left.phase) - phaseSort(right.phase));
+  return finalizeStageStatuses(run, stages);
+}
+
+function finalizeStageStatuses(run: ConversationRun, stages: TimelineStage[]): TimelineStage[] {
+  if (run.status !== "completed") return stages;
+  return stages.map((stage) => {
+    if (stage.status !== "running") return stage;
+    return { ...stage, status: "success" };
+  });
 }
 
 function phaseSort(phase: TimelinePhase): number {
