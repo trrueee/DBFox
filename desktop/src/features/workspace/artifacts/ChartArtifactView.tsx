@@ -22,6 +22,23 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
   const switchable = !compact && (artifact.chartType === "line" || artifact.chartType === "bar");
   const { option, theme } = useChartOption(artifact, chartType, compact);
   const handleExportPng = useChartExport(chartRef, artifact.id, chartType, theme.panelBg, onToast);
+  const metaItems = [
+    ...(typeof artifact.sampleSize === "number"
+      ? [
+          <div key="sample-size" className="flex flex-wrap items-center gap-1.5">
+            <span className="hifi-artifact-pill">样本 {artifact.sampleSize} 行</span>
+          </div>,
+        ]
+      : []),
+    ...((artifact.sourceRefs || []).map((sourceRef) => (
+      <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
+        <span className="hifi-artifact-pill">{sourceRef.label}</span>
+        <span className="font-mono">{sourceRef.formula}</span>
+        <span className="hifi-artifact-muted-text">-&gt;</span>
+        <span className="font-mono">{sourceRef.field}</span>
+      </div>
+    ))),
+  ];
 
   useEffect(() => {
     chartRef.current?.getEchartsInstance()?.resize();
@@ -35,18 +52,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
       tone="chart"
       description={artifact.description}
       compact={compact}
-      meta={
-        artifact.sourceRefs && artifact.sourceRefs.length > 0
-          ? artifact.sourceRefs.map((sourceRef) => (
-              <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
-                <span className="hifi-artifact-pill">{sourceRef.label}</span>
-                <span className="font-mono">{sourceRef.formula}</span>
-                <span className="hifi-artifact-muted-text">-&gt;</span>
-                <span className="font-mono">{sourceRef.field}</span>
-              </div>
-            ))
-          : undefined
-      }
+      meta={metaItems.length > 0 ? metaItems : undefined}
       actions={
         !compact ? (
           <>

@@ -24,6 +24,12 @@ from engine.agent_core.persistence._common import (
     _format_cell,
 )
 from engine.agent_core.persistence.sessions import create_or_get_session
+from engine.agent_core.persistence.memory import (
+    list_reusable_sqls,
+    load_session_memory,
+    save_session_memory,
+    upsert_reusable_sql,
+)
 from engine.agent_core.persistence.runs import (
     start_run,
     complete_run,
@@ -78,6 +84,8 @@ __all__ = [
     "_format_cell",
     # sessions
     "create_or_get_session",
+    # memory
+    "list_reusable_sqls", "load_session_memory", "save_session_memory", "upsert_reusable_sql",
     # runs
     "start_run", "complete_run", "fail_run", "cancel_run",
     "mark_run_waiting_approval", "mark_run_resumed",

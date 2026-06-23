@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
@@ -400,8 +400,8 @@ class ResultPageRequest(BaseModel):
     datasourceId: str
     sourceSqlArtifactId: str
     safeSql: str
-    page: int
-    pageSize: int
+    page: int = Field(ge=1)
+    pageSize: int = Field(ge=1, le=500)
     sort: list[ResultSort] | None = None
     filters: list[ResultFilter] | None = None
     search: str | None = None
@@ -693,8 +693,19 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
         # build count query
         import sqlglot
         try:
-            base_expr = sqlglot.parse_one(source_sql, read=dialect)
+            count_source_sql = _build_result_view_sql(
+                req=req,
+                source_sql=source_sql,
+                source_artifact=source_artifact,
+                dialect=dialect,
+                limit=None,
+                offset=None,
+            )
+            base_expr = sqlglot.parse_one(count_source_sql, read=dialect)
             count_sql = sqlglot.select("COUNT(*)").from_(base_expr.subquery("dbfox_count")).sql(dialect=dialect)
+            count_warnings = validate_derived_sql(count_sql, dialect=dialect)
+            if count_warnings:
+                raise ValueError(count_warnings[0])
             
             count_decision = _pagination_execution_decision(
                 req.datasourceId,

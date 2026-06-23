@@ -4,6 +4,104 @@ from typing import Any
 from langchain_core.messages import SystemMessage
 
 
+def _list_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict) and not item.get("__clear__")]
+
+
+def _format_conversation_memory(state: dict[str, Any]) -> str:
+    summary = state.get("conversation_summary")
+    recent_turns = _list_dicts(state.get("recent_turns"))
+    sql_refs = _list_dicts(state.get("sql_ref_index"))
+    artifact_refs = _list_dicts(state.get("artifact_ref_index"))
+    active_task = state.get("active_task")
+
+    if not summary and not recent_turns and not sql_refs and not artifact_refs and not active_task:
+        return ""
+
+    parts = ["### Conversation Memory"]
+    if summary:
+        parts.append(f"- **Summary**: {summary}")
+    if isinstance(active_task, dict) and active_task:
+        parts.append(f"- **Active task**: {active_task}")
+
+    if recent_turns:
+        parts.append("- **Recent turns**:")
+        for turn in recent_turns[-4:]:
+            question = str(turn.get("question") or "").strip()
+            answer = str(turn.get("answer") or "").strip()
+            sql_fingerprints = ", ".join(str(item) for item in (turn.get("sql_fingerprints") or [])[:4])
+            artifact_ids = ", ".join(str(item) for item in (turn.get("artifact_ids") or [])[:4])
+            if question or answer:
+                parts.append(f"  - user: {question}")
+                if answer:
+                    parts.append(f"    assistant: {answer}")
+            if sql_fingerprints:
+                parts.append(f"    sql_fingerprints: {sql_fingerprints}")
+            if artifact_ids:
+                parts.append(f"    artifact_ids: {artifact_ids}")
+
+    if sql_refs:
+        parts.append("- **Reusable SQL refs**:")
+        for ref in sql_refs[:5]:
+            purpose = ref.get("purpose") or ref.get("question") or ref.get("id") or "SQL ref"
+            tables = ", ".join(str(t) for t in (ref.get("tables") or ref.get("involved_tables") or [])[:6])
+            columns = ", ".join(str(c) for c in (ref.get("columns") or ref.get("result_columns") or [])[:8])
+            safe_sql = str(ref.get("safe_sql") or "").strip()
+            if len(safe_sql) > 800:
+                safe_sql = safe_sql[:797] + "..."
+            parts.append(f"  - {purpose}")
+            if tables:
+                parts.append(f"    - tables: {tables}")
+            if columns:
+                parts.append(f"    - columns: {columns}")
+            if safe_sql:
+                parts.append(f"    - sql: ```sql\n{safe_sql}\n```")
+
+    if artifact_refs:
+        parts.append("- **SQL-backed artifact refs**:")
+        for ref in artifact_refs[:5]:
+            artifact_id = ref.get("artifact_id") or ref.get("id")
+            source_sql_id = ref.get("source_sql_artifact_id")
+            columns = ", ".join(str(c) for c in (ref.get("columns") or [])[:8])
+            detail = f"  - artifact={artifact_id}"
+            if source_sql_id:
+                detail += f", source_sql={source_sql_id}"
+            if columns:
+                detail += f", columns={columns}"
+            parts.append(detail)
+
+    return "\n".join(parts)
+
+
+def _format_reusable_sql_candidates(state: dict[str, Any]) -> str:
+    candidates = _list_dicts(state.get("reusable_sql_candidates"))
+    if not candidates:
+        return ""
+
+    parts = ["### Datasource Reusable SQL"]
+    for candidate in candidates[:5]:
+        purpose = candidate.get("purpose") or candidate.get("question") or candidate.get("id") or "reusable SQL"
+        usage_count = candidate.get("usage_count")
+        tables = ", ".join(str(t) for t in (candidate.get("tables") or [])[:6])
+        columns = ", ".join(str(c) for c in (candidate.get("columns") or [])[:8])
+        safe_sql = str(candidate.get("safe_sql") or "").strip()
+        if len(safe_sql) > 800:
+            safe_sql = safe_sql[:797] + "..."
+        header = f"- {purpose}"
+        if usage_count is not None:
+            header += f" (usage_count={usage_count})"
+        parts.append(header)
+        if tables:
+            parts.append(f"  - tables: {tables}")
+        if columns:
+            parts.append(f"  - columns: {columns}")
+        if safe_sql:
+            parts.append(f"  - sql: ```sql\n{safe_sql}\n```")
+    return "\n".join(parts)
+
+
 def build_progress_guidance_message(state: dict[str, Any]) -> SystemMessage | None:
     """Inject Progress Judge supervisor output into the next model turn."""
     progress = state.get("progress_decision") or {}
@@ -69,6 +167,12 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
             from engine.agent.context_pack import ContextPack, render_for_model
             pack = ContextPack.model_validate(context_pack_raw)
             content = render_for_model(pack)
+            memory_context = _format_conversation_memory(state)
+            if memory_context:
+                content = f"{content}\n\n{memory_context}"
+            reusable_sql_context = _format_reusable_sql_candidates(state)
+            if reusable_sql_context:
+                content = f"{content}\n\n{reusable_sql_context}"
             return SystemMessage(content=content)
         except Exception:
             pass  # Fall through to legacy path
@@ -157,6 +261,14 @@ def build_context_message(state: dict[str, Any]) -> SystemMessage:
     error = state.get("error")
     if error:
         parts.append(f"- **Runtime Error Warning**: {error}")
+
+    memory_context = _format_conversation_memory(state)
+    if memory_context:
+        parts.append(memory_context)
+
+    reusable_sql_context = _format_reusable_sql_candidates(state)
+    if reusable_sql_context:
+        parts.append(reusable_sql_context)
 
     content = "\n\n".join(parts)
     return SystemMessage(content=content)

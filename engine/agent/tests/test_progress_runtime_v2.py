@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage
 
 from engine.agent.graph.state import DBFoxAgentState
-from engine.agent.model.context_builder import build_progress_guidance_message
+from engine.agent.model.context_builder import build_context_message, build_progress_guidance_message
 from engine.agent.progress.fast_path import (
     deterministic_progress_fastpath,
     check_sql_repair_fastpath as _check_sql_repair_fastpath,
@@ -158,6 +158,69 @@ class TestSqlRepairModule:
 
 
 class TestStreamingContext:
+    def test_build_context_message_includes_conversation_memory_refs(self):
+        message = build_context_message({
+            "conversation_summary": "用户之前分析了注册趋势。",
+            "sql_ref_index": [
+                {
+                    "purpose": "registration trend",
+                    "safe_sql": "SELECT month, COUNT(*) FROM users GROUP BY month",
+                    "tables": ["users"],
+                    "columns": ["month", "count"],
+                }
+            ],
+            "artifact_ref_index": [
+                {
+                    "artifact_id": "result_view_1",
+                    "source_sql_artifact_id": "sql_1",
+                    "columns": ["month", "count"],
+                }
+            ],
+        })
+
+        assert "Conversation Memory" in message.content
+        assert "用户之前分析了注册趋势" in message.content
+        assert "registration trend" in message.content
+        assert "SELECT month, COUNT(*) FROM users GROUP BY month" in message.content
+        assert "result_view_1" in message.content
+
+    def test_build_context_message_includes_recent_turns_from_session_memory(self):
+        message = build_context_message({
+            "recent_turns": [
+                {
+                    "question": "统计工具调用次数",
+                    "answer": "广告文案生成调用最多。",
+                    "sql_fingerprints": ["fp_tool_usage"],
+                    "artifact_ids": ["result_tool_usage"],
+                }
+            ],
+        })
+
+        assert "Recent turns" in message.content
+        assert "统计工具调用次数" in message.content
+        assert "广告文案生成调用最多" in message.content
+        assert "fp_tool_usage" in message.content
+        assert "result_tool_usage" in message.content
+
+    def test_build_context_message_includes_datasource_reusable_sql_candidates(self):
+        message = build_context_message({
+            "reusable_sql_candidates": [
+                {
+                    "question": "统计工具调用",
+                    "purpose": "tool invocation count",
+                    "safe_sql": "SELECT COUNT(*) AS usage_count FROM ai_tool_invocations",
+                    "tables": ["ai_tool_invocations"],
+                    "columns": ["usage_count"],
+                    "usage_count": 3,
+                }
+            ],
+        })
+
+        assert "Datasource Reusable SQL" in message.content
+        assert "tool invocation count" in message.content
+        assert "SELECT COUNT(*) AS usage_count FROM ai_tool_invocations" in message.content
+        assert "usage_count=3" in message.content
+
     def test_build_streaming_context_summary(self):
         summary = build_streaming_context_summary({
             "context_pack": {"ui_summary": "Using 2 schema tables"},

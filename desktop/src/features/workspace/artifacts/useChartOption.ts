@@ -8,6 +8,18 @@ function scatterXValue(point: ChartArtifact["series"][number], index: number): n
   return Number.isFinite(value) ? value : index + 1;
 }
 
+function yAxisName(artifact: ChartArtifact): string {
+  const label = artifact.yLabel || "";
+  if (label && artifact.unit) return `${label} (${artifact.unit})`;
+  return label || artifact.unit || "";
+}
+
+function shouldShowDataLabels(artifact: ChartArtifact, chartType: ChartArtifactType, compact: boolean): boolean {
+  if (artifact.dataLabel !== undefined) return artifact.dataLabel;
+  if (compact || chartType === "scatter") return false;
+  return artifact.series.length > 0 && artifact.series.length <= 8;
+}
+
 export function buildChartOption(
   artifact: ChartArtifact,
   chartType: ChartArtifactType,
@@ -16,6 +28,8 @@ export function buildChartOption(
 ) {
   const labels = artifact.series.map((point) => point.label);
   const values = artifact.series.map((point) => point.value);
+  const showDataLabels = shouldShowDataLabels(artifact, chartType, compact);
+  const seriesName = artifact.seriesLabel || artifact.yLabel || artifact.title;
 
   if (chartType === "pie") {
     return {
@@ -29,9 +43,17 @@ export function buildChartOption(
       color: theme.chartColors,
       series: [
         {
-          name: artifact.title,
+          name: seriesName,
           type: "pie",
           radius: compact ? ["35%", "68%"] : ["32%", "70%"],
+          center: ["50%", "50%"],
+          label: {
+            show: showDataLabels || !compact,
+            color: theme.textSecondary,
+            fontSize: theme.axisFontSize,
+            formatter: "{b}\n{d}%",
+          },
+          labelLine: { show: showDataLabels || !compact, lineStyle: { color: theme.borderColor } },
           data: artifact.series.map((point) => ({ name: point.label, value: point.value })),
         },
       ],
@@ -41,35 +63,45 @@ export function buildChartOption(
   return {
     tooltip: {
       trigger: chartType === "scatter" ? "item" as const : "axis" as const,
+      axisPointer: { type: chartType === "bar" ? "shadow" as const : "line" as const },
       backgroundColor: theme.panelBg,
       borderColor: theme.borderColor,
       textStyle: { color: theme.textColor, fontSize: theme.tooltipFontSize },
       boxShadow: theme.tooltipShadow,
     },
     color: theme.chartColors,
-    grid: compact ? { left: 36, right: 14, top: 16, bottom: 30 } : { left: 48, right: 24, top: 24, bottom: 40 },
+    grid: compact ? { left: 40, right: 16, top: 18, bottom: 34 } : { left: 56, right: 28, top: 28, bottom: 48 },
     xAxis: {
       type: chartType === "scatter" ? "value" as const : "category" as const,
       data: chartType === "scatter" ? undefined : labels,
       axisLabel: { color: theme.textSecondary, fontSize: theme.axisFontSize, rotate: labels.length > 6 && !compact ? 30 : 0 },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: theme.borderColor } },
+      name: artifact.xLabel || "",
+      nameGap: 24,
+      nameTextStyle: { color: theme.textMuted, fontSize: theme.axisFontSize },
     },
     yAxis: {
       type: "value" as const,
       axisLabel: { color: theme.textSecondary, fontSize: theme.axisFontSize },
       splitLine: { lineStyle: { color: theme.gridColor } },
-      name: artifact.unit || "",
+      name: yAxisName(artifact),
       nameTextStyle: { color: theme.textMuted, fontSize: theme.axisFontSize },
     },
     series: [
       {
-        name: artifact.title,
+        name: seriesName,
         type: chartType === "area" ? "line" : chartType,
         data: chartType === "scatter"
           ? artifact.series.map((point, index) => [scatterXValue(point, index), point.value])
           : values,
         itemStyle: { color: theme.chartColors[0] },
+        label: {
+          show: showDataLabels,
+          position: "top",
+          color: theme.textSecondary,
+          fontSize: theme.axisFontSize,
+        },
         ...(chartType === "line" || chartType === "area"
           ? {
               smooth: true,

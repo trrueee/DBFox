@@ -193,6 +193,42 @@ describe("ChartArtifactView", () => {
     expect(option.yAxis.splitLine.lineStyle.color).toBe("rgb(241, 245, 249)");
   });
 
+  it("uses enriched chart metadata for axis names, labels, and source details", () => {
+    const artifact: ChartArtifact = {
+      id: "chart-enriched",
+      type: "chart",
+      title: "GMV 趋势",
+      chartType: "bar",
+      unit: "CNY",
+      xLabel: "日期",
+      yLabel: "GMV",
+      seriesLabel: "GMV",
+      dataLabel: true,
+      sampleSize: 2,
+      series: [
+        { label: "2026-06-01", value: 120 },
+        { label: "2026-06-02", value: 260 },
+      ],
+      sourceRefs: [
+        { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
+      ],
+    };
+
+    render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
+
+    const option = echartsMock.options[0] as {
+      xAxis: { name: string };
+      yAxis: { name: string };
+      series: Array<{ name: string; label: { show: boolean; position: string } }>;
+    };
+    expect(option.xAxis.name).toBe("日期");
+    expect(option.yAxis.name).toBe("GMV (CNY)");
+    expect(option.series[0].name).toBe("GMV");
+    expect(option.series[0].label).toEqual(expect.objectContaining({ show: true, position: "top" }));
+    expect(screen.getByText("样本 2 行")).toBeTruthy();
+    expect(screen.getByText("orders.amount")).toBeTruthy();
+  });
+
   it("can expand chart analysis height", () => {
     render(<ChartArtifactView artifact={makeChartArtifact("area")} onToast={vi.fn()} />);
 

@@ -35,10 +35,12 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
     from engine.agent.nodes.prepare_repair_node import prepare_repair
     from engine.agent.nodes.finalize_node import finalize_answer
     from engine.agent.nodes.approval_node import approval_interrupt
+    from engine.agent.nodes.turn_node import finalize_turn, start_turn
 
     graph = StateGraph(DBFoxAgentState)
 
     # ---- Nodes -----------------------------------------------------------
+    graph.add_node("start_turn", start_turn)
     graph.add_node("model", call_model)
     graph.add_node("policy", apply_policy)
     graph.add_node("tools", execute_allowed_tools)
@@ -47,9 +49,11 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
     graph.add_node("repair", prepare_repair)
     graph.add_node("approval", approval_interrupt)
     graph.add_node("finalize", finalize_answer)
+    graph.add_node("finalize_turn", finalize_turn)
 
     # ---- Edges -----------------------------------------------------------
-    graph.add_edge(START, "model")
+    graph.add_edge(START, "start_turn")
+    graph.add_edge("start_turn", "model")
 
     graph.add_conditional_edges(
         "model",
@@ -90,12 +94,14 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
         {
             "model": "model",
             "repair": "repair",
+            "approval": "approval",
             "finalize": "finalize",
         },
     )
 
     graph.add_edge("repair", "model")
 
-    graph.add_edge("finalize", END)
+    graph.add_edge("finalize", "finalize_turn")
+    graph.add_edge("finalize_turn", END)
 
     return graph.compile(checkpointer=checkpointer)
