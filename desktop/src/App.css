@@ -1690,6 +1690,72 @@
   background: var(--agent-surface);
 }
 
+.hifi-result-toolbar-stack {
+  border-bottom: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+}
+
+.hifi-table-toolbar-stack {
+  border-bottom: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+}
+
+.hifi-table-toolbar-stack .hifi-panel-toolbar {
+  border-bottom: 0;
+}
+
+.hifi-result-toolbar-stack .hifi-result-toolbar {
+  border-bottom: 0;
+}
+
+.hifi-result-control-row {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--agent-border-subtle);
+  background: var(--agent-surface-muted);
+  color: var(--agent-text-secondary);
+  font-size: var(--ui-font-label);
+}
+
+.hifi-result-control-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.hifi-result-control-field span {
+  color: var(--agent-text-muted);
+}
+
+.hifi-result-control-field select,
+.hifi-result-control-field input {
+  height: 22px;
+  min-width: 112px;
+  border: 1px solid var(--agent-border);
+  border-radius: 5px;
+  background: var(--agent-surface);
+  color: var(--agent-text);
+  font-size: var(--ui-font-label);
+  outline: none;
+}
+
+.hifi-result-control-field input {
+  width: 148px;
+  padding: 0 7px;
+}
+
+.hifi-result-control-value {
+  flex: 1 1 180px;
+}
+
+.hifi-result-control-value input {
+  width: 100%;
+  min-width: 120px;
+}
+
 .hifi-result-search-icon {
   color: var(--agent-text-muted);
 }

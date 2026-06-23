@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { agentApi } from "../../../../lib/api/agent";
+import type { ResultFilter } from "../../../../lib/api/types";
 import type { ResultViewArtifact, TableArtifact } from "../../../../types/agentArtifact";
 import type {
   SqlBackedDataViewSource,
@@ -25,6 +26,10 @@ export interface ArtifactTableData {
   setSearch: (value: string) => void;
   sort: SortState | null;
   setSortColumn: (columnIndex: number) => void;
+  setSortState: (columnIndex: number, direction: SortDirection) => void;
+  clearSort: () => void;
+  filters: ResultFilter[];
+  setFilters: (value: ResultFilter[]) => void;
   page: number;
   setPage: (updater: number | ((page: number) => number)) => void;
   pageSize: number;
@@ -175,11 +180,35 @@ export function useArtifactTableData(
     setPage(1);
   };
 
+  const setSortState = (columnIndex: number, direction: SortDirection) => {
+    const column = artifact.columns[columnIndex];
+    if (!column) return;
+    if (isSqlBackedWorkspace) {
+      sqlBacked.setSort([{ column, direction }]);
+      return;
+    }
+    setSort({ columnIndex, direction });
+    setPage(1);
+  };
+
+  const clearSort = () => {
+    if (isSqlBackedWorkspace) {
+      sqlBacked.setSort([]);
+      return;
+    }
+    setSort(null);
+    setPage(1);
+  };
+
   return {
     search: isSqlBackedWorkspace ? sqlBacked.search : search,
     setSearch: isSqlBackedWorkspace ? sqlBacked.setSearch : setSearch,
     sort: activeSort,
     setSortColumn,
+    setSortState,
+    clearSort,
+    filters: isSqlBackedWorkspace ? sqlBacked.filters : [],
+    setFilters: isSqlBackedWorkspace ? sqlBacked.setFilters : () => undefined,
     page: isSqlBackedWorkspace ? sqlBacked.page : page,
     setPage: isSqlBackedWorkspace ? sqlBacked.setPage : setPage,
     pageSize: isSqlBackedWorkspace ? sqlBacked.pageSize : pageSize,

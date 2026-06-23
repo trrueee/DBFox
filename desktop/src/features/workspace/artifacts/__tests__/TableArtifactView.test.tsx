@@ -216,4 +216,41 @@ describe("TableArtifactView", () => {
     );
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
+
+  it("applies sql-backed toolbar filters through the result page API", async () => {
+    render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+    fireEvent.click(screen.getByRole("button", { name: "筛选" }));
+    fireEvent.change(screen.getByLabelText("筛选列"), { target: { value: "day" } });
+    fireEvent.change(screen.getByLabelText("筛选条件"), { target: { value: "contains" } });
+    fireEvent.change(screen.getByLabelText("筛选值"), { target: { value: "2026-06" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用筛选" }));
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: [{ column: "day", operator: "contains", value: "2026-06" }],
+        }),
+      ),
+    );
+  });
+
+  it("applies sql-backed toolbar sort through the result page API", async () => {
+    render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+    fireEvent.click(screen.getByRole("button", { name: "排序" }));
+    fireEvent.change(screen.getByLabelText("排序列"), { target: { value: "order_count" } });
+    fireEvent.change(screen.getByLabelText("排序方向"), { target: { value: "asc" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用排序" }));
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sort: [{ column: "order_count", direction: "asc" }],
+        }),
+      ),
+    );
+  });
 });
