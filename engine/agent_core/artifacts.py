@@ -189,30 +189,33 @@ def build_result_view_artifact(
     
     all_rows = execution.get("rows") or []
     preview_rows = all_rows[:10]
+    is_sql_backed = bool(datasource_id and sql)
+    payload: dict[str, Any] = {
+        "storageMode": "sql_backed" if is_sql_backed else "payload",
+        "datasourceId": datasource_id or "",
+        "sourceSqlSemanticId": "sql_candidate",
+        "sourceSql": sql,
+        "safeSql": sql,
+        "columns": execution.get("columns", []),
+        "previewRows": preview_rows,
+        "previewRowCount": len(preview_rows),
+        "rowCount": execution.get("rowCount", len(all_rows)),
+        "returnedRows": execution.get("returnedRows", len(all_rows)),
+        "latencyMs": execution.get("latencyMs", 0),
+        "truncated": bool(execution.get("truncated")),
+        "warnings": _string_list(execution.get("warnings")),
+        "notices": _string_list(execution.get("notices")),
+        "used_tables": _used_tables(sql or ""),
+        "safety_state": _safety_state(safety),
+    }
+    if not is_sql_backed:
+        payload["rows"] = all_rows
     
     return _artifact(
         semantic_id,
         "result_view",
         "Result view",
-        {
-            "storageMode": "payload", # Legacy compatibility, switch to sql_backed later
-            "datasourceId": datasource_id or "",
-            "sourceSqlSemanticId": "sql_candidate",
-            "sourceSql": sql,
-            "safeSql": sql,
-            "columns": execution.get("columns", []),
-            "previewRows": preview_rows,
-            "previewRowCount": len(preview_rows),
-            "rows": all_rows, # Legacy compatibility
-            "rowCount": execution.get("rowCount", len(all_rows)),
-            "returnedRows": execution.get("returnedRows", len(all_rows)),
-            "latencyMs": execution.get("latencyMs", 0),
-            "truncated": bool(execution.get("truncated")),
-            "warnings": _string_list(execution.get("warnings")),
-            "notices": _string_list(execution.get("notices")),
-            "used_tables": _used_tables(sql or ""),
-            "safety_state": _safety_state(safety),
-        },
+        payload,
         mode="both",
         priority=20,
         identity=identity,
