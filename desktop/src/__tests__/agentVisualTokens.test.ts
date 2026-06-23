@@ -20,6 +20,11 @@ function listSourceFiles(root: string, extensions: Set<string>): string[] {
   });
 }
 
+function tokenValue(tokens: string, selector: ":root" | ".dark", token: string): string {
+  const block = tokens.match(new RegExp(`${selector.replace(".", "\\.")}\\s*{([\\s\\S]*?)}`))?.[1] || "";
+  return block.match(new RegExp(`${token}:\\s*([^;]+);`))?.[1].trim() || "";
+}
+
 describe("agent visual tokens", () => {
   it("defines semantic agent tokens for stages and trust states in both themes", () => {
     const tokens = read("styles/tokens.css");
@@ -60,6 +65,40 @@ describe("agent visual tokens", () => {
     expect(tokens).toMatch(/\.dark\s*{[\s\S]*--ui-font-body:/);
     expect(tokens).toMatch(/\.dark\s*{[\s\S]*--agent-chart-1:/);
     expect(tokens).toMatch(/\.dark\s*{[\s\S]*--trust-danger:/);
+  });
+
+  it("sets desktop typography scale for readable Chinese UI", () => {
+    const tokens = read("styles/tokens.css");
+    const expected = {
+      "--ui-font-nano": "9px",
+      "--ui-font-micro": "10px",
+      "--ui-font-caption": "11px",
+      "--ui-font-label": "12px",
+      "--ui-font-control": "13px",
+      "--ui-font-body": "14px",
+      "--ui-font-input": "14px",
+      "--ui-font-section-title": "15px",
+      "--ui-font-title": "18px",
+      "--ui-font-display": "24px",
+      "--ui-font-code": "13px",
+      "--ui-font-data": "12px",
+      "--agent-font-micro": "10px",
+      "--agent-font-caption": "11px",
+      "--agent-font-label": "12px",
+      "--agent-font-ui": "13px",
+      "--agent-font-code": "13px",
+      "--agent-font-input": "15px",
+      "--agent-font-title": "15px",
+      "--agent-font-body": "15px",
+      "--agent-font-subtitle": "17px",
+      "--agent-font-display": "20px",
+    };
+
+    for (const selector of [":root", ".dark"] as const) {
+      for (const [token, value] of Object.entries(expected)) {
+        expect(tokenValue(tokens, selector, token), `${selector} ${token}`).toBe(value);
+      }
+    }
   });
 
   it("keeps conversation workspace colors behind tokens", () => {
