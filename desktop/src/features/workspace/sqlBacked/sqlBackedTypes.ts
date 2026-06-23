@@ -51,7 +51,7 @@ export interface UseSqlBackedDataViewOptions {
   source: SqlBackedDataViewSource;
   fetchPage: (request: SqlBackedPageRequest) => Promise<SqlBackedPageResponse>;
   exportAll: (request: SqlBackedExportRequest) => Promise<Blob>;
+  enabled?: boolean;
   initialPageSize?: number;
   countMode?: "none" | "exact" | "estimate";
 }
-

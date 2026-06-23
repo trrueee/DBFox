@@ -43,6 +43,7 @@ export function useSqlBackedDataView({
   source,
   fetchPage,
   exportAll: requestExportAll,
+  enabled = true,
   initialPageSize = 20,
   countMode = "estimate",
 }: UseSqlBackedDataViewOptions): SqlBackedDataViewState {
@@ -88,10 +89,16 @@ export function useSqlBackedDataView({
   }, [buildPageRequest, fetchPage]);
 
   useEffect(() => {
+    if (!enabled) {
+      requestSeqRef.current += 1;
+      dataRef.current = null;
+      nextLoadingModeRef.current = "initial";
+      return;
+    }
     const mode = nextLoadingModeRef.current;
-    nextLoadingModeRef.current = data ? "refresh" : "initial";
+    nextLoadingModeRef.current = dataRef.current ? "refresh" : "initial";
     void load(mode);
-  }, [load]);
+  }, [enabled, load]);
 
   const setPage = useCallback((value: SetPageValue) => {
     nextLoadingModeRef.current = "page";
@@ -123,11 +130,13 @@ export function useSqlBackedDataView({
   }, []);
 
   const refresh = useCallback(() => {
+    if (!enabled) return;
     nextLoadingModeRef.current = "refresh";
     void load("refresh");
-  }, [load]);
+  }, [enabled, load]);
 
   const handleExportAll = useCallback(async () => {
+    if (!enabled) throw new Error("SQL-backed data view is disabled");
     const req: SqlBackedExportRequest = {
       source,
       sort: sort.length ? sort : undefined,
@@ -140,7 +149,7 @@ export function useSqlBackedDataView({
     } finally {
       setLoadingMode("idle");
     }
-  }, [filters, normalizedSearch, requestExportAll, sort, source]);
+  }, [enabled, filters, normalizedSearch, requestExportAll, sort, source]);
 
   const columns = data?.columns ?? source.columns;
   const rows = useMemo(

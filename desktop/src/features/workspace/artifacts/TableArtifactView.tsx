@@ -1,7 +1,7 @@
 import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink } from "lucide-react";
 import type { ResultViewArtifact, TableArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
-import { copyText, downloadTextFile } from "./artifactActions";
+import { copyText, downloadBlobFile, downloadTextFile } from "./artifactActions";
 import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
 import { ArtifactTableGrid } from "./table/ArtifactTableGrid";
 import { ArtifactTableToolbar } from "./table/ArtifactTableToolbar";
@@ -22,7 +22,17 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     onToast(ok ? "已复制 CSV" : "复制失败，请手动选择复制");
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    if (table.exportAll) {
+      try {
+        const blob = await table.exportAll();
+        const ok = downloadBlobFile(`${artifact.id}.csv`, blob);
+        onToast(ok ? "已导出 CSV" : "CSV 导出失败");
+      } catch {
+        onToast("CSV 导出失败");
+      }
+      return;
+    }
     const ok = downloadTextFile(`${artifact.id}.csv`, table.csv, "text/csv;charset=utf-8");
     onToast(ok ? "已导出 CSV" : "CSV 导出失败");
   };
@@ -40,10 +50,10 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
       onSearchChange={table.setSearch}
       isLoading={table.isLoading}
       isSqlBackedWorkspace={table.isSqlBackedWorkspace}
-      onRefresh={() => table.isSqlBackedWorkspace && table.setPage(table.page)}
+      onRefresh={table.refresh}
       onFilter={() => onToast("筛选器待接入：后续会转换为安全 SQL 条件")}
       onSortNotice={() => onToast("排序待接入：后续会转换为安全 SQL 排序")}
-      onExport={handleExport}
+      onExport={() => void handleExport()}
       onCopy={() => void handleCopy()}
       canToggleLoadedRows={!table.isSqlBackedWorkspace && table.rowsToUseLength > 10 && !table.isSearching}
       expanded={table.expanded}
@@ -124,7 +134,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
             <Copy size={10} />
             复制 CSV
           </button>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleExport}>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={() => void handleExport()}>
             <Download size={10} />
             导出 CSV
           </button>

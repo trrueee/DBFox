@@ -1,7 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ResultPageRequest, ResultPageResponse } from "../../../../lib/api/types";
 import type { ResultViewArtifact, TableArtifact } from "../../../../types/agentArtifact";
+import type {
+  SqlBackedDataViewSource,
+  SqlBackedExportRequest,
+  SqlBackedPageRequest,
+} from "../../sqlBacked/sqlBackedTypes";
+import { useSqlBackedDataView } from "../../sqlBacked/useSqlBackedDataView";
 import { toCsv } from "../artifactActions";
 
 const PREVIEW_ROW_LIMIT = 10;
@@ -39,6 +44,8 @@ export interface ArtifactTableData {
   expanded: boolean;
   setExpanded: (value: boolean | ((current: boolean) => boolean)) => void;
   csv: string;
+  exportAll?: () => Promise<Blob>;
+  refresh: () => void;
   rowsToUseLength: number;
   isSearching: boolean;
   hasNextPage: boolean;
@@ -52,62 +59,68 @@ export function useArtifactTableData(
   const [sort, setSort] = useState<SortState | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [backendData, setBackendData] = useState<ResultPageResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [expanded, setExpanded] = useState(false);
 
   const isSqlBackedWorkspace = mode === "workspace" && artifact.type === "result_view" && artifact.storageMode === "sql_backed";
 
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const sqlBackedSource = useMemo<SqlBackedDataViewSource>(() => {
+    if (artifact.type === "result_view") {
+      return {
+        kind: "artifact-result",
+        datasourceId: artifact.datasourceId,
+        sourceSqlArtifactId: artifact.sourceSqlSemanticId,
+        safeSql: artifact.safeSql,
+        columns: artifact.columns,
+      };
+    }
+    return {
+      kind: "artifact-result",
+      datasourceId: "",
+      sourceSqlArtifactId: artifact.id,
+      safeSql: artifact.sql ?? "",
+      columns: artifact.columns,
+    };
+  }, [artifact]);
 
-  useEffect(() => {
-    if (!isSqlBackedWorkspace) return;
-    let active = true;
-    const fetchPage = async () => {
-      setIsLoading(true);
-      setFetchError(null);
-      try {
-        const resultView = artifact as ResultViewArtifact;
-        const req: ResultPageRequest = {
-          datasourceId: resultView.datasourceId,
-          sourceSqlArtifactId: resultView.sourceSqlSemanticId,
-          safeSql: resultView.safeSql,
-          page,
-          pageSize,
-          sort: sort ? [{ column: artifact.columns[sort.columnIndex], direction: sort.direction }] : undefined,
-          search: debouncedSearch.trim() || undefined,
-          countMode: "estimate",
-        };
-        const res = await agentApi.fetchResultPage(req);
-        if (active) setBackendData(res);
-      } catch (err) {
-        if (active) setFetchError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-    void fetchPage();
-    return () => {
-      active = false;
-    };
-  }, [isSqlBackedWorkspace, artifact, page, pageSize, sort, debouncedSearch]);
+  const fetchSqlBackedPage = useCallback(async (request: SqlBackedPageRequest) => {
+    if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");
+    return agentApi.fetchResultPage({
+      datasourceId: request.source.datasourceId,
+      sourceSqlArtifactId: request.source.sourceSqlArtifactId,
+      safeSql: request.source.safeSql,
+      page: request.page,
+      pageSize: request.pageSize,
+      sort: request.sort,
+      filters: request.filters,
+      search: request.search,
+      countMode: request.countMode ?? "estimate",
+    });
+  }, []);
+
+  const exportSqlBackedRows = useCallback(async (request: SqlBackedExportRequest) => {
+    if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");
+    return agentApi.exportResultCsv({
+      datasourceId: request.source.datasourceId,
+      sourceSqlArtifactId: request.source.sourceSqlArtifactId,
+      safeSql: request.source.safeSql,
+      sort: request.sort,
+      filters: request.filters,
+      search: request.search,
+    });
+  }, []);
+
+  const sqlBacked = useSqlBackedDataView({
+    source: sqlBackedSource,
+    fetchPage: fetchSqlBackedPage,
+    exportAll: exportSqlBackedRows,
+    enabled: isSqlBackedWorkspace,
+    initialPageSize: 50,
+    countMode: "estimate",
+  });
 
   const rowsToUse = artifact.type === "result_view" ? (artifact.rows ?? artifact.previewRows) : artifact.rows;
 
-  const backendRows = useMemo(() => {
-    if (!backendData) return [];
-    return backendData.rows.map((row) =>
-      backendData.columns.map((col) => {
-        const val = row[col];
-        return typeof val === "object" && val !== null ? JSON.stringify(val) : String(val ?? "");
-      }),
-    );
-  }, [backendData]);
+  const backendRows = sqlBacked.rows;
 
   const csv = useMemo(
     () => toCsv(artifact.columns, isSqlBackedWorkspace ? backendRows : rowsToUse),
@@ -137,7 +150,24 @@ export function useArtifactTableData(
       ? filteredAndSortedRows.slice(0, shouldUseWindow ? WINDOW_ROW_LIMIT : filteredAndSortedRows.length)
       : filteredAndSortedRows.slice(0, PREVIEW_ROW_LIMIT);
 
+  const activeSort = useMemo<SortState | null>(() => {
+    if (!isSqlBackedWorkspace) return sort;
+    const current = sqlBacked.sort[0];
+    if (!current) return null;
+    const columnIndex = artifact.columns.indexOf(current.column);
+    if (columnIndex < 0) return null;
+    return { columnIndex, direction: current.direction };
+  }, [artifact.columns, isSqlBackedWorkspace, sort, sqlBacked.sort]);
+
   const setSortColumn = (columnIndex: number) => {
+    if (isSqlBackedWorkspace) {
+      const column = artifact.columns[columnIndex];
+      if (!column) return;
+      const current = sqlBacked.sort[0];
+      const direction = current?.column === column && current.direction === "desc" ? "asc" : "desc";
+      sqlBacked.setSort([{ column, direction }]);
+      return;
+    }
     setSort((current) => {
       if (current?.columnIndex !== columnIndex) return { columnIndex, direction: "desc" };
       return { columnIndex, direction: current.direction === "desc" ? "asc" : "desc" };
@@ -146,32 +176,34 @@ export function useArtifactTableData(
   };
 
   return {
-    search,
-    setSearch,
-    sort,
+    search: isSqlBackedWorkspace ? sqlBacked.search : search,
+    setSearch: isSqlBackedWorkspace ? sqlBacked.setSearch : setSearch,
+    sort: activeSort,
     setSortColumn,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
+    page: isSqlBackedWorkspace ? sqlBacked.page : page,
+    setPage: isSqlBackedWorkspace ? sqlBacked.setPage : setPage,
+    pageSize: isSqlBackedWorkspace ? sqlBacked.pageSize : pageSize,
+    setPageSize: isSqlBackedWorkspace ? sqlBacked.setPageSize : setPageSize,
     visibleRows,
     filteredAndSortedRows,
-    totalRows: isSqlBackedWorkspace ? (backendData?.rowCount ?? undefined) : (artifact.rowCount ?? rowsToUse.length),
+    totalRows: isSqlBackedWorkspace ? (sqlBacked.rowCount ?? undefined) : (artifact.rowCount ?? rowsToUse.length),
     returnedRows: isSqlBackedWorkspace ? backendRows.length : (artifact.returnedRows ?? rowsToUse.length),
     previewCount: visibleRows.length,
-    warnings: isSqlBackedWorkspace ? (backendData?.warnings ?? []) : (artifact.warnings ?? []),
-    notices: isSqlBackedWorkspace ? (backendData?.notices ?? []) : (artifact.notices ?? []),
-    latencyMs: isSqlBackedWorkspace ? backendData?.latencyMs : artifact.latencyMs,
-    isLoading,
-    fetchError,
+    warnings: isSqlBackedWorkspace ? sqlBacked.warnings : (artifact.warnings ?? []),
+    notices: isSqlBackedWorkspace ? sqlBacked.notices : (artifact.notices ?? []),
+    latencyMs: isSqlBackedWorkspace ? sqlBacked.latencyMs : artifact.latencyMs,
+    isLoading: isSqlBackedWorkspace ? sqlBacked.isLoading : false,
+    fetchError: isSqlBackedWorkspace ? sqlBacked.error : null,
     isSqlBackedWorkspace,
     shouldUseWindow,
     expanded,
     setExpanded,
     csv,
+    exportAll: isSqlBackedWorkspace ? sqlBacked.exportAll : undefined,
+    refresh: isSqlBackedWorkspace ? sqlBacked.refresh : () => undefined,
     rowsToUseLength: rowsToUse.length,
     isSearching,
-    hasNextPage: Boolean(backendData?.hasNextPage),
+    hasNextPage: isSqlBackedWorkspace ? sqlBacked.hasNextPage : false,
   };
 }
 

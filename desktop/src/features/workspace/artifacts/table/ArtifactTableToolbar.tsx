@@ -62,7 +62,7 @@ export function ArtifactTableToolbar({
               className="hifi-input hifi-result-search h-6 w-32 pl-6 pr-2 rounded text-[var(--ui-font-label)]"
               value={search}
               onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="本地搜索..."
+              placeholder={isSqlBackedWorkspace ? "搜索 SQL 结果..." : "本地搜索..."}
             />
           </div>
         </div>
