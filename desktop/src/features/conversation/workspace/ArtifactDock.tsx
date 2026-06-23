@@ -1,5 +1,6 @@
 import { BarChart3, CheckCircle2, Code2, FileText, ShieldCheck, Table2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
@@ -28,6 +29,14 @@ interface ArtifactDockProps {
 
 type DockKind = "sql" | "safety" | "result" | "chart" | "note";
 
+const MIN_DOCK_WIDTH = 340;
+const DEFAULT_DOCK_WIDTH = 420;
+const MAX_DOCK_WIDTH = 680;
+
+type DockStyle = CSSProperties & {
+  "--conv-artifact-width": string;
+};
+
 export function ArtifactDock({
   artifacts,
   selectedArtifactId,
@@ -35,6 +44,8 @@ export function ArtifactDock({
   onOpenSqlConsole,
   onOpenResultTab,
 }: ArtifactDockProps) {
+  const [dockWidth, setDockWidth] = useState(DEFAULT_DOCK_WIDTH);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const orderedArtifacts = useMemo(
     () => sortConversationArtifacts(artifacts).filter(isDockArtifact),
     [artifacts],
@@ -49,6 +60,51 @@ export function ArtifactDock({
   const activeId = selectedArtifactId || localSelectedId || preferredArtifactId;
   const activeArtifact = orderedArtifacts.find((artifact) => artifact.id === activeId) || orderedArtifacts[0];
 
+  const applyDockWidth = useCallback((value: number) => {
+    setDockWidth(clampDockWidth(value));
+  }, []);
+
+  const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    dragRef.current = { startX: event.clientX, startWidth: dockWidth };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const dragState = dragRef.current;
+      if (!dragState) return;
+      applyDockWidth(dragState.startWidth + dragState.startX - moveEvent.clientX);
+    };
+
+    const handlePointerUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }, [applyDockWidth, dockWidth]);
+
+  const handleResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 40 : 20;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      applyDockWidth(dockWidth + step);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      applyDockWidth(dockWidth - step);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      applyDockWidth(MIN_DOCK_WIDTH);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      applyDockWidth(MAX_DOCK_WIDTH);
+    }
+  };
+
+  const dockStyle: DockStyle = {
+    "--conv-artifact-width": `${dockWidth}px`,
+  };
+
   if (orderedArtifacts.length === 0) return null;
 
   const handleSelect = (artifact: ConversationArtifact) => {
@@ -57,7 +113,19 @@ export function ArtifactDock({
   };
 
   return (
-    <aside className="conv-artifact-dock" aria-label="Artifact dock">
+    <aside className="conv-artifact-dock" aria-label="Artifact dock" style={dockStyle}>
+      <div
+        role="separator"
+        aria-label="调整工件区宽度"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_DOCK_WIDTH}
+        aria-valuemax={MAX_DOCK_WIDTH}
+        aria-valuenow={dockWidth}
+        className="conv-artifact-resizer"
+        tabIndex={0}
+        onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
+      />
       <header className="conv-artifact-dock-header">
         <div>
           <strong>产物</strong>
@@ -99,6 +167,10 @@ export function ArtifactDock({
       </div>
     </aside>
   );
+}
+
+function clampDockWidth(value: number): number {
+  return Math.min(MAX_DOCK_WIDTH, Math.max(MIN_DOCK_WIDTH, Math.round(value)));
 }
 
 function isDockArtifact(artifact: ConversationArtifact): boolean {

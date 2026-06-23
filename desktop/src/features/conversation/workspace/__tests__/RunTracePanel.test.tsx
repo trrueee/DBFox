@@ -9,7 +9,7 @@ describe("RunTracePanel", () => {
     cleanup();
   });
 
-  it("groups runtime events into a compact stage timeline", () => {
+  it("summarizes runtime events as one node and expands into the stage timeline", () => {
     const run: ConversationRun = {
       id: "run-stage",
       conversation_id: "conv-1",
@@ -105,6 +105,15 @@ describe("RunTracePanel", () => {
 
     const { container } = render(<RunTracePanel run={run} />);
 
+    expect(screen.getByRole("button", { name: /已完成/ })).toBeTruthy();
+    expect(screen.getByText("任务完成。")).toBeTruthy();
+    expect(container.querySelectorAll(".conv-run-status-node")).toHaveLength(1);
+    expect(container.querySelectorAll(".conv-run-stage")).toHaveLength(0);
+    expect(container.textContent).not.toContain("Run ID:");
+    expect(container.textContent).not.toContain("sql.execute_readonly");
+
+    fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
+
     expect(screen.getByText("执行过程 · 6 阶段 · 1 条 SQL · 128 行 · 42ms")).toBeTruthy();
     expect(screen.getByText("理解问题")).toBeTruthy();
     expect(screen.getByText("搜索结构")).toBeTruthy();
@@ -113,8 +122,6 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("整理回答")).toBeTruthy();
     expect(screen.getByText("完成")).toBeTruthy();
     expect(container.querySelectorAll(".conv-run-stage")).toHaveLength(6);
-    expect(container.textContent).not.toContain("Run ID:");
-    expect(container.textContent).not.toContain("sql.execute_readonly");
   });
 
   it("renders completed runtime events with product labels and a compact summary", () => {
@@ -145,14 +152,14 @@ describe("RunTracePanel", () => {
 
     const { container } = render(<RunTracePanel run={run} />);
 
-    expect(screen.getByText("执行过程 · 1 阶段 · 1 条 SQL · 128 行 · 42ms")).toBeTruthy();
-    expect(screen.getByText("执行只读查询")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /正在执行工具|已完成/ })).toBeTruthy();
     expect(screen.getAllByText("查询返回 128 行，正在整理结论。").length).toBeGreaterThan(0);
     expect(screen.queryByText("sql.execute_readonly")).toBeNull();
     expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
+    expect(container.querySelectorAll(".conv-run-stage")).toHaveLength(0);
   });
 
-  it("keeps failed traces open with the failure reason visible", () => {
+  it("keeps failed traces summarized with the failure reason visible", () => {
     const run: ConversationRun = {
       id: "run-2",
       conversation_id: "conv-1",
@@ -176,7 +183,8 @@ describe("RunTracePanel", () => {
 
     expect(screen.getAllByText("执行失败").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SQL 语法错误").length).toBeGreaterThan(0);
-    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
+    expect(container.querySelectorAll(".conv-run-stage")).toHaveLength(0);
   });
 
   it("shows memory and semantic references from context updates", () => {
@@ -218,6 +226,8 @@ describe("RunTracePanel", () => {
 
     render(<RunTracePanel run={run} />);
 
+    fireEvent.click(screen.getByRole("button", { name: /正在调用模型/ }));
+
     expect(screen.getByText("参考业务记忆")).toBeTruthy();
     expect(screen.getByText("GMV definition")).toBeTruthy();
     expect(screen.getByText("GMV = paid_amount - refund_amount")).toBeTruthy();
@@ -226,7 +236,7 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("users.created_at")).toBeTruthy();
   });
 
-  it("shows SQL repair root cause and recovery strategy outside debug details", () => {
+  it("keeps SQL repair details inside the expanded debug chain", () => {
     const run: ConversationRun = {
       id: "run-repair",
       conversation_id: "conv-1",
@@ -257,7 +267,13 @@ describe("RunTracePanel", () => {
 
     render(<RunTracePanel run={run} />);
 
-    expect(screen.getByText("SQL 修复")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /SQL 修复中/ })).toBeTruthy();
+    expect(screen.getByText("Column not found — looking up schema to fix the query.")).toBeTruthy();
+    expect(screen.queryByText("失败 SQL")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /SQL 修复中/ }));
+
+    expect(screen.getAllByText("SQL 修复").length).toBeGreaterThan(0);
     expect(screen.getByText("missing_column")).toBeTruthy();
     expect(screen.getByText("第 1 次修复")).toBeTruthy();
     expect(screen.getByText("失败 SQL")).toBeTruthy();
@@ -266,7 +282,71 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("Use schema.describe_table and fuzzy-match similar columns, then sql.revise.")).toBeTruthy();
   });
 
-  it("keeps a running trace expanded when the same run completes", () => {
+  it("shows completed status for finished runs that include repair attempts", () => {
+    const run: ConversationRun = {
+      id: "run-repaired-complete",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析注册数据",
+      status: "completed",
+      events: [
+        {
+          event_id: "evt-repair",
+          run_id: "run-repaired-complete",
+          sequence: 1,
+          created_at_ms: 1,
+          type: "agent.progress.update",
+          step: {
+            name: "sql_repair",
+            phase: "repairing",
+            status: "running",
+            summary: "Preparing SQL repair",
+            error_class: "validation_blocked",
+            attempt: 1,
+          },
+        },
+        {
+          event_id: "evt-result",
+          run_id: "run-repaired-complete",
+          sequence: 2,
+          created_at_ms: 2,
+          type: "agent.tool.completed",
+          step: {
+            name: "execute",
+            tool_name: "sql.execute_readonly",
+            phase: "executing",
+            status: "success",
+            summary: "查询返回 2 行。",
+            rowCount: 2,
+            durationMs: 181,
+          },
+        },
+        {
+          event_id: "evt-completed",
+          run_id: "run-repaired-complete",
+          sequence: 3,
+          created_at_ms: 3,
+          type: "agent.run.completed",
+          step: { phase: "completed", status: "success", summary: "任务完成。" },
+        },
+      ],
+    };
+
+    const { container } = render(<RunTracePanel run={run} />);
+
+    expect(screen.getByRole("button", { name: /已完成/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /SQL 修复中/ })).toBeNull();
+    expect(screen.queryByText("SQL 修复")).toBeNull();
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /已完成/ }));
+
+    expect(screen.getByText("SQL 修复")).toBeTruthy();
+    expect(screen.getAllByText("Preparing SQL repair").length).toBeGreaterThan(0);
+    expect(container.querySelector(".conv-run-stage-running")).toBeNull();
+  });
+
+  it("keeps the user-expanded debug chain open when the same run completes", () => {
     const runningEvents: AgentRuntimeEvent[] = [
       {
         event_id: "evt-running",
@@ -302,6 +382,9 @@ describe("RunTracePanel", () => {
     };
 
     const { rerender, container } = render(<RunTracePanel run={runningRun} />);
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /正在执行工具/ }));
     expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
 
     rerender(<RunTracePanel run={completedRun} />);
@@ -321,7 +404,7 @@ describe("RunTracePanel", () => {
     };
 
     const { container } = render(<RunTracePanel run={run} />);
-    const toggle = screen.getByRole("button", { name: /执行过程/ });
+    const toggle = screen.getByRole("button", { name: /待执行|已完成/ });
 
     expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
     fireEvent.click(toggle);
