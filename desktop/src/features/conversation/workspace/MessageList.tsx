@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
@@ -27,6 +27,24 @@ export function MessageList({
   onSelectArtifact,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const runsByAssistantMessageId = useMemo(
+    () => new Map(runs.map((run) => [run.assistant_message_id, run])),
+    [runs],
+  );
+  const artifactsByMessageId = useMemo(() => {
+    const map = new Map<string, ConversationArtifact[]>();
+    for (const artifact of artifacts) {
+      const key = artifact.message_id || "";
+      const existing = map.get(key);
+      if (existing) {
+        existing.push(artifact);
+      } else {
+        map.set(key, [artifact]);
+      }
+    }
+    return map;
+  }, [artifacts]);
+
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
   }, [messages.length, artifacts.length]);
@@ -34,8 +52,8 @@ export function MessageList({
     <div className="conv-message-scroll" ref={ref}>
       <div className="conv-message-column">
         {messages.map((message) => {
-          const run = runs.find((item) => item.assistant_message_id === message.id);
-          const messageArtifacts = artifacts.filter((artifact) => artifact.message_id === message.id);
+          const run = runsByAssistantMessageId.get(message.id);
+          const messageArtifacts = artifactsByMessageId.get(message.id) || [];
           return (
             <MessageBubble
               key={message.id}

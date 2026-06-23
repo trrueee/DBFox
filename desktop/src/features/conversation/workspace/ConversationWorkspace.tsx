@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { useConversationStore } from "../../../stores/conversationStore";
+import { useEffect, useState } from "react";
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
-import type {
-  ConversationArtifact,
-  ConversationMessage,
-  ConversationRun,
-} from "../../../types/conversation";
 import { Composer } from "./Composer";
 import { ArtifactDock } from "./ArtifactDock";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageList } from "./MessageList";
+import { useConversationViewModel } from "./useConversationViewModel";
 import "./conversationWorkspace.css";
 
 export function ConversationWorkspace({
@@ -25,27 +20,23 @@ export function ConversationWorkspace({
   onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
   onDelete: () => void;
 }) {
-  const store = useConversationStore();
   const [selectedArtifact, setSelectedArtifact] = useState<{ conversationId: string; artifactId: string } | null>(null);
-  const detail = store.detailById[conversationId];
+  const {
+    detail,
+    messages,
+    runs,
+    artifacts,
+    runningRun,
+    openConversation,
+    sendMessage,
+    cancelRun,
+    resolveApproval,
+  } = useConversationViewModel(conversationId);
+
   useEffect(() => {
-    if (!detail && conversationId) void store.openConversation(conversationId);
-  }, [conversationId, detail, store]);
-  const messages = useMemo<ConversationMessage[]>(
-    () => detail?.messages.map((item) => store.messagesById[item.id] || item) || [],
-    [detail, store.messagesById],
-  );
-  const runs = useMemo<ConversationRun[]>(
-    () => detail?.runs.map((item) => store.runsById[item.id] || item) || [],
-    [detail, store.runsById],
-  );
-  const artifacts = useMemo<ConversationArtifact[]>(
-    () =>
-      detail?.artifacts.map((item) => store.artifactsById[item.id] || item) ||
-      Object.values(store.artifactsById).filter((item) => item.conversation_id === conversationId),
-    [conversationId, detail, store.artifactsById],
-  );
-  const runningRun = runs.find((run) => run.status === "running" || run.status === "waiting_approval");
+    if (!detail && conversationId) void openConversation(conversationId);
+  }, [conversationId, detail, openConversation]);
+
   if (!detail) return <div className="conv-workspace">Loading...</div>;
   const hasArtifacts = artifacts.length > 0;
   const selectedArtifactId = selectedArtifact?.conversationId === conversationId ? selectedArtifact.artifactId : null;
@@ -60,7 +51,7 @@ export function ConversationWorkspace({
           artifacts={artifacts}
           onOpenSqlConsole={onOpenSqlConsole}
           onOpenResultTab={onOpenResultTab}
-          onResolveApproval={(runId, approvalId, approved) => void store.resolveApproval(runId, approvalId, approved)}
+          onResolveApproval={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
           onSelectArtifact={selectArtifact}
         />
         {hasArtifacts && (
@@ -75,8 +66,8 @@ export function ConversationWorkspace({
       </div>
       <Composer
         running={Boolean(runningRun)}
-        onSend={(text) => void store.sendMessage(conversationId, text)}
-        onCancel={() => runningRun && store.cancelRun(runningRun.id)}
+        onSend={(text) => void sendMessage(conversationId, text)}
+        onCancel={() => runningRun && cancelRun(runningRun.id)}
       />
     </div>
   );
