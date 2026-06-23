@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ConversationRun } from "../../../../types/conversation";
 import { RunTracePanel } from "../RunTracePanel";
@@ -148,7 +148,7 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("执行只读查询")).toBeTruthy();
     expect(screen.getAllByText("查询返回 128 行，正在整理结论。").length).toBeGreaterThan(0);
     expect(screen.queryByText("sql.execute_readonly")).toBeNull();
-    expect(container.querySelector("details")?.hasAttribute("open")).toBe(false);
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
   });
 
   it("keeps failed traces open with the failure reason visible", () => {
@@ -175,7 +175,7 @@ describe("RunTracePanel", () => {
 
     expect(screen.getAllByText("执行失败").length).toBeGreaterThan(0);
     expect(screen.getAllByText("SQL 语法错误").length).toBeGreaterThan(0);
-    expect(container.querySelector("details")?.hasAttribute("open")).toBe(true);
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
   });
 
   it("shows memory and semantic references from context updates", () => {
@@ -263,5 +263,66 @@ describe("RunTracePanel", () => {
     expect(screen.getByText("SELECT refund_amount FROM orders")).toBeTruthy();
     expect(screen.getByText("column refund_amount not found in orders")).toBeTruthy();
     expect(screen.getByText("Use schema.describe_table and fuzzy-match similar columns, then sql.revise.")).toBeTruthy();
+  });
+
+  it("keeps a running trace expanded when the same run completes", () => {
+    const runningRun: ConversationRun = {
+      id: "run-controlled",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析订单",
+      status: "running",
+      events: [
+        {
+          event_id: "evt-running",
+          run_id: "run-controlled",
+          sequence: 1,
+          created_at_ms: 1,
+          type: "agent.step.started",
+          step: { phase: "executing", status: "running", summary: "执行查询中" },
+        },
+      ],
+    };
+    const completedRun: ConversationRun = {
+      ...runningRun,
+      status: "completed",
+      events: [
+        ...runningRun.events,
+        {
+          event_id: "evt-completed",
+          run_id: "run-controlled",
+          sequence: 2,
+          created_at_ms: 2,
+          type: "agent.run.completed",
+          step: { phase: "completed", status: "success", summary: "任务完成" },
+        },
+      ],
+    };
+
+    const { rerender, container } = render(<RunTracePanel run={runningRun} />);
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
+
+    rerender(<RunTracePanel run={completedRun} />);
+
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
+    expect(screen.getAllByText("任务完成").length).toBeGreaterThan(0);
+  });
+
+  it("lets the user collapse and expand the trace manually", () => {
+    const run: ConversationRun = {
+      id: "run-toggle",
+      conversation_id: "conv-1",
+      datasource_id: "ds-1",
+      question: "分析订单",
+      status: "completed",
+      events: [],
+    };
+
+    const { container } = render(<RunTracePanel run={run} />);
+    const toggle = screen.getByRole("button", { name: /执行过程/ });
+
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(container.querySelector(".conv-run-trace")?.getAttribute("data-expanded")).toBe("true");
   });
 });
