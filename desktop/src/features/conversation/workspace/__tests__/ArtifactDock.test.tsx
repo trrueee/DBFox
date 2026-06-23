@@ -15,6 +15,10 @@ vi.mock("echarts-for-react", () => ({
   },
 }));
 
+vi.mock("@monaco-editor/react", () => ({
+  default: ({ value }: { value: string }) => <pre data-testid="sql-editor-mock">{value}</pre>,
+}));
+
 function trustedQueryArtifacts(): ConversationArtifact[] {
   return [
     {

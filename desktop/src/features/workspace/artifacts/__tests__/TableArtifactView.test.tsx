@@ -64,6 +64,21 @@ describe("TableArtifactView", () => {
     expect(screen.queryByText("2026-06-11")).toBeNull();
   });
 
+  it("marks numeric and null cells with data-grid classes", () => {
+    render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
+
+    expect(screen.getByText("10").closest("td")?.className).toContain("is-numeric");
+    expect(screen.getByText("NULL").closest("td")?.className).toContain("is-null");
+  });
+
+  it("keeps warnings and notices in the meta area", () => {
+    const { container } = render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
+
+    const meta = container.querySelector(".artifact-table-meta");
+    expect(meta?.textContent).toContain("仅展示前 10 行");
+    expect(meta?.textContent).toContain("可继续筛选");
+  });
+
   it("copies an individual cell value", async () => {
     const onToast = vi.fn();
     render(<TableArtifactView artifact={makeArtifact()} onToast={onToast} />);

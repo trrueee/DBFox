@@ -1633,6 +1633,53 @@
   padding: 4px 8px 8px;
 }
 
+.artifact-table-grid tr {
+  border-left: 2px solid transparent;
+}
+
+.artifact-table-grid tbody tr:hover {
+  border-left-color: var(--agent-accent);
+  background: var(--agent-surface-subtle);
+}
+
+.artifact-table-head-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.artifact-table-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-table-cell.is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.artifact-table-null-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill, 999px);
+  padding: 0 6px;
+  background: var(--agent-surface-muted);
+  color: var(--agent-text-muted);
+  font-size: var(--ui-font-caption);
+  font-style: italic;
+}
+
+.artifact-table-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .hifi-result-workspace {
   background: var(--agent-surface);
   color: var(--agent-text);
