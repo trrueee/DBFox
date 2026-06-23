@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { AgentRuntimeEvent } from "../../../../lib/api/types";
 import type { ConversationRun } from "../../../../types/conversation";
 import { RunTracePanel } from "../RunTracePanel";
 
@@ -266,28 +267,29 @@ describe("RunTracePanel", () => {
   });
 
   it("keeps a running trace expanded when the same run completes", () => {
+    const runningEvents: AgentRuntimeEvent[] = [
+      {
+        event_id: "evt-running",
+        run_id: "run-controlled",
+        sequence: 1,
+        created_at_ms: 1,
+        type: "agent.step.started",
+        step: { phase: "executing", status: "running", summary: "执行查询中" },
+      },
+    ];
     const runningRun: ConversationRun = {
       id: "run-controlled",
       conversation_id: "conv-1",
       datasource_id: "ds-1",
       question: "分析订单",
       status: "running",
-      events: [
-        {
-          event_id: "evt-running",
-          run_id: "run-controlled",
-          sequence: 1,
-          created_at_ms: 1,
-          type: "agent.step.started",
-          step: { phase: "executing", status: "running", summary: "执行查询中" },
-        },
-      ],
+      events: runningEvents,
     };
     const completedRun: ConversationRun = {
       ...runningRun,
       status: "completed",
       events: [
-        ...runningRun.events,
+        ...runningEvents,
         {
           event_id: "evt-completed",
           run_id: "run-controlled",
