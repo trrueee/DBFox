@@ -198,6 +198,46 @@ def test_emit_artifacts_from_observation_resolves_existing_semantic_dependencies
     assert result_view.depends_on == ["sql-physical-id", "safety-physical-id"]
 
 
+def test_emit_artifacts_from_observation_skips_empty_sql_execution_results():
+    observation = ToolObservation(
+        name="sql.execute_readonly",
+        status="success",
+        input={"sql": "SELECT id FROM users WHERE id = -1"},
+        output={
+            "status": "success",
+            "success": True,
+            "columns": ["id"],
+            "rows": [],
+            "returned_rows": 0,
+            "rowCount": 0,
+            "safe_sql": "SELECT id FROM users WHERE id = -1",
+        },
+        error=None,
+        latency_ms=5,
+    )
+    state = {
+        "datasource_id": "ds-test",
+        "execution": {
+            "success": True,
+            "columns": ["id"],
+            "rows": [],
+            "rowCount": 0,
+            "safe_sql": "SELECT id FROM users WHERE id = -1",
+        },
+        "safety": {"can_execute": True},
+        "artifacts": [],
+    }
+
+    artifacts = emit_artifacts_from_observation(
+        "sql.execute_readonly",
+        observation,
+        state,
+        "run-empty-result",
+    )
+
+    assert artifacts == []
+
+
 def test_rebuild_context_pack_returns_pack_without_mutating_inputs():
     state = {
         "datasource_id": "ds-test",

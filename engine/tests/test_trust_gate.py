@@ -69,14 +69,19 @@ def test_trust_gate_rejects_dangerous_sql(db_session_module, test_datasource_mod
 
 def test_trust_gate_prod_datasource_requires_confirmation(db_session_module, test_datasource_module) -> None:
     sync_schema(db_session_module, test_datasource_module.id)
+    original_env = test_datasource_module.env
     test_datasource_module.env = "prod"
     db_session_module.commit()
 
-    result = TrustGate(db_session_module, validate_sql_schema).evaluate(
-        test_datasource_module.id,
-        "SELECT id, username FROM users LIMIT 10",
-        policy="agent_readonly",
-    )
+    try:
+        result = TrustGate(db_session_module, validate_sql_schema).evaluate(
+            test_datasource_module.id,
+            "SELECT id, username FROM users LIMIT 10",
+            policy="agent_readonly",
+        )
+    finally:
+        test_datasource_module.env = original_env
+        db_session_module.commit()
 
     assert result["riskLevel"] == "safe"
     assert result["requiresConfirmation"] is True
@@ -212,6 +217,83 @@ def test_trust_gate_execution_decision_original_sql_does_not_drive_dry_run_resul
     assert decision.can_execute is True
     assert decision.safe_sql == safe_sql
     assert "syntax_error" not in decision.blocked_reasons
+
+
+def test_trust_gate_auto_limit_warning_is_executable_without_confirmation_on_dev_agent_readonly(
+    db_session_module,
+    test_datasource_module,
+    monkeypatch,
+) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
+    test_datasource_module.env = "dev"
+    db_session_module.commit()
+    safe_sql = "SELECT id FROM users LIMIT 1000"
+
+    def fake_guardrail(sql: str, dialect: str = "mysql"):
+        return {
+            "result": "warn",
+            "originalSql": sql,
+            "safeSql": safe_sql,
+            "checks": [
+                {
+                    "rule": "auto_limit",
+                    "level": "warn",
+                    "message": "LIMIT 1000 was appended automatically.",
+                }
+            ],
+            "message": "LIMIT 1000 was appended automatically.",
+        }
+
+    def fake_dry_run(_db, _datasource_id: str, sql: str) -> DryRunResult:
+        assert sql == safe_sql
+        return DryRunResult(True)
+
+    monkeypatch.setattr("engine.sql.trust_gate.guardrail_check", fake_guardrail)
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
+
+    decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+        test_datasource_module.id,
+        "SELECT id FROM users",
+        policy="agent_readonly",
+    )
+
+    assert decision.can_execute is True
+    assert decision.passed is True
+    assert decision.requires_confirmation is False
+    assert decision.safe_sql == safe_sql
+    assert "requires_confirmation" not in decision.blocked_reasons
+
+
+def test_trust_gate_prod_confirmation_is_approval_not_hard_block(
+    db_session_module,
+    test_datasource_module,
+    monkeypatch,
+) -> None:
+    sync_schema(db_session_module, test_datasource_module.id)
+    original_env = test_datasource_module.env
+    test_datasource_module.env = "prod"
+    db_session_module.commit()
+
+    def fake_dry_run(_db, _datasource_id: str, _sql: str) -> DryRunResult:
+        return DryRunResult(True)
+
+    monkeypatch.setattr("engine.sql.trust_gate.dry_run_query", fake_dry_run)
+
+    try:
+        decision = TrustGate(db_session_module, validate_sql_schema).execution_decision(
+            test_datasource_module.id,
+            "SELECT id FROM users LIMIT 10",
+            policy="agent_readonly",
+        )
+    finally:
+        test_datasource_module.env = original_env
+        db_session_module.commit()
+
+    assert decision.can_execute is True
+    assert decision.passed is True
+    assert decision.requires_confirmation is True
+    assert decision.safe_sql == "SELECT id FROM users LIMIT 10"
+    assert "requires_confirmation" not in decision.blocked_reasons
 
 
 def test_trust_gate_execution_decision_blocks_when_safe_sql_dry_run_fails(

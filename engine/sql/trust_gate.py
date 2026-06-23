@@ -91,10 +91,11 @@ class TrustGate:
         messages: list[str] = []
 
         guardrail_result = public_guardrail["result"]
+        benign_auto_limit_warning = _is_auto_limit_only_warning(public_guardrail) and not schema_warnings
         if guardrail_result == "reject":
             risk_level: RiskLevel = "danger"
             messages.append("Guardrail rejected this SQL. Execution is blocked.")
-        elif schema_warnings or guardrail_result == "warn":
+        elif schema_warnings or (guardrail_result == "warn" and not benign_auto_limit_warning):
             risk_level = "warning"
             if schema_warnings:
                 messages.append("Schema validation found unknown tables or columns.")
@@ -102,7 +103,10 @@ class TrustGate:
                 messages.append(public_guardrail["message"])
         else:
             risk_level = "safe"
-            messages.append("SQL passed schema validation and guardrail checks.")
+            if guardrail_result == "warn":
+                messages.append(public_guardrail["message"])
+            else:
+                messages.append("SQL passed schema validation and guardrail checks.")
 
         requires_confirmation = _requires_confirmation(
             env=env, policy=policy, risk_level=risk_level,
@@ -144,9 +148,7 @@ class TrustGate:
             policy == "agent_readonly"
             and any(check.get("rule") == "select_star" for check in guardrail_checks)
         )
-        requires_confirmation = _requires_confirmation(
-            env=env, policy=policy, risk_level=trust_gate["riskLevel"],
-        )
+        requires_confirmation = bool(trust_gate["requiresConfirmation"])
         blocked_reasons: list[str] = []
 
         if not datasource:
@@ -160,10 +162,8 @@ class TrustGate:
         if schema_warnings:
             # We no longer block execution on schema warnings; let the DB handle it so Agent can self-correct.
             messages.append("Schema validation warning: unknown tables or columns in query.")
-        from engine.policy.confirmation import confirmation_bypass_enabled
-        if requires_confirmation and not confirmation_bypass_enabled():
-            blocked_reasons.append("requires_confirmation")
-            messages.append("Execution blocked until production datasource confirmation is handled.")
+        if requires_confirmation:
+            messages.append("Execution requires manual approval before running.")
         if select_star_blocked:
             blocked_reasons.append("select_star")
             messages.append("Agent execution requires explicit projected columns instead of SELECT *.")
@@ -192,8 +192,7 @@ class TrustGate:
 
         blocked_reasons = list(dict.fromkeys(blocked_reasons))
         can_execute = not blocked_reasons
-        hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
-        safe_sql = candidate_safe_sql if not hard_blockers else None
+        safe_sql = candidate_safe_sql if can_execute else None
 
         return ExecutionSafetyDecision(
             datasource_id=datasource_id,
@@ -250,6 +249,25 @@ def _requires_confirmation(
 
     # Legacy / fallback — danger is blocked, not confirmed
     return False
+
+
+def _is_auto_limit_only_warning(guardrail: GuardrailResult) -> bool:
+    if guardrail.get("result") != "warn":
+        return False
+    checks = guardrail.get("checks") or []
+    if not isinstance(checks, list) or not checks:
+        return False
+    warning_rules = {
+        str(check.get("rule") or "").strip()
+        for check in checks
+        if isinstance(check, dict) and str(check.get("level") or "").strip() == "warn"
+    }
+    non_warning_rules = {
+        str(check.get("rule") or "").strip()
+        for check in checks
+        if isinstance(check, dict) and str(check.get("level") or "").strip() != "warn"
+    }
+    return warning_rules == {"auto_limit"} and not non_warning_rules
 
 
 def _should_dry_run(sql: str) -> bool:
