@@ -128,6 +128,34 @@ class TestSqlRepairModule:
         assert plan.error_class == "permission_denied"
         assert plan.retry_budget == 0
 
+    def test_requires_confirmation_does_not_trigger_sql_repair(self):
+        result = _check_sql_repair_fastpath({
+            "messages": [HumanMessage(content="q")],
+            "revision_count": 0,
+            "safety": {
+                "can_execute": True,
+                "requires_confirmation": True,
+                "safe_sql": "SELECT id FROM users LIMIT 10",
+                "blocked_reasons": [],
+            },
+        })
+
+        assert result is None
+
+    def test_legacy_confirmation_blocker_does_not_trigger_sql_repair(self):
+        result = _check_sql_repair_fastpath({
+            "messages": [HumanMessage(content="q")],
+            "revision_count": 0,
+            "safety": {
+                "can_execute": False,
+                "requires_confirmation": True,
+                "safe_sql": "SELECT id FROM users LIMIT 10",
+                "blocked_reasons": ["requires_confirmation"],
+            },
+        })
+
+        assert result is None
+
 
 class TestStreamingContext:
     def test_build_streaming_context_summary(self):

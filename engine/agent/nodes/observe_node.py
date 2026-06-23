@@ -40,6 +40,35 @@ def _is_empty_result(tool_name: str, output: Any) -> bool:
     return False
 
 
+def _has_result_rows(payload: dict[str, Any]) -> bool:
+    rows = payload.get("rows") or payload.get("previewRows")
+    if isinstance(rows, list) and rows:
+        return True
+    for key in ("rowCount", "returnedRows", "returned_rows", "previewRowCount"):
+        value = payload.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            return int(value) > 0
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _has_sql_suggestion_payload(payload: dict[str, Any]) -> bool:
+    if isinstance(payload.get("proposed_sql"), str) and payload["proposed_sql"].strip():
+        return True
+    suggestions = payload.get("suggestions")
+    if not isinstance(suggestions, list):
+        return False
+    return any(
+        isinstance(item, dict)
+        and isinstance(item.get("proposed_sql"), str)
+        and item["proposed_sql"].strip()
+        for item in suggestions
+    )
+
+
 from engine.agent.tools.tool_aliases import STEP_NAME_TO_INTERNAL
 
 
@@ -96,13 +125,20 @@ def emit_artifacts_from_observation(
     artifacts = []
 
     # Artifact emission for execution tools
-    if step_name in ("db.query", "sql.execute_readonly") and state.get("execution") and state.get("execution", {}).get("success"):
+    execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
+    if (
+        step_name in ("db.query", "sql.execute_readonly")
+        and execution
+        and execution.get("success")
+        and _has_result_rows(execution)
+    ):
         artifacts.append(build_result_view_artifact(state["execution"], datasource_id=state.get("datasource_id"), safety=state.get("safety"), identity=identity))
 
     if step_name in ("db.query", "sql.execute_readonly") and observation.output and observation.status == "success":
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
-        artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
+        if _has_result_rows(payload) and _has_sql_suggestion_payload(payload):
+            artifacts.append(build_sql_suggestion_artifact(payload, identity=identity))
 
     if step_name == "chart.suggest" and state.get("chart_suggestion") and observation.status == "success":
         chart = state.get("chart_suggestion")

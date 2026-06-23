@@ -46,6 +46,11 @@ def classify_sql_failure(
     execution = execution or {}
     safety = safety or {}
     el = error_text.lower()
+    hard_blocked_reasons = [
+        str(reason)
+        for reason in safety.get("blocked_reasons", [])
+        if str(reason) != "requires_confirmation"
+    ]
 
     if execution.get("success") and int(execution.get("rowCount") or 0) == 0:
         return "empty_result"
@@ -64,7 +69,7 @@ def classify_sql_failure(
         return "missing_table"
     if any(k in el for k in ("type", "cast", "cannot convert", "incompatible")):
         return "type_mismatch"
-    if safety.get("blocked_reasons") or any(k in el for k in ("guardrail", "trust gate", "validation", "blocked")):
+    if hard_blocked_reasons or any(k in el for k in ("guardrail", "trust gate", "validation", "blocked")):
         return "validation_blocked"
     return "unknown"
 
@@ -81,6 +86,8 @@ def plan_sql_repair(
 
     execution = state.get("execution") or {}
     safety = state.get("safety") or {}
+    if _is_confirmation_only_safety(safety):
+        return None
 
     if not error_text:
         if isinstance(safety.get("blocked_reasons"), list) and safety["blocked_reasons"]:
@@ -216,6 +223,17 @@ def plan_sql_repair(
     if plan.error_class == "permission_denied":
         return plan
     return plan
+
+
+def _is_confirmation_only_safety(safety: dict[str, Any]) -> bool:
+    if not safety.get("requires_confirmation"):
+        return False
+    reasons = [
+        str(reason)
+        for reason in safety.get("blocked_reasons", [])
+        if str(reason)
+    ]
+    return not reasons or all(reason == "requires_confirmation" for reason in reasons)
 
 
 def repair_plan_to_progress_decision(plan: SqlRepairPlan) -> dict[str, Any]:

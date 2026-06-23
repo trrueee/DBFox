@@ -319,6 +319,76 @@ def get_run_sequence_by_session(db: Session, session_id: str) -> list[AgentRun]:
     )
 
 
+def _response_evidence_ids(response_data: dict[str, Any] | None) -> set[str]:
+    if not isinstance(response_data, dict):
+        return set()
+    answer = response_data.get("answer")
+    if not isinstance(answer, dict):
+        return set()
+    evidence = answer.get("evidence")
+    if not isinstance(evidence, list):
+        return set()
+    ids: set[str] = set()
+    for item in evidence:
+        if isinstance(item, dict) and isinstance(item.get("artifact_id"), str):
+            ids.add(item["artifact_id"])
+    return ids
+
+
+def _payload_has_rows(payload: dict[str, Any]) -> bool:
+    rows = payload.get("rows") or payload.get("previewRows")
+    if isinstance(rows, list) and rows:
+        return True
+    for key in ("rowCount", "returnedRows", "returned_rows", "previewRowCount"):
+        value = payload.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            return int(value) > 0
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _is_followup_artifact(artifact: Any, payload: dict[str, Any]) -> bool:
+    artifact_type = str(artifact.type or "")
+    if artifact_type in {"result_view", "table"}:
+        return _payload_has_rows(payload)
+    if artifact_type == "chart":
+        return True
+    if artifact_type == "sql":
+        safety = payload.get("safety_state")
+        if isinstance(safety, dict) and safety.get("can_execute") is False:
+            return False
+        if str(payload.get("execution_status") or "") == "failed":
+            return False
+        return bool(payload.get("sql") or payload.get("safeSql") or payload.get("safe_sql"))
+    return False
+
+
+def _select_followup_artifacts(
+    artifacts: list[Any],
+    response_data: dict[str, Any] | None,
+) -> list[tuple[Any, dict[str, Any]]]:
+    evidence_ids = _response_evidence_ids(response_data)
+    selected: list[tuple[Any, dict[str, Any]]] = []
+    for artifact in artifacts:
+        payload = _parse_json(artifact.payload_json) or {}
+        if _is_followup_artifact(artifact, payload):
+            selected.append((artifact, payload))
+
+    type_rank = {"result_view": 0, "chart": 1, "sql": 2, "table": 3}
+
+    def rank(item: tuple[Any, dict[str, Any]]) -> tuple[int, int, int]:
+        artifact, _payload = item
+        artifact_ids = {str(artifact.id or ""), str(artifact.semantic_id or "")}
+        evidence_rank = 0 if artifact_ids.intersection(evidence_ids) else 1
+        sequence = artifact.sequence if isinstance(artifact.sequence, int) else 10_000
+        return (evidence_rank, type_rank.get(str(artifact.type or ""), 9), sequence)
+
+    return sorted(selected, key=rank)
+
+
 def build_followup_context_from_run(
     db: Session,
     parent_run_id: str,
@@ -328,8 +398,6 @@ def build_followup_context_from_run(
     if run is None:
         return None
 
-    artifacts = _load_run_artifacts(db, parent_run_id)
-
     response_data = _parse_json(run.response_json) if run.response_json else None
     previous_answer = None
     if response_data:
@@ -338,6 +406,11 @@ def build_followup_context_from_run(
             previous_answer = answer.get("answer")
         if not previous_answer:
             previous_answer = response_data.get("explanation")
+
+    artifacts = _select_followup_artifacts(
+        _load_run_artifacts(db, parent_run_id),
+        response_data,
+    )
 
     return AgentFollowUpContext(
         session_id=run.session_id,
@@ -350,10 +423,10 @@ def build_followup_context_from_run(
                 type=artifact.type,
                 title=artifact.title,
                 summary=_summarize_artifact_payload(
-                    _parse_json(artifact.payload_json) or {}
+                    payload
                 ),
-                payload=_parse_json(artifact.payload_json) or {},
+                payload=payload,
             )
-            for artifact in artifacts[:8]
+            for artifact, payload in artifacts[:6]
         ],
     )

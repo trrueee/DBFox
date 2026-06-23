@@ -65,7 +65,7 @@ def sql_execute_readonly(
     if hard_blockers:
         raise RuntimeError(f"SQL execution is blocked by safety rules: {hard_blockers}")
 
-    if "requires_confirmation" in blocked_reasons and not safety.get("can_execute"):
+    if safety.get("requires_confirmation"):
         raise RuntimeError("SQL execution requires manual approval.")
 
     result = execute_query(
