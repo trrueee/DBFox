@@ -39,6 +39,19 @@ describe("agent visual tokens", () => {
       "--trust-safe",
       "--trust-warning",
       "--trust-danger",
+      "--surface-base",
+      "--surface-panel",
+      "--surface-card",
+      "--surface-card-hover",
+      "--border-subtle",
+      "--border-strong",
+      "--radius-sm",
+      "--radius-md",
+      "--radius-lg",
+      "--radius-xl",
+      "--radius-pill",
+      "--shadow-card",
+      "--shadow-card-hover",
     ]) {
       expect(tokens).toContain(token);
     }
@@ -75,13 +88,25 @@ describe("agent visual tokens", () => {
   });
 
   it("keeps chart rendering colors behind agent tokens", () => {
-    const source = read("features/workspace/artifacts/ChartArtifactView.tsx");
+    const source = read("features/workspace/artifacts/useChartTheme.ts");
 
     expect(source).toContain("--agent-chart-1");
     expect(source).toContain("--agent-chart-tooltip-shadow");
     expect(source).not.toMatch(/#[0-9A-Fa-f]{3,8}/);
     expect(source).not.toMatch(/\brgba?\(/);
     expect(source).not.toMatch(/theme\s*===\s*["']dark["']/);
+  });
+
+  it("keeps high-frequency UI surfaces behind tokens", () => {
+    for (const relativePath of [
+      "App.css",
+      "features/conversation/workspace/conversationWorkspace.css",
+      "components/data-grid/data-grid.css",
+    ]) {
+      const source = read(relativePath);
+      expect(source, relativePath).not.toMatch(/background:\s*#(?:fff|ffffff|f8fafc|f1f5f9|fbfcfe)\b/i);
+      expect(source, relativePath).not.toMatch(/border(?:-color)?:\s*#(?:e2e8f0|e8edf4|cbd5e1)\b/i);
+    }
   });
 
   it("keeps UI typography on shared tokens across source files", () => {

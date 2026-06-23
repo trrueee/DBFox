@@ -12,6 +12,8 @@ interface ChartArtifactViewProps {
   compact?: boolean;
 }
 
+const chartFillStyle = { height: "100%", width: "100%" };
+
 export function ChartArtifactView({ artifact, onToast, compact = false }: ChartArtifactViewProps) {
   const [chartType, setChartType] = useState<ChartArtifactType>(artifact.chartType);
   const [expanded, setExpanded] = useState(false);
@@ -85,7 +87,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
       }
     >
       <div className={`hifi-chart-body ${expanded ? "is-expanded" : ""}`} data-chart-id={artifact.id}>
-        <ReactECharts ref={chartRef} option={option} style={{ height: "100%", width: "100%" }} />
+        <ReactECharts ref={chartRef} option={option} style={chartFillStyle} />
       </div>
     </ArtifactCard>
   );
