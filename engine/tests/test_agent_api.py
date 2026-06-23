@@ -240,6 +240,77 @@ def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch,
     assert exc_info.value.detail["code"] == "FILTER_COLUMN_NOT_ALLOWED"
 
 
+def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
+    _add_pagination_source(
+        db_session,
+        safe_sql="SELECT id, created_at, status FROM orders",
+        columns=["id", "created_at", "status"],
+    )
+    executed_sql: dict[str, str] = {}
+
+    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+        executed_sql["datasource_id"] = datasource_id
+        executed_sql["sql"] = sql
+        assert safety_decision.can_execute is True
+        return {
+            "columns": ["id", "created_at", "status"],
+            "rows": [
+                {"id": 2, "created_at": "2026-06-02", "status": "paid"},
+                {"id": 1, "created_at": "2026-06-01", "status": "paid"},
+            ],
+            "latencyMs": 3,
+            "warnings": [],
+            "notices": [],
+        }
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = agent_module.api_agent_result_export(
+        agent_module.ResultExportRequest(
+            datasourceId="ds-page",
+            sourceSqlArtifactId="artifact-result-page",
+            safeSql="SELECT id, created_at, status FROM orders",
+            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            search="2026",
+            sort=[agent_module.ResultSort(column="created_at", direction="desc")],
+        ),
+        db_session,
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert response.status_code == 200
+    assert response.media_type == "text/csv"
+    assert body.splitlines()[0] == "id,created_at,status"
+    assert "2026-06-02,paid" in body
+    assert "`status` = 'paid'" in executed_sql["sql"]
+    assert "LIKE '%2026%'" in executed_sql["sql"]
+    assert "ORDER BY `created_at` DESC" in executed_sql["sql"]
+    assert "LIMIT" not in executed_sql["sql"].upper()
+
+
+def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):
+    _add_pagination_source(db_session)
+
+    def fail_execute_query(*_args, **_kwargs):
+        raise AssertionError("filter validation must run before export execution")
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fail_execute_query)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_export(
+            agent_module.ResultExportRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="SELECT id, amount FROM orders",
+                filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "FILTER_COLUMN_NOT_ALLOWED"
+
+
 def test_sse_failed_event() -> None:
     event_str = sse_failed_event("evt_123", "run_456", "Test error message", "ERR_CODE")
     assert event_str.startswith("event: agent.run.failed\n")

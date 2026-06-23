@@ -407,6 +407,14 @@ class ResultPageRequest(BaseModel):
     search: str | None = None
     countMode: Literal["none", "exact", "estimate"] = "none"
 
+class ResultExportRequest(BaseModel):
+    datasourceId: str
+    sourceSqlArtifactId: str
+    safeSql: str
+    sort: list[ResultSort] | None = None
+    filters: list[ResultFilter] | None = None
+    search: str | None = None
+
 class ResultPageResponse(BaseModel):
     columns: list[str]
     rows: list[dict[str, Any]]
@@ -592,17 +600,50 @@ def _pagination_execution_decision(datasource_id: str, original_sql: str, safe_s
     )
 
 
-@router.post("/agent/results/page", response_model=ResultPageResponse)
-def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
-    from engine.sql.safety_gate import validate_derived_sql
-    from engine.sql.executor import execute_query
-    from engine.models import DataSource
+def _build_result_view_sql(
+    *,
+    req: ResultPageRequest | ResultExportRequest,
+    source_sql: str,
+    source_artifact: AgentArtifactRecord,
+    dialect: str,
+    limit: int | None,
+    offset: int | None,
+) -> str:
     from engine.sql.sql_backed_view import (
         SqlBackedFilter,
         SqlBackedSort,
         SqlBackedViewError,
         build_sql_backed_page_sql,
     )
+
+    source_columns = sorted(_result_columns_from_artifact(source_artifact))
+    try:
+        derived = build_sql_backed_page_sql(
+            base_sql=source_sql,
+            dialect=dialect,
+            columns=source_columns,
+            filters=[SqlBackedFilter.model_validate(item.model_dump()) for item in (req.filters or [])],
+            search=req.search,
+            searchable_columns=source_columns,
+            sorts=[SqlBackedSort.model_validate(item.model_dump()) for item in (req.sort or [])],
+            limit=limit,
+            offset=offset,
+        )
+        return derived.sql
+    except SqlBackedViewError as e:
+        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "DERIVED_SQL_BUILD_FAILED", "message": f"Failed to build derived SQL: {e}"},
+        )
+
+
+@router.post("/agent/results/page", response_model=ResultPageResponse)
+def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
+    from engine.sql.safety_gate import validate_derived_sql
+    from engine.sql.executor import execute_query
+    from engine.models import DataSource
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
@@ -615,25 +656,15 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
     offset = (req.page - 1) * req.pageSize
 
     source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
-    source_columns = sorted(_result_columns_from_artifact(source_artifact))
 
-    try:
-        derived = build_sql_backed_page_sql(
-            base_sql=source_sql,
-            dialect=dialect,
-            columns=source_columns,
-            filters=[SqlBackedFilter.model_validate(item.model_dump()) for item in (req.filters or [])],
-            search=req.search,
-            searchable_columns=source_columns,
-            sorts=[SqlBackedSort.model_validate(item.model_dump()) for item in (req.sort or [])],
-            limit=limit + 1, # Fetch one extra to determine hasNextPage
-            offset=offset,
-        )
-        derived_sql = derived.sql
-    except SqlBackedViewError as e:
-        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_BUILD_FAILED", "message": f"Failed to build derived SQL: {e}"})
+    derived_sql = _build_result_view_sql(
+        req=req,
+        source_sql=source_sql,
+        source_artifact=source_artifact,
+        dialect=dialect,
+        limit=limit + 1, # Fetch one extra to determine hasNextPage
+        offset=offset,
+    )
 
     warnings = validate_derived_sql(derived_sql, dialect=dialect)
     if warnings:
@@ -690,4 +721,68 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
         latencyMs=res.get("latencyMs", 0),
         warnings=res.get("warnings"),
         notices=res.get("notices"),
+    )
+
+
+@router.post("/agent/results/export")
+def api_agent_result_export(req: ResultExportRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+    import csv
+    import io
+
+    from engine.sql.safety_gate import validate_derived_sql
+    from engine.sql.executor import execute_query
+    from engine.models import DataSource
+
+    ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
+    if not ds:
+        raise HTTPException(status_code=404, detail="Datasource not found.")
+
+    dialect = ds.db_type or "mysql"
+    source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
+    derived_sql = _build_result_view_sql(
+        req=req,
+        source_sql=source_sql,
+        source_artifact=source_artifact,
+        dialect=dialect,
+        limit=None,
+        offset=None,
+    )
+
+    warnings = validate_derived_sql(derived_sql, dialect=dialect)
+    if warnings:
+        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_VALIDATION_FAILED", "message": warnings[0]})
+
+    try:
+        decision = _pagination_execution_decision(
+            req.datasourceId,
+            original_sql=source_sql,
+            safe_sql=derived_sql,
+        )
+        res = execute_query(db, req.datasourceId, derived_sql, safety_decision=decision)
+    except DBFoxError as e:
+        raise HTTPException(status_code=400, detail=_http_detail(e))
+    except Exception as e:
+        logger.exception("Failed to export derived query")
+        raise HTTPException(status_code=500, detail={"code": "EXECUTION_ERROR", "message": str(e)})
+
+    columns = list(res.get("columns") or [])
+    rows = list(res.get("rows") or [])
+
+    def stream_csv():
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
+        writer.writeheader()
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        for row in rows:
+            writer.writerow({column: row.get(column, "") for column in columns})
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    return StreamingResponse(
+        stream_csv(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="dbfox-result.csv"'},
     )
