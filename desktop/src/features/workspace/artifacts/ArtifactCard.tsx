@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 export type ArtifactTone = "default" | "sql" | "table" | "chart" | "insight" | "warning" | "danger";
 
 interface ArtifactCardProps {
+  className?: string;
   icon?: ReactNode;
   title: string;
   badge: string;
@@ -15,6 +16,7 @@ interface ArtifactCardProps {
 }
 
 export function ArtifactCard({
+  className,
   icon,
   title,
   badge,
@@ -25,8 +27,15 @@ export function ArtifactCard({
   children,
   compact = false,
 }: ArtifactCardProps) {
+  const classNames = [
+    "artifact-card",
+    `artifact-card-${tone}`,
+    className,
+    compact ? "is-compact" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <section className={`artifact-card artifact-card-${tone} ${compact ? "is-compact" : ""}`}>
+    <section className={classNames}>
       <header className="artifact-card-header">
         <div className="artifact-card-title">
           {icon}

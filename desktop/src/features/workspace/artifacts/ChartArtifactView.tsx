@@ -159,6 +159,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
 
   return (
     <ArtifactCard
+      className="hifi-chart-card"
       title={artifact.title}
       badge="图表"
       tone="chart"
