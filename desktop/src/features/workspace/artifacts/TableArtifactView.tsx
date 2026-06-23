@@ -46,13 +46,17 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     <ArtifactTableToolbar
       mode={mode}
       artifactId={artifact.id}
+      columns={artifact.columns}
       search={table.search}
       onSearchChange={table.setSearch}
+      sort={table.sort}
+      onApplySort={table.setSortState}
+      onClearSort={table.clearSort}
+      filters={table.filters}
+      onFiltersChange={table.setFilters}
       isLoading={table.isLoading}
       isSqlBackedWorkspace={table.isSqlBackedWorkspace}
       onRefresh={table.refresh}
-      onFilter={() => onToast("筛选器待接入：后续会转换为安全 SQL 条件")}
-      onSortNotice={() => onToast("排序待接入：后续会转换为安全 SQL 排序")}
       onExport={() => void handleExport()}
       onCopy={() => void handleCopy()}
       canToggleLoadedRows={!table.isSqlBackedWorkspace && table.rowsToUseLength > 10 && !table.isSearching}
