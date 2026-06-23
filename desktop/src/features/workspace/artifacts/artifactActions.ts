@@ -10,6 +10,14 @@ export async function copyText(text: string) {
 export function downloadTextFile(filename: string, content: string, mimeType = "text/plain;charset=utf-8") {
   try {
     const blob = new Blob([content], { type: mimeType });
+    return downloadBlobFile(filename, blob);
+  } catch {
+    return false;
+  }
+}
+
+export function downloadBlobFile(filename: string, blob: Blob) {
+  try {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
