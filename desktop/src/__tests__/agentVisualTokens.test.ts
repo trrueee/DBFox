@@ -101,6 +101,22 @@ describe("agent visual tokens", () => {
     }
   });
 
+  it("keeps chat bubbles neutral and answer text aligned with user body size", () => {
+    const tokens = read("styles/tokens.css");
+    const css = read("features/conversation/workspace/conversationWorkspace.css");
+
+    expect(tokenValue(tokens, ":root", "--agent-user-bg")).toBe("#F3F4F6");
+    expect(tokenValue(tokens, ":root", "--agent-user-border")).toBe("#D1D5DB");
+    expect(tokenValue(tokens, ":root", "--agent-user-text")).toBe("#374151");
+    expect(tokenValue(tokens, ".dark", "--agent-user-bg")).toBe("#1F2937");
+    expect(tokenValue(tokens, ".dark", "--agent-user-border")).toBe("#4B5563");
+    expect(tokenValue(tokens, ".dark", "--agent-user-text")).toBe("#E5E7EB");
+
+    expect(css).toMatch(/\.conv-message-user \.conv-message-body p,[\s\S]*?font-size:\s*var\(--agent-font-body\);/);
+    expect(css).toMatch(/\.conv-answer-document \.hifi-md-p,[\s\S]*?font-size:\s*var\(--agent-font-body\);/);
+    expect(css).toMatch(/\.conv-run-status-copy strong\s*{[\s\S]*?font-size:\s*var\(--agent-font-ui\);/);
+  });
+
   it("keeps conversation workspace colors behind tokens", () => {
     const css = read("features/conversation/workspace/conversationWorkspace.css");
 
