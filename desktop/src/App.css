@@ -3323,7 +3323,15 @@
 
 /* ===== Chart Card ===== */
 .hifi-chart-card .hifi-chart-body {
+  height: 280px;
   padding: 4px 8px 8px;
+  transition: height 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hifi-chart-card.is-compact .hifi-chart-body {
+  height: 180px;
+}
+.hifi-chart-card .hifi-chart-body.is-expanded {
+  height: min(520px, 62vh);
 }
 .hifi-chart-type-btn {
   display: flex;
@@ -3346,6 +3354,12 @@
 }
 .hifi-chart-type-btn:hover:not(.active) {
   background: #F8FAFC;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hifi-chart-card .hifi-chart-body {
+    transition: none;
+  }
 }
 
 /* ===== Markdown Content ===== */
