@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Activity, BookOpen, CheckCircle2, Circle, Database, MessageSquare, Search, ShieldCheck, Tags, Wrench, XCircle } from "lucide-react";
 import type { ConversationRun } from "../../../types/conversation";
 import {
@@ -7,18 +8,43 @@ import {
   type TimelinePhase,
   type TimelineStage,
 } from "./runTraceModel";
+import { RunPhaseStepper } from "./RunPhaseStepper";
 
 export function RunTracePanel({ run }: { run: ConversationRun }) {
   const { stages, contextReferences, repairSummaries, summary } = buildRunTraceModel(run);
+  const initiallyExpanded = run.status === "running" || run.status === "failed" || run.status === "waiting_approval";
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const userToggledRef = useRef(false);
+
+  useEffect(() => {
+    if (run.status === "running" || run.status === "failed" || run.status === "waiting_approval") {
+      setExpanded(true);
+      return;
+    }
+    if (!userToggledRef.current && run.status === "completed") {
+      setExpanded((value) => value);
+    }
+  }, [run.status]);
+
+  const toggleExpanded = () => {
+    userToggledRef.current = true;
+    setExpanded((value) => !value);
+  };
 
   return (
-    <details className="conv-run-trace" open={run.status === "running" || run.status === "failed"}>
-      <summary>
+    <section className="conv-run-trace" data-expanded={expanded ? "true" : "false"}>
+      <button
+        type="button"
+        className="conv-run-trace-summary"
+        aria-expanded={expanded}
+        onClick={toggleExpanded}
+      >
         {run.status === "failed" ? <XCircle size={14} /> : <Activity size={14} />}
         <span>{summary}</span>
         {stages.length > 0 && <span className="conv-run-count">{stages.length}</span>}
-      </summary>
-      <div className="conv-run-trace-body">
+      </button>
+      <RunPhaseStepper stages={stages} />
+      <div className="conv-run-trace-body" hidden={!expanded}>
         {contextReferences.length > 0 && (
           <div className="conv-context-reference-groups">
             {contextReferences.map((group) => (
@@ -108,7 +134,7 @@ export function RunTracePanel({ run }: { run: ConversationRun }) {
         )}
         {run.error_message && <div>{run.error_message}</div>}
       </div>
-    </details>
+    </section>
   );
 }
 
