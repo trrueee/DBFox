@@ -50,7 +50,11 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
 
     const nextCacheKey = `${tableId}|${nextPage}|${pageSize}`;
     const cached = previewCache.get(nextCacheKey);
-    setData(cached ?? null);
+    if (cached) {
+      setData(cached);
+    } else if (tableId !== prevTableId) {
+      setData(null);
+    }
   }
 
   const loadPreview = async () => {
