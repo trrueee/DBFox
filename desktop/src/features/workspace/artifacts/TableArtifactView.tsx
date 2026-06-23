@@ -3,6 +3,7 @@ import { Copy, Download, ExternalLink, AlertCircle, RefreshCw, Filter, ArrowUpDo
 import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
 import { agentApi } from "../../../lib/api/agent";
 import type { ResultPageRequest, ResultPageResponse } from "../../../lib/api/types";
+import { ArtifactCard } from "./ArtifactCard";
 import { copyText, downloadTextFile, toCsv } from "./artifactActions";
 
 const PREVIEW_ROW_LIMIT = 10;
@@ -277,13 +278,56 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
 
   // mode === "inline"
   return (
-    <div className="hifi-ai-card">
-      <div className="hifi-ai-card-header flex items-center justify-between gap-2">
-        <span>{artifact.title}</span>
-        <span className="hifi-artifact-chip hifi-artifact-chip-table">结果表</span>
-      </div>
-      <div className="hifi-ai-card-body p-3">
-        {artifact.description && <p className="hifi-artifact-description mb-2">{artifact.description}</p>}
+    <ArtifactCard
+      title={artifact.title}
+      badge="结果表"
+      tone="table"
+      description={artifact.description}
+      meta={
+        <>
+          <span className="hifi-artifact-pill">
+            预览 {previewCount} / 共 {totalRows} 行
+          </span>
+          {shouldUseWindow && (
+            <span className="hifi-artifact-pill">
+              窗口 1-{visibleRows.length} / {filteredAndSortedRows.length}
+            </span>
+          )}
+          <span className="hifi-artifact-pill">{artifact.columns.length} 列</span>
+          {latencyMs !== undefined && (
+            <span className="hifi-artifact-pill">{latencyMs}ms</span>
+          )}
+          {!isSqlBackedWorkspace && returnedRows > previewCount && (
+            <span className="hifi-artifact-pill">已载入 {returnedRows} 行</span>
+          )}
+          {artifact.truncated && (
+            <span className="hifi-artifact-pill hifi-artifact-pill-warning">结果已截断</span>
+          )}
+        </>
+      }
+      actions={
+        <>
+          {onOpenResultTab && (
+            <button
+              type="button"
+              className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1"
+              onClick={() => onOpenResultTab(artifact)}
+            >
+              <ExternalLink size={10} />
+              打开为 Tab
+            </button>
+          )}
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
+            <Copy size={10} />
+            复制 CSV
+          </button>
+          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleExport}>
+            <Download size={10} />
+            导出 CSV
+          </button>
+        </>
+      }
+    >
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor={`${artifact.id}-table-search`}>
             搜索结果
@@ -311,26 +355,6 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
             获取分页数据失败: {fetchError}
           </div>
         )}
-        <div className="hifi-artifact-meta mb-2 flex flex-wrap items-center gap-2">
-          <span className="hifi-artifact-pill">
-            预览 {previewCount} / 共 {totalRows} 行
-          </span>
-          {shouldUseWindow && (
-            <span className="hifi-artifact-pill">
-              窗口 1-{visibleRows.length} / {filteredAndSortedRows.length}
-            </span>
-          )}
-          <span className="hifi-artifact-pill">{artifact.columns.length} 列</span>
-          {latencyMs !== undefined && (
-            <span className="hifi-artifact-pill">{latencyMs}ms</span>
-          )}
-          {!isSqlBackedWorkspace && returnedRows > previewCount && (
-            <span className="hifi-artifact-pill">已载入 {returnedRows} 行</span>
-          )}
-          {artifact.truncated && (
-            <span className="hifi-artifact-pill hifi-artifact-pill-warning">结果已截断</span>
-          )}
-        </div>
         {(warnings.length > 0 || notices.length > 0) && (
           <div className="mb-2 grid gap-1 text-[var(--ui-font-caption)]">
             {warnings.map((warning) => <span key={`warning-${warning}`} className="hifi-artifact-warning-text">{warning}</span>)}
@@ -384,28 +408,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
             </tbody>
           </table>
         </div>
-        <div className="flex gap-2 justify-end mt-3">
-          {onOpenResultTab && (
-            <button
-              type="button"
-              className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1"
-              onClick={() => onOpenResultTab(artifact)}
-            >
-              <ExternalLink size={10} />
-              打开为 Tab
-            </button>
-          )}
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
-            <Copy size={10} />
-            复制 CSV
-          </button>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleExport}>
-            <Download size={10} />
-            导出 CSV
-          </button>
-        </div>
-      </div>
-    </div>
+    </ArtifactCard>
   );
 }
 
