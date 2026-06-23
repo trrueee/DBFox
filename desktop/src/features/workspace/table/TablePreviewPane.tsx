@@ -235,7 +235,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
           </button>
         </div>
         <select
-          className="border border-gray-200 rounded px-1 text-[10px]"
+          className="border border-gray-200 rounded px-1 text-[var(--ui-font-caption)]"
           value={pageSize}
           onChange={(event) => {
             setPageSize(Number(event.target.value));

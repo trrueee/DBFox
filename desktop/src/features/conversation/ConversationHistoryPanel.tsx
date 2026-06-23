@@ -13,14 +13,14 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
     <div className="p-4 flex flex-col gap-2 overflow-auto h-full">
       <div className="flex items-center justify-between mb-1">
         <div>
-          <div className="font-bold text-[13px] text-slate-800">对话历史</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">SQLite 本地会话记录</div>
+          <div className="font-bold text-[var(--ui-font-body)] text-slate-800">对话历史</div>
+          <div className="text-[var(--ui-font-caption)] text-slate-400 mt-0.5">SQLite 本地会话记录</div>
         </div>
         <span className="hifi-guide-chip-prod">{conversations.length} 条</span>
       </div>
 
       {conversations.length === 0 ? (
-        <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center text-[11px] text-slate-400 bg-white">
+        <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center text-[var(--ui-font-label)] text-slate-400 bg-white">
           暂无历史记录。提交问数后，会话会写入本地 SQLite。
         </div>
       ) : (
@@ -34,15 +34,15 @@ export function ConversationHistoryPanel({ conversations, activeConversationId, 
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-800">
+                  <div className="flex items-center gap-1.5 text-[var(--ui-font-label)] font-bold text-slate-800">
                     <MessageSquare size={12} className="text-indigo-500 shrink-0" />
                     <span className="truncate">{conversation.title}</span>
                     <ChevronRight size={10} className="text-slate-300 group-hover:text-indigo-400 shrink-0 ml-auto" />
                   </div>
                   {preview && (
-                    <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{preview}</div>
+                    <div className="text-[var(--ui-font-caption)] text-slate-500 mt-0.5 line-clamp-1">{preview}</div>
                   )}
-                  <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-1.5">
+                  <div className="flex items-center gap-1.5 text-[var(--ui-font-micro)] text-slate-400 mt-1.5">
                     <Clock size={10} />
                     <span>{formatTime(conversation.updated_at)}</span>
                     <span>·</span>

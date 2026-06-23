@@ -115,7 +115,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
     <div className="hifi-sql-workspace hifi-tab-pane flex flex-col h-full">
       <div className="hifi-panel-toolbar flex-shrink-0">
         <div className="hifi-toolbar-left">
-          <span className="font-semibold text-[11px] text-slate-700">SQL Console / {dbLabel}</span>
+          <span className="font-semibold text-[var(--ui-font-label)] text-slate-700">SQL Console / {dbLabel}</span>
         </div>
         <div className="hifi-toolbar-right">
           <button className="hifi-guide-btn-primary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={runSql} disabled={running}>

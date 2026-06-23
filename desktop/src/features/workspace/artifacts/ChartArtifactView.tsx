@@ -2,7 +2,6 @@ import { useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { BarChart3, LineChart, Download } from "lucide-react";
 import type { ChartArtifact, ChartArtifactType } from "../../../types/agentArtifact";
-import { useTheme } from "../../../hooks/useTheme";
 
 interface ChartArtifactViewProps {
   artifact: ChartArtifact;
@@ -16,6 +15,15 @@ type EChartsDomElement = HTMLElement & {
   };
 };
 
+const CHART_COLOR_TOKENS = [
+  "--agent-chart-1",
+  "--agent-chart-2",
+  "--agent-chart-3",
+  "--agent-chart-4",
+  "--agent-chart-5",
+  "--agent-chart-6",
+] as const;
+
 function scatterXValue(point: ChartArtifact["series"][number], index: number): number {
   const raw = point.x ?? point.label;
   const value = typeof raw === "number" ? raw : Number(raw);
@@ -24,7 +32,6 @@ function scatterXValue(point: ChartArtifact["series"][number], index: number): n
 
 export function ChartArtifactView({ artifact, onToast, compact = false }: ChartArtifactViewProps) {
   const [chartType, setChartType] = useState<ChartArtifactType>(artifact.chartType);
-  const { theme } = useTheme();
 
   const labels = artifact.series.map((p) => p.label);
   const values = artifact.series.map((p) => p.value);
@@ -37,18 +44,24 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
     return val || fallback;
   };
 
-  const textColor = getThemeColor("--color-text-primary", "#334155");
-  const textMuted = getThemeColor("--color-text-muted", "#94A3B8");
-  const textSecondary = getThemeColor("--color-text-secondary", "#64748B");
-  const borderColor = getThemeColor("--color-border", "#E2E8F0");
-  const borderLight = getThemeColor("--color-border-light", "#F1F5F9");
-  const panelBg = getThemeColor("--color-panel", "#ffffff");
+  const getThemeFontSize = (varName: string, fallback: number) => {
+    const value = getThemeColor(varName, `${fallback}px`);
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
 
-  const chartColors = theme === "dark"
-    ? ["#E08244", "#38BDF8", "#F59E0B", "#34D399", "#F472B6", "#A78BFA"]
-    : ["#4F46E5", "#0D7377", "#B45309", "#2E7D32", "#DB2777", "#7C3AED"];
-
-  const primaryRgb = theme === "dark" ? "224, 130, 68" : "79, 70, 229";
+  const textColor = getThemeColor("--color-text-primary", "currentColor");
+  const textMuted = getThemeColor("--color-text-muted", "currentColor");
+  const textSecondary = getThemeColor("--color-text-secondary", "currentColor");
+  const borderColor = getThemeColor("--color-border", "currentColor");
+  const borderLight = getThemeColor("--agent-chart-grid", "currentColor");
+  const panelBg = getThemeColor("--color-panel", "transparent");
+  const tooltipShadow = getThemeColor("--agent-chart-tooltip-shadow", "none");
+  const areaStart = getThemeColor("--agent-chart-area-start", "transparent");
+  const areaEnd = getThemeColor("--agent-chart-area-end", "transparent");
+  const tooltipFontSize = getThemeFontSize("--ui-font-control", 12);
+  const axisFontSize = getThemeFontSize("--ui-font-caption", 10);
+  const chartColors = CHART_COLOR_TOKENS.map((token) => getThemeColor(token, "currentColor"));
 
   const option = chartType === "pie"
     ? {
@@ -56,8 +69,8 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
           trigger: "item" as const,
           backgroundColor: panelBg,
           borderColor,
-          textStyle: { color: textColor, fontSize: 12 },
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          textStyle: { color: textColor, fontSize: tooltipFontSize },
+          boxShadow: tooltipShadow,
         },
         color: chartColors,
         series: [
@@ -74,23 +87,24 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
           trigger: chartType === "scatter" ? "item" as const : "axis" as const,
           backgroundColor: panelBg,
           borderColor,
-          textStyle: { color: textColor, fontSize: 12 },
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          textStyle: { color: textColor, fontSize: tooltipFontSize },
+          boxShadow: tooltipShadow,
         },
+        color: chartColors,
         grid: compact ? { left: 36, right: 14, top: 16, bottom: 30 } : { left: 48, right: 24, top: 24, bottom: 40 },
         xAxis: {
           type: chartType === "scatter" ? "value" as const : "category" as const,
           data: chartType === "scatter" ? undefined : labels,
-          axisLabel: { color: textSecondary, fontSize: 10, rotate: labels.length > 6 && !compact ? 30 : 0 },
+          axisLabel: { color: textSecondary, fontSize: axisFontSize, rotate: labels.length > 6 && !compact ? 30 : 0 },
           axisTick: { show: false },
           axisLine: { lineStyle: { color: borderColor } },
         },
         yAxis: {
           type: "value" as const,
-          axisLabel: { color: textSecondary, fontSize: 10 },
+          axisLabel: { color: textSecondary, fontSize: axisFontSize },
           splitLine: { lineStyle: { color: borderLight } },
           name: artifact.unit || "",
-          nameTextStyle: { color: textMuted, fontSize: 10 },
+          nameTextStyle: { color: textMuted, fontSize: axisFontSize },
         },
         series: [
           {
@@ -105,7 +119,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
                   smooth: true,
                   lineStyle: { width: 2.5 },
                   areaStyle: chartType === "area"
-                    ? { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: `rgba(${primaryRgb}, 0.15)` }, { offset: 1, color: `rgba(${primaryRgb}, 0)` }] } }
+                    ? { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: areaStart }, { offset: 1, color: areaEnd }] } }
                     : undefined,
                   symbol: "circle",
                   symbolSize: compact ? 4 : 6,

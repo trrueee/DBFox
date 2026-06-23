@@ -199,11 +199,11 @@ export function LlmConfigPanel({
           <div className="hifi-settings-status-row">
             <span>API Key</span>
             {config.apiKey ? (
-              <Badge variant="success" className="gap-1 text-[0.62rem]">
+              <Badge variant="success" className="gap-1 text-[var(--ui-font-caption)]">
                 <CheckCircle2 size={9} />已配置
               </Badge>
             ) : (
-              <Badge variant="secondary" className="gap-1 text-[0.62rem]">
+              <Badge variant="secondary" className="gap-1 text-[var(--ui-font-caption)]">
                 <AlertCircle size={9} />未设置
               </Badge>
             )}

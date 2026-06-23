@@ -111,7 +111,7 @@
   border-radius: var(--radius-control);
   background: var(--color-bg);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-family: inherit;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
@@ -125,7 +125,7 @@
   color: var(--color-text-muted);
   padding: 0 5px;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-family: inherit;
   line-height: 16px;
 }
@@ -166,14 +166,14 @@
 }
 
 .hifi-header-title {
-  font-size: 18px;
+  font-size: var(--ui-font-title);
   font-weight: 600;
   color: var(--color-text-primary);
   line-height: 1.2;
 }
 
 .hifi-header-subtitle {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
   font-weight: 400;
   margin-top: 1px;
@@ -187,7 +187,7 @@
 }
 
 .hifi-header-tab {
-  font-size: 14px;
+  font-size: var(--ui-font-input);
   font-weight: 400;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -245,7 +245,7 @@
   border-radius: 50%;
   background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
   color: #FFFFFF;
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -295,7 +295,7 @@
 }
 
 .hifi-sidebar-title {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-secondary);
   letter-spacing: 0.02em;
@@ -319,15 +319,15 @@
 }
 
 .hifi-db-info { flex: 1; display: flex; flex-direction: column; line-height: 1.3; }
-.hifi-db-name { font-size: 12px; font-weight: 600; color: var(--color-text-primary); }
-.hifi-db-version { font-size: 10px; color: var(--color-text-muted); }
+.hifi-db-name { font-size: var(--ui-font-control); font-weight: 600; color: var(--color-text-primary); }
+.hifi-db-version { font-size: var(--ui-font-caption); color: var(--color-text-muted); }
 
 .hifi-search-box { position: relative; margin-bottom: 8px; }
 
 .hifi-search-input {
   width: 100%; height: 28px; border-radius: 6px;
   border: 1px solid var(--color-border);
-  padding: 0 8px 0 28px; font-size: 12px; outline: none;
+  padding: 0 8px 0 28px; font-size: var(--ui-font-control); outline: none;
   box-sizing: border-box; background: hsl(var(--card));
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -343,7 +343,7 @@
 
 .hifi-tree-node {
   display: flex; align-items: center; height: 28px; padding: 0 6px;
-  border-radius: 6px; cursor: pointer; font-size: 12px;
+  border-radius: 6px; cursor: pointer; font-size: var(--ui-font-control);
   color: var(--color-text-secondary); transition: background 0.1s ease, color 0.1s ease;
 }
 .hifi-tree-node:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
@@ -405,7 +405,7 @@
 }
 
 .hifi-hero-title {
-  font-size: 24px;
+  font-size: var(--ui-font-display);
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 6px;
@@ -419,7 +419,7 @@
 }
 
 .hifi-hero-subtitle {
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -454,7 +454,7 @@
   background: #ffffff;
   box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05), inset 0 2px 4px rgba(0,0,0,0.01);
   padding: 16px 50px 16px 20px;
-  font-size: 14px;
+  font-size: var(--ui-font-input);
   color: var(--color-text-primary);
   outline: none;
   resize: none;
@@ -506,13 +506,13 @@
 }
 
 .hifi-section-title {
-  font-size: 14px;
+  font-size: var(--ui-font-input);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .hifi-text-btn {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   color: var(--color-primary);
   background: none;
   border: none;
@@ -566,7 +566,7 @@
 }
 
 .hifi-recommend-text {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
   line-height: 1.4;
@@ -580,7 +580,7 @@
   border-radius: 4px;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 400;
   display: flex;
   align-items: center;
@@ -595,7 +595,7 @@
 }
 
 .hifi-recent-tab {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 400;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -640,7 +640,7 @@
 }
 
 .hifi-recent-name {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
   overflow: hidden;
@@ -649,7 +649,7 @@
 }
 
 .hifi-recent-desc {
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   color: var(--color-text-muted);
   margin-top: 2px;
 }
@@ -686,7 +686,7 @@
 }
 
 .hifi-panel-title {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-primary);
   display: flex;
@@ -711,7 +711,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   font-weight: 400;
   color: var(--color-text-secondary);
   border-right: 1px solid var(--color-border);
@@ -765,7 +765,7 @@
   border-radius: 4px;
   border: 1px solid var(--color-border);
   background: #FFFFFF;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-secondary);
   display: flex;
   align-items: center;
@@ -805,7 +805,7 @@
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
 }
 
 .hifi-table th {
@@ -829,7 +829,7 @@
 .hifi-column-type {
   display: block;
   font-weight: 400;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   color: #94a3b8;
   text-transform: lowercase;
   line-height: 1.2;
@@ -892,7 +892,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 .hifi-img-popover {
@@ -915,7 +915,7 @@
 
 .hifi-img-popover-hint {
   margin-top: 4px;
-  font-size: 9.5px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
   text-align: center;
 }
@@ -974,7 +974,7 @@
 }
 
 .hifi-img-lightbox-url {
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   color: #CBD5E1;
   max-width: 520px;
   overflow: hidden;
@@ -989,7 +989,7 @@
   border: none;
   background: rgba(255, 255, 255, 0.12);
   color: #E2E8F0;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   padding: 4px 8px;
   border-radius: 6px;
   cursor: pointer;
@@ -1029,7 +1029,7 @@
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   background: #FFFBEB;
   color: #92400E;
   border-bottom: 1px solid #FDE68A;
@@ -1042,7 +1042,7 @@
   background: none;
   color: #B45309;
   cursor: pointer;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   padding: 1px 4px;
 }
 
@@ -1052,7 +1052,7 @@
   gap: 8px;
   margin: 10px 12px;
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   background: #FEF2F2;
   color: #B91C1C;
   border: 1px solid #FECACA;
@@ -1102,13 +1102,13 @@
 }
 
 .hifi-preview-empty-title {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .hifi-preview-empty-copy {
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   color: var(--color-text-muted);
   max-width: 320px;
   line-height: 1.6;
@@ -1126,7 +1126,7 @@
   gap: 4px;
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   font-weight: 400;
 }
 
@@ -1152,7 +1152,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
   background: #F8FAFC;
   flex-shrink: 0;
@@ -1185,7 +1185,7 @@
 /* Schema Specifics */
 .hifi-breadcrumb {
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: var(--color-primary);
   font-weight: 400;
   background: #F8FAFC;
@@ -1203,7 +1203,7 @@
 
 .hifi-subtab {
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: var(--color-text-muted);
   cursor: pointer;
   position: relative;
@@ -1228,7 +1228,7 @@
   display: inline-flex;
   padding: 1px 4px;
   border-radius: 3px;
-  font-size: 8px;
+  font-size: var(--ui-font-nano);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -1308,7 +1308,7 @@
 }
 
 .hifi-assistant-title {
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -1319,7 +1319,7 @@
   padding: 1px 4px;
   background: #F3E8FF;
   color: #C45A3C;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 600;
   border-radius: 3px;
 }
@@ -1331,7 +1331,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   flex-shrink: 0;
 }
 
@@ -1363,7 +1363,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   line-height: 1.5;
   align-self: flex-start;
   max-width: 90%;
@@ -1396,7 +1396,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   line-height: 1.5;
   white-space: pre-line;
 }
@@ -1409,7 +1409,7 @@
   color: var(--color-primary);
   border-radius: 10px;
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   line-height: 1.5;
   align-self: flex-end;
   max-width: 85%;
@@ -1423,7 +1423,7 @@
   background: #F1F5F9;
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -1451,7 +1451,7 @@
 .hifi-ai-card-header {
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-border);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
 }
@@ -1461,7 +1461,7 @@
 }
 
 .hifi-artifact-description {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--agent-text-muted);
 }
 
@@ -1470,7 +1470,7 @@
   flex-wrap: wrap;
   gap: 6px;
   color: var(--agent-text-muted);
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 .hifi-artifact-pill {
@@ -1489,12 +1489,12 @@
 
 .hifi-artifact-action-btn {
   height: 24px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 .hifi-artifact-action-btn-sm {
   height: 22px;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
 }
 
 .hifi-artifact-muted-text {
@@ -1507,7 +1507,7 @@
 
 .hifi-artifact-sort-indicator {
   color: var(--agent-accent);
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 .hifi-result-workspace {
@@ -1556,7 +1556,7 @@
   border-radius: 4px;
   background: var(--agent-surface);
   color: var(--agent-text-secondary);
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
 }
 
 .hifi-result-inline-table {
@@ -1596,7 +1596,7 @@
 }
 
 .hifi-artifact-empty-body {
-  font-size: 0.68rem;
+  font-size: var(--ui-font-label);
   line-height: 1.5;
   color: var(--color-text-muted);
 }
@@ -1608,7 +1608,7 @@
   border: 1px solid var(--color-border);
   padding: 10px;
   font-family: "JetBrains Mono", monospace;
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   color: var(--agent-text);
   line-height: 1.4;
   white-space: pre;
@@ -1647,7 +1647,7 @@
   border: 2px solid var(--color-secondary);
   background: #FFFFFF;
   padding: 0 48px 0 16px;
-  font-size: 12.5px;
+  font-size: var(--ui-font-body);
   outline: none;
   box-sizing: border-box;
   font-family: inherit;
@@ -1696,7 +1696,7 @@
 }
 
 .hifi-guide-title {
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   margin-bottom: 12px;
   color: var(--color-text-primary);
@@ -1709,7 +1709,7 @@
 }
 
 .hifi-guide-subtitle {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 8px;
@@ -1722,7 +1722,7 @@
   border-radius: 6px;
   color: #FFFFFF;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   border: none;
   cursor: pointer;
@@ -1738,7 +1738,7 @@
   color: var(--color-primary);
   background: var(--color-primary-soft);
   border: 1px solid #C7D2FE;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   cursor: pointer;
   display: flex;
@@ -1747,7 +1747,7 @@
 }
 
 .hifi-guide-btn-text {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   color: var(--color-primary);
   background: none;
@@ -1760,7 +1760,7 @@
   border-radius: 4px;
   background: var(--color-danger-soft);
   color: var(--color-danger);
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 600;
 }
 
@@ -1769,7 +1769,7 @@
   border-radius: 4px;
   background: var(--color-warning-soft);
   color: var(--color-warning);
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 600;
 }
 
@@ -1778,7 +1778,7 @@
   border-radius: 4px;
   background: var(--color-info-soft);
   color: var(--color-info);
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 600;
 }
 
@@ -1797,7 +1797,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-secondary);
 }
 
@@ -1808,7 +1808,7 @@
   border-radius: 6px;
   border: 1px solid var(--color-border);
   padding: 0 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   outline: none;
   box-sizing: border-box;
 }
@@ -1876,7 +1876,7 @@
 
 .hifi-workspace-tab {
   height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 400; color: var(--color-text-secondary);
+  font-size: var(--ui-font-control); font-weight: 400; color: var(--color-text-secondary);
   border: none; background: transparent; border-radius: 6px;
   cursor: pointer; max-width: 150px; transition: all 0.1s ease;
   position: relative; user-select: none;
@@ -1936,7 +1936,7 @@
   border-radius: 6px;
   border: 1px solid var(--color-border);
   background: #FFFFFF;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-secondary);
   display: flex;
   align-items: center;
@@ -1986,7 +1986,7 @@
 
 .hifi-workspace-subtab {
   padding: 8px 0 6px;
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   color: var(--color-text-secondary);
   cursor: pointer;
   font-weight: 400;
@@ -2035,7 +2035,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: var(--color-text-secondary);
   cursor: pointer;
   border-radius: 4px;
@@ -2099,7 +2099,7 @@
   color: #FFFFFF;
   padding: 8px 16px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
   z-index: 10000;
@@ -2137,7 +2137,7 @@
   background: #F8FAFC;
   border-right: 1px solid var(--color-border);
   font-family: monospace;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: var(--color-text-muted);
   text-align: right;
   padding: 10px 6px 10px 0;
@@ -2159,7 +2159,7 @@
   outline: none;
   padding: 10px;
   font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   line-height: 1.6;
   color: #0F172A;
   background: #FFFFFF;
@@ -2183,7 +2183,7 @@
   border-radius: 6px;
   background: var(--color-success);
   color: #FFFFFF;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   font-weight: 600;
   border: none;
   cursor: pointer;
@@ -2215,7 +2215,7 @@
 }
 
 .hifi-sql-output-tab {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-secondary);
   font-weight: 400;
   cursor: pointer;
@@ -2244,7 +2244,7 @@
   flex: 1;
   overflow: auto;
   padding: 10px;
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
 }
 
 .hifi-sql-history-item {
@@ -2277,7 +2277,7 @@
   overflow: auto;
   padding: 12px 14px 18px;
   font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   line-height: 1.6;
   color: #DBEAFE;
 }
@@ -2340,7 +2340,7 @@
 
 .sql-console-result-meta {
   color: #64748B;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   margin-bottom: 4px;
 }
 
@@ -2356,7 +2356,7 @@
   border-collapse: collapse;
   width: max-content;
   min-width: 100%;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
 }
 
 .sql-console-table th {
@@ -2495,13 +2495,13 @@
 }
 
 .hifi-approval-title {
-  font-size: 12.5px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
 }
 
 .hifi-approval-risk {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -2520,7 +2520,7 @@
 }
 
 .hifi-approval-reason {
-  font-size: 11.5px;
+  font-size: var(--ui-font-control);
   color: #78350F;
   line-height: 1.5;
 }
@@ -2528,7 +2528,7 @@
 .hifi-approval-sql {
   margin: 0;
   font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   background: #FFFFFF;
   border: 1px solid #FDE68A;
   border-radius: 6px;
@@ -2546,7 +2546,7 @@
 }
 
 .hifi-approval-btn {
-  font-size: 11.5px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   padding: 5px 14px;
   border-radius: 6px;
@@ -2593,13 +2593,13 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   color: #1E293B;
 }
 
 .hifi-eval-header-ds {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   color: #64748B;
   background: #F1F5F9;
@@ -2616,7 +2616,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   padding: 0 14px;
   height: 34px;
@@ -2671,13 +2671,13 @@
 }
 
 .hifi-eval-form-row label {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: #64748B;
 }
 
 .hifi-eval-form-row input[type="text"],
 .hifi-eval-form-row input:not([type]) {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   padding: 6px 10px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
@@ -2694,7 +2694,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--ui-font-control);
   color: #334155;
 }
 
@@ -2718,7 +2718,7 @@
 }
 
 .hifi-eval-panel-title {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: #334155;
   padding: 10px 14px;
@@ -2728,7 +2728,7 @@
 
 .hifi-eval-empty {
   padding: 18px 14px;
-  font-size: 11.5px;
+  font-size: var(--ui-font-control);
   color: #94A3B8;
   line-height: 1.6;
 }
@@ -2755,13 +2755,13 @@
 }
 
 .hifi-eval-task-name {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: #1E293B;
 }
 
 .hifi-eval-task-question {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: #64748B;
   margin-top: 2px;
   white-space: nowrap;
@@ -2777,7 +2777,7 @@
 }
 
 .hifi-eval-chip {
-  font-size: 9.5px;
+  font-size: var(--ui-font-caption);
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 999px;
@@ -2817,7 +2817,7 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: var(--ui-font-control);
   color: #334155;
   text-align: left;
 }
@@ -2827,7 +2827,7 @@
 }
 
 .hifi-eval-run-rate {
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   min-width: 44px;
 }
@@ -2837,11 +2837,11 @@
 .hifi-eval-rate-bad { color: #DC2626; }
 
 .hifi-eval-run-counts { color: #475569; }
-.hifi-eval-run-latency { color: #94A3B8; font-size: 10.5px; }
+.hifi-eval-run-latency { color: #94A3B8; font-size: var(--ui-font-label); }
 
 .hifi-eval-run-time {
   margin-left: auto;
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   color: #94A3B8;
 }
 
@@ -2858,7 +2858,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: #475569;
   padding: 6px 8px;
   background: #FFFFFF;
@@ -2868,7 +2868,7 @@
 
 .hifi-eval-case-status {
   font-weight: 600;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   padding: 1px 7px;
   border-radius: 999px;
 }
@@ -2884,7 +2884,7 @@
 
 .hifi-eval-case-reasons {
   flex-basis: 100%;
-  font-size: 10.5px;
+  font-size: var(--ui-font-label);
   color: #B91C1C;
   line-height: 1.5;
 }
@@ -2895,7 +2895,7 @@
   align-items: center;
   gap: 7px;
   padding: 6px 16px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: #C45A3C;
   background: #EFF6FF;
   border-top: 1px solid #BFDBFE;
@@ -2929,7 +2929,7 @@
   color: #DC2626;
   border-radius: 6px;
   padding: 3px 10px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -2945,7 +2945,7 @@
   color: #64748B;
   border-radius: 6px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -2967,12 +2967,12 @@
   border: 1px solid #FED7AA;
   border-radius: 10px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   color: #C2410C;
   font-weight: 400;
 }
 .hifi-answer-error-hint {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #9A3412;
   font-weight: 400;
   opacity: 0.8;
@@ -2992,7 +2992,7 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   color: #0F172A;
 }
@@ -3008,7 +3008,7 @@
   box-shadow: 0 4px 10px rgba(118, 103, 242, 0.08);
 }
 .hifi-answer-text {
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   line-height: 1.65;
   color: #1E293B;
   white-space: pre-wrap;
@@ -3020,7 +3020,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: #475569;
   margin: 12px 0 6px;
@@ -3036,7 +3036,7 @@
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   color: #334155;
   padding: 3px 0;
 }
@@ -3054,7 +3054,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #64748B;
   padding: 2px 0;
 }
@@ -3085,7 +3085,7 @@
   margin: 4px 0 0;
 }
 .hifi-answer-caveats li {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #92400E;
   padding: 1px 0;
 }
@@ -3095,7 +3095,7 @@
   margin: 10px 0;
 }
 .hifi-followup-label {
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #94A3B8;
   margin-bottom: 6px;
   display: block;
@@ -3110,7 +3110,7 @@
   align-items: center;
   gap: 4px;
   padding: 5px 12px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #4F46E5;
   background: #EEF2FF;
   border: 1px solid #C7D2FE;
@@ -3124,7 +3124,7 @@
 
 /* ===== Artifact Chips (fixed colors) ===== */
 .hifi-artifact-chip {
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   font-weight: 600;
   padding: 1px 8px;
   border-radius: 10px;
@@ -3160,7 +3160,7 @@
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   border: 1px solid #E2E8F0;
   border-radius: 4px;
   background: #fff;
@@ -3180,25 +3180,25 @@
 
 /* ===== Markdown Content ===== */
 .hifi-markdown-content {
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   line-height: 1.6;
   color: #334155;
 }
 .hifi-md-h1 {
   margin: 10px 0 4px;
-  font-size: 13px;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   color: #1E293B;
 }
 .hifi-md-h2 {
   margin: 8px 0 4px;
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 650;
   color: #334155;
 }
 .hifi-md-h3 {
   margin: 8px 0 4px;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   font-weight: 650;
   color: #475569;
 }
@@ -3231,7 +3231,7 @@
   background: #EEF2F7;
   color: #334155;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 0.92em;
+  font-size: var(--ui-font-input);
   padding: 1px 4px;
 }
 .hifi-md-pre {
@@ -3301,7 +3301,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #94A3B8;
   background: #F8FAFC;
   border: 1px solid #E2E8F0;
@@ -3316,7 +3316,7 @@
 }
 .hifi-thinking-count {
   margin-left: auto;
-  font-size: 9px;
+  font-size: var(--ui-font-micro);
   color: #CBD5E1;
 }
 .hifi-thinking-body {
@@ -3409,7 +3409,7 @@
   cursor: default;
 }
 .hifi-agent-timeline-title {
-  font-size: 12px;
+  font-size: var(--ui-font-control);
   font-weight: 650;
 }
 .hifi-agent-timeline-subtitle {
@@ -3417,7 +3417,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #64748B;
 }
 .hifi-agent-timeline-latency {
@@ -3425,7 +3425,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: #94A3B8;
 }
 .hifi-agent-timeline-expand {
@@ -3438,7 +3438,7 @@
 }
 .hifi-agent-timeline-tool .hifi-agent-timeline-content {
   color: #475569;
-  font-size: 11px;
+  font-size: var(--ui-font-label);
   border-top: 1px solid #F1F5F9;
   padding-top: 8px;
   background: #FCFDFF;
@@ -3463,7 +3463,7 @@
   padding: 6px 8px;
   border-bottom: 1px solid #E2E8F0;
   background: #F8FAFC;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   font-weight: 650;
   color: #475569;
 }
@@ -3477,7 +3477,7 @@
   max-height: 260px;
   overflow: auto;
   padding: 8px;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   line-height: 1.45;
   color: #334155;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -3542,7 +3542,7 @@
   border: none;
   background: transparent;
   outline: none;
-  font-size: 0.82rem;
+  font-size: var(--ui-font-body);
   color: var(--color-text-primary);
   font-family: var(--font-family);
 }
@@ -3552,7 +3552,7 @@
 }
 
 .hifi-command-kbd {
-  font-size: 0.62rem;
+  font-size: var(--ui-font-caption);
   font-family: "Fira Code", monospace;
   color: var(--color-text-muted);
   background: var(--color-bg);
@@ -3571,7 +3571,7 @@
 .hifi-command-empty {
   padding: 32px 20px;
   text-align: center;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   color: var(--color-text-muted);
 }
 
@@ -3581,7 +3581,7 @@
 
 .hifi-command-category {
   padding: 4px 12px 2px;
-  font-size: 0.62rem;
+  font-size: var(--ui-font-caption);
   font-weight: 600;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -3628,7 +3628,7 @@
 .hifi-command-item-label {
   flex: 1;
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: var(--ui-font-body);
   font-weight: 400;
   color: var(--color-text-primary);
 }
@@ -3643,7 +3643,7 @@
   gap: 16px;
   padding: 6px 16px;
   border-top: 1px solid var(--color-border);
-  font-size: 0.62rem;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
   background: var(--color-bg);
 }
@@ -3677,14 +3677,14 @@
 }
 
 .hifi-settings-page-title {
-  font-size: 1.1rem;
+  font-size: var(--ui-font-title);
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 4px;
 }
 
 .hifi-settings-page-desc {
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   color: var(--color-text-secondary);
   margin: 0;
   line-height: 1.5;
@@ -3722,14 +3722,14 @@
 }
 
 .hifi-settings-section-title {
-  font-size: 0.85rem;
+  font-size: var(--ui-font-input);
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0;
 }
 
 .hifi-settings-section-subtitle {
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
   color: var(--color-text-muted);
   margin: 2px 0 0;
 }
@@ -3742,14 +3742,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
   margin-bottom: 6px;
 }
 
 .hifi-settings-hint {
-  font-size: 0.62rem;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
   margin: 4px 0 0;
 }
@@ -3758,7 +3758,7 @@
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg);
@@ -3803,7 +3803,7 @@
   gap: 4px;
   padding: 4px 10px;
   border-radius: 6px;
-  font-size: 0.67rem;
+  font-size: var(--ui-font-label);
   font-weight: 400;
   border: 1px solid var(--color-border);
   background: transparent;
@@ -3841,13 +3841,13 @@
   align-items: center;
   justify-content: space-between;
   padding: 6px 0;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   color: var(--color-text-secondary);
 }
 
 .hifi-settings-mono {
   font-family: "Fira Code", monospace;
-  font-size: 0.65rem;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-primary);
 }
 
@@ -3856,7 +3856,7 @@
   align-items: center;
   gap: 6px;
   margin-top: 12px;
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
   color: var(--color-success);
 }
 
@@ -3891,7 +3891,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px 10px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   font-weight: 600;
   color: var(--color-text-primary);
 }
@@ -3905,7 +3905,7 @@
   border: none;
   border-radius: 8px;
   text-align: left;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   font-weight: 400;
   cursor: pointer;
   background: transparent;
@@ -3936,7 +3936,7 @@
 }
 
 .hifi-settings-main-title {
-  font-size: 1rem;
+  font-size: var(--ui-font-section-title);
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 16px;
@@ -3955,7 +3955,7 @@
 }
 
 .hifi-settings-form-label {
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-primary);
 }
@@ -3964,7 +3964,7 @@
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-bg);
@@ -3982,7 +3982,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   color: var(--color-text-secondary);
   cursor: pointer;
 }
@@ -3996,7 +3996,7 @@
 .hifi-settings-range-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: var(--ui-font-caption);
   color: var(--color-text-muted);
 }
 
@@ -4005,7 +4005,7 @@
   background: var(--color-warning-soft);
   border: 1px solid #FDBA74;
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   color: var(--color-warning);
   line-height: 1.45;
 }
@@ -4030,7 +4030,7 @@
 }
 
 .hifi-shortcuts-title {
-  font-size: 1rem;
+  font-size: var(--ui-font-section-title);
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 14px;
@@ -4040,7 +4040,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   color: var(--color-text-secondary);
   padding: 6px 0;
 }
@@ -4053,7 +4053,7 @@
   border-radius: 8px;
   background: linear-gradient(135deg, var(--color-primary), #C45A3C);
   color: #fff;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   cursor: pointer;
   font-family: var(--font-family);
@@ -4086,14 +4086,14 @@
 
 .hifi-page-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: var(--ui-font-title);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .hifi-page-desc {
   margin: 6px 0 0;
-  font-size: 0.82rem;
+  font-size: var(--ui-font-body);
   color: var(--color-text-secondary);
   line-height: 1.5;
 }
@@ -4113,7 +4113,7 @@
 
 .hifi-card-title {
   margin: 0 0 16px;
-  font-size: 1.05rem;
+  font-size: var(--ui-font-title);
   font-weight: 600;
   color: var(--color-text-primary);
   letter-spacing: -0.01em;
@@ -4127,7 +4127,7 @@
   height: 36px;
   padding: 0 16px;
   border-radius: 10px;
-  font-size: 0.8rem;
+  font-size: var(--ui-font-body);
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
@@ -4199,7 +4199,7 @@
 }
 
 .hifi-section-title {
-  font-size: 0.75rem;
+  font-size: var(--ui-font-control);
   font-weight: 600;
   color: var(--color-text-secondary);
   display: flex;
@@ -4210,7 +4210,7 @@
 .hifi-section-count {
   font-weight: 400;
   color: var(--color-text-muted);
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
 }
 
 .hifi-empty-state {
@@ -4228,14 +4228,14 @@
 
 .hifi-empty-title {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: var(--ui-font-input);
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .hifi-empty-desc {
   margin: 4px 0 16px;
-  font-size: 0.75rem;
+  font-size: var(--ui-font-control);
   color: var(--color-text-secondary);
 }
 
@@ -4318,7 +4318,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   color: var(--color-text-secondary);
   cursor: pointer;
   margin-right: 8px;
@@ -4348,7 +4348,7 @@
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -4376,7 +4376,7 @@
   border-radius: 8px;
   color: #b91c1c;
   background: rgba(239, 68, 68, 0.08);
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
 }
 
 .hifi-diagnostics-empty {
@@ -4404,7 +4404,7 @@
   display: block;
   margin-bottom: 4px;
   color: var(--color-text-secondary);
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
   font-weight: 600;
 }
 
@@ -4414,7 +4414,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text-primary);
-  font-size: 0.9rem;
+  font-size: var(--ui-font-input);
 }
 
 .hifi-diagnostics-sources {
@@ -4447,7 +4447,7 @@
 .hifi-diagnostics-source-header h3 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: 0.85rem;
+  font-size: var(--ui-font-input);
   font-weight: 700;
 }
 
@@ -4457,7 +4457,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text-secondary);
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
   white-space: nowrap;
 }
 
@@ -4469,7 +4469,7 @@
   color: var(--color-text-primary);
   background: color-mix(in srgb, var(--color-bg) 72%, #ffffff);
   font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;

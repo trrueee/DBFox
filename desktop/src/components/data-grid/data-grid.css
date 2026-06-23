@@ -19,7 +19,7 @@
   background: rgba(13, 115, 119, 0.94);
   color: #fff;
   box-shadow: var(--shadow-md);
-  font-size: 0.76rem;
+  font-size: var(--ui-font-control);
   font-weight: 800;
 }
 
@@ -33,7 +33,7 @@
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
 }
 
 .data-grid-toolbar-left,
@@ -55,7 +55,7 @@
   border-radius: 999px;
   background: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 0.68rem;
+  font-size: var(--ui-font-label);
   font-weight: 700;
 }
 
@@ -65,7 +65,7 @@
   color: var(--text-muted);
   cursor: pointer;
   padding: 0;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   line-height: 1;
 }
 
@@ -81,7 +81,7 @@
   background: var(--bg-surface);
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 0.68rem;
+  font-size: var(--ui-font-label);
   font-weight: 800;
 }
 
@@ -93,11 +93,11 @@
 .data-grid-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
 }
 
 .data-grid-table--comfortable {
-  font-size: 0.85rem;
+  font-size: var(--ui-font-input);
 }
 
 .data-grid-table th {
@@ -147,7 +147,7 @@
   text-align: center !important;
   background: var(--bg-secondary) !important;
   color: var(--text-muted) !important;
-  font-size: 0.7rem;
+  font-size: var(--ui-font-label);
   font-weight: 800;
   user-select: none;
 }
@@ -165,7 +165,7 @@
   background: rgba(100, 116, 139, 0.08);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--ui-font-label);
   user-select: none;
 }
 
@@ -180,7 +180,7 @@
   background: rgba(74, 91, 192, 0.08);
   color: var(--accent-indigo);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: var(--ui-font-label);
   font-weight: 800;
 }
 
@@ -215,7 +215,7 @@
   gap: 4px;
   min-width: 0;
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: var(--ui-font-caption);
   font-weight: 700;
 }
 
@@ -263,7 +263,7 @@
   cursor: pointer;
   padding: 6px 8px;
   text-align: left;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   font-weight: 700;
 }
 
@@ -282,7 +282,7 @@
   color: var(--text-primary);
   outline: none;
   padding: 0 8px;
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
 }
 
 .data-grid-context-menu {
@@ -331,7 +331,7 @@
 .data-grid-inspector-title {
   min-width: 0;
   color: var(--text-primary);
-  font-size: 0.82rem;
+  font-size: var(--ui-font-body);
   font-weight: 900;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -343,7 +343,7 @@
   overflow: auto;
   padding: 14px;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
   line-height: 1.6;
 }
 
@@ -366,7 +366,7 @@
   box-shadow: var(--shadow-lg);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: var(--ui-font-label);
   line-height: 1.55;
 }
 
@@ -375,5 +375,5 @@
   display: grid;
   place-items: center;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ui-font-control);
 }
