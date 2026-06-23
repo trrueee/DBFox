@@ -2,6 +2,7 @@ import { useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { BarChart3, LineChart, Download } from "lucide-react";
 import type { ChartArtifact, ChartArtifactType } from "../../../types/agentArtifact";
+import { ArtifactCard } from "./ArtifactCard";
 
 interface ChartArtifactViewProps {
   artifact: ChartArtifact;
@@ -157,11 +158,27 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
   };
 
   return (
-    <div className={`hifi-ai-card hifi-chart-card mt-2 ${compact ? "is-compact" : ""}`}>
-      <div className="hifi-ai-card-header flex justify-between items-center">
-        <span>{artifact.title}</span>
-        {!compact && (
-          <div className="flex items-center gap-1.5">
+    <ArtifactCard
+      title={artifact.title}
+      badge="图表"
+      tone="chart"
+      description={artifact.description}
+      compact={compact}
+      meta={
+        artifact.sourceRefs && artifact.sourceRefs.length > 0
+          ? artifact.sourceRefs.map((sourceRef) => (
+              <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
+                <span className="hifi-artifact-pill">{sourceRef.label}</span>
+                <span className="font-mono">{sourceRef.formula}</span>
+                <span className="hifi-artifact-muted-text">-&gt;</span>
+                <span className="font-mono">{sourceRef.field}</span>
+              </div>
+            ))
+          : undefined
+      }
+      actions={
+        !compact ? (
+          <>
             {switchable && (
               <>
                 <button
@@ -183,27 +200,13 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
             <button className="hifi-guide-btn-secondary hifi-artifact-action-btn-sm flex items-center gap-1" onClick={handleExportPng}>
               <Download size={9} /> PNG
             </button>
-          </div>
-        )}
-      </div>
-      {artifact.description && (
-        <p className="hifi-artifact-description px-3 pt-1">{artifact.description}</p>
-      )}
-      {artifact.sourceRefs && artifact.sourceRefs.length > 0 && (
-        <div className="hifi-artifact-meta grid px-3 pt-2">
-          {artifact.sourceRefs.map((sourceRef) => (
-            <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
-              <span className="hifi-artifact-pill">{sourceRef.label}</span>
-              <span className="font-mono">{sourceRef.formula}</span>
-              <span className="hifi-artifact-muted-text">-&gt;</span>
-              <span className="font-mono">{sourceRef.field}</span>
-            </div>
-          ))}
-        </div>
-      )}
+          </>
+        ) : undefined
+      }
+    >
       <div className="hifi-chart-body" data-chart-id={artifact.id}>
         <ReactECharts option={option} style={chartStyle} />
       </div>
-    </div>
+    </ArtifactCard>
   );
 }
