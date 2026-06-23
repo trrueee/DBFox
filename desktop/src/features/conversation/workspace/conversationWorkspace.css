@@ -153,6 +153,7 @@
 .conv-message-user .conv-message-body p,
 .conv-message-user .conv-message-body .hifi-md-p {
   margin: 0;
+  font-size: var(--agent-font-body);
   line-height: 1.6;
 }
 
@@ -162,6 +163,19 @@
 }
 
 .conv-answer-document {
+  font-size: var(--agent-font-body);
+  line-height: 1.75;
+  color: var(--agent-text-secondary);
+}
+
+.conv-answer-document .hifi-markdown-content,
+.conv-answer-document .hifi-md-p,
+.conv-answer-document .hifi-md-ul,
+.conv-answer-document .hifi-md-ol,
+.conv-answer-document .hifi-md-li,
+.conv-answer-document .hifi-md-table,
+.conv-answer-document .hifi-md-table th,
+.conv-answer-document .hifi-md-table td {
   font-size: var(--agent-font-body);
   line-height: 1.75;
   color: var(--agent-text-secondary);
@@ -1211,14 +1225,14 @@
   border: 1px solid var(--agent-border);
   border-radius: 24px;
   background: var(--agent-surface-elevated);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08), var(--agent-shadow-soft);
+  box-shadow: var(--shadow-card-hover), var(--agent-shadow-soft);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .conv-composer-card:focus-within {
   border-color: var(--agent-border-strong);
   background: var(--agent-surface);
-  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.11), var(--agent-focus-ring);
+  box-shadow: var(--shadow-card-hover), var(--agent-focus-ring);
 }
 
 .conv-composer textarea {
