@@ -45,15 +45,22 @@ export function ConversationWorkspace({
     <div className="conv-workspace">
       <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
       <div className={`conv-workspace-main ${hasArtifacts ? "has-artifact-dock" : ""}`}>
-        <MessageList
-          messages={messages}
-          runs={runs}
-          artifacts={artifacts}
-          onOpenSqlConsole={onOpenSqlConsole}
-          onOpenResultTab={onOpenResultTab}
-          onResolveApproval={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
-          onSelectArtifact={selectArtifact}
-        />
+        <section className="conv-conversation-pane" aria-label="Conversation">
+          <MessageList
+            messages={messages}
+            runs={runs}
+            artifacts={artifacts}
+            onOpenSqlConsole={onOpenSqlConsole}
+            onOpenResultTab={onOpenResultTab}
+            onResolveApproval={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
+            onSelectArtifact={selectArtifact}
+          />
+          <Composer
+            running={Boolean(runningRun)}
+            onSend={(text) => void sendMessage(conversationId, text)}
+            onCancel={() => runningRun && cancelRun(runningRun.id)}
+          />
+        </section>
         {hasArtifacts && (
           <ArtifactDock
             artifacts={artifacts}
@@ -64,11 +71,6 @@ export function ConversationWorkspace({
           />
         )}
       </div>
-      <Composer
-        running={Boolean(runningRun)}
-        onSend={(text) => void sendMessage(conversationId, text)}
-        onCancel={() => runningRun && cancelRun(runningRun.id)}
-      />
     </div>
   );
 }

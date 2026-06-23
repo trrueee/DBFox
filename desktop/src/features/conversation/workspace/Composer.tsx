@@ -1,4 +1,4 @@
-import { Send, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { useState } from "react";
 
 export function Composer({
@@ -20,24 +20,49 @@ export function Composer({
     onSend(text);
   };
   return (
-    <footer className="conv-composer">
-      <div className="conv-composer-box">
-        <textarea
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder={disabled || "Continue asking..."}
-          disabled={Boolean(disabled)}
-        />
-        {running ? (
-          <button type="button" onClick={onCancel} title="Cancel">
-            <Square size={16} />
-          </button>
-        ) : (
-          <button type="button" onClick={submit} title="Send">
-            <Send size={16} />
-          </button>
-        )}
-      </div>
+    <footer className="conv-composer" aria-label="对话输入区">
+      <form
+        className="conv-composer-rail"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div className="conv-composer-card">
+          <textarea
+            aria-label="继续提问"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder={disabled || "Continue asking..."}
+            disabled={Boolean(disabled)}
+            rows={2}
+          />
+          <div className="conv-composer-toolbar">
+            <span className="conv-composer-spacer" aria-hidden="true" />
+            {running ? (
+              <button
+                type="button"
+                className="conv-composer-submit is-pausing"
+                onClick={onCancel}
+                aria-label="暂停生成"
+                title="暂停生成"
+              >
+                <Square size={13} fill="currentColor" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="conv-composer-submit"
+                aria-label="发送"
+                title="发送"
+                disabled={Boolean(disabled)}
+              >
+                <ArrowUp size={18} />
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
     </footer>
   );
 }
