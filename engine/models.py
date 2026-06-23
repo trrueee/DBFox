@@ -142,6 +142,7 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     tables = relationship("SchemaTable", back_populates="datasource", cascade="all, delete-orphan")
     queries = relationship("QueryHistory", back_populates="datasource", cascade="all, delete-orphan")
     golden_sqls = relationship("GoldenSQL", back_populates="datasource", cascade="all, delete-orphan")
+    reusable_sqls = relationship("ReusableSQL", back_populates="datasource", cascade="all, delete-orphan")
     backups = relationship("BackupRecord", back_populates="datasource", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -397,6 +398,35 @@ class GoldenSQL(Base):  # type: ignore[misc,valid-type]
     datasource = relationship("DataSource", back_populates="golden_sqls")
 
 
+class ReusableSQL(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "reusable_sqls"
+    __table_args__ = (
+        Index("ix_reusable_sqls_datasource", "data_source_id"),
+        Index("ix_reusable_sqls_fingerprint", "sql_fingerprint"),
+        UniqueConstraint("data_source_id", "sql_fingerprint", name="uq_reusable_sqls_ds_fingerprint"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    data_source_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+
+    question = Column(String, nullable=False)
+    safe_sql = Column(Text, nullable=False)
+    sql_fingerprint = Column(String, nullable=False)
+    purpose = Column(Text, nullable=True)
+    involved_tables_json = Column(Text, nullable=False, default="[]")
+    result_columns_json = Column(Text, nullable=False, default="[]")
+    source_artifact_id = Column(String, nullable=True)
+    source_sql_artifact_id = Column(String, nullable=True)
+
+    usage_count = Column(Integer, nullable=False, default=1)
+    verified = Column(Boolean, nullable=False, default=False)
+    last_used_at = Column(DateTime, nullable=False, default=utcnow)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    datasource = relationship("DataSource", back_populates="reusable_sqls")
+
+
 class AgentSession(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "agent_sessions"
     __table_args__ = (
@@ -420,6 +450,7 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
         order_by="AgentMessage.sequence",
     )
     runs = relationship("AgentRun", back_populates="session", cascade="all, delete-orphan")
+    memory = relationship("AgentSessionMemory", back_populates="session", cascade="all, delete-orphan", uselist=False)
 
     def __repr__(self) -> str:
         return f"<AgentSession id={self.id!r} title={self.title!r} datasource_id={self.datasource_id!r}>"
@@ -443,6 +474,25 @@ class AgentMessage(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     session = relationship("AgentSession", back_populates="messages")
+
+
+class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_session_memories"
+    __table_args__ = (
+        Index("ix_agent_session_memories_datasource", "datasource_id"),
+        UniqueConstraint("session_id", name="uq_agent_session_memories_session"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    conversation_summary = Column(Text, nullable=True)
+    summary_cursor_message_id = Column(String, nullable=True)
+    memory_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    session = relationship("AgentSession", back_populates="memory")
 
 
 class AgentRun(Base):  # type: ignore[misc,valid-type]

@@ -24,6 +24,7 @@ vi.mock("../../features/conversation/conversationRepository", () => ({
 vi.mock("../../lib/api/agent", () => ({
   agentApi: {
     rejectAgentApproval: vi.fn(),
+    resolveAgentApproval: vi.fn(),
     streamResumeAgentRun: vi.fn(),
   },
 }));
@@ -198,6 +199,19 @@ describe("conversationStore", () => {
       artifacts: [],
       approvals: [],
     });
+    vi.mocked(agentApi.resolveAgentApproval).mockResolvedValue({
+      id: "approval-1",
+      run_id: "run-approval",
+      session_id: "conv-approval",
+      step_name: "sql.execute_readonly",
+      tool_name: "sql.execute_readonly",
+      status: "approved",
+      risk_level: "warning",
+      reason: "生产环境需要确认",
+      policy_decision: {},
+      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      created_at: "2026-06-22T00:00:00Z",
+    });
     vi.mocked(agentApi.streamResumeAgentRun).mockImplementation(async (_runId, _approvalId, options) => {
       options?.onEvent?.({
         event_id: "event-complete",
@@ -247,9 +261,104 @@ describe("conversationStore", () => {
 
     await store.resolveApproval("run-approval", "approval-1", true);
 
+    expect(agentApi.resolveAgentApproval).toHaveBeenCalledWith(
+      "run-approval",
+      "approval-1",
+      "approved",
+      "Approved in DBFox UI",
+    );
     expect(agentApi.streamResumeAgentRun).toHaveBeenCalledWith("run-approval", "approval-1", expect.any(Object));
+    expect(vi.mocked(agentApi.resolveAgentApproval).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(agentApi.streamResumeAgentRun).mock.invocationCallOrder[0],
+    );
     const state = useConversationStore.getState();
     expect(state.messagesById["assistant-approval"].content).toBe("已完成");
+  });
+
+  it("resolves rejected approval decisions without resuming the run", async () => {
+    const store = useConversationStore.getState();
+    store.loadConversation({
+      id: "conv-reject",
+      title: "Reject",
+      datasource_id: "ds-1",
+      context_tables: [],
+      created_at: null,
+      updated_at: null,
+      messages: [
+        {
+          id: "assistant-reject",
+          conversation_id: "conv-reject",
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          sequence: 1,
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+      runs: [
+        {
+          id: "run-reject",
+          conversation_id: "conv-reject",
+          datasource_id: "ds-1",
+          question: "orders",
+          assistant_message_id: "assistant-reject",
+          status: "waiting_approval",
+          approval: {
+            id: "approval-reject",
+            run_id: "run-reject",
+            session_id: "conv-reject",
+            step_name: "sql.execute_readonly",
+            tool_name: "sql.execute_readonly",
+            status: "pending",
+            risk_level: "warning",
+            reason: "生产环境需要确认",
+            policy_decision: {},
+            requested_action: { args: { sql: "SELECT * FROM orders" } },
+            created_at: "2026-06-22T00:00:00Z",
+          },
+          events: [],
+        },
+      ],
+      artifacts: [],
+      approvals: [],
+    });
+    const rejectedApproval = {
+      id: "approval-reject",
+      run_id: "run-reject",
+      session_id: "conv-reject",
+      step_name: "sql.execute_readonly",
+      tool_name: "sql.execute_readonly",
+      status: "rejected" as const,
+      risk_level: "warning",
+      reason: "生产环境需要确认",
+      policy_decision: {},
+      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      created_at: "2026-06-22T00:00:00Z",
+    };
+    vi.mocked(agentApi.resolveAgentApproval).mockResolvedValue(rejectedApproval);
+    vi.mocked(agentApi.rejectAgentApproval).mockResolvedValue({
+      run_id: "run-reject",
+      session_id: "conv-reject",
+      success: false,
+      status: "failed",
+      question: "orders",
+      artifacts: [],
+      approval: rejectedApproval,
+    });
+
+    await store.resolveApproval("run-reject", "approval-reject", false);
+
+    expect(agentApi.resolveAgentApproval).toHaveBeenCalledWith(
+      "run-reject",
+      "approval-reject",
+      "rejected",
+      "Rejected in DBFox UI",
+    );
+    expect(agentApi.streamResumeAgentRun).not.toHaveBeenCalled();
+    expect(agentApi.rejectAgentApproval).not.toHaveBeenCalled();
+    expect(useConversationStore.getState().runsById["run-reject"].approval?.status).toBe("rejected");
+    expect(useConversationStore.getState().messagesById["assistant-reject"].status).toBe("failed");
   });
 
   it("does not replace a run when a duplicate event is ignored", () => {

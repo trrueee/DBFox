@@ -46,12 +46,15 @@ def route_approval_output(state: DBFoxAgentState) -> Literal["tools", "model", "
     return "progress"
 
 
-def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize", "repair"]:
+def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize", "repair", "approval"]:
     """After progress judge: complete/clarify → finalize; continue → model
     (model receives progress guidance); replan → model with anti-loop check;
     repair → repair."""
     decision = state.get("progress_decision") or {}
     status = decision.get("status", "failed")
+
+    if state.get("status") == "waiting_approval" or state.get("pending_approval"):
+        return "approval"
 
     if status == "complete":
         return "finalize"

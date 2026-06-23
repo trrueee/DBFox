@@ -1,6 +1,6 @@
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticsPage } from "../DiagnosticsPage";
 import { diagnosticsApi } from "../../lib/api/diagnostics";
 
@@ -41,8 +41,28 @@ describe("DiagnosticsPage", () => {
           modified_at: "2026-06-20T00:00:00Z",
           content: "ERROR api_key=[REDACTED] failed",
         },
+        {
+          name: "engine-stderr",
+          path: "artifacts/runtime-logs/engine.err.log",
+          exists: true,
+          size_bytes: 20,
+          modified_at: "2026-06-20T00:00:01Z",
+          content: "backend stderr",
+        },
+        {
+          name: "frontend-stdout",
+          path: "artifacts/runtime-logs/frontend.out.log",
+          exists: true,
+          size_bytes: 18,
+          modified_at: "2026-06-20T00:00:02Z",
+          content: "frontend stdout",
+        },
       ],
     });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("renders sanitized diagnostic logs and copies a diagnostic bundle", async () => {
@@ -53,13 +73,39 @@ describe("DiagnosticsPage", () => {
 
     expect(getByText("诊断日志")).toBeInTheDocument();
     expect(getByText("已脱敏")).toBeInTheDocument();
-    expect(getByText("engine")).toBeInTheDocument();
+    expect(getByRole("heading", { name: "后端日志" })).toBeInTheDocument();
+    expect(getByText("engine, engine-stderr")).toBeInTheDocument();
     expect(getByText(/api_key=\[REDACTED\]/)).toBeInTheDocument();
+    expect(getByText(/backend stderr/)).toBeInTheDocument();
     expect(queryByText("secret-key")).not.toBeInTheDocument();
 
     fireEvent.click(getByRole("button", { name: "复制诊断包" }));
 
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledOnce());
     expect(onToast).toHaveBeenCalledWith("诊断包已复制", "success");
+  });
+
+  it("switches between backend and frontend diagnostic groups from a scrollable dropdown", async () => {
+    const { getByRole, getByText, queryByText } = render(<DiagnosticsPage onToast={vi.fn()} />);
+
+    await waitFor(() => expect(diagnosticsApi.getLogs).toHaveBeenCalled());
+
+    const selector = getByRole("button", { name: "日志分组" });
+    expect(selector).toHaveClass("hifi-diagnostics-source-trigger");
+    expect(selector).toHaveAttribute("aria-expanded", "false");
+    expect(getByRole("heading", { name: "后端日志" })).toBeInTheDocument();
+    expect(queryByText(/frontend stdout/)).not.toBeInTheDocument();
+
+    fireEvent.click(selector);
+    expect(selector).toHaveAttribute("aria-expanded", "true");
+    const menu = getByRole("listbox", { name: "日志分组" });
+    expect(menu).toHaveClass("hifi-diagnostics-source-menu");
+
+    fireEvent.click(getByRole("option", { name: /前端日志/ }));
+
+    expect(getByRole("heading", { name: "前端日志" })).toBeInTheDocument();
+    expect(getByText("frontend-stdout, frontend-client")).toBeInTheDocument();
+    expect(getByText(/frontend stdout/)).toBeInTheDocument();
+    expect(queryByText(/backend stderr/)).not.toBeInTheDocument();
   });
 });

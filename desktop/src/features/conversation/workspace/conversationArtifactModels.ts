@@ -96,6 +96,31 @@ export function payloadBoolean(payload: Record<string, unknown>, keys: string[])
   return false;
 }
 
+function payloadOptionalBoolean(payload: Record<string, unknown>, keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "boolean") return value;
+  }
+  return undefined;
+}
+
+function payloadRecordList(payload: Record<string, unknown>, keys: string[]): Array<Record<string, string>> | undefined {
+  for (const key of keys) {
+    const value = payload[key];
+    if (!Array.isArray(value)) continue;
+    const records = value.flatMap((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const record: Record<string, string> = {};
+      for (const [recordKey, recordValue] of Object.entries(item as Record<string, unknown>)) {
+        if (typeof recordValue === "string" && recordValue.trim()) record[recordKey] = recordValue;
+      }
+      return Object.keys(record).length > 0 ? [record] : [];
+    });
+    if (records.length > 0) return records;
+  }
+  return undefined;
+}
+
 export function safetyGuardrailResult(payload: Record<string, unknown>): string {
   const flattened = payloadString(payload, ["guardrail_result", "guardrailResult"]);
   if (flattened) return flattened;
@@ -265,6 +290,14 @@ export function toChartArtifactModel(artifact: ConversationArtifact): ChartArtif
     title: artifact.title,
     description: payloadString(artifact.payload, ["reason", "description"]),
     chartType: chartType(artifact),
+    unit: payloadString(artifact.payload, ["unit"]),
+    xLabel: payloadString(artifact.payload, ["xLabel", "x_label", "x"]),
+    yLabel: payloadString(artifact.payload, ["yLabel", "y_label", "y"]),
+    seriesLabel: payloadString(artifact.payload, ["seriesLabel", "series_label", "yLabel", "y_label", "y"]),
+    dataLabel: payloadOptionalBoolean(artifact.payload, ["dataLabel", "data_label"]),
+    sampleSize: payloadNumber(artifact.payload, ["sampleSize", "sample_size"]),
+    dimensions: payloadRecordList(artifact.payload, ["dimensions"]),
+    metrics: payloadRecordList(artifact.payload, ["metrics"]),
     series: chartSeries(artifact),
     sourceRefs: chartSourceRefs(artifact.payload),
     depends_on: artifact.depends_on,

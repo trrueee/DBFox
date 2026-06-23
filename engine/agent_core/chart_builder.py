@@ -36,6 +36,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
             "title": f"{y_col} by {x_col}",
             "series": series,
             "reason": "A temporal field plus a numeric measure is best shown as a line chart.",
+            **_chart_metadata(x_col, y_col, x_kind="temporal", aggregate=True, sample_size=len(rows), data_label=len(series) <= 12),
         }
 
     if category_cols and numeric_cols:
@@ -50,6 +51,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
             "title": f"{y_col} by {x_col}",
             "series": series,
             "reason": "A category field plus a numeric measure is best compared by category.",
+            **_chart_metadata(x_col, y_col, x_kind="category", aggregate=True, sample_size=len(rows), data_label=len(series) <= 24),
         }
 
     if len(numeric_cols) >= 2:
@@ -62,6 +64,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
             "title": f"{y_col} vs {x_col}",
             "series": _series_from_rows(rows, x_col, y_col, aggregate=False, max_points=120),
             "reason": "Two numeric fields are best inspected with a scatter-style comparison.",
+            **_chart_metadata(x_col, y_col, x_kind="numeric", aggregate=False, sample_size=len(rows), data_label=False),
         }
 
     return {
@@ -70,6 +73,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
         "y": numeric_cols[0] if numeric_cols else None,
         "series": [],
         "reason": "No clear category/time plus numeric pairing was found.",
+        "sample_size": len(rows),
     }
 
 
@@ -96,6 +100,44 @@ def _series_from_rows(rows: list[dict[str, Any]], x_col: str, y_col: str, *, agg
         {"label": label, "value": value}
         for label, value in list(grouped.items())[:max_points]
     ]
+
+
+def _chart_metadata(
+    x_col: str,
+    y_col: str,
+    *,
+    x_kind: str,
+    aggregate: bool,
+    sample_size: int,
+    data_label: bool,
+) -> dict[str, Any]:
+    aggregation = "sum" if aggregate else "none"
+    expression = f"SUM({y_col})" if aggregate else y_col
+    return {
+        "x_label": x_col,
+        "y_label": y_col,
+        "series_label": y_col,
+        "aggregation": aggregation,
+        "data_label": data_label,
+        "sample_size": sample_size,
+        "dimensions": [
+            {
+                "name": x_col,
+                "column": x_col,
+                "role": "x",
+                "kind": x_kind,
+            }
+        ],
+        "metrics": [
+            {
+                "name": y_col,
+                "source_column": y_col,
+                "expression": expression,
+                "aggregation": aggregation,
+                "role": "y",
+            }
+        ],
+    }
 
 
 def _looks_temporal(column: str, values: list[Any]) -> bool:

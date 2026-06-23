@@ -16,6 +16,13 @@ export type ChartArtifact = AgentArtifactBase & {
   type: "chart";
   chartType: ChartArtifactType;
   unit?: string;
+  xLabel?: string;
+  yLabel?: string;
+  seriesLabel?: string;
+  dataLabel?: boolean;
+  sampleSize?: number;
+  dimensions?: Array<{ name?: string; column?: string; role?: string; kind?: string }>;
+  metrics?: Array<{ name?: string; source_column?: string; expression?: string; aggregation?: string; role?: string }>;
   series: Array<{ label: string; value: number; x?: string | number; y?: number }>;
   sourceRefs?: Array<{ label: string; formula: string; field: string }>;
 };
