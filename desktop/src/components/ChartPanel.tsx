@@ -161,7 +161,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>标签:</label>
           <select
-            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveLabel}
             onChange={(e) => setLabelCol(e.target.value)}
             style={{ width: "auto" }}
@@ -173,7 +173,7 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>数值:</label>
           <select
-            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveValue}
             onChange={(e) => setValueCol(e.target.value)}
             style={{ width: "auto" }}

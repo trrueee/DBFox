@@ -62,11 +62,11 @@ function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 }
 
 function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />;
+  return <h2 className={cn("text-[var(--ui-font-title)] font-semibold leading-none tracking-tight", className)} {...props} />;
 }
 
 function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-[hsl(var(--muted-foreground))]", className)} {...props} />;
+  return <p className={cn("text-[var(--ui-font-body)] text-[hsl(var(--muted-foreground))]", className)} {...props} />;
 }
 
 export {

@@ -47,7 +47,7 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
             ))}
           </div>
         )}
-        <pre className="hifi-sql-card font-mono text-[10px] leading-relaxed p-3">{artifact.sql}</pre>
+        <pre className="hifi-sql-card font-mono text-[var(--ui-font-caption)] leading-relaxed p-3">{artifact.sql}</pre>
         <div className="hifi-sql-card-action flex gap-2">
           <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
             <Copy size={10} />

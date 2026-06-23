@@ -60,15 +60,15 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
   }, [datasourceId]);
 
   if (loading) {
-    return <div className="p-4 text-[11px] text-slate-400">正在加载 ER 关系图...</div>;
+    return <div className="p-4 text-[var(--ui-font-label)] text-slate-400">正在加载 ER 关系图...</div>;
   }
 
   if (error) {
-    return <div className="p-4 text-[11px] text-red-500 bg-red-50 rounded-lg">{error}</div>;
+    return <div className="p-4 text-[var(--ui-font-label)] text-red-500 bg-red-50 rounded-lg">{error}</div>;
   }
 
   if (!data || data.nodes.length === 0) {
-    return <div className="p-4 text-[11px] text-slate-400">暂无 ER 关系图数据，请先同步 Schema。</div>;
+    return <div className="p-4 text-[var(--ui-font-label)] text-slate-400">暂无 ER 关系图数据，请先同步 Schema。</div>;
   }
 
   // Filter to show the current table and its direct connections
@@ -84,7 +84,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
 
   return (
     <div className="h-full w-full bg-[var(--color-bg)] relative overflow-auto flex flex-col p-4">
-      <span className="text-[10px] text-[var(--color-text-muted)] block mb-2">
+      <span className="text-[var(--ui-font-caption)] text-[var(--color-text-muted)] block mb-2">
         ER 关系图 &gt; {tableId}{" "}
         <span className="text-slate-400">
           ({connectedEdges.length} 条关系, {connectedNodes.length} 个关联表)
@@ -93,7 +93,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
       <div className="flex-1 relative border border-[var(--color-border)] bg-[var(--color-panel)] rounded-xl shadow-inner overflow-auto">
         <div className="relative p-6 flex flex-wrap gap-6 min-w-max">
           {/* Active Table Node */}
-          <div className="bg-[var(--color-panel)] border-2 border-[var(--color-primary)] rounded-lg shadow-sm text-[10px] w-[160px]">
+          <div className="bg-[var(--color-panel)] border-2 border-[var(--color-primary)] rounded-lg shadow-sm text-[var(--ui-font-caption)] w-[160px]">
             <div className="bg-[var(--color-primary-soft)] border-b border-[var(--color-border)] px-2 py-1 font-bold text-[var(--color-text-primary)]">
               {tableId}
             </div>
@@ -103,7 +103,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
                   <span className={f.is_pk ? "font-bold text-[var(--color-text-primary)]" : ""}>
                     {f.name}
                   </span>
-                  <span className="text-[var(--color-text-muted)] text-[9px]">
+                  <span className="text-[var(--color-text-muted)] text-[var(--ui-font-micro)]">
                     {f.is_pk ? "PK" : f.is_fk ? "FK" : f.type.slice(0, 12)}
                   </span>
                 </div>
@@ -120,11 +120,11 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
             );
             const isIncoming = edge?.target === tableId;
             return (
-              <div key={node.table} className="bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-sm text-[10px] w-[160px]">
+              <div key={node.table} className="bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-sm text-[var(--ui-font-caption)] w-[160px]">
                 <div className="bg-[var(--color-warning-soft)] border-b border-[var(--color-border)] px-2 py-1 font-bold flex justify-between text-[var(--color-text-primary)]">
                   <span>{node.table}</span>
                   {edge && (
-                    <span className="text-[9px] text-[var(--color-text-muted)]">
+                    <span className="text-[var(--ui-font-micro)] text-[var(--color-text-muted)]">
                       {isIncoming ? "← 被引用" : "→ 引用"}
                     </span>
                   )}
@@ -135,7 +135,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
                       <span className={f.is_pk ? "font-bold text-[var(--color-text-primary)]" : ""}>
                         {f.name}
                       </span>
-                      <span className="text-[var(--color-text-muted)] text-[9px]">
+                      <span className="text-[var(--color-text-muted)] text-[var(--ui-font-micro)]">
                         {f.is_pk ? "PK" : f.type.slice(0, 12)}
                       </span>
                     </div>

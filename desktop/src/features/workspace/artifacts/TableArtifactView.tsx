@@ -155,7 +155,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
             <div className="relative flex items-center">
               <Search size={12} className="hifi-result-search-icon absolute left-2" />
               <input
-                className="hifi-input hifi-result-search h-6 w-32 pl-6 pr-2 rounded text-[11px]"
+                className="hifi-input hifi-result-search h-6 w-32 pl-6 pr-2 rounded text-[var(--ui-font-label)]"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="本地搜索..."
@@ -245,7 +245,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
                 >
                   &lt;
                 </button>
-                <span className="hifi-page-num active flex items-center justify-center h-5 px-2 rounded text-[11px] font-medium">{page}</span>
+                <span className="hifi-page-num active flex items-center justify-center h-5 px-2 rounded text-[var(--ui-font-label)] font-medium">{page}</span>
                 <button
                   className={`hifi-toolbar-btn hifi-result-page-btn flex items-center justify-center ${!backendData?.hasNextPage ? "opacity-40 cursor-not-allowed" : ""}`}
                   disabled={(!backendData?.hasNextPage) || isLoading}
@@ -290,7 +290,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           </label>
           <input
             id={`${artifact.id}-table-search`}
-            className="hifi-input h-7 min-w-[180px] flex-1 rounded px-2 text-[11px]"
+            className="hifi-input h-7 min-w-[180px] flex-1 rounded px-2 text-[var(--ui-font-label)]"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索结果"
@@ -306,7 +306,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           )}
         </div>
         {fetchError && (
-          <div className="hifi-result-error mb-2 p-2 rounded text-[11px] flex items-center gap-1">
+          <div className="hifi-result-error mb-2 p-2 rounded text-[var(--ui-font-label)] flex items-center gap-1">
             <AlertCircle size={12} />
             获取分页数据失败: {fetchError}
           </div>
@@ -332,7 +332,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           )}
         </div>
         {(warnings.length > 0 || notices.length > 0) && (
-          <div className="mb-2 grid gap-1 text-[10px]">
+          <div className="mb-2 grid gap-1 text-[var(--ui-font-caption)]">
             {warnings.map((warning) => <span key={`warning-${warning}`} className="hifi-artifact-warning-text">{warning}</span>)}
             {notices.map((notice) => <span key={`notice-${notice}`} className="hifi-artifact-muted-text">{notice}</span>)}
           </div>
