@@ -362,10 +362,25 @@ export interface ResultSort {
   direction: "asc" | "desc";
 }
 
+export type ResultFilterOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "is_null"
+  | "is_not_null"
+  | "in"
+  | "not_in";
+
 export interface ResultFilter {
   column: string;
-  operator: string;
-  value: unknown;
+  operator: ResultFilterOperator;
+  value?: unknown;
 }
 
 export interface ResultPageRequest {
@@ -378,6 +393,15 @@ export interface ResultPageRequest {
   filters?: ResultFilter[] | null;
   search?: string | null;
   countMode?: "none" | "exact" | "estimate";
+}
+
+export interface ResultExportRequest {
+  datasourceId: string;
+  sourceSqlArtifactId: string;
+  safeSql: string;
+  sort?: ResultSort[] | null;
+  filters?: ResultFilter[] | null;
+  search?: string | null;
 }
 
 export interface ResultPageResponse {

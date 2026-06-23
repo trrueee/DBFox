@@ -1,4 +1,4 @@
-import { BASE_URL, ENGINE_TOKEN, request } from "./client";
+import { BASE_URL, ENGINE_TOKEN, request, requestBlob } from "./client";
 import type {
   AgentArtifact,
   AgentArtifactRecord,
@@ -12,6 +12,7 @@ import type {
   AgentRuntimeEventRecord,
   AgentSessionRunSummary,
   AgentTraceEventRecord,
+  ResultExportRequest,
   ResultPageRequest,
   ResultPageResponse,
 } from "./types";
@@ -423,6 +424,12 @@ export const agentApi = {
 
   fetchResultPage: (req: ResultPageRequest) =>
     request<ResultPageResponse>("/agent/results/page", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  exportResultCsv: (req: ResultExportRequest) =>
+    requestBlob("/agent/results/export", {
       method: "POST",
       body: JSON.stringify(req),
     }),

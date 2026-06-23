@@ -189,3 +189,35 @@ export async function request<T>(
   if (cacheKey) _inflight.set(cacheKey, promise);
   return promise;
 }
+
+export async function requestBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Local-Token": ENGINE_TOKEN,
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const payload = (() => {
+      if (!text) return null;
+      try { return JSON.parse(text); } catch { return { message: text }; }
+    })();
+    const detail = payload?.detail;
+    let message = payload?.message || "Request failed";
+    let code = payload?.code as string | undefined;
+
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      message = detail.message || message;
+      code = detail.code || code;
+    }
+
+    const checks = (detail && typeof detail === "object" && !Array.isArray(detail) ? detail.checks : payload?.checks) || [];
+    throw new ApiError(message, response.status, code, checks, detail || payload);
+  }
+
+  return response.blob();
+}
