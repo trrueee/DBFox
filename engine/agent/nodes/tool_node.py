@@ -158,24 +158,6 @@ def _summarize_sql_execute_readonly(output: dict[str, Any]) -> str:
     )
 
 
-def _summarize_sql_revise(output: dict[str, Any]) -> str:
-    if "can_fix" not in output:
-        return f"[sql.revise] WARNING: malformed output, missing 'can_fix' field. Output keys: {list(output.keys())[:10]}"
-    can_fix = output["can_fix"]
-    fixed = output.get("fixed_sql", "")
-    reason = output.get("reason", "")
-    if not can_fix:
-        return (
-            f"[sql.revise] can_fix=False. The SQL validator rejected this query "
-            f"and it CANNOT be automatically fixed. DO NOT call sql.revise again. "
-            f"Instead, either generate a completely new SQL with sql.generate, "
-            f"or explain the issue to the user and finalize. "
-            f"Reason: {reason}"
-        )
-    preview = fixed[:200] + ("..." if len(fixed) > 200 else "") if fixed else ""
-    return f"[sql.revise] can_fix=True, reason={reason}" + (f"\n```sql\n{preview}\n```" if preview else "")
-
-
 def _summarize_chart_suggest(output: dict[str, Any]) -> str:
     chart_type = output.get("type", "unknown")
     x_col = output.get("x", "")
@@ -359,7 +341,7 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     # schema.build_context   → replaced by db.observe + db.search
     # query_plan.build       → tool removed
     # sql.generate           → merged into db.query via TrustGate
-    # sql.revise             → tool removed
+    # SQL repair now uses corrected model-authored SQL followed by sql.validate.
     # followup.suggest       → tool removed
 }
 

@@ -206,7 +206,7 @@ describe("agentTimeline", () => {
       type: "agent.progress.update",
       step: {
         status: "running",
-        summary: "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
+        summary: "Use schema.describe_table and fuzzy-match similar columns, then generate corrected SQL and call sql.validate.",
       },
     }));
 

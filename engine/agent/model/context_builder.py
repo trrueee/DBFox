@@ -31,7 +31,7 @@ def build_progress_guidance_message(state: dict[str, Any]) -> SystemMessage | No
 
     if state.get("repair_mode"):
         parts.append(
-            "- **Mode**: SQL repair active — use schema tools and sql.revise before asking the user."
+            "- **Mode**: SQL repair active — use schema tools as needed, then produce corrected SQL, call sql.validate, and call sql.execute_readonly only after validation succeeds."
         )
 
     repair_trace = state.get("repair_trace") or []

@@ -30,7 +30,7 @@ class TestProgressDecisionSchema:
             next_action_hint="Check refund trend",
             missing_evidence=["refund trend"],
             user_visible_update="Checking refund rate changes.",
-            recovery_strategy="Use sql.revise after schema lookup.",
+            recovery_strategy="Use sql.validate after schema lookup.",
         )
         dumped = decision.model_dump(mode="json")
         assert dumped["next_action_hint"] == "Check refund trend"
@@ -78,7 +78,7 @@ class TestSqlRepairModule:
             "error_class": "missing_column",
             "failed_sql": "SELECT foo FROM orders",
             "root_cause": "column foo not found in orders",
-            "recovery_strategy": "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.",
+            "recovery_strategy": "Use schema.describe_table and fuzzy-match similar columns, then generate corrected SQL and call sql.validate.",
             "user_visible_update": "Column not found — looking up schema to fix the query.",
         }))
 
@@ -99,6 +99,25 @@ class TestSqlRepairModule:
 
         assert result is not None
         assert result["repair_trace"][0]["failed_sql"] == "SELECT safe_foo FROM orders"
+
+    def test_repair_guidance_uses_current_sql_lifecycle_tools(self):
+        result = _check_sql_repair_fastpath({
+            "messages": [HumanMessage(content="q")],
+            "revision_count": 0,
+            "execution": {"success": False, "error": "syntax error near FROM"},
+        })
+
+        assert result is not None
+        decision = result["progress_decision"]
+        guidance = " ".join(
+            str(decision.get(key) or "")
+            for key in ("reason_summary", "recovery_strategy", "next_action_hint", "user_visible_update")
+        )
+        legacy_groups = {"sql_repair", "sql_generation", "sql_validation", "execution"}
+        assert "sql.revise" not in guidance
+        assert "sql.validate" in guidance
+        assert not legacy_groups.intersection(decision["next_tool_groups"])
+        assert "sql" in decision["next_tool_groups"]
 
     def test_permission_denied_no_retry_budget(self):
         plan = plan_sql_repair({
@@ -125,16 +144,16 @@ class TestStreamingContext:
         enriched = _enrich_progress_result({
             "progress_decision": {
                 "status": "continue",
-                "recovery_strategy": "sql.revise",
-                "next_tool_groups": ["sql_repair", "schema"],
+                "recovery_strategy": "sql.validate",
+                "next_tool_groups": ["sql", "schema"],
             },
         }, {
             "messages": [HumanMessage(content="q")],
-            "allowed_tool_groups": ["sql_generation"],
+            "allowed_tool_groups": ["db"],
             "revision_count": 0,
         })
         assert enriched.get("repair_mode") is True
-        assert "sql_repair" in enriched.get("allowed_tool_groups", [])
+        assert "sql" in enriched.get("allowed_tool_groups", [])
         assert "schema" in enriched.get("allowed_tool_groups", [])
 
     def test_context_update_exposes_memory_and_semantic_references(self):
@@ -417,9 +436,9 @@ class TestPrepareRepairNode:
             "progress_decision": {
                 "status": "continue",
                 "recovery_strategy": "lookup_schema_then_revise_sql",
-                "next_tool_groups": ["schema", "sql_generation"],
+                "next_tool_groups": ["schema", "sql"],
             },
-            "allowed_tool_groups": ["sql_generation"],
+            "allowed_tool_groups": ["db"],
             "repair_trace": [
                 {
                     "type": "agent.repair.attempted",
@@ -445,7 +464,7 @@ class TestModelProgressInjection:
                 "status": "continue",
                 "next_action_hint": "Check refund rate",
                 "missing_evidence": ["refund trend"],
-                "recovery_strategy": "sql.revise after schema lookup",
+                "recovery_strategy": "sql.validate after schema lookup",
             },
         })
         assert msg is not None
@@ -453,6 +472,21 @@ class TestModelProgressInjection:
         assert "Next action" in content
         assert "refund rate" in content
         assert "Missing evidence" in content
+
+    def test_repair_mode_guidance_uses_current_sql_lifecycle(self):
+        msg = build_progress_guidance_message({
+            "repair_mode": True,
+            "progress_decision": {
+                "status": "continue",
+                "recovery_strategy": "Regenerate the SQL and validate it.",
+            },
+        })
+
+        assert msg is not None
+        content = str(msg.content)
+        assert "sql.revise" not in content
+        assert "sql.validate" in content
+        assert "sql.execute_readonly" in content
 
     def test_skips_when_complete(self):
         assert build_progress_guidance_message({

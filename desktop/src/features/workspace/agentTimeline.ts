@@ -286,9 +286,9 @@ export function normalizeAgentProgressText(text: string): string {
     "Answer payload exists.": "",
     "Preparing SQL repair": "",
     "Query failed — revising SQL based on the error.": "查询遇到问题，正在根据错误调整。",
-    "Use sql.revise with the execution error, re-validate, then retry.": "正在重新校验查询并准备重试。",
+    "Update SQL based on the execution error, call sql.validate, then retry.": "正在重新校验查询并准备重试。",
     "Column not found — looking up schema to fix the query.": "字段不匹配，正在核对表结构。",
-    "Use schema.describe_table and fuzzy-match similar columns, then sql.revise.": "正在查找相近字段并修正查询。",
+    "Use schema.describe_table and fuzzy-match similar columns, then generate corrected SQL and call sql.validate.": "正在查找相近字段并修正查询。",
   };
   if (Object.prototype.hasOwnProperty.call(exact, normalized)) return exact[normalized];
 
