@@ -1622,6 +1622,13 @@
   margin: 0;
 }
 
+.artifact-sql-editor {
+  overflow: hidden;
+  border: 1px solid var(--agent-border);
+  border-radius: var(--radius-control);
+  background: var(--agent-surface-elevated);
+}
+
 .artifact-card-chart .hifi-chart-body {
   padding: 4px 8px 8px;
 }

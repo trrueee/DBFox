@@ -1,4 +1,6 @@
+import Editor from "@monaco-editor/react";
 import { Copy, Download, Terminal } from "lucide-react";
+import { useTheme } from "../../../hooks/useTheme";
 import type { SqlArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText, downloadTextFile } from "./artifactActions";
@@ -10,6 +12,7 @@ interface SqlArtifactViewProps {
 }
 
 export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArtifactViewProps) {
+  const { theme } = useTheme();
   const metadata = [
     artifact.purpose,
     ...(artifact.usedTables || []),
@@ -63,7 +66,27 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
         </>
       }
     >
-      <pre className="hifi-sql-card font-mono text-[var(--ui-font-caption)] leading-relaxed p-3">{artifact.sql}</pre>
+      <div className="artifact-sql-editor">
+        <Editor
+          height="160px"
+          defaultLanguage="sql"
+          value={artifact.sql}
+          theme={theme === "dark" ? "vs-dark" : "light"}
+          options={{
+            readOnly: true,
+            minimap: { enabled: false },
+            lineNumbers: "on",
+            glyphMargin: false,
+            folding: false,
+            scrollBeyondLastLine: false,
+            fontSize: 12,
+            fontFamily: "var(--font-mono)",
+            wordWrap: "on",
+            renderLineHighlight: "none",
+            overviewRulerLanes: 0,
+          }}
+        />
+      </div>
     </ArtifactCard>
   );
 }
