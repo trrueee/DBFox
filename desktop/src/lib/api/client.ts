@@ -18,6 +18,39 @@ export async function initEngineConfig(): Promise<void> {
   }
 }
 
+type EngineHealthOptions = {
+  attempts?: number;
+  intervalMs?: number;
+};
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function waitEngineHealth(options: EngineHealthOptions = {}): Promise<void> {
+  const attempts = options.attempts ?? 20;
+  const intervalMs = options.intervalMs ?? 250;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetch(`${BASE_URL}/health`, { method: "GET" });
+      if (response.ok) {
+        const text = await response.text();
+        const payload = text ? JSON.parse(text) : null;
+        if (payload?.status === "healthy") return;
+      }
+      lastError = new Error(`Engine health check failed with status ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts - 1) {
+      await delay(intervalMs);
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : "Engine health check failed";
+  throw new ApiError(message, 503, "ENGINE_HEALTH_UNAVAILABLE");
+}
+
 export class ApiError extends Error {
   status?: number;
   code?: string;

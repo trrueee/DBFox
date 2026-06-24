@@ -11,6 +11,7 @@ Base.metadata.create_all(bind=db_engine)
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
+from engine.dev_server import bind_engine_socket
 from engine.main import _write_frontend_env_file_if_owned
 
 def test_fastapi_app_startup_and_health() -> None:
@@ -37,6 +38,16 @@ def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:
     """
     assert "**/.dbfox_runtime/**" not in _RELOAD_EXCLUDES
     assert "**/node_modules/**" not in _RELOAD_EXCLUDES
+
+
+def test_bind_engine_socket_returns_actual_ephemeral_port() -> None:
+    sock, port = bind_engine_socket(0)
+    try:
+        assert port > 0
+        assert sock.getsockname()[0] == "127.0.0.1"
+        assert sock.getsockname()[1] == port
+    finally:
+        sock.close()
 
 
 def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
