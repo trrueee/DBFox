@@ -1155,7 +1155,7 @@ git diff --stat
 git status --short
 ```
 
-Expected: only files from this plan are modified, plus the existing untracked `docs/reviews/architecture/gpt-pro-review.md` if it remains untracked.
+Expected: only files from this plan are modified, plus the existing untracked `docs/reviews/architecture/17-gpt-pro-review.md` if it remains untracked.
 
 - [ ] **Step 5: Commit final verification adjustments if any were needed**
 

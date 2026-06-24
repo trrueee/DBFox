@@ -2,6 +2,7 @@ import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
+import { getStoredApiConfig } from "../../components/SettingsDialog";
 
 interface ContextDrawerProps {
   open: boolean;
@@ -34,17 +35,14 @@ export function ContextDrawer({ open, type, activeTab, onClose, onGenerateIndexS
 }
 
 function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
+  // Keep onGenerateIndexSql to satisfy any potential callbacks, but display a premium empty state instead of hardcoded demo data
+  void onGenerateIndexSql;
   return (
     <div className="flex flex-col gap-3">
       <span className="text-[var(--ui-font-caption)] text-slate-400 uppercase block mb-1">数据库诊断建议</span>
-      <div className="border border-purple-200 bg-purple-50/60 rounded-xl p-3 text-purple-900">
-        <div className="flex items-center gap-1.5 font-bold text-[var(--ui-font-label)] mb-1 text-purple-800"><Sparkles size={12} /><span>性能索引推荐</span></div>
-        <p className="text-[var(--ui-font-caption)] leading-relaxed mb-2 opacity-90">检测到表 `comment_infos` 的字段 `user_id` 在联合查询中执行了大量全表扫描，建议立即为其创建单列索引。</p>
-        <button className="bg-purple-600 hover:bg-purple-700 text-white rounded text-[var(--ui-font-micro)] font-semibold px-2 py-0.5" onClick={onGenerateIndexSql}>生成并运行 DDL</button>
-      </div>
-      <div className="border border-amber-200 bg-amber-50/60 rounded-xl p-3 text-amber-900">
-        <div className="flex items-center gap-1.5 font-bold text-[var(--ui-font-label)] mb-1 text-amber-800"><Info size={12} /><span>多租户结构警告</span></div>
-        <p className="text-[var(--ui-font-caption)] leading-relaxed opacity-90">数据表 `id_users` 与 `id_organizations` 缺少一致的联合主键 `tenant_id`，建议补充主键以确保多租户隔离层级正确。</p>
+      <div className="text-slate-400 text-center py-8 text-[var(--ui-font-caption)] flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50">
+        <Sparkles size={16} className="text-slate-300" />
+        <span>暂无诊断建议。在 SQL 控制台执行查询或与智能助手交互时，相关的性能优化建议会呈现在此处。</span>
       </div>
     </div>
   );
@@ -52,6 +50,10 @@ function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
 
 function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; contextTables: string[] }) {
   const tables = useDatasourceStore((s) => s.tables);
+  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
+  const datasources = useDatasourceStore((s) => s.datasources);
+  const activeDs = datasources.find((ds) => ds.id === activeDatasourceId) ?? datasources[0] ?? null;
+  const apiConfig = getStoredApiConfig();
 
   if (activeTab.type === "table") {
     const tableId = activeTab.tableId || "";
@@ -75,15 +77,32 @@ function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; con
         rows.push(["AI 置信度/打分:", `${(table.ai_confidence * 100).toFixed(1)}%`]);
       }
     } else {
-      rows.push(["预估行数:", "12,345 Rows"]);
-      rows.push(["存储引擎:", "InnoDB"]);
+      rows.push(["预估行数:", "—"]);
+      rows.push(["存储引擎:", "—"]);
     }
     return <InfoList rows={rows} />;
   }
   if (activeTab.type === "sql") {
-    return <InfoList rows={[["连接名称:", "prod-mysql"], ["会话端口:", "3306"], ["事务模式:", "AUTO-COMMIT"]]} />;
+    return (
+      <InfoList
+        rows={[
+          ["连接名称:", activeDs ? activeDs.name : "—"],
+          ["激活数据库:", activeDs ? activeDs.database_name : "—"],
+          ["连接主机:", activeDs?.host ? `${activeDs.host}:${activeDs.port}` : "—"],
+          ["事务模式:", "AUTO-COMMIT"],
+        ]}
+      />
+    );
   }
-  return <InfoList rows={[["上下文关联:", `${contextTables.length} 张表`], ["激活大模型:", "DeepSeek-Coder-V2"], ["会话ID:", "caae-f483-d1e4"]]} />;
+  return (
+    <InfoList
+      rows={[
+        ["上下文关联:", `${contextTables.length} 张表`],
+        ["激活大模型:", apiConfig?.modelName || "—"],
+        ["会话ID:", activeTab.conversationId || "—"],
+      ]}
+    />
+  );
 }
 
 function InfoList({ rows }: { rows: string[][] }) {

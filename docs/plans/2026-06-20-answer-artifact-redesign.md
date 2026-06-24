@@ -6,7 +6,7 @@
 
 **Architecture:** Agent 自己写统计 SQL 替代 result.profile；answer.synthesize 成为唯一答案入口；artifact 分 Evidence（table/chart/sql，用户可见）和 Process（其余，Trace 面板）；前端 FinalAnswerCard 答案正文主导，支撑数据折叠
 
-**Spec:** `docs/superpowers/specs/2026-06-20-answer-artifact-redesign.md`
+**Spec:** `docs/designs/2026-06-20-answer-artifact-redesign.md`
 
 **Tech Stack:** Python (Pydantic, LangChain/LangGraph), TypeScript (React), SQLite
 

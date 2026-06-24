@@ -14,7 +14,7 @@
 
 This plan implements:
 
-- `docs/superpowers/specs/2026-06-23-sql-backed-data-view-productization-design.md`
+- `docs/designs/2026-06-23-sql-backed-data-view-productization.md`
 - User-approved architecture principle: DBFox must not move large data results as application state; database browsing and Agent artifacts should both be SQL-backed views.
 
 ## File Structure
@@ -1082,7 +1082,7 @@ Commit after Tasks 1, 2, 3, 5, 6, 7, 8, 9, and final verification fixes. Run at 
 
 ## Execution Notes
 
-- Preserve untracked `docs/reviews/architecture/gpt-pro-review.md`.
+- Preserve untracked `docs/reviews/architecture/17-gpt-pro-review.md`.
 - Use CodeGraph before locating or editing Agent artifact builder code.
 - Keep database browsing and artifact result UI separate; share query capability, not product shell.
 - Do not add frontend-only fake filtering/sorting for SQL-backed results.
