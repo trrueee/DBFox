@@ -19,14 +19,7 @@ from engine.tools.db_tools import (
     db_inspect,
     db_observe,
     db_query,
-    db_remember,
     db_search,
-)
-from engine.tools.memory_tools import (
-    memory_delete,
-    memory_search,
-    memory_summarize_session,
-    memory_write,
 )
 from engine.tools.runtime import (
     ArtifactSpec,
@@ -55,7 +48,7 @@ class EmptyInput(BaseModel):
 
 
 class SearchInput(BaseModel):
-    query: str = Field(description="A semantic search expression for table names, column names, comments, aliases, and AI-enriched descriptions; use one expression per call, and make multiple db.search calls for multiple candidate expressions.")
+    query: str = Field(description="A semantic search expression for table names, column names, comments, aliases, and AI-enriched descriptions. Before calling, expand the user's wording with Chinese synonyms, English schema terms, abbreviations, and possible table or column names; use one expression per call, and make multiple db.search calls for multiple candidate expressions.")
     limit: int = Field(default=20, description="Max results to return.")
 
 
@@ -86,15 +79,6 @@ class SqlExecuteReadonlyInput(BaseModel):
     question: str | None = Field(default=None, description="The original user question this SQL answers.")
 
 
-class RememberInput(BaseModel):
-    type: str = Field(description="Memory type: table_alias, column_alias, column_values, join_path, business_definition.")
-    target: str = Field(description="Table or column name this memory is about.")
-    evidence: str = Field(default="", description="Evidence or description of the discovery.")
-    aliases: list[str] | None = Field(default=None, description="Alias names (for table_alias/column_alias).")
-    value: Any | None = Field(default=None, description="Value payload: alias string, values list, join dict, or definition dict.")
-    content: dict[str, Any] | None = Field(default=None, description="Structured metadata payload.")
-
-
 class EscalateInput(BaseModel):
     group: str = Field(description="Tool group to request access to.")
     reason: str = Field(default="", description="Why this group is needed for the current task.")
@@ -118,25 +102,6 @@ class ExpandRelatedTablesInput(BaseModel):
     table_name: str = Field(description="Seed table name to expand from.")
     depth: int = Field(default=1, description="How many FK hops to expand (only depth=1 supported currently).", ge=1, le=1)
     limit: int = Field(default=20, description="Max related tables to return.", ge=1, le=50)
-
-
-class MemorySearchInput(BaseModel):
-    query: str = Field(description="Search terms for finding relevant memories.")
-    scope: list[str] | None = Field(default=None, description="Namespaces to search: user, datasource, project.")
-    memory_types: list[str] | None = Field(default=None, description="Filter by memory type.")
-    limit: int = Field(default=10, description="Max results.")
-
-
-class MemoryWriteInput(BaseModel):
-    type: str = Field(default="user_preference", description="Memory type: user_preference, schema_discovery, business_rule.")
-    text: str = Field(description="What to remember, in natural language.")
-    content: dict[str, Any] | None = Field(default=None, description="Optional structured metadata.")
-
-
-class MemoryDeleteInput(BaseModel):
-    memory_id: str = Field(description="ID of the memory record to delete.")
-    reason: str = Field(default="user_requested", description="Why this memory is being deleted.")
-
 
 
 class ChartSuggestInput(BaseModel):
@@ -167,7 +132,7 @@ class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
 
     def run(self, tool_input: EscalateInput, context: ToolRunContext) -> LooseOutput:
         valid_groups = {
-            "environment", "schema", "db", "semantic", "memory",
+            "environment", "schema", "db", "semantic",
             "execution", "result", "chart", "answer", "sql",
         }
         group = tool_input.group.strip()
@@ -335,8 +300,12 @@ class DbSearchTool(BaseTool[SearchInput, LooseOutput]):
     description = (
         "Full-text search across table names, column names, comments, AI-enriched "
         "descriptions, business terms, and aliases. Returns scored results with "
-        "match reasons. Use after db.observe to find relevant tables and columns "
-        "for the user's question."
+        "match reasons and search trace fields. Before calling, rewrite the user's "
+        "question into semantic search expressions that include original terms, "
+        "Chinese synonyms, English schema terms, abbreviations, and possible table "
+        "or column names. Use separate db.search calls for entity/domain terms, "
+        "action/event terms, and schema-language terms, then compare candidates "
+        "before inspecting tables."
     )
     input_model = SearchInput
     output_model = LooseOutput
@@ -479,36 +448,6 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
         ))
 
 
-class DbRememberTool(BaseTool[RememberInput, LooseOutput]):
-    name = "db.remember"
-    group = "db"
-    description = (
-        "Record a useful discovery for future searches: schema aliases, "
-        "join paths, business definitions, or data quirks. Stored memories "
-        "are searchable in later sessions via db.search and memory.search."
-    )
-    input_model = RememberInput
-    output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(merge_strategy="new")
-    artifacts = ArtifactSpec()
-
-    def run(self, tool_input: RememberInput, context: ToolRunContext) -> LooseOutput:
-        extra: dict[str, Any] = {}
-        if tool_input.aliases:
-            extra["aliases"] = tool_input.aliases
-        if tool_input.value is not None:
-            extra["value"] = tool_input.value
-        if tool_input.content:
-            extra.update(tool_input.content)
-        return LooseOutput.model_validate(db_remember(
-            context.db_session, context.request.datasource_id,
-            mem_type=tool_input.type, target=tool_input.target,
-            evidence=tool_input.evidence, **extra,
-        ))
-
-
 # ── Result / Chart / Answer ────────────────────────────────────────────────────
 
 
@@ -571,87 +510,6 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
         )
 
 
-# ── Memory ─────────────────────────────────────────────────────────────────────
-
-
-class MemorySearchTool(BaseTool[MemorySearchInput, LooseOutput]):
-    name = "memory.search"
-    group = "memory"
-    description = "Search long-term memory for relevant context from past sessions: schema discoveries, business rules, user preferences, and join paths."
-    input_model = MemorySearchInput
-    output_model = LooseOutput
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
-    artifacts = ArtifactSpec()
-
-    def run(self, tool_input: MemorySearchInput, context: ToolRunContext) -> LooseOutput:
-        state = context.state
-        return LooseOutput.model_validate(memory_search(
-            query=tool_input.query,
-            user_id=state.get("user_id") or state.get("thread_id"),
-            datasource_id=state.get("datasource_id") or context.request.datasource_id,
-            project_id=state.get("project_id"),
-            scope=tool_input.scope,
-            memory_types=tool_input.memory_types,
-            limit=tool_input.limit,
-        ))
-
-
-class MemoryWriteTool(BaseTool[MemoryWriteInput, LooseOutput]):
-    name = "memory.write"
-    group = "memory"
-    description = "Write a new entry to long-term memory. Use for discoveries that will be useful in future sessions: table relationships, business definitions, user preferences, or data quirks."
-    input_model = MemoryWriteInput
-    output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
-    artifacts = ArtifactSpec()
-
-    def run(self, tool_input: MemoryWriteInput, context: ToolRunContext) -> LooseOutput:
-        state = context.state
-        return LooseOutput.model_validate(memory_write(
-            mem_type=tool_input.type,
-            text=tool_input.text,
-            content=tool_input.content,
-            user_id=state.get("user_id") or state.get("thread_id"),
-            datasource_id=state.get("datasource_id") or context.request.datasource_id,
-            project_id=state.get("project_id"),
-        ))
-
-
-class MemoryDeleteTool(BaseTool[MemoryDeleteInput, LooseOutput]):
-    name = "memory.delete"
-    group = "memory"
-    description = "Delete a long-term memory entry by ID."
-    input_model = MemoryDeleteInput
-    output_model = LooseOutput
-    policy = ToolPolicy(side_effect="write", risk_level="warning", visible_to_model=False)
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
-    artifacts = ArtifactSpec()
-
-    def run(self, tool_input: MemoryDeleteInput, context: ToolRunContext) -> LooseOutput:
-        return LooseOutput.model_validate(memory_delete(memory_id=tool_input.memory_id, reason=tool_input.reason))
-
-
-class MemorySummarizeSessionTool(BaseTool[EmptyInput, LooseOutput]):
-    name = "memory.summarize_session"
-    group = "memory"
-    description = "Summarize the current conversation session into a compact memory for future recall. Use at the end of a successful task."
-    input_model = EmptyInput
-    output_model = LooseOutput
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("datasource_id", "user_id", "project_id", "thread_id", "session_id"))
-    artifacts = ArtifactSpec()
-
-    def run(self, tool_input: EmptyInput, context: ToolRunContext) -> LooseOutput:
-        session_id = str(context.state.get("thread_id") or context.state.get("session_id") or "")
-        return LooseOutput.model_validate(memory_summarize_session(session_id=session_id))
-
-
 # ── Registry ───────────────────────────────────────────────────────────────────
 
 
@@ -671,12 +529,7 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(DbQueryTool())
     registry.register(SqlValidateTool())
     registry.register(SqlExecuteReadonlyTool())
-    registry.register(DbRememberTool())
 
     registry.register(ChartSuggestTool())
     registry.register(AnswerSynthesizeTool())
-    registry.register(MemorySearchTool())
-    registry.register(MemoryWriteTool())
-    registry.register(MemoryDeleteTool())
-    registry.register(MemorySummarizeSessionTool())
     return registry

@@ -93,9 +93,9 @@ def _existing_artifact_id(state: dict[str, Any], semantic_id: str, artifact_type
 
 
 def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> dict[str, Any] | None:
-    """Best-effort query plan when no query_plan.build step ran.
+    """Best-effort query plan when no explicit query plan is present.
 
-    Prefers the plan embedded in the SQL generator's metadata, falling back to
+    Prefers the plan embedded in SQL metadata, falling back to
     a minimal plan assembled from the question and schema context.
     """
     candidate = state.get("sql_candidate") or {}

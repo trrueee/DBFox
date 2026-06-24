@@ -1,7 +1,7 @@
 """Environment data models for DBFox Agent.
 
-These models represent deterministic facts about the datasource environment.
-They do NOT contain business semantics, user intent, or LLM output.
+These models represent persisted datasource environment facts. Catalog rows may
+include schema-doc AI enrichment, but this layer does not call an LLM itself.
 """
 
 from __future__ import annotations
@@ -51,6 +51,13 @@ class TableSnapshot(BaseModel):
     column_count: int = 0
     columns: list[ColumnSnapshot] = Field(default_factory=list)
     comment: str | None = None
+    ai_description: str | None = None
+    semantic_tags: list[str] = Field(default_factory=list)
+    business_terms: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    table_role: str | None = None
+    grain: str | None = None
+    subject_area: str | None = None
 
 
 class ColumnSnapshot(BaseModel):
@@ -62,6 +69,12 @@ class ColumnSnapshot(BaseModel):
     is_primary_key: bool = False
     is_foreign_key: bool = False
     column_default: str | None = None
+    ai_description: str | None = None
+    semantic_tags: list[str] = Field(default_factory=list)
+    business_terms: list[str] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list)
+    column_role: str | None = None
+    metric_type: str | None = None
 
 
 class ForeignKeySnapshot(BaseModel):

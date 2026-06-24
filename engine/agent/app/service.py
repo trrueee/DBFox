@@ -47,7 +47,7 @@ logger = logging.getLogger("dbfox.dbfox_agent.service")
 # Full set of safe tool groups available to the model on every run.
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
-    "environment", "schema", "db", "memory",
+    "environment", "schema", "db",
     "result", "chart", "answer", "sql",
 ]
 

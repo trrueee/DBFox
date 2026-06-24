@@ -105,32 +105,6 @@ def _execute_tool(
 _Summarizer = Callable[[dict[str, Any]], str]
 
 
-def _summarize_schema_build_context(output: dict[str, Any]) -> str:
-    tables = output.get("selected_tables") or output.get("candidate_tables") or []
-    count = output.get("selected_schema_table_count", len(tables))
-    return (
-        f"[schema.build_context] OK. Selected {count} table(s): {', '.join(str(t) for t in tables[:10])}. "
-        f"Schema context ready for query planning or SQL generation."
-    )
-
-
-def _summarize_query_plan_build(output: dict[str, Any]) -> str:
-    goal = output.get("analysis_goal", "")
-    metrics = output.get("metrics") or []
-    dims = output.get("dimensions") or []
-    tables = output.get("candidate_tables") or []
-    return (
-        f"[query_plan.build] OK. Goal: {goal}. "
-        f"Metrics: {len(metrics)}, Dimensions: {len(dims)}, Tables: {', '.join(str(t) for t in tables[:8])}."
-    )
-
-
-def _summarize_sql_generate(output: dict[str, Any]) -> str:
-    sql = output.get("sql") or ""
-    preview = sql[:300] + ("..." if len(sql) > 300 else "")
-    return f"[sql.generate] OK.\n```sql\n{preview}\n```"
-
-
 def _summarize_sql_validate(output: dict[str, Any]) -> str:
     can_exec = output.get("can_execute", False)
     requires = output.get("requires_confirmation", False)
@@ -164,11 +138,6 @@ def _summarize_chart_suggest(output: dict[str, Any]) -> str:
     y_col = output.get("y", "")
     reason = output.get("reason", "")
     return f"[chart.suggest] type={chart_type}, x={x_col}, y={y_col}, reason={reason}"
-
-
-def _summarize_followup_suggest(output: dict[str, Any]) -> str:
-    suggestions = output.get("suggestions") or []
-    return f"[followup.suggest] {len(suggestions)} suggestion(s) generated."
 
 
 def _summarize_schema_list_tables(output: dict[str, Any]) -> str:
@@ -280,30 +249,6 @@ def _summarize_db_query(output: dict[str, Any]) -> str:
     )
 
 
-def _summarize_db_remember(output: dict[str, Any]) -> str:
-    return f"[db.remember] status={output.get('status')}, target={output.get('target')}"
-
-
-def _summarize_memory_search(output: dict[str, Any]) -> str:
-    memories = output.get("memories") or []
-    lines = [f"[memory.search] {len(memories)} result(s):"]
-    for m in memories[:5]:
-        lines.append(f"  [{m.get('type')}] {m.get('text', '')[:120]}")
-    return "\n".join(lines)
-
-
-def _summarize_memory_write(output: dict[str, Any]) -> str:
-    return f"[memory.write] {output.get('type')} → {output.get('status')} (id={output.get('memory_id', '?')})"
-
-
-def _summarize_memory_delete(output: dict[str, Any]) -> str:
-    return f"[memory.delete] deleted={output.get('deleted')}"
-
-
-def _summarize_memory_summarize_session(output: dict[str, Any]) -> str:
-    return f"[memory.summarize_session] {output.get('summary', '')[:300]}"
-
-
 def _summarize_default(output: dict[str, Any]) -> str:
     """Generic fallback — compact JSON without huge data."""
     compact: dict[str, Any] = {}
@@ -332,17 +277,6 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "db.query": _summarize_db_query,
     "sql.validate": _summarize_sql_validate,
     "sql.execute_readonly": _summarize_sql_execute_readonly,
-    "db.remember": _summarize_db_remember,
-    "memory.search": _summarize_memory_search,
-    "memory.write": _summarize_memory_write,
-    "memory.delete": _summarize_memory_delete,
-    "memory.summarize_session": _summarize_memory_summarize_session,
-    # ── Legacy summarizers (kept as functions; tools removed in tool-layer-v2) ──
-    # schema.build_context   → replaced by db.observe + db.search
-    # query_plan.build       → tool removed
-    # sql.generate           → merged into db.query via TrustGate
-    # SQL repair now uses corrected model-authored SQL followed by sql.validate.
-    # followup.suggest       → tool removed
 }
 
 

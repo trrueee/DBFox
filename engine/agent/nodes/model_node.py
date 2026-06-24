@@ -10,7 +10,7 @@ from engine.agent.model.context_builder import build_context_message, build_prog
 from engine.agent.tools.langchain_tools import build_langchain_tools
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
-from engine.agent.graph.message_utils import first_user_text, message_content_text
+from engine.agent.graph.message_utils import message_content_text
 from engine.agent.progress.fast_path import _max_steps_reason
 
 import logging
@@ -102,16 +102,6 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         build_context_message(state),
     ]
 
-    memory_ctx = ""
-    memory_references: list[dict[str, str]] = []
-    # Auto-inject memory context on first model turn (migrated from deleted planner).
-    # Subsequent turns already have this context in the conversation history.
-    if int(state.get("step_count", 0)) == 0:
-        memory_ctx = _get_memory_context(state)
-        if memory_ctx:
-            memory_references = _memory_references_from_context(memory_ctx)
-            messages.append(SystemMessage(content=memory_ctx))
-
     progress_msg = build_progress_guidance_message(state)
     if progress_msg is not None:
         messages.append(progress_msg)
@@ -139,10 +129,6 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         ],
         "step_count": state.get("step_count", 0) + 1,
     }
-    if memory_ctx:
-        result["memory_context"] = memory_ctx
-    if memory_references:
-        result["memory_references"] = memory_references
     return result
 
 
@@ -164,7 +150,7 @@ def _build_escalate_tool(registry: Any) -> Any | None:
 
     class EscalateInput(BaseModel):
         group: str = Field(description=(
-            "Tool group you need: workspace, environment, schema, db, semantic, memory."
+            "Tool group you need: environment, schema, db, semantic, execution, result, chart, answer, sql."
         ))
         reason: str = Field(description="Why you need this tool group.")
 
@@ -183,54 +169,3 @@ def _build_escalate_tool(registry: Any) -> Any | None:
         func=_noop,
     )
 
-
-def _get_memory_context(state: DBFoxAgentState) -> str:
-    """Auto-inject relevant long-term memory into the first model turn.
-
-    Migrated from the deleted planner_node.  Searches for user preferences,
-    project rules, past successful trajectories, metric definitions, and
-    schema aliases — then formats them as a SystemMessage for the LLM.
-
-    Best-effort: exceptions are logged but never block the model call.
-    """
-    try:
-        from engine.agent.memory_bridge import search_memory_for_planner
-
-        messages = state.get("messages", [])
-        question = first_user_text(messages)
-        if not question:
-            return ""
-
-        return search_memory_for_planner(
-            question=question,
-            user_id=state.get("user_id") or state.get("thread_id"),
-            datasource_id=str(state.get("datasource_id") or ""),
-            project_id=state.get("project_id"),
-        )
-    except Exception as exc:
-        logger.warning("Failed to retrieve memory context for model: %s", exc)
-        return ""
-
-
-def _memory_references_from_context(memory_context: str) -> list[dict[str, str]]:
-    references: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
-    for raw_line in memory_context.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if line.startswith("- "):
-            label = line[2:].strip()
-            if label.startswith("**") and "**:" in label:
-                label = label.split("**:", 1)[1].strip()
-            current = {"label": label, "summary": "", "source": "memory"}
-            references.append(current)
-            continue
-        if current and line.startswith("(") and line.endswith(")"):
-            detail = line[1:-1].strip()
-            if ":" in detail:
-                _, value = detail.split(":", 1)
-                current["summary"] = value.strip()
-            else:
-                current["summary"] = detail
-    return [item for item in references if item.get("label")][:5]

@@ -6,7 +6,7 @@ import {
   type EngineSchemaTable,
 } from "../lib/api/schema";
 import { datasourcesApi } from "../lib/api/datasources";
-import type { DataSource, DataSourceCreateParams, DataSourceHealthResult, DataSourceUpdateParams, DeleteConfirm, SchemaSyncOptions } from "../lib/api/types";
+import type { DataSource, DataSourceCreateParams, DataSourceHealthResult, DataSourceUpdateParams, DeleteConfirm, SchemaSyncOptions, SchemaSyncResult } from "../lib/api/types";
 
 interface DatasourceState {
   datasources: DataSource[];
@@ -25,7 +25,7 @@ interface DatasourceActions {
   createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
-  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<unknown>;
+  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<SchemaSyncResult>;
   checkHealth: (id: string) => Promise<DataSourceHealthResult>;
 }
 

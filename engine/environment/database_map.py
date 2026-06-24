@@ -1,7 +1,7 @@
 """Database Map — the Agent's "world model" of a datasource.
 
-Combines static schema metadata (from catalog) with dynamic intelligence
-(from memory / usage history) to give the Agent a rich understanding of
+Combines static schema metadata, schema-doc AI annotations, and lightweight
+heuristics to give the Agent a rich understanding of
 the database beyond raw DDL.
 
 Layers:
@@ -61,7 +61,7 @@ class ColumnProfile(BaseModel):
     is_sensitive: bool = False
     sensitivity_reason: str = ""
 
-    # Semantic tags (from memory — business terms mapped to this column)
+    # Semantic tags from schema docs / AI enrichment.
     semantic_tags: list[str] = Field(default_factory=list)
 
 
@@ -88,7 +88,7 @@ class TableProfile(BaseModel):
     risk_reasons: list[str] = Field(default_factory=list)
     is_prod: bool = False
 
-    # Usage heat (from memory trajectories)
+    # Usage heat from runtime/profile signals when available.
     query_count: int = 0
     last_queried_at: str | None = None
 
@@ -113,7 +113,7 @@ class Relationship(BaseModel):
 class DatabaseMap(BaseModel):
     """Complete intelligence model of a datasource.
 
-    Built from catalog snapshot + memory store + live profiling.
+    Built from catalog snapshot + schema-doc semantics + live profiling.
     Cached in agent state and refreshed when catalog changes.
     """
 
@@ -216,7 +216,7 @@ class DatabaseMap(BaseModel):
 
 
 class DatabaseMapBuilder:
-    """Assembles a DatabaseMap from catalog + memory + heuristics."""
+    """Assembles a DatabaseMap from catalog annotations + heuristics."""
 
     def __init__(self) -> None:
         from engine.policy.sensitivity import _SENSITIVE_FALLBACK
@@ -229,14 +229,13 @@ class DatabaseMapBuilder:
         self,
         catalog: CatalogSnapshot,
         *,
-        memory_store: Any | None = None,
         profiles: dict[str, Any] | None = None,
     ) -> DatabaseMap:
         """Build a DatabaseMap from a catalog snapshot + optional enrichments."""
         tables = self._build_tables(catalog)
         relationships = self._build_relationships(catalog, tables)
-        semantic_index = self._build_semantic_index(memory_store)
-        usage = self._build_usage_stats(memory_store, catalog.datasource_id)
+        semantic_index = self._build_semantic_index(catalog)
+        usage = self._build_usage_stats()
         risk = self._build_risk_profile(tables)
 
         # Enrich with live profiles if available
@@ -279,8 +278,8 @@ class DatabaseMapBuilder:
                 row_count_estimate=ts.row_count_estimate,
                 column_count=len(columns),
                 category=category,
-                business_module=module,
-                description=ts.comment or "",
+                business_module=ts.subject_area or module,
+                description=ts.ai_description or ts.comment or "",
                 columns=columns,
                 risk_level=risk,
                 risk_reasons=risk_reasons,
@@ -308,6 +307,12 @@ class DatabaseMapBuilder:
                 category=category,
                 is_sensitive=is_sensitive,
                 sensitivity_reason="name matches sensitive pattern" if is_sensitive else "",
+                semantic_tags=_unique_terms(
+                    cs.semantic_tags,
+                    cs.business_terms,
+                    cs.aliases,
+                    [cs.column_role, cs.metric_type],
+                ),
             ))
         return columns
 
@@ -363,76 +368,35 @@ class DatabaseMapBuilder:
 
     # ── Semantic index ─────────────────────────────────────────────────────
 
-    def _build_semantic_index(
-        self, memory_store: Any | None
-    ) -> dict[str, list[str]]:
-        """Build term → column mapping from memory store."""
+    def _build_semantic_index(self, catalog: CatalogSnapshot) -> dict[str, list[str]]:
+        """Build term-to-object mappings from schema-doc AI annotations."""
         index: dict[str, list[str]] = {}
-        if memory_store is None:
-            return index
-
-        try:
-            records = memory_store.search(
-                types=["metric_definition", "schema_alias"],
-                limit=50,
+        for table in catalog.tables:
+            table_terms = _unique_terms(
+                table.semantic_tags,
+                table.business_terms,
+                table.aliases,
+                [table.table_role, table.grain, table.subject_area, table.ai_description],
             )
-            for r in records:
-                if r.type == "metric_definition":
-                    term = r.content.get("metric_name") or r.text.split("→")[0].strip()
-                    expr = r.content.get("sql_expression") or r.content.get("business_definition", "")
-                    if term and expr:
-                        index.setdefault(term, []).append(expr)
-                elif r.type == "schema_alias":
-                    alias = r.content.get("alias") or r.text
-                    target = r.content.get("target") or ""
-                    if alias and target:
-                        index.setdefault(alias, []).append(target)
-        except Exception:
-            pass
+            for term in table_terms:
+                _index_term(index, term, table.table_name)
 
+            for column in table.columns:
+                target = f"{table.table_name}.{column.column_name}"
+                column_terms = _unique_terms(
+                    column.semantic_tags,
+                    column.business_terms,
+                    column.aliases,
+                    [column.column_role, column.metric_type, column.ai_description],
+                )
+                for term in column_terms:
+                    _index_term(index, term, target)
         return index
 
     # ── Usage stats ────────────────────────────────────────────────────────
 
-    def _build_usage_stats(
-        self, memory_store: Any | None, datasource_id: str
-    ) -> dict[str, Any]:
-        stats: dict[str, Any] = {
-            "total": 0, "top_tables": [], "join_paths": [],
-        }
-        if memory_store is None:
-            return stats
-
-        try:
-            records = memory_store.search(
-                types=["successful_trajectory"],
-                datasource_id=datasource_id,
-                limit=50,
-            )
-            stats["total"] = len(records)
-
-            table_counts: dict[str, int] = {}
-            join_paths: list[str] = []
-
-            for r in records:
-                tables = r.content.get("selected_tables") or r.content.get("tables") or []
-                for t in tables:
-                    tn = str(t)
-                    table_counts[tn] = table_counts.get(tn, 0) + 1
-
-                jps = r.content.get("join_paths") or []
-                for jp in jps:
-                    if isinstance(jp, str) and jp not in join_paths:
-                        join_paths.append(jp)
-
-            stats["top_tables"] = sorted(
-                table_counts, key=table_counts.get, reverse=True
-            )[:10]
-            stats["join_paths"] = join_paths[:10]
-        except Exception:
-            pass
-
-        return stats
+    def _build_usage_stats(self) -> dict[str, Any]:
+        return {"total": 0, "top_tables": [], "join_paths": []}
 
     # ── Risk profile ───────────────────────────────────────────────────────
 
@@ -557,40 +521,62 @@ class DatabaseMapBuilder:
         top_tables = set(usage.get("top_tables", []))
         for t in tables:
             if t.table_name.lower() in {tt.lower() for tt in top_tables}:
-                t.query_count = 1  # We don't have exact counts from memory search
+                t.query_count = 1
 
 
 # ── Convenience builder ────────────────────────────────────────────────────────
+
+
+def _unique_terms(*groups: Any) -> list[str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        values = group if isinstance(group, list) else [group]
+        for value in values:
+            if value is None:
+                continue
+            term = str(value).strip()
+            if not term:
+                continue
+            key = term.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            terms.append(term)
+    return terms
+
+
+def _index_term(index: dict[str, list[str]], term: str, target: str) -> None:
+    targets = index.setdefault(term, [])
+    if target not in targets:
+        targets.append(target)
 
 
 def build_database_map(
     datasource_id: str,
     *,
     db_session: Any = None,
-    memory_store: Any | None = None,
 ) -> DatabaseMap | None:
     """Build a DatabaseMap for a datasource.
 
-    Uses the catalog + memory to assemble a complete intelligence model.
+    Uses the catalog and schema-doc annotations to assemble a datasource model.
     Returns None if the catalog is unavailable.
     """
     try:
         from engine.environment.service import EnvironmentService
-        from engine.memory.long_term_store import get_long_term_store
 
         if db_session is None:
             logger.warning("No db_session provided — cannot build DatabaseMap.")
             return None
 
-        service = EnvironmentService(db_session)
-        catalog = service.get_catalog_snapshot(datasource_id)
+        service = EnvironmentService()
+        catalog = service.get_catalog_snapshot(db_session, datasource_id)
         if catalog is None or not catalog.tables:
             logger.warning("Catalog is empty for datasource %s", datasource_id)
             return None
 
-        store = memory_store or get_long_term_store()
         builder = DatabaseMapBuilder()
-        return builder.build(catalog, memory_store=store)
+        return builder.build(catalog)
     except Exception as exc:
         logger.error("Failed to build DatabaseMap for %s: %s", datasource_id, exc)
         return None

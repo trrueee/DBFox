@@ -21,7 +21,6 @@ _BATCHABLE_DISCOVERY_TOOLS = {
     "schema.describe_table",
     "schema.expand_related_tables",
     "schema.list_tables_page",
-    "memory.search",
 }
 
 

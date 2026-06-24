@@ -513,7 +513,6 @@ def progress_decision_dict(
     user_visible_update: str | None = None,
     next_instruction: str | None = None,
     next_tool_groups: list[str] | None = None,
-    should_consult_memory: bool = False,
 ) -> dict[str, Any]:
     return {
         "status": status,
@@ -534,7 +533,6 @@ def progress_decision_dict(
         "user_visible_update": user_visible_update,
         "next_instruction": next_instruction,
         "next_tool_groups": list(next_tool_groups or []),
-        "should_consult_memory": should_consult_memory,
     }
 
 

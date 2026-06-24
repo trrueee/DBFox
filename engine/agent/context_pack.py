@@ -15,7 +15,6 @@ Structure:
     ├─ safety         — TrustGate / guardrail result
     ├─ execution      — query execution result
     ├─ result         — analysis units summary / chart type
-    ├─ memory         — relevant memories (auto-injected)
     ├─ run_state      — step count / retry history / error
     └─ skill          — active skill guidance
 """
@@ -87,11 +86,6 @@ class ResultSection(BaseModel):
     chart_type: str | None = None
 
 
-class MemorySection(BaseModel):
-    planner_hints: str = ""
-    recovery_hints: str = ""
-
-
 class RunStateSection(BaseModel):
     step_count: int = 0
     max_steps: int = 20
@@ -149,7 +143,6 @@ class ContextPack(BaseModel):
     safety: SafetySection = Field(default_factory=SafetySection)
     execution: ExecutionSection = Field(default_factory=ExecutionSection)
     result: ResultSection = Field(default_factory=ResultSection)
-    memory: MemorySection = Field(default_factory=MemorySection)
     run_state: RunStateSection = Field(default_factory=RunStateSection)
     skill: SkillSection = Field(default_factory=SkillSection)
     intent: IntentSection = Field(default_factory=IntentSection)
@@ -198,7 +191,6 @@ def build_context_pack(state: dict[str, Any]) -> ContextPack:
         safety=_build_safety_section(state),
         execution=_build_execution_section(state),
         result=_build_result_section(state),
-        memory=_build_memory_section(),
         run_state=_build_runstate_section(state),
         skill=_build_skill_section(state),
         intent=_build_intent_section(state),
@@ -332,10 +324,6 @@ def _build_result_section(state: dict[str, Any]) -> ResultSection:
     )
 
 
-def _build_memory_section() -> MemorySection:
-    return MemorySection()
-
-
 def _build_runstate_section(state: dict[str, Any]) -> RunStateSection:
     return RunStateSection(
         step_count=int(state.get("step_count") or 0),
@@ -414,7 +402,7 @@ def _build_constraints_section(state: dict[str, Any]) -> ConstraintsSection:
 
 
 def render_for_planner(pack: ContextPack) -> str:
-    """Planner view: compact, focused on environment + memory + run state."""
+    """Planner view: compact, focused on environment, schema, and run state."""
     parts: list[str] = []
 
     if pack.environment.dialect != "unknown":
@@ -423,9 +411,6 @@ def render_for_planner(pack: ContextPack) -> str:
             f"catalog={pack.environment.catalog_status}, "
             f"tables={pack.environment.table_count}"
         )
-
-    if pack.memory.planner_hints:
-        parts.append(pack.memory.planner_hints)
 
     if pack.workspace.selected_tables:
         parts.append(f"Workspace tables: {', '.join(pack.workspace.selected_tables[:6])}")
@@ -560,9 +545,6 @@ def render_for_judge(pack: ContextPack) -> str:
 
     if pack.skill.selected_skill_ids:
         parts.append(f"Skills: {', '.join(pack.skill.selected_skill_ids)}")
-
-    if pack.memory.recovery_hints:
-        parts.append(pack.memory.recovery_hints)
 
     return " | ".join(parts)
 

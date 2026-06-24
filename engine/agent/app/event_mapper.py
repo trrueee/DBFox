@@ -160,7 +160,6 @@ def context_update_event(
         "repair_mode": bool(state.get("repair_mode")),
     }
     visible = state.get("visible_plan") or {}
-    memory_refs = _memory_references(state)
     semantic_refs = _semantic_references(state)
     if isinstance(visible, dict):
         task_lens = {
@@ -169,19 +168,16 @@ def context_update_event(
             "next_likely": str(visible.get("next_likely") or ""),
             "missing_evidence": list(visible.get("missing_evidence") or []),
         }
-        if memory_refs:
-            task_lens["memory_references"] = memory_refs
         if semantic_refs:
             task_lens["semantic_references"] = semantic_refs
         if any(task_lens.values()) or task_lens["missing_evidence"]:
             step_payload["task_lens"] = task_lens
-    elif memory_refs or semantic_refs:
+    elif semantic_refs:
         step_payload["task_lens"] = {
             "goal": "",
             "current_focus": "",
             "next_likely": "",
             "missing_evidence": [],
-            "memory_references": memory_refs,
             "semantic_references": semantic_refs,
         }
 
@@ -260,7 +256,7 @@ def _phase_for_tool(tool_name: str) -> str:
         return "validating"
     if "sql.execute" in lowered or lowered.startswith("db.query") or "readonly" in lowered:
         return "executing"
-    if "chart" in lowered or "answer" in lowered or "memory" in lowered:
+    if "chart" in lowered or "answer" in lowered:
         return "synthesizing"
     if "sql" in lowered:
         return "generating_sql"
@@ -279,22 +275,6 @@ def _phase_for_progress(trace: dict[str, Any]) -> str:
     if "answer" in name or "final" in name:
         return "synthesizing"
     return "understanding"
-
-
-def _memory_references(state: dict[str, Any]) -> list[dict[str, str]]:
-    raw = state.get("memory_references") or []
-    if not isinstance(raw, list):
-        return []
-    refs: list[dict[str, str]] = []
-    for item in raw[:5]:
-        if not isinstance(item, dict):
-            continue
-        label = str(item.get("label") or item.get("title") or "").strip()
-        summary = str(item.get("summary") or item.get("value") or "").strip()
-        source = str(item.get("source") or "memory").strip() or "memory"
-        if label:
-            refs.append({"label": label, "summary": summary, "source": source})
-    return refs
 
 
 def _semantic_references(state: dict[str, Any]) -> list[dict[str, str]]:
