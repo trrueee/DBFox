@@ -126,7 +126,7 @@ def _build_answer(answer_raw: Any, artifacts: list[AgentArtifact] | None) -> Age
 
         if artifacts and art_id:
             for art in artifacts:
-                if art.semantic_id == art_id or (art_id == "result_table" and art.semantic_id and art.semantic_id.startswith("result_table_")):
+                if art.semantic_id == art_id or _matches_result_view_semantic(art_id, art.semantic_id):
                     art_id = art.id
                     break
         evidence_mapped.append(AnswerEvidence(artifact_id=art_id, label=label or "", value=val))
@@ -139,6 +139,10 @@ def _build_answer(answer_raw: Any, artifacts: list[AgentArtifact] | None) -> Age
         recommendations=answer_raw.get("recommendations") or [],
         follow_up_questions=answer_raw.get("follow_up_questions") or [],
     )
+
+
+def _matches_result_view_semantic(requested_id: Any, semantic_id: str | None) -> bool:
+    return requested_id == "result_view" and bool(semantic_id and semantic_id.startswith("result_view_"))
 
 
 def _build_suggestions(state: dict[str, Any]) -> list[FollowUpSuggestion]:

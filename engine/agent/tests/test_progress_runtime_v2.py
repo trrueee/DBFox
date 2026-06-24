@@ -480,6 +480,13 @@ class TestContextPackV1:
         summary = render_ui_summary(pack)
         assert "orders" in summary or "workspace" in summary.lower()
 
+    def test_non_chartable_suggestion_does_not_set_chart_type(self):
+        pack = build_context_pack({
+            "chart_suggestion": {"type": "none", "chartable": False, "series": []},
+        })
+
+        assert pack.result.chart_type is None
+
     def test_legacy_schema_key_still_validates(self):
         pack = ContextPack.model_validate({
             "schema": {"selected_tables": ["orders", "refunds"]},

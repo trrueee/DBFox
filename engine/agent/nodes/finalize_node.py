@@ -105,7 +105,7 @@ def _build_artifact_evidence(artifacts: list[Any]) -> list[dict[str, Any]]:
             sql_count += 1
             evidence.append({"artifact_id": artifact_id, "label": f"SQL #{sql_count}", "value": None})
             continue
-        if artifact_type in {"result_view", "table"}:
+        if artifact_type == "result_view":
             result_count += 1
             payload = _artifact_payload(artifact)
             row_count = _payload_number(payload, "rowCount", "row_count", "returnedRows", "returned_rows")

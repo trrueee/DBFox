@@ -169,19 +169,19 @@ def _build_evidence(units: list[dict[str, Any]]) -> list[AnswerEvidence]:
     evidence: list[AnswerEvidence] = []
     if len(units) == 1:
         evidence.append(AnswerEvidence(
-            artifact_id="result_table",
+            artifact_id="result_view",
             label="查询行数",
             value=total_rows,
         ))
     else:
         evidence.append(AnswerEvidence(
-            artifact_id="result_table",
+            artifact_id="result_view",
             label="查询次数",
             value=len(units),
         ))
         if total_rows > 0:
             evidence.append(AnswerEvidence(
-                artifact_id="result_table",
+                artifact_id="result_view",
                 label="合计行数",
                 value=total_rows,
             ))
