@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { TableArtifact } from "../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../types/agentArtifact";
 import { useWorkspaceStore } from "../workspaceStore";
 
 const INITIAL = {
@@ -163,13 +163,19 @@ describe("workspaceStore — conversations", () => {
 describe("workspaceStore - artifact results", () => {
   beforeEach(reset);
 
-  it("opens a table artifact as a dedicated result tab", () => {
-    const artifact: TableArtifact = {
-      id: "result-table-1",
-      type: "table",
+  it("opens a result view artifact as a dedicated result tab", () => {
+    const artifact: ResultViewArtifact = {
+      id: "result-view-1",
+      type: "result_view",
       title: "Query result",
+      storageMode: "sql_backed",
+      datasourceId: "ds-1",
+      sourceSqlSemanticId: "sql-artifact-1",
+      sourceSql: "SELECT day, count FROM daily_orders",
+      safeSql: "SELECT day, count FROM daily_orders",
       columns: ["day", "count"],
-      rows: [["2026-06-01", "12"]],
+      previewRows: [["2026-06-01", "12"]],
+      previewRowCount: 1,
       rowCount: 1,
       returnedRows: 1,
     };
@@ -177,9 +183,9 @@ describe("workspaceStore - artifact results", () => {
     useWorkspaceStore.getState().openArtifactResultTab(artifact);
 
     const state = useWorkspaceStore.getState();
-    expect(state.activeTabId).toBe("artifact-result-result-table-1");
+    expect(state.activeTabId).toBe("artifact-result-result-view-1");
     expect(state.tabs.at(-1)).toMatchObject({
-      id: "artifact-result-result-table-1",
+      id: "artifact-result-result-view-1",
       title: "Query result",
       type: "artifact-result",
       artifactResult: artifact,

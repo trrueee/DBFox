@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
   ConversationMessage,
@@ -12,7 +12,7 @@ interface MessageListProps {
   runs: ConversationRun[];
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab: (artifact: ResultViewArtifact) => void;
   onResolveApproval: (runId: string, approvalId: string, approved: boolean) => void;
   onSelectArtifact?: (artifactId: string) => void;
 }

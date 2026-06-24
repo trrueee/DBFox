@@ -21,7 +21,7 @@ describe("ArtifactEvidencePanel", () => {
     echartsMock.options = [];
   });
 
-  it("groups SQL, table, and chart by depends_on", () => {
+  it("groups SQL, result view, and chart by depends_on", () => {
     const artifacts: ConversationArtifact[] = [
       {
         id: "sql-1",
@@ -36,15 +36,23 @@ describe("ArtifactEvidencePanel", () => {
         depends_on: [],
       },
       {
-        id: "table-1",
+        id: "result-view-1",
         conversation_id: "conv",
         run_id: "run",
         message_id: "assistant",
-        type: "table",
+        type: "result_view",
         title: "Rows",
         status: "completed",
         sequence: 2,
-        payload: { columns: ["value"], rows: [{ value: 1 }] },
+        payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "sql-1",
+          safeSql: "select 1",
+          columns: ["value"],
+          previewRows: [{ value: 1 }],
+          rowCount: 1,
+        },
         depends_on: ["sql-1"],
       },
       {
@@ -57,7 +65,7 @@ describe("ArtifactEvidencePanel", () => {
         status: "completed",
         sequence: 3,
         payload: { type: "bar", series: [{ label: "A", value: 1 }] },
-        depends_on: ["table-1"],
+        depends_on: ["result-view-1"],
       },
     ];
 
@@ -68,7 +76,7 @@ describe("ArtifactEvidencePanel", () => {
     expect(screen.getByText("Chart")).toBeTruthy();
   });
 
-  it("renders sql_suggestion, table preview, and chart values from agent artifacts", () => {
+  it("renders sql_suggestion, result view preview, and chart values from agent artifacts", () => {
     const artifacts: ConversationArtifact[] = [
       {
         id: "sql_suggestion_1",
@@ -83,17 +91,22 @@ describe("ArtifactEvidencePanel", () => {
         depends_on: [],
       },
       {
-        id: "result_table_1",
+        id: "result_view_1",
         conversation_id: "conv",
         run_id: "run",
         message_id: "assistant",
-        type: "table",
+        type: "result_view",
         title: "Query result",
         status: "completed",
         sequence: 2,
         payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "sql_suggestion_1",
+          safeSql: "SELECT user_type, COUNT(*) AS user_count FROM id_users GROUP BY user_type",
           columns: ["user_type", "user_count"],
-          rows: [{ user_type: "personal_user", user_count: 25 }],
+          previewRows: [{ user_type: "personal_user", user_count: 25 }],
+          rowCount: 1,
         },
         depends_on: ["sql_suggestion_1"],
       },
@@ -110,7 +123,7 @@ describe("ArtifactEvidencePanel", () => {
           type: "bar",
           series: [{ label: "personal_user", value: 25 }],
         },
-        depends_on: ["result_table_1"],
+        depends_on: ["result_view_1"],
       },
     ];
 
@@ -174,24 +187,28 @@ describe("ArtifactEvidencePanel", () => {
     ).toEqual(["bar", "line", "pie", "scatter"]);
   });
 
-  it("renders table previews with row counts and a 10-row limit", () => {
+  it("renders result view previews with row counts and a 10-row limit", () => {
     const rows = Array.from({ length: 12 }, (_, index) => ({
       day: `2026-06-${String(index + 1).padStart(2, "0")}`,
       order_count: (index + 1) * 10,
     }));
     const artifacts: ConversationArtifact[] = [
       {
-        id: "table-preview",
+        id: "result-view-preview",
         conversation_id: "conv",
         run_id: "run",
         message_id: "assistant",
-        type: "table",
+        type: "result_view",
         title: "Daily orders",
         status: "completed",
         sequence: 1,
         payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "sql-artifact",
+          safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
           columns: ["day", "order_count"],
-          rows,
+          previewRows: rows,
           rowCount: 128,
           returnedRows: 12,
           latencyMs: 42,
@@ -211,7 +228,7 @@ describe("ArtifactEvidencePanel", () => {
     expect(screen.queryByText("2026-06-11")).toBeNull();
   });
 
-  it("opens a table preview as a full result tab with all loaded rows", () => {
+  it("opens a result view preview as a SQL-backed result tab", () => {
     const rows = Array.from({ length: 12 }, (_, index) => ({
       day: `2026-06-${String(index + 1).padStart(2, "0")}`,
       order_count: (index + 1) * 10,
@@ -219,20 +236,24 @@ describe("ArtifactEvidencePanel", () => {
     const onOpenResultTab = vi.fn();
     const artifacts: ConversationArtifact[] = [
       {
-        id: "table-preview",
+        id: "result-view-preview",
         conversation_id: "conv",
         run_id: "run",
         message_id: "assistant",
-        type: "table",
+        type: "result_view",
         title: "Daily orders",
         status: "completed",
         sequence: 1,
         payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "sql-artifact",
+          sourceSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+          safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
           columns: ["day", "order_count"],
-          rows,
+          previewRows: rows,
           rowCount: 128,
           returnedRows: 12,
-          sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
         },
         depends_on: [],
       },
@@ -246,16 +267,19 @@ describe("ArtifactEvidencePanel", () => {
 
     expect(onOpenResultTab).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "table-preview",
-        type: "table",
+        id: "result-view-preview",
+        type: "result_view",
         title: "Daily orders",
+        storageMode: "sql_backed",
+        datasourceId: "ds-1",
+        sourceSqlSemanticId: "sql-artifact",
+        safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
         columns: ["day", "order_count"],
         rowCount: 128,
         returnedRows: 12,
-        sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
       }),
     );
-    expect(onOpenResultTab.mock.calls[0][0].rows).toHaveLength(12);
+    expect(onOpenResultTab.mock.calls[0][0].previewRows).toHaveLength(12);
   });
 
   it("groups SQL, safety, result_view, and chart by semantic ids", () => {

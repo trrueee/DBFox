@@ -1,5 +1,5 @@
 import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink } from "lucide-react";
-import type { ResultViewArtifact, TableArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText, downloadBlobFile, downloadTextFile } from "./artifactActions";
 import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
@@ -8,9 +8,9 @@ import { ArtifactTableToolbar } from "./table/ArtifactTableToolbar";
 import { useArtifactTableData } from "./table/useArtifactTableData";
 
 interface TableArtifactViewProps {
-  artifact: TableArtifact | ResultViewArtifact;
+  artifact: ResultViewArtifact;
   onToast: (message: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
   mode?: "inline" | "workspace";
 }
 
@@ -170,7 +170,7 @@ function InlineTableMeta({
   artifact,
   table,
 }: {
-  artifact: TableArtifact | ResultViewArtifact;
+  artifact: ResultViewArtifact;
   table: ReturnType<typeof useArtifactTableData>;
 }) {
   return (
