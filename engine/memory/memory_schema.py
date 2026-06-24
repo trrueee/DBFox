@@ -155,6 +155,10 @@ class SessionMemory(BaseModel):
     last_sql: str | None = None
     last_execution_id: str | None = None
     last_table_artifact_id: str | None = None
+    last_result_artifact_id: str | None = None
+    last_source_sql_artifact_id: str | None = None
+    last_result_safe_sql: str | None = None
+    last_result_sql_fingerprint: str | None = None
     last_chart_artifact_id: str | None = None
     last_report_artifact_id: str | None = None
 
