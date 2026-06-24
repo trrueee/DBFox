@@ -19,8 +19,10 @@ dbfox_local.db-shm
 dbfox_local.db-wal
 dbfox_demo.db
 dbfox_agent_kernel_checkpoints.sqlite
+dbfox_agent_core_checkpoints.sqlite.version
 demo_shop
 *.sqlite
+*.sqlite.version
 *.sqlite3
 *.db
 *.db-shm
@@ -96,7 +98,9 @@ desktop/src-tauri/.tauri/
 # ============================================================
 artifacts/*.json
 artifacts/*_report*.md
+artifacts/runtime-logs/
 !artifacts/spider_*.json
+tmp_tables.json
 
 # ============================================================
 # LangGraph / Agent Runtime
