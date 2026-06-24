@@ -55,7 +55,7 @@ class ResultViewService:
                 "Source result artifact was not found.",
                 status_code=404,
             )
-        if source.type not in {"result_view", "table", "sql"}:
+        if source.type not in {"result_view", "sql"}:
             raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Source artifact cannot back pagination.")
 
         payload = _artifact_payload(source)
