@@ -254,19 +254,19 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
             raise BackupError("Backup file was not created or is empty.")
 
         completed = datetime.now(UTC)
-        record.status = "success"
-        record.backup_type = backup_mode
-        record.completed_at = completed
-        record.duration_ms = int((time.monotonic() - start_time) * 1000)
-        record.file_size_bytes = output_path.stat().st_size
-        record.checksum_sha256 = _sha256_file(output_path)
-        record.error_message = None
+        setattr(record, "status", "success")
+        setattr(record, "backup_type", backup_mode)
+        setattr(record, "completed_at", completed)
+        setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
+        setattr(record, "file_size_bytes", output_path.stat().st_size)
+        setattr(record, "checksum_sha256", _sha256_file(output_path))
+        setattr(record, "error_message", None)
     except Exception as exc:
         completed = datetime.now(UTC)
-        record.status = "failed"
-        record.completed_at = completed
-        record.duration_ms = int((time.monotonic() - start_time) * 1000)
-        record.error_message = str(exc)[:2000]
+        setattr(record, "status", "failed")
+        setattr(record, "completed_at", completed)
+        setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
+        setattr(record, "error_message", str(exc)[:2000])
         db.commit()  # independent commit so API rollback does not erase the audit trail
         raise
 

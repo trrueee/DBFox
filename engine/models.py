@@ -301,15 +301,7 @@ USING fts5(search_text, content='schema_search_docs', content_rowid='id')
 
 QUERY_HISTORY_FTS_DDL = """
 CREATE VIRTUAL TABLE IF NOT EXISTS query_history_fts
-USING fts5(
-    history_id UNINDEXED,
-    question,
-    submitted_sql,
-    generated_sql,
-    safe_sql,
-    executed_sql,
-    error_message
-)
+USING fts5(search_text, content='query_history_search_docs', content_rowid='id')
 """
 
 
@@ -349,6 +341,27 @@ class QueryHistory(Base):  # type: ignore[misc,valid-type]
 
     def __repr__(self) -> str:
         return f"<QueryHistory id={self.id!r} status={self.execution_status!r} latency_ms={self.execution_time_ms!r}>"
+
+
+class QueryHistorySearchDoc(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "query_history_search_docs"
+    __table_args__ = (
+        Index("ix_query_history_search_docs_datasource", "datasource_id"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    history_id = Column(String, ForeignKey("query_history.id", ondelete="CASCADE"), nullable=False, unique=True)
+    datasource_id = Column(String, nullable=False)
+
+    question = Column(Text, nullable=True)
+    submitted_sql = Column(Text, nullable=True)
+    generated_sql = Column(Text, nullable=True)
+    safe_sql = Column(Text, nullable=True)
+    executed_sql = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    search_text = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
 class LLMLog(Base):  # type: ignore[misc,valid-type]
