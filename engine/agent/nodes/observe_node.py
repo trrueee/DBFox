@@ -18,6 +18,7 @@ from engine.agent_core.artifacts import (
     build_sql_artifact,
     build_result_view_artifact,
 )
+from engine.agent_core.chart_builder import is_chartable_suggestion
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.observe_node")
 
@@ -76,6 +77,21 @@ def _tool_name_from_step(step_name: str) -> str:
     return STEP_NAME_TO_INTERNAL.get(step_name, step_name)
 
 
+def _existing_artifact_id(state: dict[str, Any], semantic_id: str, artifact_type: str) -> str | None:
+    for item in state.get("artifacts") or []:
+        if isinstance(item, dict):
+            item_id = item.get("id")
+            item_semantic_id = item.get("semantic_id")
+            item_type = item.get("type")
+        else:
+            item_id = getattr(item, "id", None)
+            item_semantic_id = getattr(item, "semantic_id", None)
+            item_type = getattr(item, "type", None)
+        if item_type == artifact_type and item_semantic_id == semantic_id and item_id:
+            return str(item_id)
+    return None
+
+
 def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> dict[str, Any] | None:
     """Best-effort query plan when no query_plan.build step ran.
 
@@ -132,7 +148,45 @@ def emit_artifacts_from_observation(
         and execution.get("success")
         and _has_result_rows(execution)
     ):
-        artifacts.append(build_result_view_artifact(state["execution"], datasource_id=state.get("datasource_id"), safety=state.get("safety"), identity=identity))
+        sql_text = str(state.get("sql") or execution.get("safe_sql") or execution.get("sql") or "").strip()
+        sql_artifact = build_sql_artifact(
+            sql_text,
+            safety=state.get("safety"),
+            execution=state.get("execution"),
+            identity=identity,
+        ) if sql_text else None
+        source_sql_artifact_id = (
+            _existing_artifact_id(state, sql_artifact.semantic_id, "sql")
+            if sql_artifact is not None
+            else None
+        )
+        if sql_artifact is not None and source_sql_artifact_id is None:
+            source_sql_artifact_id = sql_artifact.id
+        safety_artifact = build_safety_artifact(
+            state.get("safety"),
+            identity=identity,
+            source_sql=sql_text,
+            source_sql_artifact_id=source_sql_artifact_id,
+        ) if isinstance(state.get("safety"), dict) else None
+        safety_artifact_id = (
+            _existing_artifact_id(state, safety_artifact.semantic_id, "safety")
+            if safety_artifact is not None
+            else None
+        )
+        if safety_artifact is not None and safety_artifact_id is None:
+            safety_artifact_id = safety_artifact.id
+        if sql_artifact is not None and sql_artifact.id == source_sql_artifact_id:
+            artifacts.append(sql_artifact)
+        if safety_artifact is not None and safety_artifact.id == safety_artifact_id:
+            artifacts.append(safety_artifact)
+        artifacts.append(build_result_view_artifact(
+            state["execution"],
+            datasource_id=state.get("datasource_id"),
+            safety=state.get("safety"),
+            identity=identity,
+            source_sql_artifact_id=source_sql_artifact_id,
+            safety_artifact_id=safety_artifact_id,
+        ))
 
     if step_name in ("db.query", "sql.execute_readonly") and observation.output and observation.status == "success":
         payload = dict(observation.output)
@@ -142,35 +196,27 @@ def emit_artifacts_from_observation(
 
     if step_name == "chart.suggest" and state.get("chart_suggestion") and observation.status == "success":
         chart = state.get("chart_suggestion")
-        if isinstance(chart, dict) and chart.get("type") and chart.get("type") != "table":
+        if isinstance(chart, dict) and is_chartable_suggestion(chart):
             artifacts.append(build_chart_artifact(chart, safety=state.get("safety"), execution=state.get("execution"), identity=identity))
 
-    # Bind dependencies. result_table is now keyed per-query (result_table_{hash}),
-    # so a bare "result_table" dep must resolve to the most recent table artifact.
+    # Bind dependencies against existing artifacts and artifacts emitted in this
+    # observation so sql -> result_view -> chart stays addressable by semantic id.
     existing_artifacts = state.get("artifacts") or []
     semantic_to_id: dict[str, str] = {}
-    latest_table_id: str | None = None
-    for item in existing_artifacts:
+    for item in [*existing_artifacts, *artifacts]:
         if isinstance(item, dict):
             sem_id = item.get("semantic_id") or item.get("id")
             item_id = item.get("id")
-            item_type = item.get("type")
         else:
             sem_id = item.semantic_id or item.id
             item_id = item.id
-            item_type = item.type
         if sem_id and item_id:
             semantic_to_id[sem_id] = item_id
-        if item_type == "table" and item_id:
-            latest_table_id = item_id
 
     for art in artifacts:
         resolved: list[str] = []
         for dep in art.depends_on:
-            if dep == "result_table":
-                resolved.append(semantic_to_id.get(dep) or latest_table_id or dep)
-            else:
-                resolved.append(semantic_to_id.get(dep, dep))
+            resolved.append(semantic_to_id.get(dep, dep))
         # De-dup while preserving order
         seen_deps: set[str] = set()
         art.depends_on = [d for d in resolved if not (d in seen_deps or seen_deps.add(d))]
