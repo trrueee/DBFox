@@ -129,10 +129,10 @@ export function SettingsButton({ onClick, isConfigured }: SettingsButtonProps) {
       <div className="relative">
         <Zap
           size={14}
-          className={isConfigured ? "text-[hsl(var(--success))]" : "text-[hsl(var(--muted-foreground))]"}
+          className={isConfigured ? "text-[var(--color-success)]" : "text-[hsl(var(--muted-foreground))]"}
         />
         {isConfigured && (
-          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))]" />
+          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[var(--color-success)]" />
         )}
       </div>
     </Button>

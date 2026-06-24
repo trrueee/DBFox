@@ -150,7 +150,7 @@ export function DataSourceTree({
         )}
 
         <div className="hifi-search-box">
-          <Search size={12} className="hifi-search-icon" />
+          <Search size={14} className="hifi-search-icon" />
           <input
             type="text"
             className="hifi-search-input"
@@ -167,7 +167,7 @@ export function DataSourceTree({
             className={`ds-quick-nav-item ${activeTabType === "smart-query" ? "active" : ""}`}
             aria-current={activeTabType === "smart-query" ? "page" : undefined}
           >
-            <Sparkles size={12} className="text-purple-500" />
+            <Sparkles size={14} className="text-purple-500" />
             <span>智能问数</span>
           </button>
           <button
@@ -176,7 +176,7 @@ export function DataSourceTree({
             className={`ds-quick-nav-item ${activeTabType === "conversation-history" ? "active" : ""}`}
             aria-current={activeTabType === "conversation-history" ? "page" : undefined}
           >
-            <MessageSquare size={12} className="text-indigo-500" />
+            <MessageSquare size={14} className="text-indigo-500" />
             <span>对话历史</span>
           </button>
         </div>
@@ -193,10 +193,10 @@ export function DataSourceTree({
               onContextMenu={(event) => onNodeContextMenu(event, "schema", activeDatasource.database_name || activeDatasource.name)}
             >
               <ChevronDown
-                size={12}
+                size={14}
                 className={`mr-1 text-slate-500 ds-group-chevron ${schemaCollapsed ? "ds-group-chevron-collapsed" : ""}`}
               />
-              <Database size={12} className="mr-1 text-blue-600" />
+              <Database size={14} className="mr-1 text-blue-600" />
               <span>{activeDatasource.database_name || activeDatasource.name}</span>
             </div>
           )}
@@ -207,7 +207,7 @@ export function DataSourceTree({
             <div key={moduleName} className="ds-tree-group">
               <div className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)}>
                 <ChevronDown
-                  size={10}
+                  size={12}
                   className={`mr-1 text-gray-400 ds-group-chevron ${groupCollapsed ? "ds-group-chevron-collapsed" : ""}`}
                 />
                 <span className="text-gray-500 font-medium">{moduleName}</span>
@@ -229,7 +229,7 @@ export function DataSourceTree({
                     onContextMenu={(event) => onNodeContextMenu(event, "table", table.table_name)}
                   >
                     <span className="hifi-tree-indent" />
-                    <FileText size={11} className="mr-1.5 opacity-70" />
+                    <FileText size={13} className="mr-1.5 opacity-70" />
                     <span className="truncate" title={table.table_comment}>{table.table_name}</span>
                   </div>
                 );

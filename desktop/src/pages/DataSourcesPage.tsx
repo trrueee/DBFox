@@ -330,49 +330,50 @@ export const DataSourcesPage = ({
     : env === "test" ? { label: "测试", color: "var(--color-warning)", bg: "var(--color-warning-soft)" }
     : { label: "开发", color: "var(--color-text-secondary)", bg: "var(--color-border)" };
 
-  // ---- Render modes ----
-
-
-
   const renderDetail = () => {
     if (!selected) return <div className="hifi-empty-state"><Database size={28} /><p>选择一个数据源查看详情</p></div>;
     const h = healthType(selected);
     const syncingStructure = actionState === "syncing";
     const detailActionBusy = actionState !== "idle";
     return (
-      <div className="hifi-datasource-detail" style={{ padding: 20, overflow: "auto", display: "flex", flexDirection: "column", height: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-          <div>
-            <h3 style={{ fontSize: "1.1rem", fontWeight: 700 }}>{selected.name}</h3>
-            <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", fontFamily: "monospace" }}>
-              {selected.db_type === "sqlite" ? selected.database_name : `${selected.host}:${selected.port} / ${selected.database_name}`}
+      <div className="hifi-datasource-detail" style={{ padding: 24, overflow: "auto", display: "flex", flexDirection: "column", height: "100%", gap: 20 }}>
+        {/* Connection Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-light)", paddingBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: dbBadge(selected).bg, display: "flex", alignItems: "center", justifyContent: "center", color: dbBadge(selected).color }}>
+              <Database size={22} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <h3 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0, color: "var(--color-text-primary)" }}>{selected.name}</h3>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: dbBadge(selected).color, background: dbBadge(selected).bg, padding: "2px 8px", borderRadius: 6 }}>{dbBadge(selected).label}</span>
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: envBadge(selected.env).color, background: envBadge(selected.env).bg, padding: "2px 8px", borderRadius: 6 }}>{envBadge(selected.env).label}</span>
+                {selected.is_read_only && <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "2px 8px", borderRadius: 6 }}>只读</span>}
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontFamily: "monospace", marginTop: 4 }}>
+                {selected.db_type === "sqlite" ? selected.database_name : `${selected.host}:${selected.port} / ${selected.database_name}`}
+              </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }} disabled={detailActionBusy}>设为当前</button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={() => startEdit(selected)} disabled={detailActionBusy}>编辑</button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem" }} onClick={handleSyncSchema} disabled={detailActionBusy} title="重新读取表、字段、主外键和注释等结构信息">
-              <RefreshCw size={12} className={syncingStructure ? "animate-spin" : ""} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }} disabled={detailActionBusy}>设为当前</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => startEdit(selected)} disabled={detailActionBusy}>编辑</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={handleSyncSchema} disabled={detailActionBusy} title="重新读取表、字段、主外键和注释等结构信息">
+              <RefreshCw size={12} className={syncingStructure ? "animate-spin mr-1" : "mr-1"} />
               {syncingStructure ? "同步中" : "同步结构"}
             </button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ padding: "4px 12px", fontSize: "0.72rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={detailActionBusy}><Trash2 size={12} /> 删除</button>
+            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={detailActionBusy}><Trash2 size={12} className="mr-1" /> 删除</button>
           </div>
-        </div>
-        
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: dbBadge(selected).color, background: dbBadge(selected).bg, padding: "2px 8px", borderRadius: 4 }}>{dbBadge(selected).label}</span>
-          <span style={{ fontSize: "0.7rem", fontWeight: 500, color: envBadge(selected.env).color, background: envBadge(selected.env).bg, padding: "2px 8px", borderRadius: 4 }}>{envBadge(selected.env).label}</span>
-          {selected.is_read_only && <span style={{ fontSize: "0.7rem", color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "2px 8px", borderRadius: 4 }}>只读</span>}
         </div>
 
         {/* Tab switcher */}
-        <div style={{ display: "flex", gap: 16, borderBottom: "1px solid var(--border-light)", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 16, borderBottom: "1px solid var(--border-light)" }}>
           <button 
             type="button"
             onClick={() => setActiveTab("info")} 
             style={{ 
-              padding: "8px 4px", 
-              fontSize: "0.85rem", 
+              padding: "8px 4px 12px", 
+              fontSize: "0.9rem", 
               borderBottom: activeTab === "info" ? "2px solid var(--color-primary)" : "2px solid transparent", 
               color: activeTab === "info" ? "var(--color-text-primary)" : "var(--color-text-muted)", 
               background: "none", 
@@ -386,27 +387,97 @@ export const DataSourcesPage = ({
         </div>
 
         {activeTab === "info" && (
-          <div style={{ flex: 1 }}>
-            <h4 className="field-label" style={{ marginBottom: 8 }}>连接配置摘要</h4>
-            <div className="hifi-datasource-metrics" style={{ marginBottom: 16 }}>
-              <div><span className="field-label">主机</span><div style={{ fontSize: "0.82rem" }}>{selected.db_type === "sqlite" ? "N/A" : selected.host || "-"}</div></div>
-              <div><span className="field-label">端口</span><div style={{ fontSize: "0.82rem" }}>{selected.port || "-"}</div></div>
-              <div><span className="field-label">数据库</span><div style={{ fontSize: "0.82rem" }}>{selected.database_name || "-"}</div></div>
-              <div><span className="field-label">用户名</span><div style={{ fontSize: "0.82rem" }}>{selected.username || "-"}</div></div>
-              <div><span className="field-label">环境</span><div style={{ fontSize: "0.82rem" }}>{envBadge(selected.env).label}</div></div>
-              <div><span className="field-label">只读</span><div style={{ fontSize: "0.82rem" }}>{selected.is_read_only ? "是" : "否"}</div></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Connection Config Details Cards */}
+            <div>
+              <h4 className="field-label" style={{ marginBottom: 10, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>连接配置摘要</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>主机地址</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, wordBreak: "break-all" }}>{selected.db_type === "sqlite" ? "N/A (本地文件)" : selected.host || "-"}</div>
+                </div>
+
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>端口</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{selected.db_type === "sqlite" ? "N/A" : selected.port || "-"}</div>
+                </div>
+
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>数据库名</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, wordBreak: "break-all" }}>{selected.database_name || "-"}</div>
+                </div>
+
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>连接用户名</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{selected.db_type === "sqlite" ? "N/A" : selected.username || "-"}</div>
+                </div>
+
+              </div>
             </div>
-            <h4 className="field-label" style={{ marginBottom: 8 }}>状态</h4>
-            <div className="hifi-datasource-metrics">
-              <div><span className="field-label">连接</span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: h === "success" ? "var(--color-success)" : h === "error" ? "var(--color-danger)" : "var(--color-border-hover)", marginRight: 4 }} />{h === "success" ? "正常" : h === "error" ? "失败" : "未检测"}{selected.last_test_latency_ms ? <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}> {selected.last_test_latency_ms}ms</span> : null}</div>
-              <div><span className="field-label">上次同步</span><div style={{ fontSize: "0.82rem" }}>{fmtDate(selected.last_sync_at)}</div></div>
-              <div><span className="field-label">表数量</span><div style={{ fontSize: "0.82rem" }}>{selected.last_test_tables_count ?? "-"}</div></div>
+
+            {/* Health & Sync Details Cards */}
+            <div>
+              <h4 className="field-label" style={{ marginBottom: 10, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>状态与同步</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+                
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>连接状态</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, display: "flex", alignItems: "center" }}>
+                    {h === "success" ? (
+                      <>
+                        <span style={{ position: "relative", display: "inline-flex", height: 8, width: 8, marginRight: 8, borderRadius: "50%", background: "var(--color-success)" }}>
+                          <span style={{ position: "absolute", inlineSize: "100%", blockSize: "100%", borderRadius: "50%", background: "var(--color-success)", opacity: 0.6, transform: "scale(1.8)" }} />
+                        </span>
+                        <span style={{ color: "var(--color-success)" }}>正常</span>
+                        {selected.last_test_latency_ms ? <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginLeft: 6 }}>({selected.last_test_latency_ms}ms)</span> : null}
+                      </>
+                    ) : h === "error" ? (
+                      <>
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-danger)", marginRight: 8 }} />
+                        <span style={{ color: "var(--color-danger)" }}>失败</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-border-hover)", marginRight: 8 }} />
+                        <span>未检测</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>数据表数量</div>
+                  <div style={{ fontSize: "1.05rem", color: "var(--color-text-primary)", fontWeight: 700, marginTop: 2 }}>{selected.last_test_tables_count ?? "-"} <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)" }}>张表</span></div>
+                </div>
+
+                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>上次结构同步</div>
+                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{fmtDate(selected.last_sync_at)}</div>
+                </div>
+
+              </div>
             </div>
-            {selected.last_test_error && <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-danger)" }}>{selected.last_test_error}</div>}
+
+            {selected.last_test_error && (
+              <div style={{ 
+                padding: "12px 16px", 
+                borderRadius: 10, 
+                border: "1px solid rgba(239, 68, 68, 0.2)", 
+                backgroundColor: "rgba(239, 68, 68, 0.04)", 
+                fontSize: "0.8rem", 
+                color: "var(--color-danger)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 4
+              }}>
+                <div style={{ fontWeight: 600 }}>连接异常信息:</div>
+                <div style={{ fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{selected.last_test_error}</div>
+              </div>
+            )}
 
           </div>
         )}
-
       </div>
     );
   };
@@ -486,21 +557,29 @@ export const DataSourcesPage = ({
                   </>
                 )}
                 {/* Env + read-only */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginTop: 16 }}>
-                  <div>
-                    <label className="field-label">环境标签</label>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginTop: 16 }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <label className="field-label" style={{ marginTop: 0 }}>环境标签</label>
                     <select className="hifi-select" value={form.env} onChange={(e) => updateForm("env", e.target.value)}>
                       <option value="dev">💻 开发环境 (DEV)</option>
                       <option value="test">🔬 测试环境 (TEST)</option>
                       <option value="prod">🚨 生产环境 (PROD)</option>
                     </select>
                   </div>
-                  <div><label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, height: 38, cursor: "pointer", marginTop: 20 }}><input type="checkbox" checked={form.is_read_only} onChange={(e) => updateForm("is_read_only", e.target.checked)} /> 启用只读模式</label></div>
+                  <div style={{ display: "flex", alignItems: "center", height: 38 }}>
+                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, margin: 0, cursor: "pointer", fontWeight: 650 }}>
+                      <input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.is_read_only} onChange={(e) => updateForm("is_read_only", e.target.checked)} />
+                      启用只读模式
+                    </label>
+                  </div>
                 </div>
                 {/* SSH */}
                 {form.db_type !== "sqlite" && (
                   <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssh_enabled} onChange={(e) => updateForm("ssh_enabled", e.target.checked)} /> 启用 SSH 隧道连接</label>
+                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", margin: 0, fontWeight: 650 }}>
+                      <input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.ssh_enabled} onChange={(e) => updateForm("ssh_enabled", e.target.checked)} />
+                      启用 SSH 隧道连接
+                    </label>
                   </div>
                 )}
                 {form.db_type !== "sqlite" && form.ssh_enabled && (
@@ -520,7 +599,7 @@ export const DataSourcesPage = ({
                 {/* SSL */}
                 {form.db_type === "mysql" && (
                   <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_enabled} onChange={(e) => updateForm("ssl_enabled", e.target.checked)} /> 启用 MySQL SSL/TLS</label>
+                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", margin: 0, fontWeight: 650 }}><input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.ssl_enabled} onChange={(e) => updateForm("ssl_enabled", e.target.checked)} /> 启用 MySQL SSL/TLS</label>
                   </div>
                 )}
                 {form.db_type === "mysql" && form.ssl_enabled && (
@@ -530,7 +609,7 @@ export const DataSourcesPage = ({
                       <div><label className="field-label">客户端证书</label><input className="hifi-input" value={form.ssl_cert_path} onChange={(e) => updateForm("ssl_cert_path", e.target.value)} /></div>
                       <div><label className="field-label">客户端私钥</label><input className="hifi-input" value={form.ssl_key_path} onChange={(e) => updateForm("ssl_key_path", e.target.value)} /></div>
                     </div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}><input type="checkbox" checked={form.ssl_verify_identity} onChange={(e) => updateForm("ssl_verify_identity", e.target.checked)} /> 校验证书主机名</label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.82rem", fontWeight: 600, margin: 0 }}><input type="checkbox" style={{ width: 14, height: 14, cursor: "pointer" }} checked={form.ssl_verify_identity} onChange={(e) => updateForm("ssl_verify_identity", e.target.checked)} /> 校验证书主机名</label>
                   </div>
                 )}
                 {/* Error / Test result */}
