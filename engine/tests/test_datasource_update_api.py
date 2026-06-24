@@ -4,7 +4,7 @@ import pytest
 from engine.crypto import decrypt_password, encrypt_password
 from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
-from engine.models import DEFAULT_PROJECT_ID, DataSource
+from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTable
 
 
 def _headers() -> dict[str, str]:
@@ -169,3 +169,44 @@ def test_update_datasource_missing_id_returns_404(client) -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "NOT_FOUND"
+
+
+def test_update_column_metadata_updates_semantic_fields(client, db_session) -> None:
+    datasource = _create_datasource(db_session)
+    table = SchemaTable(
+        id="schema-table-1",
+        data_source_id=datasource.id,
+        table_schema="main",
+        table_name="orders",
+    )
+    column = SchemaColumn(
+        id="schema-column-1",
+        table_id=table.id,
+        column_name="total_amount",
+        data_type="decimal",
+        column_type="decimal(10,2)",
+    )
+    db_session.add_all([table, column])
+    db_session.commit()
+
+    response = client.put(
+        f"/api/v1/schema/columns/{column.id}",
+        json={
+            "ai_description": "Order amount in base currency",
+            "semantic_tags": "metric,revenue",
+            "business_terms": "GMV",
+            "ai_confidence": 0.92,
+        },
+        headers=_headers(),
+    )
+
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["success"] is True
+    assert body["column"]["ai_description"] == "Order amount in base currency"
+    assert body["column"]["semantic_tags"] == "metric,revenue"
+    assert body["column"]["business_terms"] == "GMV"
+    assert body["column"]["ai_confidence"] == 0.92
+
+    db_session.refresh(column)
+    assert column.ai_description == "Order amount in base currency"

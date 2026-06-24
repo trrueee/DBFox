@@ -17,6 +17,7 @@ from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
 from engine.models import (
     DEFAULT_PROJECT_ID,
     DataSource,
+    SchemaColumn,
     SchemaTable,
 )
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceResponse, _json_list_or_empty
