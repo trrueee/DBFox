@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import json
+import socket
 from pathlib import Path
 
 import uvicorn
@@ -25,7 +27,19 @@ def default_reload_enabled() -> bool:
     return not is_frozen_runtime()
 
 
-def _write_frontend_env_for_dev() -> None:
+def bind_engine_socket(port: int) -> tuple[socket.socket, int]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind((ENGINE_HOST, port))
+    sock.listen(socket.SOMAXCONN)
+    return sock, int(sock.getsockname()[1])
+
+
+def _emit_engine_ready(port: int) -> None:
+    print(f"DBFOX_ENGINE_READY {json.dumps({'port': port}, separators=(',', ':'))}", flush=True)
+
+
+def _write_frontend_env_for_dev(port: int | None = None) -> None:
     """Write desktop/.env.local so Vite picks up the engine token before starting.
 
     Must happen BEFORE uvicorn starts (not inside lifespan), otherwise Vite may
@@ -44,17 +58,14 @@ def _write_frontend_env_for_dev() -> None:
         if not _is_dbfox_owned_frontend_env(existing):
             need_write = False  # user has custom content, don't overwrite
         else:
-            from engine.main import LOCAL_SECURE_TOKEN
-            expected = f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={LOCAL_SECURE_TOKEN}\n"
+            from engine.main import LOCAL_SECURE_TOKEN, _frontend_env_content
+            expected = _frontend_env_content(LOCAL_SECURE_TOKEN, port=port)
             if existing.strip() == expected.strip():
                 need_write = False  # already up to date
 
     if need_write:
-        from engine.main import LOCAL_SECURE_TOKEN
-        env_file.write_text(
-            f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={LOCAL_SECURE_TOKEN}\n",
-            "utf-8",
-        )
+        from engine.main import LOCAL_SECURE_TOKEN, _frontend_env_content
+        env_file.write_text(_frontend_env_content(LOCAL_SECURE_TOKEN, port=port), "utf-8")
 
 
 def run_engine_server(*, reload: bool | None = None) -> None:
@@ -68,17 +79,17 @@ def run_engine_server(*, reload: bool | None = None) -> None:
 
     if reload is None:
         reload = default_reload_enabled()
-
-    # Write frontend env file BEFORE uvicorn starts so Vite always reads
-    # a valid token — even during a cold start race.
-    if not is_frozen_runtime():
-        _write_frontend_env_for_dev()
+    port = int(os.environ.get("DBFOX_ENGINE_PORT", str(ENGINE_PORT)))
 
     if reload:
+        # Write frontend env file BEFORE uvicorn starts so Vite always reads
+        # a valid token — even during a cold start race.
+        if not is_frozen_runtime():
+            _write_frontend_env_for_dev(port)
         uvicorn.run(
             "engine.main:app",
             host=ENGINE_HOST,
-            port=ENGINE_PORT,
+            port=port,
             reload=True,
             reload_dirs=[str(ENGINE_DIR)],
             reload_includes=["*.py"],
@@ -88,7 +99,15 @@ def run_engine_server(*, reload: bool | None = None) -> None:
 
     from engine.main import app
 
-    uvicorn.run(app, host=ENGINE_HOST, port=ENGINE_PORT)
+    sock, actual_port = bind_engine_socket(port)
+    os.environ["DBFOX_ENGINE_PORT"] = str(actual_port)
+    if not is_frozen_runtime():
+        _write_frontend_env_for_dev(actual_port)
+    _emit_engine_ready(actual_port)
+
+    config = uvicorn.Config(app, host=ENGINE_HOST, port=actual_port)
+    server = uvicorn.Server(config)
+    server.run(sockets=[sock])
 
 
 if __name__ == "__main__":

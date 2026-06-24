@@ -1,5 +1,6 @@
 import build_sidecar
 import json
+import sys
 from pathlib import Path
 
 
@@ -47,3 +48,15 @@ def test_export_langsmith_runtime_env_copies_only_tracing_keys(tmp_path, monkeyp
     assert "LANGCHAIN_API_KEY=lsv2-test\n" in text
     assert "LANGCHAIN_PROJECT=DBFox\n" in text
     assert "OPENAI_API_KEY" not in text
+
+
+def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path) -> None:
+    def fail_static_token_write(_token: str) -> Path:
+        raise AssertionError("production static token preset must not be generated")
+
+    monkeypatch.setattr(build_sidecar, "write_token_preset", fail_static_token_write, raising=False)
+    monkeypatch.setattr(build_sidecar, "write_env_local", lambda _token: tmp_path / ".env.local")
+    monkeypatch.setattr(build_sidecar, "export_langsmith_runtime_env", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["build_sidecar.py", "--token-only"])
+
+    build_sidecar.main()

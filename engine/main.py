@@ -29,11 +29,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from engine.api import router
+from engine.app.errors import public_error
 from engine.db import init_db
 from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import DBFoxError, NotFoundError
 from engine.schemas import ErrorResponse
-from engine.runtime_paths import private_runtime_file, write_private_text
+from engine.engine_runtime.credentials import RuntimeCredentialPolicy
+from engine.runtime_paths import private_runtime_file
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
@@ -57,28 +59,7 @@ def get_or_create_local_token() -> str:
         如果是打包后的独立程序，该值为 True，否则为 False。
       - `secrets.token_hex(32)`：利用 Python 的密码学安全随机数生成器生成一个 32 字节（64 个字符）的十六进制随机字符串，极其难被暴力破解。
     """
-    # 优先使用 Rust/Tauri 动态传入的 Token
-    env_token = os.environ.get("DBFOX_ENGINE_TOKEN")
-    if env_token:
-        return env_token.strip()
-
-    # 如果是在 Tauri 打包后的“冷冻（frozen）”环境下运行，尝试读取打包时预设的静态 Token
-    if is_frozen:
-        try:
-            from engine import token_preset
-            if token_preset.STATIC_TOKEN:
-                return token_preset.STATIC_TOKEN
-        except ImportError:
-            pass
-
-    # 如果安全 Token 文件存在，直接读取并返回它
-    if TOKEN_FILE.exists():
-        return TOKEN_FILE.read_text("utf-8").strip()
-        
-    # 如果都不存在，生成一个 32 字节高强度随机 Token，并持久化保存
-    token = secrets.token_hex(32)
-    write_private_text(TOKEN_FILE, token)
-    return token
+    return RuntimeCredentialPolicy(token_file=TOKEN_FILE, is_frozen=is_frozen).resolve_token()
 
 
 # 初始化并保存当前运行周期的安全令牌
@@ -93,8 +74,9 @@ ALLOWED_TAURI_ORIGINS = {
 FRONTEND_ENV_KEYS = {"VITE_LOCAL_ENGINE_PORT", "VITE_LOCAL_ENGINE_TOKEN"}
 
 
-def _frontend_env_content(token: str) -> str:
-    return f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={token}\n"
+def _frontend_env_content(token: str, port: int | str | None = None) -> str:
+    engine_port = str(port or os.environ.get("DBFOX_ENGINE_PORT", "18625"))
+    return f"VITE_LOCAL_ENGINE_PORT={engine_port}\nVITE_LOCAL_ENGINE_TOKEN={token}\n"
 
 
 def _is_dbfox_owned_frontend_env(content: str) -> bool:
@@ -292,11 +274,17 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
       - `@app.exception_handler(异常类型)` 使得每当接口运行期间抛出此类型异常时，FastAPI 就会直接跳过默认报错行为，
         调用这个装饰的函数来生成自定义 HTTP 响应给客户端。
     """
-    from engine.policy.error_sanitizer import sanitize_error_message
     logger.warning("DBFoxError at %s %s: [%s] %s", request.method, request.url.path, exc.code, exc.message)
+    detail = public_error(exc.code, exc.message)
     return JSONResponse(
         status_code=404 if isinstance(exc, NotFoundError) else 400,
-        content={"detail": ErrorResponse(code=exc.code, message=sanitize_error_message(exc.message), checks=getattr(exc, "checks", [])).model_dump()},
+        content={
+            "detail": ErrorResponse(
+                code=str(detail["code"]),
+                message=str(detail["message"]),
+                checks=getattr(exc, "checks", []),
+            ).model_dump()
+        },
     )
 
 

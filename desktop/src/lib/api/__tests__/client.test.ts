@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { request, ApiError, getUserErrorMessage } from "../client";
+import { request, ApiError, getUserErrorMessage, waitEngineHealth } from "../client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -97,5 +97,24 @@ describe("API client request error normalization", () => {
       expect(err.code).toBe("INVALID_CREDENTIALS");
       expect(err.checks).toEqual(["passphrase_format"]);
     }
+  });
+
+  it("waitEngineHealth resolves after a successful health probe", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("not ready"))
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ status: "healthy" }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await waitEngineHealth({ attempts: 2, intervalMs: 0 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://127.0.0.1:18625/api/v1/health",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });
