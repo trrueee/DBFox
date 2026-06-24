@@ -157,6 +157,7 @@ def extract_sql_backed_refs(
         payload = artifact.get("payload") if isinstance(artifact.get("payload"), dict) else {}
         if payload.get("storageMode") != "sql_backed":
             continue
+        source_sql = _first_str(payload, ("sourceSql", "source_sql", "safeSql", "safe_sql"))
         safe_sql = _first_str(payload, ("safeSql", "safe_sql", "sourceSql", "source_sql"))
         if not safe_sql:
             continue
@@ -181,6 +182,7 @@ def extract_sql_backed_refs(
                 "datasource_id": ref_datasource_id,
                 "artifact_id": artifact_id,
                 "source_sql_artifact_id": source_sql_artifact_id,
+                "source_sql": source_sql,
                 "safe_sql": safe_sql,
                 "sql_fingerprint": fingerprint,
                 "columns": columns,
@@ -200,6 +202,7 @@ def extract_sql_backed_refs(
                 "datasource_id": ref_datasource_id,
                 "artifact_id": artifact_id,
                 "source_sql_artifact_id": source_sql_artifact_id,
+                "source_sql": source_sql,
                 "safe_sql": safe_sql,
                 "sql_fingerprint": fingerprint,
                 "columns": columns,
@@ -222,6 +225,8 @@ def _active_task_update(state: dict[str, Any], artifact_refs: list[dict[str, Any
     if artifact_refs:
         active["current_result_ref_id"] = artifact_refs[0].get("id")
         active["current_result_artifact_id"] = artifact_refs[0].get("artifact_id")
+        active["current_source_sql_artifact_id"] = artifact_refs[0].get("source_sql_artifact_id")
+        active["current_sql_fingerprint"] = artifact_refs[0].get("sql_fingerprint")
     return active or None
 
 
@@ -247,6 +252,11 @@ def _recent_turn_summary(
             str(ref.get("artifact_id"))
             for ref in artifact_refs
             if ref.get("artifact_id")
+        ],
+        "source_sql_artifact_ids": [
+            str(ref.get("source_sql_artifact_id"))
+            for ref in artifact_refs
+            if ref.get("source_sql_artifact_id")
         ],
     }
 
@@ -276,13 +286,27 @@ def _compact_recent_turns(
 def _format_turn_for_summary(turn: dict[str, Any]) -> str:
     question = _truncate(str(turn.get("question") or "").strip(), 160)
     answer = _truncate(str(turn.get("answer") or "").strip(), 240)
+    refs = _format_turn_refs(turn)
     if question and answer:
-        return f"- {question} -> {answer}"
-    if question:
-        return f"- {question}"
-    if answer:
-        return f"- {answer}"
-    return ""
+        base = f"- {question} -> {answer}"
+    elif question:
+        base = f"- {question}"
+    elif answer:
+        base = f"- {answer}"
+    else:
+        base = ""
+    if not base or not refs:
+        return base
+    return f"{base} [{refs}]"
+
+
+def _format_turn_refs(turn: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for field in ("artifact_ids", "source_sql_artifact_ids", "sql_fingerprints"):
+        values = _str_list(turn.get(field))
+        if values:
+            parts.append(f"{field}={','.join(values[:5])}")
+    return "; ".join(parts)
 
 
 def _answer_text(value: Any) -> str:
@@ -337,4 +361,12 @@ def _first_str(payload: dict[str, Any], keys: tuple[str, ...]) -> str:
 def _str_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [str(item) for item in value if str(item).strip()]
+    items: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            items.append(item.strip())
+        elif isinstance(item, dict):
+            raw = item.get("name") or item.get("field") or item.get("column")
+            if isinstance(raw, str) and raw.strip():
+                items.append(raw.strip())
+    return items

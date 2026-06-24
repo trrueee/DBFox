@@ -182,8 +182,8 @@ def test_emit_artifacts_from_observation_resolves_existing_semantic_dependencies
         },
         "safety": {"can_execute": True},
         "artifacts": [
-            {"id": "sql-physical-id", "semantic_id": "sql_candidate", "type": "sql"},
-            {"id": "safety-physical-id", "semantic_id": "safety_report", "type": "safety"},
+            {"id": "sql-physical-id", "semantic_id": "sql_candidate_b1698e52", "type": "sql"},
+            {"id": "safety-physical-id", "semantic_id": "safety_report_b1698e52", "type": "safety"},
         ],
     }
 
@@ -196,6 +196,57 @@ def test_emit_artifacts_from_observation_resolves_existing_semantic_dependencies
 
     result_view = next(artifact for artifact in artifacts if artifact.type == "result_view")
     assert result_view.depends_on == ["sql-physical-id", "safety-physical-id"]
+    assert result_view.payload["sourceSqlSemanticId"] == "sql-physical-id"
+
+
+def test_emit_artifacts_from_execution_creates_bound_sql_safety_and_result_view():
+    observation = ToolObservation(
+        name="sql.execute_readonly",
+        status="success",
+        input={"sql": "SELECT user_id, COUNT(*) AS calls FROM ai_tool_invocations GROUP BY user_id"},
+        output={
+            "status": "success",
+            "success": True,
+            "columns": ["user_id", "calls"],
+            "rows": [{"user_id": "1", "calls": "12"}],
+            "returned_rows": 1,
+            "rowCount": 1,
+            "safe_sql": "SELECT user_id, COUNT(*) AS calls FROM ai_tool_invocations GROUP BY user_id",
+        },
+        error=None,
+        latency_ms=5,
+    )
+    state = {
+        "datasource_id": "ds-test",
+        "sql": "SELECT user_id, COUNT(*) AS calls FROM ai_tool_invocations GROUP BY user_id",
+        "execution": {
+            "success": True,
+            "columns": ["user_id", "calls"],
+            "rows": [{"user_id": "1", "calls": "12"}],
+            "rowCount": 1,
+            "safe_sql": "SELECT user_id, COUNT(*) AS calls FROM ai_tool_invocations GROUP BY user_id",
+        },
+        "safety": {
+            "can_execute": True,
+            "safe_sql": "SELECT user_id, COUNT(*) AS calls FROM ai_tool_invocations GROUP BY user_id",
+        },
+        "artifacts": [],
+    }
+
+    artifacts = emit_artifacts_from_observation(
+        "sql.execute_readonly",
+        observation,
+        state,
+        "run-bound-artifacts",
+    )
+
+    sql_artifact = next(artifact for artifact in artifacts if artifact.type == "sql")
+    safety_artifact = next(artifact for artifact in artifacts if artifact.type == "safety")
+    result_view = next(artifact for artifact in artifacts if artifact.type == "result_view")
+    assert sql_artifact.semantic_id.startswith("sql_candidate_")
+    assert safety_artifact.semantic_id.startswith("safety_report_")
+    assert result_view.payload["sourceSqlSemanticId"] == sql_artifact.id
+    assert result_view.depends_on == [sql_artifact.id, safety_artifact.id]
 
 
 def test_emit_artifacts_from_observation_skips_empty_sql_execution_results():
@@ -312,7 +363,7 @@ def test_service_persists_artifact_created_events_via_event_store():
 
     artifact = AgentArtifact(
         id="artifact-1",
-        type="table",
+        type="result_view",
         title="Rows",
         payload={"rows": []},
         presentation=AgentArtifactPresentation(mode="inline"),

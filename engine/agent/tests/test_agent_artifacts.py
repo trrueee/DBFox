@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from engine.agent_core.artifacts import (
+    build_agent_artifacts,
     build_chart_artifact,
     build_sql_artifact,
     build_result_view_artifact,
@@ -159,3 +160,31 @@ def test_chart_artifact_exposes_normalized_chart_contract_fields():
         {"label": "personal", "value": 120},
         {"label": "enterprise", "value": 80},
     ]
+
+
+def test_chart_artifact_depends_on_result_view_for_same_sql():
+    artifact = build_chart_artifact(
+        {
+            "type": "bar",
+            "x": "day",
+            "y": "gmv",
+            "series": [{"label": "2026-06-01", "value": 120}],
+        },
+        safety={"can_execute": True},
+        execution={"sql": "SELECT day, SUM(amount) AS gmv FROM orders GROUP BY day"},
+    )
+
+    assert artifact.depends_on[0].startswith("result_view_")
+
+
+def test_agent_artifacts_skip_non_chartable_chart_suggestions():
+    artifacts = build_agent_artifacts(
+        query_plan=None,
+        sql=None,
+        safety=None,
+        execution=None,
+        chart_suggestion={"type": "none", "chartable": False, "series": []},
+        answer=None,
+    )
+
+    assert all(artifact.type != "chart" for artifact in artifacts)
