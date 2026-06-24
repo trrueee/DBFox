@@ -12,6 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.agent_core.memory import sql_fingerprint
 from engine.memory.memory_schema import SessionMemory
 
 logger = logging.getLogger("dbfox.memory.session")
@@ -65,8 +66,17 @@ class SessionMemoryService:
                     continue
                 mem.recent_artifact_ids.append(str(art_id))
                 mem.recent_artifact_ids = mem.recent_artifact_ids[-20:]
-                if art_type == "table":
-                    mem.last_table_artifact_id = str(art_id)
+                if art_type == "result_view":
+                    payload = _artifact_payload(art)
+                    if _payload_str(payload, ("storageMode", "storage_mode")) == "sql_backed":
+                        mem.last_result_artifact_id = str(art_id)
+                        mem.last_source_sql_artifact_id = _payload_str(
+                            payload,
+                            ("sourceSqlArtifactId", "source_sql_artifact_id", "sourceSqlSemanticId"),
+                        ) or None
+                        safe_sql = _payload_str(payload, ("safeSql", "safe_sql", "sourceSql", "source_sql"))
+                        mem.last_result_safe_sql = safe_sql or None
+                        mem.last_result_sql_fingerprint = sql_fingerprint(safe_sql) if safe_sql else None
                 elif art_type == "chart":
                     mem.last_chart_artifact_id = str(art_id)
                 elif art_type == "report":
@@ -85,6 +95,12 @@ class SessionMemoryService:
             parts.append(f"Last question: {mem.last_question}")
         if mem.last_sql:
             parts.append(f"Last SQL (for reference): {mem.last_sql}")
+        if mem.last_result_artifact_id:
+            parts.append(f"Last result artifact: {mem.last_result_artifact_id}")
+        if mem.last_source_sql_artifact_id:
+            parts.append(f"Last source SQL artifact: {mem.last_source_sql_artifact_id}")
+        if mem.last_result_safe_sql:
+            parts.append(f"Last result SQL: {mem.last_result_safe_sql}")
         if mem.current_topic:
             parts.append(f"Current analysis topic: {mem.current_topic}")
         if mem.current_dataset_summary:
@@ -124,3 +140,22 @@ def get_session_memory_service() -> SessionMemoryService:
     if _session_service is None:
         _session_service = SessionMemoryService()
     return _session_service
+
+
+def _artifact_payload(artifact: Any) -> dict[str, Any]:
+    payload = getattr(artifact, "payload", None)
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(artifact, dict):
+        payload = artifact.get("payload")
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _payload_str(payload: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""

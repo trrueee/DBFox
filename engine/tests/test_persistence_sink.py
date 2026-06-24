@@ -196,7 +196,7 @@ def test_sqlite_agent_event_store_records_artifacts_for_conversation_detail(tmp_
             title="Registrations by user type",
             payload={"series": [{"label": "personal_user", "value": 25}]},
             presentation=AgentArtifactPresentation(mode="inline", priority=80),
-            depends_on=["result_table_1"],
+            depends_on=["result_view_1"],
         )
         event = AgentRuntimeEvent(
             event_id="runtime_artifacts_1_tool_completed",
@@ -218,7 +218,7 @@ def test_sqlite_agent_event_store_records_artifacts_for_conversation_detail(tmp_
         assert detail is not None
         assert len(detail["artifacts"]) == 1
         assert detail["artifacts"][0]["message_id"] == detail["runs"][0]["assistant_message_id"]
-        assert detail["artifacts"][0]["depends_on"] == ["result_table_1"]
+        assert detail["artifacts"][0]["depends_on"] == ["result_view_1"]
         assert detail["runs"][0]["events"][0]["type"] == "agent.step.completed"
         assert detail["runs"][0]["events"][0]["step"]["tool_name"] == "sql.execute_readonly"
     finally:
@@ -842,7 +842,7 @@ def test_conversation_detail_recovers_response_json_artifacts_without_migration(
                         "title": "Recovered chart",
                         "payload": {"series": [{"label": "personal_user", "value": 25}]},
                         "presentation": {"mode": "inline", "priority": 80},
-                        "depends_on": ["result_table_from_response"],
+                        "depends_on": ["result_view_from_response"],
                     }
                 ]
             }
@@ -856,7 +856,7 @@ def test_conversation_detail_recovers_response_json_artifacts_without_migration(
         assert len(detail["artifacts"]) == 1
         assert detail["artifacts"][0]["id"] == "chart_from_response"
         assert detail["artifacts"][0]["message_id"] == detail["runs"][0]["assistant_message_id"]
-        assert detail["artifacts"][0]["depends_on"] == ["result_table_from_response"]
+        assert detail["artifacts"][0]["depends_on"] == ["result_view_from_response"]
     finally:
         db.close()
         engine.dispose()
