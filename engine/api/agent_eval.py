@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_error
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.evaluation.agent_eval import AgentEvalRunner
@@ -186,8 +187,7 @@ def api_import_benchmark(req: AgentBenchmarkImportRequest, db: Session = Depends
         raise
     except Exception as exc:
         logger.exception("Benchmark import failed")
-        from engine.policy.error_sanitizer import sanitize_error_message
-        raise HTTPException(status_code=500, detail={"code": "IMPORT_ERROR", "message": sanitize_error_message(str(exc))})
+        raise HTTPException(status_code=500, detail=public_error("IMPORT_ERROR", exc))
 
 
 @router.post("/agent-eval/run", response_model=AgentEvalRunResponse)
@@ -196,12 +196,10 @@ def api_run_eval(req: AgentEvalRunRequest, db: Session = Depends(get_db)) -> Any
         runner = AgentEvalRunner(db)
         return runner.run(req)
     except DBFoxError as exc:
-        from engine.policy.error_sanitizer import sanitized_http_detail
-        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
+        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
     except Exception as exc:
         logger.exception("Agent eval run failed")
-        from engine.policy.error_sanitizer import sanitize_error_message
-        raise HTTPException(status_code=500, detail={"code": "EVAL_RUN_ERROR", "message": sanitize_error_message(str(exc))})
+        raise HTTPException(status_code=500, detail=public_error("EVAL_RUN_ERROR", exc))
 
 
 @router.get("/agent-eval/runs", response_model=list[AgentEvalRunResponse])

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_message
 from engine.db import get_db
 from engine.crypto import decrypt_password, encrypt_password
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
@@ -120,10 +121,9 @@ def _persist_health_success(ds: DataSource, result: dict[str, Any], latency_ms: 
 
 
 def _persist_health_failure(ds: DataSource, message: str, latency_ms: int, checked_at: datetime) -> None:
-    from engine.policy.error_sanitizer import sanitize_error_message
     setattr(ds, "last_test_at", checked_at)
     setattr(ds, "last_test_status", "failed")
-    setattr(ds, "last_test_error", sanitize_error_message(message))
+    setattr(ds, "last_test_error", public_message(message))
     setattr(ds, "last_test_latency_ms", latency_ms)
     setattr(ds, "last_test_readonly", None)
     setattr(ds, "last_test_server_version", None)
