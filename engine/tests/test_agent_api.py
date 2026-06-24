@@ -98,7 +98,8 @@ def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_s
     _add_pagination_source(db_session)
     executed_sql: dict[str, str] = {}
 
-    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+    def fake_execute_query(_db, datasource_id, sql, **kwargs):
+        safety_decision = kwargs["safety_decision"]
         executed_sql["datasource_id"] = datasource_id
         executed_sql["sql"] = sql
         assert safety_decision.can_execute is True
@@ -183,7 +184,8 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
     )
     executed_sql: dict[str, str] = {}
 
-    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+    def fake_execute_query(_db, datasource_id, sql, **kwargs):
+        safety_decision = kwargs["safety_decision"]
         executed_sql["datasource_id"] = datasource_id
         executed_sql["sql"] = sql
         assert safety_decision.can_execute is True
@@ -224,7 +226,8 @@ def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_ses
     )
     executed_sql: list[str] = []
 
-    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+    def fake_execute_query(_db, datasource_id, sql, **kwargs):
+        safety_decision = kwargs["safety_decision"]
         executed_sql.append(sql)
         assert datasource_id == "ds-page"
         assert safety_decision.can_execute is True
@@ -321,22 +324,17 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
     )
     executed_sql: dict[str, str] = {}
 
-    def fake_execute_query(_db, datasource_id, sql, safety_decision):
+    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000):
         executed_sql["datasource_id"] = datasource_id
         executed_sql["sql"] = sql
         assert safety_decision.can_execute is True
-        return {
-            "columns": ["id", "created_at", "status"],
-            "rows": [
-                {"id": 2, "created_at": "2026-06-02", "status": "paid"},
-                {"id": 1, "created_at": "2026-06-01", "status": "paid"},
-            ],
-            "latencyMs": 3,
-            "warnings": [],
-            "notices": [],
-        }
+        yield {"id": 2, "created_at": "2026-06-02", "status": "paid"}
+        yield {"id": 1, "created_at": "2026-06-01", "status": "paid"}
 
-    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+    monkeypatch.setattr(
+        "engine.sql.execution.streaming_executor.StreamingQueryExecutor.stream_rows",
+        fake_stream_rows,
+    )
 
     response = agent_module.api_agent_result_export(
         agent_module.ResultExportRequest(
@@ -402,6 +400,21 @@ def test_sse_failed_event() -> None:
     assert payload["type"] == "agent.run.failed"
 
 
+def test_sse_failed_event_sanitizes_error_message() -> None:
+    event_str = sse_failed_event(
+        "evt_123",
+        "run_456",
+        "mysql://root:secret@1.2.3.4/prod password=secret",
+        "ERR_CODE",
+    )
+
+    data_json = event_str.strip().split("\n")[1][6:]
+    payload = json.loads(data_json)
+    assert "[REDACTED]" in payload["error"]
+    assert "secret" not in payload["error"]
+    assert "mysql://root" not in payload["error"]
+
+
 def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
     class FakeDb:
         def __init__(self) -> None:
@@ -415,7 +428,7 @@ def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch)
             pass
 
         def run(self, _req: AgentRunRequest) -> None:
-            raise RuntimeError("boom")
+            raise RuntimeError("mysql://root:secret@1.2.3.4/prod password=secret")
 
     fake_db = FakeDb()
     monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
@@ -428,6 +441,9 @@ def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch)
 
     assert fake_db.rollback_calls == 1
     assert exc_info.value.status_code == 500
+    assert "[REDACTED]" in exc_info.value.detail["message"]
+    assert "secret" not in exc_info.value.detail["message"]
+    assert "mysql://root" not in exc_info.value.detail["message"]
 
 
 async def _streaming_response_text(response) -> str:

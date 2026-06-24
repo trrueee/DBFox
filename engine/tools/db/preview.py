@@ -8,7 +8,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaColumn
+from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
+from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db._common import (
     DEFAULT_PREVIEW_ROWS,
     MAX_PREVIEW_ROWS,
@@ -68,11 +70,14 @@ def db_preview(
     sql = _build_preview_sql(table_name, requested, requested_limit, args, dialect)
 
     try:
+        ctx = DialectContext.from_datasource_id(db, datasource_id)
+        decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="table_preview")
         result = execute_query(
             db,
             datasource_id,
             sql,
             question=f"Preview table {table_name}",
+            safety_decision=decision,
             safety_policy="table_preview",
             redact=True,
         )

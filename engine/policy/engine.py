@@ -25,7 +25,7 @@ class PolicyEngine:
         # Always parse the AST so that DDL and Commands are blocked in every
         # environment.  Dev writable datasources may run DML, but never DDL.
         try:
-            expressions = parse_sql(sql_str, ds.db_type)
+            expressions = parse_sql(sql_str, str(ds.db_type or "mysql"))
         except Exception as exc:
             logger.warning("SQL parsing failed in PolicyEngine; blocking query: %s", exc)
             raise DBFoxError(

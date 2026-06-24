@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any
+from typing import Any, cast
 
 import sqlglot
 from sqlglot import exp
@@ -27,9 +27,12 @@ def build_derived_sql(
 ) -> str:
     """Build a derived SQL for pagination/sorting over a safe base query."""
     try:
-        base_expr = sqlglot.parse_one(base_sql, read=dialect)
+        parsed_base = sqlglot.parse_one(base_sql, read=dialect)
     except Exception as e:
         raise DerivedSqlError(f"Failed to parse base SQL: {e}")
+    if not isinstance(parsed_base, exp.Select):
+        raise DerivedSqlError("Base SQL must be a SELECT statement.")
+    base_expr = cast(exp.Select, parsed_base)
         
     query = sqlglot.select("*").from_(base_expr.subquery("dbfox_result"))
     
@@ -53,31 +56,21 @@ def build_derived_sql(
 
 def validate_pagination_base_sql(base_sql: str, dialect: str = "mysql") -> list[str]:
     """Validate the persisted source SQL before deriving a paginated query."""
-    try:
-        exprs = sqlglot.parse(base_sql, read=dialect)
-    except Exception as exc:
-        return [f"Source SQL validation parse error: {exc}"]
-    if len(exprs) != 1:
-        return ["Source SQL must be a single statement."]
-    if not isinstance(exprs[0], exp.Select):
-        return ["Source SQL must be a SELECT statement."]
-    return []
+    from engine.sql.dialect_context import DialectContext, canonical_sql_dialect
+    from engine.sql.safety.service import SqlSafetyService
+
+    ctx = DialectContext(datasource_id="", dialect=canonical_sql_dialect(dialect))
+    return SqlSafetyService().validate_source_artifact_sql(base_sql, ctx)
 
 def validate_derived_sql(derived_sql: str, dialect: str = "mysql") -> list[str]:
     """Lightweight validation for derived SQLs (paging/sorting).
     Ensures it is a SELECT without dangerous operations.
     """
-    warnings = []
-    try:
-        exprs = sqlglot.parse(derived_sql, read=dialect)
-        if len(exprs) != 1:
-            return ["Derived SQL must be a single statement."]
-        expr = exprs[0]
-        if not isinstance(expr, exp.Select):
-            return ["Derived SQL must be a SELECT statement."]
-    except Exception as e:
-        warnings.append(f"Derived SQL validation parse error: {e}")
-    return warnings
+    from engine.sql.dialect_context import DialectContext, canonical_sql_dialect
+    from engine.sql.safety.service import SqlSafetyService
+
+    ctx = DialectContext(datasource_id="", dialect=canonical_sql_dialect(dialect))
+    return SqlSafetyService().validate_derived_sql(derived_sql, ctx)
 
 def guardrail_bypass_allowed() -> bool:
     """Centralized check for guardrail bypass availability.
@@ -190,7 +183,11 @@ def _resolve_execution_safety_decision(
             messages=["Guardrail bypass was used; prefer explicit non-query execution helpers."],
         )
 
-    return TrustGate(db, validate_sql_schema).execution_decision(datasource_id, sql_str, policy=policy)
+    from engine.sql.dialect_context import DialectContext
+    from engine.sql.safety.service import SqlSafetyService
+
+    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    return SqlSafetyService(db).build_execution_decision(sql_str, ctx, policy=policy)
 
 
 def _decision_checks_for_history(decision: ExecutionSafetyDecision) -> list[dict[str, Any]]:
@@ -278,7 +275,12 @@ def _decision_block_message(decision: ExecutionSafetyDecision) -> str:
     return "TrustGate blocked execution before SQL reached the database."
 
 
-def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, datasource_id: str) -> list[str]:
+def validate_sql_schema(
+    generated_sql: str | exp.Expression,
+    db: Session,
+    datasource_id: str,
+    dialect: str = "mysql",
+) -> list[str]:
     """Check generated SQL for hallucinated tables/columns against local schema cache."""
     warnings = []
     try:
@@ -290,7 +292,10 @@ def validate_sql_schema(generated_sql: str | exp.Expression, db: Session, dataso
         if isinstance(generated_sql, exp.Expression):
             parsed = generated_sql
         else:
-            parsed = sqlglot.parse_one(str(generated_sql), read="mysql")
+            from engine.sql.dialect_context import canonical_sql_dialect
+
+            read_dialect = "postgres" if canonical_sql_dialect(dialect) == "postgresql" else canonical_sql_dialect(dialect)
+            parsed = cast(exp.Expression, sqlglot.parse_one(str(generated_sql), read=read_dialect))
 
         projection_aliases = {
             alias.alias.lower()

@@ -69,6 +69,19 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
   };
 }
 
+function makeTypedSqlBackedArtifact(): ResultViewArtifact {
+  return {
+    ...makeSqlBackedArtifact(),
+    columns: [
+      { name: "day", type: "date" },
+      { name: "order_count", type: "integer" },
+    ],
+    dialect: "sqlite",
+    fingerprint: "sql_test:typed",
+    sqlFingerprint: "sql_test:typed",
+  };
+}
+
 describe("TableArtifactView", () => {
   beforeEach(() => {
     cleanup();
@@ -249,6 +262,21 @@ describe("TableArtifactView", () => {
       expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
         expect.objectContaining({
           sort: [{ column: "order_count", direction: "asc" }],
+        }),
+      ),
+    );
+  });
+
+  it("normalizes typed sql-backed columns before sorting and fetching", async () => {
+    render(<TableArtifactView artifact={makeTypedSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+    fireEvent.click(screen.getByRole("button", { name: "order_count" }));
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sort: [{ column: "order_count", direction: "desc" }],
         }),
       ),
     );

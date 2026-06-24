@@ -23,6 +23,7 @@ from engine.errors import (
 from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
+from engine.persistence.search_index import SearchIndexService
 from engine.query_registry import QUERY_REGISTRY
 
 
@@ -40,29 +41,14 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
     try:
         audit_db.add(history)
         audit_db.commit()
-        # Populate FTS5 index (best-effort — failures are logged, not raised)
         try:
-            audit_db.execute(
-                __import__("sqlalchemy").text(
-                    "INSERT OR REPLACE INTO query_history_fts"
-                    " (history_id, question, submitted_sql, generated_sql, safe_sql, executed_sql, error_message)"
-                    " VALUES (:id, :q, :ss, :gs, :sf, :es, :em)"
-                ),
-                {
-                    "id": history.id,
-                    "q": history.question or "",
-                    "ss": history.submitted_sql or "",
-                    "gs": history.generated_sql or "",
-                    "sf": history.safe_sql or "",
-                    "es": history.executed_sql or "",
-                    "em": history.error_message or "",
-                },
-            )
+            SearchIndexService(audit_db).index_query_history(history)
             audit_db.commit()
         except Exception:
             audit_db.rollback()
-            logger.debug("FTS5 index population skipped (table may not exist yet)")
-        return history.id
+            logger.debug("Query history search index population skipped", exc_info=True)
+        history_id = getattr(history, "id", None)
+        return str(history_id) if history_id else None
     except Exception:
         audit_db.rollback()
         logger.exception("Failed to write query history to database")
@@ -87,6 +73,7 @@ from engine.sql.safety_gate import (
     validate_sql_schema,
     _is_projection_alias_reference,
 )
+from engine.sql.guardrail import GuardrailResult
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
 logger = logging.getLogger("dbfox.sql.executor")
@@ -103,7 +90,7 @@ def _run_approved_query(
     sql_str: str,
     question: str | None,
     execution_id: str,
-    guard_res: dict,
+    guard_res: GuardrailResult,
     guardrail_ms: int,
     guard_checks_json: str,
     redact: bool = True,
@@ -129,14 +116,14 @@ def _run_approved_query(
     serialize_ms = 0
 
     try:
-        db_type = ds.db_type or "mysql"
+        db_type = str(getattr(ds, "db_type", None) or "mysql")
         if db_type == "sqlite":
             rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_sqlite_profiled(
                 safe_sql,
                 execution_id=execution_id,
                 datasource_id=datasource_id,
-                sqlite_path=ds.database_name,  # type: ignore[arg-type]
-                read_only=ds.is_read_only,
+                sqlite_path=str(getattr(ds, "database_name", "") or ""),
+                read_only=bool(getattr(ds, "is_read_only", False)),
             )
         elif db_type == "postgresql":
             conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
@@ -366,15 +353,16 @@ def explain_sql(
             checks=_decision_checks_for_error(decision),
         )
     safe_sql = str(decision.safe_sql or "").strip()
-    _validate_explain_sql(safe_sql, ds.db_type)
+    db_type = str(getattr(ds, "db_type", None) or "mysql")
+    _validate_explain_sql(safe_sql, db_type)
         
-    warnings = []
-    records = []
+    warnings: list[str] = []
+    records: list[dict[str, Any]] = []
 
-    if ds.db_type == "sqlite":
+    if db_type == "sqlite":
         from engine.sql.dialect.sqlite import explain as explain_sqlite
-        records, warnings = explain_sqlite(str(ds.database_name or ""), safe_sql)
-    elif ds.db_type in ("postgresql", "postgres"):
+        records, warnings = explain_sqlite(str(getattr(ds, "database_name", "") or ""), safe_sql)
+    elif db_type in ("postgresql", "postgres"):
         from engine.sql.postgres_explain import explain_postgres_sql
         return explain_postgres_sql(db, datasource_id, sql_str)
     else:

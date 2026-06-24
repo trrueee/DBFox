@@ -46,7 +46,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     <ArtifactTableToolbar
       mode={mode}
       artifactId={artifact.id}
-      columns={artifact.columns}
+      columns={table.columns}
       search={table.search}
       onSearchChange={table.setSearch}
       sort={table.sort}
@@ -86,7 +86,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
         <div className="hifi-table-container hifi-result-table-wrap flex-1 overflow-auto relative">
           {table.isLoading && <div className="hifi-preview-loading-bar absolute top-0 left-0 right-0" />}
           <ArtifactTableGrid
-            columns={artifact.columns}
+            columns={table.columns}
             rows={table.visibleRows}
             sort={table.sort}
             onSort={table.setSortColumn}
@@ -154,7 +154,7 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
       )}
       <div className="hifi-result-inline-table overflow-auto">
         <ArtifactTableGrid
-          columns={artifact.columns}
+          columns={table.columns}
           rows={table.visibleRows}
           sort={table.sort}
           onSort={table.setSortColumn}
@@ -183,7 +183,7 @@ function InlineTableMeta({
           窗口 1-{table.visibleRows.length} / {table.filteredAndSortedRows.length}
         </span>
       )}
-      <span className="hifi-artifact-pill">{artifact.columns.length} 列</span>
+      <span className="hifi-artifact-pill">{table.columns.length} 列</span>
       {table.latencyMs !== undefined && <span className="hifi-artifact-pill">{table.latencyMs}ms</span>}
       {!table.isSqlBackedWorkspace && table.returnedRows > table.previewCount && (
         <span className="hifi-artifact-pill">已载入 {table.returnedRows} 行</span>

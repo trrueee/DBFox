@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import sqlglot
 from pydantic import BaseModel
@@ -83,10 +83,10 @@ def build_sql_backed_page_sql(
 
     query = sqlglot.select("*").from_(base_expr.subquery("dbfox_result"))
 
-    for item in filters or []:
-        _ensure_column_allowed(item.column, allowed_columns, "FILTER_COLUMN_NOT_ALLOWED")
-        _ensure_operator_allowed(item.operator)
-        query = query.where(_filter_expression(item))
+    for filter_item in filters or []:
+        _ensure_column_allowed(filter_item.column, allowed_columns, "FILTER_COLUMN_NOT_ALLOWED")
+        _ensure_operator_allowed(filter_item.operator)
+        query = query.where(_filter_expression(filter_item))
 
     search_expr = _search_expression(
         search=search,
@@ -96,9 +96,9 @@ def build_sql_backed_page_sql(
     if search_expr is not None:
         query = query.where(search_expr)
 
-    for item in sorts or []:
-        _ensure_column_allowed(item.column, allowed_columns, "SORT_COLUMN_NOT_ALLOWED")
-        query = query.order_by(exp.Ordered(this=_column(item.column), desc=item.direction == "desc"))
+    for sort_item in sorts or []:
+        _ensure_column_allowed(sort_item.column, allowed_columns, "SORT_COLUMN_NOT_ALLOWED")
+        query = query.order_by(exp.Ordered(this=_column(sort_item.column), desc=sort_item.direction == "desc"))
 
     if limit is not None:
         query = query.limit(limit)
@@ -197,6 +197,6 @@ def _search_expression(
 
     combined = expressions[0]
     for expression in expressions[1:]:
-        combined = exp.or_(combined, expression)
+        combined = cast(exp.Expression, exp.or_(combined, expression))
     return combined
 

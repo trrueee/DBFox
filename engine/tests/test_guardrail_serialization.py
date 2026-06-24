@@ -6,6 +6,8 @@ from sqlglot import exp
 
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.sql.guardrail as guardrail_module
+from engine.sql.dialect_context import DialectContext
+from engine.sql.safety.service import SqlSafetyService
 from engine.sql.trust_gate import TrustGate
 
 
@@ -35,6 +37,33 @@ def test_query_validate_response_is_json_serializable_without_internal_ast() -> 
     payload = response.json()
     assert "_parsed_ast" not in payload
     json.dumps(payload)
+
+
+def test_query_validate_routes_through_sql_safety_service(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_public_validate_sql(self: SqlSafetyService, sql: str, ctx: DialectContext) -> dict[str, Any]:
+        calls.append((sql, ctx.dialect))
+        return {
+            "result": "pass",
+            "originalSql": sql,
+            "safeSql": sql,
+            "checks": [],
+            "message": "from service",
+        }
+
+    monkeypatch.setattr(SqlSafetyService, "public_validate_sql", fake_public_validate_sql, raising=False)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/query/validate",
+        json={"sql": "SELECT 1"},
+        headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "from service"
+    assert calls == [("SELECT 1", "mysql")]
 
 
 def test_guardrail_check_result_is_json_serializable_without_internal_ast() -> None:

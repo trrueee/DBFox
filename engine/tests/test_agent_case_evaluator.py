@@ -266,6 +266,9 @@ def test_execution_isomorphism_comparator():
 
 def test_evaluator_golden_sql_isomorphism(db_session, test_datasource, monkeypatch):
     from engine.models import GoldenSQL
+    from engine.sql.dialect_context import DialectContext
+    from engine.sql.safety.service import SqlSafetyService
+    from engine.sql.trust_gate import ExecutionSafetyDecision
     # Add a golden sql record
     golden = GoldenSQL(
         data_source_id=test_datasource.id,
@@ -302,10 +305,40 @@ def test_evaluator_golden_sql_isomorphism(db_session, test_datasource, monkeypat
             "rows": [{"username": "Alice"}, {"username": "Bob"}]
         }
     }
+    built: list[tuple[str, str, str]] = []
+    received: list[ExecutionSafetyDecision | None] = []
+
+    def fake_build_execution_decision(
+        self: SqlSafetyService,
+        sql: str,
+        ctx: DialectContext,
+        *,
+        policy: str = "readonly",
+    ) -> ExecutionSafetyDecision:
+        built.append((sql, ctx.datasource_id, policy))
+        return ExecutionSafetyDecision(
+            datasource_id=ctx.datasource_id,
+            policy=policy,  # type: ignore[arg-type]
+            original_sql=sql,
+            safe_sql=sql,
+            passed=True,
+            can_execute=True,
+            requires_confirmation=False,
+            guardrail={
+                "result": "pass",
+                "originalSql": sql,
+                "safeSql": sql,
+                "checks": [],
+                "message": "ok",
+            },
+        )
     
     def mock_execute_query(db, datasource_id, sql, *args, **kwargs):
+        received.append(kwargs.get("safety_decision"))
+        assert kwargs.get("safety_policy") == "agent_readonly"
         return results_map.get(sql, {"success": False, "error": "mock error"})
 
+    monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
     monkeypatch.setattr("engine.sql.executor.execute_query", mock_execute_query)
 
     evaluator = AgentCaseEvaluator(db=db_session)
@@ -322,6 +355,13 @@ def test_evaluator_golden_sql_isomorphism(db_session, test_datasource, monkeypat
     res2 = evaluator.evaluate(task, resp2)
     assert not res2.passed
     assert "isomorphic" in "".join(res2.failure_reasons)
+    assert built == [
+        ("SELECT id, username FROM users LIMIT 10", test_datasource.id, "agent_readonly"),
+        ("SELECT id, username FROM users", test_datasource.id, "agent_readonly"),
+        ("SELECT id, username FROM users LIMIT 10", test_datasource.id, "agent_readonly"),
+        ("SELECT username FROM users", test_datasource.id, "agent_readonly"),
+    ]
+    assert all(decision is not None for decision in received)
 
 
 

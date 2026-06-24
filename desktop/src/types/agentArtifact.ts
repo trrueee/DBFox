@@ -51,6 +51,8 @@ export type TableArtifact = AgentArtifactBase & {
   notices?: string[];
 };
 
+export type ResultArtifactColumn = string | { name: string; type?: string };
+
 export type ResultViewArtifact = AgentArtifactBase & {
   type: "result_view";
   storageMode: "payload" | "sql_backed";
@@ -58,7 +60,10 @@ export type ResultViewArtifact = AgentArtifactBase & {
   sourceSqlSemanticId: string;
   sourceSql: string;
   safeSql: string;
-  columns: string[];
+  dialect?: string;
+  columns: ResultArtifactColumn[];
+  fingerprint?: string;
+  sqlFingerprint?: string;
   previewRows: string[][];
   previewRowCount: number;
   rows?: string[][]; // For legacy compatibility

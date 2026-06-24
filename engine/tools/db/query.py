@@ -7,7 +7,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
+from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db.preview import _infer_column_types
 
 
@@ -21,7 +23,17 @@ def db_query(db: Session, datasource_id: str, sql: str, question: str = "") -> d
     if not sql:
         raise ValueError("sql is required.")
 
-    result = execute_query(db, datasource_id, sql, question=question, safety_policy="agent_readonly", redact=True)
+    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="agent_readonly")
+    result = execute_query(
+        db,
+        datasource_id,
+        sql,
+        question=question,
+        safety_decision=decision,
+        safety_policy="agent_readonly",
+        redact=True,
+    )
 
     decision = result.get("safetyDecision") or {}
     safe_sql = str(decision.get("safe_sql") or "").strip()
