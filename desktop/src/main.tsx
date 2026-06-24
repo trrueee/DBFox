@@ -34,6 +34,25 @@ function renderEngineStartupError(error: unknown) {
 initEngineConfig().then(() => waitEngineHealth()).then(() => {
   if (bootEl) bootEl.style.display = 'none'
 
+  // Disable default context menu in production to make it feel like a native desktop app
+  if (import.meta.env.PROD) {
+    window.addEventListener('contextmenu', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+    });
+  }
+
+  // Listen to window focus/blur to toggle active/inactive visual classes on body
+  window.addEventListener('focus', () => {
+    document.body.classList.remove('window-inactive');
+  });
+  window.addEventListener('blur', () => {
+    document.body.classList.add('window-inactive');
+  });
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>

@@ -1,4 +1,4 @@
-import { Send } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 interface AskInputBoxProps {
   value: string;
@@ -13,15 +13,21 @@ export function AskInputBox({ value, onChange, onSubmit }: AskInputBoxProps) {
         className="hifi-ask-input"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
         placeholder="用自然语言提问，例如：查询用户表中最近一周的新注册用户数量"
       />
       <button
-        className="hifi-ask-send-btn animate-pulse"
+        className="hifi-ask-send-btn"
         onClick={onSubmit}
         aria-label="发送问题"
         title="发送问题"
       >
-        <Send size={14} />
+        <ArrowUp size={16} />
       </button>
     </div>
   );
