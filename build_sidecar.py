@@ -102,6 +102,29 @@ LANGSMITH_ENV_KEYS = (
     "LANGSMITH_ENDPOINT",
 )
 
+SIDECAR_RUNTIME_EXCLUDED_DIRS = {
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "fixtures",
+    "tests",
+}
+
+SIDECAR_RUNTIME_EXCLUDED_FILE_SUFFIXES = (
+    ".db",
+    ".db-journal",
+    ".db-shm",
+    ".db-wal",
+    ".pyc",
+    ".pyo",
+    ".sqlite",
+    ".sqlite-journal",
+    ".sqlite-shm",
+    ".sqlite-wal",
+    ".sqlite3",
+)
+
 
 def _venv_python() -> str:
     """Return the python executable inside .build_venv, or fail."""
@@ -157,14 +180,38 @@ def export_langsmith_runtime_env(env_file: Path = ROOT / ".env") -> Path | None:
     return target
 
 
+def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
+    ignored: set[str] = set()
+    for name in names:
+        path = Path(src) / name
+        if path.is_dir() and name in SIDECAR_RUNTIME_EXCLUDED_DIRS:
+            ignored.add(name)
+            continue
+        if path.is_file() and name.endswith(SIDECAR_RUNTIME_EXCLUDED_FILE_SUFFIXES):
+            ignored.add(name)
+    return ignored
+
+
+def prepare_sidecar_engine_tree(work_dir: Path) -> Path:
+    """Stage only runtime engine files for PyInstaller --add-data."""
+    staging_root = work_dir / "_runtime_data"
+    staged_engine = staging_root / "engine"
+    shutil.rmtree(staging_root, ignore_errors=True)
+    staging_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ENGINE_DIR, staged_engine, ignore=_ignore_sidecar_runtime)
+    return staged_engine
+
+
 def build_pyinstaller(python_exe: str) -> Path:
     dist_dir = ROOT / "pyinstaller_dist"
     work_dir = ROOT / "pyinstaller_build"
-    spec_path = ROOT / "dbfox_engine.spec"
+    spec_paths = (ROOT / "dbfox-engine.spec", ROOT / "dbfox_engine.spec")
 
     shutil.rmtree(dist_dir, ignore_errors=True)
     shutil.rmtree(work_dir, ignore_errors=True)
-    spec_path.unlink(missing_ok=True)
+    for spec_path in spec_paths:
+        spec_path.unlink(missing_ok=True)
+    staged_engine = prepare_sidecar_engine_tree(work_dir)
 
     cmd = [
         python_exe, "-m", "PyInstaller",
@@ -173,7 +220,7 @@ def build_pyinstaller(python_exe: str) -> Path:
         "--name", "dbfox-engine",
         "--distpath", str(dist_dir),
         "--workpath", str(work_dir),
-        "--add-data", f"{ENGINE_DIR}{os.pathsep}engine",
+        "--add-data", f"{staged_engine}{os.pathsep}engine",
         "--add-data", f"{ROOT / 'alembic.ini'}{os.pathsep}.",
     ]
     for mod in HIDDEN_IMPORTS:
@@ -240,6 +287,7 @@ def main() -> None:
 
     shutil.rmtree(ROOT / "pyinstaller_dist", ignore_errors=True)
     shutil.rmtree(ROOT / "pyinstaller_build", ignore_errors=True)
+    (ROOT / "dbfox-engine.spec").unlink(missing_ok=True)
     (ROOT / "dbfox_engine.spec").unlink(missing_ok=True)
 
     print("\n" + "=" * 55)
