@@ -199,22 +199,20 @@ def _ensure_fts5(conn) -> None:
     """Create FTS5 virtual tables if they don't exist."""
     from sqlalchemy import text as sa_text
     from sqlalchemy.exc import OperationalError
-    from engine.models import FTS5_DDL, QUERY_HISTORY_FTS_DDL
+    from engine.models import FTS5_DDL
+    from engine.persistence.search_index import ensure_query_history_search_schema
 
-    for ddl, probe in [
-        (FTS5_DDL, "schema_search_fts"),
-        (QUERY_HISTORY_FTS_DDL, "query_history_fts"),
-    ]:
-        try:
-            conn.execute(sa_text(f"SELECT 1 FROM {probe} LIMIT 0"))
-        except OperationalError as e:
-            if "no such table" in str(e).lower():
-                conn.execute(sa_text(ddl))
-                conn.commit()
-            else:
-                raise
-        except Exception:
+    try:
+        conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
+    except OperationalError as e:
+        if "no such table" in str(e).lower():
+            conn.execute(sa_text(FTS5_DDL))
+        else:
             raise
+    except Exception:
+        raise
+
+    ensure_query_history_search_schema(conn)
 
 
 def init_db() -> None:
@@ -230,7 +228,6 @@ def init_db() -> None:
     5. 容灾恢复：若发生任何无法恢复的异常，自动丢弃当前连接，从备份文件瞬间还原，保证系统稳定性。
     """
     from engine import models  # 必须在这里导入模型，确保所有映射关系已在 SQLAlchemy 中完成注册
-    import shutil
     import time
     import sys
     from pathlib import Path
@@ -238,6 +235,7 @@ def init_db() -> None:
     from sqlalchemy.engine import Connection
     from alembic.config import Config
     from alembic import command
+    from engine.persistence.backup import MetadataBackupService
 
     # 1. 物理安全备份机制 (Secure Database Backup)
     backup_path = None
@@ -246,17 +244,8 @@ def init_db() -> None:
         backup_name = f"{DB_PATH.name}.bak_{timestamp}"
         backup_path = DB_PATH.with_name(backup_name)
         try:
-            # 完整物理复制数据库文件
-            shutil.copy2(DB_PATH, backup_path)
-            
-            # 回收历史备份：只保留最近 5 次的备份文件，多余的老旧备份自动清理删除，避免撑爆磁盘
-            backups = sorted(DB_PATH.parent.glob(f"{DB_PATH.name}.bak_*"))
-            if len(backups) > 5:
-                for old_bak in backups[:-5]:
-                    try:
-                        old_bak.unlink()
-                    except Exception:
-                        pass
+            MetadataBackupService.backup_sqlite(DB_PATH, backup_path)
+            MetadataBackupService.prune_old_backups(DB_PATH, limit=5)
         except Exception as e:
             logger.warning("迁移警告：升级前未能成功备份元数据库文件: %s", e)
             backup_path = None
@@ -321,8 +310,9 @@ def init_db() -> None:
         if backup_path is not None and backup_path.exists():
             try:
                 engine.dispose()
-                import shutil
-                shutil.copy2(backup_path, DB_PATH)
+                MetadataBackupService.restore_sqlite(backup_path, DB_PATH)
+                with engine.begin() as conn:
+                    _ensure_fts5(conn)
                 logger.info("已从备份恢复数据库")
             except Exception as restore_err:
                 logger.error("恢复备份失败: %s", restore_err)

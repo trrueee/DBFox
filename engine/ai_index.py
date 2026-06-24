@@ -265,10 +265,7 @@ def _call_aliyun_llm(
     from openai import OpenAI
 
     # ── API key ──
-    resolved_api_key = (
-        api_key
-        or os.getenv("OPENAI_API_KEY", "")
-    ).strip()
+    resolved_api_key = str(api_key or os.getenv("OPENAI_API_KEY") or "").strip()
     if not resolved_api_key:
         raise RuntimeError("请先在设置中配置 LLM API Key。")
 
