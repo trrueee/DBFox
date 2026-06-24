@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_error
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.models import DataSource
@@ -23,8 +24,7 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
     try:
         PolicyEngine.enforce_test_data_policy(datasource)
     except DBFoxError as exc:
-        from engine.policy.error_sanitizer import sanitized_http_detail
-        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
+        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
 
     from engine.policy import confirmation_bypass_enabled, confirmation_manager
     if not confirmation_bypass_enabled():
@@ -64,12 +64,10 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
             language=req.language
         )
     except DBFoxError as exc:
-        from engine.policy.error_sanitizer import sanitized_http_detail
-        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
+        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
     except Exception as exc:
         logger.exception("Test data generation failed")
-        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "TEST_DATA_FAILED", "message": sanitize_error_message(str(exc))}
+            detail=public_error("TEST_DATA_FAILED", exc),
         )

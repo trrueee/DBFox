@@ -30,6 +30,25 @@ module = [
 ]
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = [
+    "engine.api.agent",
+    "engine.agent.app.service",
+    "engine.agent_core.event_store",
+    "engine.agent_core.memory_projection",
+    "engine.agent_core.persistence.*",
+    "engine.agent_core.types",
+    "engine.sql.dialect_context",
+    "engine.sql.executor",
+    "engine.sql.execution.*",
+    "engine.sql.permissions.*",
+    "engine.sql.result_view.*",
+    "engine.sql.safety.*",
+    "engine.sql.safety_gate",
+    "engine.sql.sql_backed_view",
+]
+ignore_errors = false
+
 
 
 [tool.pytest.ini_options]

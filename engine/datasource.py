@@ -8,6 +8,7 @@ import pymysql
 
 from engine.crypto import decrypt_password
 from engine.errors import DataSourceConnectionError
+from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
 from engine.tunnel import (
     TUNNEL_MANAGER,
     close_active_tunnel,
@@ -185,7 +186,6 @@ def test_connection(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
-    import os
     import sqlite3
 
     db_path = _require_existing_sqlite_file(config.get("database_name", ""))
@@ -201,12 +201,18 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
             tables_row = cursor.fetchone()
             tables_count = int(tables_row[0]) if tables_row else 0
 
+            permission_report = SQLitePermissionProbe(
+                database_path=db_path,
+                connection_readonly=True,
+            ).probe(conn)
+
             return {
                 "ok": True,
                 "serverVersion": f"SQLite {version}",
-                "readonly": not os.access(db_path, os.W_OK),
+                "readonly": permission_report.readonly,
                 "tablesCount": tables_count,
-                "warnings": [],
+                "warnings": permission_report.warnings,
+                "permissionReport": permission_report.model_dump(),
                 "message": "SQLite 数据库连接测试成功！",
             }
         finally:
@@ -250,19 +256,17 @@ def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                cursor.execute("SELECT current_setting('transaction_read_only')")
-                ro_res = cursor.fetchone()
-                readonly = (ro_res[0] == "on") if ro_res else False
+            permission_report = PostgresPermissionProbe().probe(conn)
 
-                warnings = []
-                if not readonly:
-                    warnings.append("提示：当前数据库账号包含写入权限，建议在生产环境使用只读账号以保安全。")
-
-                return {
-                    "ok": True, "serverVersion": version, "readonly": readonly,
-                    "tablesCount": tables_count, "warnings": warnings,
-                    "message": "PostgreSQL 数据库连接测试成功！",
-                }
+            return {
+                "ok": True,
+                "serverVersion": version,
+                "readonly": permission_report.readonly,
+                "tablesCount": tables_count,
+                "warnings": permission_report.warnings,
+                "permissionReport": permission_report.model_dump(),
+                "message": "PostgreSQL 数据库连接测试成功！",
+            }
         finally:
             conn.close()
     except DataSourceConnectionError:
@@ -304,13 +308,17 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
-                readonly, warnings = _check_mysql_readonly(cursor)
+            permission_report = MySQLPermissionProbe().probe(conn)
 
-                return {
-                    "ok": True, "serverVersion": version, "readonly": readonly,
-                    "tablesCount": tables_count, "warnings": warnings,
-                    "message": "数据库连接测试成功！",
-                }
+            return {
+                "ok": True,
+                "serverVersion": version,
+                "readonly": permission_report.readonly,
+                "tablesCount": tables_count,
+                "warnings": permission_report.warnings,
+                "permissionReport": permission_report.model_dump(),
+                "message": "数据库连接测试成功！",
+            }
         finally:
             conn.close()
     except DataSourceConnectionError:
@@ -319,36 +327,6 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
         raise DataSourceConnectionError(f"无法建立 MySQL 数据库连接，请检查主机/端口/用户名/SSL 配置。错误详情: {str(e)}")
     finally:
         _cleanup_test_tunnel(temp_tunnel, config)
-
-
-def _check_mysql_readonly(cursor: Any) -> tuple[bool, list[str]]:
-    """Determine MySQL read-only status from GRANTS or server variables."""
-    readonly = True
-    warnings: list[str] = []
-    try:
-        cursor.execute("SHOW GRANTS FOR CURRENT_USER()")
-        grants = [row[0] for row in cursor.fetchall()]
-        for grant in grants:
-            grant_upper = grant.upper()
-            if "ALL PRIVILEGES" in grant_upper or any(
-                op in grant_upper for op in ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER"]
-            ):
-                readonly = False
-                break
-    except Exception:
-        try:
-            cursor.execute("SHOW VARIABLES LIKE 'read_only'")
-            res = cursor.fetchone()
-            if res and res[1] == "ON":
-                readonly = True
-            else:
-                readonly = False
-        except Exception:
-            readonly = False
-
-    if not readonly:
-        warnings.append("提示：当前数据库账号包含写入权限(INSERT/UPDATE/DELETE/DROP)，建议在生产环境使用只读只查的只读账号以保安全。")
-    return readonly, warnings
 
 
 def datasource_connection_dict(ds: Any) -> dict[str, Any]:
