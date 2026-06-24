@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDatasourceStore } from "../datasourceStore";
 
-vi.mock("../../features/engine/engineApi", () => ({
+vi.mock("../../lib/api/schema", () => ({
   listTables: vi.fn().mockResolvedValue([]),
   listColumns: vi.fn().mockResolvedValue([]),
 }));
@@ -19,7 +19,7 @@ vi.mock("../../lib/api/datasources", () => ({
 }));
 
 const { datasourcesApi } = await import("../../lib/api/datasources");
-const { listTables, listColumns } = await import("../../features/engine/engineApi");
+const { listTables, listColumns } = await import("../../lib/api/schema");
 
 const DS1 = { id: "ds-1", name: "Test DB", db_type: "mysql" as const, host: "localhost", port: 3306, database_name: "test", username: "root", is_read_only: false, env: "dev" };
 const DS2 = { id: "ds-2", name: "Prod DB", db_type: "postgresql" as const, host: "prod.db", port: 5432, database_name: "prod", username: "admin", is_read_only: true, env: "prod" };

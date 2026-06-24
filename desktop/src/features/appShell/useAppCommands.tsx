@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Sparkles, Cpu, Database, FileText, Terminal, HelpCircle, FlaskConical, Bug, MessageSquare } from "lucide-react";
 import type { CommandItem } from "../../components/CommandPalette";
-import type { EngineSchemaTable, EngineColumn } from "../engine/engineApi";
+import type { EngineSchemaTable, EngineColumn } from "../../lib/api/schema";
 
 interface UseAppCommandsProps {
   tables: EngineSchemaTable[];

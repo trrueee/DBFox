@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { WorkspaceTab } from "../../mock/dbfoxMock";
+import type { WorkspaceTab } from "../../types/workspace";
 import { SmartQueryHome } from "../workspace/SmartQueryHome";
 import { ConversationHistoryPanel } from "../conversation/ConversationHistoryPanel";
 import { ConversationWorkspace } from "../conversation/workspace/ConversationWorkspace";
@@ -13,7 +13,7 @@ import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { testLlmConnection } from "../../lib/api/agent";
-import { defaultSql } from "../../mock/dbfoxMock";
+import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useConversationStore } from "../../stores/conversationStore";
@@ -120,13 +120,22 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
   const setTableSubTabs = useWorkspaceStore((s) => s.setTableSubTabs);
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
   const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
+  const datasources = useDatasourceStore((s) => s.datasources);
+  const fallbackDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0] ?? null;
+  const tabDatasource = activeTab.datasourceId
+    ? datasources.find((item) => item.id === activeTab.datasourceId) ?? null
+    : null;
+  const datasourceId = activeTab.datasourceId || activeDatasourceId || fallbackDatasource?.id || "";
+  const datasourceDbType = activeTab.datasourceDbType ?? tabDatasource?.db_type ?? fallbackDatasource?.db_type ?? null;
+  const subTabKey = activeTab.id || tableId;
 
   return (
     <TableWorkspace
       tableId={tableId}
-      datasourceId={activeDatasourceId || ""}
-      currentSubTab={tableSubTabs[tableId] || "preview"}
-      onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [tableId]: subTab }))}
+      datasourceId={datasourceId}
+      datasourceDbType={datasourceDbType}
+      currentSubTab={tableSubTabs[subTabKey] || tableSubTabs[tableId] || "preview"}
+      onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [subTabKey]: subTab }))}
       onOpenSqlConsole={openSqlConsole}
       onToast={showToast}
     />

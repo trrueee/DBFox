@@ -65,6 +65,35 @@ describe("workspaceStore — tabs", () => {
     expect(diagnosticTabs[0].title).toBe("诊断日志");
     expect(s.activeTabId).toBe("diagnostics");
   });
+
+  it("binds table tabs to the datasource active when they are opened", () => {
+    useWorkspaceStore.getState().openTableTab("users", "schema", {
+      id: "ds-1",
+      dbType: "postgresql",
+    });
+    useWorkspaceStore.getState().openTableTab("users", "preview", {
+      id: "ds-2",
+      dbType: "mysql",
+    });
+
+    const state = useWorkspaceStore.getState();
+    const tableTabs = state.tabs.filter((tab) => tab.type === "table");
+    expect(tableTabs).toHaveLength(2);
+    expect(tableTabs[0]).toMatchObject({
+      id: "table-ds-1-users",
+      tableId: "users",
+      datasourceId: "ds-1",
+      datasourceDbType: "postgresql",
+    });
+    expect(tableTabs[1]).toMatchObject({
+      id: "table-ds-2-users",
+      tableId: "users",
+      datasourceId: "ds-2",
+      datasourceDbType: "mysql",
+    });
+    expect(state.tableSubTabs["table-ds-1-users"]).toBe("schema");
+    expect(state.tableSubTabs["table-ds-2-users"]).toBe("preview");
+  });
 });
 
 describe("workspaceStore — messages", () => {

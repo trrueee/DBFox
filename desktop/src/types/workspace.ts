@@ -1,4 +1,4 @@
-/** Core workspace types extracted from mock/dbfoxMock.ts */
+/** Core workspace types. */
 
 import type { AgentArtifact, TableArtifact, ResultViewArtifact } from "./agentArtifact";
 import type { AgentTimelineItem } from "../features/workspace/agentTimeline";
@@ -33,6 +33,8 @@ export interface WorkspaceTab {
   title: string;
   type: WorkspaceTabType;
   tableId?: string;
+  datasourceId?: string;
+  datasourceDbType?: string | null;
   selectedTables?: string[];
   queryText?: string;
   conversationId?: string;
