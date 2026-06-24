@@ -179,7 +179,9 @@ def test_extract_sql_backed_refs_keeps_safe_sql_for_follow_up_analysis() -> None
                 "payload": {
                     "storageMode": "sql_backed",
                     "datasourceId": "ds_1",
-                    "sourceSqlSemanticId": "art_sql_1",
+                    "sourceSqlArtifactId": "art_sql_1",
+                    "sourceSqlSemanticId": "sql_candidate_1",
+                    "sourceSql": "SELECT day, usage_count FROM ai_tool_invocations",
                     "safeSql": "SELECT day, usage_count FROM ai_tool_invocations",
                     "columns": ["day", "usage_count"],
                     "previewRows": [{"day": "2026-06-01", "usage_count": 12}],
@@ -203,12 +205,15 @@ def test_extract_sql_backed_refs_keeps_safe_sql_for_follow_up_analysis() -> None
     assert artifact_refs[0]["id"] == "mem_result_art_result_1"
     assert artifact_refs[0]["artifact_id"] == "art_result_1"
     assert artifact_refs[0]["source_sql_artifact_id"] == "art_sql_1"
+    assert artifact_refs[0]["source_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert artifact_refs[0]["safe_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert artifact_refs[0]["columns"] == ["day", "usage_count"]
     assert artifact_refs[0]["row_count"] == 31
 
     assert len(sql_refs) == 1
     assert sql_refs[0]["kind"] == "sql_ref"
+    assert sql_refs[0]["source_sql_artifact_id"] == "art_sql_1"
+    assert sql_refs[0]["source_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert sql_refs[0]["safe_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert sql_refs[0]["tables"] == ["ai_tool_invocations"]
 
@@ -273,14 +278,63 @@ def test_finalize_turn_records_recent_turn_without_artifacts() -> None:
             "question": "你刚才干什么了",
             "answer": "我刚才分析了工具调用趋势。",
             "sql_fingerprints": [],
+            "source_sql_artifact_ids": [],
             "artifact_ids": [],
         }
     ]
 
 
+def test_finalize_turn_records_result_and_sql_artifact_ids_for_current_task_memory() -> None:
+    safe_sql = "SELECT day, usage_count FROM ai_tool_invocations"
+
+    update = finalize_turn(
+        {
+            "run_id": "run_recent_sql_backed",
+            "datasource_id": "ds_1",
+            "question": "分析每日调用",
+            "answer": {"answer": "完成。"},
+            "artifacts": [
+                {
+                    "id": "art_result_recent",
+                    "type": "result_view",
+                    "title": "Daily usage",
+                    "payload": {
+                        "storageMode": "sql_backed",
+                        "datasourceId": "ds_1",
+                        "sourceSqlArtifactId": "art_sql_recent",
+                        "sourceSql": safe_sql,
+                        "safeSql": safe_sql,
+                        "columns": [{"name": "day"}, {"name": "usage_count"}],
+                        "previewRows": [{"day": "2026-06-01", "usage_count": 12}],
+                        "rowCount": 31,
+                        "used_tables": ["ai_tool_invocations"],
+                    },
+                }
+            ],
+            "recent_turns": [],
+        }
+    )
+
+    recent_turns = [item for item in update["recent_turns"] if not item.get("__clear__")]
+    assert recent_turns[0]["artifact_ids"] == ["art_result_recent"]
+    assert recent_turns[0]["source_sql_artifact_ids"] == ["art_sql_recent"]
+    assert recent_turns[0]["sql_fingerprints"] == [sql_fingerprint(safe_sql)]
+
+    assert update["active_task"]["current_result_artifact_id"] == "art_result_recent"
+    assert update["active_task"]["current_source_sql_artifact_id"] == "art_sql_recent"
+    assert update["active_task"]["current_sql_fingerprint"] == sql_fingerprint(safe_sql)
+
+
 def test_finalize_turn_batch_compacts_old_recent_turns_into_summary() -> None:
     existing_turns = [
-        {"run_id": f"run_{idx}", "question": f"问题 {idx}", "answer": f"回答 {idx}"}
+        {
+            "run_id": f"run_{idx}",
+            "question": f"问题 {idx}",
+            "answer": f"回答 {idx}",
+            "artifact_ids": [f"result_{idx}"],
+            "source_sql_artifact_ids": [f"sql_{idx}"],
+            "sql_fingerprints": [f"fp_{idx}"],
+        }
         for idx in range(1, 7)
     ]
 
@@ -299,6 +353,9 @@ def test_finalize_turn_batch_compacts_old_recent_turns_into_summary() -> None:
     assert [turn["run_id"] for turn in recent_turns] == ["run_4", "run_5", "run_6", "run_7"]
     assert "此前用户在分析工具使用。" in update["conversation_summary"]
     assert "问题 1 -> 回答 1" in update["conversation_summary"]
+    assert "artifact_ids=result_1" in update["conversation_summary"]
+    assert "source_sql_artifact_ids=sql_1" in update["conversation_summary"]
+    assert "sql_fingerprints=fp_1" in update["conversation_summary"]
     assert "问题 3 -> 回答 3" in update["conversation_summary"]
     assert "问题 4 -> 回答 4" not in update["conversation_summary"]
 
@@ -374,6 +431,7 @@ def test_agent_service_persists_graph_memory_projection(db_session, monkeypatch)
                 "id": "mem_sql_1",
                 "kind": "sql_ref",
                 "datasource_id": datasource.id,
+                "artifact_id": "result_view_1",
                 "source_sql_artifact_id": "sql_1",
                 "safe_sql": safe_sql,
                 "sql_fingerprint": fingerprint,
@@ -420,6 +478,8 @@ def test_agent_service_persists_graph_memory_projection(db_session, monkeypatch)
     assert "artifact_ref_index" in memory.memory_json
     assert reusable.safe_sql == safe_sql
     assert reusable.sql_fingerprint == fingerprint
+    assert reusable.source_artifact_id == "result_view_1"
+    assert reusable.source_sql_artifact_id == "sql_1"
     assert reusable.usage_count == 1
     assert reusable.verified is True
 

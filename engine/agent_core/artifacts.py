@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 import re
 
+from engine.agent_core.chart_builder import is_chartable_suggestion
 from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation
 from engine.sql.result_view.fingerprint import result_source_fingerprint
 
@@ -49,7 +50,7 @@ def build_agent_artifacts(
     if execution and execution.get("success"):
         artifacts.append(build_result_view_artifact(execution, datasource_id=datasource_id, safety=safety, identity=identity))
 
-    if chart_suggestion and chart_suggestion.get("type") and chart_suggestion.get("type") != "table":
+    if is_chartable_suggestion(chart_suggestion):
         artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, execution=execution, identity=identity))
 
     if error:
@@ -131,6 +132,8 @@ def build_sql_artifact(
     execution: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
+    sql = sql.strip()
+    semantic_id = _sql_artifact_semantic_id(sql)
     execution_meta = _execution_meta(execution or (safety or {}).get("execution"))
     payload: dict[str, Any] = {
         "purpose": "分析查询",
@@ -145,7 +148,7 @@ def build_sql_artifact(
     if isinstance(generation_metadata, dict):
         payload["generation_metadata"] = generation_metadata
     return _artifact(
-        "sql_candidate",
+        semantic_id,
         "sql",
         "Validated SQL",
         payload,
@@ -162,9 +165,13 @@ def build_safety_artifact(
     safety: dict[str, Any],
     *,
     identity: AgentArtifactIdentity | None = None,
+    source_sql: str | None = None,
+    source_sql_artifact_id: str | None = None,
 ) -> AgentArtifact:
+    sql = source_sql or _safety_sql(safety)
+    semantic_id = _safety_artifact_semantic_id(sql)
     return _artifact(
-        "safety_report",
+        semantic_id,
         "safety",
         "Safety report",
         safety,
@@ -173,7 +180,7 @@ def build_safety_artifact(
         collapsed=True,
         identity=identity,
         produced_by_step="validate_sql",
-        depends_on=["sql_candidate"],
+        depends_on=[source_sql_artifact_id or _sql_artifact_semantic_id(sql)],
     )
 
 
@@ -183,6 +190,8 @@ def build_result_view_artifact(
     *,
     safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
+    source_sql_artifact_id: str | None = None,
+    safety_artifact_id: str | None = None,
 ) -> AgentArtifact:
     # Fingerprint the SQL so each distinct query gets its own result view artifact.
     sql = _execution_sql(execution)
@@ -194,10 +203,13 @@ def build_result_view_artifact(
     preview_rows = all_rows[:10]
     is_sql_backed = bool(datasource_id and sql)
     typed_columns = _result_view_columns(execution)
+    source_sql_ref = source_sql_artifact_id or _sql_artifact_semantic_id(sql)
+    safety_ref = safety_artifact_id or _safety_artifact_semantic_id(sql)
     payload: dict[str, Any] = {
         "storageMode": "sql_backed" if is_sql_backed else "payload",
         "datasourceId": datasource_id or "",
-        "sourceSqlSemanticId": "sql_candidate",
+        "sourceSqlArtifactId": source_sql_ref,
+        "sourceSqlSemanticId": source_sql_ref,
         "sourceSql": sql,
         "safeSql": sql,
         "dialect": dialect,
@@ -227,7 +239,7 @@ def build_result_view_artifact(
         priority=20,
         identity=identity,
         produced_by_step="execute_sql",
-        depends_on=["sql_candidate", "safety_report"],
+        depends_on=[source_sql_ref, safety_ref] if safety or safety_artifact_id else [source_sql_ref],
     )
 
 
@@ -239,7 +251,7 @@ def build_chart_artifact(
     identity: AgentArtifactIdentity | None = None,
 ) -> AgentArtifact:
     sql = _execution_sql(execution) if execution else None
-    table_sem = "result_table" if not sql else f"result_table_{_sql_fingerprint(sql)}"
+    result_view_sem = "result_view" if not sql else f"result_view_{_sql_fingerprint(sql)}"
     sem_id = "chart_suggestion" if not sql else f"chart_suggestion_{_sql_fingerprint(sql)}"
     chart_type = str(chart_suggestion.get("chart_type") or chart_suggestion.get("type") or "bar").strip().lower()
     return _artifact(
@@ -255,6 +267,8 @@ def build_chart_artifact(
             "aggregation": chart_suggestion.get("aggregation") or "",
             "reason": chart_suggestion.get("reason") or "",
             "series": chart_suggestion.get("series") or [],
+            "source_result_semantic_id": result_view_sem,
+            "source_sql": sql or "",
             "source_refs": _chart_source_refs(chart_suggestion),
             "safety_state": _safety_state(safety),
         },
@@ -262,7 +276,7 @@ def build_chart_artifact(
         priority=30,
         identity=identity,
         produced_by_step="suggest_chart",
-        depends_on=[table_sem],
+        depends_on=[result_view_sem],
     )
 
 
@@ -426,6 +440,32 @@ def _execution_dialect(execution: dict[str, Any] | None, safety: dict[str, Any] 
                 return "sqlite"
             return "mysql"
     return "mysql"
+
+
+def _safety_sql(safety: dict[str, Any] | None) -> str:
+    if not isinstance(safety, dict):
+        return ""
+    for key in ("safe_sql", "safeSql", "original_sql", "originalSql", "sql"):
+        value = safety.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    guardrail = safety.get("guardrail")
+    if isinstance(guardrail, dict):
+        for key in ("safeSql", "safe_sql", "originalSql", "original_sql"):
+            value = guardrail.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
+def _sql_artifact_semantic_id(sql: str | None) -> str:
+    clean = (sql or "").strip()
+    return f"sql_candidate_{_sql_fingerprint(clean)}" if clean else "sql_candidate"
+
+
+def _safety_artifact_semantic_id(sql: str | None) -> str:
+    clean = (sql or "").strip()
+    return f"safety_report_{_sql_fingerprint(clean)}" if clean else "safety_report"
 
 
 def _result_view_columns(execution: dict[str, Any]) -> list[dict[str, str]]:
