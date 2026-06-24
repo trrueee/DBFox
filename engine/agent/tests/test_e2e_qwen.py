@@ -150,7 +150,7 @@ class TestRealModelToolCalling:
                 internal_names.add(evt.step["name"])
 
         # Verify key trajectory nodes appeared (internal names are dotted)
-        expected_steps = {"schema.build_context", "sql.generate"}
+        expected_steps = {"db.observe", "db.search", "sql.validate"}
         found = expected_steps & internal_names
         print(f"\n[CHECK] Expected steps found: {found} / {sorted(internal_names)}")
         assert found, (
@@ -221,18 +221,17 @@ class TestExecuteFalse:
             "skip_execution",
             "sql.skip_execution",
             "sql_skip_execution",
-            "generate_sql_candidate",
-            "sql.generate",
-            "sql_generate",
             "validate_sql",
             "sql.validate",
             "sql_validate",
-            "build_schema_context",
-            "schema.build_context",
-            "schema_build_context",
-            "build_query_plan",
-            "query_plan.build",
-            "query_plan_build",
+            "observe_database",
+            "db.observe",
+            "db_observe",
+            "search_database",
+            "db.search",
+            "db_search",
+            "schema.describe_table",
+            "schema_describe_table",
         }
         has_skip_or_answer = any(s in allowed_skip for s in step_names)
         print(f"[EXECUTE=FALSE] Has skip/answer step: {has_skip_or_answer}")

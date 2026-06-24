@@ -118,6 +118,10 @@ def test_db_search_tool_description_uses_semantic_expression_not_keywords():
     assert "semantic search expression" in description
     assert "one expression per call" in description
     assert "make multiple db.search calls" in description
+    assert "Chinese synonyms" in description
+    assert "English schema terms" in description
+    assert "abbreviations" in description
+    assert "possible table or column names" in description
 
 
 def test_unknown_tool_gets_safe_default_reducer_behavior():

@@ -167,7 +167,3 @@ class ProgressDecision(BaseModel):
         description="When replanning: suggested tool groups for the new plan.",
     )
 
-    should_consult_memory: bool = Field(
-        default=False,
-        description="True when the agent should search memory before the next attempt.",
-    )

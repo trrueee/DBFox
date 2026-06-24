@@ -59,9 +59,9 @@ class TestPolicyGateBasics:
 
     def test_safe_tool_allowed(self):
         registry = ToolRegistry()
-        registry.register(_make_tool("schema.build_context"))
+        registry.register(_make_tool("schema.describe_table"))
         gate = PolicyGate(registry)
-        decision = gate.check({}, "schema.build_context", {})
+        decision = gate.check({}, "schema.describe_table", {})
         assert decision.status == "allowed"
 
     def test_write_tool_blocked(self):
@@ -97,7 +97,6 @@ class TestPolicyGateBasics:
                 "schema",
                 "db",
                 "semantic",
-                "memory",
                 "result",
                 "chart",
                 "answer",

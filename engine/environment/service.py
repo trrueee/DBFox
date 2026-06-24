@@ -7,8 +7,10 @@ profiles and snapshots.  No LLM involvement.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -140,6 +142,12 @@ class EnvironmentService:
                         is_primary_key=bool(col.is_primary_key),
                         is_foreign_key=bool(col.is_foreign_key),
                         column_default=str(col.column_default) if col.column_default else None,
+                        ai_description=str(col.ai_description) if col.ai_description else None,
+                        semantic_tags=_string_list(col.semantic_tags),
+                        business_terms=_string_list(col.business_terms),
+                        aliases=_string_list(col.aliases),
+                        column_role=str(col.column_role) if col.column_role else None,
+                        metric_type=str(col.metric_type) if col.metric_type else None,
                     )
                 )
 
@@ -177,6 +185,13 @@ class EnvironmentService:
                     column_count=len(col_snapshots),
                     columns=col_snapshots,
                     comment=str(table.table_comment) if table.table_comment else None,
+                    ai_description=str(table.ai_description) if table.ai_description else None,
+                    semantic_tags=_string_list(table.semantic_tags),
+                    business_terms=_string_list(table.business_terms),
+                    aliases=_string_list(table.aliases),
+                    table_role=str(table.table_role) if table.table_role else None,
+                    grain=str(table.grain) if table.grain else None,
+                    subject_area=str(table.subject_area) if table.subject_area else None,
                 )
             )
 
@@ -233,6 +248,12 @@ class EnvironmentService:
                 is_primary_key=bool(c.is_primary_key),
                 is_foreign_key=bool(c.is_foreign_key),
                 column_default=str(c.column_default) if c.column_default else None,
+                ai_description=str(c.ai_description) if c.ai_description else None,
+                semantic_tags=_string_list(c.semantic_tags),
+                business_terms=_string_list(c.business_terms),
+                aliases=_string_list(c.aliases),
+                column_role=str(c.column_role) if c.column_role else None,
+                metric_type=str(c.metric_type) if c.metric_type else None,
             )
             for c in columns
         ]
@@ -244,6 +265,13 @@ class EnvironmentService:
             column_count=len(col_snapshots),
             columns=col_snapshots,
             comment=str(table.table_comment) if table.table_comment else None,
+            ai_description=str(table.ai_description) if table.ai_description else None,
+            semantic_tags=_string_list(table.semantic_tags),
+            business_terms=_string_list(table.business_terms),
+            aliases=_string_list(table.aliases),
+            table_role=str(table.table_role) if table.table_role else None,
+            grain=str(table.grain) if table.grain else None,
+            subject_area=str(table.subject_area) if table.subject_area else None,
         )
 
     # ------------------------------------------------------------------
@@ -281,3 +309,20 @@ class EnvironmentService:
         non-empty catalogs.
         """
         return "empty" if table_count == 0 else "fresh"
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    if not text:
+        return []
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, list):
+        return [str(item).strip() for item in parsed if str(item).strip()]
+    return [part.strip() for part in text.split(",") if part.strip()]

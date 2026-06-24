@@ -74,7 +74,7 @@
     "question": "统计一下每个用户的订单总额，按总额降序排列",
     "workspace_context_json": "{}",
     "expected_intent": "analysis",
-    "expected_tools_json": "[\"schema.build_context\", \"query_plan.build\", \"sql.validate\"]",
+    "expected_tools_json": "[\"db.observe\", \"db.search\", \"sql.validate\"]",
     "forbidden_tools_json": "[\"sql.execute_readonly\", \"sql.execute_write\", \"backup.create\", \"backup.restore\", \"ddl.execute\"]",
     "expected_artifact_types_json": "[\"agent_plan\", \"query_plan\", \"sql\", \"safety\"]",
     "expected_final_contains_json": "[]",

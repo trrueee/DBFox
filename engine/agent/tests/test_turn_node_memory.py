@@ -360,6 +360,48 @@ def test_finalize_turn_batch_compacts_old_recent_turns_into_summary() -> None:
     assert "问题 4 -> 回答 4" not in update["conversation_summary"]
 
 
+def test_recent_turn_compaction_prefers_llm_summary(monkeypatch) -> None:
+    from engine.agent.nodes import turn_node
+
+    existing_turns = [
+        {
+            "run_id": f"run_{idx}",
+            "question": f"question {idx}",
+            "answer": f"answer {idx}",
+            "artifact_ids": [f"result_{idx}"],
+            "source_sql_artifact_ids": [f"sql_{idx}"],
+            "sql_fingerprints": [f"fp_{idx}"],
+        }
+        for idx in range(1, 8)
+    ]
+    captured: dict[str, object] = {}
+
+    def fake_summarize(conversation_summary, batch, *, model_name=None, api_key=None, api_base=None):
+        captured["conversation_summary"] = conversation_summary
+        captured["batch"] = batch
+        captured["model_name"] = model_name
+        captured["api_key"] = api_key
+        captured["api_base"] = api_base
+        return "LLM compressed summary"
+
+    monkeypatch.setattr(turn_node, "_llm_summarize_turn_batch", fake_summarize)
+
+    summary, kept = turn_node._compact_recent_turns(
+        "Previous summary",
+        existing_turns,
+        model_name="test-model",
+        api_key="sk-test",
+        api_base="http://example.test/v1",
+    )
+
+    assert summary == "Previous summary\nLLM compressed summary"
+    assert [turn["run_id"] for turn in kept] == ["run_4", "run_5", "run_6", "run_7"]
+    assert [turn["run_id"] for turn in captured["batch"]] == ["run_1", "run_2", "run_3"]
+    assert captured["model_name"] == "test-model"
+    assert captured["api_key"] == "sk-test"
+    assert captured["api_base"] == "http://example.test/v1"
+
+
 def test_finalize_turn_removes_old_langgraph_messages_by_batch() -> None:
     messages = [
         HumanMessage(content=f"问题 {idx}", id=f"msg_{idx}")

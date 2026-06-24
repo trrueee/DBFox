@@ -41,8 +41,3 @@ recovery:
   answer_error:
     - condition: "answer.synthesize fails"
       action: "report the error and suggest re-running the query"
-
-writeback:
-  - memory_type: trajectory
-    trigger: on_success
-    content_hint: "analysis pattern, notable facts, anomalies found"

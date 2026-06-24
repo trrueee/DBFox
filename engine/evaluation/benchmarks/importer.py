@@ -12,9 +12,8 @@ from engine.models import AgentGoldenTask
 logger = logging.getLogger("dbfox.benchmarks.importer")
 
 _DEFAULT_EXPECTED_TOOLS = [
-    "schema.build_context",
-    "query_plan.build",
-    "sql.generate_candidate",
+    "db.observe",
+    "db.search",
     "sql.validate",
 ]
 

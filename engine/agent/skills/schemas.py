@@ -5,7 +5,6 @@ A Skill is a curated execution pattern that bundles:
 - Ordered step guidance (recommended tool sequence)
 - Success criteria (for the Progress Judge)
 - Recovery rules (what to do when things go wrong)
-- Memory writeback rules (what to persist after success)
 
 Skills are NOT hardcoded workflows. They are "task playbooks" that give the
 ReAct model structured guidance while preserving its freedom to adapt.
@@ -33,29 +32,6 @@ class SkillRecoveryRule(BaseModel):
             "E.g. 'schema.list_tables + schema.refresh_catalog', "
             "'loosen_time_filter + retry', 'ask_user_clarification'."
         ),
-    )
-
-
-# ── Memory writeback ──────────────────────────────────────────────────────────
-
-class SkillWritebackRule(BaseModel):
-    """What to persist to memory after a successful execution of this skill."""
-
-    memory_type: str = Field(
-        description=(
-            "Type of memory to write: 'trajectory', 'semantic_definition', "
-            "'schema_alias', 'join_path', 'metric_definition', 'query_pattern'."
-        ),
-    )
-    trigger: str = Field(
-        description=(
-            "When to trigger this writeback. E.g. 'on_success', "
-            "'on_user_confirmed', 'on_join_discovered'."
-        ),
-    )
-    content_hint: str = Field(
-        default="",
-        description="Hint for the model about what to include in the memory entry.",
     )
 
 
@@ -116,13 +92,6 @@ class SkillSpec(BaseModel):
             "'empty_result'). Each entry is a list of actions to try in order."
         ),
     )
-
-    # ── Memory writeback ───────────────────────────────────────────────────
-    writeback: list[SkillWritebackRule] = Field(
-        default_factory=list,
-        description="Memory entries to write after successful execution.",
-    )
-
 
 # ── Skill manifest (registry container) ───────────────────────────────────────
 

@@ -22,6 +22,7 @@ import { useToast } from "../components/Toast";
 
 type PageMode = "detail" | "create" | "edit";
 type ActionState = "idle" | "testing" | "saving" | "syncing" | "deleting";
+type ToastType = "success" | "warning" | "info";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -88,6 +89,35 @@ const firstSchemaSyncWarning = (result: unknown): string | null => {
   return null;
 };
 
+const aiEnrichSyncMessage = (result: unknown): { text: string; type: ToastType } | null => {
+  const syncResult = result as SchemaSyncResult | null | undefined;
+  const enrich = syncResult?.aiEnrich;
+  if (!enrich) return null;
+
+  const count = Number(enrich.enriched_count || 0);
+  if (enrich.ai_enriched) {
+    return { text: `AI 语义增强 ${count} 张表`, type: "success" };
+  }
+
+  const reason = String(enrich.reason || "").trim();
+  if (!reason || reason === "no structural changes") {
+    return { text: "AI 语义增强无需更新", type: "info" };
+  }
+  return { text: `AI 语义增强未完成：${reason}`, type: "warning" };
+};
+
+const schemaSyncToast = (baseMessage: string, result: unknown): { message: string; type: ToastType; inline: string | null } => {
+  const warning = firstSchemaSyncWarning(result);
+  const enrich = aiEnrichSyncMessage(result);
+  const type = warning || enrich?.type === "warning" ? "warning" : "success";
+  const detail = warning || enrich?.text || "";
+  return {
+    message: detail ? `${baseMessage}；${detail}` : baseMessage,
+    type,
+    inline: enrich?.text || warning || null,
+  };
+};
+
 export const DataSourcesPage = ({
   onSelectDataSource,
   activeDataSource,
@@ -108,6 +138,8 @@ export const DataSourcesPage = ({
   const [search, setSearch] = useState("");
   const [formError, setFormError] = useState("");
   const [actionState, setActionState] = useState<ActionState>("idle");
+  const [syncAiEnrich, setSyncAiEnrich] = useState(false);
+  const [lastSyncFeedback, setLastSyncFeedback] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     status: "idle" | "testing" | "success" | "error";
     message: string;
@@ -124,11 +156,12 @@ export const DataSourcesPage = ({
     try {
       setActionState("syncing");
       const syncFn = syncSchema || api.syncSchema;
-      const syncResult = await syncFn(selectedId);
+      const syncResult = await syncFn(selectedId, syncAiEnrich ? { ai_enrich: true } : undefined);
       await loadDatasources(selectedId);
       await onRefreshDatasources();
-      const warning = firstSchemaSyncWarning(syncResult);
-      toast.toast(warning || "表结构已同步", warning ? "warning" : "success");
+      const feedback = schemaSyncToast("表结构已同步", syncResult);
+      setLastSyncFeedback(feedback.inline);
+      toast.toast(feedback.message, feedback.type);
     } catch (err: unknown) {
       toast.toast((err as Error).message || "表结构同步失败", "error");
     } finally {
@@ -232,13 +265,14 @@ export const DataSourcesPage = ({
       const created = await createFn(
         buildDatasourceCreatePayload(form as DatasourceFormShape, activeProject?.id),
       );
-      const syncResult = await syncFn(created.id);
+      const syncResult = await syncFn(created.id, syncAiEnrich ? { ai_enrich: true } : undefined);
       setMode("detail");
       await loadDatasources(created.id);
       await onRefreshDatasources();
       onSelectDataSource(created);
-      const warning = firstSchemaSyncWarning(syncResult);
-      toast.toast(warning ? `数据源创建成功；${warning}` : "数据源创建成功", warning ? "warning" : "success");
+      const feedback = schemaSyncToast("数据源创建成功", syncResult);
+      setLastSyncFeedback(feedback.inline);
+      toast.toast(feedback.message, feedback.type);
     } catch (error: unknown) {
       setFormError((error as Error).message ?? "保存失败。");
     } finally {
@@ -355,7 +389,11 @@ export const DataSourcesPage = ({
               </div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, height: 32, cursor: detailActionBusy ? "not-allowed" : "pointer", fontSize: "0.76rem", fontWeight: 650, color: "var(--color-text-muted)" }}>
+              <input type="checkbox" style={{ width: 14, height: 14, cursor: detailActionBusy ? "not-allowed" : "pointer" }} checked={syncAiEnrich} onChange={(e) => setSyncAiEnrich(e.target.checked)} disabled={detailActionBusy} />
+              AI 语义增强
+            </label>
             <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }} disabled={detailActionBusy}>设为当前</button>
             <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => startEdit(selected)} disabled={detailActionBusy}>编辑</button>
             <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={handleSyncSchema} disabled={detailActionBusy} title="重新读取表、字段、主外键和注释等结构信息">
@@ -414,6 +452,11 @@ export const DataSourcesPage = ({
                 </div>
 
               </div>
+              {lastSyncFeedback && (
+                <div role="status" style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "var(--bg-secondary)", border: "1px solid var(--border-light)", color: "var(--color-text-secondary)", fontSize: "0.8rem", fontWeight: 600 }}>
+                  {lastSyncFeedback}
+                </div>
+              )}
             </div>
 
             {/* Health & Sync Details Cards */}
@@ -540,7 +583,7 @@ export const DataSourcesPage = ({
                 {form.db_type === "sqlite" ? (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                     <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：本地 SQLite 数据库" /></div>
-                    <div><label className="field-label">SQLite 数据库文件绝对路径</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} placeholder="C:\Users\...\mydb.sqlite" /></div>
+                    <div><label className="field-label" htmlFor="ds-sqlite-path">SQLite 数据库文件绝对路径</label><input id="ds-sqlite-path" className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} placeholder="C:\Users\...\mydb.sqlite" /></div>
                   </div>
                 ) : (
                   <>
@@ -621,6 +664,12 @@ export const DataSourcesPage = ({
                     </div>
                   </div>
                 )}
+                <div style={{ marginTop: 16, borderTop: "1px solid var(--border-light)", paddingTop: 14 }}>
+                  <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: actionState !== "idle" ? "not-allowed" : "pointer", margin: 0, fontWeight: 650 }}>
+                    <input type="checkbox" style={{ width: 16, height: 16, cursor: actionState !== "idle" ? "not-allowed" : "pointer" }} checked={syncAiEnrich} onChange={(e) => setSyncAiEnrich(e.target.checked)} disabled={actionState !== "idle"} />
+                    AI 语义增强
+                  </label>
+                </div>
                 <div className="hifi-form-actions">
                   <button type="button" className="hifi-btn hifi-btn-outline" onClick={handleTestConnection} disabled={actionState !== "idle"}>测试连接</button>
                   <button type="button" className="hifi-btn hifi-btn-primary" onClick={mode === "create" ? handleCreate : handleUpdate} disabled={actionState !== "idle"}>

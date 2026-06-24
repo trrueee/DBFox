@@ -38,7 +38,6 @@ AgentToolGroup = Literal[
     "schema",
     "db",
     "semantic",
-    "memory",
 ]
 
 

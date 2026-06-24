@@ -420,7 +420,14 @@ def api_sync_schema(
     """
     try:
         payload = req or SchemaSyncRequest()
-        result = _sync_catalog(db, id, ai_enrich=payload.ai_enrich)
+        result = _sync_catalog(
+            db,
+            id,
+            ai_enrich=payload.ai_enrich,
+            ai_api_key=payload.api_key,
+            ai_api_base=payload.api_base,
+            ai_model_name=payload.model_name,
+        )
 
         response: dict[str, Any] = {
             "ok": result.synced,
@@ -433,14 +440,12 @@ def api_sync_schema(
         }
 
         if payload.ai_enrich:
-            from engine.ai_enrich import ai_enrich_catalog
-            enrich = ai_enrich_catalog(
-                db, id,
-                api_key=payload.api_key,
-                api_base=payload.api_base,
-                model_name=payload.model_name,
-            )
-            response["aiEnrich"] = enrich.model_dump(mode="json") if hasattr(enrich, 'model_dump') else dict(enrich or {})
+            enrich = result.ai_enrich_result or {
+                "ai_enriched": False,
+                "enriched_count": 0,
+                "reason": "AI enrichment did not return a result.",
+            }
+            response["aiEnrich"] = enrich.model_dump(mode="json") if hasattr(enrich, "model_dump") else dict(enrich or {})
 
         return response
     except ValueError as exc:

@@ -5,6 +5,8 @@ import { DataSourcesPage } from "../DataSourcesPage";
 import { api } from "../../lib/api";
 import type { DataSource } from "../../lib/api";
 
+const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
+
 vi.mock("../../lib/api", () => ({
   api: {
     listDatasources: vi.fn(),
@@ -15,6 +17,10 @@ vi.mock("../../lib/api", () => ({
     deleteDatasource: vi.fn(),
     syncSchema: vi.fn(),
   },
+}));
+
+vi.mock("../../components/Toast", () => ({
+  useToast: () => ({ toast: toastMock }),
 }));
 
 vi.mock("../../components/DangerConfirmDialog", () => ({
@@ -79,6 +85,7 @@ function renderPage(overrides: Partial<React.ComponentProps<typeof DataSourcesPa
 describe("DataSourcesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    toastMock.mockClear();
     vi.mocked(api.listDatasources).mockResolvedValue([]);
   });
 
@@ -191,6 +198,72 @@ describe("DataSourcesPage", () => {
     expect(buttonTexts.some((t) => t?.includes("编辑"))).toBe(true);
     expect(buttonTexts.some((t) => t?.includes("同步"))).toBe(true);
     expect(buttonTexts.some((t) => t?.includes("删除"))).toBe(true);
+  });
+
+  it("syncs schema with AI enrichment when the semantic toggle is selected", async () => {
+    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
+    const syncSchema = vi.fn().mockResolvedValue({
+      ok: true,
+      aiEnrich: { ai_enriched: true, enriched_count: 3, reason: "", errors: [] },
+    });
+    const { container, getByText } = renderPage({
+      datasources: mockDatasources,
+      actions: {
+        createDatasource: vi.fn(),
+        updateDatasource: vi.fn(),
+        deleteDatasource: vi.fn(),
+        syncSchema,
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
+    fireEvent.click(firstItem);
+
+    const detailArea = container.querySelector(".hifi-datasource-detail")!;
+    fireEvent.click(within(detailArea as HTMLElement).getByLabelText("AI 语义增强"));
+    const syncButton = within(detailArea as HTMLElement).getByText("同步结构").closest("button") as HTMLButtonElement;
+    fireEvent.click(syncButton);
+
+    await waitFor(() => expect(syncSchema).toHaveBeenCalledWith("ds-1", { ai_enrich: true }));
+    expect(toastMock).toHaveBeenCalledWith("表结构已同步；AI 语义增强 3 张表", "success");
+    expect(getByText("AI 语义增强 3 张表")).toBeInTheDocument();
+  });
+
+  it("passes AI enrichment preference when saving a new datasource", async () => {
+    const created = { ...mockDatasources[1], id: "new-ds", name: "New SQLite" };
+    const createDatasource = vi.fn().mockResolvedValue(created);
+    const syncSchema = vi.fn().mockResolvedValue({
+      ok: true,
+      aiEnrich: { ai_enriched: false, enriched_count: 0, reason: "请先在设置中配置 LLM API Key。" },
+    });
+
+    const { container } = renderPage({
+      initialShowAddForm: true,
+      actions: {
+        createDatasource,
+        updateDatasource: vi.fn(),
+        deleteDatasource: vi.fn(),
+        syncSchema,
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
+    fireEvent.click(within(form).getByLabelText("AI 语义增强"));
+    fireEvent.click(within(form).getByText("SQLite"));
+    fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), { target: { value: "New SQLite" } });
+    fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), { target: { value: "D:\\data\\local.db" } });
+    fireEvent.click(within(form).getByText("保存并同步 Schema"));
+
+    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
+    expect(syncSchema).toHaveBeenCalledWith("new-ds", { ai_enrich: true });
+    expect(toastMock).toHaveBeenCalledWith(
+      "数据源创建成功；AI 语义增强未完成：请先在设置中配置 LLM API Key。",
+      "warning",
+    );
   });
 
   it("invokes onSelectDataSource when set current is clicked", async () => {

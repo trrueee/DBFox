@@ -7,10 +7,9 @@ from engine.tools.db_tools import (
     db_observe,
     db_preview,
     db_query,
-    db_remember,
     db_search,
 )
-from engine.models import DomainTagRule, QueryHistory, SemanticAlias
+from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc
 from engine.schema_sync import sync_schema
 
 
@@ -67,6 +66,79 @@ def test_db_search_fallback_keyword_returns_empty_for_no_match(db_session, test_
     result = db_search(db_session, test_datasource.id, "xyznonexistent12345", 5)
     assert result["total_matches"] == 0
     assert result["results"] == []
+
+
+def test_db_search_fallback_uses_schema_doc_ai_annotations(db_session, test_datasource) -> None:
+    db_session.add(
+        SchemaSearchDoc(
+            datasource_id=test_datasource.id,
+            entity_type="table",
+            entity_id="orders-doc",
+            table_name="orders",
+            name="orders",
+            ai_description="Gross merchandise value (GMV) derived from paid order amount.",
+            business_terms='["GMV", "gross merchandise value"]',
+            aliases='["gross sales"]',
+            search_text="orders GMV gross merchandise value paid order amount",
+        )
+    )
+    db_session.commit()
+
+    result = db_search(db_session, test_datasource.id, "GMV", 5)
+
+    assert result["total_matches"] >= 1
+    assert result["results"][0]["table_name"] == "orders"
+    assert "ai_description_match:GMV" in result["results"][0]["reasons"]
+
+
+def test_db_search_fallback_uses_schema_doc_semantic_fields(db_session, test_datasource) -> None:
+    db_session.add(
+        SchemaSearchDoc(
+            datasource_id=test_datasource.id,
+            entity_type="table",
+            entity_id="semantic-doc",
+            table_name="orders",
+            name="orders",
+            semantic_tags='["revenue_metrics"]',
+            business_terms='["GMV"]',
+            aliases='["gross sales"]',
+            search_text="orders",
+        )
+    )
+    db_session.commit()
+
+    for query in ("revenue_metrics", "GMV", "gross sales"):
+        result = db_search(db_session, test_datasource.id, query, 5)
+
+        assert result["total_matches"] >= 1
+        assert result["results"][0]["table_name"] == "orders"
+
+
+def test_db_search_returns_trace_fields_for_schema_discovery(db_session, test_datasource) -> None:
+    db_session.add(
+        SchemaSearchDoc(
+            datasource_id=test_datasource.id,
+            entity_type="table",
+            entity_id="semantic-trace-doc",
+            table_name="orders",
+            name="orders",
+            semantic_tags='["revenue_metrics"]',
+            business_terms='["GMV"]',
+            aliases='["gross sales"]',
+            search_text="orders",
+        )
+    )
+    db_session.commit()
+
+    result = db_search(db_session, test_datasource.id, "revenue_metrics", 5)
+
+    assert result["original_query"] == "revenue_metrics"
+    assert result["tokens"] == ["revenue_metrics"]
+    assert "semantic_tags" in result["searched_fields"]
+    assert "business_terms" in result["searched_fields"]
+    assert "aliases" in result["searched_fields"]
+    assert result["matched_fields"] == ["semantic_tags"]
+    assert result["results"][0]["matched_fields"] == ["semantic_tags"]
 
 
 def test_db_inspect_reads_live_sqlite_table_structure(db_session, test_datasource) -> None:
@@ -186,111 +258,3 @@ def test_db_query_blocks_writes_inside_tool(db_session, test_datasource) -> None
     sync_schema(db_session, test_datasource.id)
     with pytest.raises(DBFoxError):
         db_query(db_session, test_datasource.id, "DELETE FROM users")
-
-
-def test_db_remember_records_table_alias_and_redacts_evidence(db_session, test_datasource) -> None:
-    result = db_remember(
-        db_session,
-        test_datasource.id,
-        mem_type="table_alias",
-        target="users",
-        evidence="Found in request from alice@example.com",
-        aliases=["customers"],
-    )
-
-    assert result["status"] == "remembered"
-    assert result["created"] == [{"alias": "customers", "target": "users", "target_type": "table"}]
-    row = (
-        db_session.query(SemanticAlias)
-        .filter(
-            SemanticAlias.data_source_id == test_datasource.id,
-            SemanticAlias.alias == "customers",
-            SemanticAlias.target_type == "table",
-            SemanticAlias.target == "users",
-        )
-        .one()
-    )
-    assert row.description == "Found in request from [REDACTED_EMAIL]"
-
-
-def test_db_remember_prod_alias_requires_confirmation_without_write(db_session, test_datasource) -> None:
-    test_datasource.env = "prod"
-    db_session.commit()
-
-    result = db_remember(
-        db_session,
-        test_datasource.id,
-        mem_type="table_alias",
-        target="users",
-        aliases=["customers"],
-    )
-
-    assert result["status"] == "pending_confirmation"
-    assert result["aliases"] == ["customers"]
-    assert (
-        db_session.query(SemanticAlias)
-        .filter(
-            SemanticAlias.data_source_id == test_datasource.id,
-            SemanticAlias.alias == "customers",
-            SemanticAlias.target_type == "table",
-            SemanticAlias.target == "users",
-        )
-        .count()
-        == 0
-    )
-
-
-def test_db_remember_join_path_requires_confirmation_without_write(db_session, test_datasource) -> None:
-    result = db_remember(
-        db_session,
-        test_datasource.id,
-        mem_type="join_path",
-        target="orders.users",
-        value={
-            "left_table": "orders",
-            "left_column": "user_id",
-            "right_table": "users",
-            "right_column": "id",
-            "join_type": "many_to_one",
-            "description": "orders.user_id links to users.id",
-        },
-    )
-
-    assert result["status"] == "pending_confirmation"
-    assert result["join"]["left_table"] == "orders"
-    assert (
-        db_session.query(SemanticAlias)
-        .filter(
-            SemanticAlias.data_source_id == test_datasource.id,
-            SemanticAlias.target_type == "join_path",
-            SemanticAlias.target == "orders.users",
-        )
-        .count()
-        == 0
-    )
-
-
-def test_db_remember_business_definition_requires_confirmation_without_write(db_session, test_datasource) -> None:
-    result = db_remember(
-        db_session,
-        test_datasource.id,
-        mem_type="business_definition",
-        target="active_users",
-        value={
-            "description": "Users with a recent login from alice@example.com",
-            "sql": "SELECT * FROM users WHERE email = 'alice@example.com'",
-        },
-    )
-
-    assert result["status"] == "pending_confirmation"
-    assert result["definition"]["sql"] == "SELECT * FROM users WHERE email = '[REDACTED_EMAIL]'"
-    assert (
-        db_session.query(SemanticAlias)
-        .filter(
-            SemanticAlias.data_source_id == test_datasource.id,
-            SemanticAlias.target_type == "business_definition",
-            SemanticAlias.target == "active_users",
-        )
-        .count()
-        == 0
-    )

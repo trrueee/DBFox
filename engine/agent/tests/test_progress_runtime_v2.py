@@ -247,7 +247,7 @@ class TestStreamingContext:
         assert "sql" in enriched.get("allowed_tool_groups", [])
         assert "schema" in enriched.get("allowed_tool_groups", [])
 
-    def test_context_update_exposes_memory_and_semantic_references(self):
+    def test_context_update_exposes_semantic_references(self):
         sequence = 0
 
         def emit(event_type, **kwargs):
@@ -259,9 +259,6 @@ class TestStreamingContext:
             emit,
             {
                 "context_pack": {"ui_summary": "Using semantic context"},
-                "memory_references": [
-                    {"label": "GMV definition", "summary": "GMV = paid_amount - refund_amount", "source": "memory"}
-                ],
                 "semantic_resolution": {
                     "semantic_aliases_used": [
                         {"alias": "新注册用户", "target": "users.created_at", "source": "db"}
@@ -273,9 +270,7 @@ class TestStreamingContext:
 
         assert event is not None
         task_lens = event["step"]["task_lens"]
-        assert task_lens["memory_references"] == [
-            {"label": "GMV definition", "summary": "GMV = paid_amount - refund_amount", "source": "memory"}
-        ]
+        assert "memory_references" not in task_lens
         assert task_lens["semantic_references"] == [
             {"label": "新注册用户", "summary": "users.created_at", "source": "db"}
         ]
@@ -328,24 +323,22 @@ class TestModelNodeStepLimit:
         assert result["trace_events"][0]["type"] == "agent.model.completed"
         assert "error" not in result
 
-    def test_exposes_injected_memory_context_to_ui_state(self, monkeypatch):
+    def test_model_node_does_not_expose_legacy_memory_context(self, monkeypatch):
         from unittest.mock import MagicMock
 
         from engine.agent.nodes import model_node
+
+        captured: dict[str, object] = {}
 
         class FakeModel:
             def bind_tools(self, tools):
                 return self
 
             def invoke(self, messages, config):
+                captured["messages"] = messages
                 return AIMessage(content="继续。")
 
         monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
-        monkeypatch.setattr(
-            model_node,
-            "_get_memory_context",
-            lambda state: "## Relevant Memory Context\n### Metric Definitions\n- GMV definition\n  (definition: GMV = paid_amount - refund_amount)",
-        )
         registry = MagicMock()
         registry.get.return_value = None
 
@@ -370,14 +363,10 @@ class TestModelNodeStepLimit:
             },
         )
 
-        assert result["memory_context"]
-        assert result["memory_references"] == [
-            {
-                "label": "GMV definition",
-                "summary": "GMV = paid_amount - refund_amount",
-                "source": "memory",
-            }
-        ]
+        assert "memory_context" not in result
+        assert "memory_references" not in result
+        rendered = "\n".join(getattr(message, "content", "") for message in captured["messages"])
+        assert "Relevant Memory Context" not in rendered
 
 
 class TestContextSummaryMerge:
