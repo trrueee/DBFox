@@ -159,8 +159,8 @@ def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, 
                 created_at_ms=1,
                 type="agent.step.completed",
                 step={
-                    "name": "sql.generate",
-                    "phase": "generating",
+                    "name": "sql.validate",
+                    "phase": "validating",
                     "status": "success",
                     "durationMs": 35,
                 },
@@ -213,8 +213,8 @@ def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, 
 
     case_payload = json.loads(result.case_results[0].response_json)
     telemetry = case_payload["eval_telemetry"]
-    assert telemetry["stage_counts"] == {"generating": 1, "repairing": 1, "executing": 1}
-    assert telemetry["stage_durations_ms"] == {"generating": 35, "repairing": 120, "executing": 80}
+    assert telemetry["stage_counts"] == {"validating": 1, "repairing": 1, "executing": 1}
+    assert telemetry["stage_durations_ms"] == {"validating": 35, "repairing": 120, "executing": 80}
     assert telemetry["repair_count"] == 1
     assert telemetry["failure_layer"] == "execution"
     assert telemetry["error_classes"] == ["missing_column"]
@@ -226,8 +226,8 @@ def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, 
     assert summary["runtime_telemetry"] == {
         "final_success_cases": 1,
         "repair_count": 1,
-        "stage_counts": {"generating": 1, "repairing": 1, "executing": 1},
-        "stage_durations_ms": {"generating": 35, "repairing": 120, "executing": 80},
+        "stage_counts": {"validating": 1, "repairing": 1, "executing": 1},
+        "stage_durations_ms": {"validating": 35, "repairing": 120, "executing": 80},
         "failure_layers": {"execution": 1},
         "error_classes": {"missing_column": 1},
     }

@@ -15,7 +15,6 @@ This module is a thin re-export layer. The actual implementations live in
   - ``inspect.py``  — ``db.inspect`` handler
   - ``preview.py``  — ``db.preview`` handler
   - ``query.py``    — ``db.query`` handler
-  - ``remember.py`` — ``db.remember`` handler
   - ``sql_execution.py`` — ``sql.validate`` / ``sql.execute_readonly`` handlers
 """
 
@@ -29,7 +28,6 @@ from engine.tools.db.search import db_search
 from engine.tools.db.inspect import db_inspect
 from engine.tools.db.preview import db_preview
 from engine.tools.db.query import db_query
-from engine.tools.db.remember import db_remember
 from engine.tools.db.sql_execution import sql_validate, sql_execute_readonly
 
 __all__ = [
@@ -38,7 +36,6 @@ __all__ = [
     "db_inspect",
     "db_preview",
     "db_query",
-    "db_remember",
     "sql_validate",
     "sql_execute_readonly",
 ]
@@ -113,13 +110,4 @@ from engine.tools.db.preview import (
     _infer_column_types,
     _resolve_dialect,
     _resolve_preview_columns,
-)
-from engine.tools.db.remember import (
-    _load_aliases,
-    _load_synonyms,
-    _remember_alias,
-    _remember_business_def,
-    _remember_column_values,
-    _remember_join_path,
-    _remember_needs_approval,
 )

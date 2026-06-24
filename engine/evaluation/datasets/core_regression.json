@@ -130,7 +130,7 @@
           "should_execute_sql": false
         },
         "trajectory": {
-          "must_call": ["schema.*", "sql.generate", "sql.validate"],
+          "must_call": ["db.*", "schema.*", "sql.validate"],
           "must_not_call": ["sql.execute_readonly"]
         },
         "artifacts": {
@@ -155,7 +155,7 @@
           "execution_mode": "suggest_only"
         },
         "trajectory": {
-          "must_call": ["sql.generate", "sql.validate"],
+          "must_call": ["db.*", "sql.validate"],
           "must_not_call": ["sql.execute_readonly"]
         },
         "sql": {
@@ -182,7 +182,7 @@
           "task_type": "sql_repair"
         },
         "trajectory": {
-          "must_call": ["sql.revise|sql.generate"],
+          "must_call": ["sql.validate"],
           "must_not_call": ["sql.execute_readonly"]
         }
       },

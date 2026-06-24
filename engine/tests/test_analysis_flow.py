@@ -28,8 +28,9 @@ class TestSafeToolGroups:
 
     def test_full_safe_groups_still_include_db_groups(self):
         from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
-        for group in ["environment", "schema", "db", "memory"]:
+        for group in ["environment", "schema", "db"]:
             assert group in FULL_SAFE_TOOL_GROUPS
+        assert "memory" not in FULL_SAFE_TOOL_GROUPS
 
 
 class TestEscalateGroups:
@@ -258,6 +259,10 @@ class TestSystemPrompt:
         assert "Before the first db.search" in SYSTEM_PROMPT
         assert "state your semantic search plan in Chinese" in SYSTEM_PROMPT
         assert "issue at least two db.search calls" in SYSTEM_PROMPT
+        assert "Chinese synonyms" in SYSTEM_PROMPT
+        assert "English schema terms" in SYSTEM_PROMPT
+        assert "abbreviations" in SYSTEM_PROMPT
+        assert "possible table or column names" in SYSTEM_PROMPT
         assert "Never claim a table was found unless it appears in a tool result" in SYSTEM_PROMPT
 
     def test_prompt_requires_followup_sql_after_raw_preview_for_analysis(self):

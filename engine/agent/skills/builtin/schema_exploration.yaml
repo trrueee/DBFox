@@ -15,6 +15,7 @@ use_when:
 
 allowed_tool_groups:
   - environment
+  - db
   - schema
 
 forbidden_tool_groups:
@@ -26,9 +27,9 @@ forbidden_tool_groups:
 
 steps:
   - environment.get_profile
-  - schema.list_tables
+  - db.observe
+  - "db.search with 2-4 semantic expressions derived from the user question: original wording, Chinese synonyms, English schema terms, abbreviations, possible table or column names, entity/domain terms, and action/event terms"
   - schema.describe_table
-  - schema.build_context
 
 success_criteria:
   - relevant tables are listed with column details
@@ -43,8 +44,3 @@ recovery:
   unknown_table:
     - condition: "schema.describe_table fails because table not found"
       action: "schema.list_tables to find the correct table name, then retry"
-
-writeback:
-  - memory_type: schema_alias
-    trigger: on_user_confirmed
-    content_hint: "business name → actual table name mapping if the user used an alias"

@@ -468,14 +468,9 @@ def _activity_title(step_name: str) -> str:
         "inspect_database": "Inspected table",
         "preview_table": "Previewed data",
         "query_database": "Executed query",
-        "remember_database_semantics": "Remembered semantics",
         "list_tables": "Listed tables",
         "describe_table": "Described table",
         "refresh_catalog": "Refreshed catalog",
-        "memory_search": "Searched memory",
-        "memory_write": "Wrote to memory",
-        "memory_delete": "Deleted memory",
-        "summarize_session": "Summarized session",
     }
     return titles.get(step_name, step_name.replace("_", " ").title())
 
@@ -499,8 +494,6 @@ def _activity_summary(step_name: str, status: str, output: Any) -> str:
             return f"{output.get('returned_rows', 0)} rows"
         if step_name == "query_database":
             return f"{output.get('returned_rows', output.get('rowCount', 0))} rows"
-        if step_name == "remember_database_semantics":
-            return f"Saved: {output.get('type', '?')}"
         if step_name == "list_tables":
             tables = output.get("tables") or []
             return f"{len(tables)} tables"
@@ -520,12 +513,7 @@ def _step_to_tool(step_name: str) -> str:
         "inspect_database": "db.inspect",
         "preview_table": "db.preview",
         "query_database": "db.query",
-        "remember_database_semantics": "db.remember",
         "load_follow_up_context": "followup.load_context",
-        "memory_search": "memory.search",
-        "memory_write": "memory.write",
-        "memory_delete": "memory.delete",
-        "summarize_session": "memory.summarize_session",
     }
     return mapping.get(step_name, step_name)
 

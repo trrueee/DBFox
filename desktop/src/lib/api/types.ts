@@ -102,12 +102,22 @@ export interface SchemaSyncOptions {
   ai_enrich?: boolean;
 }
 
+export interface SchemaAiEnrichResult {
+  ai_enriched?: boolean;
+  enriched_count?: number;
+  reason?: string;
+  errors?: string[];
+  capped?: boolean;
+  total_changed?: number;
+  max_tables_per_run?: number;
+}
+
 /** Consolidated CRUD actions for datasource management. */
 export interface DataSourceActions {
   createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
-  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<unknown>;
+  syncSchema: (id: string, options?: SchemaSyncOptions) => Promise<SchemaSyncResult>;
   checkHealth: (id: string) => Promise<DataSourceHealthResult>;
 }
 export interface DataSourceHealthResult {
@@ -191,6 +201,7 @@ export interface SchemaSyncResult {
   syncedTables?: number;
   tablesSynced?: number;
   warnings?: string[];
+  aiEnrich?: SchemaAiEnrichResult;
   [key: string]: unknown;
 }
 

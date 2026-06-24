@@ -45,7 +45,7 @@ class TestModelRoute:
 
         ai_msg = AIMessage(
             content="",
-            tool_calls=[{"name": "sql.generate", "args": {}, "id": "call_1"}],
+            tool_calls=[{"name": "sql.validate", "args": {}, "id": "call_1"}],
         )
         state: DBFoxAgentState = {
             "messages": [HumanMessage(content="query"), ai_msg],
@@ -61,7 +61,7 @@ class TestModelRoute:
 class TestPolicyRoute:
     def test_allowed_calls_routes_to_tools(self):
         state: DBFoxAgentState = {
-            "allowed_tool_calls": [{"name": "sql.generate"}],
+            "allowed_tool_calls": [{"name": "sql.validate"}],
             "status": "running",
         }
         assert route_policy_output(state) == "tools"

@@ -139,9 +139,8 @@ def test_import_benchmark_cases_to_db(db_session, test_datasource):
 
     # Verify defaults are set
     assert json.loads(str(t1.expected_tools_json)) == [
-        "schema.build_context",
-        "query_plan.build",
-        "sql.generate_candidate",
+        "db.observe",
+        "db.search",
         "sql.validate",
     ]
     assert json.loads(str(t1.forbidden_tools_json)) == [

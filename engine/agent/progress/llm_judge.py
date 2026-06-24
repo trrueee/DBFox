@@ -130,24 +130,6 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
         except Exception as exc:
             logger.warning("Failed to load skill recovery context for progress judge: %s", exc)
 
-    # ---- Past recovery experience (Agent v2 memory integration) ------------
-    has_failure = bool(error or (execution and not execution.get("success")))
-    if has_failure:
-        try:
-            from engine.agent.memory_bridge import search_memory_for_recovery
-            failure_text = str(error or execution.get("error", ""))
-            recovery_mem = search_memory_for_recovery(
-                error=failure_text,
-                failure_layer=(state.get("progress_decision") or {}).get("failure_layer"),
-                datasource_id=str(state.get("datasource_id") or ""),
-                user_id=state.get("user_id") or state.get("thread_id"),
-                project_id=state.get("project_id"),
-            )
-            if recovery_mem:
-                context_parts.append(recovery_mem)
-        except Exception as exc:
-            logger.warning("Failed to search memory for recovery: %s", exc)
-
     judge_prompt = "\n\n".join(context_parts)
 
     # ---- Call LLM with structured output ------------------------------------

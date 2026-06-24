@@ -177,15 +177,28 @@ def test_internal_db_query_is_documented_as_backend_fast_path():
     assert "sql.execute_readonly" in SYSTEM_PROMPT
 
 
-def test_wrapped_memory_tools_consume_identity_state():
+def test_legacy_memory_tools_are_not_registered():
     from engine.tools.dbfox_tools import register_dbfox_tools
+    from engine.tools.runtime.manifest import build_langchain_tools
 
     registry = register_dbfox_tools()
-    required = {"datasource_id", "user_id", "project_id", "thread_id", "session_id"}
+    names = {tool.name for tool in registry.list_tools()}
 
     for name in ["memory.search", "memory.write", "memory.delete", "memory.summarize_session"]:
-        consumes = set(registry.require(name).state.consumes)
-        assert required <= consumes
+        assert name not in names
 
+    assert build_langchain_tools(registry, allowed_groups=["memory"]) == []
+
+
+def test_agent_runtime_does_not_expose_semantic_memory_write_tool():
+    from engine.tools.dbfox_tools import register_dbfox_tools
+    from engine.tools.runtime.manifest import build_langchain_tools
+
+    registry = register_dbfox_tools()
+    names = {tool.name for tool in registry.list_tools()}
+
+    assert "db.remember" not in names
+    tools = build_langchain_tools(registry, allowed_groups=["db"])
+    assert "db_remember" not in {tool.name for tool in tools}
 
 

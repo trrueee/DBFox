@@ -112,6 +112,27 @@ def test_no_agent_persistence_imports() -> None:
         assert not violations, f"{dirname} still imports engine.agent.persistence: {violations}"
 
 
+def test_no_legacy_long_term_memory_imports() -> None:
+    """Runtime memory uses graph projection + reusable SQL, not old long-term memory."""
+    forbidden = {
+        "engine.agent.memory_bridge",
+        "engine.memory.long_term_store",
+        "engine.memory.memory_namespace",
+        "engine.memory.memory_policy",
+        "engine.memory.memory_retriever",
+        "engine.memory.memory_schema",
+        "engine.memory.memory_writer",
+        "engine.memory.session_memory",
+    }
+    for dirname in ["agent", "agent_core", "tools", "environment", "tests", "api", "evaluation"]:
+        pkg = ENGINE_DIR / dirname
+        if not pkg.exists():
+            continue
+        imports = _imports_in_package(pkg)
+        violations = sorted(forbidden & imports)
+        assert not violations, f"{dirname} imports legacy long-term memory modules: {violations}"
+
+
 def test_agent_state_declares_each_field_once() -> None:
     """DBFoxAgentState should not silently override TypedDict fields."""
     filepath = ENGINE_DIR / "agent" / "graph" / "state.py"
@@ -166,7 +187,7 @@ def test_engine_agent_init_exports_runtime_only() -> None:
                   if u not in ("annotations", "app", "graph", "nodes", "planning",
                                "progress", "guardrails", "model", "tools", "runtime",
                                "checkpoints", "environment", "events", "memory", "tests",
-                               "skills", "context_pack", "extensions", "memory_bridge", "repair")}
+                               "skills", "context_pack", "extensions", "repair")}
     assert not unexpected, (
         f"engine.agent exports unexpected names: {unexpected}. "
         f"Public types belong in engine.agent_core."
