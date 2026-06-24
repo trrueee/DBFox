@@ -1,11 +1,11 @@
 import { act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDatasourceStore } from "../../../stores/datasourceStore";
-import { listTables } from "../../engine/engineApi";
+import { listTables } from "../../../lib/api/schema";
 import { datasourcesApi } from "../../../lib/api/datasources";
 import type { DataSource } from "../../../lib/api/types";
 
-vi.mock("../../engine/engineApi", () => ({
+vi.mock("../../../lib/api/schema", () => ({
   listTables: vi.fn(),
   listColumns: vi.fn(),
 }));

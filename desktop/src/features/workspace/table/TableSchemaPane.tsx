@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { request } from "../../../lib/api/client";
-import type { EngineColumn } from "../../engine/engineApi";
+import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
 
 interface TableSchemaPaneProps {
   tableId: string;
@@ -19,18 +18,12 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
       setLoading(true);
       setError("");
       try {
-        // Resolve table by name within the correct datasource
-        const tables = await request<Array<{ id: string; table_name: string }>>(
-          `/schema/tables?datasource_id=${encodeURIComponent(datasourceId)}`
-        );
-        const table = tables.find((t) => t.table_name === tableId);
+        const table = await findTableByName(datasourceId, tableId);
         if (!table) {
           if (!cancelled) setError("未找到该表的 Schema 元数据，请先同步 Schema。");
           return;
         }
-        const nextColumns = await request<EngineColumn[]>(
-          `/schema/tables/${encodeURIComponent(table.id)}/columns`
-        );
+        const nextColumns = await listColumns(table.id);
         if (!cancelled) setColumns(nextColumns);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "读取字段结构失败");

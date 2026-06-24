@@ -1,5 +1,5 @@
 import { Info, Sparkles, X } from "lucide-react";
-import type { WorkspaceTab } from "../../mock/dbfoxMock";
+import type { WorkspaceTab } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 

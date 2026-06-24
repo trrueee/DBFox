@@ -4,7 +4,7 @@ import {
   listTables,
   type EngineColumn,
   type EngineSchemaTable,
-} from "../features/engine/engineApi";
+} from "../lib/api/schema";
 import { datasourcesApi } from "../lib/api/datasources";
 import type { DataSource, DataSourceCreateParams, DataSourceHealthResult, DataSourceUpdateParams, DeleteConfirm, SchemaSyncOptions } from "../lib/api/types";
 
