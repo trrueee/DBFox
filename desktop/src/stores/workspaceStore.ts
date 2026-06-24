@@ -3,7 +3,7 @@ import type { WorkspaceTab } from "../types/workspace";
 import { defaultSql } from "../features/workspace/defaultSql";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
-import type { TableArtifact, ResultViewArtifact } from "../types/agentArtifact";
+import type { ResultViewArtifact } from "../types/agentArtifact";
 
 interface WorkspaceState {
   tabs: WorkspaceTab[];
@@ -33,7 +33,7 @@ interface WorkspaceActions {
   openAgentEvalTab: () => void;
   openDiagnosticsTab: () => void;
   openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
-  openArtifactResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
+  openArtifactResultTab: (artifact: ResultViewArtifact) => void;
   openTableTab: (tableName: string, initialSubtab?: string, datasource?: TableTabDatasourceContext) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;

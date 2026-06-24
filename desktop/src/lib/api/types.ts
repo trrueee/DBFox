@@ -336,7 +336,7 @@ export interface AgentChartSuggestion {
 export interface AgentArtifact {
   id: string;
   semantic_id?: string | null;
-  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "table" | "result_view" | "chart" | "error" | "insight" | "recommendation";
+  type: "agent_plan" | "query_plan" | "sql" | "sql_suggestion" | "safety" | "result_view" | "chart" | "error" | "insight" | "recommendation";
   title: string;
   payload: Record<string, unknown>;
   presentation: {

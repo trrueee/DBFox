@@ -1,8 +1,5 @@
 import { Copy, Database, ExternalLink, Play, Table2, Terminal } from "lucide-react";
-import type {
-  TableArtifact as TableArtifactModel,
-  ResultViewArtifact as ResultViewArtifactModel,
-} from "../../../types/agentArtifact";
+import type { ResultViewArtifact as ResultViewArtifactModel } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
 import {
@@ -12,6 +9,7 @@ import {
   conversationTableColumns,
   conversationTableRows,
   dependsOnAnyConversationArtifact,
+  isSqlBackedResultViewArtifact,
   isSqlConversationArtifact,
   payloadBoolean,
   payloadNumber,
@@ -20,13 +18,13 @@ import {
   safetySchemaWarningsCount,
   sortConversationArtifacts,
   toChartArtifactModel,
-  toTableArtifactModel,
+  toResultViewArtifactModel,
 } from "./conversationArtifactModels";
 
 interface ArtifactEvidencePanelProps {
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifactModel) => void;
 }
 
 function groupedArtifacts(artifacts: ConversationArtifact[]) {
@@ -37,7 +35,7 @@ function groupedArtifacts(artifacts: ConversationArtifact[]) {
       (item) => item.type === "safety" && dependsOnAnyConversationArtifact(item, sqlKeys),
     );
     const tables = artifacts.filter(
-      (item) => (item.type === "table" || item.type === "result_view") && dependsOnAnyConversationArtifact(item, sqlKeys),
+      (item) => isSqlBackedResultViewArtifact(item) && dependsOnAnyConversationArtifact(item, sqlKeys),
     );
     const tableIds = new Set(tables.flatMap(conversationArtifactKeys));
     const charts = artifacts.filter(
@@ -92,13 +90,13 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
               </header>
               <pre>{sql}</pre>
               {group.safety.map((safety) => <SafetyArtifact key={safety.id} artifact={safety} />)}
-              {group.tables.map((table) => <TableArtifact key={table.id} artifact={table} onOpenResultTab={onOpenResultTab} />)}
+              {group.tables.map((table) => <ResultViewArtifactCard key={table.id} artifact={table} onOpenResultTab={onOpenResultTab} />)}
               {group.charts.map((chart) => <ChartArtifact key={chart.id} artifact={chart} />)}
             </section>
           );
         })}
         {orphanArtifacts.map((artifact) => {
-          if (artifact.type === "table" || artifact.type === "result_view") return <TableArtifact key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
+          if (isSqlBackedResultViewArtifact(artifact)) return <ResultViewArtifactCard key={artifact.id} artifact={artifact} onOpenResultTab={onOpenResultTab} />;
           if (artifact.type === "chart") return <ChartArtifact key={artifact.id} artifact={artifact} />;
           if (artifact.type === "safety") return <SafetyArtifact key={artifact.id} artifact={artifact} />;
           if (isSqlConversationArtifact(artifact)) {
@@ -150,12 +148,12 @@ function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
   );
 }
 
-function TableArtifact({
+function ResultViewArtifactCard({
   artifact,
   onOpenResultTab,
 }: {
   artifact: ConversationArtifact;
-  onOpenResultTab?: (artifact: TableArtifactModel | ResultViewArtifactModel) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifactModel) => void;
 }) {
   const columns = conversationTableColumns(artifact);
   const allRows = conversationTableRows(artifact);
@@ -173,7 +171,7 @@ function TableArtifact({
           <button
             type="button"
             className="conv-artifact-open"
-            onClick={() => onOpenResultTab(toTableArtifactModel(artifact))}
+            onClick={() => onOpenResultTab(toResultViewArtifactModel(artifact))}
           >
             <ExternalLink size={12} />
             打开为 Tab

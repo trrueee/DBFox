@@ -5,7 +5,6 @@ import type {
   MarkdownArtifact,
   ResultViewArtifact,
   SqlArtifact,
-  TableArtifact,
 } from "../../../types/agentArtifact";
 import { ChartArtifactView } from "./ChartArtifactView";
 import { EmptyArtifactsState } from "./EmptyArtifactsState";
@@ -16,14 +15,13 @@ import { TableArtifactView } from "./TableArtifactView";
 interface ArtifactRendererProps {
   artifacts: AgentArtifact[];
   onOpenSqlConsole: (initialSql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
   onToast: (message: string) => void;
 }
 
 type ArtifactRendererMap = {
   chart: (artifact: ChartArtifact, props: ArtifactRendererProps) => ReactElement;
   sql: (artifact: SqlArtifact, props: ArtifactRendererProps) => ReactElement;
-  table: (artifact: TableArtifact, props: ArtifactRendererProps) => ReactElement;
   result_view: (artifact: ResultViewArtifact, props: ArtifactRendererProps) => ReactElement;
   markdown: (artifact: MarkdownArtifact, props: ArtifactRendererProps) => ReactElement;
 };
@@ -35,14 +33,6 @@ const ARTIFACT_RENDERERS: ArtifactRendererMap = {
       key={artifact.id}
       artifact={artifact}
       onOpenSqlConsole={props.onOpenSqlConsole}
-      onToast={props.onToast}
-    />
-  ),
-  table: (artifact, props) => (
-    <TableArtifactView
-      key={artifact.id}
-      artifact={artifact}
-      onOpenResultTab={props.onOpenResultTab}
       onToast={props.onToast}
     />
   ),
@@ -77,8 +67,6 @@ function renderArtifact(artifact: AgentArtifact, props: ArtifactRendererProps) {
       return ARTIFACT_RENDERERS.chart(artifact, props);
     case "sql":
       return ARTIFACT_RENDERERS.sql(artifact, props);
-    case "table":
-      return ARTIFACT_RENDERERS.table(artifact, props);
     case "result_view":
       return ARTIFACT_RENDERERS.result_view(artifact, props);
     case "markdown":
