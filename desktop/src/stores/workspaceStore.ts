@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { WorkspaceTab } from "../mock/dbfoxMock";
-import { defaultSql } from "../mock/dbfoxMock";
+import type { WorkspaceTab } from "../types/workspace";
+import { defaultSql } from "../features/workspace/defaultSql";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
 import type { TableArtifact, ResultViewArtifact } from "../types/agentArtifact";
@@ -13,6 +13,11 @@ interface WorkspaceState {
   contextTables: string[];
   tableSubTabs: Record<string, string>;
   _tabSeq: { sql: number; multiTable: number; queryResult: number; message: number };
+}
+
+interface TableTabDatasourceContext {
+  id: string;
+  dbType?: string | null;
 }
 
 interface WorkspaceActions {
@@ -29,7 +34,7 @@ interface WorkspaceActions {
   openDiagnosticsTab: () => void;
   openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
   openArtifactResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
-  openTableTab: (tableName: string, initialSubtab?: string) => void;
+  openTableTab: (tableName: string, initialSubtab?: string, datasource?: TableTabDatasourceContext) => void;
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;
   patchTab: (tabId: string, patch: Partial<WorkspaceTab>) => void;
@@ -53,6 +58,10 @@ interface WorkspaceActions {
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
 const HOME_TAB: WorkspaceTab = { id: "smart-query", title: "Ask", type: "smart-query" };
+
+function tableTabId(tableName: string, datasource?: TableTabDatasourceContext) {
+  return datasource?.id ? `table-${datasource.id}-${tableName}` : `table-${tableName}`;
+}
 
 export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   tabs: [HOME_TAB],
@@ -188,16 +197,26 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     }));
   },
 
-  openTableTab: (tableName, initialSubtab = "preview") => {
-    const tabId = `table-${tableName}`;
+  openTableTab: (tableName, initialSubtab = "preview", datasource) => {
+    const tabId = tableTabId(tableName, datasource);
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
-        : [...state.tabs, { id: tabId, title: tableName, type: "table", tableId: tableName }],
+        : [
+            ...state.tabs,
+            {
+              id: tabId,
+              title: tableName,
+              type: "table",
+              tableId: tableName,
+              datasourceId: datasource?.id,
+              datasourceDbType: datasource?.dbType ?? null,
+            },
+          ],
       activeTabId: tabId,
       selectedTables: [tableName],
       tableSubTabs: initialSubtab
-        ? { ...state.tableSubTabs, [tableName]: initialSubtab }
+        ? { ...state.tableSubTabs, [tabId]: initialSubtab }
         : state.tableSubTabs,
     }));
   },

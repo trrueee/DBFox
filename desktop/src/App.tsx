@@ -6,7 +6,7 @@ import { ContextDrawer } from "./features/assistant/ContextDrawer";
 import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
 import { DataSourceTree } from "./features/datasource/DataSourceTree";
 import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
-import { type ContextMenuState } from "./mock/dbfoxMock";
+import type { ContextMenuState } from "./types/workspace";
 import { CommandPalette } from "./components/CommandPalette";
 import TitleBar from "./components/TitleBar";
 import { useSidebarLayout } from "./features/appShell/useSidebarLayout";
@@ -38,6 +38,7 @@ export default function App() {
   const tables = useDatasourceStore((s) => s.tables);
   const tableColumns = useDatasourceStore((s) => s.tableColumns);
   const refreshSchema = useDatasourceStore((s) => s.refreshSchema);
+  const activeDatasource = useDatasourceStore((s) => s.datasources.find((item) => item.id === s.activeDatasourceId) ?? s.datasources[0] ?? null);
 
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
   const openNewConnectionTab = useWorkspaceStore((s) => s.openNewConnectionTab);
@@ -45,6 +46,17 @@ export default function App() {
   const openMultiTableWorkspace = useWorkspaceStore((s) => s.openMultiTableWorkspace);
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
   const setSelectedTables = useWorkspaceStore((s) => s.setSelectedTables);
+
+  const openTableTabForActiveDatasource = useCallback(
+    (tableName: string, initialSubtab?: string) => {
+      openTableTab(
+        tableName,
+        initialSubtab,
+        activeDatasource ? { id: activeDatasource.id, dbType: activeDatasource.db_type ?? null } : undefined,
+      );
+    },
+    [activeDatasource, openTableTab],
+  );
 
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -61,7 +73,7 @@ export default function App() {
       setSelectedTables((prev) => (prev.includes(tableName) ? prev.filter((table) => table !== tableName) : [...prev, tableName]));
       return;
     }
-    openTableTab(tableName);
+    openTableTabForActiveDatasource(tableName);
   };
 
   const handleNodeContextMenu = (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => {
@@ -119,7 +131,7 @@ export default function App() {
     openNewConnectionTab,
     openAgentEvalTab: useWorkspaceStore.getState().openAgentEvalTab,
     openDiagnosticsTab: useWorkspaceStore.getState().openDiagnosticsTab,
-    openTableTab,
+    openTableTab: openTableTabForActiveDatasource,
   });
 
   return (
@@ -137,7 +149,7 @@ export default function App() {
             onToggleCollapse={toggleSidebarCollapse}
             onTreeSearchChange={setTreeSearch}
             onTableClick={handleTableClick}
-            onTableDoubleClick={openTableTab}
+            onTableDoubleClick={openTableTabForActiveDatasource}
             onNodeContextMenu={handleNodeContextMenu}
             onRefresh={refreshSchema}
             onNewConnection={openNewConnectionTab}
@@ -198,7 +210,7 @@ export default function App() {
         <DataSourceContextMenu
           contextMenu={contextMenu}
           onOpenSqlConsole={openSqlConsole}
-          onOpenTable={(tableName, subTab) => openTableTab(tableName, subTab)}
+          onOpenTable={(tableName, subTab) => openTableTabForActiveDatasource(tableName, subTab)}
           onOpenMultiTableWorkspace={openMultiTableWorkspace}
           onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
           onToast={toast}

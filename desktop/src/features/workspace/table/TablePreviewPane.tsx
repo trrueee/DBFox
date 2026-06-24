@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowUpDown, Code, Database, Download, Filter, RefreshCw, Search, Sparkles } from "lucide-react";
 import { ImageCell, isImageUrl } from "../../../components/ImageCell";
-import { executeSql, listColumns, quoteIdentifier, resolveTableByName } from "../../engine/engineApi";
-import type { EngineColumn } from "../../engine/engineApi";
+import { executeSql, quoteIdentifier } from "../../engine/engineApi";
+import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
 import { downloadTextFile, toCsv } from "../artifacts/artifactActions";
 
 interface TablePreviewPaneProps {
   tableId: string;
+  datasourceId: string;
+  datasourceDbType?: string | null;
   onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
 }
@@ -48,7 +50,13 @@ interface TableSortState {
 // (then revalidates in the background) instead of flashing an empty loading view.
 const previewCache = new Map<string, PreviewData>();
 
-export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePreviewPaneProps) {
+export function TablePreviewPane({
+  tableId,
+  datasourceId,
+  datasourceDbType,
+  onOpenSqlConsole,
+  onToast,
+}: TablePreviewPaneProps) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
@@ -62,7 +70,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [activeSort, setActiveSort] = useState<TableSortState | null>(null);
   const querySignature = JSON.stringify({ search: search.trim(), filter: activeFilter, sort: activeSort });
-  const cacheKey = `${tableId}|${page}|${pageSize}|${querySignature}`;
+  const cacheKey = `${datasourceId}|${tableId}|${page}|${pageSize}|${querySignature}`;
   const [data, setData] = useState<PreviewData | null>(() => previewCache.get(cacheKey) ?? null);
   const [columnTypes, setColumnTypes] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(false);
@@ -70,27 +78,35 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   const requestSeqRef = useRef(0);
 
+  const [prevDatasourceId, setPrevDatasourceId] = useState(datasourceId);
   const [prevTableId, setPrevTableId] = useState(tableId);
   const [prevPage, setPrevPage] = useState(page);
   const [prevPageSize, setPrevPageSize] = useState(pageSize);
   const [prevQuerySignature, setPrevQuerySignature] = useState(querySignature);
 
-  if (tableId !== prevTableId || page !== prevPage || pageSize !== prevPageSize || querySignature !== prevQuerySignature) {
+  if (
+    datasourceId !== prevDatasourceId ||
+    tableId !== prevTableId ||
+    page !== prevPage ||
+    pageSize !== prevPageSize ||
+    querySignature !== prevQuerySignature
+  ) {
     let nextPage = page;
-    if (tableId !== prevTableId) {
+    if (datasourceId !== prevDatasourceId || tableId !== prevTableId) {
       nextPage = 1;
       setPage(1);
+      setPrevDatasourceId(datasourceId);
       setPrevTableId(tableId);
     }
     setPrevPage(nextPage);
     setPrevPageSize(pageSize);
     setPrevQuerySignature(querySignature);
 
-    const nextCacheKey = `${tableId}|${nextPage}|${pageSize}|${querySignature}`;
+    const nextCacheKey = `${datasourceId}|${tableId}|${nextPage}|${pageSize}|${querySignature}`;
     const cached = previewCache.get(nextCacheKey);
     if (cached) {
       setData(cached);
-    } else if (tableId !== prevTableId) {
+    } else if (datasourceId !== prevDatasourceId || tableId !== prevTableId) {
       setData(null);
     }
   }
@@ -100,13 +116,17 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
     setLoading(true);
     setError("");
     try {
-      const resolved = await resolveTableByName(tableId);
+      if (!datasourceId) {
+        setError("Cannot preview table without an active datasource.");
+        return;
+      }
+      const table = await findTableByName(datasourceId, tableId);
       if (seq !== requestSeqRef.current) return;
-      if (!resolved) {
+      if (!table) {
         setError("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
         return;
       }
-      const cols = await listColumns(resolved.table.id);
+      const cols = await listColumns(table.id);
       if (seq !== requestSeqRef.current) return;
       const types = new Map<string, string>();
       cols.forEach((c: EngineColumn) => types.set(c.column_name, c.data_type));
@@ -115,7 +135,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
       const offset = (page - 1) * pageSize;
       const previewSql = buildTableSelectSql({
         tableName: tableId,
-        dbType: resolved.datasource.db_type ?? "mysql",
+        dbType: datasourceDbType ?? "mysql",
         columns: cols.map((column: EngineColumn) => column.column_name),
         search,
         filter: activeFilter,
@@ -123,7 +143,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
         limit: pageSize + 1,
         offset,
       });
-      const result = await executeSql(resolved.datasource.id, previewSql, `preview table ${tableId}`);
+      const result = await executeSql(datasourceId, previewSql, `preview table ${tableId}`);
       if (seq !== requestSeqRef.current) return;
       const next: PreviewData = {
         columns: result.columns,
@@ -147,7 +167,7 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
   useEffect(() => {
     void loadPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableId, page, pageSize, querySignature]);
+  }, [datasourceId, datasourceDbType, tableId, page, pageSize, querySignature]);
 
   const columns = data?.columns ?? [];
   const rows = data?.rows ?? [];
@@ -194,21 +214,25 @@ export function TablePreviewPane({ tableId, onOpenSqlConsole, onToast }: TablePr
 
   const handleExport = async () => {
     try {
-      const resolved = await resolveTableByName(tableId);
-      if (!resolved) {
+      if (!datasourceId) {
+        onToast("Cannot export table without an active datasource.");
+        return;
+      }
+      const table = await findTableByName(datasourceId, tableId);
+      if (!table) {
         onToast("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
         return;
       }
-      const cols = await listColumns(resolved.table.id);
+      const cols = await listColumns(table.id);
       const exportSql = buildTableSelectSql({
         tableName: tableId,
-        dbType: resolved.datasource.db_type ?? "mysql",
+        dbType: datasourceDbType ?? "mysql",
         columns: cols.map((column: EngineColumn) => column.column_name),
         search,
         filter: activeFilter,
         sort: activeSort,
       });
-      const result = await executeSql(resolved.datasource.id, exportSql, `export table ${tableId}`);
+      const result = await executeSql(datasourceId, exportSql, `export table ${tableId}`);
       const csv = toCsv(
         result.columns,
         result.rows.map((row) => result.columns.map((column) => cellToText(row[column]))),

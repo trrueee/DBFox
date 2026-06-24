@@ -4,12 +4,17 @@ import { TablePreviewPane } from "../TablePreviewPane";
 
 const engineMocks = vi.hoisted(() => ({
   executeSql: vi.fn(),
-  listColumns: vi.fn(),
   quoteIdentifier: vi.fn((identifier: string) => `\`${identifier}\``),
-  resolveTableByName: vi.fn(),
 }));
 
 vi.mock("../../../engine/engineApi", () => engineMocks);
+
+const schemaMocks = vi.hoisted(() => ({
+  findTableByName: vi.fn(),
+  listColumns: vi.fn(),
+}));
+
+vi.mock("../../../../lib/api/schema", () => schemaMocks);
 
 function sqlResult(rows: Array<Record<string, unknown>>, latencyMs = 5) {
   return {
@@ -31,11 +36,8 @@ describe("TablePreviewPane", () => {
       createObjectURL: vi.fn(() => "blob:table-csv"),
       revokeObjectURL: vi.fn(),
     });
-    engineMocks.resolveTableByName.mockResolvedValue({
-      datasource: { id: "ds-1", db_type: "mysql" },
-      table: { id: "table-1", table_name: "users" },
-    });
-    engineMocks.listColumns.mockResolvedValue([
+    schemaMocks.findTableByName.mockResolvedValue({ id: "table-1", table_name: "users" });
+    schemaMocks.listColumns.mockResolvedValue([
       { column_name: "id", data_type: "bigint" },
       { column_name: "name", data_type: "varchar" },
     ]);
@@ -51,10 +53,11 @@ describe("TablePreviewPane", () => {
       .mockReturnValueOnce(new Promise(() => {}));
 
     const { container } = render(
-      <TablePreviewPane tableId="users" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />,
+      <TablePreviewPane tableId="users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />,
     );
 
     expect(await screen.findByText("user-1")).toBeTruthy();
+    expect(schemaMocks.findTableByName).toHaveBeenCalledWith("ds-1", "users");
 
     fireEvent.click(screen.getByText(">"));
 
@@ -66,7 +69,7 @@ describe("TablePreviewPane", () => {
   it("pushes search, filter, and sort into the preview SQL", async () => {
     engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
 
-    render(<TablePreviewPane tableId="users" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+    render(<TablePreviewPane tableId="users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
 
     expect(await screen.findByText("amy")).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText("搜索表数据..."), { target: { value: "amy" } });
@@ -92,7 +95,7 @@ describe("TablePreviewPane", () => {
     engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
     const onToast = vi.fn();
 
-    render(<TablePreviewPane tableId="users" onOpenSqlConsole={vi.fn()} onToast={onToast} />);
+    render(<TablePreviewPane tableId="users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={onToast} />);
 
     expect(await screen.findByText("amy")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "导出" }));
