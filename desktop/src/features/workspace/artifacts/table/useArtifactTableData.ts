@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { agentApi } from "../../../../lib/api/agent";
 import type { ResultFilter } from "../../../../lib/api/types";
-import type { ResultViewArtifact, TableArtifact } from "../../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../../types/agentArtifact";
 import type {
   SqlBackedDataViewSource,
   SqlBackedExportRequest,
@@ -58,7 +58,7 @@ export interface ArtifactTableData {
 }
 
 export function useArtifactTableData(
-  artifact: TableArtifact | ResultViewArtifact,
+  artifact: ResultViewArtifact,
   mode: "inline" | "workspace",
 ): ArtifactTableData {
   const [search, setSearch] = useState("");
@@ -71,20 +71,11 @@ export function useArtifactTableData(
   const columns = useMemo(() => artifact.columns.map(columnName).filter(Boolean), [artifact.columns]);
 
   const sqlBackedSource = useMemo<SqlBackedDataViewSource>(() => {
-    if (artifact.type === "result_view") {
-      return {
-        kind: "artifact-result",
-        datasourceId: artifact.datasourceId,
-        sourceSqlArtifactId: artifact.sourceSqlSemanticId,
-        safeSql: artifact.safeSql,
-        columns,
-      };
-    }
     return {
       kind: "artifact-result",
-      datasourceId: "",
+      datasourceId: artifact.datasourceId,
       sourceSqlArtifactId: artifact.id,
-      safeSql: artifact.sql ?? "",
+      safeSql: artifact.safeSql,
       columns,
     };
   }, [artifact, columns]);
@@ -125,7 +116,7 @@ export function useArtifactTableData(
     countMode: "estimate",
   });
 
-  const rowsToUse = artifact.type === "result_view" ? (artifact.rows ?? artifact.previewRows) : artifact.rows;
+  const rowsToUse = artifact.rows ?? artifact.previewRows;
 
   const backendRows = sqlBacked.rows;
 
@@ -239,7 +230,7 @@ export function useArtifactTableData(
   };
 }
 
-function columnName(column: TableArtifact["columns"][number] | ResultViewArtifact["columns"][number]): string {
+function columnName(column: ResultViewArtifact["columns"][number]): string {
   if (typeof column === "string") return column;
   return column.name;
 }

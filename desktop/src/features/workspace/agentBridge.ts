@@ -10,7 +10,6 @@ import type {
   MarkdownArtifact,
   ResultViewArtifact,
   SqlArtifact,
-  TableArtifact,
 } from "../../types/agentArtifact";
 import { normalizeAgentProgressText } from "./agentTimeline";
 
@@ -23,11 +22,10 @@ const TYPE_ORDER: Record<string, number> = {
   sql_suggestion: 1,
   safety: 2,
   result_view: 3,
-  table: 4,
-  chart: 5,
-  insight: 6,
-  recommendation: 7,
-  error: 8,
+  chart: 4,
+  insight: 5,
+  recommendation: 6,
+  error: 7,
 };
 
 /** Artifact types that stay internal — progress is narrated in the chat stream instead. */
@@ -40,26 +38,24 @@ export function toViewArtifacts(artifacts: ApiAgentArtifact[]): ViewAgentArtifac
 
   const result: ViewAgentArtifact[] = [];
   for (const artifact of visible) {
-    const mapped = mapArtifact(artifact, artifacts);
+    const mapped = mapArtifact(artifact);
     if (mapped) result.push(mapped);
   }
   result.sort((a, b) => (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9));
   return result;
 }
 
-function mapArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ViewAgentArtifact | null {
+function mapArtifact(artifact: ApiAgentArtifact): ViewAgentArtifact | null {
   switch (artifact.type as string) {
     case "sql":
     case "sql_suggestion":
       return mapSqlArtifact(artifact);
-    case "table":
-      return mapTableArtifact(artifact);
     case "result_view":
       return mapResultViewArtifact(artifact);
     case "safety":
       return mapSafetyArtifact(artifact);
     case "chart":
-      return mapChartArtifact(artifact, all);
+      return mapChartArtifact(artifact);
     case "insight":
       return mapInsightArtifact(artifact);
     case "recommendation":
@@ -92,41 +88,11 @@ function mapSqlArtifact(artifact: ApiAgentArtifact): SqlArtifact | null {
   };
 }
 
-function mapTableArtifact(artifact: ApiAgentArtifact): TableArtifact | null {
-  const payload = artifact.payload || {};
-  const columns = Array.isArray(payload.columns) ? payload.columns.map(String) : [];
-  const rawRows = Array.isArray(payload.rows) ? payload.rows : [];
-  if (columns.length === 0) return null;
-
-  const rows = rowsFromPayload(columns, rawRows);
-
-  const rowCount = numberValue(payload, ["rowCount", "row_count"]) ?? rows.length;
-  const returnedRows = numberValue(payload, ["returnedRows", "returned_rows"]) ?? rows.length;
-  const latencyMs = numberValue(payload, ["latencyMs", "latency_ms"]);
-  const warnings = stringArray(payload.warnings);
-  const notices = stringArray(payload.notices);
-  return {
-    id: artifact.id,
-    type: "table",
-    title: "查询结果",
-    description: `${rowCount} 行 · ${columns.length} 列`,
-    columns,
-    rows,
-    rowCount,
-    returnedRows,
-    latencyMs,
-    sql: firstString(payload, ["sql"]),
-    truncated: Boolean(payload.truncated),
-    warnings,
-    notices,
-    depends_on: artifact.depends_on,
-    payload: artifact.payload,
-  };
-}
-
 function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact | null {
   const payload = artifact.payload || {};
-  const columns = Array.isArray(payload.columns) ? payload.columns.map(String) : [];
+  if (firstString(payload, ["storageMode", "storage_mode"]) !== "sql_backed") return null;
+  const columns = resultColumnsFromPayload(payload.columns);
+  const columnNames = columnNamesFromColumns(columns);
   const rawRows = Array.isArray(payload.previewRows)
     ? payload.previewRows
     : Array.isArray(payload.preview_rows)
@@ -134,23 +100,26 @@ function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact |
       : Array.isArray(payload.rows)
         ? payload.rows
         : [];
-  if (columns.length === 0) return null;
-  const rows = rowsFromPayload(columns, rawRows);
-  const storageMode = firstString(payload, ["storageMode", "storage_mode"]) === "sql_backed" ? "sql_backed" : "payload";
+  if (columnNames.length === 0) return null;
+  const rows = rowsFromPayload(columnNames, rawRows);
   return {
     id: artifact.id,
     type: "result_view",
     title: artifact.title || "查询结果",
-    description: `${numberValue(payload, ["rowCount", "row_count"]) ?? rows.length} 行 · ${columns.length} 列`,
-    storageMode,
+    description: `${numberValue(payload, ["rowCount", "row_count"]) ?? rows.length} 行 · ${columnNames.length} 列`,
+    storageMode: "sql_backed",
     datasourceId: firstString(payload, ["datasourceId", "datasource_id"]),
-    sourceSqlSemanticId: firstString(payload, ["sourceSqlSemanticId", "source_sql_semantic_id"]),
+    sourceSqlSemanticId: firstString(payload, [
+      "sourceSqlArtifactId",
+      "source_sql_artifact_id",
+      "sourceSqlSemanticId",
+      "source_sql_semantic_id",
+    ]),
     sourceSql: firstString(payload, ["sourceSql", "source_sql"]),
     safeSql: firstString(payload, ["safeSql", "safe_sql"]),
     columns,
     previewRows: rows,
     previewRowCount: numberValue(payload, ["previewRowCount", "preview_row_count"]) ?? rows.length,
-    rows: storageMode === "payload" ? rows : undefined,
     rowCount: numberValue(payload, ["rowCount", "row_count"]),
     returnedRows: numberValue(payload, ["returnedRows", "returned_rows"]) ?? rows.length,
     latencyMs: numberValue(payload, ["latencyMs", "latency_ms"]),
@@ -171,6 +140,34 @@ function rowsFromPayload(columns: string[], rawRows: unknown[]): string[][] {
       const record = row as Record<string, unknown>;
       return [columns.map((column) => formatCell(record[column]))];
     }
+    return [];
+  });
+}
+
+function resultColumnsFromPayload(value: unknown): ResultViewArtifact["columns"] {
+  if (!Array.isArray(value)) return [];
+  const columns: ResultViewArtifact["columns"] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item.trim()) {
+      columns.push(item.trim());
+      continue;
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const rawName = record.name || record.field || record.column;
+    if (typeof rawName !== "string" || !rawName.trim()) continue;
+    const rawType = record.type || record.dataType || record.data_type;
+    const column: { name: string; type?: string } = { name: rawName.trim() };
+    if (typeof rawType === "string" && rawType.trim()) column.type = rawType.trim();
+    columns.push(column);
+  }
+  return columns;
+}
+
+function columnNamesFromColumns(columns: ResultViewArtifact["columns"]): string[] {
+  return columns.flatMap((column) => {
+    if (typeof column === "string" && column.trim()) return [column.trim()];
+    if (typeof column === "object" && column.name.trim()) return [column.name.trim()];
     return [];
   });
 }
@@ -214,7 +211,7 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
   };
 }
 
-function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): ChartArtifact | null {
+function mapChartArtifact(artifact: ApiAgentArtifact): ChartArtifact | null {
   const payload = artifact.payload || {};
   const chartType = firstString(payload, ["chart_type", "chartType", "type", "kind"]).toLowerCase();
   const x = typeof payload.x === "string" ? payload.x : "";
@@ -226,8 +223,7 @@ function mapChartArtifact(artifact: ApiAgentArtifact, all: ApiAgentArtifact[]): 
   // (with aggregation + dedup). Trust it first — reconstructing from the raw
   // table artifact loses aggregation and frequently yields an empty series
   // when the table artifact's row shape differs.
-  const series = seriesFromPayload(payload)
-    ?? seriesFromTableArtifact(all, x, y);
+  const series = seriesFromPayload(payload);
   if (!series || series.length === 0) return null;
 
   return {
@@ -265,26 +261,6 @@ function seriesFromPayload(
 }
 
 /** Fallback: rebuild series from the raw table artifact rows (pre-aggregation). */
-function seriesFromTableArtifact(
-  all: ApiAgentArtifact[],
-  x: string,
-  y: string,
-): ChartArtifact["series"] | null {
-  const tableArtifact = all.find((item) => item.type === "table");
-  const rowsValue = tableArtifact?.payload?.rows;
-  const rawRows = Array.isArray(rowsValue) ? rowsValue : [];
-  const series: Array<{ label: string; value: number }> = [];
-  for (const row of rawRows) {
-    if (!row || typeof row !== "object") continue;
-    const record = row as Record<string, unknown>;
-    const value = Number(record[y]);
-    if (!Number.isFinite(value)) continue;
-    series.push({ label: formatCell(record[x]), value });
-    if (series.length >= 60) break;
-  }
-  return series.length > 0 ? series : null;
-}
-
 function mapInsightArtifact(artifact: ApiAgentArtifact): MarkdownArtifact | null {
   const payload = artifact.payload || {};
   if (artifact.semantic_id === "semantic_resolution") return null;

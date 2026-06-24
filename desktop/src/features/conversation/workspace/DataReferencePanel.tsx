@@ -1,13 +1,15 @@
 import { BarChart2, Braces, Database, FileCode2, Table2 } from "lucide-react";
 import type { ConversationArtifact } from "../../../types/conversation";
 import type { DataReference } from "../../../types/agentArtifact";
+import { isSqlBackedResultViewArtifact } from "./conversationArtifactModels";
 
 interface DataReferencePanelProps {
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
+  onSelectArtifact?: (artifactId: string) => void;
 }
 
-export function DataReferencePanel({ artifacts, onOpenSqlConsole }: DataReferencePanelProps) {
+export function DataReferencePanel({ artifacts, onOpenSqlConsole, onSelectArtifact }: DataReferencePanelProps) {
   const references = buildDataReferences(artifacts);
   if (references.length === 0) return null;
 
@@ -21,6 +23,10 @@ export function DataReferencePanel({ artifacts, onOpenSqlConsole }: DataReferenc
             type="button"
             className={`conv-data-ref conv-data-ref-${reference.type}`}
             onClick={() => {
+              if ("artifactId" in reference && reference.artifactId && onSelectArtifact) {
+                onSelectArtifact(reference.artifactId);
+                return;
+              }
               if (reference.type === "sql") onOpenSqlConsole(reference.sql);
             }}
             title={referenceTitle(reference)}
@@ -53,7 +59,7 @@ export function buildDataReferences(artifacts: ConversationArtifact[]): DataRefe
       add({ type: "sql", artifactId: artifact.id, label: `SQL: ${artifact.title}`, sql });
     }
 
-    if (artifact.type === "table" || artifact.type === "result_view") {
+    if (isSqlBackedResultViewArtifact(artifact)) {
       const rowCount = numberValue(artifact.payload.rowCount ?? artifact.payload.row_count);
       add({ type: "result", artifactId: artifact.id, rowCount, label: artifact.title || "结果表" });
     }

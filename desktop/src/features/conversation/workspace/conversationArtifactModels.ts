@@ -3,7 +3,6 @@ import type {
   MarkdownArtifact,
   ResultViewArtifact,
   SqlArtifact,
-  TableArtifact,
 } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 
@@ -26,6 +25,17 @@ export function isSqlConversationArtifact(artifact: ConversationArtifact): boole
   return artifact.type === "sql" || artifact.type === "sql_suggestion";
 }
 
+export function isResultViewConversationArtifact(artifact: ConversationArtifact): boolean {
+  return artifact.type === "result_view";
+}
+
+export function isSqlBackedResultViewArtifact(artifact: ConversationArtifact): boolean {
+  if (!isResultViewConversationArtifact(artifact)) return false;
+  const storageMode = payloadString(artifact.payload, ["storageMode", "storage_mode"]);
+  const safeSql = payloadString(artifact.payload, ["safeSql", "safe_sql", "sourceSql", "source_sql"]);
+  return storageMode === "sql_backed" && Boolean(safeSql);
+}
+
 export function conversationArtifactKeys(artifact: ConversationArtifact): string[] {
   return [artifact.id, artifact.semantic_id].filter((item): item is string => Boolean(item));
 }
@@ -45,7 +55,16 @@ export function conversationTableRows(artifact: ConversationArtifact): unknown[]
 
 export function conversationTableColumns(artifact: ConversationArtifact): string[] {
   const columns = artifact.payload.columns;
-  if (Array.isArray(columns)) return columns.filter((item): item is string => typeof item === "string");
+  if (Array.isArray(columns)) {
+    const names = columns.flatMap((item) => {
+      if (typeof item === "string" && item.trim()) return [item];
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const record = item as Record<string, unknown>;
+      const name = record.name || record.field || record.column;
+      return typeof name === "string" && name.trim() ? [name] : [];
+    });
+    if (names.length > 0) return names;
+  }
   const first = conversationTableRows(artifact)[0];
   return first && typeof first === "object" && !Array.isArray(first) ? Object.keys(first) : [];
 }
@@ -167,7 +186,7 @@ export function safetyRedactionSummary(payload: Record<string, unknown>): { coun
   return { count: Math.max(count, fields.size), fields: Array.from(fields).slice(0, 8) };
 }
 
-export function toTableArtifactModel(artifact: ConversationArtifact): TableArtifact | ResultViewArtifact {
+export function toResultViewArtifactModel(artifact: ConversationArtifact): ResultViewArtifact {
   const columns = conversationTableColumns(artifact);
   const rows = conversationTableRows(artifact).map((row) =>
     columns.map((column, index) => conversationCellText(row, column, index)),
@@ -175,41 +194,27 @@ export function toTableArtifactModel(artifact: ConversationArtifact): TableArtif
   const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? rows.length;
   const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? rows.length;
 
-  if (artifact.type === "result_view") {
-    return {
-      id: artifact.id,
-      type: "result_view",
-      title: artifact.title,
-      storageMode: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? "sql_backed" : "payload",
-      datasourceId: payloadString(artifact.payload, ["datasourceId"]) || "",
-      sourceSqlSemanticId: payloadString(artifact.payload, ["sourceSqlSemanticId"]) || "",
-      sourceSql: payloadString(artifact.payload, ["sourceSql"]) || "",
-      safeSql: payloadString(artifact.payload, ["safeSql"]) || "",
-      columns,
-      previewRows: payloadString(artifact.payload, ["storageMode"]) === "sql_backed" ? rows : rows.slice(0, 10),
-      previewRowCount: payloadNumber(artifact.payload, ["previewRowCount"]) || Math.min(rows.length, 10),
-      rows,
-      rowCount,
-      returnedRows,
-      latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
-      truncated: Boolean(artifact.payload.truncated),
-      warnings: payloadStringList(artifact.payload, ["warnings"]),
-      notices: payloadStringList(artifact.payload, ["notices"]),
-      depends_on: artifact.depends_on,
-      payload: artifact.payload,
-    };
-  }
-
   return {
     id: artifact.id,
-    type: "table",
+    type: "result_view",
     title: artifact.title,
+    storageMode: payloadString(artifact.payload, ["storageMode", "storage_mode"]) === "sql_backed" ? "sql_backed" : "payload",
+    datasourceId: payloadString(artifact.payload, ["datasourceId", "datasource_id"]) || "",
+    sourceSqlSemanticId: payloadString(artifact.payload, [
+      "sourceSqlArtifactId",
+      "source_sql_artifact_id",
+      "sourceSqlSemanticId",
+      "source_sql_semantic_id",
+    ]) || "",
+    sourceSql: payloadString(artifact.payload, ["sourceSql", "source_sql"]) || "",
+    safeSql: payloadString(artifact.payload, ["safeSql", "safe_sql"]) || "",
     columns,
+    previewRows: payloadString(artifact.payload, ["storageMode", "storage_mode"]) === "sql_backed" ? rows : rows.slice(0, 10),
+    previewRowCount: payloadNumber(artifact.payload, ["previewRowCount", "preview_row_count"]) || Math.min(rows.length, 10),
     rows,
     rowCount,
     returnedRows,
     latencyMs: payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]),
-    sql: payloadString(artifact.payload, ["sql", "safe_sql"]),
     truncated: Boolean(artifact.payload.truncated),
     warnings: payloadStringList(artifact.payload, ["warnings"]),
     notices: payloadStringList(artifact.payload, ["notices"]),

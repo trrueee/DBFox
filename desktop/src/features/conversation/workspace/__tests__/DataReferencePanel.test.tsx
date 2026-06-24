@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
 import { DataReferencePanel } from "../DataReferencePanel";
 
@@ -19,20 +19,6 @@ function artifacts(): ConversationArtifact[] {
       depends_on: [],
     },
     {
-      id: "result-1",
-      conversation_id: "conv",
-      run_id: "run",
-      type: "table",
-      title: "结果表",
-      status: "completed",
-      payload: {
-        columns: ["day", "gmv"],
-        rows: [{ day: "2026-06-01", gmv: 120 }],
-        rowCount: 1,
-      },
-      depends_on: ["sql-1"],
-    },
-    {
       id: "chart-1",
       conversation_id: "conv",
       run_id: "run",
@@ -45,7 +31,7 @@ function artifacts(): ConversationArtifact[] {
           { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
         ],
       },
-      depends_on: ["result-1"],
+      depends_on: ["result-view-1"],
     },
     {
       id: "result-view-1",
@@ -55,6 +41,10 @@ function artifacts(): ConversationArtifact[] {
       title: "分页结果",
       status: "completed",
       payload: {
+        storageMode: "sql_backed",
+        datasourceId: "ds-1",
+        sourceSqlArtifactId: "sql-1",
+        safeSql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
         columns: ["day", "gmv"],
         previewRows: [{ day: "2026-06-01", gmv: 120 }],
         rowCount: 128,
@@ -65,6 +55,10 @@ function artifacts(): ConversationArtifact[] {
 }
 
 describe("DataReferencePanel", () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
   it("derives clickable data reference chips from artifacts", () => {
     const onOpenSqlConsole = vi.fn();
     render(<DataReferencePanel artifacts={artifacts()} onOpenSqlConsole={onOpenSqlConsole} />);
@@ -73,11 +67,32 @@ describe("DataReferencePanel", () => {
     expect(screen.getByText("orders")).toBeTruthy();
     expect(screen.getByText("orders.amount")).toBeTruthy();
     expect(screen.getByText("SQL: 趋势分析")).toBeTruthy();
-    expect(screen.getByText("结果表")).toBeTruthy();
     expect(screen.getByText("分页结果")).toBeTruthy();
     expect(screen.getByText("趋势图")).toBeTruthy();
 
     fireEvent.click(screen.getByText("SQL: 趋势分析"));
     expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)");
+  });
+
+  it("selects artifact references for the dock when a selector is provided", () => {
+    const onOpenSqlConsole = vi.fn();
+    const onSelectArtifact = vi.fn();
+    render(
+      <DataReferencePanel
+        artifacts={artifacts()}
+        onOpenSqlConsole={onOpenSqlConsole}
+        onSelectArtifact={onSelectArtifact}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("SQL: 趋势分析"));
+    expect(onSelectArtifact).toHaveBeenCalledWith("sql-1");
+    expect(onOpenSqlConsole).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("分页结果"));
+    expect(onSelectArtifact).toHaveBeenCalledWith("result-view-1");
+
+    fireEvent.click(screen.getByText("趋势图"));
+    expect(onSelectArtifact).toHaveBeenCalledWith("chart-1");
   });
 });

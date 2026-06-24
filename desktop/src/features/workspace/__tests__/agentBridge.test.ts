@@ -3,33 +3,7 @@ import type { AgentArtifact } from "../../../lib/api";
 import { toViewArtifacts } from "../agentBridge";
 
 describe("agentBridge", () => {
-  it("maps array-shaped table rows by column position", () => {
-    const artifacts: AgentArtifact[] = [
-      {
-        id: "table-1",
-        semantic_id: "result_table",
-        type: "table",
-        title: "Result table",
-        status: "completed",
-        presentation: { mode: "both", priority: 1, collapsed: false },
-        payload: {
-          columns: ["day", "order_count"],
-          rows: [["2026-06-01", 12]],
-          rowCount: 1,
-        },
-        depends_on: [],
-        refs: [],
-      },
-    ];
-
-    const [table] = toViewArtifacts(artifacts);
-
-    expect(table?.type).toBe("table");
-    if (table?.type !== "table") throw new Error("Expected table artifact");
-    expect(table.rows).toEqual([["2026-06-01", "12"]]);
-  });
-
-  it("maps SQL, table, and chart metadata for artifact views", () => {
+  it("maps SQL, result view, and chart metadata for artifact views", () => {
     const artifacts: AgentArtifact[] = [
       {
         id: "sql-1",
@@ -51,15 +25,21 @@ describe("agentBridge", () => {
         refs: [],
       },
       {
-        id: "table-1",
-        semantic_id: "result_table",
-        type: "table",
-        title: "Result table",
+        id: "result-view-1",
+        semantic_id: "result_view_gmv",
+        type: "result_view",
+        title: "Result view",
         status: "completed",
         presentation: { mode: "both", priority: 1, collapsed: false },
         payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "sql-1",
+          sourceSql: "SELECT SUM(amount) AS gmv FROM orders",
+          safeSql: "SELECT SUM(amount) AS gmv FROM orders",
           columns: ["gmv"],
-          rows: [[120]],
+          previewRows: [[120]],
+          previewRowCount: 1,
           rowCount: 12,
           returnedRows: 1,
           latencyMs: 42,
@@ -82,14 +62,14 @@ describe("agentBridge", () => {
           series: [{ label: "2026-06-01", value: 120 }],
           source_refs: [{ label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" }],
         },
-        depends_on: ["table-1"],
+        depends_on: ["result-view-1"],
         refs: [],
       },
     ];
 
     const viewArtifacts = toViewArtifacts(artifacts);
     const sql = viewArtifacts.find((artifact) => artifact.type === "sql");
-    const table = viewArtifacts.find((artifact) => artifact.type === "table");
+    const resultView = viewArtifacts.find((artifact) => artifact.type === "result_view");
     const chart = viewArtifacts.find((artifact) => artifact.type === "chart");
 
     expect(sql?.type).toBe("sql");
@@ -99,13 +79,36 @@ describe("agentBridge", () => {
     expect(sql.rowCount).toBe(12);
     expect(sql.latencyMs).toBe(42);
 
-    expect(table?.type).toBe("table");
-    if (table?.type !== "table") throw new Error("Expected table artifact");
-    expect(table.notices).toEqual(["preview"]);
+    expect(resultView?.type).toBe("result_view");
+    if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
+    expect(resultView.notices).toEqual(["preview"]);
+    expect(resultView.safeSql).toBe("SELECT SUM(amount) AS gmv FROM orders");
 
     expect(chart?.type).toBe("chart");
     if (chart?.type !== "chart") throw new Error("Expected chart artifact");
     expect(chart.sourceRefs).toEqual([{ label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" }]);
+  });
+
+  it("does not render chart artifacts without backend series", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "chart-1",
+        semantic_id: "chart",
+        type: "chart",
+        title: "GMV chart",
+        status: "completed",
+        presentation: { mode: "inline", priority: 1, collapsed: false },
+        payload: {
+          type: "bar",
+          x: "day",
+          y: "gmv",
+        },
+        depends_on: ["result-view-1"],
+        refs: [],
+      },
+    ];
+
+    expect(toViewArtifacts(artifacts)).toEqual([]);
   });
 
   it("maps result_view artifacts for sql-backed result tabs", () => {

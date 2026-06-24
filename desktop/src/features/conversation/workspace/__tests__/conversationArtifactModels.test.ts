@@ -1,44 +1,31 @@
 import { describe, expect, it } from "vitest";
+import { conversationTableColumns, toResultViewArtifactModel } from "../conversationArtifactModels";
 import type { ConversationArtifact } from "../../../../types/conversation";
-import { toChartArtifactModel } from "../conversationArtifactModels";
 
 describe("conversationArtifactModels", () => {
-  it("promotes enriched chart payload fields to the chart artifact model", () => {
+  it("maps typed result_view columns for conversation dock previews", () => {
     const artifact: ConversationArtifact = {
-      id: "chart-1",
-      conversation_id: "conv-1",
-      run_id: "run-1",
-      message_id: "msg-1",
-      semantic_id: "chart_suggestion",
-      type: "chart",
-      title: "GMV 趋势",
-      status: "completed",
-      sequence: 1,
+      id: "result-view-1",
+      semantic_id: "result_view_1",
+      type: "result_view",
+      title: "Result view",
       payload: {
-        type: "line",
-        unit: "CNY",
-        x_label: "日期",
-        y_label: "GMV",
-        series_label: "GMV",
-        data_label: true,
-        sample_size: 128,
-        series: [{ label: "2026-06-01", value: 120 }],
-        source_refs: [{ label: "GMV", formula: "SUM(amount)", field: "orders.amount" }],
+        storageMode: "sql_backed",
+        datasourceId: "ds-1",
+        sourceSqlSemanticId: "sql-1",
+        safeSql: "SELECT total_users FROM users",
+        columns: [{ name: "total_users", type: "integer" }],
+        previewRows: [{ total_users: 30 }],
+        rowCount: 1,
+        returnedRows: 1,
       },
-      presentation: {},
-      depends_on: [],
-      refs: {},
-      created_at: null,
+      depends_on: ["sql-1"],
+      sequence: 1,
     };
 
-    const model = toChartArtifactModel(artifact);
-
-    expect(model.unit).toBe("CNY");
-    expect(model.xLabel).toBe("日期");
-    expect(model.yLabel).toBe("GMV");
-    expect(model.seriesLabel).toBe("GMV");
-    expect(model.dataLabel).toBe(true);
-    expect(model.sampleSize).toBe(128);
-    expect(model.sourceRefs).toEqual([{ label: "GMV", formula: "SUM(amount)", field: "orders.amount" }]);
+    expect(conversationTableColumns(artifact)).toEqual(["total_users"]);
+    const model = toResultViewArtifactModel(artifact);
+    expect(model.columns).toEqual(["total_users"]);
+    expect(model.previewRows).toEqual([["30"]]);
   });
 });
