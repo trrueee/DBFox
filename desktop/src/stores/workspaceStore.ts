@@ -57,7 +57,7 @@ interface WorkspaceActions {
 
 export type WorkspaceStore = WorkspaceState & WorkspaceActions;
 
-const HOME_TAB: WorkspaceTab = { id: "smart-query", title: "Ask", type: "smart-query" };
+const HOME_TAB: WorkspaceTab = { id: "smart-query", title: "智能问数", type: "smart-query" };
 
 function tableTabId(tableName: string, datasource?: TableTabDatasourceContext) {
   return datasource?.id ? `table-${datasource.id}-${tableName}` : `table-${tableName}`;
@@ -99,7 +99,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const tabId = `sql-${seq.sql++}`;
     set({ _tabSeq: { ...seq } });
     set((state) => ({
-      tabs: [...state.tabs, { id: tabId, title: "SQL Console", type: "sql" }],
+      tabs: [...state.tabs, { id: tabId, title: "SQL 控制台", type: "sql" }],
       activeTabId: tabId,
       sqlConsoleState: {
         ...state.sqlConsoleState,
@@ -113,7 +113,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
-        : [...state.tabs, { id: tabId, title: "LLM Config", type: "llm-config" }],
+        : [...state.tabs, { id: tabId, title: "LLM 配置", type: "llm-config" }],
       activeTabId: tabId,
     }));
   },
@@ -123,7 +123,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
-        : [...state.tabs, { id: tabId, title: "History", type: "conversation-history" }],
+        : [...state.tabs, { id: tabId, title: "历史记录", type: "conversation-history" }],
       activeTabId: tabId,
     }));
   },
@@ -139,8 +139,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const tabId = "datasource-settings";
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
-        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "Data Sources" } : tab))
-        : [...state.tabs, { id: tabId, title: "Data Sources", type: "datasource-settings" }],
+        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "数据源管理" } : tab))
+        : [...state.tabs, { id: tabId, title: "数据源管理", type: "datasource-settings" }],
       activeTabId: tabId,
     }));
   },
@@ -149,8 +149,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     const tabId = "datasource-settings";
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
-        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "New Datasource" } : tab))
-        : [...state.tabs, { id: tabId, title: "New Datasource", type: "datasource-settings" }],
+        ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "新建数据源" } : tab))
+        : [...state.tabs, { id: tabId, title: "新建数据源", type: "datasource-settings" }],
       activeTabId: tabId,
     }));
   },
@@ -160,7 +160,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
-        : [...state.tabs, { id: tabId, title: "Agent Eval", type: "agent-eval" }],
+        : [...state.tabs, { id: tabId, title: "Agent 评估", type: "agent-eval" }],
       activeTabId: tabId,
     }));
   },
