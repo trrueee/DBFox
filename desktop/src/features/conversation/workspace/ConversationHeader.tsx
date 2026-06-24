@@ -12,9 +12,11 @@ export function ConversationHeader({
 }) {
   return (
     <header className="conv-header">
-      <div>
+      <div className="conv-header-title-group">
         <h2>{detail.title || "Conversation"}</h2>
-        <span>{detail.datasource_id}</span>
+        <span className="conv-header-meta" title={detail.id}>
+          会话 {shortIdentifier(detail.id)}
+        </span>
       </div>
       <div className="conv-header-actions">
         <button type="button" onClick={onOpenHistory} title="Open history">
@@ -26,4 +28,9 @@ export function ConversationHeader({
       </div>
     </header>
   );
+}
+
+function shortIdentifier(value: string): string {
+  if (value.length <= 16) return value;
+  return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }

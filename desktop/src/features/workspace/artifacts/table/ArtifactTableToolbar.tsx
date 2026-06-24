@@ -83,7 +83,7 @@ export function ArtifactTableToolbar({
     return (
       <div className="hifi-result-toolbar-stack">
         <div className="hifi-panel-toolbar hifi-result-toolbar px-2">
-          <div className="hifi-toolbar-left flex items-center gap-1">
+          <div className="hifi-toolbar-left hifi-result-toolbar-main flex items-center gap-1">
             <button className="hifi-toolbar-btn" onClick={onRefresh} disabled={isLoading || !isSqlBackedWorkspace}>
               <RefreshCw size={10} className={isLoading ? "animate-spin" : ""} /> 刷新
             </button>
@@ -107,12 +107,10 @@ export function ArtifactTableToolbar({
             <button className="hifi-toolbar-btn" onClick={onCopy}>
               <Copy size={10} /> 复制
             </button>
-          </div>
-          <div className="hifi-toolbar-right flex items-center gap-2">
-            <div className="relative flex items-center">
+            <div className="hifi-result-search-shell relative flex items-center">
               <Search size={12} className="hifi-result-search-icon absolute left-2" />
               <input
-                className="hifi-input hifi-result-search h-6 w-32 pl-6 pr-2 rounded text-[var(--ui-font-label)]"
+                className="hifi-input hifi-result-search pl-6 pr-2 text-[var(--ui-font-label)]"
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
                 placeholder={isSqlBackedWorkspace ? "搜索 SQL 结果..." : "本地搜索..."}
