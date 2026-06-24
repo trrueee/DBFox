@@ -1,4 +1,4 @@
-import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { AgentAnswer, AgentApproval } from "../../../lib/api/types";
 import type {
   ConversationArtifact,
@@ -14,7 +14,7 @@ interface MessageBubbleProps {
   run?: ConversationRun;
   artifacts: ConversationArtifact[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
   onResolveApproval?: (runId: string, approvalId: string, approved: boolean) => void;
   onSelectArtifact?: (artifactId: string) => void;
 }
@@ -62,7 +62,13 @@ export function MessageBubble({
             />
           </>
         )}
-        {!isUser && <DataReferencePanel artifacts={artifacts} onOpenSqlConsole={onOpenSqlConsole} />}
+        {!isUser && (
+          <DataReferencePanel
+            artifacts={artifacts}
+            onOpenSqlConsole={onOpenSqlConsole}
+            onSelectArtifact={onSelectArtifact}
+          />
+        )}
       </div>
     </article>
   );
@@ -222,7 +228,7 @@ function findEvidenceArtifact(artifacts: ConversationArtifact[], artifactId: str
 }
 
 function isGroundedArtifact(artifact: ConversationArtifact): boolean {
-  return artifact.type === "sql" || artifact.type === "sql_suggestion" || artifact.type === "table" || artifact.type === "result_view";
+  return artifact.type === "sql" || artifact.type === "sql_suggestion" || artifact.type === "result_view";
 }
 
 function sqlText(artifact: ConversationArtifact): string {

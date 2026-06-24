@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentApi } from "../../../../lib/api/agent";
-import type { ResultViewArtifact, TableArtifact } from "../../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../../types/agentArtifact";
 import { TableArtifactView } from "../TableArtifactView";
 
 vi.mock("../../../../lib/api/agent", () => ({
@@ -11,13 +11,24 @@ vi.mock("../../../../lib/api/agent", () => ({
   },
 }));
 
-function makeArtifact(): TableArtifact {
+function makeArtifact(): ResultViewArtifact {
   return {
-    id: "result-table-1",
-    type: "table",
+    id: "result-view-payload-1",
+    type: "result_view",
     title: "查询结果",
     description: "订单按日聚合结果",
+    storageMode: "payload",
+    datasourceId: "ds-1",
+    sourceSqlSemanticId: "sql-artifact-payload-1",
+    sourceSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+    safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
     columns: ["day", "order_count", "note"],
+    previewRows: Array.from({ length: 10 }, (_, index) => [
+      `2026-06-${String(index + 1).padStart(2, "0")}`,
+      String((index + 1) * 10),
+      index === 1 ? "NULL" : `row-${index + 1}`,
+    ]),
+    previewRowCount: 10,
     rows: Array.from({ length: 12 }, (_, index) => [
       `2026-06-${String(index + 1).padStart(2, "0")}`,
       String((index + 1) * 10),
@@ -29,13 +40,18 @@ function makeArtifact(): TableArtifact {
     truncated: true,
     warnings: ["仅展示前 10 行"],
     notices: ["可继续筛选"],
-    sql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
   };
 }
 
-function makeLargeArtifact(): TableArtifact {
+function makeLargeArtifact(): ResultViewArtifact {
   return {
     ...makeArtifact(),
+    previewRows: Array.from({ length: 10 }, (_, index) => [
+      `2026-07-${String(index + 1).padStart(3, "0")}`,
+      String(index + 1),
+      `large-row-${index + 1}`,
+    ]),
+    previewRowCount: 10,
     rows: Array.from({ length: 620 }, (_, index) => [
       `2026-07-${String(index + 1).padStart(3, "0")}`,
       String(index + 1),
@@ -66,6 +82,14 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
     returnedRows: 1,
     latencyMs: 42,
     truncated: false,
+  };
+}
+
+function makeLegacySqlBackedArtifact(): ResultViewArtifact {
+  return {
+    ...makeSqlBackedArtifact(),
+    id: "result-view-legacy",
+    sourceSqlSemanticId: "sql_candidate",
   };
 }
 
@@ -221,13 +245,50 @@ describe("TableArtifactView", () => {
     await waitFor(() =>
       expect(agentApi.exportResultCsv).toHaveBeenCalledWith({
         datasourceId: "ds-1",
-        sourceSqlArtifactId: "sql-artifact-1",
+        sourceSqlArtifactId: "result-view-1",
         safeSql: "SELECT day, order_count FROM daily_orders",
         search: "daily",
         sort: [{ column: "order_count", direction: "desc" }],
       }),
     );
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
+  });
+
+  it("uses the result view artifact as source for sql-backed pagination", async () => {
+    render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceSqlArtifactId: "result-view-1",
+          safeSql: "SELECT day, order_count FROM daily_orders",
+        }),
+      ),
+    );
+  });
+
+  it("uses the result view artifact as source for legacy generic sql ids", async () => {
+    render(<TableArtifactView artifact={makeLegacySqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await waitFor(() =>
+      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceSqlArtifactId: "result-view-legacy",
+          safeSql: "SELECT day, order_count FROM daily_orders",
+        }),
+      ),
+    );
+  });
+
+  it("keeps the workspace result search inside the main toolbar group", async () => {
+    const { container } = render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+    const search = container.querySelector(".hifi-result-search-shell .hifi-result-search");
+    if (!search) throw new Error("Result search input was not rendered");
+
+    expect(container.querySelector(".hifi-result-toolbar-main")?.contains(search)).toBe(true);
+    expect(container.querySelector(".hifi-toolbar-right .hifi-result-search")).toBeNull();
   });
 
   it("applies sql-backed toolbar filters through the result page API", async () => {

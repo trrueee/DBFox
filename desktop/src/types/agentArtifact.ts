@@ -1,4 +1,4 @@
-export type AgentArtifactType = "chart" | "sql" | "table" | "result_view" | "markdown";
+export type AgentArtifactType = "chart" | "sql" | "result_view" | "markdown";
 
 export type AgentArtifactBase = {
   id: string;
@@ -38,19 +38,6 @@ export type SqlArtifact = AgentArtifactBase & {
   latencyMs?: number;
 };
 
-export type TableArtifact = AgentArtifactBase & {
-  type: "table";
-  columns: string[];
-  rows: string[][];
-  rowCount?: number;
-  returnedRows?: number;
-  latencyMs?: number;
-  sql?: string;
-  truncated?: boolean;
-  warnings?: string[];
-  notices?: string[];
-};
-
 export type ResultArtifactColumn = string | { name: string; type?: string };
 
 export type ResultViewArtifact = AgentArtifactBase & {
@@ -66,7 +53,7 @@ export type ResultViewArtifact = AgentArtifactBase & {
   sqlFingerprint?: string;
   previewRows: string[][];
   previewRowCount: number;
-  rows?: string[][]; // For legacy compatibility
+  rows?: string[][]; // Historical payload-mode result views only; new interactive views use SQL.
   rowCount?: number;
   returnedRows?: number;
   latencyMs?: number;
@@ -80,7 +67,7 @@ export type MarkdownArtifact = AgentArtifactBase & {
   content: string;
 };
 
-export type AgentArtifact = ChartArtifact | SqlArtifact | TableArtifact | ResultViewArtifact | MarkdownArtifact;
+export type AgentArtifact = ChartArtifact | SqlArtifact | ResultViewArtifact | MarkdownArtifact;
 
 export type DataReference =
   | { type: "table"; datasourceId?: string; schema?: string; table: string; label: string }
