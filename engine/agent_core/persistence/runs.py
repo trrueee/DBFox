@@ -354,7 +354,7 @@ def _payload_has_rows(payload: dict[str, Any]) -> bool:
 
 def _is_followup_artifact(artifact: Any, payload: dict[str, Any]) -> bool:
     artifact_type = str(artifact.type or "")
-    if artifact_type in {"result_view", "table"}:
+    if artifact_type == "result_view":
         return _payload_has_rows(payload)
     if artifact_type == "chart":
         return True
@@ -379,7 +379,7 @@ def _select_followup_artifacts(
         if _is_followup_artifact(artifact, payload):
             selected.append((artifact, payload))
 
-    type_rank = {"result_view": 0, "chart": 1, "sql": 2, "table": 3}
+    type_rank = {"result_view": 0, "chart": 1, "sql": 2}
 
     def rank(item: tuple[Any, dict[str, Any]]) -> tuple[int, int, int]:
         artifact, _payload = item

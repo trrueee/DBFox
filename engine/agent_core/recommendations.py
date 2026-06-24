@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.agent_core.chart_builder import is_chartable_suggestion
 from engine.agent_core.types import FollowUpSuggestion
 
 
@@ -24,7 +25,7 @@ def suggest_followups(
         )
     )
 
-    if chart_suggestion and chart_suggestion.get("type") not in (None, "table"):
+    if is_chartable_suggestion(chart_suggestion):
         suggestions.append(
             FollowUpSuggestion(
                 label="Open chart",

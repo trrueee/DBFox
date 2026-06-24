@@ -53,3 +53,20 @@ def test_chart_suggestion_includes_temporal_axis_metadata_for_time_series():
     assert suggestion["metrics"][0]["expression"] == "SUM(orders)"
     assert suggestion["aggregation"] == "sum"
     assert suggestion["sample_size"] == 2
+
+
+def test_chart_suggestion_uses_none_type_when_result_is_not_chartable():
+    suggestion = suggest_plotly_chart(
+        {
+            "success": True,
+            "columns": ["first_name", "last_name"],
+            "rows": [
+                {"first_name": "Ada", "last_name": "Lovelace"},
+                {"first_name": "Grace", "last_name": "Hopper"},
+            ],
+        }
+    )
+
+    assert suggestion["type"] == "none"
+    assert suggestion["chartable"] is False
+    assert suggestion["series"] == []

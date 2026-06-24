@@ -4,7 +4,15 @@ from collections import defaultdict
 from typing import Any
 
 
-SUPPORTED_CHART_TYPES = {"line", "bar", "area", "scatter", "pie", "table"}
+SUPPORTED_CHART_TYPES = {"line", "bar", "area", "scatter", "pie"}
+NON_CHART_TYPE = "none"
+
+
+def is_chartable_suggestion(suggestion: dict[str, Any] | None) -> bool:
+    if not isinstance(suggestion, dict) or suggestion.get("chartable") is False:
+        return False
+    chart_type = str(suggestion.get("chart_type") or suggestion.get("type") or "").strip().lower()
+    return chart_type in SUPPORTED_CHART_TYPES
 
 
 def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
@@ -14,12 +22,12 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
     execute model-generated code and it does not return frontend UI code.
     """
     if not execution or not execution.get("success"):
-        return {"type": "table", "x": None, "y": None, "series": [], "reason": "No successful result set is available."}
+        return _non_chart_suggestion("No successful result set is available.")
 
     columns = [str(item) for item in _list_value(execution.get("columns"))]
     rows = [item for item in _list_value(execution.get("rows")) if isinstance(item, dict)]
     if not columns or not rows:
-        return {"type": "table", "x": None, "y": None, "series": [], "reason": "Empty result sets are best displayed as a table."}
+        return _non_chart_suggestion("Empty result sets should remain a result view.")
 
     numeric_cols = [column for column in columns if any(_is_number(row.get(column)) for row in rows)]
     time_cols = [column for column in columns if _looks_temporal(column, [row.get(column) for row in rows])]
@@ -31,6 +39,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
         series = _series_from_rows(rows, x_col, y_col, aggregate=True, max_points=120)
         return {
             "type": "line",
+            "chartable": True,
             "x": x_col,
             "y": y_col,
             "title": f"{y_col} by {x_col}",
@@ -46,6 +55,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
         chart_type = "pie" if _looks_like_share(y_col) and 0 < len(series) <= 8 else "bar"
         return {
             "type": chart_type,
+            "chartable": True,
             "x": x_col,
             "y": y_col,
             "title": f"{y_col} by {x_col}",
@@ -59,6 +69,7 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
         y_col = numeric_cols[1]
         return {
             "type": "scatter",
+            "chartable": True,
             "x": x_col,
             "y": y_col,
             "title": f"{y_col} vs {x_col}",
@@ -68,13 +79,34 @@ def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
         }
 
     return {
-        "type": "table",
+        "type": NON_CHART_TYPE,
+        "chartable": False,
         "x": columns[0],
         "y": numeric_cols[0] if numeric_cols else None,
         "series": [],
         "reason": "No clear category/time plus numeric pairing was found.",
         "sample_size": len(rows),
     }
+
+
+def _non_chart_suggestion(
+    reason: str,
+    *,
+    x: str | None = None,
+    y: str | None = None,
+    sample_size: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "type": NON_CHART_TYPE,
+        "chartable": False,
+        "x": x,
+        "y": y,
+        "series": [],
+        "reason": reason,
+    }
+    if sample_size is not None:
+        payload["sample_size"] = sample_size
+    return payload
 
 
 def _series_from_rows(rows: list[dict[str, Any]], x_col: str, y_col: str, *, aggregate: bool, max_points: int) -> list[dict[str, Any]]:

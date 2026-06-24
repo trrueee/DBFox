@@ -13,14 +13,13 @@ AgentArtifactType = Literal[
     "sql",
     "sql_suggestion",
     "safety",
-    "table",
     "result_view",
     "chart",
     "error",
 ]
 
 # Artifact categorization for frontend rendering
-EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset({"table", "result_view", "chart", "sql"})
+EVIDENCE_ARTIFACT_TYPES: frozenset[str] = frozenset({"result_view", "chart", "sql"})
 PROCESS_ARTIFACT_TYPES: frozenset[str] = frozenset({
     "query_plan", "sql_suggestion", "safety", "agent_plan", "error",
 })
