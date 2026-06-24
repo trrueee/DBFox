@@ -26,6 +26,8 @@ from typing import Any
 
 from pydantic import AliasChoices, BaseModel, Field
 
+from engine.agent_core.chart_builder import is_chartable_suggestion
+
 
 # ── Section models ─────────────────────────────────────────────────────────────
 
@@ -318,11 +320,15 @@ def _build_result_section(state: dict[str, Any]) -> ResultSection:
     total_rows = sum(
         int((u.get("execution") or {}).get("rowCount", 0)) for u in non_empty
     )
+    chart_suggestion = state.get("chart_suggestion")
+    chart_type = None
+    if isinstance(chart_suggestion, dict) and is_chartable_suggestion(chart_suggestion):
+        chart_type = _str_or_none(chart_suggestion.get("chart_type") or chart_suggestion.get("type"))
     return ResultSection(
         query_count=len(units),
         total_rows=total_rows,
         non_empty_queries=len(non_empty),
-        chart_type=_str_or_none((state.get("chart_suggestion") or {}).get("type")),
+        chart_type=chart_type,
     )
 
 
