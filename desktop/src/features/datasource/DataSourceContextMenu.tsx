@@ -63,7 +63,8 @@ export function DataSourceContextMenu({
           <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成表级 ER 关系图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<Copy size={11} className="text-slate-500" />} label="复制物理表名" onClick={() => run(() => { navigator.clipboard.writeText(contextMenu.targetNode); onToast(`已成功复制表名: ${contextMenu.targetNode}`); })} />
-          <Item danger icon={<Trash2 size={11} />} label="删除表（不可逆）" onClick={() => run(() => onToast(`删除表功能需通过 SQL 控制台执行 DROP TABLE ${contextMenu.targetNode} 完成`))} />
+          <Item danger icon={<Trash2 size={11} />} label="在 SQL 控制台中删除表" onClick={() => run(() => { onOpenSqlConsole(`DROP TABLE ${contextMenu.targetNode};`); onToast(`已在 SQL 控制台中生成 DROP TABLE 语句`); })} />
+
         </>
       )}
 

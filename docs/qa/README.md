@@ -1,7 +1,7 @@
 # DBFox 软件质量保证规格说明（QA Spec）
 
-> 本目录是基于代码评审产出的可立项、可追踪、可验收的质量工程文档集。
-> 与设计文档 `docs/design/db-tools-spec.md`（描述工具「应该做什么」）互补，
+> 本目录是基于系统设计与质量标准产出的可立项、可追踪、可验收的质量工程文档集。
+> 与设计文档 `docs/designs/2026-06-17-db-tools-spec.md`（描述工具「应该做什么」）互补，
 > 本目录描述「系统在质量、安全、测试方面必须满足什么」。
 
 ---
@@ -10,12 +10,13 @@
 
 | 文档 | 对应报告章节 | 内容 | 主要读者 |
 |---|---|---|---|
-| [04-integration-system-test-spec.md](./04-integration-system-test-spec.md) | 第 4 节 | 集成测试与系统测试规格 | 测试工程师 |
-| [05-defect-reports-spec.md](./05-defect-reports-spec.md) | 第 5 节 | 7 张具体缺陷单（D1–D7） | 开发 + 测试 + 产品 |
-| [06-whitebox-test-spec.md](./06-whitebox-test-spec.md) | 第 6 节 | 核心方法白盒测试用例（G/DELIM/SV/RES/CONF/PREVIEW/WHERE/ROW/TG/TUNNEL） | 测试工程师 |
-| [07-blackbox-test-spec.md](./07-blackbox-test-spec.md) | 第 7 节 | 黑盒测试用例（等价类/边界值/错误推测/场景/状态迁移，136 例） | 测试工程师 + QA |
-| [08-nonfunctional-spec.md](./08-nonfunctional-spec.md) | 第 8 节 | 非功能需求 NFR（安全/异常/性能/可用性，23 条） | 架构 + 开发 |
-| [09-refactoring-spec.md](./09-refactoring-spec.md) | 第 9 节 | 8 条安全重构方案（R1–R8） | 开发 |
+| [04-integration-test.md](./04-integration-test.md) | 第 4 节 | 集成测试与系统测试规格 | 测试工程师 |
+| [05-defect-reports.md](./05-defect-reports.md) | 第 5 节 | 7 张具体缺陷单（D1–D7） | 开发 + 测试 + 产品 |
+| [06-whitebox-test.md](./06-whitebox-test.md) | 第 6 节 | 核心方法白盒测试用例（G/DELIM/SV/RES/CONF/PREVIEW/WHERE/ROW/TG/TUNNEL） | 测试工程师 |
+| [07-blackbox-test.md](./07-blackbox-test.md) | 第 7 节 | 黑盒测试用例（等价类/边界值/错误推测/场景/状态迁移，136 例） | 测试工程师 + QA |
+| [08-nonfunctional.md](./08-nonfunctional.md) | 第 8 节 | 非功能需求 NFR（安全/异常/性能/可用性，23 条） | 架构 + 开发 |
+| [09-refactoring.md](./09-refactoring.md) | 第 9 节 | 8 条安全重构方案（R1–R8） | 开发 |
+| [10-frontend-ux-issues.md](./10-frontend-ux-issues.md) | N/A | 前端对话与 SQL 结果展示问题梳理及修复状态 | 前端开发 + UX |
 
 ---
 
@@ -78,9 +79,5 @@
 
 | 既有文档 | 关系 |
 |---|---|
-| `docs/design/db-tools-spec.md` | 描述工具「做什么」；本目录描述「做到什么质量」 |
+| `docs/designs/2026-06-17-db-tools-spec.md` | 描述工具「做什么」；本目录描述「做到什么质量」 |
 | `docs/软件重构和测试.md` | 早期质量分析报告；本目录是其规格化、可立项化的延伸 |
-| `docs/lessons-learned.md` | Agent 开发经验；本目录的 Agent 测试用例参考其踩坑 |
-| `docs/deep_research_report.md` | 项目深度研究报告；本目录聚焦质量工程切片 |
-
-本目录的所有断言都可回溯到具体代码位置（`file:line`），与评审报告 §1–§12 一一对应。

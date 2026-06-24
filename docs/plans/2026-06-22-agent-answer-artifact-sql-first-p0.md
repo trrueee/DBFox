@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the P0 behavior from `docs/designs/2026-06-22-agent-answer-artifact-and-sql-first-design.md`: stage-based narration, SQL-first analysis guidance, adaptive final answers, productized trace labels, and stronger table result browsing.
+**Goal:** Implement the P0 behavior from `docs/designs/2026-06-22-agent-answer-artifact-and-sql-first.md`: stage-based narration, SQL-first analysis guidance, adaptive final answers, productized trace labels, and stronger table result browsing.
 
 **Architecture:** Keep the existing backend event and artifact contracts. Update prompt/synthesis guidance on the backend, then improve frontend rendering by mapping raw runtime events to product language and making table artifacts behave like result previews with metadata, fixed scrolling, sticky headers, and CSV actions.
 

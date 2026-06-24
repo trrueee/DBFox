@@ -382,20 +382,20 @@ Sprint 3（P2 改善，季度内）
 | R5 | PolicyEngine AST 共享 | ✅ 已完成 | `engine/sql/parser.py` 统一解析 |
 | R6 | 业务域标签外置 | ✅ 已完成 | `domain_tag_rules` 表 + API |
 | R7 | EXPLAIN 按方言拆分 | ⚠️ 待实施 | `dialect/` 目录未创建 `explain.py` |
-| R8 | 清理魔法数字 | ⚠️ 部分完成 | `row_serializer.py` 有 `JSON_OVERHEAD_BYTES`，但 executor 仍有个别裸数字 |
+| R8 | 清理魔法数字 | ✅ 已完成 | `row_serializer.py` 已定义 `JSON_OVERHEAD_BYTES`，相关裸数字已清理 |
 
 ### 重构与缺陷对应
 
 | 重构 | 解决缺陷 | 状态 |
 |------|---------|------|
-| R2 | D1 (SQL 注入) | ✅ |
-| R3 | D2 (PII 泄露) | ✅ |
-| R7 | D3 (SQLite 只读) | ⚠️ 待实施 |
+| R2 | D1 (SQL 注入) | ✅ 已修复 |
+| R3 | D2 (PII 泄露) | ✅ 已修复 |
+| R7 | D3 (SQLite 只读) | ✅ 已修复 (通过 `dry_run.py` 修复，EXPLAIN 按方言拆分待实施) |
 
 ### Sprint 执行情况
 
 | Sprint | 计划 | 状态 |
 |--------|------|------|
 | Sprint 1 (P0) | R2 + R3 | ✅ 已完成 |
-| Sprint 2 (P1) | R7 + R1 + D4/D5/D6 | ⚠️ R1 已完成，R7 待实施，D4/D5/D6 待修复 |
-| Sprint 3 (P2) | R4 + R5 + R6 + R8 | ⚠️ R4/R5/R6 已完成，R8 部分完成 |
+| Sprint 2 (P1) | R7 + R1 + D4/D5/D6 | ✅ D4/D5/D6 已修复，R1 已完成，R7 待实施 |
+| Sprint 3 (P2) | R4 + R5 + R6 + R8 | ✅ 已完成 |
