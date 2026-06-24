@@ -2,14 +2,16 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, text as sa_text
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
 from engine.sql.executor import execute_query
-from engine.sql.guardrail import guardrail_check
+from engine.sql.dialect_context import DialectContext
+from engine.sql.safety.service import SqlSafetyService
 from engine.models import DataSource, QueryHistory
+from engine.persistence.search_index import SearchIndexService
 from engine.policy.engine import PolicyEngine
 from engine.query_registry import QUERY_REGISTRY
 from engine.schemas import SQLCancelRequest, SQLExecuteRequest, SQLExplainRequest, SQLValidateRequest
@@ -36,13 +38,13 @@ def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
 
 @router.post("/query/validate")
 def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    dialect = "mysql"
+    ctx = DialectContext(datasource_id=req.datasource_id or "", dialect="mysql")
     if req.datasource_id:
         ds = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
         if not ds:
             raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
-        dialect = str(ds.db_type or "mysql")
-    result = guardrail_check(req.sql, dialect=dialect)
+        ctx = DialectContext.from_datasource(ds)
+    result = SqlSafetyService(db).public_validate_sql(req.sql, ctx)
     return _public_guardrail_result(dict(result))
 
 
@@ -55,7 +57,21 @@ def api_execute_sql(req: SQLExecuteRequest, db: Session = Depends(get_db)) -> di
     PolicyEngine.enforce_query_policy(datasource, req.sql)
 
     try:
-        return execute_query(db, req.datasource_id, req.sql, req.question, req.execution_id)
+        ctx = DialectContext.from_datasource(datasource)
+        decision = SqlSafetyService(db).build_execution_decision(
+            req.sql,
+            ctx,
+            policy="user_readonly",
+        )
+        return execute_query(
+            db,
+            req.datasource_id,
+            req.sql,
+            req.question,
+            req.execution_id,
+            safety_decision=decision,
+            safety_policy="user_readonly",
+        )
     except DBFoxError:
         raise
     except Exception as exc:
@@ -112,25 +128,15 @@ def api_query_history(
 
     search_term = (search or "").strip()
     if search_term:
-        # Try FTS5 search; fall back to LIKE if table not ready
         try:
-            safe_term = search_term.replace('"', '""')
-            fts_rows = db.execute(
-                sa_text("""
-                    SELECT history_id FROM query_history_fts
-                    WHERE query_history_fts MATCH :q
-                    ORDER BY rank
-                    LIMIT :lim
-                """),
-                {"q": f'"{safe_term}"', "lim": limit * 2}
-            ).fetchall()
-            if fts_rows:
-                fts_ids = [row[0] for row in fts_rows]
+            fts_ids = SearchIndexService(db).search_query_history(
+                search_term,
+                datasource_id=datasource_id,
+                limit=limit * 2,
+            )
+            if fts_ids:
                 history_query = history_query.filter(QueryHistory.id.in_(fts_ids))
             else:
-                # FTS5 matched nothing — return empty immediately rather
-                # than falling through with an unfiltered query that would
-                # expose the full history to a no-hit search.
                 return []
         except Exception:
             # FTS5 unavailable — fall back to LIKE
@@ -157,6 +163,11 @@ def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> 
         raise NotFoundError("Query history record not found", "QUERY_HISTORY_NOT_FOUND")
 
     try:
+        try:
+            SearchIndexService(db).delete_query_history(history_id)
+        except Exception:
+            db.rollback()
+            logger.debug("Query history search index delete skipped", exc_info=True)
         db.delete(item)
         db.commit()
     except Exception:
@@ -172,6 +183,11 @@ def api_clear_query_history(datasource_id: str = Query(...), db: Session = Depen
         raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
 
     try:
+        try:
+            SearchIndexService(db).clear_query_history(datasource_id)
+        except Exception:
+            db.rollback()
+            logger.debug("Query history search index clear skipped", exc_info=True)
         deleted = (
             db.query(QueryHistory)
             .filter(QueryHistory.data_source_id == datasource_id)

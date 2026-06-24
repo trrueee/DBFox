@@ -152,9 +152,24 @@ class AgentCaseEvaluator:
                 # Value-set isomorphism check
                 try:
                     from engine.sql.executor import execute_query
+                    from engine.sql.dialect_context import DialectContext
+                    from engine.sql.safety.service import SqlSafetyService
                     from engine.evaluation.execution_comparator import ExecutionIsomorphismComparator
 
-                    expected_res = execute_query(current_db, task.datasource_id, standard_sql)
+                    ctx = DialectContext.from_datasource_id(current_db, task.datasource_id)
+                    safety_service = SqlSafetyService(current_db)
+                    expected_decision = safety_service.build_execution_decision(
+                        standard_sql,
+                        ctx,
+                        policy="agent_readonly",
+                    )
+                    expected_res = execute_query(
+                        current_db,
+                        task.datasource_id,
+                        standard_sql,
+                        safety_decision=expected_decision,
+                        safety_policy="agent_readonly",
+                    )
                     if not expected_res.get("success"):
                         # If the database execution of the golden query failed, print warning but don't fail actual result comparison if both are empty
                         expected_rows = []
@@ -162,7 +177,18 @@ class AgentCaseEvaluator:
                         expected_rows = expected_res.get("rows", [])
 
                     if actual_sql:
-                        actual_res = execute_query(current_db, task.datasource_id, actual_sql)
+                        actual_decision = safety_service.build_execution_decision(
+                            actual_sql,
+                            ctx,
+                            policy="agent_readonly",
+                        )
+                        actual_res = execute_query(
+                            current_db,
+                            task.datasource_id,
+                            actual_sql,
+                            safety_decision=actual_decision,
+                            safety_policy="agent_readonly",
+                        )
                         if actual_res.get("success"):
                             actual_rows = actual_res.get("rows", [])
                         else:
@@ -372,4 +398,3 @@ def _is_hard_failure(failure: str) -> bool:
         "similarity",
     ]
     return any(kw in failure.lower() for kw in hard_keywords)
-

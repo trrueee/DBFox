@@ -22,6 +22,7 @@ export interface SortState {
 }
 
 export interface ArtifactTableData {
+  columns: string[];
   search: string;
   setSearch: (value: string) => void;
   sort: SortState | null;
@@ -67,6 +68,7 @@ export function useArtifactTableData(
   const [expanded, setExpanded] = useState(false);
 
   const isSqlBackedWorkspace = mode === "workspace" && artifact.type === "result_view" && artifact.storageMode === "sql_backed";
+  const columns = useMemo(() => artifact.columns.map(columnName).filter(Boolean), [artifact.columns]);
 
   const sqlBackedSource = useMemo<SqlBackedDataViewSource>(() => {
     if (artifact.type === "result_view") {
@@ -75,7 +77,7 @@ export function useArtifactTableData(
         datasourceId: artifact.datasourceId,
         sourceSqlArtifactId: artifact.sourceSqlSemanticId,
         safeSql: artifact.safeSql,
-        columns: artifact.columns,
+        columns,
       };
     }
     return {
@@ -83,9 +85,9 @@ export function useArtifactTableData(
       datasourceId: "",
       sourceSqlArtifactId: artifact.id,
       safeSql: artifact.sql ?? "",
-      columns: artifact.columns,
+      columns,
     };
-  }, [artifact]);
+  }, [artifact, columns]);
 
   const fetchSqlBackedPage = useCallback(async (request: SqlBackedPageRequest) => {
     if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");
@@ -128,8 +130,8 @@ export function useArtifactTableData(
   const backendRows = sqlBacked.rows;
 
   const csv = useMemo(
-    () => toCsv(artifact.columns, isSqlBackedWorkspace ? backendRows : rowsToUse),
-    [artifact.columns, backendRows, isSqlBackedWorkspace, rowsToUse],
+    () => toCsv(columns, isSqlBackedWorkspace ? backendRows : rowsToUse),
+    [columns, backendRows, isSqlBackedWorkspace, rowsToUse],
   );
   const normalizedSearch = search.trim().toLowerCase();
 
@@ -159,14 +161,14 @@ export function useArtifactTableData(
     if (!isSqlBackedWorkspace) return sort;
     const current = sqlBacked.sort[0];
     if (!current) return null;
-    const columnIndex = artifact.columns.indexOf(current.column);
+    const columnIndex = columns.indexOf(current.column);
     if (columnIndex < 0) return null;
     return { columnIndex, direction: current.direction };
-  }, [artifact.columns, isSqlBackedWorkspace, sort, sqlBacked.sort]);
+  }, [columns, isSqlBackedWorkspace, sort, sqlBacked.sort]);
 
   const setSortColumn = (columnIndex: number) => {
     if (isSqlBackedWorkspace) {
-      const column = artifact.columns[columnIndex];
+      const column = columns[columnIndex];
       if (!column) return;
       const current = sqlBacked.sort[0];
       const direction = current?.column === column && current.direction === "desc" ? "asc" : "desc";
@@ -181,7 +183,7 @@ export function useArtifactTableData(
   };
 
   const setSortState = (columnIndex: number, direction: SortDirection) => {
-    const column = artifact.columns[columnIndex];
+    const column = columns[columnIndex];
     if (!column) return;
     if (isSqlBackedWorkspace) {
       sqlBacked.setSort([{ column, direction }]);
@@ -201,6 +203,7 @@ export function useArtifactTableData(
   };
 
   return {
+    columns,
     search: isSqlBackedWorkspace ? sqlBacked.search : search,
     setSearch: isSqlBackedWorkspace ? sqlBacked.setSearch : setSearch,
     sort: activeSort,
@@ -234,6 +237,11 @@ export function useArtifactTableData(
     isSearching,
     hasNextPage: isSqlBackedWorkspace ? sqlBacked.hasNextPage : false,
   };
+}
+
+function columnName(column: TableArtifact["columns"][number] | ResultViewArtifact["columns"][number]): string {
+  if (typeof column === "string") return column;
+  return column.name;
 }
 
 function compareCells(left: string, right: string, direction: SortDirection): number {

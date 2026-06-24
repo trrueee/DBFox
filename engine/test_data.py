@@ -6,7 +6,9 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from engine.models import SchemaTable, SchemaColumn, DataSource
+from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
+from engine.sql.safety.service import SqlSafetyService
 from engine.errors import DBFoxError
 
 logger = logging.getLogger("dbfox.test_data")
@@ -191,7 +193,15 @@ def generate_smart_test_data(
             try:
                 logger.info(f"Querying parent keys from table {parent_table.table_name} col {parent_column_name}")
                 parent_query_sql = f"SELECT `{parent_column_name}` FROM `{parent_table.table_name}` LIMIT 200"
-                parent_res = execute_query(db, datasource_id, parent_query_sql)
+                ctx = DialectContext.from_datasource_id(db, datasource_id)
+                decision = SqlSafetyService(db).build_execution_decision(parent_query_sql, ctx, policy="readonly")
+                parent_res = execute_query(
+                    db,
+                    datasource_id,
+                    parent_query_sql,
+                    safety_decision=decision,
+                    safety_policy="readonly",
+                )
                 
                 if parent_res["success"] and parent_res["rows"]:
                     parent_ids = [row[parent_column_name] for row in parent_res["rows"]]

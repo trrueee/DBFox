@@ -30,11 +30,21 @@ from engine.agent_core.types import (
     AgentRuntimeEvent,
 )
 from engine.agent_core.events import EventEmitter
+from engine.app.errors import public_error, public_message
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.llm.errors import llm_error_from_exception
 from engine.llm.providers.openai import create_openai_client
-from engine.models import AgentArtifactRecord, AgentRun
+from engine.sql.execution.streaming_executor import export_max_rows_from_env
+from engine.sql.result_view.models import (
+    ResultExportQuery as ServiceResultExportQuery,
+    ResultFilter as ServiceResultFilter,
+    ResultPageQuery as ServiceResultPageQuery,
+    ResultSort as ServiceResultSort,
+    ResultSourceRef,
+    ResultViewError,
+)
+from engine.sql.result_view.service import ResultViewService
 
 logger = logging.getLogger("dbfox.api.agent")
 router = APIRouter()
@@ -115,7 +125,7 @@ def _check_llm_credentials(req: AgentRunRequest) -> None:
     if os.environ.get("DBFOX_TESTING") == "1":
         # Test environment runs the agent against mocked LLM nodes.
         return
-    key = (req.api_key or os.environ.get("OPENAI_API_KEY", "")).strip()
+    key = str(req.api_key or os.environ.get("OPENAI_API_KEY") or "").strip()
     if not key:
         raise DBFoxError("请先在设置中配置 LLM API Key。", code="NO_LLM_KEY")
 
@@ -144,7 +154,7 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
         "sequence": 1,
         "created_at_ms": 0,
         "type": "agent.run.failed",
-        "error": message,
+        "error": public_message(message),
         "response": None,
         "code": code,
     }
@@ -152,8 +162,8 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
 
 
 def _http_detail(exc: DBFoxError) -> dict[str, str]:
-    from engine.policy.error_sanitizer import sanitize_error_message
-    return {"code": exc.code, "message": sanitize_error_message(str(exc))}
+    detail = public_error(exc.code, exc)
+    return {"code": str(detail["code"]), "message": str(detail["message"])}
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +236,7 @@ def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentR
         logger.exception("Agent runtime failed")
         raise HTTPException(
             status_code=500,
-            detail={"code": "AGENT_RUNTIME_ERROR", "message": f"Agent runtime failed: {str(exc)}"},
+            detail=public_error("AGENT_RUNTIME_ERROR", f"Agent runtime failed: {str(exc)}"),
         )
 
 
@@ -240,18 +250,16 @@ def api_agent_run_resume(
         return DBFoxAgentRuntime(db).resume(run_id, req.approval_id)
     except DBFoxError as exc:
         db.rollback()
-        from engine.policy.error_sanitizer import sanitized_http_detail
-        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
+        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
     except Exception as exc:
         db.rollback()
         llm_error = llm_error_from_exception(exc)
         if llm_error is not None:
             raise HTTPException(status_code=400, detail=_http_detail(llm_error))
         logger.exception("Agent runtime resume failed")
-        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "AGENT_RESUME_ERROR", "message": sanitize_error_message(f"Agent resume failed: {str(exc)}")},
+            detail=public_error("AGENT_RESUME_ERROR", f"Agent resume failed: {str(exc)}"),
         )
 
 
@@ -271,7 +279,7 @@ def api_cancel_agent_run(
         logger.exception("Failed to cancel agent run %s", run_id)
         raise HTTPException(
             status_code=500,
-            detail={"code": "AGENT_CANCEL_ERROR", "message": f"Failed to cancel run: {str(exc)}"},
+            detail=public_error("AGENT_CANCEL_ERROR", f"Failed to cancel run: {str(exc)}"),
         )
 
 
@@ -306,15 +314,13 @@ def api_resolve_agent_approval(
         return approval
     except DBFoxError as exc:
         db.rollback()
-        from engine.policy.error_sanitizer import sanitized_http_detail
-        raise HTTPException(status_code=400, detail=sanitized_http_detail(exc, exc.code))
+        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
     except Exception as exc:
         db.rollback()
         logger.exception("Failed to resolve agent approval")
-        from engine.policy.error_sanitizer import sanitize_error_message
         raise HTTPException(
             status_code=500,
-            detail={"code": "APPROVAL_RESOLVE_ERROR", "message": sanitize_error_message(f"Failed to resolve approval: {str(exc)}")},
+            detail=public_error("APPROVAL_RESOLVE_ERROR", f"Failed to resolve approval: {str(exc)}"),
         )
 
 
@@ -427,373 +433,101 @@ class ResultPageResponse(BaseModel):
     warnings: list[str] | None = None
     notices: list[str] | None = None
 
-def _normalize_sql_for_source_match(sql: str) -> str:
-    return " ".join(sql.strip().split())
 
-
-def _artifact_payload(record: AgentArtifactRecord) -> dict[str, object]:
-    try:
-        payload = json.loads(record.payload_json or "{}")
-    except (TypeError, ValueError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _safe_sql_from_artifact(record: AgentArtifactRecord) -> str:
-    payload = _artifact_payload(record)
-    for key in ("safeSql", "safe_sql", "sourceSql", "source_sql", "sql"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def _result_columns_from_artifact(record: AgentArtifactRecord) -> set[str]:
-    payload = _artifact_payload(record)
-    raw_columns = payload.get("columns")
-    if not isinstance(raw_columns, list):
-        return set()
-
-    columns: set[str] = set()
-    for item in raw_columns:
-        name = ""
-        if isinstance(item, str):
-            name = item
-        elif isinstance(item, dict):
-            raw_name = item.get("name") or item.get("field") or item.get("column")
-            name = raw_name if isinstance(raw_name, str) else ""
-        name = name.strip()
-        if name:
-            columns.add(_normalize_result_column_name(name))
-    return columns
-
-
-def _normalize_result_column_name(column: str) -> str:
-    return column.strip().strip('`"[]').lower()
-
-
-def _load_source_artifact(
-    db: Session,
-    *,
-    datasource_id: str,
-    source_artifact_id: str,
-) -> AgentArtifactRecord | None:
-    base_query = (
-        db.query(AgentArtifactRecord)
-        .join(AgentRun, AgentRun.id == AgentArtifactRecord.run_id)
-        .filter(AgentRun.datasource_id == datasource_id)
-    )
-    by_id = base_query.filter(AgentArtifactRecord.id == source_artifact_id).first()
-    if by_id is not None:
-        return by_id
-    return (
-        base_query
-        .filter(AgentArtifactRecord.semantic_id == source_artifact_id)
-        .order_by(AgentArtifactRecord.created_at.desc())
-        .first()
-    )
-
-
-def _verified_pagination_source(
-    db: Session,
-    req: ResultPageRequest,
-    dialect: str,
-) -> tuple[str, AgentArtifactRecord]:
-    source = _load_source_artifact(
-        db,
+def _result_source_ref(req: ResultPageRequest | ResultExportRequest) -> ResultSourceRef:
+    return ResultSourceRef(
         datasource_id=req.datasourceId,
-        source_artifact_id=req.sourceSqlArtifactId,
-    )
-    if source is None:
-        raise HTTPException(
-            status_code=404,
-            detail={"code": "SOURCE_ARTIFACT_NOT_FOUND", "message": "Source result artifact was not found."},
-        )
-    if source.type not in {"result_view", "table", "sql"}:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "SOURCE_ARTIFACT_UNSUPPORTED", "message": "Source artifact cannot back pagination."},
-        )
-
-    persisted_safe_sql = _safe_sql_from_artifact(source)
-    if not persisted_safe_sql:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "SOURCE_SQL_MISSING", "message": "Source artifact does not contain safe SQL."},
-        )
-    if _normalize_sql_for_source_match(persisted_safe_sql) != _normalize_sql_for_source_match(req.safeSql):
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "SOURCE_SQL_MISMATCH", "message": "Requested SQL does not match the source artifact."},
-        )
-
-    from engine.sql.safety_gate import validate_pagination_base_sql
-
-    warnings = validate_pagination_base_sql(persisted_safe_sql, dialect=dialect)
-    if warnings:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "SOURCE_SQL_VALIDATION_FAILED", "message": warnings[0]},
-        )
-    return persisted_safe_sql, source
-
-
-def _verified_pagination_source_sql(db: Session, req: ResultPageRequest, dialect: str) -> str:
-    source_sql, _ = _verified_pagination_source(db, req, dialect)
-    return source_sql
-
-
-def _validated_result_page_sorts(
-    req: ResultPageRequest,
-    source: AgentArtifactRecord,
-) -> list[dict[str, str]] | None:
-    if not req.sort:
-        return None
-
-    allowed_columns = _result_columns_from_artifact(source)
-    if not allowed_columns:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "SOURCE_COLUMNS_MISSING",
-                "message": "Source result artifact does not list sortable columns.",
-            },
-        )
-
-    sorts: list[dict[str, str]] = []
-    for sort in req.sort:
-        normalized = _normalize_result_column_name(sort.column)
-        if normalized not in allowed_columns:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "code": "SORT_COLUMN_NOT_ALLOWED",
-                    "message": f"Sort column '{sort.column}' is not present in the source result.",
-                },
-            )
-        sorts.append({"column": sort.column.strip(), "direction": sort.direction})
-    return sorts
-
-
-def _pagination_execution_decision(datasource_id: str, original_sql: str, safe_sql: str):
-    from engine.sql.trust_gate import ExecutionSafetyDecision
-
-    guardrail = {
-        "result": "pass",
-        "originalSql": original_sql,
-        "safeSql": safe_sql,
-        "checks": [],
-        "message": "Pagination derived from persisted safe SQL artifact.",
-    }
-    return ExecutionSafetyDecision(
-        datasource_id=datasource_id,
-        policy="readonly",
-        original_sql=original_sql,
-        safe_sql=safe_sql,
-        passed=True,
-        can_execute=True,
-        requires_confirmation=False,
-        guardrail=guardrail,
-        schema_warnings=[],
-        scope_state={"source": "pagination"},
-        messages=[],
+        source_sql_artifact_id=req.sourceSqlArtifactId,
+        safe_sql=req.safeSql,
     )
 
 
-def _build_result_view_sql(
-    *,
-    req: ResultPageRequest | ResultExportRequest,
-    source_sql: str,
-    source_artifact: AgentArtifactRecord,
-    dialect: str,
-    limit: int | None,
-    offset: int | None,
-) -> str:
-    from engine.sql.sql_backed_view import (
-        SqlBackedFilter,
-        SqlBackedSort,
-        SqlBackedViewError,
-        build_sql_backed_page_sql,
+def _result_filters(filters: list[ResultFilter] | None) -> list[ServiceResultFilter]:
+    return [ServiceResultFilter.model_validate(item.model_dump()) for item in (filters or [])]
+
+
+def _result_sorts(sorts: list[ResultSort] | None) -> list[ServiceResultSort]:
+    return [ServiceResultSort.model_validate(item.model_dump()) for item in (sorts or [])]
+
+
+def _result_view_http_error(exc: ResultViewError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail=public_error(exc.code, exc.message),
     )
-
-    source_columns = sorted(_result_columns_from_artifact(source_artifact))
-    try:
-        derived = build_sql_backed_page_sql(
-            base_sql=source_sql,
-            dialect=dialect,
-            columns=source_columns,
-            filters=[SqlBackedFilter.model_validate(item.model_dump()) for item in (req.filters or [])],
-            search=req.search,
-            searchable_columns=source_columns,
-            sorts=[SqlBackedSort.model_validate(item.model_dump()) for item in (req.sort or [])],
-            limit=limit,
-            offset=offset,
-        )
-        return derived.sql
-    except SqlBackedViewError as e:
-        raise HTTPException(status_code=400, detail={"code": e.code, "message": e.message})
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "DERIVED_SQL_BUILD_FAILED", "message": f"Failed to build derived SQL: {e}"},
-        )
-
 
 @router.post("/agent/results/page", response_model=ResultPageResponse)
 def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
-    from engine.sql.safety_gate import validate_derived_sql
-    from engine.sql.executor import execute_query
     from engine.models import DataSource
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Datasource not found.")
-        
-    dialect = ds.db_type or "mysql"
-
-    # Calculate limit and offset
-    limit = req.pageSize
-    offset = (req.page - 1) * req.pageSize
-
-    source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
-
-    derived_sql = _build_result_view_sql(
-        req=req,
-        source_sql=source_sql,
-        source_artifact=source_artifact,
-        dialect=dialect,
-        limit=limit + 1, # Fetch one extra to determine hasNextPage
-        offset=offset,
-    )
-
-    warnings = validate_derived_sql(derived_sql, dialect=dialect)
-    if warnings:
-        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_VALIDATION_FAILED", "message": warnings[0]})
 
     try:
-        decision = _pagination_execution_decision(
-            req.datasourceId,
-            original_sql=source_sql,
-            safe_sql=derived_sql,
+        result = ResultViewService(db).page(
+            ServiceResultPageQuery(
+                source=_result_source_ref(req),
+                filters=_result_filters(req.filters),
+                sort=_result_sorts(req.sort),
+                search=req.search,
+                page=req.page,
+                page_size=req.pageSize,
+                count_mode=req.countMode,
+            )
         )
-        res = execute_query(db, req.datasourceId, derived_sql, safety_decision=decision)
+    except ResultViewError as e:
+        raise _result_view_http_error(e)
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
         logger.exception("Failed to execute derived query")
-        raise HTTPException(status_code=500, detail={"code": "EXECUTION_ERROR", "message": str(e)})
-
-    rows = res.get("rows", [])
-    has_next = len(rows) > limit
-    returned_rows = rows[:limit]
-
-    # Handle exact count if requested
-    row_count = None
-    if req.countMode == "exact":
-        # build count query
-        import sqlglot
-        try:
-            count_source_sql = _build_result_view_sql(
-                req=req,
-                source_sql=source_sql,
-                source_artifact=source_artifact,
-                dialect=dialect,
-                limit=None,
-                offset=None,
-            )
-            base_expr = sqlglot.parse_one(count_source_sql, read=dialect)
-            count_sql = sqlglot.select("COUNT(*)").from_(base_expr.subquery("dbfox_count")).sql(dialect=dialect)
-            count_warnings = validate_derived_sql(count_sql, dialect=dialect)
-            if count_warnings:
-                raise ValueError(count_warnings[0])
-            
-            count_decision = _pagination_execution_decision(
-                req.datasourceId,
-                original_sql=source_sql,
-                safe_sql=count_sql,
-            )
-            count_res = execute_query(db, req.datasourceId, count_sql, safety_decision=count_decision)
-            if count_res.get("rows") and len(count_res["rows"]) > 0:
-                # Get first value of first row
-                first_row = count_res["rows"][0]
-                if first_row:
-                    row_count = int(list(first_row.values())[0])
-        except Exception as e:
-            logger.warning(f"Failed to execute exact count query: {e}")
+        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
 
     return ResultPageResponse(
-        columns=res.get("columns", []),
-        rows=returned_rows,
-        page=req.page,
-        pageSize=req.pageSize,
-        rowCount=row_count,
-        hasNextPage=has_next,
-        executedSql=derived_sql,
-        latencyMs=res.get("latencyMs", 0),
-        warnings=res.get("warnings"),
-        notices=res.get("notices"),
+        columns=result.columns,
+        rows=result.rows,
+        page=result.page,
+        pageSize=result.page_size,
+        rowCount=result.row_count,
+        hasNextPage=result.has_next_page,
+        executedSql=result.executed_sql,
+        latencyMs=result.latency_ms,
+        warnings=result.warnings,
+        notices=result.notices,
     )
 
 
 @router.post("/agent/results/export")
 def api_agent_result_export(req: ResultExportRequest, db: Session = Depends(get_db)) -> StreamingResponse:
-    import csv
-    import io
-
-    from engine.sql.safety_gate import validate_derived_sql
-    from engine.sql.executor import execute_query
     from engine.models import DataSource
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
         raise HTTPException(status_code=404, detail="Datasource not found.")
 
-    dialect = ds.db_type or "mysql"
-    source_sql, source_artifact = _verified_pagination_source(db, req, dialect)
-    derived_sql = _build_result_view_sql(
-        req=req,
-        source_sql=source_sql,
-        source_artifact=source_artifact,
-        dialect=dialect,
-        limit=None,
-        offset=None,
-    )
-
-    warnings = validate_derived_sql(derived_sql, dialect=dialect)
-    if warnings:
-        raise HTTPException(status_code=400, detail={"code": "DERIVED_SQL_VALIDATION_FAILED", "message": warnings[0]})
-
     try:
-        decision = _pagination_execution_decision(
-            req.datasourceId,
-            original_sql=source_sql,
-            safe_sql=derived_sql,
+        stream, _columns = ResultViewService(db).export_csv_stream(
+            ServiceResultExportQuery(
+                source=_result_source_ref(req),
+                filters=_result_filters(req.filters),
+                sort=_result_sorts(req.sort),
+                search=req.search,
+            )
         )
-        res = execute_query(db, req.datasourceId, derived_sql, safety_decision=decision)
+    except ResultViewError as e:
+        raise _result_view_http_error(e)
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
         logger.exception("Failed to export derived query")
-        raise HTTPException(status_code=500, detail={"code": "EXECUTION_ERROR", "message": str(e)})
-
-    columns = list(res.get("columns") or [])
-    rows = list(res.get("rows") or [])
-
-    def stream_csv():
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore", lineterminator="\n")
-        writer.writeheader()
-        yield output.getvalue()
-        output.seek(0)
-        output.truncate(0)
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in columns})
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
 
     return StreamingResponse(
-        stream_csv(),
+        stream,
         media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="dbfox-result.csv"'},
+        headers={
+            "Content-Disposition": 'attachment; filename="dbfox-result.csv"',
+            "X-DBFox-Export-Max-Rows": str(export_max_rows_from_env()),
+        },
     )

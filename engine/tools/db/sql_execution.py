@@ -5,8 +5,9 @@ from __future__ import annotations
 import time
 from typing import Any
 from sqlalchemy.orm import Session
+from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
-from engine.sql.safety_gate import _resolve_execution_safety_decision
+from engine.sql.safety.service import SqlSafetyService
 from engine.tools.db.preview import _infer_column_types
 
 
@@ -16,14 +17,8 @@ def sql_validate(db: Session, datasource_id: str, sql: str, question: str = "") 
     if not sql:
         raise ValueError("sql is required.")
 
-    decision = _resolve_execution_safety_decision(
-        db=db,
-        datasource_id=datasource_id,
-        sql_str=sql,
-        bypass_guardrail=False,
-        safety_decision=None,
-        policy="agent_readonly",
-    )
+    ctx = DialectContext.from_datasource_id(db, datasource_id)
+    decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="agent_readonly")
 
     return {
         "can_execute": decision.can_execute,
