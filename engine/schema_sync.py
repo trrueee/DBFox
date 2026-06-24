@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from typing import Any
 from pathlib import Path
 
+from engine.app.errors import public_message
+
 from sqlalchemy.orm import Session
 
 from engine.models import DataSource, SchemaColumn, SchemaTable
@@ -87,10 +89,11 @@ def sync_schema(
         }
 
         if ai_enrich:
+            configured_api_key = str(ai_api_key or os.getenv("OPENAI_API_KEY") or "").strip()
             enrich_result = result.ai_enrich_result or {
                 "ai_enriched": False,
                 "enriched_count": 0,
-                "reason": "请先在设置中配置 LLM API Key。" if not (ai_api_key or os.getenv("OPENAI_API_KEY", "")).strip() else "Unknown reason",
+                "reason": "请先在设置中配置 LLM API Key。" if not configured_api_key else "Unknown reason",
             }
             response["aiEnrich"] = enrich_result
             warning = _ai_enrich_warning(enrich_result)
@@ -102,16 +105,15 @@ def sync_schema(
     except Exception as e:
         db.rollback()
         now = datetime.now(UTC)
-        from engine.policy.error_sanitizer import sanitize_error_message
         db.query(DataSource).filter(DataSource.id == datasource_id).update(
             {
                 "last_sync_at": now,
                 "last_sync_status": "failed",
-                "last_sync_error": sanitize_error_message(str(e)),
+                "last_sync_error": public_message(str(e)),
             }
         )
         db.commit()
-        raise ValueError(f"Schema sync failed: {sanitize_error_message(str(e))}")
+        raise ValueError(f"Schema sync failed: {public_message(str(e))}")
 
 
 def _guess_module_tag(table_name: str) -> str | None:
