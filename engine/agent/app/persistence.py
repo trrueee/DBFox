@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -20,6 +21,21 @@ from engine.agent.app.response_builder import build_response
 logger = logging.getLogger("dbfox.dbfox_agent.app.persistence")
 
 
+@dataclass(frozen=True)
+class ApprovalCheckpointDraft:
+    response: AgentRunResponse
+    approval: AgentApprovalRecord | None
+    status: str
+    current_step_name: str
+    next_step_name: str | None
+    plan: Any | None
+    state: dict[str, Any]
+    completed_steps: list[dict[str, Any]]
+    pending_steps: list[dict[str, Any]]
+    artifacts: list[dict[str, Any]]
+    waiting_approval_id: str | None
+
+
 def resolve_session_id(db: Session, req: AgentRunRequest) -> str:
     """Resolve the session ID for the run, preserving multi-turn thread continuity."""
     if req.conversation_id:
@@ -33,18 +49,6 @@ def resolve_session_id(db: Session, req: AgentRunRequest) -> str:
     if req.follow_up_context and req.follow_up_context.session_id:
         return str(req.follow_up_context.session_id)
     return str(uuid.uuid4())
-
-
-def start_run_persistence(persistence_sink: Any, req: AgentRunRequest, run_id: str, session_id: str, db: Session) -> None:
-    """Initialize persist logging for the agent execution session."""
-    try:
-        persistence_sink.init_run_session(req, run_id, session_id)
-    except Exception as exc:
-        logger.warning("Failed to start persistence for run %s: %s", run_id, exc)
-        try:
-            db.rollback()
-        except Exception:
-            pass
 
 
 def pending_approval_from_workspace(db: Session, req: AgentRunRequest) -> dict[str, Any] | None:
@@ -77,16 +81,15 @@ def request_from_run(db: Session, run_id: str) -> AgentRunRequest:
     )
 
 
-def save_approval_checkpoint(
-    db: Session,
+def build_approval_checkpoint_draft(
     run_id: str,
     session_id: str,
     req: AgentRunRequest,
     full_state: dict[str, Any],
     steps: list[Any],
     artifacts: list[Any],
-) -> tuple[AgentRunResponse, AgentApprovalRecord | None]:
-    """Save an interrupt/approval checkpoint to the database."""
+) -> ApprovalCheckpointDraft:
+    """Build the approval checkpoint payload; persistence is owned by AgentEventStore."""
     pending = full_state.get("pending_approval") or {}
     approval = AgentApprovalRecord.model_validate(pending) if isinstance(pending, dict) else None
 
@@ -108,10 +111,9 @@ def save_approval_checkpoint(
     current_step = response.steps[-1].name if (response.steps and len(response.steps) > 0) else "approval_interrupt"
     next_step = approval.step_name if approval else str(pending.get("tool_name", ""))
 
-    checkpoint = agent_persistence.save_checkpoint(
-        db,
-        run_id=run_id,
-        session_id=session_id,
+    return ApprovalCheckpointDraft(
+        response=response,
+        approval=approval,
         status="waiting_approval",
         current_step_name=current_step,
         next_step_name=next_step,
@@ -125,24 +127,20 @@ def save_approval_checkpoint(
                 "args": (pending.get("requested_action") or {}).get("args", {}),
             }
         ],
+        artifacts=_checkpoint_items(artifacts),
+        waiting_approval_id=approval.id if approval else None,
     )
 
-    response.checkpoint = checkpoint
 
-    try:
-        if approval:
-            agent_persistence.mark_run_waiting_approval(
-                db,
-                run_id=run_id,
-                approval_id=approval.id,
-                current_step_name=approval.step_name,
-            )
-        db.commit()
-    except Exception as exc:
-        logger.warning("Failed to persist waiting approval state for run %s: %s", run_id, exc)
-        try:
-            db.rollback()
-        except Exception:
-            pass
-
-    return response, approval
+def _checkpoint_items(items: list[Any]) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for item in items:
+        if hasattr(item, "model_dump"):
+            value = item.model_dump(mode="json")
+        elif isinstance(item, dict):
+            value = dict(item)
+        else:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    return records

@@ -93,10 +93,8 @@ def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, An
                 "requested_action": requested_action,
             }
 
-            if db is not None:
-                from engine.agent_core import persistence as ap
-                approval_rec = ap.create_approval(
-                    db,
+            if ctx.event_store is not None:
+                approval_rec = ctx.event_store.create_approval(
                     run_id=run_id,
                     session_id=thread_id,
                     step_name=_step_name(internal_name),
@@ -106,8 +104,21 @@ def apply_policy(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, An
                     policy_decision=policy_decision,
                     requested_action=requested_action,
                 )
-                pending_app = approval_rec.model_dump(mode="json")
-                pending_app["tool_call_id"] = call_id
+                if approval_rec is not None:
+                    pending_app = approval_rec.model_dump(mode="json")
+                    pending_app["tool_call_id"] = call_id
+                else:
+                    pending_app = _approval_pending_payload(
+                        run_id=run_id,
+                        session_id=thread_id,
+                        step_name=_step_name(internal_name),
+                        tool_name=internal_name,
+                        risk_level=decision.risk_level,
+                        reason=decision.reason,
+                        policy_decision=policy_decision,
+                        requested_action=requested_action,
+                        call_id=call_id,
+                    )
             else:
                 pending_app = {
                     "id": f"approval_mock_{uuid4().hex[:8]}",
@@ -219,3 +230,30 @@ def _can_batch_tool_calls(tool_calls: list[Any], registry: Any) -> bool:
         groups.add(spec.group)
 
     return len(groups) == 1
+
+
+def _approval_pending_payload(
+    *,
+    run_id: str,
+    session_id: str,
+    step_name: str,
+    tool_name: str,
+    risk_level: str,
+    reason: str,
+    policy_decision: dict[str, Any],
+    requested_action: dict[str, Any],
+    call_id: str,
+) -> dict[str, Any]:
+    return {
+        "id": f"approval_mock_{uuid4().hex[:8]}",
+        "run_id": run_id,
+        "session_id": session_id,
+        "step_name": step_name,
+        "tool_name": tool_name,
+        "status": "pending",
+        "risk_level": risk_level,
+        "reason": reason,
+        "policy_decision": policy_decision,
+        "requested_action": requested_action,
+        "tool_call_id": call_id,
+    }

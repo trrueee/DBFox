@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from sqlalchemy.orm import Session
 
+from engine.agent_core.event_store import AgentEventStore
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse
 from engine.tools.runtime.registry import ToolRegistry
 from engine.agent.app.runtime_config import RuntimeConfig
@@ -16,12 +17,14 @@ class RequestContext:
         db: Session,
         request: AgentRunRequest,
         registry: ToolRegistry | None = None,
+        event_store: AgentEventStore | None = None,
     ):
         from engine.tools.dbfox_tools import register_dbfox_tools
 
         self.db = db
         self.request = request
         self.registry = registry or register_dbfox_tools()
+        self.event_store = event_store
 
         # Resolved model config (request overrides env)
         self.model_name = request.model_name
@@ -38,6 +41,7 @@ class RequestContext:
             "registry": self.registry,
             "db": self.db,
             "request": self.request,
+            "event_store": self.event_store,
         }
         return {
             "configurable": configurable,

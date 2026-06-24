@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from engine.agent.nodes.turn_node import (
@@ -9,7 +11,7 @@ from engine.agent.nodes.turn_node import (
     plan_message_compaction,
 )
 from engine.agent_core.memory import sql_fingerprint
-from engine.agent_core.types import AgentRunRequest
+from engine.agent_core.types import AgentApprovalRecord, AgentRunRequest, AgentRunResponse
 from engine.tools.runtime import ToolRegistry
 from engine.models import AgentSession, AgentSessionMemory, DataSource, ReusableSQL
 
@@ -18,6 +20,58 @@ class Message:
     def __init__(self, id: str, type: str = "human") -> None:
         self.id = id
         self.type = type
+
+
+class FakeApprovalEventStore:
+    def __init__(self) -> None:
+        self.created_approvals: list[dict] = []
+
+    def create_approval(self, **kwargs):
+        self.created_approvals.append(kwargs)
+        return AgentApprovalRecord(
+            id="approval-progress-event-store",
+            run_id=kwargs["run_id"],
+            session_id=kwargs["session_id"],
+            step_name=kwargs["step_name"],
+            tool_name=kwargs["tool_name"],
+            status="pending",
+            risk_level=kwargs["risk_level"],
+            reason=kwargs["reason"],
+            policy_decision=kwargs["policy_decision"],
+            requested_action=kwargs["requested_action"],
+            created_at=datetime.now(UTC),
+        )
+
+
+class FakeMemoryProjectionStore:
+    def __init__(self) -> None:
+        self.saved_projection: dict | None = None
+
+    def load_session_memory(self, session_id: str):
+        assert session_id == "session_projection_boundary"
+        return {
+            "datasource_id": "ds_projection_boundary",
+            "conversation_summary": "来自 projection store 的摘要",
+            "artifact_ref_index": [{"artifact_id": "artifact_projection"}],
+            "sql_ref_index": [],
+        }
+
+    def list_reusable_sqls(self, *, datasource_id: str, limit: int = 5):
+        assert datasource_id == "ds_projection_boundary"
+        return [
+            {
+                "safe_sql": "SELECT 1",
+                "tables": [],
+                "columns": [],
+            }
+        ]
+
+    def save_run_projection(self, response, *, final_state, datasource_id):
+        self.saved_projection = {
+            "response": response,
+            "final_state": final_state,
+            "datasource_id": datasource_id,
+        }
 
 
 def test_build_turn_reset_update_clears_turn_runtime_without_touching_durable_memory() -> None:
@@ -520,9 +574,96 @@ def test_agent_service_initial_state_recalls_datasource_reusable_sql(db_session)
     assert state["reusable_sql_candidates"][0]["tables"] == ["ai_tool_invocations"]
 
 
-def test_progress_routes_confirmation_only_safety_to_approval() -> None:
+def test_agent_service_initial_state_uses_memory_projection_store(monkeypatch) -> None:
+    from engine.agent.app.service import DBFoxAgentService
+    from engine.agent_core import persistence as agent_persistence
+
+    def fail_load_session_memory(*_args, **_kwargs):
+        raise AssertionError("service must not load session memory directly")
+
+    def fail_list_reusable_sqls(*_args, **_kwargs):
+        raise AssertionError("service must not list reusable SQLs directly")
+
+    monkeypatch.setattr(agent_persistence, "load_session_memory", fail_load_session_memory)
+    monkeypatch.setattr(agent_persistence, "list_reusable_sqls", fail_list_reusable_sqls)
+
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    service.db = object()
+    service.memory_projection = FakeMemoryProjectionStore()
+
+    state = service._initial_state(
+        AgentRunRequest(
+            datasource_id="ds_projection_boundary",
+            question="继续",
+            session_id="session_projection_boundary",
+        ),
+        "run_projection_boundary",
+        "session_projection_boundary",
+    )
+
+    assert state["conversation_summary"] == "来自 projection store 的摘要"
+    assert state["artifact_ref_index"][0]["artifact_id"] == "artifact_projection"
+    assert state["reusable_sql_candidates"][0]["safe_sql"] == "SELECT 1"
+
+
+def test_agent_service_persists_memory_projection_through_store(monkeypatch) -> None:
+    from engine.agent.app.service import DBFoxAgentService
+    from engine.agent_core import persistence as agent_persistence
+
+    def fail_save_session_memory(*_args, **_kwargs):
+        raise AssertionError("service must not save session memory directly")
+
+    def fail_upsert_reusable_sql(*_args, **_kwargs):
+        raise AssertionError("service must not upsert reusable SQL directly")
+
+    monkeypatch.setattr(agent_persistence, "save_session_memory", fail_save_session_memory)
+    monkeypatch.setattr(agent_persistence, "upsert_reusable_sql", fail_upsert_reusable_sql)
+
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    store = FakeMemoryProjectionStore()
+    service.memory_projection = store
+    response = AgentRunResponse(
+        run_id="run_projection_save",
+        session_id="session_projection_save",
+        success=True,
+        status="completed",
+        question="统计用户",
+        artifacts=[],
+    )
+    final_state = {
+        "conversation_summary": "保存到 projection store",
+        "sql_ref_index": [
+            {
+                "safe_sql": "SELECT COUNT(*) FROM users",
+                "question": "统计用户",
+                "tables": ["users"],
+                "columns": ["count"],
+                "verified": True,
+            }
+        ],
+    }
+
+    service._persist_memory_projection(
+        response,
+        final_state=final_state,
+        datasource_id="ds_projection_save",
+    )
+
+    assert store.saved_projection is not None
+    assert store.saved_projection["response"].run_id == "run_projection_save"
+    assert store.saved_projection["datasource_id"] == "ds_projection_save"
+
+
+def test_progress_routes_confirmation_only_safety_to_approval(monkeypatch) -> None:
     from engine.agent.graph.routes import route_progress_output
     from engine.agent.nodes.progress_node import judge_progress
+    from engine.agent_core import persistence as agent_persistence
+
+    def fail_create_approval(*_args, **_kwargs):
+        raise AssertionError("progress node must not write approvals directly")
+
+    monkeypatch.setattr(agent_persistence, "create_approval", fail_create_approval)
+    store = FakeApprovalEventStore()
 
     state = {
         "run_id": "run_confirm",
@@ -546,15 +687,18 @@ def test_progress_routes_confirmation_only_safety_to_approval() -> None:
             "configurable": {
                 "thread_id": "session_confirm",
                 "registry": ToolRegistry(),
-                "db": None,
+                "db": object(),
+                "event_store": store,
                 "request": AgentRunRequest(datasource_id="ds_confirm", question="查用户"),
             }
         },
     )
 
     assert update["status"] == "waiting_approval"
+    assert update["pending_approval"]["id"] == "approval-progress-event-store"
     assert update["pending_approval"]["tool_name"] == "sql.execute_readonly"
     assert update["pending_approval"]["requested_action"]["args"]["sql"] == "SELECT * FROM users LIMIT 1000"
+    assert store.created_approvals[0]["run_id"] == "run_confirm"
     routed_state = dict(state)
     routed_state.update(update)
     assert route_progress_output(routed_state) == "approval"

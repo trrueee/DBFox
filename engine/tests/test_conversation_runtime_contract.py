@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from engine.agent_core.event_store import create_agent_event_store
 from engine.agent_core.persistence import get_conversation_detail
-from engine.agent_core.persistence_sink import create_persistence_sink
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse
 from engine.models import (
     AgentArtifactRecord,
@@ -81,14 +81,15 @@ def test_conversation_message_run_artifact_links(db_session):
     assert saved.runs[0].artifacts[0].message_id == "msg-assistant-1"
 
 
-def test_persistence_sink_creates_user_and_assistant_messages(db_session):
-    sink = create_persistence_sink(db_session)
-    req = AgentRunRequest(datasource_id="ds-1", question="Count users", session_id="conv-sink")
+def test_agent_event_store_creates_user_and_assistant_messages(db_session):
+    store = create_agent_event_store(db_session)
+    req = AgentRunRequest(datasource_id="ds-1", question="Count users", session_id="conv-store")
 
-    sink.start_run(req, run_id="run-sink", session_id="conv-sink")
+    store.start_run(req, run_id="run-store", session_id="conv-store")
+    store.flush()
     db_session.commit()
 
-    detail = get_conversation_detail(db_session, "conv-sink")
+    detail = get_conversation_detail(db_session, "conv-store")
     assert detail is not None
     assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
     assert detail["messages"][0]["content"] == "Count users"
@@ -97,13 +98,13 @@ def test_persistence_sink_creates_user_and_assistant_messages(db_session):
     assert detail["runs"][0]["assistant_message_id"] == detail["messages"][1]["id"]
 
 
-def test_persistence_sink_completes_assistant_message(db_session):
-    sink = create_persistence_sink(db_session)
-    req = AgentRunRequest(datasource_id="ds-1", question="Count users", session_id="conv-sink-complete")
-    sink.start_run(req, run_id="run-sink-complete", session_id="conv-sink-complete")
+def test_agent_event_store_completes_assistant_message(db_session):
+    store = create_agent_event_store(db_session)
+    req = AgentRunRequest(datasource_id="ds-1", question="Count users", session_id="conv-store-complete")
+    store.start_run(req, run_id="run-store-complete", session_id="conv-store-complete")
     response = AgentRunResponse(
-        run_id="run-sink-complete",
-        session_id="conv-sink-complete",
+        run_id="run-store-complete",
+        session_id="conv-store-complete",
         success=True,
         status="completed",
         question="Count users",
@@ -111,10 +112,10 @@ def test_persistence_sink_completes_assistant_message(db_session):
         artifacts=[],
     )
 
-    sink.complete_run(response)
+    store.complete_run(response)
     db_session.commit()
 
-    detail = get_conversation_detail(db_session, "conv-sink-complete")
+    detail = get_conversation_detail(db_session, "conv-store-complete")
     assert detail is not None
     assistant = detail["messages"][1]
     assert assistant["role"] == "assistant"

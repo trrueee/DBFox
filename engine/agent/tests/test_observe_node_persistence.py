@@ -297,18 +297,18 @@ def test_observe_tools_does_not_write_artifacts_with_graph_db(db_session, monkey
     assert calls == []
 
 
-def test_service_persists_artifact_created_events_via_sink():
-    class FakeSink:
+def test_service_persists_artifact_created_events_via_event_store():
+    class FakeEventStore:
         def __init__(self):
             self.artifacts = []
 
-        def record_artifact(self, session_id, run_id, artifact, index):
+        def append_artifact(self, session_id, run_id, artifact, index):
             self.artifacts.append((session_id, run_id, artifact, index))
 
-    sink = FakeSink()
+    store = FakeEventStore()
     service = DBFoxAgentService.__new__(DBFoxAgentService)
     service._persist_events = True
-    service.persistence_sink = sink
+    service.event_store = store
 
     artifact = AgentArtifact(
         id="artifact-1",
@@ -329,7 +329,7 @@ def test_service_persists_artifact_created_events_via_sink():
 
     service._persist_artifact_event("session-1", event, index=3)
 
-    assert sink.artifacts == [("session-1", "run-1", artifact, 3)]
+    assert store.artifacts == [("session-1", "run-1", artifact, 3)]
 
 
 def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypatch):
@@ -348,6 +348,10 @@ def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypat
     monkeypatch.setattr("engine.agent_core.workspace_context.build_agent_context_bundle", fake_context_bundle)
     service = DBFoxAgentService.__new__(DBFoxAgentService)
     service.db = object()
+    service.memory_projection = SimpleNamespace(
+        load_session_memory=lambda _session_id: None,
+        list_reusable_sqls=lambda **_kwargs: [],
+    )
 
     state = service._initial_state(
         AgentRunRequest(datasource_id="ds-test", question="分析新注册用户"),
@@ -369,6 +373,10 @@ def test_service_initial_state_exposes_state_namespaces(monkeypatch):
     )
     service = DBFoxAgentService.__new__(DBFoxAgentService)
     service.db = object()
+    service.memory_projection = SimpleNamespace(
+        load_session_memory=lambda _session_id: None,
+        list_reusable_sqls=lambda **_kwargs: [],
+    )
 
     state = service._initial_state(
         AgentRunRequest(datasource_id="ds-test", question="分析订单", execute=False),

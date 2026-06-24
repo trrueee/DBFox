@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from engine.errors import DBFoxError
-from engine.agent_core.types import AgentRunRequest, AgentRunResponse
+from engine.agent_core.types import AgentArtifactType, AgentRunRequest, AgentRunResponse
 from engine.models import AgentMessage, AgentRun, AgentArtifactRecord
 from engine.agent_core.persistence._common import (
     _safe_json,
@@ -19,6 +19,8 @@ from engine.agent_core.persistence._common import (
     _parse_json,
     _redact_trace_for_storage,
     _summarize_artifact_payload,
+    _model_optional_str,
+    _model_str,
 )
 
 logger = logging.getLogger("dbfox.agent.persistence")
@@ -398,7 +400,8 @@ def build_followup_context_from_run(
     if run is None:
         return None
 
-    response_data = _parse_json(run.response_json) if run.response_json else None
+    response_json = _model_optional_str(run, "response_json")
+    response_data = _parse_json(response_json) if response_json else None
     previous_answer = None
     if response_data:
         answer = response_data.get("answer")
@@ -413,15 +416,15 @@ def build_followup_context_from_run(
     )
 
     return AgentFollowUpContext(
-        session_id=run.session_id,
-        parent_run_id=run.id,
-        previous_question=run.question,
+        session_id=_model_optional_str(run, "session_id"),
+        parent_run_id=_model_optional_str(run, "id"),
+        previous_question=_model_optional_str(run, "question"),
         previous_answer=previous_answer,
         artifacts=[
             AgentContextArtifact(
-                id=artifact.id,
-                type=artifact.type,
-                title=artifact.title,
+                id=_model_str(artifact, "id"),
+                type=cast(AgentArtifactType, _model_str(artifact, "type")),
+                title=_model_str(artifact, "title"),
                 summary=_summarize_artifact_payload(
                     payload
                 ),
