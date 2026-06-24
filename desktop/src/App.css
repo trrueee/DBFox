@@ -342,8 +342,8 @@
 }
 
 .hifi-tree-node {
-  display: flex; align-items: center; height: 28px; padding: 0 6px;
-  border-radius: 6px; cursor: pointer; font-size: var(--ui-font-control);
+  display: flex; align-items: center; height: 32px; padding: 0 6px;
+  border-radius: 6px; cursor: pointer; font-size: 13.5px;
   color: var(--color-text-secondary); transition: background 0.1s ease, color 0.1s ease;
 }
 .hifi-tree-node:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
@@ -1318,7 +1318,7 @@
 .hifi-ai-badge {
   padding: 1px 4px;
   background: #F3E8FF;
-  color: #C45A3C;
+  color: var(--color-primary);
   font-size: var(--ui-font-micro);
   font-weight: 600;
   border-radius: 3px;
@@ -1564,13 +1564,13 @@
 .artifact-card-table .artifact-card-badge {
   border-color: #BFDBFE;
   background: #EFF6FF;
-  color: #C45A3C;
+  color: var(--color-info);
 }
 
 .artifact-card-chart .artifact-card-badge {
   border-color: #DDD6FE;
   background: #F5F3FF;
-  color: #C45A3C;
+  color: var(--color-primary);
 }
 
 .artifact-card-sql .artifact-card-badge {
@@ -2796,7 +2796,7 @@
 }
 
 .hifi-approval-approve {
-  background: #C45A3C;
+  background: var(--color-success);
   color: #FFFFFF;
 }
 
@@ -3018,7 +3018,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: #EFF6FF;
-  color: #C45A3C;
+  color: var(--color-primary);
 }
 
 .hifi-eval-chip-keyword {
@@ -3132,7 +3132,7 @@
   gap: 7px;
   padding: 6px 16px;
   font-size: var(--ui-font-label);
-  color: #C45A3C;
+  color: var(--color-primary);
   background: #EFF6FF;
   border-top: 1px solid #BFDBFE;
 }
@@ -3368,12 +3368,12 @@
 }
 .hifi-artifact-chip-table {
   background: #EFF6FF;
-  color: #C45A3C;
+  color: var(--color-info);
   border: 1px solid #BFDBFE;
 }
 .hifi-artifact-chip-chart {
   background: #F5F3FF;
-  color: #C45A3C;
+  color: var(--color-primary);
   border: 1px solid #DDD6FE;
 }
 .hifi-artifact-chip-sql {
@@ -3921,7 +3921,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   color: #fff;
   flex-shrink: 0;
 }
@@ -4301,7 +4301,7 @@
   height: 34px;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--color-primary), #C45A3C);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
   color: #fff;
   font-size: var(--ui-font-control);
   font-weight: 600;
@@ -4839,5 +4839,31 @@
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ── UI Text Copy Prevention ── */
+.u-select-none,
+.hifi-btn,
+.hifi-tree-node,
+.ds-quick-nav-item,
+.hifi-datasource-list-item,
+.hifi-tab-pane button,
+.hifi-ai-badge,
+.hifi-guide-chip-prod,
+.artifact-card-badge,
+.hifi-artifact-chip-table,
+.hifi-artifact-chip-chart,
+.hifi-artifact-chip-sql,
+.hifi-eval-chip,
+.hifi-eval-chip-keyword,
+.field-label,
+.hifi-page-title,
+.hifi-search-icon,
+.hifi-settings-page-icon,
+.hifi-shortcuts-close {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
