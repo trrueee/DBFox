@@ -33,6 +33,12 @@ export function Composer({
             aria-label="继续提问"
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                submit();
+              }
+            }}
             placeholder={disabled || "Continue asking..."}
             disabled={Boolean(disabled)}
             rows={2}

@@ -4867,3 +4867,30 @@
   -ms-user-select: none;
 }
 
+/* ── Custom Premium Scrollbars ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.18);
+  border-radius: 99px;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.4);
+}
+
+/* ── Tauri Inactive Window State Dimming ── */
+.window-inactive .titlebar {
+  opacity: 0.72;
+  filter: grayscale(15%);
+  transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.window-inactive .titlebar-title {
+  color: var(--color-text-muted);
+}
+

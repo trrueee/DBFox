@@ -59,7 +59,7 @@ export default function TitleBar() {
   const handleClose = async () => { try { (await getTauriWindow())?.close(); } catch { /* ignore */ } };
 
   return (
-    <div className="titlebar" data-tauri-drag-region>
+    <div className="titlebar" data-tauri-drag-region onDoubleClick={handleToggleMaximize}>
       <span className="titlebar-brand">
         <span className="titlebar-logo">
           <FoxIcon variant="app" size={20} />
