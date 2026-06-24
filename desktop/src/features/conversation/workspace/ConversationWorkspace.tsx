@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import { Composer } from "./Composer";
 import { ArtifactDock } from "./ArtifactDock";
 import { ConversationHeader } from "./ConversationHeader";
@@ -17,7 +17,7 @@ export function ConversationWorkspace({
   conversationId: string;
   onOpenHistory: () => void;
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab: (artifact: ResultViewArtifact) => void;
   onDelete: () => void;
 }) {
   const [selectedArtifact, setSelectedArtifact] = useState<{ conversationId: string; artifactId: string } | null>(null);
@@ -42,35 +42,33 @@ export function ConversationWorkspace({
   const selectedArtifactId = selectedArtifact?.conversationId === conversationId ? selectedArtifact.artifactId : null;
   const selectArtifact = (artifactId: string) => setSelectedArtifact({ conversationId, artifactId });
   return (
-    <div className="conv-workspace">
-      <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
-      <div className={`conv-workspace-main ${hasArtifacts ? "has-artifact-dock" : ""}`}>
-        <section className="conv-conversation-pane" aria-label="Conversation">
-          <MessageList
-            messages={messages}
-            runs={runs}
-            artifacts={artifacts}
-            onOpenSqlConsole={onOpenSqlConsole}
-            onOpenResultTab={onOpenResultTab}
-            onResolveApproval={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
-            onSelectArtifact={selectArtifact}
-          />
-          <Composer
-            running={Boolean(runningRun)}
-            onSend={(text) => void sendMessage(conversationId, text)}
-            onCancel={() => runningRun && cancelRun(runningRun.id)}
-          />
-        </section>
-        {hasArtifacts && (
-          <ArtifactDock
-            artifacts={artifacts}
-            selectedArtifactId={selectedArtifactId}
-            onSelectArtifact={selectArtifact}
-            onOpenSqlConsole={onOpenSqlConsole}
-            onOpenResultTab={onOpenResultTab}
-          />
-        )}
-      </div>
+    <div className={`conv-workspace ${hasArtifacts ? "has-artifact-dock" : ""}`}>
+      <section className="conv-conversation-pane" aria-label="Conversation">
+        <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
+        <MessageList
+          messages={messages}
+          runs={runs}
+          artifacts={artifacts}
+          onOpenSqlConsole={onOpenSqlConsole}
+          onOpenResultTab={onOpenResultTab}
+          onResolveApproval={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
+          onSelectArtifact={selectArtifact}
+        />
+        <Composer
+          running={Boolean(runningRun)}
+          onSend={(text) => void sendMessage(conversationId, text)}
+          onCancel={() => runningRun && cancelRun(runningRun.id)}
+        />
+      </section>
+      {hasArtifacts && (
+        <ArtifactDock
+          artifacts={artifacts}
+          selectedArtifactId={selectedArtifactId}
+          onSelectArtifact={selectArtifact}
+          onOpenSqlConsole={onOpenSqlConsole}
+          onOpenResultTab={onOpenResultTab}
+        />
+      )}
     </div>
   );
 }

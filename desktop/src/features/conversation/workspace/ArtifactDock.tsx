@@ -1,7 +1,7 @@
 import { BarChart3, CheckCircle2, Code2, FileText, ShieldCheck, Table2 } from "lucide-react";
 import type { CSSProperties, KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { TableArtifact, ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
 import { MarkdownArtifactView } from "../../workspace/artifacts/MarkdownArtifactView";
@@ -9,6 +9,7 @@ import { SqlArtifactView } from "../../workspace/artifacts/SqlArtifactView";
 import { TableArtifactView } from "../../workspace/artifacts/TableArtifactView";
 import {
   conversationSqlText,
+  isSqlBackedResultViewArtifact,
   payloadBoolean,
   safetyGuardrailResult,
   safetySchemaWarningsCount,
@@ -16,7 +17,7 @@ import {
   toChartArtifactModel,
   toMarkdownArtifactModel,
   toSqlArtifactModel,
-  toTableArtifactModel,
+  toResultViewArtifactModel,
 } from "./conversationArtifactModels";
 
 interface ArtifactDockProps {
@@ -24,7 +25,7 @@ interface ArtifactDockProps {
   selectedArtifactId?: string | null;
   onSelectArtifact?: (artifactId: string) => void;
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
 }
 
 type DockKind = "sql" | "safety" | "result" | "chart" | "note";
@@ -53,7 +54,7 @@ export function ArtifactDock({
   const preferredArtifactId = useMemo(() => {
     const selected = orderedArtifacts.find((artifact) => artifact.id === selectedArtifactId);
     if (selected) return selected.id;
-    const result = orderedArtifacts.find((artifact) => artifact.type === "result_view" || artifact.type === "table");
+    const result = orderedArtifacts.find(isSqlBackedResultViewArtifact);
     return result?.id || orderedArtifacts[0]?.id || null;
   }, [orderedArtifacts, selectedArtifactId]);
   const [localSelectedId, setLocalSelectedId] = useState<string | null>(preferredArtifactId);
@@ -126,12 +127,6 @@ export function ArtifactDock({
         onPointerDown={handleResizePointerDown}
         onKeyDown={handleResizeKeyDown}
       />
-      <header className="conv-artifact-dock-header">
-        <div>
-          <strong>产物</strong>
-          <span>{orderedArtifacts.length} items</span>
-        </div>
-      </header>
       <div className="conv-artifact-dock-body">
         <nav className="conv-artifact-dock-list" aria-label="Artifact list">
           {orderedArtifacts.map((artifact) => {
@@ -178,8 +173,7 @@ function isDockArtifact(artifact: ConversationArtifact): boolean {
     artifact.type === "sql" ||
     artifact.type === "sql_suggestion" ||
     artifact.type === "safety" ||
-    artifact.type === "table" ||
-    artifact.type === "result_view" ||
+    isSqlBackedResultViewArtifact(artifact) ||
     artifact.type === "chart" ||
     artifact.type === "markdown" ||
     artifact.type === "query_plan" ||
@@ -191,7 +185,7 @@ function isDockArtifact(artifact: ConversationArtifact): boolean {
 function artifactKind(artifact: ConversationArtifact): DockKind {
   if (artifact.type === "sql" || artifact.type === "sql_suggestion") return "sql";
   if (artifact.type === "safety") return "safety";
-  if (artifact.type === "table" || artifact.type === "result_view") return "result";
+  if (isSqlBackedResultViewArtifact(artifact)) return "result";
   if (artifact.type === "chart") return "chart";
   return "note";
 }
@@ -219,7 +213,7 @@ function DockArtifactPreview({
 }: {
   artifact: ConversationArtifact;
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab?: (artifact: TableArtifact | ResultViewArtifact) => void;
+  onOpenResultTab?: (artifact: ResultViewArtifact) => void;
 }) {
   if (artifact.type === "sql" || artifact.type === "sql_suggestion") {
     return (
@@ -231,10 +225,10 @@ function DockArtifactPreview({
     );
   }
 
-  if (artifact.type === "table" || artifact.type === "result_view") {
+  if (isSqlBackedResultViewArtifact(artifact)) {
     return (
       <TableArtifactView
-        artifact={toTableArtifactModel(artifact)}
+        artifact={toResultViewArtifactModel(artifact)}
         onOpenResultTab={onOpenResultTab}
         onToast={() => undefined}
       />
