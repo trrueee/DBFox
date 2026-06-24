@@ -4,6 +4,7 @@ from typing import Any
 import re
 
 from engine.agent_core.types import AgentAnswer, AgentArtifact, AgentArtifactPresentation
+from engine.sql.result_view.fingerprint import result_source_fingerprint
 
 
 class AgentArtifactIdentity:
@@ -186,17 +187,23 @@ def build_result_view_artifact(
     # Fingerprint the SQL so each distinct query gets its own result view artifact.
     sql = _execution_sql(execution)
     semantic_id = "result_view" if not sql else f"result_view_{_sql_fingerprint(sql)}"
+    dialect = _execution_dialect(execution, safety)
+    fingerprint = result_source_fingerprint(sql or "", dialect) if sql else ""
     
     all_rows = execution.get("rows") or []
     preview_rows = all_rows[:10]
     is_sql_backed = bool(datasource_id and sql)
+    typed_columns = _result_view_columns(execution)
     payload: dict[str, Any] = {
         "storageMode": "sql_backed" if is_sql_backed else "payload",
         "datasourceId": datasource_id or "",
         "sourceSqlSemanticId": "sql_candidate",
         "sourceSql": sql,
         "safeSql": sql,
-        "columns": execution.get("columns", []),
+        "dialect": dialect,
+        "columns": typed_columns,
+        "fingerprint": fingerprint,
+        "sqlFingerprint": fingerprint,
         "previewRows": preview_rows,
         "previewRowCount": len(preview_rows),
         "rowCount": execution.get("rowCount", len(all_rows)),
@@ -399,6 +406,66 @@ def _execution_sql(execution: dict[str, Any] | None) -> str | None:
     if not sql:
         return None
     return str(sql).strip()
+
+
+def _execution_dialect(execution: dict[str, Any] | None, safety: dict[str, Any] | None) -> str:
+    candidates = []
+    if isinstance(execution, dict):
+        candidates.extend([execution.get("dialect"), execution.get("db_dialect")])
+        safety_decision = execution.get("safetyDecision") or execution.get("safety_decision")
+        if isinstance(safety_decision, dict):
+            candidates.extend([safety_decision.get("dialect"), safety_decision.get("db_dialect")])
+    if isinstance(safety, dict):
+        candidates.extend([safety.get("dialect"), safety.get("db_dialect")])
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            raw = value.strip().lower()
+            if raw in {"postgres", "postgresql"}:
+                return "postgresql"
+            if raw == "sqlite":
+                return "sqlite"
+            return "mysql"
+    return "mysql"
+
+
+def _result_view_columns(execution: dict[str, Any]) -> list[dict[str, str]]:
+    raw_columns = execution.get("columns") or []
+    rows = execution.get("rows") or []
+    typed: list[dict[str, str]] = []
+    for item in raw_columns if isinstance(raw_columns, list) else []:
+        if isinstance(item, dict):
+            raw_name = item.get("name") or item.get("field") or item.get("column")
+            name = raw_name if isinstance(raw_name, str) else ""
+            raw_type = item.get("type") or item.get("dataType") or item.get("data_type")
+            column_type = raw_type if isinstance(raw_type, str) and raw_type.strip() else _infer_column_type(name, rows)
+        else:
+            name = str(item)
+            column_type = _infer_column_type(name, rows)
+        name = name.strip()
+        if name:
+            typed.append({"name": name, "type": column_type})
+    return typed
+
+
+def _infer_column_type(column: str, rows: Any) -> str:
+    if not isinstance(rows, list):
+        return "unknown"
+    for row in rows:
+        if not isinstance(row, dict) or column not in row:
+            continue
+        value = row.get(column)
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "float"
+        if isinstance(value, bytes):
+            return "binary"
+        return "text"
+    return "unknown"
 
 
 def _sql_fingerprint(sql: str) -> str:

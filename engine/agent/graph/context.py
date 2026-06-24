@@ -13,6 +13,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.orm import Session
 
+from engine.agent_core.event_store import AgentEventStore
 from engine.agent_core.types import AgentRunRequest
 from engine.tools.runtime.registry import ToolRegistry
 
@@ -30,6 +31,7 @@ class GraphRuntimeContext:
     registry: ToolRegistry
     db: Session
     request: AgentRunRequest
+    event_store: AgentEventStore | None = None
     model_name: str | None = None
     api_key: str | None = None
     api_base: str | None = None
@@ -58,6 +60,7 @@ class GraphRuntimeContext:
             "registry": self.registry,
             "db": self.db,
             "request": self.request,
+            "event_store": self.event_store,
         }
 
 
@@ -73,6 +76,7 @@ def graph_context(config: RunnableConfig) -> GraphRuntimeContext:
         registry=raw["registry"],
         db=raw["db"],
         request=raw["request"],
+        event_store=raw.get("event_store"),
         model_name=raw.get("model_name"),
         api_key=raw.get("api_key"),
         api_base=raw.get("api_base"),

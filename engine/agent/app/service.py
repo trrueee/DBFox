@@ -4,7 +4,7 @@ import logging
 import os
 import uuid
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ from engine.agent_core.checkpointer import build_agent_core_checkpointer
 from engine.tools.dbfox_tools import register_dbfox_tools
 from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.events import EventEmitter
+from engine.agent_core.event_store import create_agent_event_store
+from engine.agent_core.memory_projection import AgentMemoryProjectionStore
 
 from engine.agent.graph.react_graph import build_dbfox_react_graph
 from engine.agent.graph.state import DBFoxAgentState, sync_state_namespaces
@@ -28,10 +30,9 @@ from engine.agent.app.response_builder import build_response
 
 from engine.agent.app.persistence import (
     resolve_session_id,
-    start_run_persistence,
+    build_approval_checkpoint_draft,
     pending_approval_from_workspace,
     request_from_run,
-    save_approval_checkpoint,
 )
 from engine.agent.app.event_mapper import (
     observe_events,
@@ -141,17 +142,17 @@ def _restore_session_memory(
         state["active_task"] = active_task
 
 
-def _load_session_memory_safe(db: Session, session_id: str) -> dict[str, Any] | None:
+def _load_session_memory_safe(memory_projection: Any, session_id: str) -> dict[str, Any] | None:
     try:
-        return agent_persistence.load_session_memory(db, session_id)
+        return memory_projection.load_session_memory(session_id)
     except Exception:
         logger.warning("Failed to load agent session memory", exc_info=True)
         return None
 
 
-def _list_reusable_sqls_safe(db: Session, datasource_id: str) -> list[dict[str, Any]]:
+def _list_reusable_sqls_safe(memory_projection: Any, datasource_id: str) -> list[dict[str, Any]]:
     try:
-        return agent_persistence.list_reusable_sqls(db, datasource_id=datasource_id, limit=5)
+        return memory_projection.list_reusable_sqls(datasource_id=datasource_id, limit=5)
     except Exception:
         logger.warning("Failed to list datasource reusable SQL candidates", exc_info=True)
         return []
@@ -167,11 +168,11 @@ class DBFoxAgentService:
         self.db = db
         self.registry = register_dbfox_tools()
         self._checkpointer = build_agent_core_checkpointer()
-        _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "sync")
+        _mode = os.environ.get("AGENT_PERSISTENCE_MODE", "buffered")
         _events_flag = os.environ.get("AGENT_PERSIST_RUNTIME_EVENTS", "true")
         self._persist_events = _mode != "disabled" and _events_flag.lower() != "false"
-        from engine.agent_core.persistence_sink import create_persistence_sink
-        self.persistence_sink = create_persistence_sink(db)
+        self.event_store = create_agent_event_store(db)
+        self.memory_projection = AgentMemoryProjectionStore(db)
 
     # ---- Public API ----------------------------------------------------------
 
@@ -197,7 +198,7 @@ class DBFoxAgentService:
             if not req.session_id:
                 req.session_id = req.follow_up_context.session_id
 
-        ctx = RequestContext(self.db, req, self.registry)
+        ctx = RequestContext(self.db, req, self.registry, self.event_store)
         run_id = str(uuid.uuid4())
         session_id = resolve_session_id(self.db, req)
         artifact_identity = AgentArtifactIdentity(run_id)
@@ -213,7 +214,11 @@ class DBFoxAgentService:
             step={"datasource_id": req.datasource_id, "question": req.question, "execute": req.execute},
         )
         if self._persist_events:
-            start_run_persistence(self.persistence_sink, req, run_id, session_id, self.db)
+            try:
+                self.event_store.start_run(req, run_id=run_id, session_id=session_id)
+            except Exception as exc:
+                logger.warning("Failed to start persistence for run %s: %s", run_id, exc)
+                self._rollback_quietly()
 
         # Build initial state
         initial_state = self._initial_state(req, run_id, session_id)
@@ -246,7 +251,7 @@ class DBFoxAgentService:
                         QUERY_REGISTRY.cancel(execution_id)
                     except Exception:
                         logger.debug("Failed to cancel active SQL query on SSE disconnect", exc_info=True)
-                agent_persistence.cancel_run(self.db, run_id=run_id)
+                self.event_store.cancel_run(run_id)
                 self.db.commit()
             except Exception:
                 self._rollback_quietly()
@@ -260,12 +265,12 @@ class DBFoxAgentService:
         # ---- after the stream loop: check for LangGraph interrupt ----------
         snapshot = app.get_state(config)
         if snapshot is not None and getattr(snapshot, "interrupts", None):
+            self._flush_event_store(run_id, "approval checkpoint")
             interrupt_state: dict[str, Any] = (
                 dict(snapshot.values) if isinstance(snapshot.values, dict)
                 else dict(accumulated_state)
             )
-            response, approval = save_approval_checkpoint(
-                self.db,
+            draft = build_approval_checkpoint_draft(
                 run_id=run_id,
                 session_id=session_id,
                 req=req,
@@ -273,6 +278,27 @@ class DBFoxAgentService:
                 steps=agent_state.steps,
                 artifacts=artifacts_from_state(interrupt_state, agent_state),
             )
+            response = draft.response
+            approval = draft.approval
+            if self._persist_events:
+                try:
+                    response.checkpoint = self.event_store.save_checkpoint(
+                        run_id=run_id,
+                        session_id=session_id,
+                        status=draft.status,
+                        current_step_name=draft.current_step_name,
+                        next_step_name=draft.next_step_name,
+                        plan=draft.plan,
+                        state=draft.state,
+                        completed_steps=draft.completed_steps,
+                        pending_steps=draft.pending_steps,
+                        artifacts=draft.artifacts,
+                        waiting_approval_id=draft.waiting_approval_id,
+                    )
+                    self.db.commit()
+                except Exception as exc:
+                    logger.warning("Failed to persist approval checkpoint for run %s: %s", run_id, exc)
+                    self._rollback_quietly()
             if approval:
                 yield emit("agent.approval.required", step={"name": approval.step_name}, approval=approval)
             yield emit("agent.checkpoint.saved", checkpoint=response.checkpoint)
@@ -338,20 +364,19 @@ class DBFoxAgentService:
         # Resolve the approval in DB.
         resolved_here = existing_approval.status == "pending"
         if resolved_here:
-            approval = agent_persistence.resolve_approval(
-                self.db,
+            approval = self.event_store.resolve_approval(
                 run_id=run_id,
                 approval_id=approval_id,
                 decision="approved" if approved else "rejected",
                 note=note,
-            )
+            ) or existing_approval
         else:
             approval = existing_approval
 
         req = request_from_run(self.db, run_id)
         session_id = approval.session_id
         checkpoint_payload = agent_persistence.get_latest_checkpoint_payload(self.db, run_id)
-        ctx = RequestContext(self.db, req, self.registry)
+        ctx = RequestContext(self.db, req, self.registry, self.event_store)
 
         emitter = self._build_emitter(
             run_id, session_id,
@@ -369,7 +394,7 @@ class DBFoxAgentService:
             )
 
         if approved:
-            agent_persistence.mark_run_resumed(self.db, run_id=run_id)
+            self.event_store.mark_run_resumed(run_id)
             yield emit("agent.run.resumed", step={"name": approval.step_name}, approval=approval)
 
         app = build_dbfox_react_graph(checkpointer=self._checkpointer)
@@ -377,7 +402,8 @@ class DBFoxAgentService:
         artifact_identity = AgentArtifactIdentity(run_id)
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
-        accumulated_state: dict[str, Any] = dict(checkpoint_payload.get("state") or {})
+        checkpoint_state = checkpoint_payload.get("state") if isinstance(checkpoint_payload, dict) else None
+        accumulated_state: dict[str, Any] = dict(checkpoint_state if isinstance(checkpoint_state, dict) else {})
 
         resume_value = {
             "decision": "approved" if approved else "rejected",
@@ -391,7 +417,7 @@ class DBFoxAgentService:
             )
         except GeneratorExit:
             try:
-                agent_persistence.cancel_run(self.db, run_id=run_id)
+                self.event_store.cancel_run(run_id)
                 self.db.commit()
             except Exception:
                 self._rollback_quietly()
@@ -457,6 +483,7 @@ class DBFoxAgentService:
             execution_mode = req.execution_mode
         else:
             execution_mode = "user_requested_read" if req.execute else "suggest_only"
+        clear_marker: Any = {"__clear__": True}
         state = DBFoxAgentState(
             run_id=run_id,
             thread_id=session_id,
@@ -486,8 +513,8 @@ class DBFoxAgentService:
             db_preview=None,
             # ---- Large Catalog Exploration ----
             candidate_tables=[],
-            searched_terms=[{"__clear__": True}],
-            exhausted_paths=[{"__clear__": True}],
+            searched_terms=[clear_marker],
+            exhausted_paths=[clear_marker],
             # ---- Multi-query Analysis Units ----
             analysis_units=[{"__clear__": True}],
             current_analysis_unit_id=None,
@@ -517,14 +544,14 @@ class DBFoxAgentService:
             revision_count=0,
             repair_mode=False,
             repair_stats=None,
-            reusable_sql_candidates=_list_reusable_sqls_safe(self.db, req.datasource_id),
+            reusable_sql_candidates=_list_reusable_sqls_safe(self.memory_projection, req.datasource_id),
         )
         _restore_session_memory(
-            state,
-            _load_session_memory_safe(self.db, session_id),
+            cast(dict[str, Any], state),
+            _load_session_memory_safe(self.memory_projection, session_id),
             datasource_id=req.datasource_id,
         )
-        sync_state_namespaces(state)
+        sync_state_namespaces(cast(dict[str, Any], state))
         return state
 
     def _new_agent_state(self, run_id: str, session_id: str, req: AgentRunRequest) -> Any:
@@ -570,11 +597,11 @@ class DBFoxAgentService:
                         yield event
 
                 if node_str in ("observe", "progress", "repair"):
-                    event, last_context_summary = context_update_event(
+                    context_event, last_context_summary = context_update_event(
                         emit, accumulated_state, last_context_summary,
                     )
-                    if event is not None:
-                        yield event
+                    if context_event is not None:
+                        yield context_event
 
                 # Emit trace events
                 if "trace_events" in update:
@@ -628,7 +655,11 @@ class DBFoxAgentService:
     def _build_emitter(self, run_id: str, session_id: str, start_sequence: int) -> EventEmitter:
         def save(event: AgentRuntimeEvent) -> None:
             if self._persist_events:
-                self.persistence_sink.record_event(session_id, event)
+                try:
+                    self.event_store.append_event(session_id, event)
+                except Exception as exc:
+                    logger.warning("Failed to persist runtime event for run %s: %s", run_id, exc)
+                    self._rollback_quietly()
 
         return EventEmitter(run_id, save, start_sequence=start_sequence)
 
@@ -646,7 +677,7 @@ class DBFoxAgentService:
         ):
             return
         try:
-            self.persistence_sink.record_artifact(session_id, event.run_id, event.artifact, index)
+            self.event_store.append_artifact(session_id, event.run_id, event.artifact, index)
         except Exception as exc:
             logger.warning(
                 "Failed to persist artifact %s for run %s: %s",
@@ -655,6 +686,15 @@ class DBFoxAgentService:
                 exc,
             )
 
+    def _flush_event_store(self, run_id: str, purpose: str) -> None:
+        if not self._persist_events:
+            return
+        try:
+            self.event_store.flush()
+        except Exception as exc:
+            logger.warning("Failed to flush event store for %s on run %s: %s", purpose, run_id, exc)
+            self._rollback_quietly()
+
     def _persist_memory_projection(
         self,
         response: AgentRunResponse,
@@ -662,45 +702,11 @@ class DBFoxAgentService:
         final_state: dict[str, Any],
         datasource_id: str,
     ) -> None:
-        artifact_refs = _memory_list(final_state.get("artifact_ref_index"))
-        sql_refs = _memory_list(final_state.get("sql_ref_index"))
-        recent_turns = _memory_list(final_state.get("recent_turns"))
-
-        payload: dict[str, Any] = {
-            "session_id": response.session_id,
-            "datasource_id": datasource_id,
-            "last_run_id": response.run_id,
-            "conversation_summary": final_state.get("conversation_summary") or response.context_summary,
-            "summary_cursor_message_id": final_state.get("summary_cursor_message_id"),
-            "recent_turns": recent_turns,
-            "artifact_ref_index": artifact_refs,
-            "sql_ref_index": sql_refs,
-            "active_task": final_state.get("active_task"),
-        }
-        agent_persistence.save_session_memory(
-            self.db,
-            session_id=response.session_id,
+        self.memory_projection.save_run_projection(
+            response,
+            final_state=final_state,
             datasource_id=datasource_id,
-            payload=payload,
         )
-
-        for ref in sql_refs:
-            safe_sql = str(ref.get("safe_sql") or "").strip()
-            ref_datasource_id = str(ref.get("datasource_id") or datasource_id)
-            if not safe_sql or not ref_datasource_id:
-                continue
-            agent_persistence.upsert_reusable_sql(
-                self.db,
-                datasource_id=ref_datasource_id,
-                question=str(ref.get("question") or response.question),
-                safe_sql=safe_sql,
-                purpose=ref.get("purpose"),
-                involved_tables=list(ref.get("tables") or ref.get("involved_tables") or []),
-                result_columns=list(ref.get("columns") or ref.get("result_columns") or []),
-                source_artifact_id=ref.get("artifact_id"),
-                source_sql_artifact_id=ref.get("source_sql_artifact_id"),
-                verified=bool(ref.get("verified")),
-            )
 
     def _finalize_persistence(
         self,
@@ -718,7 +724,7 @@ class DBFoxAgentService:
         if self._persist_events:
             try:
                 if response.success:
-                    self.persistence_sink.complete_run(response)
+                    self.event_store.complete_run(response)
                     if final_state is not None and datasource_id:
                         self._persist_memory_projection(
                             response,
@@ -726,7 +732,7 @@ class DBFoxAgentService:
                             datasource_id=datasource_id,
                         )
                 else:
-                    self.persistence_sink.fail_run(
+                    self.event_store.fail_run(
                         response.run_id, response.session_id,
                         response.error or response.status or "Agent stopped.", response,
                     )

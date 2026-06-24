@@ -85,7 +85,7 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
     }
 
     if status == "failed" and error:
-        error_artifact = _build_and_persist_error_artifact(state, config, str(error))
+        error_artifact = _build_error_artifact(state, str(error))
         if error_artifact is not None:
             result["artifacts"] = [error_artifact]
 
@@ -146,16 +146,11 @@ def _payload_number(payload: dict[str, Any], *keys: str) -> int | float | None:
     return None
 
 
-def _build_and_persist_error_artifact(
+def _build_error_artifact(
     state: DBFoxAgentState,
-    config: RunnableConfig,
     error: str,
 ) -> dict[str, Any] | None:
-    """Emit the terminal `agent_error` artifact for failed runs.
-
-    Gives the frontend a structured error card with recovery guidance and the
-    safety state at the moment of failure. Best-effort persistence to DB.
-    """
+    """Emit the terminal `agent_error` artifact for failed runs."""
     existing = state.get("artifacts") or []
     for item in existing:
         sem_id = item.get("semantic_id") if isinstance(item, dict) else getattr(item, "semantic_id", None)
@@ -175,22 +170,6 @@ def _build_and_persist_error_artifact(
     except Exception as exc:
         logger.warning("Failed to build error artifact: %s", exc)
         return None
-
-    try:
-        from engine.agent.graph.context import graph_context
-        from engine.agent_core import persistence as ap
-        from engine.models import AgentArtifactRecord
-
-        db = graph_context(config).db
-        if db is not None:
-            run_id = str(state.get("run_id") or "")
-            thread_id = str(state.get("thread_id") or run_id)
-            existing_count = db.query(AgentArtifactRecord).filter(
-                AgentArtifactRecord.run_id == run_id
-            ).count()
-            ap.record_artifact(db, thread_id, run_id, artifact, sequence=existing_count + 1)
-    except Exception as exc:
-        logger.warning("Failed to save error artifact to DB: %s", exc)
 
     return artifact.model_dump(mode="json")
 

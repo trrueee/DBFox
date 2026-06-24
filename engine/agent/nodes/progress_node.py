@@ -41,11 +41,8 @@ def _confirmation_approval_update(state: DBFoxAgentState, ctx: Any) -> dict[str,
         "requested_action": requested_action,
     }
 
-    if ctx.db is not None:
-        from engine.agent_core import persistence as ap
-
-        approval_rec = ap.create_approval(
-            ctx.db,
+    if ctx.event_store is not None:
+        approval_rec = ctx.event_store.create_approval(
             run_id=run_id,
             session_id=session_id,
             step_name=STEP_NAME_MAP.get("sql.execute_readonly", "sql.execute_readonly"),
@@ -55,20 +52,22 @@ def _confirmation_approval_update(state: DBFoxAgentState, ctx: Any) -> dict[str,
             policy_decision=policy_decision,
             requested_action=requested_action,
         )
-        pending_app = approval_rec.model_dump(mode="json")
+        if approval_rec is not None:
+            pending_app = approval_rec.model_dump(mode="json")
+        else:
+            pending_app = _approval_pending_payload(
+                run_id=run_id,
+                session_id=session_id,
+                policy_decision=policy_decision,
+                requested_action=requested_action,
+            )
     else:
-        pending_app = {
-            "id": f"approval_mock_{uuid4().hex[:8]}",
-            "run_id": run_id,
-            "session_id": session_id,
-            "step_name": STEP_NAME_MAP.get("sql.execute_readonly", "sql.execute_readonly"),
-            "tool_name": "sql.execute_readonly",
-            "status": "pending",
-            "risk_level": "warning",
-            "reason": "SQL execution requires human approval.",
-            "policy_decision": policy_decision,
-            "requested_action": requested_action,
-        }
+        pending_app = _approval_pending_payload(
+            run_id=run_id,
+            session_id=session_id,
+            policy_decision=policy_decision,
+            requested_action=requested_action,
+        )
     pending_app["tool_call_id"] = f"confirm_sql_execute_{uuid4().hex[:8]}"
 
     return {
@@ -88,6 +87,27 @@ def _confirmation_approval_update(state: DBFoxAgentState, ctx: Any) -> dict[str,
                 "approval_id": pending_app.get("id"),
             }
         ],
+    }
+
+
+def _approval_pending_payload(
+    *,
+    run_id: str,
+    session_id: str,
+    policy_decision: dict[str, Any],
+    requested_action: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "id": f"approval_mock_{uuid4().hex[:8]}",
+        "run_id": run_id,
+        "session_id": session_id,
+        "step_name": STEP_NAME_MAP.get("sql.execute_readonly", "sql.execute_readonly"),
+        "tool_name": "sql.execute_readonly",
+        "status": "pending",
+        "risk_level": "warning",
+        "reason": "SQL execution requires human approval.",
+        "policy_decision": policy_decision,
+        "requested_action": requested_action,
     }
 
 

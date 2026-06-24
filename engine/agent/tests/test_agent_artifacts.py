@@ -62,6 +62,34 @@ def test_result_view_artifact_preserves_result_browsing_metadata():
     assert "rows" not in artifact.payload
 
 
+def test_result_view_artifact_stores_typed_columns_dialect_and_fingerprint():
+    artifact = build_result_view_artifact(
+        {
+            "success": True,
+            "columns": [
+                {"name": "id", "type": "integer"},
+                {"name": "name", "type": "text"},
+            ],
+            "rows": [{"id": 1, "name": "Alice"}],
+            "rowCount": 1,
+            "latencyMs": 12,
+            "sql": "SELECT id, name FROM users",
+            "dialect": "sqlite",
+        },
+        datasource_id="ds_123",
+        safety={"can_execute": True},
+    )
+
+    assert artifact.payload["safeSql"] == "SELECT id, name FROM users"
+    assert artifact.payload["dialect"] == "sqlite"
+    assert artifact.payload["columns"] == [
+        {"name": "id", "type": "integer"},
+        {"name": "name", "type": "text"},
+    ]
+    assert artifact.payload["fingerprint"].startswith("sql_")
+    assert artifact.payload["sqlFingerprint"] == artifact.payload["fingerprint"]
+
+
 def test_result_view_artifact_keeps_preview_not_full_rows():
     artifact = build_result_view_artifact(
         {

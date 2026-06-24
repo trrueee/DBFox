@@ -4,6 +4,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.nodes.finalize_node import finalize_answer
+from engine.agent_core.types import AgentRunRequest
+from engine.tools.runtime import ToolRegistry
 
 
 class TestFinalizeNode:
@@ -164,3 +166,48 @@ class TestFinalizeNode:
         evidence = result["answer"]["evidence"]
         assert {"artifact_id": "sql_candidate", "label": "SQL #1", "value": None} in evidence
         assert {"artifact_id": "result_view_1", "label": "结果 128 行", "value": 128} in evidence
+
+    def test_finalize_error_artifact_is_not_persisted_by_node(self, monkeypatch):
+        from engine.agent_core import persistence as agent_persistence
+
+        calls = []
+
+        def record_artifact(*args, **kwargs):
+            calls.append((args, kwargs))
+
+        class FakeQuery:
+            def filter(self, *_args, **_kwargs):
+                return self
+
+            def count(self):
+                return 0
+
+        class FakeDB:
+            def query(self, *_args, **_kwargs):
+                return FakeQuery()
+
+        monkeypatch.setattr(agent_persistence, "record_artifact", record_artifact)
+        state: DBFoxAgentState = {
+            "run_id": "run-error-artifact",
+            "thread_id": "session-error-artifact",
+            "messages": [],
+            "status": "failed",
+            "error": "SQL execution failed.",
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(
+            state,
+            {
+                "configurable": {
+                    "thread_id": "session-error-artifact",
+                    "registry": ToolRegistry(),
+                    "db": FakeDB(),
+                    "request": AgentRunRequest(datasource_id="ds-error", question="q"),
+                }
+            },
+        )
+
+        assert result["status"] == "failed"
+        assert result["artifacts"][0]["semantic_id"] == "agent_error"
+        assert calls == []

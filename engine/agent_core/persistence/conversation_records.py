@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session, selectinload
 from engine.models import AgentArtifactRecord, AgentMessage, AgentRun, AgentRuntimeEventRecord, AgentSession
 
 
-def _dt(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+def _dt(value: Any) -> str | None:
+    return value.isoformat() if isinstance(value, datetime) else None
 
 
-def _json(text: str | None, fallback: Any) -> Any:
-    if not text:
+def _json(text: Any, fallback: Any) -> Any:
+    if not isinstance(text, str) or not text:
         return fallback
     try:
         return json.loads(text)
