@@ -175,6 +175,11 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
     if request.method == "OPTIONS":
         return await call_next(request)
 
+    # Native startup probes use raw local HTTP and do not send browser
+    # Origin/Referer headers, so health must be public before frozen-origin gates.
+    if request.url.path == "/api/v1/health":
+        return await call_next(request)
+
     # 🔒 在生产环境（Tauri 容器内）强制检查请求的 Origin 来源头部
     if is_frozen:
         origin = request.headers.get("origin")
@@ -216,7 +221,7 @@ async def verify_local_access_token(request: Request, call_next):  # type: ignor
             )
 
     # 排除部分不需要 Token 鉴权的公开路由和文档页面
-    if request.url.path in ["/", "/docs", "/openapi.json", "/redoc", "/api/v1/health"]:
+    if request.url.path in ["/", "/docs", "/openapi.json", "/redoc"]:
         if is_frozen and request.url.path in ["/docs", "/openapi.json", "/redoc"]:
             return JSONResponse(
                 status_code=404,

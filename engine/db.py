@@ -215,6 +215,74 @@ def _ensure_fts5(conn) -> None:
     ensure_query_history_search_schema(conn)
 
 
+def _sqlite_table_columns(conn: Connection, table_name: str) -> set[str]:
+    """Return SQLite column names for a table, or an empty set if unavailable."""
+    safe_name = table_name.replace('"', '""')
+    rows = conn.exec_driver_sql(f'PRAGMA table_info("{safe_name}")').fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def _has_columns(conn: Connection, table_name: str, column_names: set[str]) -> bool:
+    return column_names.issubset(_sqlite_table_columns(conn, table_name))
+
+
+def _infer_unversioned_legacy_revision(conn: Connection, tables: list[str]) -> str | None:
+    """Infer the latest completed Alembic revision for old local DBs without version table."""
+    existing_tables = set(tables)
+
+    if {"agent_session_memories", "reusable_sqls"}.issubset(existing_tables):
+        if "query_history_search_docs" in existing_tables:
+            return "0a1b2c3d4e5f"
+        return "f7a8b9c0d1e2"
+
+    if "agent_messages" in existing_tables and _has_columns(
+        conn,
+        "agent_sessions",
+        {"context_tables_json", "archived_at", "deleted_at"},
+    ):
+        return "f6a7b8c9d0e1"
+
+    if _has_columns(conn, "data_sources", {"enable_embedding_recall"}) and _has_columns(
+        conn,
+        "semantic_aliases",
+        {"embedding_blob", "embedding_synced_at"},
+    ):
+        return "d1e2f3a4b5c6"
+
+    if "schema_search_docs" in existing_tables and _has_columns(
+        conn,
+        "schema_tables",
+        {"schema_hash", "ai_description", "semantic_tags", "business_terms"},
+    ):
+        return "a6b7c8d9e0f1"
+
+    if {"agent_eval_runs", "agent_eval_case_results", "agent_golden_tasks"}.issubset(existing_tables):
+        return "d4e5f6a7b8c9"
+
+    if {"agent_approvals", "agent_checkpoints"}.issubset(existing_tables):
+        return "c3d4e5f6a7b8"
+
+    if {"semantic_aliases", "workspace_table_scopes"}.issubset(existing_tables):
+        return "b2c3d4e5f6a7"
+
+    if {"agent_sessions", "agent_runs", "agent_artifacts", "agent_runtime_events", "agent_trace_events"}.issubset(
+        existing_tables
+    ):
+        return "b1c2d3e4f5a6"
+
+    if _has_columns(
+        conn,
+        "data_sources",
+        {"last_test_at", "last_test_status", "last_test_latency_ms", "last_test_warnings"},
+    ):
+        return "f1a2b3c4d5e6"
+
+    if {"data_sources", "schema_tables", "schema_columns", "query_history"}.issubset(existing_tables):
+        return "99b4fdab0781"
+
+    return None
+
+
 def init_db() -> None:
     """
     数据库初始化与版本自动迁移迁移引擎
@@ -312,11 +380,24 @@ def init_db() -> None:
                     command.stamp(alembic_cfg, "head")
                     _ensure_fts5(conn)
                 else:
-                    missing = ", ".join(sorted(model_tables - existing_tables))
-                    raise RuntimeError(
-                        "Metadata database has existing tables but no Alembic version; "
-                        f"cannot safely migrate because required tables are missing: {missing}"
-                    )
+                    legacy_revision = _infer_unversioned_legacy_revision(conn, tables)
+                    if legacy_revision:
+                        missing = ", ".join(sorted(model_tables - existing_tables))
+                        logger.warning(
+                            "Alembic migration: inferred unversioned legacy schema at %s; "
+                            "missing current tables before upgrade: %s",
+                            legacy_revision,
+                            missing,
+                        )
+                        command.stamp(alembic_cfg, legacy_revision)
+                        command.upgrade(alembic_cfg, "head")
+                        _ensure_fts5(conn)
+                    else:
+                        missing = ", ".join(sorted(model_tables - existing_tables))
+                        raise RuntimeError(
+                            "Metadata database has existing tables but no Alembic version; "
+                            f"cannot safely migrate because required tables are missing: {missing}"
+                        )
             else:
                 logger.info("Alembic migration: upgrading to head")
                 command.upgrade(alembic_cfg, "head")
