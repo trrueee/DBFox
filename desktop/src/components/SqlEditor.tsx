@@ -20,9 +20,17 @@ interface SqlEditorProps {
   value: string;
   onChange: (value: string) => void;
   schemaTables?: SchemaTableMeta[];
+  disabled?: boolean;
+  height?: string | number;
+  className?: string;
+  ariaLabel?: string;
+  testId?: string;
+  onExecute?: (sql?: string) => void;
+  onSelectionChange?: (selectedSql: string) => void;
 }
 
 type Disposable = { dispose: () => void };
+type MonacoEditor = Parameters<OnMount>[0];
 type SqlPosition = { lineNumber: number; column: number };
 type SqlWord = { startColumn: number; endColumn: number };
 type SqlModel = {
@@ -46,9 +54,31 @@ type CompletionSuggestion = {
   range: CompletionRange;
 };
 
-export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps) {
+export function SqlEditor({
+  value,
+  onChange,
+  schemaTables = [],
+  disabled = false,
+  height = "100%",
+  className,
+  ariaLabel = "SQL 编辑器",
+  testId,
+  onExecute,
+  onSelectionChange,
+}: SqlEditorProps) {
   const [monacoInstance, setMonacoInstance] = useState<Monaco | null>(null);
   const providerRef = useRef<Disposable | null>(null);
+  const selectionListenerRef = useRef<Disposable | null>(null);
+  const executeRef = useRef(onExecute);
+  const selectionChangeRef = useRef(onSelectionChange);
+
+  useEffect(() => {
+    executeRef.current = onExecute;
+  }, [onExecute]);
+
+  useEffect(() => {
+    selectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   // Precompute escaped table names and regex patterns once when schemaTables changes
   const tablePatterns = useMemo(() =>
@@ -98,7 +128,28 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
 
     monaco.editor.setTheme("lightLab");
     setMonacoInstance(monaco);
+
+    const notifySelectionChange = () => {
+      selectionChangeRef.current?.(readSelectedSql(editor));
+    };
+
+    selectionListenerRef.current?.dispose();
+    selectionListenerRef.current = editor.onDidChangeCursorSelection(notifySelectionChange);
+
+    const executeCurrentSql = () => {
+      const selectedSql = readSelectedSql(editor);
+      executeRef.current?.(selectedSql || editor.getValue());
+    };
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, executeCurrentSql);
+    editor.addCommand(monaco.KeyCode.F9, executeCurrentSql);
+    notifySelectionChange();
   };
+
+  useEffect(() => () => {
+    selectionListenerRef.current?.dispose();
+    selectionListenerRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!monacoInstance) return;
@@ -280,10 +331,15 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
         providerRef.current = null;
       }
     };
-  }, [schemaTables, monacoInstance]);
+  }, [schemaTables, monacoInstance, tablePatterns]);
 
   return (
-    <div className="select-text" style={{ height: "100%", userSelect: "text" }}>
+    <div
+      className={className ?? "select-text"}
+      data-testid={testId}
+      aria-label={ariaLabel}
+      style={{ height, userSelect: "text" }}
+    >
       <Editor
         height="100%"
         defaultLanguage="sql"
@@ -308,6 +364,8 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
           formatOnPaste: true,
           suggest: { showKeywords: true, showSnippets: true },
           folding: true,
+          readOnly: disabled,
+          domReadOnly: disabled,
           lineDecorationsWidth: 6,
           lineNumbersMinChars: 4,
           glyphMargin: false,
@@ -319,6 +377,13 @@ export function SqlEditor({ value, onChange, schemaTables = [] }: SqlEditorProps
       />
     </div>
   );
+}
+
+function readSelectedSql(editor: MonacoEditor) {
+  const selection = editor.getSelection();
+  const model = editor.getModel();
+  if (!selection || !model || selection.isEmpty()) return "";
+  return model.getValueInRange(selection).trim();
 }
 
 const SQL_KEYWORDS = [

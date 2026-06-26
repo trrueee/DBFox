@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { BarChart3, Download, LineChart, Maximize2, Minimize2 } from "lucide-react";
+import { Button } from "../../../components/ui";
 import type { ChartArtifact, ChartArtifactType } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { useChartExport } from "./useChartExport";
 import { useChartOption } from "./useChartOption";
+import "./ArtifactViews.css";
 
 interface ChartArtifactViewProps {
   artifact: ChartArtifact;
   onToast: (message: string) => void;
   compact?: boolean;
 }
-
-const chartFillStyle = { height: "100%", width: "100%" };
 
 export function ChartArtifactView({ artifact, onToast, compact = false }: ChartArtifactViewProps) {
   const [chartType, setChartType] = useState<ChartArtifactType>(artifact.chartType);
@@ -25,17 +25,17 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
   const metaItems = [
     ...(typeof artifact.sampleSize === "number"
       ? [
-          <div key="sample-size" className="flex flex-wrap items-center gap-1.5">
-            <span className="hifi-artifact-pill">样本 {artifact.sampleSize} 行</span>
+          <div key="sample-size" className="chart-artifact__meta-row">
+            <span className="artifact-pill">样本 {artifact.sampleSize} 行</span>
           </div>,
         ]
       : []),
     ...((artifact.sourceRefs || []).map((sourceRef) => (
-      <div key={`${sourceRef.label}-${sourceRef.field}`} className="flex flex-wrap items-center gap-1.5">
-        <span className="hifi-artifact-pill">{sourceRef.label}</span>
-        <span className="font-mono">{sourceRef.formula}</span>
-        <span className="hifi-artifact-muted-text">-&gt;</span>
-        <span className="font-mono">{sourceRef.field}</span>
+      <div key={`${sourceRef.label}-${sourceRef.field}`} className="chart-artifact__meta-row">
+        <span className="artifact-pill">{sourceRef.label}</span>
+        <span className="chart-artifact__formula">{sourceRef.formula}</span>
+        <span className="chart-artifact__muted">-&gt;</span>
+        <span className="chart-artifact__formula">{sourceRef.field}</span>
       </div>
     ))),
   ];
@@ -46,7 +46,7 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
 
   return (
     <ArtifactCard
-      className="hifi-chart-card"
+      className="chart-artifact-card"
       title={artifact.title}
       badge="图表"
       tone="chart"
@@ -58,42 +58,63 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
           <>
             {switchable && (
               <>
-                <button
+                <Button
                   type="button"
-                  className={`hifi-chart-type-btn ${chartType === "line" ? "active" : ""}`}
+                  variant={chartType === "line" ? "secondary" : "outline"}
+                  size="sm"
+                  className="artifact-action-button artifact-action-button--sm chart-artifact__type-button"
+                  aria-pressed={chartType === "line"}
                   onClick={() => setChartType("line")}
                 >
                   <LineChart size={12} />
                   <span>折线</span>
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className={`hifi-chart-type-btn ${chartType === "bar" ? "active" : ""}`}
+                  variant={chartType === "bar" ? "secondary" : "outline"}
+                  size="sm"
+                  className="artifact-action-button artifact-action-button--sm chart-artifact__type-button"
+                  aria-pressed={chartType === "bar"}
                   onClick={() => setChartType("bar")}
                 >
                   <BarChart3 size={12} />
                   <span>柱状</span>
-                </button>
+                </Button>
               </>
             )}
-            <button
+            <Button
               type="button"
-              className="hifi-guide-btn-secondary hifi-artifact-action-btn-sm flex items-center gap-1"
+              variant="outline"
+              size="sm"
+              className="artifact-action-button artifact-action-button--sm"
               aria-pressed={expanded}
               onClick={() => setExpanded((value) => !value)}
             >
               {expanded ? <Minimize2 size={9} /> : <Maximize2 size={9} />}
               {expanded ? "收起分析" : "展开分析"}
-            </button>
-            <button type="button" className="hifi-guide-btn-secondary hifi-artifact-action-btn-sm flex items-center gap-1" onClick={handleExportPng}>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="artifact-action-button artifact-action-button--sm"
+              onClick={handleExportPng}
+            >
               <Download size={9} /> PNG
-            </button>
+            </Button>
           </>
         ) : undefined
       }
     >
-      <div className={`hifi-chart-body ${expanded ? "is-expanded" : ""}`} data-chart-id={artifact.id}>
-        <ReactECharts ref={chartRef} option={option} style={chartFillStyle} />
+      <div
+        className={[
+          "chart-artifact__body",
+          expanded ? "is-expanded" : "",
+          compact ? "is-compact" : "",
+        ].filter(Boolean).join(" ")}
+        data-chart-id={artifact.id}
+      >
+        <ReactECharts ref={chartRef} option={option} className="chart-artifact__echarts" />
       </div>
     </ArtifactCard>
   );

@@ -135,7 +135,7 @@ describe("ArtifactDock", () => {
     expect(screen.getByText("Guardrail: passed")).toBeTruthy();
   });
 
-  it("renders as a resizable split pane inside the conversation body", () => {
+  it("renders dock content without owning split pane resize state", () => {
     render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
@@ -145,36 +145,8 @@ describe("ArtifactDock", () => {
     );
 
     const dock = screen.getByRole("complementary", { name: "Artifact dock" });
-    const resizeHandle = screen.getByRole("separator", { name: "调整工件区宽度" });
 
-    expect(dock.style.getPropertyValue("--conv-artifact-width")).toBe("420px");
-    expect(resizeHandle.getAttribute("aria-valuemin")).toBe("340");
-    expect(resizeHandle.getAttribute("aria-valuemax")).toBe("680");
-    expect(resizeHandle.getAttribute("aria-valuenow")).toBe("420");
-  });
-
-  it("lets the user drag the artifact split width within desktop bounds", () => {
-    render(
-      <ArtifactDock
-        artifacts={trustedQueryArtifacts()}
-        onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
-      />,
-    );
-
-    const dock = screen.getByRole("complementary", { name: "Artifact dock" });
-    const resizeHandle = screen.getByRole("separator", { name: "调整工件区宽度" });
-
-    fireEvent.pointerDown(resizeHandle, { clientX: 700, pointerId: 1 });
-    fireEvent.pointerMove(window, { clientX: 560, pointerId: 1 });
-    fireEvent.pointerUp(window, { pointerId: 1 });
-
-    expect(dock.style.getPropertyValue("--conv-artifact-width")).toBe("560px");
-
-    fireEvent.pointerDown(resizeHandle, { clientX: 560, pointerId: 2 });
-    fireEvent.pointerMove(window, { clientX: -200, pointerId: 2 });
-    fireEvent.pointerUp(window, { pointerId: 2 });
-
-    expect(dock.style.getPropertyValue("--conv-artifact-width")).toBe("680px");
+    expect(dock.getAttribute("style")).toBeNull();
+    expect(screen.queryByRole("separator", { name: "调整工件区宽度" })).toBeNull();
   });
 });

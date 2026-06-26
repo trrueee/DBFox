@@ -179,7 +179,7 @@ describe("ArtifactEvidencePanel", () => {
 
     const { container } = render(<ArtifactEvidencePanel artifacts={artifacts} onOpenSqlConsole={vi.fn()} />);
 
-    expect(container.querySelectorAll(".hifi-chart-card.is-compact")).toHaveLength(4);
+    expect(container.querySelectorAll(".chart-artifact-card.is-compact")).toHaveLength(4);
     expect(
       echartsMock.options.map((option) => (
         option as { series: Array<{ type: string }> }

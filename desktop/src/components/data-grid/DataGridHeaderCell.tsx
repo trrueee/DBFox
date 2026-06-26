@@ -1,15 +1,13 @@
 import { MoreVertical } from "lucide-react";
-import type { ColumnFilter, FilterMode, SortState } from "../../hooks/useDataTableView";
-import type { DataGridColumnType } from "./types";
+import type { ColumnFilter, DataGridColumnType, FilterMode, SortState } from "./types";
 import { DataGridColumnMenu } from "./DataGridColumnMenu";
+import { DropdownMenu, DropdownMenuTrigger, Tooltip, TooltipContent, TooltipTrigger } from "../ui";
 
 interface DataGridHeaderCellProps {
   column: string;
   typeInfo?: DataGridColumnType;
   filter?: ColumnFilter;
   sortState: SortState;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
   onSort: (direction: "asc" | "desc") => void;
   onClearSort: () => void;
   onFilter: (mode: FilterMode, value?: string) => void;
@@ -35,8 +33,6 @@ export function DataGridHeaderCell({
   typeInfo,
   filter,
   sortState,
-  menuOpen,
-  onToggleMenu,
   onSort,
   onClearSort,
   onFilter,
@@ -51,32 +47,44 @@ export function DataGridHeaderCell({
     <div className="data-grid-header-cell">
       <div className="data-grid-header-top">
         <span className="data-grid-column-name">{column}</span>
-        <div className="flex items-center gap-1">
-          {sortState?.column === column && <span className="text-[var(--accent-indigo)]">{sortState.direction === "asc" ? "▲" : "▼"}</span>}
-          {filter && <span className="text-[var(--accent-teal)]">●</span>}
-          <button className="data-grid-button !h-5 !min-w-5 !px-1" type="button" onClick={(event) => { event.stopPropagation(); onToggleMenu(); }}>
-            <MoreVertical size={12} />
-          </button>
+        <div className="data-grid-header-actions">
+          {sortState?.column === column && <span className="data-grid-header-sort-indicator">{sortState.direction === "asc" ? "▲" : "▼"}</span>}
+          {filter && <span className="data-grid-header-filter-indicator">●</span>}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="data-grid-column-menu-trigger"
+                    type="button"
+                    aria-label={`列操作 ${column}`}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreVertical size={12} />
+                  </button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>列操作</TooltipContent>
+            </Tooltip>
+            <DataGridColumnMenu
+              column={column}
+              filter={filter}
+              sortState={sortState}
+              onSort={onSort}
+              onClearSort={onClearSort}
+              onFilter={onFilter}
+              onClearFilter={onClearFilter}
+              onCopyColumnName={onCopyColumnName}
+              onCopySelectColumn={onCopySelectColumn}
+              onHideColumn={onHideColumn}
+            />
+          </DropdownMenu>
         </div>
       </div>
       <div className="data-grid-column-type">
         <span>{typeBadge.icon}</span>
         <span>{typeBadge.label}</span>
       </div>
-      {menuOpen && (
-        <DataGridColumnMenu
-          column={column}
-          filter={filter}
-          sortState={sortState}
-          onSort={onSort}
-          onClearSort={onClearSort}
-          onFilter={onFilter}
-          onClearFilter={onClearFilter}
-          onCopyColumnName={onCopyColumnName}
-          onCopySelectColumn={onCopySelectColumn}
-          onHideColumn={onHideColumn}
-        />
-      )}
     </div>
   );
 }

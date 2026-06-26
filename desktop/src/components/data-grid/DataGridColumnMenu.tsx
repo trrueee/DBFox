@@ -1,5 +1,6 @@
 import { Copy, Database, EyeOff } from "lucide-react";
-import type { ColumnFilter, FilterMode, SortState } from "../../hooks/useDataTableView";
+import type { ColumnFilter, FilterMode, SortState } from "./types";
+import { DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "../ui";
 
 interface DataGridColumnMenuProps {
   column: string;
@@ -30,50 +31,55 @@ export function DataGridColumnMenu({
   const isDesc = sortState?.column === column && sortState.direction === "desc";
 
   return (
-    <div className="data-grid-menu" onClick={(event) => event.stopPropagation()}>
+    <DropdownMenuContent className="data-grid-menu" align="end" sideOffset={6} onClick={(event) => event.stopPropagation()}>
       <div className="data-grid-menu-section">
-        <button className={`data-grid-menu-item ${isAsc ? "data-grid-menu-item--active" : ""}`} type="button" onClick={() => onSort("asc")}>
+        <DropdownMenuItem className={`data-grid-menu-item ${isAsc ? "data-grid-menu-item--active" : ""}`} onSelect={() => onSort("asc")}>
           <span>▲</span> 升序排序
-        </button>
-        <button className={`data-grid-menu-item ${isDesc ? "data-grid-menu-item--active" : ""}`} type="button" onClick={() => onSort("desc")}>
+        </DropdownMenuItem>
+        <DropdownMenuItem className={`data-grid-menu-item ${isDesc ? "data-grid-menu-item--active" : ""}`} onSelect={() => onSort("desc")}>
           <span>▼</span> 降序排序
-        </button>
+        </DropdownMenuItem>
         {sortState?.column === column && (
-          <button className="data-grid-menu-item" type="button" onClick={onClearSort}>取消排序</button>
+          <DropdownMenuItem className="data-grid-menu-item" onSelect={onClearSort}>取消排序</DropdownMenuItem>
         )}
       </div>
+
+      <DropdownMenuSeparator className="data-grid-menu-separator" />
 
       <div className="data-grid-menu-section">
         <input
           className="data-grid-menu-input"
           value={filter?.mode === "contains" ? filter.value || "" : ""}
           placeholder="搜索当前列值..."
+          onKeyDown={(event) => event.stopPropagation()}
           onChange={(event) => {
             const value = event.target.value;
             if (value) onFilter("contains", value);
             else onClearFilter();
           }}
         />
-        <button className={`data-grid-menu-item ${filter?.mode === "is_null" ? "data-grid-menu-item--active" : ""}`} type="button" onClick={() => onFilter("is_null")}>
+        <DropdownMenuItem className={`data-grid-menu-item ${filter?.mode === "is_null" ? "data-grid-menu-item--active" : ""}`} onSelect={() => onFilter("is_null")}>
           只看 NULL
-        </button>
-        <button className={`data-grid-menu-item ${filter?.mode === "is_not_null" ? "data-grid-menu-item--active" : ""}`} type="button" onClick={() => onFilter("is_not_null")}>
+        </DropdownMenuItem>
+        <DropdownMenuItem className={`data-grid-menu-item ${filter?.mode === "is_not_null" ? "data-grid-menu-item--active" : ""}`} onSelect={() => onFilter("is_not_null")}>
           只看非 NULL
-        </button>
-        {filter && <button className="data-grid-menu-item" type="button" onClick={onClearFilter}>清除筛选</button>}
+        </DropdownMenuItem>
+        {filter && <DropdownMenuItem className="data-grid-menu-item" onSelect={onClearFilter}>清除筛选</DropdownMenuItem>}
       </div>
 
+      <DropdownMenuSeparator className="data-grid-menu-separator" />
+
       <div className="data-grid-menu-section">
-        <button className="data-grid-menu-item" type="button" onClick={onCopyColumnName}>
+        <DropdownMenuItem className="data-grid-menu-item" onSelect={onCopyColumnName}>
           <Copy size={12} /> 复制列名
-        </button>
-        <button className="data-grid-menu-item" type="button" onClick={onCopySelectColumn}>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="data-grid-menu-item" onSelect={onCopySelectColumn}>
           <Database size={12} /> 复制 SELECT 当前列
-        </button>
-        <button className="data-grid-menu-item" type="button" onClick={onHideColumn}>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="data-grid-menu-item" onSelect={onHideColumn}>
           <EyeOff size={12} /> 隐藏列
-        </button>
+        </DropdownMenuItem>
       </div>
-    </div>
+    </DropdownMenuContent>
   );
 }

@@ -23,6 +23,7 @@ export interface SortState {
 
 export interface ArtifactTableData {
   columns: string[];
+  columnTypes: Array<string | undefined>;
   search: string;
   setSearch: (value: string) => void;
   sort: SortState | null;
@@ -68,7 +69,18 @@ export function useArtifactTableData(
   const [expanded, setExpanded] = useState(false);
 
   const isSqlBackedWorkspace = mode === "workspace" && artifact.type === "result_view" && artifact.storageMode === "sql_backed";
-  const columns = useMemo(() => artifact.columns.map(columnName).filter(Boolean), [artifact.columns]);
+  const columnMetadata = useMemo(
+    () =>
+      artifact.columns
+        .map((column) => ({
+          name: columnName(column),
+          type: columnType(column),
+        }))
+        .filter((column) => Boolean(column.name)),
+    [artifact.columns],
+  );
+  const columns = useMemo(() => columnMetadata.map((column) => column.name), [columnMetadata]);
+  const columnTypes = useMemo(() => columnMetadata.map((column) => column.type), [columnMetadata]);
 
   const sqlBackedSource = useMemo<SqlBackedDataViewSource>(() => {
     return {
@@ -195,6 +207,7 @@ export function useArtifactTableData(
 
   return {
     columns,
+    columnTypes,
     search: isSqlBackedWorkspace ? sqlBacked.search : search,
     setSearch: isSqlBackedWorkspace ? sqlBacked.setSearch : setSearch,
     sort: activeSort,
@@ -233,6 +246,11 @@ export function useArtifactTableData(
 function columnName(column: ResultViewArtifact["columns"][number]): string {
   if (typeof column === "string") return column;
   return column.name;
+}
+
+function columnType(column: ResultViewArtifact["columns"][number]): string | undefined {
+  if (typeof column === "string") return undefined;
+  return column.type;
 }
 
 function compareCells(left: string, right: string, direction: SortDirection): number {

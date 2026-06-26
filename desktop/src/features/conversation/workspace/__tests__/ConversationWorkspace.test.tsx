@@ -23,6 +23,14 @@ vi.mock("../useConversationViewModel", () => ({
 
 describe("ConversationWorkspace", () => {
   beforeEach(() => {
+    class ResizeObserverMock {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    Object.defineProperty(window, "ResizeObserver", { configurable: true, value: ResizeObserverMock });
     HTMLElement.prototype.scrollTo = vi.fn();
     cleanup();
     viewModel.current = {
@@ -55,6 +63,12 @@ describe("ConversationWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "Revenue investigation" }).closest(".conv-conversation-pane")).toBe(
       conversationPane,
+    );
+    expect(conversationPane.closest(".conv-artifact-main-panel")).toBeTruthy();
+    expect(artifactDock.closest(".conv-artifact-dock-panel")).toBeTruthy();
+    expect(artifactDock.closest(".conv-artifact-panel-group")).toBeTruthy();
+    expect(screen.getByRole("separator", { name: "调整工件区宽度" }).classList.contains("conv-artifact-resizer")).toBe(
+      true,
     );
     expect(screen.getByText("会话 conv-1").closest(".conv-conversation-pane")).toBe(conversationPane);
     expect(artifactDock.querySelector(".conv-artifact-dock-header")).toBeNull();
