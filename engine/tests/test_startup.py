@@ -67,6 +67,16 @@ def test_frozen_engine_allows_tauri_localhost_origins(monkeypatch) -> None:
             assert response.headers.get("access-control-allow-origin") == origin
 
 
+def test_frozen_engine_allows_health_without_origin(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "is_frozen", True)
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+
 def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 
