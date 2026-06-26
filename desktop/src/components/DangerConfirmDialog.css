@@ -1,0 +1,75 @@
+.danger-confirm-dialog-content {
+  width: min(500px, calc(100vw - 32px));
+  max-width: 500px;
+  border-color: hsl(var(--destructive));
+}
+
+.danger-confirm-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.danger-confirm-dialog-title-icon {
+  color: hsl(var(--destructive));
+}
+
+.danger-confirm-dialog-body {
+  display: grid;
+  gap: 16px;
+}
+
+.danger-confirm-dialog-summary {
+  max-height: 250px;
+  padding: 14px;
+  overflow: auto;
+  font-size: var(--ui-font-body);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+}
+
+.danger-confirm-dialog-field {
+  display: grid;
+  gap: 6px;
+}
+
+.danger-confirm-dialog-label {
+  color: hsl(var(--destructive));
+  font-weight: 650;
+}
+
+.danger-confirm-dialog-code {
+  padding: 2px 6px;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
+  background: hsl(var(--destructive) / 0.15);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.danger-confirm-dialog-input.danger-confirm-dialog-input--invalid {
+  border-color: hsl(var(--destructive));
+}
+
+.danger-confirm-dialog-input.danger-confirm-dialog-input--valid {
+  border-color: hsl(var(--success));
+}
+
+.danger-confirm-dialog-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: hsl(var(--destructive));
+  font-size: var(--ui-font-body);
+}
+
+.danger-confirm-dialog-loading-icon {
+  animation: danger-confirm-dialog-spin 1s linear infinite;
+}
+
+@keyframes danger-confirm-dialog-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

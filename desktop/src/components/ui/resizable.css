@@ -1,0 +1,106 @@
+.dbfox-resizable-panel-group {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dbfox-resizable-panel {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dbfox-resizable-handle {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  outline: none;
+}
+
+.dbfox-resizable-handle[aria-orientation="vertical"] {
+  width: 8px;
+  cursor: col-resize;
+}
+
+.dbfox-resizable-handle[aria-orientation="horizontal"] {
+  height: 8px;
+  cursor: row-resize;
+}
+
+.dbfox-resizable-handle__rail {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dbfox-resizable-handle[aria-orientation="vertical"] .dbfox-resizable-handle__rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--hairline);
+  transform: translateX(-50%);
+  transition: background-color 0.15s ease, width 0.15s ease;
+}
+
+.dbfox-resizable-handle[aria-orientation="horizontal"] .dbfox-resizable-handle__rail::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--hairline);
+  transform: translateY(-50%);
+  transition: background-color 0.15s ease, height 0.15s ease;
+}
+
+.dbfox-resizable-handle__grip {
+  position: relative;
+  display: block;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-card);
+  opacity: 0;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  transition: opacity 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  pointer-events: none;
+}
+
+.dbfox-resizable-handle[aria-orientation="vertical"] .dbfox-resizable-handle__grip {
+  width: 4px;
+  height: 28px;
+}
+
+.dbfox-resizable-handle[aria-orientation="horizontal"] .dbfox-resizable-handle__grip {
+  width: 28px;
+  height: 4px;
+}
+
+.dbfox-resizable-handle:hover .dbfox-resizable-handle__grip,
+.dbfox-resizable-handle[data-resize-handle-active] .dbfox-resizable-handle__grip,
+.dbfox-resizable-handle:focus-visible .dbfox-resizable-handle__grip {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--hairline));
+  background: var(--surface-raised);
+}
+
+.dbfox-resizable-handle:hover[aria-orientation="vertical"] .dbfox-resizable-handle__rail::before,
+.dbfox-resizable-handle[data-resize-handle-active][aria-orientation="vertical"] .dbfox-resizable-handle__rail::before,
+.dbfox-resizable-handle:focus-visible[aria-orientation="vertical"] .dbfox-resizable-handle__rail::before {
+  width: 2px;
+  background: color-mix(in srgb, var(--color-primary) 70%, var(--hairline));
+}
+
+.dbfox-resizable-handle:hover[aria-orientation="horizontal"] .dbfox-resizable-handle__rail::before,
+.dbfox-resizable-handle[data-resize-handle-active][aria-orientation="horizontal"] .dbfox-resizable-handle__rail::before,
+.dbfox-resizable-handle:focus-visible[aria-orientation="horizontal"] .dbfox-resizable-handle__rail::before {
+  height: 2px;
+  background: color-mix(in srgb, var(--color-primary) 70%, var(--hairline));
+}

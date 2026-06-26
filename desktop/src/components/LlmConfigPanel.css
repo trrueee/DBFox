@@ -1,0 +1,50 @@
+.hifi-settings-secret-field {
+  position: relative;
+}
+
+.hifi-settings-input--secret {
+  padding-right: 36px;
+}
+
+.hifi-settings-input--mono {
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+}
+
+.hifi-settings-input--custom-model {
+  margin-top: 8px;
+}
+
+.hifi-settings-input[aria-invalid="true"] {
+  border-color: var(--color-danger, #dc2626);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-danger, #dc2626) 12%, transparent);
+}
+
+.hifi-settings-validation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0 14px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-danger, #dc2626) 24%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-danger, #dc2626) 7%, var(--surface-card, #fff));
+  color: var(--color-danger, #dc2626);
+  font-size: var(--ui-font-label);
+}
+
+.hifi-settings-status-badge {
+  gap: 4px;
+  font-size: var(--ui-font-caption);
+}
+
+.hifi-settings-status-value {
+  max-width: 280px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hifi-settings-submit-btn {
+  gap: 6px;
+}

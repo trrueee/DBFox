@@ -1,0 +1,12 @@
+.dbfox-label {
+  color: hsl(var(--foreground));
+  font-size: var(--ui-font-body);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.dbfox-label[aria-disabled="true"],
+.dbfox-label[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}

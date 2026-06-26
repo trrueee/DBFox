@@ -20,10 +20,14 @@ describe("app shell layout", () => {
     expect(css).not.toMatch(/width:\s*1598px|height:\s*1066px/);
   });
 
-  it("resizes the sidebar using real viewport mouse delta", () => {
-    const app = read("features/appShell/useSidebarLayout.ts");
+  it("resizes the sidebar through the DBFox resizable primitive", () => {
+    const app = read("App.tsx");
+    const resizable = read("components/ui/resizable.tsx");
 
-    expect(app).toContain("const delta = e.clientX - resizingRef.current.startX;");
+    expect(app).toContain("ResizablePanelGroup");
+    expect(app).toContain("ResizableHandle");
+    expect(app).not.toContain("handleResizeStart");
+    expect(resizable).toContain('from "react-resizable-panels"');
   });
 
   it("uses a real viewport shell with grid rows and a raised main surface", () => {

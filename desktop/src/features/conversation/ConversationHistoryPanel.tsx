@@ -1,5 +1,8 @@
-import { Clock, MessageSquare, Trash2, ChevronRight } from "lucide-react";
+import { ChevronRight, Clock, MessageSquare, Trash2 } from "lucide-react";
+import { Button, EmptyState } from "../../components/ui";
+import { WorkspaceShell } from "../appShell/WorkspaceShell";
 import type { ConversationSummary } from "../../types/conversation";
+import "./ConversationHistoryPanel.css";
 
 interface ConversationHistoryPanelProps {
   conversations: ConversationSummary[];
@@ -8,67 +11,87 @@ interface ConversationHistoryPanelProps {
   onDeleteConversation: (conversationId: string) => void;
 }
 
-export function ConversationHistoryPanel({ conversations, activeConversationId, onOpenConversation, onDeleteConversation }: ConversationHistoryPanelProps) {
-  return (
-    <div className="p-4 flex flex-col gap-2 overflow-auto h-full">
-      <div className="flex items-center justify-between mb-1">
-        <div>
-          <div className="font-bold text-[15px] text-slate-800">对话历史</div>
-        </div>
-        <span className="hifi-guide-chip-prod">{conversations.length} 条</span>
-      </div>
+function cx(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
+}
 
-      {conversations.length === 0 ? (
-        <div className="border border-dashed border-slate-200 rounded-xl p-5 text-center text-[var(--ui-font-label)] text-slate-400 bg-white">
-          暂无历史记录。提交问数后，会话会自动保存。
+export function ConversationHistoryPanel({
+  conversations,
+  activeConversationId,
+  onOpenConversation,
+  onDeleteConversation,
+}: ConversationHistoryPanelProps) {
+  return (
+    <WorkspaceShell
+      className="conversation-history"
+      title="对话历史"
+      description="继续之前的智能问数会话，查看消息与生成产物。"
+      toolbar={
+        <div className="conversation-history__toolbar">
+          <span className="conversation-history__count">{conversations.length} 条</span>
         </div>
+      }
+      bodyClassName="conversation-history__body"
+    >
+      {conversations.length === 0 ? (
+        <EmptyState
+          title="暂无历史记录"
+          description="提交问数后，会话会自动保存。"
+        />
       ) : (
-        conversations.map((conversation) => {
-          const preview = conversation.last_message?.slice(0, 100) || "";
-          return (
-            <button
-              key={conversation.id}
-              className={`text-left border rounded-xl bg-white px-4 py-3 hover:border-indigo-300 hover:bg-indigo-50/40 transition-all group ${activeConversationId === conversation.id ? "border-indigo-300 bg-indigo-50/60" : "border-slate-200"}`}
-              onClick={() => onOpenConversation(conversation)}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-slate-800">
-                    <MessageSquare size={14} className="text-indigo-500 shrink-0" />
-                    <span className="truncate">{conversation.title}</span>
-                    <ChevronRight size={12} className="text-slate-300 group-hover:text-indigo-400 shrink-0 ml-auto" />
+        <div className="conversation-history__list">
+          {conversations.map((conversation) => {
+            const preview = conversation.last_message?.slice(0, 100) || "";
+            const active = activeConversationId === conversation.id;
+            return (
+              <article
+                key={conversation.id}
+                className={cx(
+                  "conversation-history__item",
+                  active && "conversation-history__item--active",
+                )}
+              >
+                <button
+                  type="button"
+                  className="conversation-history__item-button"
+                  aria-label={`打开 ${conversation.title}`}
+                  onClick={() => onOpenConversation(conversation)}
+                >
+                  <div className="conversation-history__item-head">
+                    <MessageSquare size={14} className="conversation-history__message-icon" aria-hidden="true" />
+                    <span className="conversation-history__title">{conversation.title}</span>
+                    <ChevronRight size={12} className="conversation-history__chevron" aria-hidden="true" />
                   </div>
-                  {preview && (
-                    <div className="text-[12.5px] text-slate-500 mt-1 line-clamp-1">{preview}</div>
-                  )}
-                  <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 mt-2">
-                    <Clock size={12} />
+                  {preview ? <div className="conversation-history__preview">{preview}</div> : null}
+                  <div className="conversation-history__meta">
+                    <Clock size={12} aria-hidden="true" />
                     <span>{formatTime(conversation.updated_at)}</span>
                     <span>·</span>
                     <span>{conversation.message_count} 条消息</span>
-                    {conversation.artifact_count > 0 && (
+                    {conversation.artifact_count > 0 ? (
                       <>
                         <span>·</span>
                         <span>{conversation.artifact_count} 个产物</span>
                       </>
-                    )}
+                    ) : null}
                   </div>
-                </div>
-                <span
-                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDeleteConversation(conversation.id);
-                  }}
+                </button>
+                <Button
+                  className="conversation-history__delete"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`删除 ${conversation.title}`}
+                  title={`删除 ${conversation.title}`}
+                  onClick={() => onDeleteConversation(conversation.id)}
                 >
-                  <Trash2 size={14} />
-                </span>
-              </div>
-            </button>
-          );
-        })
+                  <Trash2 size={14} aria-hidden="true" />
+                </Button>
+              </article>
+            );
+          })}
+        </div>
       )}
-    </div>
+    </WorkspaceShell>
   );
 }
 
@@ -86,6 +109,9 @@ function formatTime(value: string | null) {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays} 天前`;
   return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }

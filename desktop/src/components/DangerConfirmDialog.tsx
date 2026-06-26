@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import "./DangerConfirmDialog.css";
 
 export interface ConfirmationDetails {
   confirm_token: string;
@@ -39,34 +40,36 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
 
   return (
     <Dialog open onOpenChange={() => details.onCancel()}>
-      <DialogContent className="sm:max-w-[500px] border-[hsl(var(--destructive))]">
+      <DialogContent className="danger-confirm-dialog-content">
         <DialogHeader>
-          <div className="flex items-center gap-2.5">
-            <ShieldAlert size={20} className="text-[hsl(var(--destructive))]" />
+          <div className="danger-confirm-dialog-title-row">
+            <ShieldAlert size={20} className="danger-confirm-dialog-title-icon" />
             <DialogTitle>安全中心：高危操作二次确认</DialogTitle>
           </div>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="whitespace-pre-wrap text-[var(--ui-font-body)] leading-relaxed p-3.5 rounded border bg-[hsl(var(--muted))] max-h-[250px] overflow-auto">
+        <div className="danger-confirm-dialog-body">
+          <div className="danger-confirm-dialog-summary">
             {details.impact_summary}
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-[hsl(var(--destructive))] font-semibold">
-              请输入 <code className="bg-[hsl(var(--destructive)/0.15)] px-1.5 py-0.5 rounded font-mono">{details.expected_confirm_text}</code> 以确认执行：
+          <div className="danger-confirm-dialog-field">
+            <Label className="danger-confirm-dialog-label">
+              请输入 <code className="danger-confirm-dialog-code">{details.expected_confirm_text}</code> 以确认执行：
             </Label>
             <Input
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder={details.expected_confirm_text}
               disabled={loading}
-              className={inputText === details.expected_confirm_text ? "border-[hsl(var(--success))]" : "border-[hsl(var(--destructive))]"}
+              className={inputText === details.expected_confirm_text
+                ? "danger-confirm-dialog-input danger-confirm-dialog-input--valid"
+                : "danger-confirm-dialog-input danger-confirm-dialog-input--invalid"}
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-1.5 text-[var(--ui-font-body)] text-[hsl(var(--destructive))]">
+            <div className="danger-confirm-dialog-warning">
               <ShieldAlert size={14} /> {error}
             </div>
           )}
@@ -75,7 +78,7 @@ export const DangerConfirmDialog: React.FC<DangerConfirmDialogProps> = ({ detail
         <DialogFooter>
           <Button variant="outline" onClick={details.onCancel} disabled={loading}>取消</Button>
           <Button variant="destructive" onClick={handleConfirm} disabled={loading || inputText.trim() !== details.expected_confirm_text}>
-            {loading && <Loader2 size={14} className="animate-spin" />}
+            {loading && <Loader2 size={14} className="danger-confirm-dialog-loading-icon" />}
             确认执行
           </Button>
         </DialogFooter>

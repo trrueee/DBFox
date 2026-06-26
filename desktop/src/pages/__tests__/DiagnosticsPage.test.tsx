@@ -65,6 +65,17 @@ describe("DiagnosticsPage", () => {
     cleanup();
   });
 
+  it("uses embedded chrome without a duplicate page title", async () => {
+    const { getByRole, queryByRole } = render(<DiagnosticsPage onToast={vi.fn()} chrome="workspace" />);
+
+    await waitFor(() => expect(diagnosticsApi.getLogs).toHaveBeenCalled());
+
+    expect(queryByRole("heading", { name: "诊断日志" })).not.toBeInTheDocument();
+    expect(getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "复制诊断包" })).toBeInTheDocument();
+    expect(getByRole("checkbox", { name: "显示空日志" })).toBeInTheDocument();
+  });
+
   it("renders sanitized diagnostic logs and copies a diagnostic bundle", async () => {
     const onToast = vi.fn();
     const { getByRole, getByText, queryByText } = render(<DiagnosticsPage onToast={onToast} />);
@@ -91,7 +102,7 @@ describe("DiagnosticsPage", () => {
     await waitFor(() => expect(diagnosticsApi.getLogs).toHaveBeenCalled());
 
     const selector = getByRole("button", { name: "日志分组" });
-    expect(selector).toHaveClass("hifi-diagnostics-source-trigger");
+    expect(selector).toHaveClass("diagnostics-source-trigger");
     expect(selector).toHaveAttribute("aria-expanded", "false");
     expect(getByRole("heading", { name: "后端日志" })).toBeInTheDocument();
     expect(queryByText(/frontend stdout/)).not.toBeInTheDocument();
@@ -99,7 +110,7 @@ describe("DiagnosticsPage", () => {
     fireEvent.click(selector);
     expect(selector).toHaveAttribute("aria-expanded", "true");
     const menu = getByRole("listbox", { name: "日志分组" });
-    expect(menu).toHaveClass("hifi-diagnostics-source-menu");
+    expect(menu).toHaveClass("diagnostics-source-menu");
 
     fireEvent.click(getByRole("option", { name: /前端日志/ }));
 

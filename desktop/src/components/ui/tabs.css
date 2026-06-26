@@ -1,0 +1,36 @@
+.dbfox-tabs-list {
+  display: inline-flex;
+  align-items: center;
+}
+
+.dbfox-tabs-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  border-radius: var(--radius);
+  outline: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.dbfox-tabs-trigger:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+
+.dbfox-tabs-trigger:disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.dbfox-tabs-content {
+  outline: none;
+}
+
+.dbfox-tabs-content:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

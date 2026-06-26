@@ -1,0 +1,53 @@
+.dbfox-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: hsl(var(--card-foreground));
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+}
+
+.dbfox-panel__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.dbfox-panel__title {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--ui-font-body);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.dbfox-panel__description {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ui-font-control);
+  line-height: 1.45;
+}
+
+.dbfox-panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+}
+
+.dbfox-panel__footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 16px;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ui-font-control);
+  border-top: 1px solid hsl(var(--border));
+}

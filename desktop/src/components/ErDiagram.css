@@ -1,0 +1,228 @@
+.er-diagram {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #faf9f6;
+}
+
+.er-diagram__viewport {
+  position: absolute;
+  inset: 0;
+}
+
+.er-card {
+  width: 210px;
+  overflow: hidden;
+  border: 1px solid var(--border-medium, #d8dee8);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  color: var(--text-primary, #172033);
+  cursor: pointer;
+  font-size: var(--ui-font-label);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+.er-card--focus {
+  border: 2px solid var(--accent-indigo, #2d3b8c);
+  box-shadow: 0 4px 20px rgba(45, 59, 140, 0.15);
+}
+
+.er-card--secondary {
+  opacity: 0.55;
+}
+
+.er-card--secondary:hover {
+  opacity: 1;
+}
+
+.er-card__handle {
+  visibility: hidden;
+}
+
+.er-card__header {
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border-light, #e8edf4);
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--text-primary, #172033);
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-control);
+  font-weight: 700;
+}
+
+.er-card--focus .er-card__header {
+  background: var(--accent-indigo-light, #eef2ff);
+}
+
+.er-card__status {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-teal, #0d7377);
+}
+
+.er-card--focus .er-card__status {
+  background: var(--accent-indigo, #2d3b8c);
+}
+
+.er-card__title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-card__annotate {
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-indigo, #2d3b8c);
+  cursor: pointer;
+  font-size: var(--ui-font-caption);
+  font-weight: 600;
+}
+
+.er-card__annotate:hover {
+  color: var(--accent-indigo-strong, #1f2a67);
+}
+
+.er-card__fields {
+  padding: 2px 0;
+}
+
+.er-card__field {
+  height: 22px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.er-card__field-marker {
+  width: 18px;
+  flex-shrink: 0;
+  color: transparent;
+  font-size: var(--ui-font-nano);
+  font-weight: 700;
+  text-align: center;
+}
+
+.er-card__field-marker--pk {
+  color: var(--accent-amber, #d97706);
+}
+
+.er-card__field-marker--fk {
+  color: var(--accent-teal, #0d7377);
+}
+
+.er-card__field-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text-secondary, #475569);
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-caption);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-card__field-name--primary {
+  color: var(--text-primary, #172033);
+  font-weight: 600;
+}
+
+.er-card__field-type {
+  color: var(--text-muted, #94a3b8);
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-micro);
+  white-space: nowrap;
+}
+
+.er-card__toggle {
+  width: 100%;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-top: 1px dashed var(--border-light, #e8edf4);
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--accent-indigo, #2d3b8c);
+  cursor: pointer;
+  font-size: var(--ui-font-caption);
+  font-weight: 600;
+}
+
+.er-card__toggle:hover {
+  background: var(--border-light, #e8edf4);
+}
+
+.er-card__comment {
+  height: 20px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-top: 1px solid var(--border-light, #e8edf4);
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--text-muted, #94a3b8);
+  font-size: var(--ui-font-micro);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-edge {
+  stroke: #0d7377;
+  stroke-width: 2;
+}
+
+.er-edge--inferred {
+  stroke: #b45309;
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+}
+
+.er-edge--secondary {
+  opacity: 0.3;
+}
+
+.er-edge-label {
+  fill: #0d7377;
+  stroke: #ffffff;
+  stroke-width: 3px;
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-micro);
+  paint-order: stroke fill;
+  pointer-events: none;
+}
+
+.er-edge-label--inferred {
+  fill: #b45309;
+}
+
+.er-edge-label--secondary {
+  opacity: 0.35;
+}
+
+.er-flow-controls {
+  overflow: hidden;
+  border: 1px solid var(--border-light, #e8edf4);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.08));
+}
+
+.er-flow-minimap {
+  border: 1px solid var(--border-light, #e8edf4);
+  border-radius: 8px;
+  background: var(--bg-secondary, #f8fafc);
+}

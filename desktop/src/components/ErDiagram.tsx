@@ -7,7 +7,6 @@ import {
   Handle,
   Position,
   BaseEdge,
-  EdgeLabelRenderer,
   getBezierPath,
   type Node,
   type Edge,
@@ -16,6 +15,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { ERDiagramData } from "../lib/api";
+import "./ErDiagram.css";
 
 /* ═══════════════════════════════════════════════
    Types
@@ -25,7 +25,7 @@ interface ErDiagramProps {
   data: Partial<ERDiagramData> | null | undefined;
   focusTable?: string | null;
   depth?: 1 | 2;
-  viewMode?: "focus" | "module" | "full";
+  viewMode?: "focus" | "full";
   showInferred?: boolean;
   onNodeClick?: (tableName: string) => void;
   onAnnotateTable?: (tableName: string) => void;
@@ -156,7 +156,7 @@ function filterVisible(
   data: ERDiagramData,
   focusTable: string | null,
   depth: 1 | 2,
-  viewMode: "focus" | "module" | "full",
+  viewMode: "focus" | "full",
   showInferred: boolean,
 ): { nodes: ERDiagramData["nodes"]; edges: ERDiagramData["edges"] } {
   const nodes = Array.isArray(data.nodes) ? data.nodes : [];
@@ -167,19 +167,6 @@ function filterVisible(
 
   if (viewMode === "full") {
     return { nodes, edges: filteredEdges };
-  }
-
-  if (viewMode === "module" && focusTable) {
-    const focusNode = nodes.find((n) => n.label === focusTable);
-    const moduleTag = focusNode?.module_tag;
-    if (moduleTag) {
-      const moduleNodes = nodes.filter((n) => n.module_tag === moduleTag);
-      const moduleLabels = new Set(moduleNodes.map((n) => n.label));
-      const moduleEdges = filteredEdges.filter(
-        (e) => moduleLabels.has(e.source) && moduleLabels.has(e.target),
-      );
-      return { nodes: moduleNodes, edges: moduleEdges };
-    }
   }
 
   if (viewMode === "focus" && focusTable) {
@@ -201,7 +188,7 @@ function filterVisible(
 function computeLayout(
   nodes: ERDiagramData["nodes"],
   focusTable: string | null,
-  viewMode: "focus" | "module" | "full",
+  viewMode: "focus" | "full",
   getNodeHeight: (node: ERNode) => number,
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
@@ -230,49 +217,20 @@ function computeLayout(
     return positions;
   }
 
-  if (viewMode === "module" && focusTable) {
-    // Group by module, arrange in columns
-    const focusNode = safeNodes.find((n) => n.label === focusTable);
-    const others = safeNodes.filter((n) => n.label !== focusTable);
+  const columnCount = Math.max(1, Math.ceil(Math.sqrt(safeNodes.length)));
+  const columnHeights = Array.from({ length: columnCount }, () => 40);
+  const columnWidth = NODE_W + 220;
 
-    if (focusNode) {
-      positions.set(focusNode.label, { x: 80, y: 60 });
-    }
-
-    let y = 60;
-    let col = 0;
-    const colX = [490, 920, 1350, 1780];
-
-    others.forEach((node) => {
-      const nodeH = getNodeHeight(node);
-      const x = colX[col] || 490 + col * (NODE_W + 220);
-      positions.set(node.label, { x, y });
-      y += nodeH + GRID_ROW_GAP;
-      if (y > 600) {
-        y = 60;
-        col++;
-      }
-    });
-    return positions;
-  }
-
-  // Full mode: grid by module groups
-  const moduleGroups = new Map<string, ERDiagramData["nodes"]>();
   for (const node of safeNodes) {
-    const tag = node.module_tag || "通用";
-    if (!moduleGroups.has(tag)) moduleGroups.set(tag, []);
-    moduleGroups.get(tag)!.push(node);
-  }
+    const shortestHeight = Math.min(...columnHeights);
+    const columnIndex = columnHeights.indexOf(shortestHeight);
+    const nodeHeight = getNodeHeight(node);
 
-  let colX = 40;
-  for (const [, groupNodes] of moduleGroups) {
-    let rowY = 40;
-    for (const node of groupNodes) {
-      const nodeH = getNodeHeight(node);
-      positions.set(node.label, { x: colX, y: rowY });
-      rowY += nodeH + 70;
-    }
-    colX += NODE_W + 220;
+    positions.set(node.label, {
+      x: 40 + columnIndex * columnWidth,
+      y: shortestHeight,
+    });
+    columnHeights[columnIndex] += nodeHeight + GRID_ROW_GAP;
   }
 
   return positions;
@@ -296,181 +254,79 @@ function TableCardNode({ data }: NodeProps) {
   } = data as unknown as TableNodeData;
   const safeFields: FieldData[] = Array.isArray(fields) ? fields : [];
   const hasToggleRow = totalFieldCount > 5 && !isFocus;
-  const nodeH = estimateNodeHeight(safeFields.length, hasToggleRow);
+  const cardClassName = [
+    "er-card",
+    isFocus ? "er-card--focus" : "",
+    isSecondary ? "er-card--secondary" : "",
+  ].filter(Boolean).join(" ");
 
   return (
-    <div
-      className="er-card"
-      style={{
-        width: NODE_W,
-        height: nodeH,
-        borderRadius: 8,
-        background: "#FFFFFF",
-        border: isFocus ? "2px solid var(--accent-indigo)" : "1px solid var(--border-medium)",
-        boxShadow: isFocus ? "0 4px 20px rgba(45, 59, 140, 0.15)" : "0 2px 8px rgba(0,0,0,0.06)",
-        fontSize: "0.78rem",
-        overflow: "hidden",
-        transition: "box-shadow 0.15s, border-color 0.15s, opacity 0.2s",
-        opacity: isSecondary ? 0.55 : 1,
-        cursor: "pointer",
-      }}
-      onMouseEnter={(e) => {
-        if (isSecondary) {
-          e.currentTarget.style.opacity = "1";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (isSecondary) {
-          e.currentTarget.style.opacity = "0.55";
-        }
-      }}
-    >
-      <Handle type="target" position={Position.Left} style={{ visibility: "hidden" }} />
-      <Handle type="source" position={Position.Right} style={{ visibility: "hidden" }} />
+    <div className={cardClassName}>
+      <Handle type="target" position={Position.Left} className="er-card__handle" />
+      <Handle type="source" position={Position.Right} className="er-card__handle" />
 
-      {/* Header */}
-      <div
-        style={{
-          height: HEADER_H,
-          padding: "0 12px",
-          display: "flex",
-          alignItems: "center",
-          background: isFocus ? "var(--accent-indigo-light)" : "var(--bg-secondary)",
-          borderBottom: "1px solid var(--border-light)",
-          fontWeight: 700,
-          fontSize: "0.8rem",
-          color: "var(--text-primary)",
-          fontFamily: "var(--font-mono)",
-          gap: 6,
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: isFocus ? "var(--accent-indigo)" : "var(--accent-teal)",
-            flexShrink: 0,
-          }}
-        />
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div className="er-card__header">
+        <span className="er-card__status" />
+        <span className="er-card__title">
           {label}
         </span>
         {onAnnotate && (
           <button
+            type="button"
+            className="er-card__annotate"
             onClick={(e) => {
               e.stopPropagation();
               onAnnotate();
             }}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: "2px 4px",
-              display: "grid",
-              placeItems: "center",
-              color: "var(--accent-indigo)",
-              fontSize: "0.75rem",
-            }}
-            title="添加设计批注修改该表架构"
+            title="添加设计批注"
           >
-            <span>🪄</span>
+            批注
           </button>
         )}
       </div>
 
-      {/* Fields */}
-      <div style={{ padding: "2px 0" }}>
+      <div className="er-card__fields">
         {safeFields.map((f) => (
-          <div
-            key={f.name}
-            style={{
-              height: ROW_H,
-              padding: "0 12px",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <span style={{ width: 14, textAlign: "center", flexShrink: 0 }}>
-              {f.is_pk && <span style={{ color: "var(--accent-amber)", fontSize: "0.65rem" }}>◆</span>}
-              {f.is_fk && !f.is_pk && <span style={{ color: "var(--accent-teal)", fontSize: "0.65rem" }}>◇</span>}
+          <div key={f.name} className="er-card__field">
+            <span
+              className={[
+                "er-card__field-marker",
+                f.is_pk ? "er-card__field-marker--pk" : "",
+                f.is_fk && !f.is_pk ? "er-card__field-marker--fk" : "",
+              ].filter(Boolean).join(" ")}
+            >
+              {f.is_pk ? "PK" : f.is_fk ? "FK" : ""}
             </span>
             <span
-              style={{
-                flex: 1,
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.7rem",
-                fontWeight: f.is_pk ? 600 : 400,
-                color: f.is_pk ? "var(--text-primary)" : "var(--text-secondary)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
+              className={[
+                "er-card__field-name",
+                f.is_pk ? "er-card__field-name--primary" : "",
+              ].filter(Boolean).join(" ")}
             >
               {f.name}
             </span>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "0.62rem",
-                color: "var(--text-muted)",
-              }}
-            >
+            <span className="er-card__field-type">
               {f.type}
             </span>
           </div>
         ))}
       </div>
 
-      {/* Toggle button */}
       {hasToggleRow && onToggle && (
-        <div
+        <button
+          type="button"
+          className="er-card__toggle"
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
           }}
-          style={{
-            height: ROW_H,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--bg-secondary)",
-            borderTop: "1px dashed var(--border-light)",
-            color: "var(--accent-indigo)",
-            fontWeight: 600,
-            fontSize: "0.68rem",
-            cursor: "pointer",
-            transition: "background 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--border-light)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--bg-secondary)";
-          }}
         >
-          {isCollapsed ? `🔍 展开全部 (${totalFieldCount})` : `▲ 折叠非关键字段`}
-        </div>
+          {isCollapsed ? `展开全部 (${totalFieldCount})` : "折叠非关键字段"}
+        </button>
       )}
 
-      {/* Comment footer */}
       {comment && !isCollapsed && (
-        <div
-          style={{
-            height: 20,
-            padding: "0 12px",
-            display: "flex",
-            alignItems: "center",
-            background: "var(--bg-secondary)",
-            borderTop: "1px solid var(--border-light)",
-            fontSize: "0.62rem",
-            color: "var(--text-muted)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <div className="er-card__comment">
           {comment}
         </div>
       )}
@@ -506,47 +362,36 @@ function ErEdge({
   const isInferred = edgeData?.edge_type === "inferred";
   const isSecondary = edgeData?.isSecondary;
   const displayLabel = edgeData?.label || "";
+  const edgeClassName = [
+    "er-edge",
+    isInferred ? "er-edge--inferred" : "",
+    isSecondary ? "er-edge--secondary" : "",
+  ].filter(Boolean).join(" ");
+  const labelClassName = [
+    "er-edge-label",
+    isInferred ? "er-edge-label--inferred" : "",
+    isSecondary ? "er-edge-label--secondary" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <>
       <BaseEdge
         id={id}
         path={edgePath}
-        style={{
-          stroke: isInferred ? "#B45309" : "#0D7377",
-          strokeWidth: isInferred ? 1.2 : 2,
-          strokeDasharray: isInferred ? "5,4" : undefined,
-          opacity: isSecondary ? 0.3 : 1,
-        }}
+        className={edgeClassName}
         markerEnd={markerEnd}
       />
       {displayLabel && (
-        <EdgeLabelRenderer>
-          <div
-            className="er-edge-label nodrag nopan"
-            style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              fontSize: "0.62rem",
-              fontFamily: "var(--font-mono)",
-              color: isInferred ? "#B45309" : "#0D7377",
-              background: "rgba(255,255,255,0.96)",
-              padding: "2px 6px",
-              borderRadius: 3,
-              border: `1px solid ${isInferred ? "#FCD34D" : "#ccf0f0"}`,
-              pointerEvents: "all",
-              whiteSpace: "nowrap",
-              maxWidth: 220,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-              zIndex: 10,
-            }}
-            title={`${displayLabel}${isInferred ? " (系统推断关联)" : ""}`}
-          >
-            {isInferred ? `✨ ${displayLabel}` : displayLabel}
-          </div>
-        </EdgeLabelRenderer>
+        <text
+          className={labelClassName}
+          x={labelX}
+          y={labelY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          <title>{`${displayLabel}${isInferred ? " (系统推断关联)" : ""}`}</title>
+          {isInferred ? `推断 ${displayLabel}` : displayLabel}
+        </text>
       )}
     </>
   );
@@ -700,8 +545,8 @@ export function ErDiagram({
   if (safeData.nodes.length === 0) return null;
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "relative", background: "#FAF9F6" }}>
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+    <div className="er-diagram">
+      <div className="er-diagram__viewport">
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
@@ -718,20 +563,9 @@ export function ErDiagram({
           proOptions={{ hideAttribution: true }}
         >
           <Background color="#E8E6E1" gap={20} />
-          <Controls
-            style={{
-              background: "rgba(255,255,255,0.85)",
-              borderRadius: 8,
-              border: "1px solid var(--border-light)",
-              boxShadow: "var(--shadow-sm)",
-            }}
-          />
+          <Controls className="er-flow-controls" />
           <MiniMap
-            style={{
-              background: "var(--bg-secondary)",
-              borderRadius: 8,
-              border: "1px solid var(--border-light)",
-            }}
+            className="er-flow-minimap"
             nodeColor={(n) => {
               const d = n.data as unknown as TableNodeData;
               return d.isFocus ? "#2D3B8C" : "#0D7377";

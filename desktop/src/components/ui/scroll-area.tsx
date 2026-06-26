@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
 import { cn } from "../../lib/utils";
+import "./scroll-area.css";
 
 const ScrollArea = React.forwardRef<
   React.ComponentRef<typeof ScrollAreaPrimitive.Root>,
@@ -8,14 +9,15 @@ const ScrollArea = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <ScrollAreaPrimitive.Root
     ref={ref}
-    className={cn("relative overflow-hidden", className)}
+    type="always"
+    className={cn("dbfox-scroll-area", className)}
     {...props}
   >
-    <ScrollAreaPrimitive.Viewport className="h-full w-full rounded-[inherit]">
+    <ScrollAreaPrimitive.Viewport className="dbfox-scroll-area-viewport">
       {children}
     </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollAreaPrimitive.Corner />
+    <ScrollBar forceMount />
+    <ScrollAreaPrimitive.Corner className="dbfox-scroll-area-corner" />
   </ScrollAreaPrimitive.Root>
 ));
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
@@ -28,16 +30,16 @@ const ScrollBar = React.forwardRef<
     ref={ref}
     orientation={orientation}
     className={cn(
-      "flex touch-none select-none transition-colors",
+      "dbfox-scroll-area-scrollbar",
       orientation === "vertical" &&
-        "h-full w-1.5 border-l border-l-transparent p-[1px]",
+        "dbfox-scroll-area-scrollbar--vertical",
       orientation === "horizontal" &&
-        "h-1.5 flex-col border-t border-t-transparent p-[1px]",
+        "dbfox-scroll-area-scrollbar--horizontal",
       className
     )}
     {...props}
   >
-    <ScrollAreaPrimitive.ScrollAreaThumb className="relative flex-1 rounded-full bg-[hsl(var(--border))]" />
+    <ScrollAreaPrimitive.ScrollAreaThumb className="dbfox-scroll-area-thumb" />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ));
 ScrollBar.displayName = ScrollAreaPrimitive.ScrollAreaScrollbar.displayName;

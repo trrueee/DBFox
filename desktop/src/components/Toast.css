@@ -1,0 +1,171 @@
+.dbfox-toast-viewport {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(400px, calc(100vw - 40px));
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  pointer-events: none;
+  outline: none;
+}
+
+.dbfox-toast-root {
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+  gap: 10px;
+  padding: 10px 14px;
+  color: hsl(var(--foreground));
+  font-size: var(--ui-font-control);
+  pointer-events: auto;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.dbfox-toast-root--success {
+  border-left-color: hsl(var(--success));
+}
+
+.dbfox-toast-root--error {
+  border-left-color: hsl(var(--destructive));
+}
+
+.dbfox-toast-root--warning {
+  border-left-color: hsl(var(--warning));
+}
+
+.dbfox-toast-root--info {
+  border-left-color: hsl(var(--primary));
+}
+
+.dbfox-toast-root[data-state="open"] {
+  animation: dbfox-toast-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dbfox-toast-root[data-state="closed"] {
+  animation: dbfox-toast-out 180ms ease-in;
+}
+
+.dbfox-toast-root[data-swipe="move"] {
+  transform: translateX(var(--radix-toast-swipe-move-x));
+}
+
+.dbfox-toast-root[data-swipe="cancel"] {
+  transform: translateX(0);
+  transition: transform 180ms ease-out;
+}
+
+.dbfox-toast-root[data-swipe="end"] {
+  animation: dbfox-toast-swipe-out 160ms ease-out;
+}
+
+.dbfox-toast-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.dbfox-toast-icon-glyph {
+  width: 15px;
+  height: 15px;
+}
+
+.dbfox-toast-root--success .dbfox-toast-icon {
+  color: hsl(var(--success));
+}
+
+.dbfox-toast-root--error .dbfox-toast-icon {
+  color: hsl(var(--destructive));
+}
+
+.dbfox-toast-root--warning .dbfox-toast-icon {
+  color: hsl(var(--warning));
+}
+
+.dbfox-toast-root--info .dbfox-toast-icon {
+  color: hsl(var(--primary));
+}
+
+.dbfox-toast-message {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.dbfox-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  opacity: 0.6;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.dbfox-toast-close:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+  opacity: 1;
+}
+
+.dbfox-toast-close:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.dbfox-toast-close-icon {
+  width: 13px;
+  height: 13px;
+}
+
+@keyframes dbfox-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes dbfox-toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+@keyframes dbfox-toast-swipe-out {
+  from {
+    transform: translateX(var(--radix-toast-swipe-end-x));
+  }
+
+  to {
+    transform: translateX(120%);
+  }
+}

@@ -2,11 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 import { FlaskConical, Loader2, Play, Plus, Trash2 } from "lucide-react";
 import { getStoredApiConfig } from "../components/SettingsDialog";
 import {
+  Button,
+  EmptyState,
+  Input,
+  LoadingState,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  PanelTitle,
+} from "../components/ui";
+import {
   agentEvalApi,
   type AgentEvalCaseResult,
   type AgentEvalRun,
   type AgentGoldenTask,
 } from "../lib/api/agentEval";
+import "./AgentEvalPage.css";
 
 interface AgentEvalPageProps {
   datasources: Array<{ id: string; name: string }>;
@@ -148,123 +159,165 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
   };
 
   return (
-    <div className="hifi-eval-page">
-      <div className="hifi-eval-header">
-        <div className="hifi-eval-header-title">
-          <FlaskConical size={15} />
+    <div className="agent-eval-page">
+      <div className="agent-eval-header">
+        <div className="agent-eval-header__title">
+          <FlaskConical size={15} aria-hidden="true" />
           <span>Agent 评测</span>
-          <span className="hifi-eval-header-ds">{datasourceName}</span>
+          <span className="agent-eval-header__datasource">{datasourceName}</span>
         </div>
-        <div className="hifi-eval-header-actions">
-          <button className="hifi-eval-btn" onClick={() => setShowForm((prev) => !prev)}>
-            <Plus size={12} /> 新建任务
-          </button>
-          <button className="hifi-eval-btn hifi-eval-btn-primary" onClick={() => void runEval()} disabled={running || loading}>
-            {running ? <Loader2 size={12} className="hifi-agent-running-spinner" /> : <Play size={12} />}
+        <div className="agent-eval-header__actions">
+          <Button variant="outline" size="sm" onClick={() => setShowForm((prev) => !prev)}>
+            <Plus size={12} aria-hidden="true" />
+            新建任务
+          </Button>
+          <Button size="sm" onClick={() => void runEval()} disabled={running || loading}>
+            {running ? <Loader2 size={12} className="agent-eval-button-spinner" aria-hidden="true" /> : <Play size={12} aria-hidden="true" />}
             {running ? "评测进行中…" : "运行评测"}
-          </button>
+          </Button>
         </div>
       </div>
 
       {showForm && (
-        <div className="hifi-eval-form">
-          <div className="hifi-eval-form-row">
-            <label>任务名称</label>
-            <input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="例如：按部门统计上月资产数" />
+        <div className="agent-eval-form">
+          <div className="agent-eval-form__row">
+            <label htmlFor="agent-eval-name">任务名称</label>
+            <Input
+              id="agent-eval-name"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder="例如：按部门统计上月资产数"
+            />
           </div>
-          <div className="hifi-eval-form-row">
-            <label>问题</label>
-            <input value={formQuestion} onChange={(e) => setFormQuestion(e.target.value)} placeholder="输入要让 Agent 回答的自然语言问题" />
+          <div className="agent-eval-form__row">
+            <label htmlFor="agent-eval-question">问题</label>
+            <Input
+              id="agent-eval-question"
+              value={formQuestion}
+              onChange={(e) => setFormQuestion(e.target.value)}
+              placeholder="输入要让 Agent 回答的自然语言问题"
+            />
           </div>
-          <div className="hifi-eval-form-row">
-            <label>答案需包含关键词（逗号分隔，可留空）</label>
-            <input value={formKeywords} onChange={(e) => setFormKeywords(e.target.value)} placeholder="例如：市场运营部, 资产" />
+          <div className="agent-eval-form__row">
+            <label htmlFor="agent-eval-keywords">答案需包含关键词（逗号分隔，可留空）</label>
+            <Input
+              id="agent-eval-keywords"
+              value={formKeywords}
+              onChange={(e) => setFormKeywords(e.target.value)}
+              placeholder="例如：市场运营部, 资产"
+            />
           </div>
-          <div className="hifi-eval-form-row hifi-eval-form-inline">
-            <label>
-              <input type="checkbox" checked={formSqlRequired} onChange={(e) => setFormSqlRequired(e.target.checked)} />
+          <div className="agent-eval-form__row agent-eval-form__inline">
+            <label className="agent-eval-form__checkbox">
+              <input
+                type="checkbox"
+                checked={formSqlRequired}
+                onChange={(e) => setFormSqlRequired(e.target.checked)}
+              />
               要求 Agent 生成 SQL
             </label>
-            <button className="hifi-eval-btn hifi-eval-btn-primary" onClick={() => void createTask()}>保存任务</button>
+            <Button size="sm" onClick={() => void createTask()}>
+              保存任务
+            </Button>
           </div>
         </div>
       )}
 
-      <div className="hifi-eval-body">
-        <section className="hifi-eval-panel">
-          <div className="hifi-eval-panel-title">Golden 任务（{tasks.length}）</div>
-          {loading && tasks.length === 0 ? (
-            <div className="hifi-eval-empty">加载中…</div>
-          ) : tasks.length === 0 ? (
-            <div className="hifi-eval-empty">
-              暂无任务。Golden 任务是带有期望结果的标准问题，用于回归验证 Agent 的问答质量。
-            </div>
-          ) : (
-            <ul className="hifi-eval-task-list">
-              {tasks.map((task) => (
-                <li key={task.id} className="hifi-eval-task">
-                  <div className="hifi-eval-task-main">
-                    <div className="hifi-eval-task-name">{task.name}</div>
-                    <div className="hifi-eval-task-question">{task.question}</div>
-                    <div className="hifi-eval-task-meta">
-                      {task.expected_sql_required && <span className="hifi-eval-chip">要求 SQL</span>}
-                      {parseJsonArray(task.expected_final_contains_json).map((keyword) => (
-                        <span key={keyword} className="hifi-eval-chip hifi-eval-chip-keyword">{keyword}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <button className="hifi-eval-icon-btn" title="删除任务" onClick={() => void removeTask(task.id)}>
-                    <Trash2 size={12} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="hifi-eval-panel">
-          <div className="hifi-eval-panel-title">评测历史（{runs.length}）</div>
-          {runs.length === 0 ? (
-            <div className="hifi-eval-empty">还没有评测记录。点击右上角"运行评测"开始第一次评测。</div>
-          ) : (
-            <ul className="hifi-eval-run-list">
-              {runs.map((run) => {
-                const passRate = run.pass_rate !== null && run.pass_rate !== undefined
-                  ? `${Math.round(run.pass_rate * 100)}%`
-                  : "-";
-                const expanded = expandedRunId === run.id;
-                return (
-                  <li key={run.id} className="hifi-eval-run">
-                    <button className="hifi-eval-run-head" onClick={() => void toggleRun(run.id)}>
-                      <span className={`hifi-eval-run-rate ${rateClass(run.pass_rate)}`}>{passRate}</span>
-                      <span className="hifi-eval-run-counts">{run.passed_cases}/{run.total_cases} 通过</span>
-                      {run.avg_latency_ms != null && (
-                        <span className="hifi-eval-run-latency">平均 {(run.avg_latency_ms / 1000).toFixed(1)}s</span>
-                      )}
-                      <span className="hifi-eval-run-time">{formatTime(run.created_at)}</span>
-                    </button>
-                    {expanded && (
-                      <div className="hifi-eval-cases">
-                        {(runCases[run.id] || []).map((item) => (
-                          <div key={item.id} className="hifi-eval-case">
-                            <span className={`hifi-eval-case-status hifi-eval-case-${item.status}`}>
-                              {item.status === "passed" ? "通过" : item.status === "failed" ? "未通过" : "错误"}
-                            </span>
-                            <span className="hifi-eval-case-task">{taskName(tasks, item.task_id)}</span>
-                            <span className="hifi-eval-case-score">得分 {item.score.toFixed(2)}</span>
-                            {item.latency_ms != null && <span className="hifi-eval-case-latency">{(item.latency_ms / 1000).toFixed(1)}s</span>}
-                            {renderFailureReasons(item.failure_reasons_json)}
-                          </div>
+      <div className="agent-eval-body">
+        <Panel className="agent-eval-panel" aria-label="Golden 任务">
+          <PanelHeader className="agent-eval-panel__header">
+            <PanelTitle className="agent-eval-panel__title">Golden 任务（{tasks.length}）</PanelTitle>
+          </PanelHeader>
+          <PanelBody className="agent-eval-panel__body">
+            {loading && tasks.length === 0 ? (
+              <LoadingState className="agent-eval-state" label="加载任务中" />
+            ) : tasks.length === 0 ? (
+              <EmptyState
+                className="agent-eval-state"
+                title="暂无 Golden 任务"
+                description="Golden 任务是带有期望结果的标准问题，用于回归验证 Agent 的问答质量。"
+              />
+            ) : (
+              <ul className="agent-eval-list">
+                {tasks.map((task) => (
+                  <li key={task.id} className="agent-eval-task">
+                    <div className="agent-eval-task__main">
+                      <div className="agent-eval-task__name">{task.name}</div>
+                      <div className="agent-eval-task__question">{task.question}</div>
+                      <div className="agent-eval-task__meta">
+                        {task.expected_sql_required && <span className="agent-eval-chip">要求 SQL</span>}
+                        {parseJsonArray(task.expected_final_contains_json).map((keyword) => (
+                          <span key={keyword} className="agent-eval-chip agent-eval-chip--keyword">{keyword}</span>
                         ))}
-                        {!runCases[run.id] && <div className="hifi-eval-empty">加载明细中…</div>}
                       </div>
-                    )}
+                    </div>
+                    <Button
+                      className="agent-eval-task__delete"
+                      variant="ghost"
+                      size="icon-sm"
+                      title="删除任务"
+                      onClick={() => void removeTask(task.id)}
+                    >
+                      <Trash2 size={12} aria-hidden="true" />
+                    </Button>
                   </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                ))}
+              </ul>
+            )}
+          </PanelBody>
+        </Panel>
+
+        <Panel className="agent-eval-panel" aria-label="评测历史">
+          <PanelHeader className="agent-eval-panel__header">
+            <PanelTitle className="agent-eval-panel__title">评测历史（{runs.length}）</PanelTitle>
+          </PanelHeader>
+          <PanelBody className="agent-eval-panel__body">
+            {runs.length === 0 ? (
+              <EmptyState
+                className="agent-eval-state"
+                title="还没有评测记录"
+                description="点击右上角“运行评测”开始第一次评测。"
+              />
+            ) : (
+              <ul className="agent-eval-list">
+                {runs.map((run) => {
+                  const passRate = run.pass_rate !== null && run.pass_rate !== undefined
+                    ? `${Math.round(run.pass_rate * 100)}%`
+                    : "-";
+                  const expanded = expandedRunId === run.id;
+                  return (
+                    <li key={run.id} className="agent-eval-run">
+                      <button className="agent-eval-run__head" onClick={() => void toggleRun(run.id)}>
+                        <span className={`agent-eval-run__rate ${rateClass(run.pass_rate)}`}>{passRate}</span>
+                        <span className="agent-eval-run__counts">{run.passed_cases}/{run.total_cases} 通过</span>
+                        {run.avg_latency_ms != null && (
+                          <span className="agent-eval-run__latency">平均 {(run.avg_latency_ms / 1000).toFixed(1)}s</span>
+                        )}
+                        <span className="agent-eval-run__time">{formatTime(run.created_at)}</span>
+                      </button>
+                      {expanded && (
+                        <div className="agent-eval-cases">
+                          {(runCases[run.id] || []).map((item) => (
+                            <div key={item.id} className="agent-eval-case">
+                              <span className={`agent-eval-case__status agent-eval-case__status--${item.status}`}>
+                                {item.status === "passed" ? "通过" : item.status === "failed" ? "未通过" : "错误"}
+                              </span>
+                              <span className="agent-eval-case__task">{taskName(tasks, item.task_id)}</span>
+                              <span className="agent-eval-case__score">得分 {item.score.toFixed(2)}</span>
+                              {item.latency_ms != null && <span className="agent-eval-case__latency">{(item.latency_ms / 1000).toFixed(1)}s</span>}
+                              {renderFailureReasons(item.failure_reasons_json)}
+                            </div>
+                          ))}
+                          {!runCases[run.id] && <LoadingState className="agent-eval-state" label="加载明细中" />}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </PanelBody>
+        </Panel>
       </div>
     </div>
   );
@@ -285,9 +338,9 @@ function taskName(tasks: AgentGoldenTask[], taskId: string): string {
 
 function rateClass(passRate: number | null | undefined): string {
   if (passRate === null || passRate === undefined) return "";
-  if (passRate >= 0.9) return "hifi-eval-rate-good";
-  if (passRate >= 0.6) return "hifi-eval-rate-warn";
-  return "hifi-eval-rate-bad";
+  if (passRate >= 0.9) return "agent-eval-run__rate--good";
+  if (passRate >= 0.6) return "agent-eval-run__rate--warn";
+  return "agent-eval-run__rate--bad";
 }
 
 function formatTime(value: string | null | undefined): string {
@@ -303,7 +356,7 @@ function renderFailureReasons(json: string) {
   const reasons = parseJsonArray(json);
   if (reasons.length === 0) return null;
   return (
-    <div className="hifi-eval-case-reasons">
+    <div className="agent-eval-case__reasons">
       {reasons.map((reason, index) => (
         <div key={index}>· {reason}</div>
       ))}

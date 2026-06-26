@@ -1,0 +1,103 @@
+.workspace-shell {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.workspace-shell__header {
+  display: flex;
+  min-height: 52px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 10px 14px;
+}
+
+.workspace-shell__heading {
+  min-width: 0;
+}
+
+.workspace-shell__title {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: var(--ui-font-title);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workspace-shell__description {
+  margin: 3px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ui-font-control);
+  line-height: 1.35;
+}
+
+.workspace-shell__toolbar {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.workspace-shell__body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.workspace-shell__state {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.workspace-shell__state > [role="status"] {
+  min-height: 80px;
+}
+
+.workspace-page-toolbar {
+  display: flex;
+  min-height: 38px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary) / 0.32);
+  padding: 8px 12px;
+}
+
+.workspace-page-toolbar__meta {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ui-font-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-shell .hifi-diagnostics-page--workspace,
+.workspace-shell .hifi-datasource-page--workspace {
+  gap: 12px;
+  padding: 14px;
+}
+
+.workspace-shell .hifi-settings-page--workspace .hifi-settings-body {
+  padding: 18px 20px;
+}
+
+.workspace-shell .hifi-settings-page--workspace .hifi-settings-footer {
+  padding: 12px 20px;
+}

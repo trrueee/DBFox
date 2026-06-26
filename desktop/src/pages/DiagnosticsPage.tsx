@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, Copy, FileWarning, RefreshCw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, Copy, FileWarning, RefreshCw, Trash2 } from "lucide-react";
+import { Button, EmptyState, ErrorState } from "../components/ui";
 import { diagnosticsApi, type DiagnosticLogSource, type DiagnosticLogsResponse } from "../lib/api/diagnostics";
 import { getClientLogSource } from "../lib/diagnostics/clientLog";
 import { getUserErrorMessage } from "../lib/api/client";
+import "./DiagnosticsPage.css";
 
 interface DiagnosticsPageProps {
   onToast: (msg: string, type?: "success" | "error" | "warning" | "info") => void;
+  chrome?: "page" | "workspace";
 }
 
 type DiagnosticGroupKey = "backend" | "frontend";
@@ -21,7 +24,7 @@ interface DiagnosticLogGroup {
   content: string;
 }
 
-export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
+export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPageProps) {
   const [logs, setLogs] = useState<DiagnosticLogsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,51 +95,60 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
   const selectedGroup = visibleGroups.find((group) => group.key === selectedGroupKey) || visibleGroups[0] || null;
   const totalSourcesCount = logs?.sources.length ?? 0;
   const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
+  const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取...";
+  const actions = (
+    <div className="diagnostics-actions">
+      <label className="diagnostics-toggle-label">
+        <input
+          type="checkbox"
+          className="diagnostics-toggle-checkbox"
+          checked={showEmptyLogs}
+          aria-label="显示空日志"
+          onChange={(e) => setShowEmptyLogs(e.target.checked)}
+        />
+        <span>显示空日志</span>
+      </label>
+      <span className="diagnostics-badge">
+        <CheckCircle2 size={14} />
+        已脱敏
+      </span>
+      <Button type="button" variant="outline" size="sm" onClick={loadLogs} disabled={loading}>
+        <RefreshCw size={14} />
+        刷新
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={handleClearLogs} disabled={loading}>
+        <Trash2 size={14} />
+        清空
+      </Button>
+      <Button type="button" size="sm" onClick={handleCopy} disabled={!logs}>
+        <Copy size={14} />
+        复制诊断包
+      </Button>
+    </div>
+  );
 
   return (
-    <div className="hifi-diagnostics-page">
-      <div className="hifi-page-header">
-        <div>
-          <h2>诊断日志</h2>
-          <p>{logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取..."}</p>
+    <div className={`diagnostics-page${chrome === "workspace" ? " diagnostics-page--workspace" : ""}`}>
+      {chrome === "workspace" ? (
+        <div className="diagnostics-page-toolbar">
+          <span className="diagnostics-page-subtitle">{generatedAtLabel}</span>
+          {actions}
         </div>
-        <div className="hifi-diagnostics-actions">
-          <label className="hifi-diagnostics-toggle-label">
-            <input
-              type="checkbox"
-              checked={showEmptyLogs}
-              aria-label="显示空日志"
-              onChange={(e) => setShowEmptyLogs(e.target.checked)}
-            />
-            <span>显示空日志</span>
-          </label>
-          <span className="hifi-diagnostics-badge">
-            <CheckCircle2 size={14} />
-            已脱敏
-          </span>
-          <button className="hifi-btn" type="button" onClick={loadLogs} disabled={loading}>
-            <RefreshCw size={14} />
-            刷新
-          </button>
-          <button className="hifi-btn hifi-btn-outline" type="button" onClick={handleClearLogs} disabled={loading}>
-            <Trash2 size={14} />
-            清空
-          </button>
-          <button className="hifi-btn hifi-btn-primary" type="button" onClick={handleCopy} disabled={!logs}>
-            <Copy size={14} />
-            复制诊断包
-          </button>
+      ) : (
+        <div className="diagnostics-page-header">
+          <div>
+            <h2 className="diagnostics-page-title">诊断日志</h2>
+            <p className="diagnostics-page-subtitle">{generatedAtLabel}</p>
+          </div>
+          {actions}
         </div>
-      </div>
+      )}
 
       {error ? (
-        <div className="hifi-diagnostics-error">
-          <AlertTriangle size={16} />
-          <span>{error}</span>
-        </div>
+        <ErrorState className="diagnostics-error" title="诊断日志加载失败" description={error} />
       ) : null}
 
-      <div className="hifi-diagnostics-summary">
+      <div className="diagnostics-summary">
         <Metric label="日志源" value={`${nonEmptySourcesCount}/${totalSourcesCount} 有内容`} />
         <Metric label="日志分组" value={`${visibleGroups.length}/2 可查看`} />
         <Metric label="进程" value={String(logs?.environment.pid ?? "-")} />
@@ -145,12 +157,14 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
       </div>
 
       {visibleGroups.length > 0 ? (
-        <div className="hifi-diagnostics-source-toolbar">
-          <div className="hifi-diagnostics-source-picker">
+        <div className="diagnostics-source-toolbar">
+          <div className="diagnostics-source-picker">
             <span>日志分组</span>
-            <button
+            <Button
               type="button"
-              className="hifi-diagnostics-source-trigger"
+              variant="outline"
+              size="sm"
+              className="diagnostics-source-trigger"
               aria-label="日志分组"
               aria-haspopup="listbox"
               aria-expanded={groupMenuOpen}
@@ -158,16 +172,17 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
             >
               <span>{selectedGroup?.label || "选择日志"}</span>
               <ChevronDown size={14} />
-            </button>
+            </Button>
             {groupMenuOpen ? (
-              <div className="hifi-diagnostics-source-menu" role="listbox" aria-label="日志分组">
+              <div className="diagnostics-source-menu" role="listbox" aria-label="日志分组">
                 {visibleGroups.map((group) => (
-                  <button
+                  <Button
                     key={group.key}
                     type="button"
+                    variant="ghost"
                     role="option"
                     aria-selected={group.key === selectedGroupKey}
-                    className={`hifi-diagnostics-source-option ${group.key === selectedGroupKey ? "active" : ""}`}
+                    className={`diagnostics-source-option${group.key === selectedGroupKey ? " is-active" : ""}`}
                     onClick={() => {
                       setSelectedGroupKey(group.key);
                       setGroupMenuOpen(false);
@@ -179,37 +194,46 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
                     </span>
                     <em>{formatBytes(group.sizeBytes)}</em>
                     {group.key === selectedGroupKey ? <Check size={14} /> : null}
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : null}
           </div>
-          <span className="hifi-diagnostics-source-count">
+          <span className="diagnostics-source-count">
             {selectedGroup ? `${selectedGroup.sourceNames.length} 个原始源` : "无日志源"}
           </span>
         </div>
       ) : null}
 
-      <div className="hifi-diagnostics-sources">
+      <div className="diagnostics-sources">
         {selectedGroup ? (
-          <section className="hifi-diagnostics-source" key={selectedGroup.key}>
-            <div className="hifi-diagnostics-source-header">
+          <section className="diagnostics-source" key={selectedGroup.key}>
+            <div className="diagnostics-source-header">
               <div>
                 <h3>{selectedGroup.label}</h3>
                 <p>{selectedGroup.sourceNames.join(", ")}</p>
               </div>
-              <span className={selectedGroup.exists ? "hifi-log-status ok" : "hifi-log-status missing"}>
+              <span
+                className={
+                  selectedGroup.exists
+                    ? "diagnostics-log-status diagnostics-log-status--ok"
+                    : "diagnostics-log-status diagnostics-log-status--missing"
+                }
+              >
                 {selectedGroup.exists ? `${formatBytes(selectedGroup.sizeBytes)}` : "未生成"}
               </span>
             </div>
-            <pre>{selectedGroup.content || (selectedGroup.exists ? "无日志内容" : "日志文件不存在")}</pre>
+            <pre className="diagnostics-source-content">
+              {selectedGroup.content || (selectedGroup.exists ? "无日志内容" : "日志文件不存在")}
+            </pre>
           </section>
         ) : null}
         {!loading && visibleGroups.length === 0 ? (
-          <div className="hifi-diagnostics-empty">
-            <FileWarning size={18} />
-            <span>暂无有效日志（包含内容的日志源）</span>
-          </div>
+          <EmptyState
+            className="diagnostics-empty"
+            icon={<FileWarning size={18} />}
+            title="暂无有效日志（包含内容的日志源）"
+          />
         ) : null}
       </div>
     </div>
@@ -218,7 +242,7 @@ export function DiagnosticsPage({ onToast }: DiagnosticsPageProps) {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="hifi-diagnostics-metric">
+    <div className="diagnostics-metric">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

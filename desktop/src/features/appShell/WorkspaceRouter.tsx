@@ -18,6 +18,7 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useConversationStore } from "../../stores/conversationStore";
 import type { ConversationSummary } from "../../types/conversation";
+import { WorkspaceShell } from "./WorkspaceShell";
 
 interface WorkspaceRouterProps {
   activeTab: WorkspaceTab;
@@ -41,13 +42,13 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
     return <MultiTableWorkspace tables={activeTab.selectedTables || []} onOpenQueryResult={openQueryResult} onToast={showToast} />;
   }
   if (activeTab.type === "llm-config") {
-    return <LlmConfigTabContent showToast={showToast} />;
+    return <LlmConfigTabContent activeTab={activeTab} showToast={showToast} />;
   }
   if (activeTab.type === "agent-eval") {
     return <AgentEvalTab showToast={showToast} />;
   }
   if (activeTab.type === "diagnostics") {
-    return <DiagnosticsTab showToast={showToast} />;
+    return <DiagnosticsTab activeTab={activeTab} showToast={showToast} />;
   }
   if (activeTab.type === "datasource-settings") {
     return <DatasourceSettingsTab activeTab={activeTab} showToast={showToast} />;
@@ -184,11 +185,11 @@ function AgentEvalTab({ showToast }: { showToast: WorkspaceRouterProps["showToas
   return <AgentEvalPage datasources={datasources} activeDatasourceId={activeDatasourceId} onToast={showToast} />;
 }
 
-function DiagnosticsTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
+function DiagnosticsTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
   return (
-    <div className="hifi-settings-tab-frame">
-      <DiagnosticsPage onToast={showToast} />
-    </div>
+    <WorkspaceShell title={activeTab.title} description="查看本地前端、后端诊断日志和运行环境。">
+      <DiagnosticsPage onToast={showToast} chrome="workspace" />
+    </WorkspaceShell>
   );
 }
 
@@ -205,8 +206,9 @@ function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceT
   const checkHealth = useDatasourceStore((s) => s.checkHealth);
 
   return (
-    <div className="hifi-settings-tab-frame">
+    <WorkspaceShell title={activeTab.title} description="管理桌面端可用的数据源连接、健康状态和 schema 同步。">
       <DataSourcesPage
+        chrome="workspace"
         onSelectDataSource={(ds) => {
           if (ds) {
             setActiveDatasourceId(ds.id);
@@ -222,7 +224,7 @@ function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceT
         datasources={datasources}
         actions={{ createDatasource, updateDatasource, deleteDatasource, syncSchema, checkHealth }}
       />
-    </div>
+    </WorkspaceShell>
   );
 }
 
@@ -253,12 +255,21 @@ function ArtifactResultTab({
   showToast: WorkspaceRouterProps["showToast"];
 }) {
   if (!activeTab.artifactResult) {
-    return <div className="hifi-tab-pane p-4 text-[var(--ui-font-body)] text-slate-500">Result artifact is no longer available.</div>;
+    return (
+      <WorkspaceShell
+        title={activeTab.title}
+        state={{
+          kind: "error",
+          title: "结果不可用",
+          description: "这个结果工件已不在当前会话上下文中。",
+        }}
+      />
+    );
   }
   return (
-    <div className="hifi-tab-pane p-4">
+    <WorkspaceShell title={activeTab.title} description="查看由智能问数生成的可复用结果工件。">
       <TableArtifactView artifact={activeTab.artifactResult} onToast={showToast} mode="workspace" />
-    </div>
+    </WorkspaceShell>
   );
 }
 
@@ -270,12 +281,13 @@ function openQueryResult(queryText: string) {
 }
 
 // ── LlmConfigTab ──
-function LlmConfigTabContent({ showToast }: { showToast: (msg: string) => void }) {
+function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: (msg: string) => void }) {
   const { config, updateConfig, handleSave } = useApiConfig();
 
   return (
-    <div className="hifi-settings-tab-frame">
+    <WorkspaceShell title={activeTab.title} description="配置桌面端智能问数使用的模型接口。">
       <LlmConfigPanel
+        chrome="workspace"
         variant="page"
         config={config}
         onChange={updateConfig}
@@ -302,6 +314,6 @@ function LlmConfigTabContent({ showToast }: { showToast: (msg: string) => void }
           }
         }}
       />
-    </div>
+    </WorkspaceShell>
   );
 }

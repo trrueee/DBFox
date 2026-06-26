@@ -1,35 +1,31 @@
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
+import type { ClassValue } from "clsx";
 import { cn } from "../../lib/utils";
+import "./badge.css";
 
-const badgeVariants = cva(
-  "inline-flex items-center rounded-[var(--radius)] px-2 py-0.5 text-[var(--ui-font-control)] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]",
-        secondary:
-          "bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))]",
-        success:
-          "bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]",
-        warning:
-          "bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]",
-        destructive:
-          "bg-[hsl(var(--destructive)/0.15)] text-[hsl(var(--destructive))]",
-        outline:
-          "border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
+type BadgeVariant = "default" | "secondary" | "success" | "warning" | "destructive" | "outline";
 
-export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+interface BadgeVariantOptions {
+  variant?: BadgeVariant | null;
+  className?: ClassValue;
+}
+
+const badgeVariantClasses: Record<BadgeVariant, string> = {
+  default: "dbfox-badge--default",
+  secondary: "dbfox-badge--secondary",
+  success: "dbfox-badge--success",
+  warning: "dbfox-badge--warning",
+  destructive: "dbfox-badge--destructive",
+  outline: "dbfox-badge--outline",
+};
+
+function badgeVariants({ variant, className }: BadgeVariantOptions = {}) {
+  return cn("dbfox-badge", badgeVariantClasses[variant ?? "default"], className);
+}
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: BadgeVariant | null;
+}
 
 function Badge({ className, variant, ...props }: BadgeProps) {
   return (

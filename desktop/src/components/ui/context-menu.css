@@ -1,0 +1,82 @@
+.dbfox-context-menu-content {
+  z-index: 50;
+  min-width: 176px;
+  padding: 4px;
+  color: hsl(var(--popover-foreground));
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 14px 34px rgba(15, 23, 42, 0.15),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+  outline: none;
+  transform-origin: var(--radix-context-menu-content-transform-origin);
+}
+
+.dbfox-context-menu-content[data-state="open"] {
+  animation: dbfox-context-menu-in 120ms ease-out;
+}
+
+.dbfox-context-menu-content[data-state="closed"] {
+  animation: dbfox-context-menu-out 90ms ease-in;
+}
+
+.dbfox-context-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 6px 8px;
+  color: hsl(var(--popover-foreground));
+  font-size: var(--ui-font-label);
+  line-height: 1.35;
+  cursor: default;
+  user-select: none;
+  border-radius: calc(var(--radius-sm, 4px) + 1px);
+  outline: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.dbfox-context-menu-item:focus,
+.dbfox-context-menu-item[data-highlighted] {
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--accent));
+}
+
+.dbfox-context-menu-item[data-disabled] {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.dbfox-context-menu-separator {
+  height: 1px;
+  margin: 4px -4px;
+  background: hsl(var(--border));
+}
+
+@keyframes dbfox-context-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dbfox-context-menu-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.98) translateY(-1px);
+  }
+}

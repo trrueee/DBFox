@@ -1,0 +1,119 @@
+.conversation-history {
+  min-height: 0;
+}
+
+.conversation-history__body {
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.conversation-history__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.conversation-history__count {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--ui-font-caption);
+  font-weight: 650;
+}
+
+.conversation-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conversation-history__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--surface-card);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.conversation-history__item:hover,
+.conversation-history__item--active {
+  border-color: rgba(79, 70, 229, 0.35);
+  background: rgba(79, 70, 229, 0.06);
+  box-shadow: 0 8px 18px rgba(79, 70, 229, 0.06);
+}
+
+.conversation-history__item-button {
+  min-width: 0;
+  padding: 12px 0 12px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.conversation-history__item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-control);
+  font-weight: 650;
+}
+
+.conversation-history__message-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.conversation-history__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-history__chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.conversation-history__item:hover .conversation-history__chevron {
+  color: var(--color-primary);
+}
+
+.conversation-history__preview {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-history__meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.conversation-history__delete {
+  margin: 8px 8px 0 0;
+  color: var(--color-text-muted);
+}
+
+.conversation-history__delete:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
