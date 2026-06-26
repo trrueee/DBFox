@@ -1187,16 +1187,13 @@
   font-size: var(--agent-font-label);
 }
 
-.conv-dock-safety-card pre {
+.conv-dock-safety-sql {
   margin: 0 12px 12px;
-  padding: 10px;
-  overflow-x: auto;
-  border: 1px solid var(--agent-border);
+  max-width: calc(100% - 24px);
+  overflow-x: hidden;
+  border: 1px solid var(--sql-code-border);
   border-radius: 6px;
-  background: var(--agent-surface);
-  color: var(--agent-text);
-  font-size: var(--agent-font-label);
-  line-height: 1.5;
+  background: var(--sql-code-surface);
 }
 
 .conv-composer {

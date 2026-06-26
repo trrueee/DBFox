@@ -25,6 +25,19 @@ describe("conversation workspace split pane foundation", () => {
     expect(dockSource).not.toContain("--conv-artifact-width");
   });
 
+  it("uses percentage split sizes so the artifact dock is not capped to pixels", () => {
+    const workspaceSource = readFileSync(workspaceSourcePath, "utf8");
+
+    expect(workspaceSource).toContain('defaultSize="72%"');
+    expect(workspaceSource).toContain('minSize="48%"');
+    expect(workspaceSource).toContain('defaultSize="28%"');
+    expect(workspaceSource).toContain('minSize="22%"');
+    expect(workspaceSource).toContain('maxSize="44%"');
+    expect(workspaceSource).not.toContain("defaultSize={72}");
+    expect(workspaceSource).not.toContain("defaultSize={28}");
+    expect(workspaceSource).not.toContain("maxSize={44}");
+  });
+
   it("keeps split pane presentation in local CSS without inline width variables", () => {
     expect(existsSync(cssPath)).toBe(true);
     const css = readFileSync(cssPath, "utf8");
@@ -34,5 +47,13 @@ describe("conversation workspace split pane foundation", () => {
     expect(css).toContain(".conv-artifact-dock-panel");
     expect(css).toContain(".conv-artifact-resizer");
     expect(css).not.toContain("width: var(--conv-artifact-width");
+  });
+
+  it("keeps safety SQL dock previews on the shared GitHub Light code surface tokens", () => {
+    const css = readFileSync(cssPath, "utf8");
+    const safetySqlRule = css.match(/\.conv-dock-safety-sql\s*\{[^}]+\}/)?.[0] ?? "";
+
+    expect(safetySqlRule).toContain("background: var(--sql-code-surface)");
+    expect(safetySqlRule).toContain("border: 1px solid var(--sql-code-border)");
   });
 });

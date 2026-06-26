@@ -12,9 +12,9 @@
   --color-danger: #C84040;
 
   /* ── Text Colors ── */
-  --color-text-primary: #162033;
-  --color-text-secondary: #5F6B7C;
-  --color-text-muted: #7C8798;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #334155;
+  --color-text-muted: #475569;
 
   /* ── Surface Colors ── */
   --color-border: #DDEAF8;
@@ -153,6 +153,8 @@
   --trust-danger: #B91C1C;
   --trust-danger-bg: #FEF2F2;
   --trust-danger-border: #FECACA;
+  --sql-code-surface: #F6F8FA;
+  --sql-code-border: #D0D7DE;
 
   /* ── shadcn/Radix HSL Bridge ──
      These exist only to satisfy imported UI primitives.
@@ -160,7 +162,7 @@
   --primary: 247 84% 68%;
   --destructive: 0 56% 52%;
   --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 25% 32%;
   --accent: 247 84% 68%;
   --accent-foreground: 210 40% 98%;
   --card: 0 0% 100%;
@@ -200,8 +202,8 @@
   --agent-font-code: 13px;
 
   --color-text-primary: #F8FAFC;
-  --color-text-secondary: #94A3B8;
-  --color-text-muted: #64748B;
+  --color-text-secondary: #CBD5E1;
+  --color-text-muted: #94A3B8;
 
   --color-border: #1E293B;
   --color-border-hover: #334155;
@@ -284,12 +286,14 @@
   --trust-danger: #FCA5A5;
   --trust-danger-bg: #2A1114;
   --trust-danger-border: #7F1D1D;
+  --sql-code-surface: #F6F8FA;
+  --sql-code-border: #D0D7DE;
 
   /* shadcn/Radix dark bridge */
   --primary: 14 70% 58%;
   --destructive: 0 56% 52%;
   --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
+  --muted-foreground: 215 24% 72%;
   --accent: 14 60% 16%;
   --accent-foreground: 14 60% 70%;
   --card: 222 47% 11%;

@@ -4,6 +4,7 @@ import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
 import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
 import { MarkdownArtifactView } from "../../workspace/artifacts/MarkdownArtifactView";
+import { SqlCodeBlock } from "../../workspace/artifacts/SqlCodeBlock";
 import { SqlArtifactView } from "../../workspace/artifacts/SqlArtifactView";
 import { TableArtifactView } from "../../workspace/artifacts/TableArtifactView";
 import {
@@ -197,7 +198,7 @@ function SafetyDockCard({ artifact }: { artifact: ConversationArtifact }) {
         <span>Guardrail: {guardrail}</span>
         <span>Schema warnings: {schemaWarnings}</span>
       </div>
-      {sql && <pre>{sql}</pre>}
+      {sql && <SqlCodeBlock sql={sql} className="conv-dock-safety-sql" ariaLabel="安全检查 SQL" />}
     </section>
   );
 }

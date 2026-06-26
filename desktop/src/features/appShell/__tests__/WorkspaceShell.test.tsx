@@ -23,6 +23,19 @@ describe("WorkspaceShell", () => {
     expect(screen.getByText("Log body")).toBeTruthy();
   });
 
+  it("allows callers to specialize the scroll body", () => {
+    render(
+      <WorkspaceShell title="Artifact result" bodyClassName="workspace-shell__body--artifact-result">
+        <div>Rows</div>
+      </WorkspaceShell>,
+    );
+
+    const shell = screen.getByRole("region", { name: "Artifact result" });
+    expect(shell.querySelector(".workspace-shell__body")?.classList.contains("workspace-shell__body--artifact-result")).toBe(
+      true,
+    );
+  });
+
   it("uses standardized loading, empty, and error body states", () => {
     const onRetry = vi.fn();
     const { rerender } = render(

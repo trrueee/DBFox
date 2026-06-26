@@ -129,6 +129,9 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
   const datasourceId = activeTab.datasourceId || activeDatasourceId || fallbackDatasource?.id || "";
   const datasourceDbType = activeTab.datasourceDbType ?? tabDatasource?.db_type ?? fallbackDatasource?.db_type ?? null;
   const subTabKey = activeTab.id || tableId;
+  const openTableSqlConsole = (initialSql?: string) => {
+    openSqlConsole(initialSql, datasourceId, datasourceDbType);
+  };
 
   return (
     <TableWorkspace
@@ -137,7 +140,7 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
       datasourceDbType={datasourceDbType}
       currentSubTab={tableSubTabs[subTabKey] || tableSubTabs[tableId] || "preview"}
       onSubTabChange={(subTab) => setTableSubTabs((prev) => ({ ...prev, [subTabKey]: subTab }))}
-      onOpenSqlConsole={openSqlConsole}
+      onOpenSqlConsole={openTableSqlConsole}
       onToast={showToast}
     />
   );
@@ -149,6 +152,7 @@ function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; show
   const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
   const sqlConsoleState = useWorkspaceStore((s) => s.sqlConsoleState);
   const tabState = sqlConsoleState[activeTab.id] ?? { draftSql: defaultSql, entries: [], running: false };
+  const datasourceId = activeTab.datasourceId || activeDatasourceId;
 
   const onPatchState = (id: string, patch: Record<string, unknown>) => {
     useWorkspaceStore.setState((s) => ({
@@ -173,7 +177,7 @@ function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; show
       onAppendEntries={onAppendEntries}
       onToast={showToast}
       datasources={datasources}
-      activeDatasourceId={activeDatasourceId}
+      activeDatasourceId={datasourceId}
     />
   );
 }
@@ -267,7 +271,11 @@ function ArtifactResultTab({
     );
   }
   return (
-    <WorkspaceShell title={activeTab.title} description="查看由智能问数生成的可复用结果工件。">
+    <WorkspaceShell
+      title={activeTab.title}
+      description="查看由智能问数生成的可复用结果工件。"
+      bodyClassName="workspace-shell__body--artifact-result"
+    >
       <TableArtifactView artifact={activeTab.artifactResult} onToast={showToast} mode="workspace" />
     </WorkspaceShell>
   );

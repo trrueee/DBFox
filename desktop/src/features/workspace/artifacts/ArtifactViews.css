@@ -10,10 +10,59 @@
 }
 
 .sql-artifact__editor {
-  overflow: hidden;
-  border: 1px solid var(--agent-border);
+  max-height: 220px;
+  overflow: auto;
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--agent-surface-elevated);
+  background: transparent;
+}
+
+.sql-code-block {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d0d7de;
+  border-radius: var(--radius-control);
+  background: #f6f8fa;
+  color: #24292f;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: var(--ui-font-label);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+  tab-size: 2;
+}
+
+.sql-token-keyword {
+  color: #0550ae;
+  font-weight: 600;
+}
+
+.sql-token-function {
+  color: #8250df;
+  font-weight: 600;
+}
+
+.sql-token-string {
+  color: #116329;
+}
+
+.sql-token-number {
+  color: #953800;
+}
+
+.sql-token-comment {
+  color: #6e7781;
+  font-style: italic;
+}
+
+.sql-token-operator,
+.sql-token-punctuation {
+  color: #57606a;
+}
+
+.sql-token-identifier {
+  color: #24292f;
 }
 
 .chart-artifact-card .artifact-card-body {

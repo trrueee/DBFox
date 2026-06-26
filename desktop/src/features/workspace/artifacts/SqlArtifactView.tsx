@@ -1,9 +1,8 @@
-import Editor from "@monaco-editor/react";
 import { Copy, Download, Terminal } from "lucide-react";
 import { Button } from "../../../components/ui";
-import { useTheme } from "../../../hooks/useTheme";
 import type { SqlArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
+import { SqlCodeBlock } from "./SqlCodeBlock";
 import { copyText, downloadTextFile } from "./artifactActions";
 import "./ArtifactViews.css";
 
@@ -14,7 +13,6 @@ interface SqlArtifactViewProps {
 }
 
 export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArtifactViewProps) {
-  const { theme } = useTheme();
   const metadata = [
     artifact.purpose,
     ...(artifact.usedTables || []),
@@ -69,25 +67,7 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
       }
     >
       <div className="sql-artifact__editor">
-        <Editor
-          height="160px"
-          defaultLanguage="sql"
-          value={artifact.sql}
-          theme={theme === "dark" ? "vs-dark" : "light"}
-          options={{
-            readOnly: true,
-            minimap: { enabled: false },
-            lineNumbers: "on",
-            glyphMargin: false,
-            folding: false,
-            scrollBeyondLastLine: false,
-            fontSize: 12,
-            fontFamily: "var(--font-mono)",
-            wordWrap: "on",
-            renderLineHighlight: "none",
-            overviewRulerLanes: 0,
-          }}
-        />
+        <SqlCodeBlock sql={artifact.sql} ariaLabel={`${artifact.title} SQL`} />
       </div>
     </ArtifactCard>
   );

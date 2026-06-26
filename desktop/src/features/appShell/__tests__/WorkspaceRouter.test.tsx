@@ -9,6 +9,10 @@ const tableWorkspaceProps = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
 }));
 
+const sqlConsoleProps = vi.hoisted(() => ({
+  latest: null as Record<string, unknown> | null,
+}));
+
 const workspacePageProps = vi.hoisted(() => ({
   diagnostics: null as Record<string, unknown> | null,
   datasourceSettings: null as Record<string, unknown> | null,
@@ -37,7 +41,10 @@ vi.mock("../../workspace/TableWorkspace", () => ({
   },
 }));
 vi.mock("../../workspace/SqlConsoleWorkspace", () => ({
-  SqlConsoleWorkspace: () => <div data-testid="sql-console" />,
+  SqlConsoleWorkspace: (props: Record<string, unknown>) => {
+    sqlConsoleProps.latest = props;
+    return <div data-testid="sql-console" />;
+  },
 }));
 vi.mock("../../workspace/MultiTableWorkspace", () => ({
   MultiTableWorkspace: () => <div data-testid="multi-table" />,
@@ -105,6 +112,7 @@ describe("WorkspaceRouter table tabs", () => {
   beforeEach(() => {
     cleanup();
     tableWorkspaceProps.latest = null;
+    sqlConsoleProps.latest = null;
     useWorkspaceStore.setState({
       tabs: [{ id: "smart-query", title: "Ask", type: "smart-query" }],
       activeTabId: "smart-query",
@@ -143,6 +151,75 @@ describe("WorkspaceRouter table tabs", () => {
       tableId: "users",
       datasourceId: "ds-1",
       datasourceDbType: "postgresql",
+    });
+  });
+
+  it("opens SQL console from a table tab bound to the table datasource", () => {
+    const activeTab: WorkspaceTab = {
+      id: "table-ds-1-users",
+      title: "users",
+      type: "table",
+      tableId: "users",
+      datasourceId: "ds-1",
+      datasourceDbType: "postgresql",
+    };
+
+    render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
+    (tableWorkspaceProps.latest?.onOpenSqlConsole as (sql?: string) => void)("SELECT * FROM users;");
+
+    const state = useWorkspaceStore.getState();
+    expect(state.activeTabId).toBe("sql-1");
+    expect(state.tabs.at(-1)).toMatchObject({
+      id: "sql-1",
+      type: "sql",
+      datasourceId: "ds-1",
+      datasourceDbType: "postgresql",
+    });
+    expect(state.sqlConsoleState["sql-1"].draftSql).toBe("SELECT * FROM users;");
+  });
+});
+
+describe("WorkspaceRouter SQL console tabs", () => {
+  beforeEach(() => {
+    cleanup();
+    sqlConsoleProps.latest = null;
+    useWorkspaceStore.setState({
+      tabs: [{ id: "smart-query", title: "Ask", type: "smart-query" }],
+      activeTabId: "smart-query",
+      sqlConsoleState: {},
+      selectedTables: [],
+      contextTables: [],
+      tableSubTabs: {},
+      _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
+    });
+    useDatasourceStore.setState({
+      datasources: [DS1, DS2] as never,
+      activeDatasourceId: "ds-2",
+      activeDatasourceForSettings: DS2 as never,
+      tables: [],
+      loadingSchema: false,
+      schemaError: "",
+      tableColumns: {},
+    });
+  });
+
+  it("passes the datasource captured on the SQL tab instead of the global active datasource", () => {
+    render(
+      <WorkspaceRouter
+        activeTab={{
+          id: "sql-1",
+          title: "SQL 控制台",
+          type: "sql",
+          datasourceId: "ds-1",
+          datasourceDbType: "postgresql",
+        }}
+        showToast={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("sql-console")).toBeTruthy();
+    expect(sqlConsoleProps.latest).toMatchObject({
+      activeDatasourceId: "ds-1",
     });
   });
 });
@@ -205,6 +282,21 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     const shell = screen.getByRole("region", { name: activeTab.title });
     expect(within(shell).getByRole("heading", { name: activeTab.title })).toBeTruthy();
     expect(within(shell).getByTestId(testId)).toBeTruthy();
+  });
+
+  it("gives artifact result tabs a non-scrolling shell body so the table owns scrolling", () => {
+    const activeTab = {
+      id: "artifact-result",
+      title: "Query Artifact",
+      type: "artifact-result",
+      artifactResult: { id: "artifact-1", title: "Query Artifact" },
+    } as unknown as WorkspaceTab;
+
+    render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
+
+    const shell = screen.getByRole("region", { name: "Query Artifact" });
+    const shellBody = shell.querySelector(".workspace-shell__body");
+    expect(shellBody?.classList.contains("workspace-shell__body--artifact-result")).toBe(true);
   });
 
   it("passes workspace chrome to pages that already sit inside WorkspaceShell", () => {

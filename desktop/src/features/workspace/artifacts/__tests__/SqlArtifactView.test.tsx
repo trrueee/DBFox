@@ -3,14 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SqlArtifact } from "../../../../types/agentArtifact";
 import { SqlArtifactView } from "../SqlArtifactView";
 
-vi.mock("@monaco-editor/react", () => ({
-  default: ({ value, options }: { value: string; options: { readOnly?: boolean; fontSize?: number } }) => (
-    <div data-testid="sql-monaco" data-readonly={String(options.readOnly)} data-font-size={String(options.fontSize)}>
-      {value}
-    </div>
-  ),
-}));
-
 function makeSqlArtifact(): SqlArtifact {
   return {
     id: "sql-1",
@@ -32,22 +24,23 @@ describe("SqlArtifactView", () => {
   it("renders SQL metadata chips", () => {
     const artifact = makeSqlArtifact();
 
-    render(<SqlArtifactView artifact={artifact} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+    const { container } = render(<SqlArtifactView artifact={artifact} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+    const meta = container.querySelector(".artifact-card-meta");
 
     expect(screen.getByText("分析查询")).toBeTruthy();
-    expect(screen.getByText("orders")).toBeTruthy();
+    expect(meta?.textContent).toContain("orders");
     expect(screen.getByText("校验 passed")).toBeTruthy();
     expect(screen.getByText("执行 completed")).toBeTruthy();
     expect(screen.getByText("12 行")).toBeTruthy();
     expect(screen.getByText("42ms")).toBeTruthy();
   });
 
-  it("renders SQL in a read-only Monaco editor", () => {
-    render(<SqlArtifactView artifact={makeSqlArtifact()} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
+  it("renders SQL in a synchronous highlighted preview instead of Monaco", () => {
+    const { container } = render(<SqlArtifactView artifact={makeSqlArtifact()} onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
 
-    const editor = screen.getByTestId("sql-monaco");
-    expect(editor.textContent).toContain("SELECT");
-    expect(editor.getAttribute("data-readonly")).toBe("true");
-    expect(editor.getAttribute("data-font-size")).toBe("12");
+    expect(screen.queryByText("Loading...")).toBeNull();
+    expect(container.querySelector(".sql-code-block")).toBeTruthy();
+    expect(container.querySelector(".sql-token-keyword")?.textContent).toBe("SELECT");
+    expect(container.querySelector(".sql-token-function")?.textContent).toBe("SUM");
   });
 });
