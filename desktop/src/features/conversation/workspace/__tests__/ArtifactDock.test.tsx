@@ -15,10 +15,6 @@ vi.mock("echarts-for-react", () => ({
   },
 }));
 
-vi.mock("@monaco-editor/react", () => ({
-  default: ({ value }: { value: string }) => <pre data-testid="sql-editor-mock">{value}</pre>,
-}));
-
 function trustedQueryArtifacts(): ConversationArtifact[] {
   return [
     {
@@ -50,6 +46,7 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
         requires_confirmation: false,
         guardrail_result: "passed",
         schema_warnings_count: 0,
+        safeSql: "SELECT id, amount FROM orders WHERE amount > 10",
       },
       depends_on: ["sql_candidate"],
     },
@@ -98,7 +95,7 @@ describe("ArtifactDock", () => {
 
   it("opens on the query result by default and keeps SQL, safety, result, and chart selectable", () => {
     const onSelectArtifact = vi.fn();
-    render(
+    const { container } = render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         onOpenSqlConsole={vi.fn()}
@@ -117,11 +114,11 @@ describe("ArtifactDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "SQL SQL" }));
 
     expect(onSelectArtifact).toHaveBeenCalledWith("artifact-sql");
-    expect(screen.getByText("SELECT id, amount FROM orders")).toBeTruthy();
+    expect(container.querySelector(".sql-code-block")?.textContent).toContain("SELECT id, amount FROM orders");
   });
 
   it("honors a selected artifact id from the conversation evidence chip", () => {
-    render(
+    const { container } = render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         selectedArtifactId="artifact-safety"
@@ -133,6 +130,8 @@ describe("ArtifactDock", () => {
     expect(screen.getByRole("button", { name: "Safety Safety" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("安全检查")).toBeTruthy();
     expect(screen.getByText("Guardrail: passed")).toBeTruthy();
+    expect(container.querySelector(".conv-dock-safety-card .sql-code-block")).toBeTruthy();
+    expect(container.querySelector(".conv-dock-safety-card .sql-token-keyword")?.textContent).toBe("SELECT");
   });
 
   it("renders dock content without owning split pane resize state", () => {

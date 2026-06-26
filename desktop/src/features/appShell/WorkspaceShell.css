@@ -55,6 +55,12 @@
   overflow: auto;
 }
 
+.workspace-shell__body--artifact-result {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .workspace-shell__state {
   display: flex;
   min-height: 100%;

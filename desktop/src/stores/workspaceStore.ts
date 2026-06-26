@@ -24,7 +24,7 @@ interface WorkspaceActions {
   setActiveTabId: (id: string) => void;
   setTabs: (updater: WorkspaceTab[] | ((prev: WorkspaceTab[]) => WorkspaceTab[])) => void;
   closeTab: (tabId: string) => void;
-  openSqlConsole: (initialSql?: string) => void;
+  openSqlConsole: (initialSql?: string, datasourceId?: string, datasourceDbType?: string | null) => void;
   openLlmConfigTab: () => void;
   openConversationHistoryTab: () => void;
   openSmartQueryTab: () => void;
@@ -94,18 +94,28 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     });
   },
 
-  openSqlConsole: (initialSql) => {
-    const seq = get()._tabSeq;
-    const tabId = `sql-${seq.sql++}`;
-    set({ _tabSeq: { ...seq } });
-    set((state) => ({
-      tabs: [...state.tabs, { id: tabId, title: "SQL 控制台", type: "sql" }],
-      activeTabId: tabId,
-      sqlConsoleState: {
-        ...state.sqlConsoleState,
-        [tabId]: { draftSql: initialSql ?? defaultSql, entries: [], running: false },
-      },
-    }));
+  openSqlConsole: (initialSql, datasourceId, datasourceDbType) => {
+    set((state) => {
+      const tabId = `sql-${state._tabSeq.sql}`;
+      return {
+        _tabSeq: { ...state._tabSeq, sql: state._tabSeq.sql + 1 },
+        tabs: [
+          ...state.tabs,
+          {
+            id: tabId,
+            title: "SQL 控制台",
+            type: "sql",
+            datasourceId,
+            datasourceDbType: datasourceDbType ?? null,
+          },
+        ],
+        activeTabId: tabId,
+        sqlConsoleState: {
+          ...state.sqlConsoleState,
+          [tabId]: { draftSql: initialSql ?? defaultSql, entries: [], running: false },
+        },
+      };
+    });
   },
 
   openLlmConfigTab: () => {

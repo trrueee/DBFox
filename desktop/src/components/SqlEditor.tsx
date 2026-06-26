@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
+import "./SqlEditor.css";
 
 export interface SchemaColumnMeta {
   name: string;
@@ -23,6 +24,7 @@ interface SqlEditorProps {
   disabled?: boolean;
   height?: string | number;
   className?: string;
+  appearance?: "light" | "dark";
   ariaLabel?: string;
   testId?: string;
   onExecute?: (sql?: string) => void;
@@ -61,6 +63,7 @@ export function SqlEditor({
   disabled = false,
   height = "100%",
   className,
+  appearance = "light",
   ariaLabel = "SQL 编辑器",
   testId,
   onExecute,
@@ -80,6 +83,8 @@ export function SqlEditor({
     selectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
 
+  const themeName = appearance === "dark" ? "dbfoxDark" : "lightLab";
+
   // Precompute escaped table names and regex patterns once when schemaTables changes
   const tablePatterns = useMemo(() =>
     schemaTables.map((t) => {
@@ -95,38 +100,8 @@ export function SqlEditor({
 
   const handleMount: OnMount = (editor, monaco) => {
     editor.focus();
-
-    // Define light lab theme
-    monaco.editor.defineTheme("lightLab", {
-      base: "vs",
-      inherit: true,
-      rules: [
-        { token: "keyword", foreground: "2D3B8C", fontStyle: "bold" },
-        { token: "string", foreground: "0D7377" },
-        { token: "number", foreground: "B45309" },
-        { token: "comment", foreground: "8E8F92", fontStyle: "italic" },
-        { token: "operator", foreground: "5C5D60" },
-        { token: "identifier", foreground: "1A1A1C" },
-        { token: "type", foreground: "2E7D32" },
-        { token: "function", foreground: "4A5BC0" },
-        { token: "delimiter", foreground: "5C5D60" },
-      ],
-      colors: {
-        "editor.background": "#FAF9F6",
-        "editor.foreground": "#1A1A1C",
-        "editor.lineHighlightBackground": "#F3F2EE",
-        "editor.selectionBackground": "#E8EAFA",
-        "editor.inactiveSelectionBackground": "#F3F2EE",
-        "editorCursor.foreground": "#2D3B8C",
-        "editorLineNumber.foreground": "#8E8F92",
-        "editorLineNumber.activeForeground": "#2D3B8C",
-        "editor.selectionHighlightBackground": "#E8EAFA",
-        "editorBracketMatch.background": "#E8EAFA",
-        "editorBracketMatch.border": "#2D3B8C",
-      },
-    });
-
-    monaco.editor.setTheme("lightLab");
+    defineSqlEditorThemes(monaco);
+    monaco.editor.setTheme(themeName);
     setMonacoInstance(monaco);
 
     const notifySelectionChange = () => {
@@ -333,9 +308,15 @@ export function SqlEditor({
     };
   }, [schemaTables, monacoInstance, tablePatterns]);
 
+  const wrapperClassName = [
+    "sql-editor",
+    `sql-editor--${appearance}`,
+    className ?? "select-text",
+  ].filter(Boolean).join(" ");
+
   return (
     <div
-      className={className ?? "select-text"}
+      className={wrapperClassName}
       data-testid={testId}
       aria-label={ariaLabel}
       style={{ height, userSelect: "text" }}
@@ -343,9 +324,12 @@ export function SqlEditor({
       <Editor
         height="100%"
         defaultLanguage="sql"
+        beforeMount={defineSqlEditorThemes}
+        theme={themeName}
         value={value}
         onChange={(v) => onChange(v ?? "")}
         onMount={handleMount}
+        loading={<div className="sql-editor-loading" aria-hidden="true" />}
         options={{
           fontSize: 13.5,
           fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
@@ -377,6 +361,66 @@ export function SqlEditor({
       />
     </div>
   );
+}
+
+function defineSqlEditorThemes(monaco: Monaco) {
+  monaco.editor.defineTheme("lightLab", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "keyword", foreground: "2D3B8C", fontStyle: "bold" },
+      { token: "string", foreground: "0D7377" },
+      { token: "number", foreground: "B45309" },
+      { token: "comment", foreground: "8E8F92", fontStyle: "italic" },
+      { token: "operator", foreground: "5C5D60" },
+      { token: "identifier", foreground: "1A1A1C" },
+      { token: "type", foreground: "2E7D32" },
+      { token: "function", foreground: "4A5BC0" },
+      { token: "delimiter", foreground: "5C5D60" },
+    ],
+    colors: {
+      "editor.background": "#FAF9F6",
+      "editor.foreground": "#1A1A1C",
+      "editor.lineHighlightBackground": "#F3F2EE",
+      "editor.selectionBackground": "#E8EAFA",
+      "editor.inactiveSelectionBackground": "#F3F2EE",
+      "editorCursor.foreground": "#2D3B8C",
+      "editorLineNumber.foreground": "#8E8F92",
+      "editorLineNumber.activeForeground": "#2D3B8C",
+      "editor.selectionHighlightBackground": "#E8EAFA",
+      "editorBracketMatch.background": "#E8EAFA",
+      "editorBracketMatch.border": "#2D3B8C",
+    },
+  });
+
+  monaco.editor.defineTheme("dbfoxDark", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [
+      { token: "keyword", foreground: "93C5FD", fontStyle: "bold" },
+      { token: "string", foreground: "5EEAD4" },
+      { token: "number", foreground: "FDBA74" },
+      { token: "comment", foreground: "64748B", fontStyle: "italic" },
+      { token: "operator", foreground: "CBD5E1" },
+      { token: "identifier", foreground: "DBEAFE" },
+      { token: "type", foreground: "86EFAC" },
+      { token: "function", foreground: "C4B5FD" },
+      { token: "delimiter", foreground: "94A3B8" },
+    ],
+    colors: {
+      "editor.background": "#020617",
+      "editor.foreground": "#DBEAFE",
+      "editor.lineHighlightBackground": "#0B1120",
+      "editor.selectionBackground": "#1D4ED8",
+      "editor.inactiveSelectionBackground": "#172554",
+      "editorCursor.foreground": "#34D399",
+      "editorLineNumber.foreground": "#475569",
+      "editorLineNumber.activeForeground": "#93C5FD",
+      "editor.selectionHighlightBackground": "#1E3A8A",
+      "editorBracketMatch.background": "#172554",
+      "editorBracketMatch.border": "#34D399",
+    },
+  });
 }
 
 function readSelectedSql(editor: MonacoEditor) {

@@ -75,6 +75,39 @@ describe("artifact view styles", () => {
     }
   });
 
+  it("wraps highlighted SQL previews instead of clipping long statements", () => {
+    const localCss = readFileSync(artifactViewsCss, "utf8");
+    const sqlBlockRule = localCss.match(/\.sql-code-block\s*\{[^}]+\}/)?.[0] ?? "";
+
+    expect(sqlBlockRule).toContain("white-space: pre-wrap");
+    expect(sqlBlockRule).toContain("overflow-wrap: anywhere");
+    expect(sqlBlockRule).not.toContain("min-width: max-content");
+    expect(localCss).toContain(".sql-token-keyword");
+    expect(localCss).toContain(".sql-token-function");
+    expect(localCss).toContain(".sql-token-string");
+  });
+
+  it("uses GitHub Light SQL syntax colors for artifact surfaces", () => {
+    const localCss = readFileSync(artifactViewsCss, "utf8");
+    const ruleFor = (selector: string) => localCss.match(new RegExp(`${selector.replace(".", "\\.")}\\s*\\{[^}]+\\}`))?.[0] ?? "";
+    const sqlBlockRule = ruleFor(".sql-code-block");
+
+    expect(sqlBlockRule).toContain("background: #f6f8fa");
+    expect(sqlBlockRule).toContain("border: 1px solid #d0d7de");
+    expect(sqlBlockRule).toContain("color: #24292f");
+    expect(sqlBlockRule).toContain('font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace');
+    expect(sqlBlockRule).toContain("line-height: 1.75");
+    expect(ruleFor(".sql-token-keyword")).toContain("color: #0550ae");
+    expect(ruleFor(".sql-token-keyword")).toContain("font-weight: 600");
+    expect(ruleFor(".sql-token-function")).toContain("color: #8250df");
+    expect(ruleFor(".sql-token-function")).toContain("font-weight: 600");
+    expect(ruleFor(".sql-token-string")).toContain("color: #116329");
+    expect(ruleFor(".sql-token-number")).toContain("color: #953800");
+    expect(ruleFor(".sql-token-comment")).toContain("color: #6e7781");
+    expect(ruleFor(".sql-token-operator,\\s*.sql-token-punctuation")).toContain("color: #57606a");
+    expect(ruleFor(".sql-token-identifier")).toContain("color: #24292f");
+  });
+
   it("uses artifact-local pill and sort indicator classes for table metadata", () => {
     const table = readFileSync(tableSource, "utf8");
     const grid = readFileSync(gridSource, "utf8");

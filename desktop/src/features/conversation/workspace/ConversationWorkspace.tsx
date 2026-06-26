@@ -77,11 +77,11 @@ export function ConversationWorkspace({
     <div className={`conv-workspace ${hasArtifacts ? "has-artifact-dock" : ""}`}>
       {hasArtifacts ? (
         <PanelGroup orientation="horizontal" className="conv-artifact-panel-group">
-          <Panel className="conv-artifact-main-panel" defaultSize={72} minSize={48}>
+          <Panel className="conv-artifact-main-panel" defaultSize="72%" minSize="48%">
             {conversationPane}
           </Panel>
           <PanelResizeHandle className="conv-artifact-resizer" aria-label="调整工件区宽度" />
-          <Panel className="conv-artifact-dock-panel" defaultSize={28} minSize={22} maxSize={44}>
+          <Panel className="conv-artifact-dock-panel" defaultSize="28%" minSize="22%" maxSize="44%">
             {artifactDock}
           </Panel>
         </PanelGroup>

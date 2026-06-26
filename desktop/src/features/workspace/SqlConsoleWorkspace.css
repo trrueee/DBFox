@@ -52,14 +52,121 @@
   line-height: 1.6;
 }
 
-.sql-console-editor-inline {
-  height: 188px;
+.sql-console-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 2px 0 8px;
+  color: #93c5fd;
+  font-size: var(--ui-font-label);
+}
+
+.sql-console-status span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sql-console-status.is-warning {
+  color: #fbbf24;
+}
+
+.sql-console-input-stack {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 1.6em;
+}
+
+.sql-console-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid #1e293b;
-  border-radius: 4px;
-  background: #faf9f6;
+  color: #dbeafe;
+  font: inherit;
+  line-height: inherit;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.sql-console-input {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 1.6em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  font: inherit;
+  line-height: inherit;
+  outline: none;
+  resize: none;
+  caret-color: #34d399;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.sql-console-input::selection {
+  background: rgba(96, 165, 250, 0.32);
+  color: transparent;
+}
+
+.sql-console-statement {
+  border-radius: 3px;
+}
+
+.sql-console-statement--read {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sql-console-statement--write {
+  background: rgba(251, 191, 36, 0.09);
+}
+
+.sql-console-statement--ddl {
+  background: rgba(196, 181, 253, 0.1);
+}
+
+.sql-console-token-keyword {
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+.sql-console-token-function {
+  color: #c4b5fd;
+  font-weight: 700;
+}
+
+.sql-console-token-string {
+  color: #86efac;
+}
+
+.sql-console-token-number {
+  color: #fdba74;
+}
+
+.sql-console-token-comment {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.sql-console-token-operator,
+.sql-console-token-punctuation {
+  color: #cbd5e1;
+}
+
+.sql-console-token-identifier,
+.sql-console-token-whitespace {
+  color: #dbeafe;
 }
 
 .sql-console-info {
@@ -190,4 +297,9 @@
   align-items: flex-start;
   gap: 8px;
   margin-top: 10px;
+}
+
+.sql-console-input:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }

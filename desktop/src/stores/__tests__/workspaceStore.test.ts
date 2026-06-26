@@ -28,6 +28,19 @@ describe("workspaceStore — tabs", () => {
     expect(s.sqlConsoleState["sql-1"].draftSql).toBe("SELECT 1");
   });
 
+  it("openSqlConsole can bind a SQL tab to a datasource", () => {
+    useWorkspaceStore.getState().openSqlConsole("SELECT * FROM users", "ds-2", "mysql");
+
+    const s = useWorkspaceStore.getState();
+    expect(s.tabs[1]).toMatchObject({
+      id: "sql-1",
+      type: "sql",
+      datasourceId: "ds-2",
+      datasourceDbType: "mysql",
+    });
+    expect(s.sqlConsoleState["sql-1"].draftSql).toBe("SELECT * FROM users");
+  });
+
   it("closeTab removes the tab and clears its console state", () => {
     useWorkspaceStore.getState().openSqlConsole();
     useWorkspaceStore.getState().closeTab("sql-1");

@@ -101,6 +101,17 @@ describe("agent visual tokens", () => {
     }
   });
 
+  it("keeps system text tokens high contrast instead of washed out gray", () => {
+    const tokens = read("styles/tokens.css");
+
+    expect(tokenValue(tokens, ":root", "--color-text-primary")).toBe("#0F172A");
+    expect(tokenValue(tokens, ":root", "--color-text-secondary")).toBe("#334155");
+    expect(tokenValue(tokens, ":root", "--color-text-muted")).toBe("#475569");
+    expect(tokenValue(tokens, ".dark", "--color-text-primary")).toBe("#F8FAFC");
+    expect(tokenValue(tokens, ".dark", "--color-text-secondary")).toBe("#CBD5E1");
+    expect(tokenValue(tokens, ".dark", "--color-text-muted")).toBe("#94A3B8");
+  });
+
   it("keeps chat bubbles neutral and answer text aligned with user body size", () => {
     const tokens = read("styles/tokens.css");
     const css = read("features/conversation/workspace/conversationWorkspace.css");
