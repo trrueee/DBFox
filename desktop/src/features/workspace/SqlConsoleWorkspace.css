@@ -1,0 +1,193 @@
+.hifi-sql-workspace {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}
+
+.sql-console-toolbar {
+  background: var(--surface-raised);
+}
+
+.sql-console-action-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.sql-console-datasource-label {
+  min-width: 0;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-control);
+  white-space: nowrap;
+}
+
+.sql-console-selection-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
+}
+
+.sql-console {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  background: #020617;
+  cursor: default;
+  padding: 0;
+}
+
+.sql-console-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px 14px;
+  color: #dbeafe;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: var(--ui-font-control);
+  line-height: 1.6;
+}
+
+.sql-console-editor-inline {
+  height: 188px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  background: #faf9f6;
+}
+
+.sql-console-info {
+  margin: 2px 0;
+  color: #64748b;
+  white-space: pre-wrap;
+}
+
+.sql-console-info.warn {
+  color: #fbbf24;
+}
+
+.sql-console-stmt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sql-console-prompt-label {
+  flex-shrink: 0;
+  color: #34d399;
+  font-weight: 600;
+  line-height: 1.6;
+  user-select: none;
+}
+
+.sql-console-sql {
+  margin: 0;
+  color: #e0e7ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sql-console-running {
+  margin: 6px 0;
+  color: #d08060;
+}
+
+.sql-console-error {
+  margin: 6px 0 4px;
+  border-left: 2px solid #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+  padding: 6px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sql-console-error strong {
+  margin-right: 8px;
+  color: #ef4444;
+}
+
+.sql-console-result {
+  margin: 6px 0 4px;
+}
+
+.sql-console-result-meta {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: var(--ui-font-label);
+}
+
+.sql-console-table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  background: #0b1120;
+}
+
+.sql-console-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ui-font-label);
+}
+
+.sql-console-table th {
+  position: sticky;
+  top: 0;
+  border-right: 1px solid #1a2740;
+  border-bottom: 1px solid #1e293b;
+  background: #111a2e;
+  color: #93c5fd;
+  font-weight: 600;
+  padding: 4px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sql-console-table th:last-child {
+  border-right: 0;
+}
+
+.sql-console-table td {
+  max-width: 280px;
+  overflow: hidden;
+  border-right: 1px solid #131f36;
+  border-bottom: 1px solid #15233d;
+  color: #cbd5e1;
+  padding: 3px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-console-table td:last-child {
+  border-right: 0;
+}
+
+.sql-console-table tbody tr:hover td {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sql-console-null {
+  color: #475569;
+  font-style: italic;
+}
+
+.sql-console-empty {
+  color: #64748b;
+  text-align: center;
+}
+
+.sql-console-prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}

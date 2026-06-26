@@ -1,6 +1,7 @@
 import { TableErPane } from "./table/TableErPane";
 import { TablePreviewPane } from "./table/TablePreviewPane";
 import { TableSchemaPane } from "./table/TableSchemaPane";
+import "./TableWorkspace.css";
 
 interface TableWorkspaceProps {
   tableId: string;
@@ -28,16 +29,23 @@ export function TableWorkspace({
   onToast,
 }: TableWorkspaceProps) {
   return (
-    <div className="hifi-table-workspace hifi-tab-pane">
-      <div className="hifi-workspace-subtabs">
+    <div className="table-workspace">
+      <div className="table-workspace__tabs" role="tablist" aria-label="表格工作区视图">
         {subTabs.map(([key, label]) => (
-          <div key={key} className={`hifi-workspace-subtab ${currentSubTab === key ? "active" : ""}`} onClick={() => onSubTabChange(key)}>
+          <button
+            key={key}
+            type="button"
+            className={`table-workspace__tab ${currentSubTab === key ? "is-active" : ""}`}
+            role="tab"
+            aria-selected={currentSubTab === key}
+            onClick={() => onSubTabChange(key)}
+          >
             {label}
-          </div>
+          </button>
         ))}
       </div>
 
-      <div className="hifi-subtab-content flex-1 overflow-auto">
+      <div className="table-workspace__body">
         {currentSubTab === "preview" && (
           <TablePreviewPane
             tableId={tableId}

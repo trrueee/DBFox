@@ -1,8 +1,10 @@
 import { Copy } from "lucide-react";
+import { Button } from "../../../components/ui";
 import type { MarkdownArtifact } from "../../../types/agentArtifact";
 import { MarkdownContent } from "../queryResult/MarkdownContent";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText } from "./artifactActions";
+import "./ArtifactViews.css";
 
 interface MarkdownArtifactViewProps {
   artifact: MarkdownArtifact;
@@ -22,10 +24,10 @@ export function MarkdownArtifactView({ artifact, onToast }: MarkdownArtifactView
       tone="insight"
       description={artifact.description}
       actions={
-        <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
+        <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleCopy}>
           <Copy size={10} />
           复制
-        </button>
+        </Button>
       }
     >
       <MarkdownContent content={artifact.content} />

@@ -1,9 +1,11 @@
 import Editor from "@monaco-editor/react";
 import { Copy, Download, Terminal } from "lucide-react";
+import { Button } from "../../../components/ui";
 import { useTheme } from "../../../hooks/useTheme";
 import type { SqlArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText, downloadTextFile } from "./artifactActions";
+import "./ArtifactViews.css";
 
 interface SqlArtifactViewProps {
   artifact: SqlArtifact;
@@ -45,28 +47,28 @@ export function SqlArtifactView({ artifact, onOpenSqlConsole, onToast }: SqlArti
       meta={
         metadata.length > 0
           ? metadata.map((item) => (
-              <span key={item} className="hifi-artifact-pill">{item}</span>
+              <span key={item} className="artifact-pill">{item}</span>
             ))
           : undefined
       }
       actions={
         <>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
+          <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleCopy}>
             <Copy size={10} />
             复制 SQL
-          </button>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleDownload}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={handleDownload}>
             <Download size={10} />
             下载
-          </button>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={openInSqlConsole}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="artifact-action-button" onClick={openInSqlConsole}>
             <Terminal size={10} />
             在 SQL 工作台打开
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="artifact-sql-editor">
+      <div className="sql-artifact__editor">
         <Editor
           height="160px"
           defaultLanguage="sql"

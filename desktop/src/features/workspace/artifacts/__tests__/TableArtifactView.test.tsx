@@ -156,6 +156,17 @@ describe("TableArtifactView", () => {
     expect(screen.getByText("NULL").closest("td")?.className).toContain("is-null");
   });
 
+  it("shows column type indicators for typed result columns", async () => {
+    render(<TableArtifactView artifact={makeTypedSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
+
+    await screen.findByText("2026-06-01");
+
+    const dayHeader = screen.getByRole("columnheader", { name: /day date/ });
+    const orderCountHeader = screen.getByRole("columnheader", { name: /order_count integer/ });
+    expect(dayHeader.querySelector(".artifact-table-type-badge")?.textContent).toBe("date");
+    expect(orderCountHeader.querySelector(".artifact-table-type-badge")?.textContent).toBe("integer");
+  });
+
   it("keeps warnings and notices in the meta area", () => {
     const { container } = render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
@@ -172,6 +183,49 @@ describe("TableArtifactView", () => {
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("NULL");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
+  });
+
+  it("uses the shared long-cell preview without breaking cell copy", async () => {
+    const longValue = "payload=" + "segment-".repeat(14);
+    const artifact = {
+      ...makeArtifact(),
+      columns: ["note"],
+      previewRows: [[longValue]],
+      previewRowCount: 1,
+      rows: [[longValue]],
+      rowCount: 1,
+      returnedRows: 1,
+      warnings: [],
+      notices: [],
+      truncated: false,
+    };
+
+    render(<TableArtifactView artifact={artifact} onToast={vi.fn()} />);
+
+    const trigger = screen.getByText(/payload=segment/).closest(".dbfox-cell-preview-trigger");
+    if (!trigger) throw new Error("Expected long-cell preview trigger");
+    expect(trigger.className).toContain("dbfox-cell-preview-trigger");
+    expect(screen.getByText("键值").className).toContain("dbfox-cell-preview-kind");
+
+    fireEvent.click(trigger.closest("td")!);
+
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(longValue));
+  });
+
+  it("marks the clicked artifact table cell as selected", async () => {
+    render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
+
+    const firstCell = screen.getByText("2026-06-01").closest("td");
+    const secondCell = screen.getByText("row-3").closest("td");
+    if (!firstCell || !secondCell) throw new Error("Expected table cells to be rendered");
+
+    fireEvent.click(firstCell);
+    expect(firstCell.className).toContain("is-selected");
+    expect(firstCell.getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.click(secondCell);
+    expect(secondCell.className).toContain("is-selected");
+    expect(firstCell.className).not.toContain("is-selected");
   });
 
   it("searches across all loaded rows, not only the preview", () => {
@@ -284,11 +338,11 @@ describe("TableArtifactView", () => {
     const { container } = render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
 
     await screen.findByText("2026-06-01");
-    const search = container.querySelector(".hifi-result-search-shell .hifi-result-search");
+    const search = container.querySelector(".artifact-table-search-shell .artifact-table-search");
     if (!search) throw new Error("Result search input was not rendered");
 
-    expect(container.querySelector(".hifi-result-toolbar-main")?.contains(search)).toBe(true);
-    expect(container.querySelector(".hifi-toolbar-right .hifi-result-search")).toBeNull();
+    expect(container.querySelector(".artifact-table-toolbar-main")?.contains(search)).toBe(true);
+    expect(container.querySelector(".hifi-toolbar-right .artifact-table-search")).toBeNull();
   });
 
   it("applies sql-backed toolbar filters through the result page API", async () => {
@@ -296,8 +350,8 @@ describe("TableArtifactView", () => {
 
     await screen.findByText("2026-06-01");
     fireEvent.click(screen.getByRole("button", { name: "筛选" }));
-    fireEvent.change(screen.getByLabelText("筛选列"), { target: { value: "day" } });
-    fireEvent.change(screen.getByLabelText("筛选条件"), { target: { value: "contains" } });
+    chooseSelectOption("筛选列", "day");
+    chooseSelectOption("筛选条件", "包含");
     fireEvent.change(screen.getByLabelText("筛选值"), { target: { value: "2026-06" } });
     fireEvent.click(screen.getByRole("button", { name: "应用筛选" }));
 
@@ -315,8 +369,8 @@ describe("TableArtifactView", () => {
 
     await screen.findByText("2026-06-01");
     fireEvent.click(screen.getByRole("button", { name: "排序" }));
-    fireEvent.change(screen.getByLabelText("排序列"), { target: { value: "order_count" } });
-    fireEvent.change(screen.getByLabelText("排序方向"), { target: { value: "asc" } });
+    chooseSelectOption("排序列", "order_count");
+    chooseSelectOption("排序方向", "升序");
     fireEvent.click(screen.getByRole("button", { name: "应用排序" }));
 
     await waitFor(() =>
@@ -343,3 +397,13 @@ describe("TableArtifactView", () => {
     );
   });
 });
+
+function chooseSelectOption(label: string, optionName: string) {
+  fireEvent.pointerDown(screen.getByRole("combobox", { name: label }), {
+    button: 0,
+    ctrlKey: false,
+    pointerId: 1,
+    pointerType: "mouse",
+  });
+  fireEvent.click(screen.getByRole("option", { name: optionName }));
+}

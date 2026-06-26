@@ -1,6 +1,7 @@
 import { AskContextDropZone } from "./smartQuery/AskContextDropZone";
 import { AskInputBox } from "./smartQuery/AskInputBox";
 import { SmartQueryHero } from "./smartQuery/SmartQueryHero";
+import "./SmartQueryHome.css";
 
 interface SmartQueryHomeProps {
   askInputValue: string;
@@ -22,8 +23,8 @@ export function SmartQueryHome({
   onClearContextTables,
 }: SmartQueryHomeProps) {
   return (
-    <div className="hifi-query-home hifi-tab-pane">
-      <div className="hifi-query-home-content">
+    <div className="smart-query-home">
+      <div className="smart-query-home__content">
         <SmartQueryHero />
 
         <AskContextDropZone

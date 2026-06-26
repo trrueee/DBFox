@@ -1,4 +1,6 @@
 import { ArrowUp } from "lucide-react";
+import { Button } from "../../../components/ui";
+import "../SmartQueryHome.css";
 
 interface AskInputBoxProps {
   value: string;
@@ -8,9 +10,9 @@ interface AskInputBoxProps {
 
 export function AskInputBox({ value, onChange, onSubmit }: AskInputBoxProps) {
   return (
-    <div className="hifi-ask-input-container">
+    <div className="ask-input">
       <textarea
-        className="hifi-ask-input"
+        className="ask-input__textarea"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
@@ -21,14 +23,16 @@ export function AskInputBox({ value, onChange, onSubmit }: AskInputBoxProps) {
         }}
         placeholder="用自然语言提问，例如：查询用户表中最近一周的新注册用户数量"
       />
-      <button
-        className="hifi-ask-send-btn"
+      <Button
+        type="button"
+        className="ask-input__send"
+        size="icon-sm"
         onClick={onSubmit}
         aria-label="发送问题"
         title="发送问题"
       >
         <ArrowUp size={16} />
-      </button>
+      </Button>
     </div>
   );
 }

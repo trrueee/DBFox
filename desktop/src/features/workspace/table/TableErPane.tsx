@@ -1,41 +1,36 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Button, EmptyState, ErrorState, LoadingState, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
+import type { ERDiagramData } from "../../../lib/api";
 import { request } from "../../../lib/api/client";
+import "./TableErPane.css";
 
 interface TableErPaneProps {
   tableId: string;
   datasourceId: string;
 }
 
-interface ErNode {
-  id: string;
-  table: string;
-  module: string;
-  fields: Array<{
-    name: string;
-    type: string;
-    is_pk: boolean;
-    is_fk: boolean;
-  }>;
-}
+type ErViewMode = "focus" | "full";
 
-interface ErEdge {
-  id: string;
-  source: string;
-  sourceHandle: string;
-  target: string;
-  targetHandle: string;
-  edge_type: string;
-}
-
-interface ErDiagramData {
-  nodes: ErNode[];
-  edges: ErEdge[];
-}
+const ErDiagram = lazy(async () => {
+  const module = await import("../../../components/ErDiagram");
+  return { default: module.ErDiagram };
+});
 
 export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
-  const [data, setData] = useState<ErDiagramData | null>(null);
+  const [data, setData] = useState<ERDiagramData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [focusTable, setFocusTable] = useState(tableId);
+  const [viewMode, setViewMode] = useState<ErViewMode>("focus");
+  const [depth, setDepth] = useState<1 | 2>(1);
+  const [showInferred, setShowInferred] = useState(true);
+
+  useEffect(() => {
+    setFocusTable(tableId);
+    setViewMode("focus");
+    setDepth(1);
+    setShowInferred(true);
+  }, [datasourceId, tableId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +39,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
       setLoading(true);
       setError("");
       try {
-        const result = await request<ErDiagramData>(
+        const result = await request<ERDiagramData>(
           `/schema/er-diagram?datasource_id=${encodeURIComponent(datasourceId)}`
         );
         if (!cancelled) setData(result);
@@ -59,92 +54,107 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
     return () => { cancelled = true; };
   }, [datasourceId]);
 
+  const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+  const edges = Array.isArray(data?.edges) ? data.edges : [];
+  const inferredEdgeCount = useMemo(
+    () => edges.filter((edge) => edge.edge_type === "inferred").length,
+    [edges],
+  );
+  const resolvedFocusTable = nodes.some((node) => node.label === focusTable) ? focusTable : tableId;
+
   if (loading) {
-    return <div className="p-4 text-[var(--ui-font-label)] text-slate-400">正在加载 ER 关系图...</div>;
+    return (
+      <div className="table-er-pane table-er-pane__state">
+        <LoadingState label="正在加载 ER 关系图..." />
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="p-4 text-[var(--ui-font-label)] text-red-500 bg-red-50 rounded-lg">{error}</div>;
+    return (
+      <div className="table-er-pane table-er-pane__state">
+        <ErrorState title="无法加载 ER 关系图" description={error} />
+      </div>
+    );
   }
 
   if (!data || data.nodes.length === 0) {
-    return <div className="p-4 text-[var(--ui-font-label)] text-slate-400">暂无 ER 关系图数据，请先同步 Schema。</div>;
+    return (
+      <div className="table-er-pane table-er-pane__state">
+        <EmptyState title="暂无 ER 关系图数据" description="请先同步 Schema 后再查看表关系。" />
+      </div>
+    );
   }
 
-  // Filter to show the current table and its direct connections
-  const activeTable = data.nodes.find((n) => n.table === tableId);
-  const connectedEdges = data.edges.filter(
-    (e) => e.source === tableId || e.target === tableId
-  );
-  const connectedTableNames = new Set(
-    connectedEdges.flatMap((e) => [e.source, e.target])
-  );
-  connectedTableNames.delete(tableId);
-  const connectedNodes = data.nodes.filter((n) => connectedTableNames.has(n.table));
+  if (edges.length === 0) {
+    return (
+      <div className="table-er-pane table-er-pane__state">
+        <EmptyState
+          title="暂无可视化关系"
+          description="没有同步到外键，也没有推断出可用的 *_id 表关系；字段结构页会保留表结构事实。"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full w-full bg-[var(--color-bg)] relative overflow-auto flex flex-col p-4">
-      <span className="text-[var(--ui-font-caption)] text-[var(--color-text-muted)] block mb-2">
-        ER 关系图 &gt; {tableId}{" "}
-        <span className="text-slate-400">
-          ({connectedEdges.length} 条关系, {connectedNodes.length} 个关联表)
-        </span>
-      </span>
-      <div className="flex-1 relative border border-[var(--color-border)] bg-[var(--color-panel)] rounded-xl shadow-inner overflow-auto">
-        <div className="relative p-6 flex flex-wrap gap-6 min-w-max">
-          {/* Active Table Node */}
-          <div className="bg-[var(--color-panel)] border-2 border-[var(--color-primary)] rounded-lg shadow-sm text-[var(--ui-font-caption)] w-[160px]">
-            <div className="bg-[var(--color-primary-soft)] border-b border-[var(--color-border)] px-2 py-1 font-bold text-[var(--color-text-primary)]">
-              {tableId}
-            </div>
-            <div className="p-2 leading-relaxed text-[var(--color-text-secondary)] font-mono">
-              {activeTable?.fields.map((f) => (
-                <div key={f.name} className="flex justify-between gap-2">
-                  <span className={f.is_pk ? "font-bold text-[var(--color-text-primary)]" : ""}>
-                    {f.name}
-                  </span>
-                  <span className="text-[var(--color-text-muted)] text-[var(--ui-font-micro)]">
-                    {f.is_pk ? "PK" : f.is_fk ? "FK" : f.type.slice(0, 12)}
-                  </span>
-                </div>
-              )) || <div className="text-slate-400">—</div>}
-            </div>
-          </div>
-
-          {/* Connected Tables */}
-          {connectedNodes.map((node) => {
-            const edge = connectedEdges.find(
-              (e) =>
-                (e.source === tableId && e.target === node.table) ||
-                (e.target === tableId && e.source === node.table)
-            );
-            const isIncoming = edge?.target === tableId;
-            return (
-              <div key={node.table} className="bg-[var(--color-panel)] border border-[var(--color-border)] rounded-lg shadow-sm text-[var(--ui-font-caption)] w-[160px]">
-                <div className="bg-[var(--color-warning-soft)] border-b border-[var(--color-border)] px-2 py-1 font-bold flex justify-between text-[var(--color-text-primary)]">
-                  <span>{node.table}</span>
-                  {edge && (
-                    <span className="text-[var(--ui-font-micro)] text-[var(--color-text-muted)]">
-                      {isIncoming ? "← 被引用" : "→ 引用"}
-                    </span>
-                  )}
-                </div>
-                <div className="p-2 leading-relaxed text-[var(--color-text-secondary)] font-mono">
-                  {node.fields.map((f) => (
-                    <div key={f.name} className="flex justify-between gap-2">
-                      <span className={f.is_pk ? "font-bold text-[var(--color-text-primary)]" : ""}>
-                        {f.name}
-                      </span>
-                      <span className="text-[var(--color-text-muted)] text-[var(--ui-font-micro)]">
-                        {f.is_pk ? "PK" : f.type.slice(0, 12)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+    <div className="table-er-pane">
+      <div className="table-er-pane__header">
+        <div>
+          <span className="table-er-pane__caption">ER 关系图 &gt; {resolvedFocusTable}</span>
+          <span className="table-er-pane__meta">
+            {nodes.length} 张表 · {edges.length} 条关系 · {inferredEdgeCount} 条推断
+          </span>
         </div>
+        <Toolbar className="table-er-pane__toolbar" aria-label="ER 图控制栏">
+          <ToolbarGroup>
+            <label className="table-er-pane__control">
+              <span>视图范围</span>
+              <Select
+                className="table-er-pane__select"
+                value={viewMode}
+                onChange={(event) => setViewMode(event.target.value as ErViewMode)}
+                aria-label="视图范围"
+              >
+                <option value="focus">聚焦</option>
+                <option value="full">全库</option>
+              </Select>
+            </label>
+            <label className="table-er-pane__control">
+              <span>关系深度</span>
+              <Select
+                className="table-er-pane__select"
+                value={String(depth)}
+                onChange={(event) => setDepth(event.target.value === "2" ? 2 : 1)}
+                aria-label="关系深度"
+                disabled={viewMode !== "focus"}
+              >
+                <option value="1">一跳</option>
+                <option value="2">两跳</option>
+              </Select>
+            </label>
+            <Button
+              className="table-er-pane__toggle"
+              size="sm"
+              variant={showInferred ? "secondary" : "outline"}
+              onClick={() => setShowInferred((value) => !value)}
+            >
+              {showInferred ? "隐藏推断关系" : "显示推断关系"}
+            </Button>
+          </ToolbarGroup>
+        </Toolbar>
+      </div>
+      <div className="table-er-pane__canvas">
+        <Suspense fallback={<LoadingState className="table-er-pane__diagram-loading" label="正在载入关系图..." />}>
+          <ErDiagram
+            data={data}
+            focusTable={resolvedFocusTable}
+            viewMode={viewMode}
+            depth={depth}
+            showInferred={showInferred}
+            onNodeClick={setFocusTable}
+          />
+        </Suspense>
       </div>
     </div>
   );

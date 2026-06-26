@@ -1,15 +1,38 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import gsap from "gsap";
-import { MoreVertical } from "lucide-react";
+import {
+  observeElementOffset,
+  useVirtualizer,
+  type Rect,
+  type Virtualizer,
+} from "@tanstack/react-virtual";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type ColumnFiltersState,
+  type Row,
+  type SortingState,
+  type VisibilityState,
+} from "@tanstack/react-table";
+import { Copy, FileJson, MoreVertical } from "lucide-react";
 import { buildInsertSql, buildRowJson, normalizeCopyValue } from "../lib/sqlCopy";
-import { useDataTableView } from "../hooks/useDataTableView";
 import { DataGridToolbar } from "./data-grid/DataGridToolbar";
 import { DataGridHeaderCell } from "./data-grid/DataGridHeaderCell";
 import { DataGridCell } from "./data-grid/DataGridCell";
 import { DataGridInspector } from "./data-grid/DataGridInspector";
 import { DataGridContextMenu } from "./data-grid/DataGridContextMenu";
-import { JsonTree, tryParseJson } from "./data-grid/json";
-import type { DataGridContextMenuState, DataGridDensity, DataGridInspectState } from "./data-grid/types";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui";
+import type { ColumnFilter, DataGridDensity, DataGridInspectState, FilterMode, SortState } from "./data-grid/types";
 import "./data-grid/data-grid.css";
 
 interface DataTableProps {
@@ -20,6 +43,34 @@ interface DataTableProps {
   tableName?: string;
   databaseName?: string;
   columnTypes?: Record<string, { dataType: string; isPrimaryKey: boolean; isForeignKey: boolean }>;
+}
+
+const VIRTUAL_FALLBACK_RECT: Rect = { width: 1024, height: 640 };
+
+type DataTableRow = Record<string, unknown>;
+
+function observeDataGridRect(instance: Virtualizer<HTMLDivElement, HTMLTableRowElement>, cb: (rect: Rect) => void) {
+  const emitRect = () => {
+    const rect = instance.scrollElement?.getBoundingClientRect();
+    cb({
+      width: rect?.width || VIRTUAL_FALLBACK_RECT.width,
+      height: rect?.height || VIRTUAL_FALLBACK_RECT.height,
+    });
+  };
+
+  emitRect();
+
+  const scrollElement = instance.scrollElement;
+  if (!scrollElement || !globalThis.ResizeObserver) return undefined;
+
+  const observer = new ResizeObserver(emitRect);
+  observer.observe(scrollElement);
+  return () => observer.disconnect();
+}
+
+function observeDataGridOffset(instance: Virtualizer<HTMLDivElement, HTMLTableRowElement>, cb: (offset: number, isScrolling: boolean) => void) {
+  cb(instance.scrollElement?.scrollTop ?? 0, false);
+  return observeElementOffset(instance, cb);
 }
 
 function isNumericValue(value: unknown) {
@@ -36,6 +87,46 @@ function normalizeFilterValue(value: unknown) {
   return String(value);
 }
 
+function buildColumnFilter(column: string, mode: FilterMode, value?: string): ColumnFilter {
+  return { column, mode, value };
+}
+
+function dataGridFilterFn(row: Row<DataTableRow>, columnId: string, filterValue: unknown) {
+  const filter = filterValue as ColumnFilter | undefined;
+  if (!filter) return true;
+
+  const value = row.getValue(columnId);
+  if (filter.mode === "is_null") return value === null || value === undefined;
+  if (filter.mode === "is_not_null") return value !== null && value !== undefined;
+  if (!filter.value) return true;
+  if (value === null || value === undefined) return false;
+
+  return String(value).toLowerCase().includes(filter.value.toLowerCase());
+}
+
+function dataGridSortingFn(rowA: Row<DataTableRow>, rowB: Row<DataTableRow>, columnId: string) {
+  const valueA = rowA.getValue(columnId);
+  const valueB = rowB.getValue(columnId);
+  const isNullA = valueA === null || valueA === undefined;
+  const isNullB = valueB === null || valueB === undefined;
+
+  if (isNullA && isNullB) return 0;
+  if (isNullA) return 1;
+  if (isNullB) return -1;
+
+  const isDateA = valueA instanceof Date || (typeof valueA === "string" && !Number.isNaN(Date.parse(valueA)) && Number.isNaN(Number(valueA)));
+  const isDateB = valueB instanceof Date || (typeof valueB === "string" && !Number.isNaN(Date.parse(valueB)) && Number.isNaN(Number(valueB)));
+
+  if (typeof valueA === "number" && typeof valueB === "number") return valueA - valueB;
+  if (isDateA && isDateB) {
+    const timeA = valueA instanceof Date ? valueA.getTime() : new Date(String(valueA)).getTime();
+    const timeB = valueB instanceof Date ? valueB.getTime() : new Date(String(valueB)).getTime();
+    return timeA - timeB;
+  }
+
+  return String(valueA).localeCompare(String(valueB), "zh-Hans-CN", { numeric: true });
+}
+
 export function DataTable({
   columns,
   rows,
@@ -46,34 +137,109 @@ export function DataTable({
   columnTypes,
 }: DataTableProps) {
   const numericSet = useMemo(() => new Set(numericColumns ?? []), [numericColumns]);
+  const tableColumns = useMemo<Array<ColumnDef<DataTableRow, unknown>>>(() => columns.map((column) => ({
+    id: column,
+    accessorFn: (row) => row[column],
+    filterFn: dataGridFilterFn,
+    sortingFn: dataGridSortingFn,
+  })), [columns]);
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+  const [scrollRootElement, setScrollRootElement] = useState<HTMLDivElement | null>(null);
   const tbodyRef = useRef<HTMLTableSectionElement>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [openColumnMenu, setOpenColumnMenu] = useState<string | null>(null);
   const [density, setDensity] = useState<DataGridDensity>("compact");
   const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; column: string } | null>(null);
-  const [contextMenu, setContextMenu] = useState<DataGridContextMenuState | null>(null);
   const [inspect, setInspect] = useState<DataGridInspectState | null>(null);
-  const [preview, setPreview] = useState<{ value: string; isJson: boolean; rect: DOMRect } | null>(null);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
-  const {
-    visibleColumns,
-    visibleRows,
-    sortState,
-    setSortState,
-    filters,
-    setFilter,
-    clearFilter,
-    clearAllFilters,
-    hiddenColumns,
-    toggleHideColumn,
-    showAllColumns,
-  } = useDataTableView({ columns, rows });
+  useEffect(() => {
+    const columnSet = new Set(columns);
+    setSorting((current) => current.filter((item) => columnSet.has(item.id)));
+    setColumnFilters((current) => current.filter((item) => columnSet.has(item.id)));
+    setColumnVisibility((current) => Object.fromEntries(Object.entries(current).filter(([column]) => columnSet.has(column))));
+  }, [columns]);
+
+  const table = useReactTable({
+    data: rows,
+    columns: tableColumns,
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const visibleColumns = table.getVisibleLeafColumns().map((column) => column.id);
+  const visibleRows = table.getRowModel().rows;
+  const sortState = useMemo<SortState>(() => {
+    const activeSort = sorting[0];
+    if (!activeSort) return null;
+    return { column: activeSort.id, direction: activeSort.desc ? "desc" : "asc" };
+  }, [sorting]);
+  const filters = useMemo<Record<string, ColumnFilter>>(() => {
+    return Object.fromEntries(columnFilters.map((filter) => [filter.id, filter.value as ColumnFilter]));
+  }, [columnFilters]);
+  const hiddenColumns = useMemo(() => {
+    return new Set(Object.entries(columnVisibility).filter(([, visible]) => visible === false).map(([column]) => column));
+  }, [columnVisibility]);
+
+  const setSortState = useCallback((next: SortState) => {
+    setSorting(next ? [{ id: next.column, desc: next.direction === "desc" }] : []);
+  }, []);
+
+  const setFilter = useCallback((column: string, mode: FilterMode, value?: string) => {
+    const filterValue = buildColumnFilter(column, mode, value);
+    setColumnFilters((current) => [
+      ...current.filter((filter) => filter.id !== column),
+      { id: column, value: filterValue },
+    ]);
+  }, []);
+
+  const clearFilter = useCallback((column: string) => {
+    setColumnFilters((current) => current.filter((filter) => filter.id !== column));
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setColumnFilters([]);
+  }, []);
+
+  const toggleHideColumn = useCallback((column: string) => {
+    setColumnVisibility((current) => ({ ...current, [column]: current[column] === false }));
+  }, []);
+
+  const showAllColumns = useCallback(() => {
+    setColumnVisibility({});
+  }, []);
+
+  const rowVirtualizer = useVirtualizer({
+    count: visibleRows.length,
+    getScrollElement: () => scrollRootElement,
+    estimateSize: () => density === "comfortable" ? 42 : 30,
+    observeElementRect: observeDataGridRect,
+    observeElementOffset: observeDataGridOffset,
+    overscan: 8,
+    initialRect: VIRTUAL_FALLBACK_RECT,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const firstVirtualRow = virtualRows[0];
+  const lastVirtualRow = virtualRows[virtualRows.length - 1];
+  const virtualPaddingTop = firstVirtualRow?.start ?? 0;
+  const virtualPaddingBottom = lastVirtualRow ? rowVirtualizer.getTotalSize() - lastVirtualRow.end : 0;
+  const tableColumnSpan = visibleColumns.length + 1;
 
   useEffect(() => {
     if (!tbodyRef.current) return;
-    const rowNodes = tbodyRef.current.querySelectorAll("tr");
+    const rowNodes = tbodyRef.current.querySelectorAll("tr:not(.data-grid-virtual-spacer)");
     gsap.fromTo(rowNodes, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.16, stagger: 0.018, ease: "power1.out" });
-  }, [visibleRows]);
+  }, [virtualRows]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -103,7 +269,6 @@ export function DataTable({
 
   const handleCopyColumnName = useCallback(async (column: string) => {
     await copyText(column, "已复制列名");
-    setOpenColumnMenu(null);
   }, [copyText]);
 
   const handleCopySelectColumn = useCallback(async (column: string) => {
@@ -112,12 +277,10 @@ export function DataTable({
       return;
     }
     await copyText(makeSelectColumnSql(column, tableName, databaseName), "已复制 SELECT 当前列");
-    setOpenColumnMenu(null);
   }, [copyText, databaseName, showToast, tableName]);
 
   const handleHideColumn = useCallback((column: string) => {
     toggleHideColumn(column);
-    setOpenColumnMenu(null);
     showToast(`已隐藏列 ${column}`);
   }, [showToast, toggleHideColumn]);
 
@@ -125,18 +288,19 @@ export function DataTable({
     clearAllFilters();
     showAllColumns();
     setSortState(null);
-    setOpenColumnMenu(null);
   }, [clearAllFilters, setSortState, showAllColumns]);
 
-  const activeContextRow = contextMenu ? visibleRows[contextMenu.rowIndex] : undefined;
-  const activeContextValue = contextMenu?.column && activeContextRow ? activeContextRow[contextMenu.column] : undefined;
+  const handleScrollRootRef = useCallback((node: HTMLDivElement | null) => {
+    scrollRootRef.current = node;
+    setScrollRootElement(node);
+  }, []);
 
   if (columns.length === 0) {
     return <div className="data-grid-empty">暂无列信息</div>;
   }
 
   return (
-    <div className="data-grid-root" style={{ maxHeight: maxHeight ?? "100%" }} onClick={() => setOpenColumnMenu(null)}>
+    <div ref={handleScrollRootRef} className="data-grid-root" style={{ maxHeight: maxHeight ?? "100%" }}>
       {toast && <div className="data-grid-toast">{toast}</div>}
 
       <DataGridToolbar
@@ -167,15 +331,11 @@ export function DataTable({
                     typeInfo={columnTypes?.[column]}
                     filter={filters[column]}
                     sortState={sortState}
-                    menuOpen={openColumnMenu === column}
-                    onToggleMenu={() => setOpenColumnMenu((current) => current === column ? null : column)}
                     onSort={(direction) => {
                       setSortState({ column, direction });
-                      setOpenColumnMenu(null);
                     }}
                     onClearSort={() => {
                       setSortState(null);
-                      setOpenColumnMenu(null);
                     }}
                     onFilter={(mode, value) => setFilter(column, mode, value)}
                     onClearFilter={() => clearFilter(column)}
@@ -188,138 +348,110 @@ export function DataTable({
             </tr>
           </thead>
           <tbody ref={tbodyRef}>
-            {visibleRows.map((row, rowIndex) => {
+            {virtualPaddingTop > 0 && (
+              <tr className="data-grid-virtual-spacer" aria-hidden="true">
+                <td
+                  className="data-grid-virtual-spacer-cell"
+                  colSpan={tableColumnSpan}
+                  style={{ "--data-grid-virtual-spacer-height": `${virtualPaddingTop}px` } as CSSProperties}
+                />
+              </tr>
+            )}
+            {virtualRows.map((virtualRow) => {
+              const rowIndex = virtualRow.index;
+              const tableRow = visibleRows[rowIndex];
+              if (!tableRow) return null;
+              const row = tableRow.original;
               const rowSelected = selectedCell?.rowIndex === rowIndex;
               return (
-                <tr key={rowIndex} className={rowSelected ? "data-grid-row--selected" : undefined}>
-                  <td
-                    className="data-grid-index-cell"
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setContextMenu({ rowIndex, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="border-0 bg-transparent cursor-pointer text-[var(--text-muted)]"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        setContextMenu({ rowIndex, x: rect.left, y: rect.bottom + 4 });
-                      }}
-                    >
-                      <MoreVertical size={11} />
-                    </button>
-                    <span className="ml-1">{rowIndex + 1}</span>
-                  </td>
+                <tr key={tableRow.id} data-index={rowIndex} className={rowSelected ? "data-grid-row--selected" : undefined}>
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <td className="data-grid-index-cell">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="data-grid-row-menu-trigger"
+                              aria-label={`行操作 ${rowIndex + 1}`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <MoreVertical size={11} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="data-grid-context-menu" align="start">
+                            <DropdownMenuItem className="data-grid-menu-item" onSelect={() => void handleCopyRowJson(row)}>
+                              <FileJson size={12} /> 复制行 JSON
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="data-grid-menu-item" onSelect={() => void handleCopyInsert(row)}>
+                              <Copy size={12} /> 复制 INSERT SQL
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <span className="data-grid-row-number">{rowIndex + 1}</span>
+                      </td>
+                    </ContextMenuTrigger>
+                    <DataGridContextMenu
+                      row={row}
+                      onCopyCell={handleCopyCell}
+                      onCopyRowJson={handleCopyRowJson}
+                      onCopyInsert={handleCopyInsert}
+                      onFilterEquals={(column, value) => setFilter(column, "contains", normalizeFilterValue(value))}
+                      onFilterNotNull={(column) => setFilter(column, "is_not_null")}
+                      onClearColumnFilter={clearFilter}
+                    />
+                  </ContextMenu>
 
                   {visibleColumns.map((column) => {
-                    const value = row[column];
+                    const value = tableRow.getValue(column);
                     const numeric = numericSet.has(column) || isNumericValue(value);
                     const selected = selectedCell?.rowIndex === rowIndex && selectedCell.column === column;
                     return (
-                      <DataGridCell
-                        key={`${rowIndex}-${column}`}
-                        value={value}
-                        numeric={numeric}
-                        selected={selected}
-                        onSelect={() => {
-                          setSelectedCell({ rowIndex, column });
-                          void handleCopyCell(value);
-                        }}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setSelectedCell({ rowIndex, column });
-                          setContextMenu({ rowIndex, column, x: event.clientX, y: event.clientY });
-                        }}
-                        onInspect={(valueText, isJson) => setInspect({ column, value: valueText, isJson })}
-                        onPreviewChange={setPreview}
-                      />
+                      <ContextMenu key={`${rowIndex}-${column}`}>
+                        <ContextMenuTrigger asChild>
+                          <DataGridCell
+                            value={value}
+                            numeric={numeric}
+                            selected={selected}
+                            onSelect={() => {
+                              setSelectedCell({ rowIndex, column });
+                              void handleCopyCell(value);
+                            }}
+                            onContextMenu={() => {
+                              setSelectedCell({ rowIndex, column });
+                            }}
+                            onInspect={(valueText, isJson) => setInspect({ column, value: valueText, isJson })}
+                          />
+                        </ContextMenuTrigger>
+                        <DataGridContextMenu
+                          row={row}
+                          column={column}
+                          value={value}
+                          onCopyCell={handleCopyCell}
+                          onCopyRowJson={handleCopyRowJson}
+                          onCopyInsert={handleCopyInsert}
+                          onFilterEquals={(column, value) => setFilter(column, "contains", normalizeFilterValue(value))}
+                          onFilterNotNull={(column) => setFilter(column, "is_not_null")}
+                          onClearColumnFilter={clearFilter}
+                        />
+                      </ContextMenu>
                     );
                   })}
                 </tr>
               );
             })}
+            {virtualPaddingBottom > 0 && (
+              <tr className="data-grid-virtual-spacer" aria-hidden="true">
+                <td
+                  className="data-grid-virtual-spacer-cell"
+                  colSpan={tableColumnSpan}
+                  style={{ "--data-grid-virtual-spacer-height": `${virtualPaddingBottom}px` } as CSSProperties}
+                />
+              </tr>
+            )}
           </tbody>
         </table>
       )}
-
-      {preview && (
-        <div
-          className="data-grid-preview animate-fade-in shadow-xl"
-          style={{
-            left: Math.min(preview.rect.left, window.innerWidth - 540),
-            top: preview.rect.bottom + 8,
-            maxWidth: 500,
-            maxHeight: 280,
-            overflow: "auto",
-            padding: 0,
-            border: "1px solid var(--border-medium)",
-            borderRadius: 8,
-            background: "var(--bg-surface)",
-            boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-            zIndex: 4500,
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", background: "var(--bg-secondary)", borderBottom: "1px solid var(--border-light)", fontSize: 10, color: "var(--text-secondary)" }}>
-            <span style={{ fontWeight: 700, textTransform: "uppercase", color: "var(--accent-indigo)" }}>
-              {preview.isJson ? "JSON 结构" : "TEXT 内容"}
-            </span>
-            <span>字符数: {preview.value.length}</span>
-          </div>
-          
-          {/* Body */}
-          <div style={{ padding: 10, fontSize: "0.72rem", fontFamily: "var(--font-mono)", lineHeight: 1.5 }}>
-            {preview.isJson && tryParseJson(preview.value) ? (
-              <JsonTree data={tryParseJson(preview.value)!} />
-            ) : (
-              <div>
-                {/* Parse Key Value structures */}
-                {preview.value.includes("=") && (preview.value.includes("&") || preview.value.includes(";")) ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    {preview.value.split(/[&;]/).map((pair, idx) => {
-                      const eqIdx = pair.indexOf("=");
-                      if (eqIdx === -1) return <div key={idx} style={{ color: "var(--text-muted)", fontSize: "0.68rem" }}>{pair}</div>;
-                      const k = pair.substring(0, eqIdx).trim();
-                      const v = pair.substring(eqIdx + 1).trim();
-                      return (
-                        <div key={idx} style={{ display: "flex", borderBottom: "1px dashed var(--border-light)", paddingBottom: 2 }}>
-                          <span style={{ fontWeight: 600, color: "var(--text-secondary)", width: 120, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }} title={k}>{k}</span>
-                          <span style={{ color: "var(--text-primary)", wordBreak: "break-all" }}>{v}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : preview.value.includes(",") && preview.value.split(",").length > 2 ? (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {preview.value.split(",").map((item, idx) => (
-                      <span key={idx} style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 4, padding: "2px 6px", fontSize: "0.65rem", color: "var(--text-primary)" }}>{item.trim()}</span>
-                    ))}
-                  </div>
-                ) : (
-                  <pre className="data-grid-inspector-pre" style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{preview.value}</pre>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <DataGridContextMenu
-        menu={contextMenu}
-        row={activeContextRow}
-        value={activeContextValue}
-        onClose={() => setContextMenu(null)}
-        onCopyCell={handleCopyCell}
-        onCopyRowJson={handleCopyRowJson}
-        onCopyInsert={handleCopyInsert}
-        onFilterEquals={(column, value) => setFilter(column, "contains", normalizeFilterValue(value))}
-        onFilterNotNull={(column) => setFilter(column, "is_not_null")}
-        onClearColumnFilter={clearFilter}
-      />
 
       <DataGridInspector
         inspect={inspect}

@@ -1,0 +1,121 @@
+.artifact-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--agent-border);
+  border-radius: var(--radius-card);
+  background: var(--agent-surface);
+  box-shadow: var(--shadow-card, var(--agent-shadow-soft));
+}
+
+.artifact-card + .artifact-card {
+  margin-top: 8px;
+}
+
+.artifact-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--agent-border);
+  background: var(--agent-surface-muted);
+}
+
+.artifact-card-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--agent-text);
+  font-size: var(--ui-font-label);
+  font-weight: 650;
+}
+
+.artifact-card-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-card-badge {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 8px;
+  background: var(--agent-accent-soft);
+  color: var(--agent-accent);
+  font-size: var(--ui-font-micro);
+  font-weight: 650;
+}
+
+.artifact-card-table .artifact-card-badge {
+  border-color: #BFDBFE;
+  background: #EFF6FF;
+  color: var(--color-info);
+}
+
+.artifact-card-chart .artifact-card-badge {
+  border-color: #DDD6FE;
+  background: #F5F3FF;
+  color: var(--color-primary);
+}
+
+.artifact-card-sql .artifact-card-badge {
+  border-color: #FDE68A;
+  background: #FFFBEB;
+  color: #B45309;
+}
+
+.artifact-card-insight .artifact-card-badge {
+  border-color: #A7F3D0;
+  background: #ECFDF5;
+  color: #059669;
+}
+
+.artifact-card-desc,
+.artifact-card-meta,
+.artifact-card-actions {
+  padding-inline: 12px;
+}
+
+.artifact-card-desc {
+  margin: 8px 0 0;
+  color: var(--agent-text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.artifact-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  color: var(--agent-text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.artifact-card-body {
+  padding: 12px;
+}
+
+.artifact-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.artifact-pill {
+  border: 1px solid var(--agent-border);
+  border-radius: 6px;
+  background: var(--agent-surface-muted);
+  color: var(--agent-text-secondary);
+  padding: 4px 8px;
+}
+
+.artifact-pill--warning {
+  border-color: var(--trust-warning-border);
+  background: var(--trust-warning-bg);
+  color: var(--trust-warning);
+}

@@ -1,4 +1,5 @@
 import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink } from "lucide-react";
+import { Button } from "../../../components/ui";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { copyText, downloadBlobFile, downloadTextFile } from "./artifactActions";
@@ -6,6 +7,7 @@ import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
 import { ArtifactTableGrid } from "./table/ArtifactTableGrid";
 import { ArtifactTableToolbar } from "./table/ArtifactTableToolbar";
 import { useArtifactTableData } from "./table/useArtifactTableData";
+import "./table/ArtifactTable.css";
 
 interface TableArtifactViewProps {
   artifact: ResultViewArtifact;
@@ -68,25 +70,26 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
 
   if (mode === "workspace") {
     return (
-      <div className="hifi-result-workspace flex flex-col h-full overflow-hidden w-full">
+      <div className="artifact-table-workspace">
         {toolbar}
         {table.fetchError && (
-          <div className="hifi-preview-error m-2">
-            <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+          <div className="artifact-table-alert artifact-table-alert-error">
+            <AlertCircle size={13} className="artifact-table-alert-icon" />
             <span>获取分页数据失败: {table.fetchError}</span>
           </div>
         )}
         {(table.warnings.length > 0 || table.notices.length > 0) && (
-          <div className="hifi-preview-notice m-2">
-            <AlertTriangle size={11} className="flex-shrink-0" />
+          <div className="artifact-table-alert artifact-table-alert-notice">
+            <AlertTriangle size={11} className="artifact-table-alert-icon" />
             <span>{[...table.warnings, ...table.notices].join("；")}</span>
           </div>
         )}
 
-        <div className="hifi-table-container hifi-result-table-wrap flex-1 overflow-auto relative">
-          {table.isLoading && <div className="hifi-preview-loading-bar absolute top-0 left-0 right-0" />}
+        <div className="artifact-table-container">
+          {table.isLoading && <div className="artifact-table-loading-bar" />}
           <ArtifactTableGrid
             columns={table.columns}
+            columnTypes={table.columnTypes}
             rows={table.visibleRows}
             sort={table.sort}
             onSort={table.setSortColumn}
@@ -125,36 +128,39 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
       actions={
         <>
           {onOpenResultTab && (
-            <button
+            <Button
               type="button"
-              className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1"
+              variant="outline"
+              size="sm"
+              className="artifact-table-action-button"
               onClick={() => onOpenResultTab(artifact)}
             >
               <ExternalLink size={10} />
               打开为 Tab
-            </button>
+            </Button>
           )}
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={handleCopy}>
+          <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={handleCopy}>
             <Copy size={10} />
             复制 CSV
-          </button>
-          <button className="hifi-guide-btn-secondary hifi-artifact-action-btn flex items-center gap-1" onClick={() => void handleExport()}>
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="artifact-table-action-button" onClick={() => void handleExport()}>
             <Download size={10} />
             导出 CSV
-          </button>
+          </Button>
         </>
       }
     >
       {toolbar}
       {table.fetchError && (
-        <div className="hifi-result-error mb-2 p-2 rounded text-[var(--ui-font-label)] flex items-center gap-1">
-          <AlertCircle size={12} />
+        <div className="artifact-table-inline-error">
+          <AlertCircle size={12} className="artifact-table-alert-icon" />
           获取分页数据失败: {table.fetchError}
         </div>
       )}
-      <div className="hifi-result-inline-table overflow-auto">
+      <div className="artifact-table-inline-table">
         <ArtifactTableGrid
           columns={table.columns}
+          columnTypes={table.columnTypes}
           rows={table.visibleRows}
           sort={table.sort}
           onSort={table.setSortColumn}
@@ -175,27 +181,27 @@ function InlineTableMeta({
 }) {
   return (
     <div className="artifact-table-meta">
-      <span className="hifi-artifact-pill">
+      <span className="artifact-pill">
         预览 {table.previewCount} / 共 {table.totalRows} 行
       </span>
       {table.shouldUseWindow && (
-        <span className="hifi-artifact-pill">
+        <span className="artifact-pill">
           窗口 1-{table.visibleRows.length} / {table.filteredAndSortedRows.length}
         </span>
       )}
-      <span className="hifi-artifact-pill">{table.columns.length} 列</span>
-      {table.latencyMs !== undefined && <span className="hifi-artifact-pill">{table.latencyMs}ms</span>}
+      <span className="artifact-pill">{table.columns.length} 列</span>
+      {table.latencyMs !== undefined && <span className="artifact-pill">{table.latencyMs}ms</span>}
       {!table.isSqlBackedWorkspace && table.returnedRows > table.previewCount && (
-        <span className="hifi-artifact-pill">已载入 {table.returnedRows} 行</span>
+        <span className="artifact-pill">已载入 {table.returnedRows} 行</span>
       )}
-      {artifact.truncated && <span className="hifi-artifact-pill hifi-artifact-pill-warning">结果已截断</span>}
+      {artifact.truncated && <span className="artifact-pill artifact-pill--warning">结果已截断</span>}
       {table.warnings.map((warning) => (
-        <span key={`warning-${warning}`} className="hifi-artifact-pill hifi-artifact-pill-warning">
+        <span key={`warning-${warning}`} className="artifact-pill artifact-pill--warning">
           {warning}
         </span>
       ))}
       {table.notices.map((notice) => (
-        <span key={`notice-${notice}`} className="hifi-artifact-pill">
+        <span key={`notice-${notice}`} className="artifact-pill">
           {notice}
         </span>
       ))}

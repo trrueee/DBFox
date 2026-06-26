@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
+import "./TableSchemaPane.css";
 
 interface TableSchemaPaneProps {
   tableId: string;
   datasourceId: string;
+}
+
+function confidenceClass(confidence: number) {
+  if (confidence >= 0.8) return "table-schema-confidence--high";
+  if (confidence >= 0.5) return "table-schema-confidence--medium";
+  return "table-schema-confidence--low";
 }
 
 export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps) {
@@ -39,12 +46,12 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
   }, [tableId, datasourceId]);
 
   return (
-    <div className="flex flex-col p-3 h-full overflow-auto">
-      <span className="text-[var(--ui-font-caption)] text-gray-400 block mb-1">字段列表 (Schema Structure) &gt; {tableId}</span>
-      {loading && <div className="text-[var(--ui-font-label)] text-slate-400 mt-4">正在读取字段结构...</div>}
-      {error && <div className="text-[var(--ui-font-label)] text-red-500 bg-red-50 rounded-lg p-3 mt-3">{error}</div>}
+    <div className="table-schema-pane">
+      <span className="table-schema-pane__caption">字段列表 (Schema Structure) &gt; {tableId}</span>
+      {loading && <div className="table-schema-pane__loading">正在读取字段结构...</div>}
+      {error && <div className="table-schema-pane__error">{error}</div>}
       {!loading && !error && (
-        <table className="hifi-table">
+        <table className="table-schema-table">
           <thead>
             <tr>
               <th>字段名</th>
@@ -62,39 +69,28 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
             {columns.map((column) => (
               <tr key={column.id}>
                 <td>{column.column_name}</td>
-                <td className="text-blue-600 font-mono">{column.column_type || column.data_type}</td>
+                <td className="table-schema-table__type">{column.column_type || column.data_type}</td>
                 <td>
-                  {column.is_primary_key && <span className="hifi-constraint-badge pk">PK</span>}
-                  {column.is_foreign_key && <span className="hifi-constraint-badge index ml-1">FK</span>}
+                  <span className="table-schema-constraints">
+                    {column.is_primary_key && <span className="table-schema-constraint table-schema-constraint--primary">PK</span>}
+                    {column.is_foreign_key && <span className="table-schema-constraint table-schema-constraint--foreign">FK</span>}
+                  </span>
                   {!column.is_primary_key && !column.is_foreign_key && "—"}
                 </td>
                 <td>{column.is_nullable ? "是" : "否"}</td>
                 <td>{column.column_default || "—"}</td>
                 <td>{column.column_comment || "—"}</td>
-                <td style={{ color: "var(--text-secondary)" }}>{column.ai_description || "—"}</td>
+                <td className="table-schema-muted">{column.ai_description || "—"}</td>
                 <td>
                   {column.ai_confidence !== undefined && column.ai_confidence !== null ? (
-                    <span style={{ 
-                      fontSize: "0.7rem", 
-                      color: column.ai_confidence >= 0.8 ? "var(--color-success)" : column.ai_confidence >= 0.5 ? "var(--color-warning)" : "var(--color-danger)",
-                      background: column.ai_confidence >= 0.8 ? "var(--color-success-soft)" : column.ai_confidence >= 0.5 ? "var(--color-warning-soft)" : "var(--color-danger-soft)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      fontWeight: 600
-                    }}>
+                    <span className={`table-schema-confidence ${confidenceClass(column.ai_confidence)}`}>
                       {(column.ai_confidence * 100).toFixed(0)}%
                     </span>
                   ) : "—"}
                 </td>
                 <td>
                   {column.semantic_tags ? (
-                    <span style={{ 
-                      fontSize: "0.7rem", 
-                      color: "var(--color-primary)",
-                      background: "var(--color-primary-soft)",
-                      padding: "2px 6px",
-                      borderRadius: 4
-                    }}>
+                    <span className="table-schema-tag">
                       {column.semantic_tags}
                     </span>
                   ) : "—"}

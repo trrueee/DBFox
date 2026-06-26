@@ -1,8 +1,14 @@
-import { useEffect, useRef } from "react";
-import { Play } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Play, Trash2 } from "lucide-react";
 import { ImageCell, isImageUrl } from "../../components/ImageCell";
+import { SqlEditor } from "../../components/SqlEditor";
+import { Button } from "../../components/ui/button";
+import { Panel } from "../../components/ui/panel";
+import { LoadingState } from "../../components/ui/state";
+import { Toolbar, ToolbarGroup, ToolbarTitle } from "../../components/ui/toolbar";
 import { executeSql, type EngineSqlResult } from "../engine/engineApi";
 import type { DataSource } from "../../lib/api/types";
+import "./SqlConsoleWorkspace.css";
 
 export type SqlConsoleTabState = {
   draftSql: string;
@@ -40,8 +46,8 @@ export const nextEntryId = () => ++entrySeq;
 export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntries, onToast, datasources, activeDatasourceId }: SqlConsoleWorkspaceProps) {
   const { draftSql, entries, running } = state;
   const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const initializedRef = useRef(false);
+  const [selectedSql, setSelectedSql] = useState("");
 
   const resolvedDatasource = datasources.find(ds => ds.id === activeDatasourceId) || datasources[0] || null;
   const dbLabel = resolvedDatasource
@@ -67,16 +73,21 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
     onAppendEntries(tabId, items.map((item) => ({ ...item, id: nextEntryId(), time }) as ConsoleEntry));
   };
 
-  const runSql = async () => {
-    const sql = draftSql.trim();
+  const runSql = async (requestedSql?: string) => {
+    const selectedRequest = requestedSql?.trim() ?? "";
+    const currentSelection = selectedSql.trim();
+    const sql = selectedRequest || currentSelection || draftSql.trim();
     if (!sql) {
       onToast("SQL 不能为空");
       return;
     }
     if (running) return;
+    const isSelectionExecution = Boolean(selectedRequest || currentSelection);
     onPatchState(tabId, { running: true });
     appendEntries([{ kind: "sql", sql }]);
-    onPatchState(tabId, { draftSql: "" });
+    if (!isSelectionExecution) {
+      onPatchState(tabId, { draftSql: "" });
+    }
     try {
       if (!resolvedDatasource) {
         throw new Error("暂无可用数据源，请先创建并同步数据源。");
@@ -96,14 +107,6 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
       onPatchState(tabId, { draftSql: sql });
     } finally {
       onPatchState(tabId, { running: false });
-      window.setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "F9" || (event.key === "Enter" && (event.ctrlKey || event.metaKey))) {
-      event.preventDefault();
-      void runSql();
     }
   };
 
@@ -111,45 +114,56 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
     onPatchState(tabId, { entries: [{ id: nextEntryId(), kind: "info", text: "控制台已清屏。", time: formatTime() }] });
   };
 
-  return (
-    <div className="hifi-sql-workspace hifi-tab-pane flex flex-col h-full">
-      <div className="hifi-panel-toolbar flex-shrink-0">
-        <div className="hifi-toolbar-left">
-          <span className="font-semibold text-[var(--ui-font-label)] text-slate-700">SQL Console / {dbLabel}</span>
-        </div>
-        <div className="hifi-toolbar-right">
-          <button className="hifi-guide-btn-primary flex items-center gap-1" style={{ height: "24px", fontSize: "10px" }} onClick={runSql} disabled={running}>
-            <Play size={10} />
-            <span>{running ? "运行中..." : "运行 (F9)"}</span>
-          </button>
-          <button className="hifi-toolbar-btn" style={{ height: "24px" }} onClick={clearConsole}>清屏</button>
-        </div>
-      </div>
+  const executableSql = selectedSql.trim() || draftSql.trim();
+  const executeDisabled = running || !executableSql;
+  const runLabel = running ? "运行中..." : selectedSql.trim() ? "运行选中 (F9)" : "运行 (F9)";
 
-      <div className="sql-console" onClick={(event) => { if (event.target === event.currentTarget) inputRef.current?.focus(); }}>
+  return (
+    <Panel className="hifi-sql-workspace hifi-tab-pane" aria-label="SQL Console">
+      <Toolbar className="sql-console-toolbar" aria-label="SQL Console 工具栏">
+        <ToolbarGroup className="gap-3">
+          <ToolbarTitle>SQL Console</ToolbarTitle>
+          <span className="sql-console-datasource-label">{dbLabel}</span>
+        </ToolbarGroup>
+        <ToolbarGroup>
+          {selectedSql.trim() ? <span className="sql-console-selection-meta">已选中 {selectedSql.trim().length} 字符</span> : null}
+          <Button size="sm" onClick={() => void runSql()} disabled={executeDisabled}>
+            <Play className="sql-console-action-icon" aria-hidden="true" />
+            <span>{runLabel}</span>
+          </Button>
+          <Button size="sm" variant="outline" onClick={clearConsole} disabled={running}>
+            <Trash2 className="sql-console-action-icon" aria-hidden="true" />
+            <span>清屏</span>
+          </Button>
+        </ToolbarGroup>
+      </Toolbar>
+
+      <div className="sql-console">
         <div className="sql-console-scroll" ref={scrollRef}>
           {entries.map((entry) => renderEntry(entry))}
 
-          {running && <div className="sql-console-running">执行中...</div>}
+          {running && <LoadingState className="sql-console-running" label="执行中..." />}
 
-          <div className="sql-console-prompt">
+          <div className="sql-console-prompt sql-console-editor-prompt">
             <span className="sql-console-prompt-label">sql&gt;</span>
-            <textarea
-              ref={inputRef}
-              className="sql-console-input"
-              value={draftSql}
-              onChange={(event) => onPatchState(tabId, { draftSql: event.target.value })}
-              onKeyDown={handleKeyDown}
-              rows={Math.min(12, Math.max(1, draftSql.split("\n").length))}
-              placeholder="输入 SQL，Ctrl+Enter 执行"
-              spellCheck={false}
-              autoCapitalize="off"
-              autoComplete="off"
-            />
+            <div className="sql-console-editor-inline">
+              <SqlEditor
+                value={draftSql}
+                onChange={(value) => {
+                  setSelectedSql("");
+                  onPatchState(tabId, { draftSql: value });
+                }}
+                disabled={running}
+                onExecute={(sql) => void runSql(sql)}
+                onSelectionChange={setSelectedSql}
+                ariaLabel="SQL 编辑器"
+                testId="sql-console-editor"
+              />
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -196,7 +210,8 @@ function ResultBlock({ result, time }: { result: EngineSqlResult; time: string }
               {result.rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {result.columns.map((column) => {
-                    const value = row[column] as string | null | undefined;
+                    const rawValue = row[column];
+                    const value = rawValue == null ? null : String(rawValue);
                     if (isImageUrl(value)) {
                       return (
                         <td key={column}>
