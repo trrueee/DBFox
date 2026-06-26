@@ -102,6 +102,7 @@ artifacts/*.json
 artifacts/*_report*.md
 artifacts/runtime-logs/
 !artifacts/spider_*.json
+reports/
 tmp_tables.json
 
 # ============================================================

@@ -14,6 +14,7 @@ class ToolRunContext(BaseModel):
     db_dialect: str = "mysql"
     read_only: bool = True
     state: Mapping[str, Any] = Field(default_factory=dict)
+    raw_input: Mapping[str, Any] = Field(default_factory=dict)
     db_session: Any | None = Field(default=None, exclude=True)
     request: Any | None = Field(default=None, exclude=True)
 
@@ -26,6 +27,7 @@ class ToolRunContext(BaseModel):
         db: Any | None,
         read_only: bool,
         db_dialect: str = "mysql",
+        raw_input: dict[str, Any] | None = None,
     ) -> "ToolRunContext":
         datasource_id = getattr(request, "datasource_id", "") if request is not None else ""
         thread_id = ""
@@ -39,6 +41,7 @@ class ToolRunContext(BaseModel):
             db_dialect=db_dialect,
             read_only=read_only,
             state=MappingProxyType(dict(state)),
+            raw_input=MappingProxyType(dict(raw_input or {})),
             db_session=db,
             request=request,
         )

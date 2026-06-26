@@ -62,6 +62,7 @@ class ToolRuntime:
                     request=request,
                     db=db,
                     read_only=tool.policy.side_effect not in {"write", "destructive"},
+                    raw_input=coerced_input,
                 ),
             )
             parsed_output = tool.output_model.model_validate(output)

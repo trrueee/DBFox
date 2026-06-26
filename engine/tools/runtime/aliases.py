@@ -3,6 +3,7 @@ from __future__ import annotations
 """Canonical tool-name alias maps shared by runtime and agent nodes."""
 
 ALIAS_TO_INTERNAL: dict[str, str] = {
+    "environment_get_profile": "environment.get_profile",
     "schema_list_tables": "schema.list_tables",
     "schema_list_tables_page": "schema.list_tables_page",
     "schema_expand_related_tables": "schema.expand_related_tables",
@@ -23,6 +24,7 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
 INTERNAL_TO_ALIAS: dict[str, str] = {v: k for k, v in ALIAS_TO_INTERNAL.items()}
 
 STEP_NAME_MAP: dict[str, str] = {
+    "environment.get_profile": "get_environment_profile",
     "schema.list_tables": "list_tables",
     "schema.list_tables_page": "list_tables_page",
     "schema.expand_related_tables": "expand_related_tables",
