@@ -1,0 +1,101 @@
+.ask-context-dropzone {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 16px;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  padding: 8px 12px;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ask-context-dropzone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  box-shadow: 0 0 0 2px var(--color-primary-soft);
+}
+
+.ask-context-dropzone__icon {
+  flex-shrink: 0;
+  color: #6366f1;
+}
+
+.ask-context-dropzone__label {
+  margin-right: 4px;
+  color: #64748b;
+  font-size: var(--ui-font-caption);
+  font-weight: 600;
+}
+
+.ask-context-dropzone__placeholder {
+  color: #94a3b8;
+  font-size: var(--ui-font-caption);
+  font-style: italic;
+}
+
+.ask-context-dropzone__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ask-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  animation: askContextScaleIn 0.2s ease-out;
+  border: 1px solid #c7d2fe;
+  border-radius: 4px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
+  font-size: var(--ui-font-micro);
+  padding: 2px 6px;
+}
+
+.ask-context-chip__remove {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ask-context-chip__remove:hover {
+  background: #c7d2fe;
+}
+
+.ask-context-dropzone__clear {
+  border: 0;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--ui-font-micro);
+  padding: 0 2px;
+}
+
+.ask-context-dropzone__clear:hover {
+  text-decoration: underline;
+}
+
+@keyframes askContextScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { compactJsonPreview, tryParseJson } from "./json";
+import { CellValuePreview, cellValueToText, getCellPreviewJson, isCellValuePreviewable } from "./CellValuePreview";
 
 interface DataGridCellProps {
   value: unknown;
@@ -8,66 +8,35 @@ interface DataGridCellProps {
   onSelect: () => void;
   onContextMenu: (event: MouseEvent<HTMLTableCellElement>) => void;
   onInspect: (value: string, isJson: boolean) => void;
-  onPreviewChange: (preview: { value: string; isJson: boolean; rect: DOMRect } | null) => void;
 }
 
-function stringifyValue(value: unknown) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-export function DataGridCell({ value, selected, numeric, onSelect, onContextMenu, onInspect, onPreviewChange }: DataGridCellProps) {
-  const parsedJson = tryParseJson(value);
+export function DataGridCell({ value, selected, numeric, onSelect, onContextMenu, onInspect }: DataGridCellProps) {
+  const valueText = cellValueToText(value);
+  const parsedJson = getCellPreviewJson(value, valueText);
   const isJson = parsedJson !== null;
-  const valueText = stringifyValue(value);
-
-  const handleMouseEnter = (event: MouseEvent<HTMLTableCellElement>) => {
-    if (isJson || valueText.length > 40) {
-      onPreviewChange({ value: valueText, isJson, rect: event.currentTarget.getBoundingClientRect() });
-    }
-  };
+  const cellClassName = [
+    "data-grid-cell",
+    selected ? "data-grid-cell--selected" : "",
+    numeric ? "data-grid-cell--numeric" : "data-grid-cell--text",
+  ].filter(Boolean).join(" ");
 
   if (value === null || value === undefined) {
     return (
-      <td className={selected ? "data-grid-cell--selected" : undefined} onClick={onSelect} onContextMenu={onContextMenu}>
+      <td className={cellClassName} onClick={onSelect} onContextMenu={onContextMenu}>
         <span className="data-grid-null">NULL</span>
-      </td>
-    );
-  }
-
-  if (isJson && parsedJson) {
-    return (
-      <td
-        className={selected ? "data-grid-cell--selected" : undefined}
-        onClick={onSelect}
-        onDoubleClick={() => onInspect(valueText, true)}
-        onContextMenu={onContextMenu}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => onPreviewChange(null)}
-        title="双击查看完整 JSON"
-      >
-        <span className="data-grid-json-pill">JSON · {compactJsonPreview(parsedJson)}</span>
       </td>
     );
   }
 
   return (
     <td
-      className={selected ? "data-grid-cell--selected" : undefined}
+      className={cellClassName}
       onClick={onSelect}
-      onDoubleClick={() => onInspect(valueText, false)}
+      onDoubleClick={() => onInspect(valueText, isJson)}
       onContextMenu={onContextMenu}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={() => onPreviewChange(null)}
-      style={{ textAlign: numeric ? "right" : "left", fontFamily: numeric ? "var(--font-mono)" : undefined }}
-      title={valueText.length > 80 ? "双击查看完整内容" : valueText}
+      title={isCellValuePreviewable(value, valueText) ? "悬停预览，双击查看完整内容" : valueText}
     >
-      {valueText}
+      <CellValuePreview value={value} displayValue={valueText} detailHint={isJson ? "双击打开完整 JSON" : "双击打开完整内容"} />
     </td>
   );
 }

@@ -1,4 +1,5 @@
 import { GitMerge, X } from "lucide-react";
+import "./AskContextDropZone.css";
 
 interface AskContextDropZoneProps {
   contextTables: string[];
@@ -10,7 +11,7 @@ interface AskContextDropZoneProps {
 export function AskContextDropZone({ contextTables, onAddContextTable, onRemoveContextTable, onClearContextTables }: AskContextDropZoneProps) {
   return (
     <div
-      className="hifi-drop-zone"
+      className="ask-context-dropzone"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -18,19 +19,21 @@ export function AskContextDropZone({ contextTables, onAddContextTable, onRemoveC
         if (tableName) onAddContextTable(tableName);
       }}
     >
-      <GitMerge size={12} className="text-indigo-500 flex-shrink-0" />
-      <span className="text-[var(--ui-font-caption)] text-slate-500 font-semibold mr-1">问数上下文:</span>
+      <GitMerge size={12} className="ask-context-dropzone__icon" />
+      <span className="ask-context-dropzone__label">问数上下文:</span>
       {contextTables.length === 0 ? (
-        <span className="text-[var(--ui-font-caption)] text-slate-400 italic">拖拽左侧的表到这里以加载问数上下文</span>
+        <span className="ask-context-dropzone__placeholder">拖拽左侧的表到这里以加载问数上下文</span>
       ) : (
-        <div className="flex gap-1.5 flex-wrap items-center">
+        <div className="ask-context-dropzone__chips">
           {contextTables.map((tableName) => (
-            <span key={tableName} className="hifi-context-chip flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded text-[var(--ui-font-micro)] font-mono">
+            <span key={tableName} className="ask-context-chip">
               <span>{tableName}</span>
-              <X size={8} className="cursor-pointer hover:bg-indigo-200 rounded-full p-0.5" onClick={() => onRemoveContextTable(tableName)} />
+              <button type="button" className="ask-context-chip__remove" onClick={() => onRemoveContextTable(tableName)} aria-label={`移除 ${tableName}`}>
+                <X size={8} />
+              </button>
             </span>
           ))}
-          <button className="text-[var(--ui-font-micro)] text-red-500 hover:underline ml-1" onClick={onClearContextTables}>清除</button>
+          <button type="button" className="ask-context-dropzone__clear" onClick={onClearContextTables}>清除</button>
         </div>
       )}
     </div>

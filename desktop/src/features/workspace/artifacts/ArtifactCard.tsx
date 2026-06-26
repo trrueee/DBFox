@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "./ArtifactCard.css";
 
 export type ArtifactTone = "default" | "sql" | "table" | "chart" | "insight" | "warning" | "danger";
 

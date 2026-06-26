@@ -1,5 +1,4 @@
-import type { ColumnFilter, SortState } from "../../hooks/useDataTableView";
-import type { DataGridDensity } from "./types";
+import type { ColumnFilter, DataGridDensity, SortState } from "./types";
 
 interface DataGridToolbarProps {
   rowsCount: number;

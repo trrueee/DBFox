@@ -1,0 +1,333 @@
+.hifi-table-preview-pane {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hifi-table-toolbar-stack {
+  border-bottom: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+}
+
+.hifi-table-toolbar {
+  min-height: 36px;
+  border-bottom: 0;
+  background: var(--agent-surface);
+  padding: 4px 8px;
+}
+
+.hifi-table-toolbar-group {
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hifi-table-toolbar-right {
+  margin-left: auto;
+}
+
+.hifi-preview-toolbar-btn {
+  height: 24px;
+  padding: 0 8px;
+  gap: 4px;
+  border-radius: 5px;
+  font-size: var(--ui-font-label);
+}
+
+.hifi-preview-toolbar-link {
+  height: 24px;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: var(--ui-font-label);
+}
+
+.hifi-preview-toolbar-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.hifi-preview-toolbar-icon.is-spinning {
+  animation: hifi-spin 1s linear infinite;
+}
+
+.hifi-preview-toolbar-icon.is-accent {
+  color: #CA8A04;
+}
+
+.hifi-preview-search-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.hifi-preview-search-icon {
+  position: absolute;
+  left: 8px;
+  width: 12px;
+  height: 12px;
+  color: var(--agent-text-muted);
+  pointer-events: none;
+}
+
+.hifi-preview-search {
+  height: 24px;
+  width: 160px;
+  padding-left: 24px;
+  padding-right: 8px;
+  border-radius: 5px;
+  font-size: var(--ui-font-label);
+}
+
+.hifi-preview-control-row {
+  padding: 4px 8px;
+}
+
+.hifi-result-control-field .hifi-preview-control-select,
+.hifi-result-control-field .hifi-preview-control-input {
+  height: 24px;
+  min-width: 128px;
+  border-color: var(--agent-border);
+  border-radius: 5px;
+  background: var(--agent-surface-elevated);
+  font-size: var(--ui-font-label);
+}
+
+.hifi-result-control-field .hifi-preview-control-input {
+  width: 154px;
+}
+
+.table-preview-popover-content {
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+  border-color: var(--agent-border);
+  background: var(--agent-surface);
+  color: var(--agent-text-secondary);
+  box-shadow: var(--agent-shadow-hover);
+}
+
+.table-preview-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.table-preview-grid {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--agent-surface);
+  box-shadow: inset 0 0 0 1px var(--agent-border);
+  color: var(--agent-text-secondary);
+  font-size: var(--ui-font-label);
+}
+
+.table-preview-row {
+  position: relative;
+}
+
+.table-preview-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 34px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--agent-border);
+  border-right: 1px solid var(--agent-border-subtle);
+  background: color-mix(in srgb, var(--agent-surface-muted) 80%, var(--agent-surface));
+  color: var(--agent-text-secondary);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table-preview-grid thead th:first-child {
+  border-left: 1px solid var(--agent-border);
+}
+
+.table-preview-grid thead th:last-child {
+  border-right-color: var(--agent-border);
+}
+
+.table-preview-grid tbody td {
+  height: 32px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--agent-border-subtle);
+  border-right: 1px solid var(--agent-border-subtle);
+  background: var(--agent-surface);
+  vertical-align: middle;
+}
+
+.table-preview-grid tbody td:first-child {
+  border-left: 1px solid var(--agent-border);
+}
+
+.table-preview-grid tbody td:last-child {
+  border-right-color: var(--agent-border);
+}
+
+.table-preview-grid tbody tr:last-child td {
+  border-bottom-color: var(--agent-border);
+}
+
+.table-preview-grid tbody .table-preview-row:hover .table-preview-cell {
+  background: var(--agent-surface-subtle);
+}
+
+.table-preview-grid tbody .table-preview-row:hover .table-preview-cell:first-child {
+  box-shadow: inset 2px 0 0 var(--agent-accent);
+}
+
+.table-preview-head {
+  font-weight: 650;
+}
+
+.table-preview-column-name {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.table-preview-type-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  border: 1px solid var(--agent-border);
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 5px;
+  background: var(--agent-surface);
+  color: var(--agent-text-muted);
+  font-size: var(--ui-font-caption);
+  font-weight: 600;
+}
+
+.table-preview-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: copy;
+}
+
+.table-preview-image-cell {
+  max-width: 240px;
+}
+
+.table-preview-cell.is-selected {
+  background: color-mix(in srgb, var(--agent-accent) 12%, var(--agent-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agent-accent) 55%, transparent);
+  color: var(--agent-text);
+}
+
+.table-preview-cell.is-null {
+  color: var(--agent-text-muted);
+}
+
+.table-preview-null-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--agent-border);
+  padding: 1px 6px;
+  background: var(--agent-surface-muted);
+  color: var(--agent-text-muted);
+  font-size: var(--ui-font-caption);
+  font-style: italic;
+}
+
+.hifi-preview-skeleton-row-0 {
+  opacity: 1;
+}
+
+.hifi-preview-skeleton-row-1 {
+  opacity: 0.88;
+}
+
+.hifi-preview-skeleton-row-2 {
+  opacity: 0.76;
+}
+
+.hifi-preview-skeleton-row-3 {
+  opacity: 0.64;
+}
+
+.hifi-preview-skeleton-row-4 {
+  opacity: 0.52;
+}
+
+.hifi-preview-skeleton-row-5 {
+  opacity: 0.4;
+}
+
+.hifi-preview-skeleton-row-6 {
+  opacity: 0.28;
+}
+
+.hifi-table-footer-notice {
+  color: #94A3B8;
+}
+
+.hifi-table-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border);
+  background: var(--surface-panel-muted);
+  color: var(--color-text-muted);
+  padding: 0 10px;
+  font-size: var(--ui-font-caption);
+}
+
+.hifi-table-footer > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hifi-table-footer > .hifi-preview-page-size {
+  justify-self: end;
+}
+
+.hifi-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.hifi-page-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.hifi-page-num.active {
+  background: var(--color-primary);
+  color: #FFFFFF;
+  border-color: var(--color-primary);
+}
+
+.hifi-preview-page-btn {
+  height: 20px;
+  padding: 0 6px;
+}
+
+.hifi-preview-page-size {
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: var(--ui-font-caption);
+}

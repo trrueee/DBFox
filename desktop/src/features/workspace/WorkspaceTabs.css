@@ -1,0 +1,149 @@
+.workspace-tabs {
+  display: flex;
+  min-width: 0;
+  height: 36px;
+  flex: 1 1 auto;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 0;
+  background: transparent;
+  padding: 0 8px;
+}
+
+.workspace-tabs__root {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+}
+
+.workspace-tabs__scroll {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  padding-right: 8px;
+}
+
+.workspace-tabs__scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.workspace-tab {
+  display: inline-flex;
+  max-width: 150px;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  transition: background 0.1s ease, color 0.1s ease;
+  user-select: none;
+}
+
+.workspace-tab:hover {
+  background: hsl(var(--primary) / 0.05);
+  color: var(--color-text-primary);
+}
+
+.workspace-tab.is-active {
+  background: hsl(var(--primary) / 0.08);
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+.workspace-tab__main {
+  min-width: 0;
+  height: 28px;
+  flex: 1 1 auto;
+  gap: 6px;
+  border-radius: 6px;
+  color: inherit;
+  font-size: var(--ui-font-control);
+  font-weight: inherit;
+  padding: 0 6px 0 10px;
+}
+
+.workspace-tab__main:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.workspace-tab__icon {
+  flex-shrink: 0;
+}
+
+.workspace-tab__icon--table,
+.workspace-tab__icon--datasource {
+  color: #3b82f6;
+}
+
+.workspace-tab__icon--sql {
+  color: #22c55e;
+}
+
+.workspace-tab__icon--multi-table {
+  color: #f97316;
+}
+
+.workspace-tab__icon--result {
+  color: #a855f7;
+}
+
+.workspace-tab__icon--conversation {
+  color: #6366f1;
+}
+
+.workspace-tab__icon--llm {
+  color: #ec4899;
+}
+
+.workspace-tab__icon--diagnostics {
+  color: #f43f5e;
+}
+
+.workspace-tab__title {
+  min-width: 0;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-tab__close {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  margin-right: 4px;
+  opacity: 0.62;
+  padding: 0;
+}
+
+.workspace-tab__close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text-primary);
+  opacity: 1;
+}
+
+.workspace-tabs__add {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--surface-card);
+  color: var(--color-text-secondary);
+  margin-left: 4px;
+  padding: 0;
+}
+
+.workspace-tabs__add:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-card-hover);
+  color: var(--color-text-primary);
+}

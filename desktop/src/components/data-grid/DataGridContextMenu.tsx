@@ -1,11 +1,10 @@
 import { Copy, FileJson, ListPlus, X } from "lucide-react";
-import type { DataGridContextMenuState } from "./types";
+import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from "../ui";
 
 interface DataGridContextMenuProps {
-  menu: DataGridContextMenuState | null;
-  row?: Record<string, unknown>;
+  row: Record<string, unknown>;
+  column?: string;
   value?: unknown;
-  onClose: () => void;
   onCopyCell: (value: unknown) => Promise<void>;
   onCopyRowJson: (row: Record<string, unknown>) => Promise<void>;
   onCopyInsert: (row: Record<string, unknown>) => Promise<void>;
@@ -15,10 +14,9 @@ interface DataGridContextMenuProps {
 }
 
 export function DataGridContextMenu({
-  menu,
   row,
+  column,
   value,
-  onClose,
   onCopyCell,
   onCopyRowJson,
   onCopyInsert,
@@ -26,43 +24,35 @@ export function DataGridContextMenu({
   onFilterNotNull,
   onClearColumnFilter,
 }: DataGridContextMenuProps) {
-  if (!menu || !row) return null;
-
-  const run = async (action: () => void | Promise<void>) => {
-    await action();
-    onClose();
-  };
-
   return (
-    <>
-      <div style={{ position: "fixed", inset: 0, zIndex: 2999 }} onClick={onClose} onContextMenu={(event) => { event.preventDefault(); onClose(); }} />
-      <div className="data-grid-context-menu" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
-        {menu.column && (
-          <div className="data-grid-menu-section">
-            <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onCopyCell(value))}>
-              <Copy size={12} /> 复制单元格
-            </button>
-            <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onFilterEquals(menu.column!, value))}>
-              <ListPlus size={12} /> 按当前值筛选
-            </button>
-            <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onFilterNotNull(menu.column!))}>
-              <ListPlus size={12} /> 只看非 NULL
-            </button>
-            <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onClearColumnFilter(menu.column!))}>
-              <X size={12} /> 清除该列筛选
-            </button>
-          </div>
-        )}
-
+    <ContextMenuContent className="data-grid-context-menu">
+      {column && (
         <div className="data-grid-menu-section">
-          <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onCopyRowJson(row))}>
-            <FileJson size={12} /> 复制行 JSON
-          </button>
-          <button className="data-grid-menu-item" type="button" onClick={() => void run(() => onCopyInsert(row))}>
-            <Copy size={12} /> 复制 INSERT SQL
-          </button>
+          <ContextMenuItem className="data-grid-menu-item" onSelect={() => void onCopyCell(value)}>
+            <Copy size={12} /> 复制单元格
+          </ContextMenuItem>
+          <ContextMenuItem className="data-grid-menu-item" onSelect={() => onFilterEquals(column, value)}>
+            <ListPlus size={12} /> 按当前值筛选
+          </ContextMenuItem>
+          <ContextMenuItem className="data-grid-menu-item" onSelect={() => onFilterNotNull(column)}>
+            <ListPlus size={12} /> 只看非 NULL
+          </ContextMenuItem>
+          <ContextMenuItem className="data-grid-menu-item" onSelect={() => onClearColumnFilter(column)}>
+            <X size={12} /> 清除该列筛选
+          </ContextMenuItem>
         </div>
+      )}
+
+      {column && <ContextMenuSeparator className="data-grid-menu-separator" />}
+
+      <div className="data-grid-menu-section">
+        <ContextMenuItem className="data-grid-menu-item" onSelect={() => void onCopyRowJson(row)}>
+          <FileJson size={12} /> 复制行 JSON
+        </ContextMenuItem>
+        <ContextMenuItem className="data-grid-menu-item" onSelect={() => void onCopyInsert(row)}>
+          <Copy size={12} /> 复制 INSERT SQL
+        </ContextMenuItem>
       </div>
-    </>
+    </ContextMenuContent>
   );
 }

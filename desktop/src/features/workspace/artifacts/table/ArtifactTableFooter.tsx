@@ -1,3 +1,5 @@
+import { Button, Select } from "../../../../components/ui";
+
 interface ArtifactTableFooterProps {
   page: number;
   pageSize: number;
@@ -26,35 +28,43 @@ export function ArtifactTableFooter({
   onPageSizeChange,
 }: ArtifactTableFooterProps) {
   return (
-    <div className="hifi-table-footer px-2 py-1">
-      <span className="hifi-result-footer-text">
+    <div className="artifact-table-footer">
+      <span className="artifact-table-footer-text">
         {isLoading ? "加载中..." : `第 ${page} 页 · 本页 ${visibleRowCount} 行${latencyMs !== undefined ? ` · ${latencyMs}ms` : ""}`}
         {totalRows !== undefined && ` · 总计约 ${totalRows} 行`}
-        {truncated && <span className="hifi-result-truncated"> · 结果已截断</span>}
+        {truncated && <span className="artifact-table-truncated"> · 结果已截断</span>}
       </span>
 
-      <div className="flex items-center gap-2">
+      <div className="artifact-table-footer-controls">
         {isSqlBackedWorkspace && (
-          <div className="hifi-pagination flex items-center gap-1">
-            <button
-              className={`hifi-toolbar-btn hifi-result-page-btn flex items-center justify-center ${page <= 1 ? "opacity-40 cursor-not-allowed" : ""}`}
+          <div className="artifact-table-pagination">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="artifact-table-page-button"
+              aria-label="上一页"
               disabled={page <= 1 || isLoading}
               onClick={() => onPageChange((current) => Math.max(1, current - 1))}
             >
               &lt;
-            </button>
-            <span className="hifi-page-num active flex items-center justify-center h-5 px-2 rounded text-[var(--ui-font-label)] font-medium">{page}</span>
-            <button
-              className={`hifi-toolbar-btn hifi-result-page-btn flex items-center justify-center ${!hasNextPage ? "opacity-40 cursor-not-allowed" : ""}`}
+            </Button>
+            <span className="artifact-table-page-number">{page}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="artifact-table-page-button"
+              aria-label="下一页"
               disabled={!hasNextPage || isLoading}
               onClick={() => onPageChange((current) => current + 1)}
             >
               &gt;
-            </button>
+            </Button>
           </div>
         )}
-        <select
-          className="hifi-result-page-size px-1 focus:outline-none"
+        <Select
+          className="artifact-table-page-size"
           value={pageSize}
           disabled={!isSqlBackedWorkspace}
           onChange={(event) => onPageSizeChange(Number(event.target.value))}
@@ -63,7 +73,7 @@ export function ArtifactTableFooter({
           <option value="20">20条/页</option>
           <option value="50">50条/页</option>
           <option value="100">100条/页</option>
-        </select>
+        </Select>
       </div>
     </div>
   );
