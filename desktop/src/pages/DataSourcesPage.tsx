@@ -1,28 +1,34 @@
 import { useEffect, useRef, useState } from "react";
+import { Database, Plus } from "lucide-react";
+
+import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
+import { getStoredApiConfig } from "../components/SettingsDialog";
+import { useToast } from "../components/Toast";
+import { Button, EmptyState } from "../components/ui";
 import {
-  AlertTriangle,
-  CheckCircle2,
-  Database,
-  Plus,
-  RefreshCw,
-  Search,
-  Trash2,
-} from "lucide-react";
+  DataSourceDetail,
+  DataSourceForm,
+  DataSourceList,
+} from "../features/datasource-management";
+import "../features/datasource-management/DataSourceManagement.css";
+import {
+  emptyDatasourceForm,
+  formFromDataSource,
+  type ActionState,
+  type ConnectionTestResultState,
+  type DatasourceFormState,
+  type PageMode,
+  type ToastType,
+} from "../features/datasource-management/formState";
 import { api } from "../lib/api";
-import type { DataSource, DataSourceActions, Project, SchemaSyncResult } from "../lib/api";
+import type { DataSource, DataSourceActions, Project, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
+import { stripSensitiveDatasourceForm } from "../lib/datasourceFormSecurity";
 import {
   buildDatasourceCreatePayload,
   buildDatasourceTestPayload,
   buildDatasourceUpdatePayload,
   type DatasourceFormShape,
 } from "../lib/datasourcePayload";
-import { StatusIndicator } from "../components/StatusIndicator";
-import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
-import { useToast } from "../components/Toast";
-
-type PageMode = "detail" | "create" | "edit";
-type ActionState = "idle" | "testing" | "saving" | "syncing" | "deleting";
-type ToastType = "success" | "warning" | "info";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -31,57 +37,9 @@ interface DataSourcesPageProps {
   onRefreshDatasources: () => Promise<void>;
   initialShowAddForm?: boolean;
   datasources: DataSource[];
-  /** Consolidated CRUD actions. Falls back to `api` module defaults when omitted. */
   actions?: DataSourceActions;
+  chrome?: "page" | "workspace";
 }
-
-const emptyForm = () => ({
-  db_type: "mysql" as string,
-  name: "",
-  host: "",
-  port: 3306 as number,
-  database_name: "",
-  username: "",
-  password: "",
-  is_read_only: false,
-  env: "dev" as string,
-  ssh_enabled: false,
-  ssh_host: "",
-  ssh_port: 22,
-  ssh_username: "",
-  ssh_password: "",
-  ssh_pkey_path: "",
-  ssh_pkey_passphrase: "",
-  ssl_enabled: false,
-  ssl_ca_path: "",
-  ssl_cert_path: "",
-  ssl_key_path: "",
-  ssl_verify_identity: true,
-});
-
-const formFromDataSource = (ds: DataSource) => ({
-  db_type: ds.db_type || "mysql",
-  name: ds.name || "",
-  host: ds.host || "",
-  port: ds.port || (ds.db_type === "postgresql" ? 5432 : ds.db_type === "sqlite" ? 0 : 3306),
-  database_name: ds.database_name || "",
-  username: ds.username || "",
-  password: "",
-  is_read_only: Boolean(ds.is_read_only),
-  env: ds.env || "dev",
-  ssh_enabled: Boolean(ds.ssh_enabled),
-  ssh_host: ds.ssh_host || "",
-  ssh_port: ds.ssh_port || 22,
-  ssh_username: ds.ssh_username || "",
-  ssh_password: "",
-  ssh_pkey_path: ds.ssh_pkey_path || "",
-  ssh_pkey_passphrase: "",
-  ssl_enabled: Boolean(ds.ssl_enabled),
-  ssl_ca_path: ds.ssl_ca_path || "",
-  ssl_cert_path: ds.ssl_cert_path || "",
-  ssl_key_path: ds.ssl_key_path || "",
-  ssl_verify_identity: ds.ssl_verify_identity !== false,
-});
 
 const firstSchemaSyncWarning = (result: unknown): string | null => {
   const syncResult = result as SchemaSyncResult | null | undefined;
@@ -106,7 +64,10 @@ const aiEnrichSyncMessage = (result: unknown): { text: string; type: ToastType }
   return { text: `AI 语义增强未完成：${reason}`, type: "warning" };
 };
 
-const schemaSyncToast = (baseMessage: string, result: unknown): { message: string; type: ToastType; inline: string | null } => {
+const schemaSyncToast = (
+  baseMessage: string,
+  result: unknown,
+): { message: string; type: ToastType; inline: string | null } => {
   const warning = firstSchemaSyncWarning(result);
   const enrich = aiEnrichSyncMessage(result);
   const type = warning || enrich?.type === "warning" ? "warning" : "success";
@@ -118,6 +79,21 @@ const schemaSyncToast = (baseMessage: string, result: unknown): { message: strin
   };
 };
 
+const schemaSyncOptions = (aiEnrich: boolean): SchemaSyncOptions | undefined => {
+  if (!aiEnrich) return undefined;
+  const llm = getStoredApiConfig();
+  const options: SchemaSyncOptions = { ai_enrich: true };
+  const apiKey = llm.apiKey.trim();
+  const apiBase = llm.apiBase.trim();
+  const modelName = llm.modelName.trim();
+  if (apiKey) options.api_key = apiKey;
+  if (apiKey || modelName) {
+    if (apiBase) options.api_base = apiBase;
+    if (modelName) options.model_name = modelName;
+  }
+  return options;
+};
+
 export const DataSourcesPage = ({
   onSelectDataSource,
   activeDataSource,
@@ -126,37 +102,93 @@ export const DataSourcesPage = ({
   initialShowAddForm,
   datasources,
   actions,
+  chrome = "page",
 }: DataSourcesPageProps) => {
   const toast = useToast();
   const createDatasource = actions?.createDatasource;
   const updateDatasource = actions?.updateDatasource;
   const deleteDatasource = actions?.deleteDatasource;
   const syncSchema = actions?.syncSchema;
+
   const [selectedId, setSelectedId] = useState("");
   const [mode, setMode] = useState<PageMode>(initialShowAddForm ? "create" : "detail");
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState<DatasourceFormState>(emptyDatasourceForm());
   const [search, setSearch] = useState("");
   const [formError, setFormError] = useState("");
   const [actionState, setActionState] = useState<ActionState>("idle");
   const [syncAiEnrich, setSyncAiEnrich] = useState(false);
   const [lastSyncFeedback, setLastSyncFeedback] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{
-    status: "idle" | "testing" | "success" | "error";
-    message: string;
-    details?: { serverVersion?: string; readonly?: boolean; tablesCount?: number };
-  }>({ status: "idle", message: "" });
+  const [testResult, setTestResult] = useState<ConnectionTestResultState>({ status: "idle", message: "" });
   const [confirmDetails, setConfirmDetails] = useState<ConfirmationDetails | null>(null);
+  const [prevInitialShowAddForm, setPrevInitialShowAddForm] = useState(initialShowAddForm);
+  const preferredIdRef = useRef<string | null>(null);
 
-  // Semantic layer states
-  const [activeTab, setActiveTab] = useState<"info">("info");
-  const selected = datasources.find((d) => d.id === selectedId) || null;
+  const selected = datasources.find((datasource) => datasource.id === selectedId) || null;
+
+  const loadDatasources = async (preferredId?: string) => {
+    if (preferredId) {
+      preferredIdRef.current = preferredId;
+    }
+    await onRefreshDatasources();
+  };
+
+  useEffect(() => {
+    if (initialShowAddForm !== prevInitialShowAddForm) {
+      setPrevInitialShowAddForm(initialShowAddForm);
+      if (initialShowAddForm) {
+        setMode("create");
+        setForm(emptyDatasourceForm());
+        setFormError("");
+        setTestResult({ status: "idle", message: "" });
+      } else {
+        setMode("detail");
+      }
+    }
+  }, [initialShowAddForm, prevInitialShowAddForm]);
+
+  useEffect(() => {
+    let preferredId: string | null = null;
+    if (preferredIdRef.current !== null) {
+      preferredId = preferredIdRef.current;
+      preferredIdRef.current = null;
+    }
+    setSelectedId((current) => {
+      if (preferredId !== null && datasources.some((item) => item.id === preferredId)) return preferredId;
+      if (current && datasources.some((item) => item.id === current)) return current;
+      if (activeDataSource && datasources.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
+      return datasources[0]?.id || "";
+    });
+  }, [datasources, activeDataSource]);
+
+  useEffect(() => {
+    void onRefreshDatasources();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id]);
+
+  const startCreate = () => {
+    setMode("create");
+    setForm(emptyDatasourceForm());
+    setFormError("");
+    setTestResult({ status: "idle", message: "" });
+  };
+
+  const startEdit = (datasource: DataSource) => {
+    setMode("edit");
+    setForm(formFromDataSource(datasource));
+    setFormError("");
+    setTestResult({ status: "idle", message: "" });
+  };
+
+  const updateForm = (key: keyof DatasourceFormState, value: string | number | boolean) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
 
   const handleSyncSchema = async () => {
     if (!selectedId || actionState !== "idle") return;
     try {
       setActionState("syncing");
       const syncFn = syncSchema || api.syncSchema;
-      const syncResult = await syncFn(selectedId, syncAiEnrich ? { ai_enrich: true } : undefined);
+      const syncResult = await syncFn(selectedId, schemaSyncOptions(syncAiEnrich));
       await loadDatasources(selectedId);
       await onRefreshDatasources();
       const feedback = schemaSyncToast("表结构已同步", syncResult);
@@ -169,107 +201,52 @@ export const DataSourcesPage = ({
     }
   };
 
-
-  const [prevInitialShowAddForm, setPrevInitialShowAddForm] = useState(initialShowAddForm);
-  useEffect(() => {
-    if (initialShowAddForm !== prevInitialShowAddForm) {
-      setPrevInitialShowAddForm(initialShowAddForm);
-      if (initialShowAddForm) {
-        setMode("create");
-        setForm(emptyForm());
-        setFormError("");
-        setTestResult({ status: "idle", message: "" });
-      } else {
-        setMode("detail");
-      }
-    }
-  }, [initialShowAddForm, prevInitialShowAddForm]);
-
-
-  // Ref to carry preferredId from loadDatasources → useEffect, avoiding a
-  // race between the explicit setSelectedId call and the datasources-change
-  // effect that also updates selectedId.
-  const preferredIdRef = useRef<string | null>(null);
-
-  const loadDatasources = async (preferredId?: string) => {
-    if (preferredId) {
-      preferredIdRef.current = preferredId;
-    }
-    await onRefreshDatasources();
-  };
-
-  useEffect(() => {
-    let preferredId: string | null = null;
-    if (preferredIdRef.current !== null) {
-      preferredId = preferredIdRef.current;
-      preferredIdRef.current = null;
-    }
-    setSelectedId((current) => {
-      if (preferredId !== null) {
-        if (datasources.some((item) => item.id === preferredId)) return preferredId;
-      }
-      if (current && datasources.some((item) => item.id === current)) return current;
-      if (activeDataSource && datasources.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
-      return datasources[0]?.id || "";
-    });
-  }, [datasources, activeDataSource]);
-
-  useEffect(() => {
-    void onRefreshDatasources();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProject?.id]);
-
-  function startCreate() {
-    setMode("create");
-    setForm(emptyForm());
-    setFormError("");
-    setTestResult({ status: "idle", message: "" });
-  }
-
-  function startEdit(ds: DataSource) {
-    setMode("edit");
-    setForm(formFromDataSource(ds));
-    setFormError("");
-    setTestResult({ status: "idle", message: "" });
-  }
-
-  const updateForm = (key: string, value: string | number | boolean) => {
-    setForm((c) => ({ ...c, [key]: value }));
-  };
-
-  const handleTestConnection = async () => {
-    if (form.db_type === "sqlite" && !form.database_name) {
+  const handleTestConnection = async (nextForm: DatasourceFormState = form) => {
+    if (nextForm.db_type === "sqlite" && !nextForm.database_name) {
       setTestResult({ status: "error", message: "请先填写 SQLite 数据库文件路径。" });
       return;
     }
-    if (form.db_type !== "sqlite" && (!form.host || !form.database_name || !form.username)) {
+    if (nextForm.db_type !== "sqlite" && (!nextForm.host || !nextForm.database_name || !nextForm.username)) {
       setTestResult({ status: "error", message: "请先填写主机、数据库名和用户名。" });
       return;
     }
     setTestResult({ status: "testing", message: "正在测试连接..." });
     try {
-      const result = await api.testConnection(buildDatasourceTestPayload(form as DatasourceFormShape));
+      const result = await api.testConnection(buildDatasourceTestPayload(nextForm as DatasourceFormShape));
       setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
     } catch (error: unknown) {
       setTestResult({ status: "error", message: (error as Error).message ?? "连接测试失败。" });
     }
   };
 
-  const handleCreate = async () => {
-    if (!validateForm()) return;
+  const handleCreate = async (nextForm: DatasourceFormState = form) => {
     try {
       setActionState("saving");
       setFormError("");
       const createFn = createDatasource || api.createDatasource;
       const syncFn = syncSchema || api.syncSchema;
-      const created = await createFn(
-        buildDatasourceCreatePayload(form as DatasourceFormShape, activeProject?.id),
-      );
-      const syncResult = await syncFn(created.id, syncAiEnrich ? { ai_enrich: true } : undefined);
+      const created = await createFn(buildDatasourceCreatePayload(nextForm as DatasourceFormShape, activeProject?.id));
       setMode("detail");
+      setForm(emptyDatasourceForm());
+
+      let syncResult: unknown = null;
+      let syncError: unknown = null;
+      try {
+        syncResult = await syncFn(created.id, schemaSyncOptions(syncAiEnrich));
+      } catch (error: unknown) {
+        syncError = error;
+      }
+
       await loadDatasources(created.id);
       await onRefreshDatasources();
       onSelectDataSource(created);
+      if (syncError) {
+        const message = (syncError as Error).message || "Schema 同步失败";
+        setLastSyncFeedback(`Schema 同步失败：${message}`);
+        toast.toast(`数据源已保存，但 Schema 同步失败：${message}`, "warning");
+        return;
+      }
+
       const feedback = schemaSyncToast("数据源创建成功", syncResult);
       setLastSyncFeedback(feedback.inline);
       toast.toast(feedback.message, feedback.type);
@@ -280,14 +257,14 @@ export const DataSourcesPage = ({
     }
   };
 
-  const handleUpdate = async () => {
-    if (!validateForm()) return;
+  const handleUpdate = async (nextForm: DatasourceFormState = form) => {
     if (!selected) return;
     try {
       setActionState("saving");
       setFormError("");
       const updateFn = updateDatasource || api.updateDatasource;
-      await updateFn(selected.id, buildDatasourceUpdatePayload(form as DatasourceFormShape));
+      await updateFn(selected.id, buildDatasourceUpdatePayload(nextForm as DatasourceFormShape));
+      setForm((current) => stripSensitiveDatasourceForm(current));
       setMode("detail");
       await loadDatasources(selected.id);
       await onRefreshDatasources();
@@ -299,30 +276,20 @@ export const DataSourcesPage = ({
     }
   };
 
-  const validateForm = () => {
-    if (form.db_type === "sqlite") {
-      if (!form.name || !form.database_name) { setFormError("请完整填写连接名称和数据库路径。"); return false; }
-    } else {
-      if (!form.name || !form.host || !form.database_name || !form.username) { setFormError("请完整填写必填项。"); return false; }
-    }
-    return true;
-  };
-
   const handleDelete = async () => {
     if (!selected) return;
     try {
       setActionState("deleting");
       const deleteFn = deleteDatasource || api.deleteDatasource;
       const res = await deleteFn(selected.id);
-      const raw = res as unknown as Record<string, unknown> | null;
+      const raw = res as Record<string, unknown> | null;
       if (raw && raw.requires_confirmation) {
-        const confirmation = raw;
         setConfirmDetails({
-          confirm_token: confirmation.confirm_token as string,
-          impact_summary: confirmation.impact_summary as string,
-          expected_confirm_text: confirmation.expected_confirm_text as string,
+          confirm_token: raw.confirm_token as string,
+          impact_summary: raw.impact_summary as string,
+          expected_confirm_text: raw.expected_confirm_text as string,
           onConfirm: async (text: string) => {
-            await deleteFn(selected.id, { token: confirmation.confirm_token as string, text });
+            await deleteFn(selected.id, { token: raw.confirm_token as string, text });
             setConfirmDetails(null);
             await loadDatasources();
             await onRefreshDatasources();
@@ -344,339 +311,85 @@ export const DataSourcesPage = ({
     }
   };
 
-  const filtered = search
-    ? datasources.filter((d) => d.name.toLowerCase().includes(search.toLowerCase()) || d.host.toLowerCase().includes(search.toLowerCase()))
-    : datasources;
-
-  const healthType = (ds: DataSource) =>
-    ds.last_test_status === "success" ? "success" : ds.last_test_status === "failed" ? "error" : "idle";
-
-  const fmtDate = (v?: string) =>
-    v ? new Date(v).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
-
-  const dbBadge = (ds: DataSource) =>
-    ds.db_type === "postgresql" ? { label: "PG", color: "var(--color-primary)", bg: "var(--color-primary-soft)" }
-    : ds.db_type === "sqlite" ? { label: "Lite", color: "var(--color-text-muted)", bg: "var(--color-border)" }
-    : { label: "MySQL", color: "var(--color-info)", bg: "var(--color-info-soft)" };
-
-  const envBadge = (env?: string) =>
-    env === "prod" ? { label: "生产", color: "var(--color-danger)", bg: "var(--color-danger-soft)" }
-    : env === "test" ? { label: "测试", color: "var(--color-warning)", bg: "var(--color-warning-soft)" }
-    : { label: "开发", color: "var(--color-text-secondary)", bg: "var(--color-border)" };
-
-  const renderDetail = () => {
-    if (!selected) return <div className="hifi-empty-state"><Database size={28} /><p>选择一个数据源查看详情</p></div>;
-    const h = healthType(selected);
-    const syncingStructure = actionState === "syncing";
-    const detailActionBusy = actionState !== "idle";
-    return (
-      <div className="hifi-datasource-detail" style={{ padding: 24, overflow: "auto", display: "flex", flexDirection: "column", height: "100%", gap: 20 }}>
-        {/* Connection Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-light)", paddingBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: dbBadge(selected).bg, display: "flex", alignItems: "center", justifyContent: "center", color: dbBadge(selected).color }}>
-              <Database size={22} />
-            </div>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <h3 style={{ fontSize: "1.15rem", fontWeight: 700, margin: 0, color: "var(--color-text-primary)" }}>{selected.name}</h3>
-                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: dbBadge(selected).color, background: dbBadge(selected).bg, padding: "2px 8px", borderRadius: 6 }}>{dbBadge(selected).label}</span>
-                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: envBadge(selected.env).color, background: envBadge(selected.env).bg, padding: "2px 8px", borderRadius: 6 }}>{envBadge(selected.env).label}</span>
-                {selected.is_read_only && <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary)", background: "var(--color-primary-soft)", padding: "2px 8px", borderRadius: 6 }}>只读</span>}
-              </div>
-              <div style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontFamily: "monospace", marginTop: 4 }}>
-                {selected.db_type === "sqlite" ? selected.database_name : `${selected.host}:${selected.port} / ${selected.database_name}`}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-            <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 6, margin: 0, height: 32, cursor: detailActionBusy ? "not-allowed" : "pointer", fontSize: "0.76rem", fontWeight: 650, color: "var(--color-text-muted)" }}>
-              <input type="checkbox" style={{ width: 14, height: 14, cursor: detailActionBusy ? "not-allowed" : "pointer" }} checked={syncAiEnrich} onChange={(e) => setSyncAiEnrich(e.target.checked)} disabled={detailActionBusy} />
-              AI 语义增强
-            </label>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => { onSelectDataSource(selected); toast.toast(`已激活: ${selected.name}`, "success"); }} disabled={detailActionBusy}>设为当前</button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={() => startEdit(selected)} disabled={detailActionBusy}>编辑</button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem" }} onClick={handleSyncSchema} disabled={detailActionBusy} title="重新读取表、字段、主外键和注释等结构信息">
-              <RefreshCw size={12} className={syncingStructure ? "animate-spin mr-1" : "mr-1"} />
-              {syncingStructure ? "同步中" : "同步结构"}
-            </button>
-            <button type="button" className="hifi-btn hifi-btn-outline" style={{ height: 32, padding: "0 12px", fontSize: "0.78rem", color: "var(--color-danger)" }} onClick={handleDelete} disabled={detailActionBusy}><Trash2 size={12} className="mr-1" /> 删除</button>
-          </div>
-        </div>
-
-        {/* Tab switcher */}
-        <div style={{ display: "flex", gap: 16, borderBottom: "1px solid var(--border-light)" }}>
-          <button 
-            type="button"
-            onClick={() => setActiveTab("info")} 
-            style={{ 
-              padding: "8px 4px 12px", 
-              fontSize: "0.9rem", 
-              borderBottom: activeTab === "info" ? "2px solid var(--color-primary)" : "2px solid transparent", 
-              color: activeTab === "info" ? "var(--color-text-primary)" : "var(--color-text-muted)", 
-              background: "none", 
-              borderTop: "none",
-              borderLeft: "none",
-              borderRight: "none",
-              cursor: "pointer", 
-              fontWeight: activeTab === "info" ? 600 : 500 
-            }}
-          >基本信息</button>
-        </div>
-
-        {activeTab === "info" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Connection Config Details Cards */}
-            <div>
-              <h4 className="field-label" style={{ marginBottom: 10, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>连接配置摘要</h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-                
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>主机地址</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, wordBreak: "break-all" }}>{selected.db_type === "sqlite" ? "N/A (本地文件)" : selected.host || "-"}</div>
-                </div>
-
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>端口</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{selected.db_type === "sqlite" ? "N/A" : selected.port || "-"}</div>
-                </div>
-
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>数据库名</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, wordBreak: "break-all" }}>{selected.database_name || "-"}</div>
-                </div>
-
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>连接用户名</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{selected.db_type === "sqlite" ? "N/A" : selected.username || "-"}</div>
-                </div>
-
-              </div>
-              {lastSyncFeedback && (
-                <div role="status" style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: "var(--bg-secondary)", border: "1px solid var(--border-light)", color: "var(--color-text-secondary)", fontSize: "0.8rem", fontWeight: 600 }}>
-                  {lastSyncFeedback}
-                </div>
-              )}
-            </div>
-
-            {/* Health & Sync Details Cards */}
-            <div>
-              <h4 className="field-label" style={{ marginBottom: 10, fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>状态与同步</h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-                
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>连接状态</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4, display: "flex", alignItems: "center" }}>
-                    {h === "success" ? (
-                      <>
-                        <span style={{ position: "relative", display: "inline-flex", height: 8, width: 8, marginRight: 8, borderRadius: "50%", background: "var(--color-success)" }}>
-                          <span style={{ position: "absolute", inlineSize: "100%", blockSize: "100%", borderRadius: "50%", background: "var(--color-success)", opacity: 0.6, transform: "scale(1.8)" }} />
-                        </span>
-                        <span style={{ color: "var(--color-success)" }}>正常</span>
-                        {selected.last_test_latency_ms ? <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginLeft: 6 }}>({selected.last_test_latency_ms}ms)</span> : null}
-                      </>
-                    ) : h === "error" ? (
-                      <>
-                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-danger)", marginRight: 8 }} />
-                        <span style={{ color: "var(--color-danger)" }}>失败</span>
-                      </>
-                    ) : (
-                      <>
-                        <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--color-border-hover)", marginRight: 8 }} />
-                        <span>未检测</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>数据表数量</div>
-                  <div style={{ fontSize: "1.05rem", color: "var(--color-text-primary)", fontWeight: 700, marginTop: 2 }}>{selected.last_test_tables_count ?? "-"} <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)" }}>张表</span></div>
-                </div>
-
-                <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-light)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>上次结构同步</div>
-                  <div style={{ fontSize: "0.9rem", color: "var(--color-text-primary)", fontWeight: 600, marginTop: 4 }}>{fmtDate(selected.last_sync_at)}</div>
-                </div>
-
-              </div>
-            </div>
-
-            {selected.last_test_error && (
-              <div style={{ 
-                padding: "12px 16px", 
-                borderRadius: 10, 
-                border: "1px solid rgba(239, 68, 68, 0.2)", 
-                backgroundColor: "rgba(239, 68, 68, 0.04)", 
-                fontSize: "0.8rem", 
-                color: "var(--color-danger)",
-                display: "flex",
-                flexDirection: "column",
-                gap: 4
-              }}>
-                <div style={{ fontWeight: 600 }}>连接异常信息:</div>
-                <div style={{ fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{selected.last_test_error}</div>
-              </div>
-            )}
-
-          </div>
-        )}
-      </div>
-    );
-  };
   return (
-    <div className="hifi-tab-pane hifi-datasource-page">
-      <div className="hifi-page-header">
-        <div><h2 className="hifi-page-title">数据源管理</h2></div>
-        <button type="button" className="hifi-btn hifi-btn-primary" onClick={startCreate}><Plus size={13} />新建连接</button>
-      </div>
+    <div className={`hifi-tab-pane ds-page${chrome === "workspace" ? " ds-page--workspace" : ""}`}>
+      {chrome === "workspace" ? (
+        <div className="ds-page-toolbar">
+          <span className="ds-page-toolbar__meta">
+            {datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
+          </span>
+          <Button type="button" onClick={startCreate}>
+            <Plus size={13} />
+            新建连接
+          </Button>
+        </div>
+      ) : (
+        <div className="ds-page-header">
+          <div>
+            <h2 className="ds-page-title">数据源管理</h2>
+          </div>
+          <Button type="button" onClick={startCreate}>
+            <Plus size={13} />
+            新建连接
+          </Button>
+        </div>
+      )}
 
       {datasources.length === 0 && mode !== "create" ? (
-        <div className="hifi-empty-state"><Database size={28} /><h3>暂无数据源连接</h3><p>添加一个数据库连接以开始使用</p><button className="hifi-btn hifi-btn-primary" onClick={startCreate}><Plus size={13} />新建连接</button></div>
+        <EmptyState
+          className="ds-page-empty"
+          icon={<Database size={18} />}
+          title="暂无数据源连接"
+          description="添加一个数据库连接以开始使用"
+          action={
+            <Button type="button" onClick={startCreate}>
+              <Plus size={13} />
+              新建连接
+            </Button>
+          }
+        />
       ) : (
-        <div className="hifi-datasource-console">
-          {/* Left list */}
-          <div className="hifi-datasource-list">
-            <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--hairline)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--bg-secondary)", borderRadius: 6, padding: "4px 8px" }}>
-                <Search size={12} style={{ color: "var(--text-muted)" }} />
-                <input className="hifi-input" style={{ border: "none", background: "transparent", padding: "2px 0", fontSize: "0.78rem" }} placeholder="搜索..." value={search} onChange={(e) => setSearch(e.target.value)} />
-              </div>
-            </div>
-            <div style={{ flex: 1, overflow: "auto", padding: "4px 6px" }}>
-              {filtered.map((ds) => (
-                <button key={ds.id} className={`hifi-datasource-list-item${ds.id === selectedId ? " active" : ""}`} onClick={() => { setMode("detail"); setSelectedId(ds.id); }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <Database size={12} style={{ color: ds.id === selectedId ? "var(--color-primary)" : "var(--text-muted)", flexShrink: 0 }} />
-                    <span style={{ fontSize: "0.8rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ds.name}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 4, marginTop: 2 }}>
-                    <span style={{ fontSize: "0.6rem", color: dbBadge(ds).color }}>{dbBadge(ds).label}</span>
-                    <span style={{ fontSize: "0.6rem", color: envBadge(ds.env).color }}>{envBadge(ds.env).label}</span>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: healthType(ds) === "success" ? "var(--color-success)" : healthType(ds) === "error" ? "var(--color-danger)" : "var(--color-border-hover)", marginLeft: "auto" }} />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Right panel */}
-          <div className="hifi-datasource-detail" style={{ minHeight: 0 }}>
-            {mode === "detail" && renderDetail()}
+        <div className="ds-page-console">
+          <DataSourceList
+            datasources={datasources}
+            selectedId={selectedId}
+            search={search}
+            onSearchChange={setSearch}
+            onSelect={(id) => {
+              setMode("detail");
+              setSelectedId(id);
+            }}
+          />
+          <div className="ds-page-detail-shell">
+            {mode === "detail" && (
+              <DataSourceDetail
+                selected={selected}
+                actionState={actionState}
+                syncAiEnrich={syncAiEnrich}
+                lastSyncFeedback={lastSyncFeedback}
+                onSyncAiEnrichChange={setSyncAiEnrich}
+                onActivate={(datasource) => {
+                  onSelectDataSource(datasource);
+                  toast.toast(`已激活: ${datasource.name}`, "success");
+                }}
+                onEdit={startEdit}
+                onSyncSchema={handleSyncSchema}
+                onDelete={handleDelete}
+              />
+            )}
             {(mode === "create" || mode === "edit") && (
-              <form onSubmit={(e) => e.preventDefault()} className="hifi-card hifi-datasource-form">
-                <h3 className="hifi-card-title">{mode === "create" ? "新增数据源" : "编辑数据源"}</h3>
-                {/* DB type selector */}
-                <div style={{ marginBottom: 20 }}>
-                  <label className="field-label">数据库类型</label>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 6 }}>
-                    {[{ id: "mysql", label: "MySQL", icon: "🐬" }, { id: "postgresql", label: "PostgreSQL", icon: "🐘" }, { id: "sqlite", label: "SQLite", icon: "📁" }].map((item) => (
-                      <button key={item.id} type="button" onClick={() => { updateForm("db_type", item.id); if (item.id === "mysql") updateForm("port", 3306); else if (item.id === "postgresql") updateForm("port", 5432); else updateForm("port", 0); }}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 16px", borderRadius: 8,
-                          border: form.db_type === item.id ? "2px solid var(--color-primary)" : "1px solid var(--border-light)",
-                          background: form.db_type === item.id ? "var(--color-primary-soft)" : "var(--bg-secondary)",
-                          color: form.db_type === item.id ? "var(--color-primary)" : "var(--text-secondary)", fontWeight: form.db_type === item.id ? 600 : 500, cursor: "pointer" }}
-                      ><span>{item.icon}</span><span>{item.label}</span></button>
-                    ))}
-                  </div>
-                </div>
-                {/* Basic fields */}
-                {form.db_type === "sqlite" ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                    <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：本地 SQLite 数据库" /></div>
-                    <div><label className="field-label" htmlFor="ds-sqlite-path">SQLite 数据库文件绝对路径</label><input id="ds-sqlite-path" className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} placeholder="C:\Users\...\mydb.sqlite" /></div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                      <div><label className="field-label" htmlFor="ds-name">连接名称</label><input id="ds-name" className="hifi-input" value={form.name} onChange={(e) => updateForm("name", e.target.value)} placeholder="例：生产只读库" /></div>
-                      <div><label className="field-label">主机地址</label><input className="hifi-input" value={form.host} onChange={(e) => updateForm("host", e.target.value)} placeholder="db.example.com" /></div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "120px 1fr 1fr", gap: 16, marginTop: 16 }}>
-                      <div><label className="field-label">端口</label><input className="hifi-input" type="number" value={form.port} onChange={(e) => updateForm("port", Number(e.target.value) || 3306)} /></div>
-                      <div><label className="field-label">数据库名</label><input className="hifi-input" value={form.database_name} onChange={(e) => updateForm("database_name", e.target.value)} /></div>
-                      <div><label className="field-label">用户名</label><input className="hifi-input" value={form.username} onChange={(e) => updateForm("username", e.target.value)} /></div>
-                    </div>
-                    <div style={{ marginTop: 16 }}><label className="field-label">密码</label><input className="hifi-input" type="password" value={form.password} onChange={(e) => updateForm("password", e.target.value)} placeholder="留空则不修改" /></div>
-                  </>
-                )}
-                {/* Env + read-only */}
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginTop: 16 }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
-                    <label className="field-label" style={{ marginTop: 0 }}>环境标签</label>
-                    <select className="hifi-select" value={form.env} onChange={(e) => updateForm("env", e.target.value)}>
-                      <option value="dev">💻 开发环境 (DEV)</option>
-                      <option value="test">🔬 测试环境 (TEST)</option>
-                      <option value="prod">🚨 生产环境 (PROD)</option>
-                    </select>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", height: 38 }}>
-                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, margin: 0, cursor: "pointer", fontWeight: 650 }}>
-                      <input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.is_read_only} onChange={(e) => updateForm("is_read_only", e.target.checked)} />
-                      启用只读模式
-                    </label>
-                  </div>
-                </div>
-                {/* SSH */}
-                {form.db_type !== "sqlite" && (
-                  <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", margin: 0, fontWeight: 650 }}>
-                      <input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.ssh_enabled} onChange={(e) => updateForm("ssh_enabled", e.target.checked)} />
-                      启用 SSH 隧道连接
-                    </label>
-                  </div>
-                )}
-                {form.db_type !== "sqlite" && form.ssh_enabled && (
-                  <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 1fr", gap: 14 }}>
-                      <div><label className="field-label">SSH 主机</label><input className="hifi-input" value={form.ssh_host} onChange={(e) => updateForm("ssh_host", e.target.value)} /></div>
-                      <div><label className="field-label">SSH 端口</label><input className="hifi-input" type="number" value={form.ssh_port} onChange={(e) => updateForm("ssh_port", Number(e.target.value) || 22)} /></div>
-                      <div><label className="field-label">SSH 用户名</label><input className="hifi-input" value={form.ssh_username} onChange={(e) => updateForm("ssh_username", e.target.value)} /></div>
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <div><label className="field-label">SSH 密码</label><input className="hifi-input" type="password" value={form.ssh_password} onChange={(e) => updateForm("ssh_password", e.target.value)} /></div>
-                      <div><label className="field-label">SSH 私钥路径</label><input className="hifi-input" value={form.ssh_pkey_path} onChange={(e) => updateForm("ssh_pkey_path", e.target.value)} /></div>
-                    </div>
-                    {form.ssh_pkey_path && <div><label className="field-label">私钥密码</label><input className="hifi-input" type="password" value={form.ssh_pkey_passphrase} onChange={(e) => updateForm("ssh_pkey_passphrase", e.target.value)} /></div>}
-                  </div>
-                )}
-                {/* SSL */}
-                {form.db_type === "mysql" && (
-                  <div style={{ marginTop: 20, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
-                    <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", margin: 0, fontWeight: 650 }}><input type="checkbox" style={{ width: 16, height: 16, cursor: "pointer" }} checked={form.ssl_enabled} onChange={(e) => updateForm("ssl_enabled", e.target.checked)} /> 启用 MySQL SSL/TLS</label>
-                  </div>
-                )}
-                {form.db_type === "mysql" && form.ssl_enabled && (
-                  <div style={{ marginTop: 16, padding: 18, background: "var(--bg-primary)", borderRadius: 10, border: "1px dashed var(--border-light)", display: "flex", flexDirection: "column", gap: 14 }}>
-                    <div><label className="field-label">CA 证书路径</label><input className="hifi-input" value={form.ssl_ca_path} onChange={(e) => updateForm("ssl_ca_path", e.target.value)} /></div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                      <div><label className="field-label">客户端证书</label><input className="hifi-input" value={form.ssl_cert_path} onChange={(e) => updateForm("ssl_cert_path", e.target.value)} /></div>
-                      <div><label className="field-label">客户端私钥</label><input className="hifi-input" value={form.ssl_key_path} onChange={(e) => updateForm("ssl_key_path", e.target.value)} /></div>
-                    </div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "0.82rem", fontWeight: 600, margin: 0 }}><input type="checkbox" style={{ width: 14, height: 14, cursor: "pointer" }} checked={form.ssl_verify_identity} onChange={(e) => updateForm("ssl_verify_identity", e.target.checked)} /> 校验证书主机名</label>
-                  </div>
-                )}
-                {/* Error / Test result */}
-                {formError && <div style={{ marginTop: 12 }}><StatusIndicator type="error" label={formError} /></div>}
-                {testResult.status !== "idle" && (
-                  <div style={{ marginTop: 16, padding: 14, borderRadius: 8, borderLeft: "3px solid", borderLeftColor: testResult.status === "success" ? "var(--color-success)" : testResult.status === "error" ? "var(--color-danger)" : "var(--color-warning)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: "0.88rem" }}>
-                      {testResult.status === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}{testResult.message}
-                    </div>
-                  </div>
-                )}
-                <div style={{ marginTop: 16, borderTop: "1px solid var(--border-light)", paddingTop: 14 }}>
-                  <label className="field-label" style={{ display: "flex", alignItems: "center", gap: 8, cursor: actionState !== "idle" ? "not-allowed" : "pointer", margin: 0, fontWeight: 650 }}>
-                    <input type="checkbox" style={{ width: 16, height: 16, cursor: actionState !== "idle" ? "not-allowed" : "pointer" }} checked={syncAiEnrich} onChange={(e) => setSyncAiEnrich(e.target.checked)} disabled={actionState !== "idle"} />
-                    AI 语义增强
-                  </label>
-                </div>
-                <div className="hifi-form-actions">
-                  <button type="button" className="hifi-btn hifi-btn-outline" onClick={handleTestConnection} disabled={actionState !== "idle"}>测试连接</button>
-                  <button type="button" className="hifi-btn hifi-btn-primary" onClick={mode === "create" ? handleCreate : handleUpdate} disabled={actionState !== "idle"}>
-                    {actionState === "saving" ? "保存中..." : (mode === "create" ? "保存并同步 Schema" : "保存修改")}
-                  </button>
-                </div>
-              </form>
+              <DataSourceForm
+                mode={mode}
+                form={form}
+                formError={formError}
+                testResult={testResult}
+                actionState={actionState}
+                syncAiEnrich={syncAiEnrich}
+                onSyncAiEnrichChange={setSyncAiEnrich}
+                updateForm={updateForm}
+                onTestConnection={handleTestConnection}
+                onSubmit={mode === "create" ? handleCreate : handleUpdate}
+              />
             )}
           </div>
         </div>

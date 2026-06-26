@@ -24,10 +24,8 @@
 .ds-tree-chevron-right { transform: rotate(90deg); }
 
 .ds-tree-main {
-  width: var(--sidebar-width, 260px);
-  flex-shrink: 0;
-  min-width: 180px;
-  max-width: 480px;
+  width: 100%;
+  min-width: 0;
   background: var(--sidebar-bg);
 }
 
@@ -60,11 +58,59 @@
   padding: 2px;
 }
 
+.ds-tree-icon-btn:hover {
+  color: var(--color-primary, #7667f2);
+}
+
+.ds-tree-icon-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #7667f2) 26%, transparent);
+  outline-offset: 2px;
+}
+
+.ds-tree-refresh-icon {
+  color: var(--color-text-secondary);
+}
+
+.ds-tree-refresh-icon.is-loading {
+  animation: ds-tree-spin 0.8s linear infinite;
+}
+
+@keyframes ds-tree-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .ds-db-select-wrapper { position: relative; }
 
 .ds-db-select-clickable { cursor: pointer; }
 
+.ds-db-select-trigger {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.ds-db-select-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-primary, #7667f2) 22%, transparent);
+  outline-offset: 2px;
+}
+
+.ds-db-select-empty {
+  opacity: 0.72;
+}
+
+.ds-db-icon {
+  color: var(--color-primary, #4f7cff);
+}
+
+.ds-db-empty-icon {
+  color: var(--color-text-tertiary, #94a3b8);
+}
+
 .ds-db-chevron {
+  color: var(--color-text-tertiary, #94a3b8);
   transition: transform 0.15s;
 }
 .ds-db-chevron-open {
@@ -72,17 +118,21 @@
 }
 
 .ds-db-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 4px;
-  right: 4px;
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
   z-index: 50;
+  width: var(--radix-dropdown-menu-trigger-width);
+  min-width: 180px;
+  max-height: min(320px, var(--radix-dropdown-menu-content-available-height));
   background: var(--bg-surface, #fff);
   border: 1px solid var(--border-medium, #e5e7eb);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  margin-top: 4px;
-  overflow: hidden;
+  margin-top: 0;
+  overflow: auto;
+  padding: 4px;
 }
 
 .ds-db-dropdown-item {
@@ -90,8 +140,10 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  cursor: pointer;
+  cursor: default;
   font-size: var(--ui-font-control);
+  border-radius: 6px;
+  outline: none;
 }
 
 .ds-db-dropdown-item.active {
@@ -102,6 +154,16 @@
 .ds-db-dropdown-item:not(.active) {
   background: transparent;
   color: var(--color-text-primary, #111827);
+}
+
+.ds-db-dropdown-item:focus,
+.ds-db-dropdown-item:hover {
+  background: var(--color-primary-soft, rgba(118, 103, 242, 0.08));
+  color: var(--color-text-primary, #111827);
+}
+
+.ds-db-item-icon {
+  color: var(--color-text-tertiary, #94a3b8);
 }
 
 .ds-db-item-info { flex: 1; }
@@ -117,9 +179,26 @@
   cursor: pointer;
 }
 
+.ds-tree-group-label {
+  font-weight: 500;
+  color: var(--color-text-secondary, #64748b);
+}
+
 .ds-tree-table-row {
   margin-left: 12px;
   cursor: grab;
+}
+
+.ds-tree-table-icon {
+  margin-right: 6px;
+  opacity: 0.7;
+}
+
+.ds-tree-table-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ds-group-chevron {
@@ -127,6 +206,51 @@
 }
 .ds-group-chevron-collapsed {
   transform: rotate(-90deg);
+}
+
+.ds-group-chevron-muted {
+  margin-right: 4px;
+  color: var(--color-text-tertiary, #94a3b8);
+}
+
+.ds-schema-node {
+  cursor: pointer;
+  font-weight: 650;
+  color: var(--color-text-primary, #111827);
+}
+
+.ds-schema-chevron {
+  margin-right: 4px;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.ds-schema-icon {
+  margin-right: 4px;
+  color: var(--color-primary, #4f7cff);
+}
+
+.ds-tree-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ds-tree-scroll-area .dbfox-scroll-area-viewport {
+  padding: 6px 8px;
+}
+
+.ds-tree-status {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  color: var(--color-text-tertiary, #94a3b8);
+  font-size: var(--ui-font-caption);
+}
+
+.ds-tree-status--error {
+  color: var(--danger-fg, #dc2626);
+  background: var(--danger-soft, #fef2f2);
 }
 
 .ds-sidebar-quick-nav {
@@ -148,7 +272,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  font-size: 13.5px;
+  font-size: var(--ui-font-control);
   font-weight: 500;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -169,4 +293,16 @@
 .ds-quick-nav-item:focus-visible {
   outline: 2px solid var(--color-primary-soft, rgba(118, 103, 242, 0.2));
   outline-offset: 1px;
+}
+
+.ds-quick-nav-icon {
+  flex: 0 0 auto;
+}
+
+.ds-quick-nav-icon--smart {
+  color: #a855f7;
+}
+
+.ds-quick-nav-icon--history {
+  color: #6366f1;
 }

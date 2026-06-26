@@ -22,6 +22,8 @@ interface DatasourceActions {
   setActiveDatasourceId: (id: string) => void;
   loadDatasources: () => Promise<void>;
   refreshSchema: () => Promise<void>;
+  loadTableColumns: (tableId: string) => Promise<EngineColumn[]>;
+  loadColumnsForTables: (tableIds: string[]) => Promise<Record<string, EngineColumn[]>>;
   createDatasource: (params: DataSourceCreateParams) => Promise<DataSource>;
   updateDatasource: (id: string, params: DataSourceUpdateParams) => Promise<DataSource>;
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => Promise<unknown>;
@@ -32,6 +34,7 @@ interface DatasourceActions {
 export type DatasourceStore = DatasourceState & DatasourceActions;
 
 const DATASOURCE_LOAD_RETRY_DELAYS_MS = [300, 900, 1500, 3000, 5000];
+const COLUMN_LOAD_CONCURRENCY = 4;
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -42,6 +45,29 @@ function isTransientEngineFetchError(error: unknown) {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return message.includes("failed to fetch") || message.includes("networkerror") || message.includes("load failed");
+}
+
+async function loadColumnsWithLimit(tables: EngineSchemaTable[]) {
+  const results: Array<{ name: string; columns: EngineColumn[] }> = new Array(tables.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tables.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const table = tables[index];
+      try {
+        const columns = await listColumns(table.id);
+        results[index] = { name: table.table_name, columns };
+      } catch {
+        results[index] = { name: table.table_name, columns: [] };
+      }
+    }
+  }
+
+  const workerCount = Math.min(COLUMN_LOAD_CONCURRENCY, tables.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
@@ -107,12 +133,41 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
     }
     set({ loadingSchema: true });
     try {
-      set({ tables: await listTables(activeDatasourceId) });
+      set({ tables: await listTables(activeDatasourceId), tableColumns: {} });
     } catch {
       // Schema refresh is best-effort
     } finally {
       set({ loadingSchema: false });
     }
+  },
+
+  loadTableColumns: async (tableId: string) => {
+    const table = get().tables.find((item) => item.id === tableId);
+    if (!table) return [];
+    const cached = get().tableColumns[table.table_name];
+    if (cached) return cached;
+
+    const columns = await listColumns(table.id);
+    set((state) => ({
+      tableColumns: {
+        ...state.tableColumns,
+        [table.table_name]: columns,
+      },
+    }));
+    return columns;
+  },
+
+  loadColumnsForTables: async (tableIds: string[]) => {
+    const requested = new Set(tableIds);
+    const targetTables = get().tables.filter((table) => requested.has(table.id));
+    const missingTables = targetTables.filter((table) => !get().tableColumns[table.table_name]);
+    const results = await loadColumnsWithLimit(missingTables);
+    const nextColumns: Record<string, EngineColumn[]> = { ...get().tableColumns };
+    for (const { name, columns } of results) {
+      nextColumns[name] = columns;
+    }
+    set({ tableColumns: nextColumns });
+    return nextColumns;
   },
 
   createDatasource: async (params) => {
@@ -145,7 +200,7 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
     if (id === get().activeDatasourceId) {
       set({ loadingSchema: true });
       try {
-        set({ tables: await listTables(id) });
+        set({ tables: await listTables(id), tableColumns: {} });
       } catch {
         // Best-effort
       } finally {
@@ -174,12 +229,12 @@ useDatasourceStore.subscribe((state, prev) => {
   const targetId = state.activeDatasourceId;
   activeTablesFetchId = targetId;
 
-  useDatasourceStore.setState({ loadingSchema: true, schemaError: "" });
+  useDatasourceStore.setState({ loadingSchema: true, schemaError: "", tableColumns: {} });
 
   listTables(targetId)
     .then((result) => {
       if (activeTablesFetchId === targetId) {
-        useDatasourceStore.setState({ tables: result, schemaError: "" });
+        useDatasourceStore.setState({ tables: result, tableColumns: {}, schemaError: "" });
       }
     })
     .catch((err) => {
@@ -194,37 +249,4 @@ useDatasourceStore.subscribe((state, prev) => {
         useDatasourceStore.setState({ loadingSchema: false });
       }
     });
-});
-
-let activeColumnsFetchTables: EngineSchemaTable[] | null = null;
-
-// Side-effect: fetch columns when tables change
-useDatasourceStore.subscribe((state, prev) => {
-  if (state.tables === prev.tables) return;
-  if (state.tables.length === 0) {
-    useDatasourceStore.setState({ tableColumns: {} });
-    return;
-  }
-  const currentTables = state.tables;
-  activeColumnsFetchTables = currentTables;
-
-  const fetchColumns = async () => {
-    const results = await Promise.all(
-      currentTables.map(async (table) => {
-        try {
-          const columns = await listColumns(table.id);
-          return { name: table.table_name, columns };
-        } catch {
-          return { name: table.table_name, columns: [] as EngineColumn[] };
-        }
-      }),
-    );
-    if (activeColumnsFetchTables !== currentTables) return;
-    const cols: Record<string, EngineColumn[]> = {};
-    for (const { name, columns } of results) {
-      cols[name] = columns;
-    }
-    useDatasourceStore.setState({ tableColumns: cols });
-  };
-  fetchColumns();
 });
