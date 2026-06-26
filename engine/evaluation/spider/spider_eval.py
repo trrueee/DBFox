@@ -5,7 +5,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_examples
 from engine.evaluation.spider.sql_prediction_extractor import extract_final_sql
@@ -242,6 +242,7 @@ def create_dbfox_sqlite_run_fn(
     model_name: str | None = None,
     execute: bool = True,
     max_steps: int = 20,
+    pre_run: Callable[[Any, str], None] | None = None,
 ) -> Any:
     """Return a run_fn backed by DBFoxAgentRuntime for Spider SQLite DBs.
 
@@ -254,14 +255,16 @@ def create_dbfox_sqlite_run_fn(
     def _run(example: SpiderExample) -> tuple[Any, list[dict[str, Any]], int, str, list[str]]:
         import time as _time
         start = _time.monotonic()
+        events_payload: list[dict[str, Any]] = []
 
         datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
+        if pre_run is not None:
+            _append_pre_run_events(events_payload, pre_run(db_session, datasource_id))
 
         from engine.agent import DBFoxAgentRuntime
         from engine.agent_core.types import AgentRunRequest
 
         runtime = DBFoxAgentRuntime(db_session)
-        events_payload: list[dict[str, Any]] = []
         response = None
 
         req = AgentRunRequest(
@@ -287,6 +290,16 @@ def create_dbfox_sqlite_run_fn(
         return response, events_payload, latency, datasource_id, synced_tables
 
     return _run
+
+
+def _append_pre_run_events(events_payload: list[dict[str, Any]], pre_run_result: Any) -> None:
+    if isinstance(pre_run_result, dict):
+        events_payload.append(pre_run_result)
+        return
+    if isinstance(pre_run_result, (list, tuple)):
+        for item in pre_run_result:
+            if isinstance(item, dict):
+                events_payload.append(item)
 
 
 def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) -> tuple[str, list[str]]:

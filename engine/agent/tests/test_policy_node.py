@@ -176,4 +176,97 @@ def test_apply_policy_creates_approval_through_event_store(monkeypatch):
     assert result["status"] == "waiting_approval"
     assert result["pending_approval"]["id"] == "approval-event-store"
     assert result["pending_approval"]["tool_call_id"] == "call_approval"
+    assert result["pending_approval"]["requested_action"]["args"]["safe_sql"] == "SELECT 1"
+    assert result["pending_approval"]["requested_action"]["args"]["ignored_model_sql"] == "SELECT 1"
     assert store.created_approvals[0]["run_id"] == "run-policy-approval"
+
+
+def test_apply_policy_allows_validated_sql_with_trailing_semicolon_difference():
+    registry = ToolRegistry().register(
+        PolicyNodeTestTool(
+            "sql.execute_readonly",
+            ToolPolicy(side_effect="read", risk_level="warning", requires_validated_sql=True),
+        )
+    )
+    message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "sql.execute_readonly",
+                "args": {"sql": " SELECT  id  FROM users ; "},
+                "id": "call_sql",
+            },
+        ],
+    )
+
+    result = apply_policy(
+        {
+            "messages": [message],
+            "allowed_tool_groups": ["sql"],
+            "execution_mode": "user_requested_read",
+            "execute": True,
+            "safety": {
+                "can_execute": True,
+                "safe_sql": "SELECT id FROM users",
+                "original_sql": "SELECT id FROM users",
+                "blocked_reasons": [],
+            },
+        },
+        _config(registry),
+    )
+
+    assert result["allowed_tool_calls"] == [
+        {
+            "name": "sql.execute_readonly",
+            "args": {"ignored_model_sql": "SELECT  id  FROM users ;"},
+            "id": "call_sql",
+        }
+    ]
+    assert result.get("blocked_tool_calls") is None
+
+
+def test_apply_policy_strips_model_sql_from_execute_readonly_call():
+    registry = ToolRegistry().register(
+        PolicyNodeTestTool(
+            "sql.execute_readonly",
+            ToolPolicy(side_effect="read", risk_level="warning", requires_validated_sql=True),
+        )
+    )
+    message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "sql.execute_readonly",
+                "args": {"sql": "SELECT wrong_column FROM wrong_table", "question": "count users"},
+                "id": "call_sql",
+            },
+        ],
+    )
+
+    result = apply_policy(
+        {
+            "messages": [message],
+            "allowed_tool_groups": ["sql"],
+            "execution_mode": "user_requested_read",
+            "execute": True,
+            "safety": {
+                "can_execute": True,
+                "safe_sql": "SELECT COUNT(*) AS total_users FROM users",
+                "original_sql": "SELECT COUNT(*) AS total_users FROM users",
+                "blocked_reasons": [],
+            },
+        },
+        _config(registry),
+    )
+
+    assert result["allowed_tool_calls"] == [
+        {
+            "name": "sql.execute_readonly",
+            "args": {
+                "question": "count users",
+                "ignored_model_sql": "SELECT wrong_column FROM wrong_table",
+            },
+            "id": "call_sql",
+        }
+    ]
+    assert result.get("blocked_tool_calls") is None

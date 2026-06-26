@@ -417,6 +417,37 @@ def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypat
     ]
 
 
+def test_service_initial_state_includes_environment_profile_and_database_map(
+    monkeypatch, db_session, test_datasource
+):
+    from engine.schema_sync import sync_schema
+
+    sync_schema(db_session, test_datasource.id)
+    monkeypatch.setattr(
+        "engine.agent_core.workspace_context.build_agent_context_bundle",
+        lambda _db, _req: {"context_summary": "Datasource demo"},
+    )
+    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    service.db = db_session
+    service.memory_projection = SimpleNamespace(
+        load_session_memory=lambda _session_id: None,
+        list_reusable_sqls=lambda **_kwargs: [],
+    )
+
+    state = service._initial_state(
+        AgentRunRequest(datasource_id=test_datasource.id, question="count orders"),
+        "run-env",
+        "session-env",
+    )
+
+    assert state["environment_profile"]["dialect"] == "sqlite"
+    assert state["environment_profile"]["catalog_status"] == "fresh"
+    assert state["environment_profile"]["table_count"] > 0
+    assert state["database_map"]["tables"]
+    assert state["working"]["environment_profile"]["dialect"] == "sqlite"
+    assert state["working"]["database_map"]["tables"]
+
+
 def test_service_initial_state_exposes_state_namespaces(monkeypatch):
     monkeypatch.setattr(
         "engine.agent_core.workspace_context.build_agent_context_bundle",

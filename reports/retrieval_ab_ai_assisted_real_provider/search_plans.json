@@ -1,0 +1,222 @@
+[
+  {
+    "case_id": "spider_tiny_school_001",
+    "db_id": "tiny_school",
+    "question": "How many students are there?",
+    "search_expressions": [
+      "students",
+      "student count",
+      "num_students",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_002",
+    "db_id": "tiny_school",
+    "question": "What is the average score?",
+    "search_expressions": [
+      "average score",
+      "score",
+      "avg",
+      "grade"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_003",
+    "db_id": "tiny_school",
+    "question": "List all student names.",
+    "search_expressions": [
+      "student name",
+      "students",
+      "name",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_004",
+    "db_id": "tiny_school",
+    "question": "Show the highest score for each student.",
+    "search_expressions": [
+      "highest score",
+      "student score",
+      "max score by student",
+      "student_id score"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_005",
+    "db_id": "tiny_school",
+    "question": "Who scored above 85?",
+    "search_expressions": [
+      "scored above 85",
+      "score",
+      "student",
+      "grade"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_006",
+    "db_id": "tiny_school",
+    "question": "Which courses did Alice take?",
+    "search_expressions": [
+      "courses",
+      "Alice",
+      "take",
+      "student_course"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_007",
+    "db_id": "tiny_school",
+    "question": "What are the scores for Bob?",
+    "search_expressions": [
+      "scores",
+      "Bob",
+      "student scores",
+      "score"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_008",
+    "db_id": "tiny_school",
+    "question": "How many courses are recorded?",
+    "search_expressions": [
+      "courses",
+      "course count",
+      "number of courses",
+      "course"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_009",
+    "db_id": "tiny_school",
+    "question": "List student names and ages.",
+    "search_expressions": [
+      "student name age",
+      "students names ages",
+      "student_name student_age",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_010",
+    "db_id": "tiny_school",
+    "question": "What is the youngest student age?",
+    "search_expressions": [
+      "youngest student age",
+      "student age",
+      "age",
+      "students"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_011",
+    "db_id": "tiny_school",
+    "question": "What is the oldest student age?",
+    "search_expressions": [
+      "oldest student age",
+      "student age",
+      "age",
+      "students"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_012",
+    "db_id": "tiny_school",
+    "question": "Which students are older than 20?",
+    "search_expressions": [
+      "students age",
+      "student age > 20",
+      "older than 20",
+      "student birth_date"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_013",
+    "db_id": "tiny_school",
+    "question": "Show each course name with its score.",
+    "search_expressions": [
+      "course name score",
+      "course score",
+      "course_name score",
+      "courses scores"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_014",
+    "db_id": "tiny_school",
+    "question": "Which students took Math?",
+    "search_expressions": [
+      "students",
+      "Math",
+      "course",
+      "enrollment"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_015",
+    "db_id": "tiny_school",
+    "question": "Which students took English?",
+    "search_expressions": [
+      "English",
+      "students",
+      "course",
+      "subject"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_016",
+    "db_id": "tiny_school",
+    "question": "What is Alice's highest score?",
+    "search_expressions": [
+      "Alice",
+      "score",
+      "highest",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_017",
+    "db_id": "tiny_school",
+    "question": "How many courses does each student have?",
+    "search_expressions": [
+      "courses per student",
+      "student course count",
+      "enrollments",
+      "student_id course_id"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_018",
+    "db_id": "tiny_school",
+    "question": "What is the average score for each student?",
+    "search_expressions": [
+      "average score",
+      "student score",
+      "score average",
+      "student_id score"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_019",
+    "db_id": "tiny_school",
+    "question": "List students with course names and scores.",
+    "search_expressions": [
+      "students courses scores",
+      "student course score",
+      "student_name course_name score",
+      "enrollment grades"
+    ]
+  },
+  {
+    "case_id": "spider_tiny_school_020",
+    "db_id": "tiny_school",
+    "question": "Which course has the top score?",
+    "search_expressions": [
+      "course",
+      "score",
+      "top score",
+      "course_score"
+    ]
+  }
+]

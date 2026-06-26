@@ -1,0 +1,96 @@
+{
+  "cases_path": "D:\\DBFoxData\\spider\\spider_data\\dev.json",
+  "case_count": 50,
+  "variants": [
+    "keyword",
+    "vector",
+    "hybrid"
+  ],
+  "mode": "ai-assisted-retrieval",
+  "planner_model": "qwen-plus",
+  "embedding_provider": "dashscope-openai-compatible",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_013db728",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21,
+      "schema_search_doc_count": 25,
+      "embedding_total_docs": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 25,
+      "embedding_build_time_ms": 4416.31,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_a959b541",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14,
+      "schema_search_doc_count": 17,
+      "embedding_total_docs": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 17,
+      "embedding_build_time_ms": 1267.697,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "sample_checks": [
+    {
+      "db_id": "concert_singer",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 445.469,
+      "embedding_build_time_ms": 1.745,
+      "error": null
+    },
+    {
+      "db_id": "concert_singer",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 448.975,
+      "embedding_build_time_ms": 1.805,
+      "error": null
+    },
+    {
+      "db_id": "pets_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 17,
+      "retrieval_latency_ms": 453.442,
+      "embedding_build_time_ms": 1.461,
+      "error": null
+    },
+    {
+      "db_id": "pets_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 18,
+      "retrieval_latency_ms": 378.527,
+      "embedding_build_time_ms": 1.028,
+      "error": null
+    }
+  ]
+}

@@ -75,7 +75,8 @@ class SqlValidateInput(BaseModel):
 
 
 class SqlExecuteReadonlyInput(BaseModel):
-    sql: str = Field(description="The exact SELECT SQL statement to execute. Must match the validated safe_sql or original_sql from sql.validate.")
+    model_config = ConfigDict(extra="ignore")
+
     question: str | None = Field(default=None, description="The original user question this SQL answers.")
 
 
@@ -423,9 +424,9 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
     name = "sql.execute_readonly"
     group = "sql"
     description = (
-        "Execute a read-only SELECT SQL statement using a previously validated safety decision. "
+        "Execute the last SQL statement that passed sql.validate, using the validated safe_sql from agent state. "
         "Requires a successful sql.validate call in the current session. "
-        "If manual confirmation is required, this tool will trigger an approval interrupt."
+        "Do not pass SQL text to this tool. If manual confirmation is required, this tool will trigger an approval interrupt."
     )
     input_model = SqlExecuteReadonlyInput
     output_model = LooseOutput
@@ -441,10 +442,12 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
 
     def run(self, tool_input: SqlExecuteReadonlyInput, context: ToolRunContext) -> LooseOutput:
         from engine.tools.db_tools import sql_execute_readonly
+        ignored_model_sql = str(context.raw_input.get("ignored_model_sql") or "").strip() or None
         return LooseOutput.model_validate(sql_execute_readonly(
             context.db_session, context.request.datasource_id,
-            tool_input.sql, tool_input.question or "",
+            question=tool_input.question or "",
             safety=context.state.get("safety"),
+            ignored_model_sql=ignored_model_sql,
         ))
 
 

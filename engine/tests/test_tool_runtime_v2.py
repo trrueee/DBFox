@@ -162,6 +162,13 @@ def test_model_visible_sql_lifecycle_excludes_internal_db_query():
     assert "sql_execute_readonly" in names
 
 
+def test_execute_readonly_model_schema_does_not_accept_sql_text():
+    from engine.tools.dbfox_tools import SqlExecuteReadonlyInput
+
+    assert "sql" not in SqlExecuteReadonlyInput.model_fields
+    assert "question" in SqlExecuteReadonlyInput.model_fields
+
+
 def test_internal_db_query_is_documented_as_backend_fast_path():
     from engine.agent.model.system_prompt import SYSTEM_PROMPT
     from engine.tools.dbfox_tools import register_dbfox_tools

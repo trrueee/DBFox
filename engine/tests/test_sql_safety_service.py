@@ -270,6 +270,102 @@ def test_sql_validate_tool_uses_sql_safety_service(
     assert built == [("SELECT id FROM users LIMIT 3", test_datasource_module.id, "agent_readonly")]
 
 
+def test_sql_execute_readonly_accepts_validated_sql_with_trailing_semicolon_difference(
+    db_session_module,
+    test_datasource_module,
+    monkeypatch,
+) -> None:
+    from engine.tools.db import sql_execution
+
+    executed: list[str] = []
+
+    def fake_execute_query(
+        _db,
+        _datasource_id,
+        sql: str,
+        *,
+        question: str = "",
+        safety_decision=None,
+        safety_policy: str = "readonly",
+        redact: bool = True,
+    ) -> dict:
+        executed.append(sql)
+        return {
+            "rows": [{"id": 1}],
+            "columns": ["id"],
+            "latencyMs": 3,
+            "truncated": False,
+        }
+
+    monkeypatch.setattr(sql_execution, "execute_query", fake_execute_query)
+
+    result = sql_execution.sql_execute_readonly(
+        db_session_module,
+        test_datasource_module.id,
+        " SELECT  id  FROM users ; ",
+        safety={
+            "can_execute": True,
+            "safe_sql": "SELECT id FROM users",
+            "original_sql": "SELECT id FROM users",
+            "blocked_reasons": [],
+        },
+    )
+
+    assert executed == ["SELECT id FROM users"]
+    assert result["success"] is True
+    assert result["safe_sql"] == "SELECT id FROM users"
+    assert result["audit"]["executed_sql_source"] == "state.safety.safe_sql"
+    assert result["audit"]["ignored_model_sql"] == "SELECT  id  FROM users ;"
+
+
+def test_sql_execute_readonly_uses_safety_safe_sql_without_model_sql(
+    db_session_module,
+    test_datasource_module,
+    monkeypatch,
+) -> None:
+    from engine.tools.db import sql_execution
+
+    executed: list[str] = []
+
+    def fake_execute_query(
+        _db,
+        _datasource_id,
+        sql: str,
+        *,
+        question: str = "",
+        safety_decision=None,
+        safety_policy: str = "readonly",
+        redact: bool = True,
+    ) -> dict:
+        executed.append(sql)
+        return {
+            "rows": [{"total_users": 2}],
+            "columns": ["total_users"],
+            "latencyMs": 4,
+            "truncated": False,
+        }
+
+    monkeypatch.setattr(sql_execution, "execute_query", fake_execute_query)
+
+    result = sql_execution.sql_execute_readonly(
+        db_session_module,
+        test_datasource_module.id,
+        question="count users",
+        safety={
+            "can_execute": True,
+            "safe_sql": "SELECT COUNT(*) AS total_users FROM users",
+            "original_sql": "SELECT COUNT(*) AS total_users FROM users",
+            "blocked_reasons": [],
+        },
+    )
+
+    assert executed == ["SELECT COUNT(*) AS total_users FROM users"]
+    assert result["success"] is True
+    assert result["safe_sql"] == "SELECT COUNT(*) AS total_users FROM users"
+    assert result["audit"]["executed_sql_source"] == "state.safety.safe_sql"
+    assert result["audit"]["ignored_model_sql"] is None
+
+
 def test_test_data_fk_prefetch_passes_explicit_safety_decision(
     db_session_module,
     test_datasource_module,

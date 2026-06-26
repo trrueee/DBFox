@@ -651,3 +651,29 @@ class TestLoopPrevention:
         if result is not None:
             assert result.get("status") != "waiting_user"
 
+    def test_repeated_db_preview_with_same_args_triggers_stop(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "db.preview", "input": {"table": "orders", "limit": 5}, "status": "success"},
+                {"name": "db.preview", "input": {"table": "orders", "limit": 5}, "status": "success"},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        assert result is not None
+        assert result["status"] == "failed"
+        assert result["progress_decision"]["status"] == "failed"
+        assert "db.preview" in result["error"]
+
+    def test_repeated_sql_validate_with_same_args_triggers_stop(self):
+        state = self._state(
+            tool_call_history=[
+                {"name": "sql.validate", "input": {"sql": "SELECT * FROM orders"}, "status": "success"},
+                {"name": "sql.validate", "input": {"sql": "SELECT * FROM orders"}, "status": "success"},
+            ]
+        )
+        result = deterministic_progress_fastpath(state)
+        assert result is not None
+        assert result["status"] == "failed"
+        assert result["progress_decision"]["status"] == "failed"
+        assert "sql.validate" in result["error"]
+
