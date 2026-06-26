@@ -39,7 +39,7 @@ jobs:
           DBFOX_MIGRATE_ONLY: "1"
         run: |
           rm -f "$RUNNER_TEMP/dbfox_migration_test.db"
-          export DBFOX_DB_PATH="$RUNNER_TEMP/dbfox_migration_test.db"
+          export DBFOX_DATABASE_URL="sqlite:///$RUNNER_TEMP/dbfox_migration_test.db"
           python << 'EOF'
           from alembic.config import Config
           from alembic import command
@@ -54,7 +54,7 @@ jobs:
           rm -f /tmp/dbfox_smoke_test.db
           python -c "
           import os
-          os.environ['DBFOX_DB_PATH'] = '/tmp/dbfox_smoke_test.db'
+          os.environ['DBFOX_DATABASE_URL'] = 'sqlite:////tmp/dbfox_smoke_test.db'
           from engine.main import app
           from fastapi.testclient import TestClient
           client = TestClient(app)
