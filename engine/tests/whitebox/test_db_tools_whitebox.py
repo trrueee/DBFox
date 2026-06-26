@@ -1,6 +1,7 @@
 import pytest
 from engine.tools.db_tools import _build_preview_sql, _build_where_clause
 from engine.errors import ToolInputError
+from engine.sql.builder import build_where_clause
 
 # covers: PREVIEW-1 table with backtick/injection
 def test_preview1_injection_backtick():
@@ -68,3 +69,13 @@ def test_where5_unsafe_op():
 def test_where6_in_non_list():
     res = _build_where_clause({"column": "name", "op": "IN", "value": "a"}, "`")
     assert res == "`name` IN 'a'"
+
+
+def test_where_ilike_downgrades_to_like_for_sqlite():
+    res = build_where_clause({"column": "name", "op": "ILIKE", "value": "%bob%"}, "sqlite")
+    assert res == "\"name\" LIKE '%bob%'"
+
+
+def test_where_ilike_is_preserved_for_postgres():
+    res = build_where_clause({"column": "name", "op": "ILIKE", "value": "%bob%"}, "postgres")
+    assert res == "\"name\" ILIKE '%bob%'"

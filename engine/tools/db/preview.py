@@ -61,13 +61,22 @@ def db_preview(
         args["order_by"] = order_by
 
     requested = _resolve_preview_columns(args, available)
+    requested_for_validation = [*requested, *_structured_column_refs(where), *_structured_order_refs(order_by)]
     unknown = [n for n in requested if n not in available]
+    unknown.extend(n for n in requested_for_validation if n not in available and n not in unknown)
     if unknown:
         raise ValueError(f"Unknown column(s) for {table_name}: {', '.join(unknown)}")
 
     requested_limit = _clamp(int(limit), 1, MAX_PREVIEW_ROWS)
     dialect = _resolve_dialect(db, datasource_id)
-    sql = _build_preview_sql(table_name, requested, requested_limit, args, dialect)
+    sql = _build_preview_sql(
+        table_name,
+        requested,
+        requested_limit,
+        args,
+        dialect,
+        catalog_validated_identifiers=True,
+    )
 
     try:
         ctx = DialectContext.from_datasource_id(db, datasource_id)
@@ -131,6 +140,8 @@ def _build_preview_sql(
     limit: int,
     args: dict[str, Any],
     dialect: str,
+    *,
+    catalog_validated_identifiers: bool = False,
 ) -> str:
     from engine.sql.builder import build_select
     return build_select(
@@ -139,7 +150,8 @@ def _build_preview_sql(
         where=args.get("where"),
         order=args.get("order_by") or args.get("order"),
         limit=limit,
-        dialect=dialect
+        dialect=dialect,
+        catalog_validated_identifiers=catalog_validated_identifiers,
     )
 
 
@@ -153,6 +165,29 @@ def _build_order_clause(order: dict[str, Any], quote: str) -> str | None:
     from engine.sql.builder import build_order_clause
     dialect = "mysql" if quote == "`" else "sqlite" if quote == '"' else "postgres"
     return build_order_clause(order, dialect)
+
+
+def _structured_column_refs(where: dict[str, Any] | None) -> list[str]:
+    if not isinstance(where, dict):
+        return []
+    column = str(where.get("column") or "").strip()
+    return [column] if column else []
+
+
+def _structured_order_refs(order_by: dict[str, Any] | list[dict[str, Any]] | None) -> list[str]:
+    if isinstance(order_by, dict):
+        column = str(order_by.get("column") or "").strip()
+        return [column] if column else []
+    if isinstance(order_by, list):
+        columns: list[str] = []
+        for item in order_by:
+            if not isinstance(item, dict):
+                continue
+            column = str(item.get("column") or "").strip()
+            if column:
+                columns.append(column)
+        return columns
+    return []
 
 
 def _column_summary_preview(col: SchemaColumn) -> dict[str, Any]:

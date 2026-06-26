@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from engine.tools.db_tools import (
@@ -233,6 +235,40 @@ def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, t
     assert result["rows"][0]["email"] == "[REDACTED_EMAIL]"
     assert "column_summaries" in result
     assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == test_datasource.id).count() == 1
+
+
+def test_db_preview_quotes_spider_style_column_names(db_session, test_datasource) -> None:
+    conn = sqlite3.connect(test_datasource.database_name)
+    try:
+        conn.execute(
+            'CREATE TABLE spider_ratings ('
+            '"18_49_Rating_Share" REAL, '
+            '"Official_ratings_(millions)" REAL'
+            ')'
+        )
+        conn.execute(
+            'INSERT INTO spider_ratings ("18_49_Rating_Share", "Official_ratings_(millions)") VALUES (?, ?)',
+            (4.2, 7.5),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    sync_schema(db_session, test_datasource.id)
+
+    result = db_preview(
+        db_session,
+        test_datasource.id,
+        table="spider_ratings",
+        columns=["18_49_Rating_Share", "Official_ratings_(millions)"],
+        limit=5,
+    )
+
+    assert result["columns"] == ["18_49_Rating_Share", "Official_ratings_(millions)"]
+    assert result["returned_rows"] == 1
+    assert float(result["rows"][0]["18_49_Rating_Share"]) == 4.2
+    assert float(result["rows"][0]["Official_ratings_(millions)"]) == 7.5
+    assert '"18_49_Rating_Share"' in result["safe_sql"]
 
 
 def test_db_preview_rejects_unknown_columns_before_query(db_session, test_datasource) -> None:

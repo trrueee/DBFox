@@ -112,25 +112,12 @@ def _rule_validated_sql(
     safe_sql = str(safety.get("safe_sql") or "").strip()
     original_sql = str(safety.get("original_sql") or state.get("sql") or "").strip()
 
-    # SQL argument must match the validated statement
-    args_sql = str(args.get("sql") or "").strip()
-    if args_sql:
-        norm_args = " ".join(args_sql.lower().split())
-        norm_safe = " ".join(safe_sql.lower().split())
-        norm_orig = " ".join(original_sql.lower().split())
-        if not ((safe_sql and norm_args == norm_safe) or (original_sql and norm_args == norm_orig)):
-            return PolicyDecision(
-                status="blocked",
-                reason="SQL parameter does not match the validated safe_sql or original_sql.",
-                risk_level="danger",
-            )
-
     blocked_reasons = [str(r) for r in safety.get("blocked_reasons", [])]
     hard_blockers = [r for r in blocked_reasons if r != "requires_confirmation"]
 
     # agent_autonomous_read + prod → approval
     approval_decision = _rule_agent_autonomous_read(
-        state, execution_mode, safe_sql, original_sql, policy
+        state, execution_mode, safe_sql, original_sql, policy, args
     )
     if approval_decision:
         return approval_decision
@@ -140,13 +127,28 @@ def _rule_validated_sql(
     if not can_execute or not safe_sql:
         return PolicyDecision(status="blocked", reason="SQL execution requires a previous successful sql.validate result.", risk_level="danger")
     if safety.get("requires_confirmation"):
-        return PolicyDecision(status="approval_required", reason="This SQL execution requires human approval.", risk_level="warning", safe_args={"sql": safe_sql})
+        return PolicyDecision(
+            status="approval_required",
+            reason="This SQL execution requires human approval.",
+            risk_level="warning",
+            safe_args=_execute_readonly_safe_args(args, safe_sql=safe_sql, include_safe_sql=True),
+        )
 
-    return PolicyDecision(status="allowed", reason="SQL was validated by TrustGate.", risk_level="safe", safe_args={"sql": safe_sql})
+    return PolicyDecision(
+        status="allowed",
+        reason="SQL was validated by TrustGate.",
+        risk_level="safe",
+        safe_args=_execute_readonly_safe_args(args),
+    )
 
 
 def _rule_agent_autonomous_read(
-    state: dict, execution_mode: str, safe_sql: str, original_sql: str, policy: Any,
+    state: dict,
+    execution_mode: str,
+    safe_sql: str,
+    original_sql: str,
+    policy: Any,
+    args: dict[str, Any],
 ) -> PolicyDecision | None:
     env_profile = state.get("environment_profile") or {}
     env = env_profile.get("env", "unknown")
@@ -155,9 +157,31 @@ def _rule_agent_autonomous_read(
             status="approval_required",
             reason=f"Agent-autonomous data read on {env} datasource requires human approval.",
             risk_level="warning",
-            safe_args={"sql": safe_sql or original_sql},
+            safe_args=_execute_readonly_safe_args(
+                args,
+                safe_sql=safe_sql or original_sql,
+                include_safe_sql=True,
+            ),
         )
     return None
+
+
+def _execute_readonly_safe_args(
+    args: dict[str, Any],
+    *,
+    safe_sql: str | None = None,
+    include_safe_sql: bool = False,
+) -> dict[str, Any]:
+    safe_args: dict[str, Any] = {}
+    question = args.get("question")
+    if question:
+        safe_args["question"] = str(question)
+    ignored_sql = str(args.get("sql") or "").strip()
+    if ignored_sql:
+        safe_args["ignored_model_sql"] = ignored_sql
+    if include_safe_sql and safe_sql:
+        safe_args["safe_sql"] = safe_sql
+    return safe_args
 
 
 def _rule_agent_read_approval(

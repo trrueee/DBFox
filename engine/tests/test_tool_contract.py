@@ -124,6 +124,13 @@ def test_db_search_tool_description_uses_semantic_expression_not_keywords():
     assert "possible table or column names" in description
 
 
+def test_environment_get_profile_alias_maps_to_internal_tool_name():
+    from engine.tools.runtime.aliases import to_alias, to_internal
+
+    assert to_internal("environment_get_profile") == "environment.get_profile"
+    assert to_alias("environment.get_profile") == "environment_get_profile"
+
+
 def test_unknown_tool_gets_safe_default_reducer_behavior():
     update = apply_tool_observation_to_state(
         state={},
