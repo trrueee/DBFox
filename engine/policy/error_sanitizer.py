@@ -27,9 +27,16 @@ _SENSITIVE_PATTERNS = [
     re.compile(r"(?i)Authorization\s*:\s*Bearer\s+\S+"),
     re.compile(r"(?i)Bearer\s+[A-Za-z0-9\-._~+/]+=*"),
 
+    # ── PII that often appears in driver and validation errors ──
+    re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+
     # ── AWS access keys ──
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"(?i)aws[_-]?(access[_-]?key[_-]?id|secret[_-]?access[_-]?key)\s*[:=]\s*\S+"),
+
+    # ── Raw provider API keys that often appear in SDK errors ──
+    re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])"),
+    re.compile(r"(?<![A-Za-z0-9_-])LTAI[A-Za-z0-9]{12,}(?![A-Za-z0-9_-])"),
 
     # ── File paths that may contain sensitive info ──
     re.compile(r"(?i)/home/\w+/\.\w+"),

@@ -39,7 +39,7 @@ def test_datasource_sync_ai_enrich_returns_catalog_result_without_second_enrich(
     def fail_second_enrich(*args, **kwargs):
         raise AssertionError("api_sync_schema should not call ai_enrich_catalog twice")
 
-    monkeypatch.setattr("engine.api.datasources._sync_catalog", fake_sync_catalog)
+    monkeypatch.setattr("engine.api.datasources.schema._sync_catalog", fake_sync_catalog)
     monkeypatch.setattr("engine.ai_enrich.ai_enrich_catalog", fail_second_enrich)
 
     def override_get_db():

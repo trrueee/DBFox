@@ -21,6 +21,19 @@ class DataRedactor:
     CREDENTIAL_ASSIGN_REGEX = re.compile(
         r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b\s*=\s*'[^']+'"
     )
+    CREDENTIAL_DEFAULT_REGEX = re.compile(
+        r"(?i)\b(password|passwd|secret|token|api_key|apikey|credential|passphrase|private_key|privatekey)\b"
+        r"(\s+[A-Z0-9_()\s]+?\bDEFAULT\s*)'[^']+'"
+    )
+    AUTHORIZATION_HEADER_REGEX = re.compile(
+        r"(?i)\b(authorization\s*[:=]\s*)(bearer\s+)?([^\s,;]+)"
+    )
+    LOCAL_TOKEN_HEADER_REGEX = re.compile(
+        r"(?i)\b(x[-_]?local[-_]?token\s*[:=]\s*)([^\s,;]+)"
+    )
+    RAW_API_KEY_REGEX = re.compile(
+        r"(?<![A-Za-z0-9_-])(?:sk-[A-Za-z0-9_-]{8,}|AKIA[0-9A-Z]{16}|LTAI[A-Za-z0-9]{12,})(?![A-Za-z0-9_-])"
+    )
 
     @staticmethod
     def _luhn_valid(digits: str) -> bool:
@@ -54,13 +67,30 @@ class DataRedactor:
 
         scrubbed = DataRedactor.CREDENTIAL_ASSIGN_REGEX.sub(replace_cred_assign, sql_str)
 
-        # 2. Redact Emails
+        # 2. Mask credential defaults in DDL, e.g. password TEXT DEFAULT 'abc'.
+        def replace_cred_default(match: re.Match[str]) -> str:
+            return f"{match.group(1)}{match.group(2)}'[REDACTED_SECURE]'"
+
+        scrubbed = DataRedactor.CREDENTIAL_DEFAULT_REGEX.sub(replace_cred_default, scrubbed)
+
+        # 3. Mask header-style bearer tokens and local engine tokens in trace/error text.
+        scrubbed = DataRedactor.AUTHORIZATION_HEADER_REGEX.sub(
+            lambda match: f"{match.group(1)}{match.group(2) or ''}[REDACTED]",
+            scrubbed,
+        )
+        scrubbed = DataRedactor.LOCAL_TOKEN_HEADER_REGEX.sub(
+            lambda match: f"{match.group(1)}[REDACTED]",
+            scrubbed,
+        )
+        scrubbed = DataRedactor.RAW_API_KEY_REGEX.sub("[REDACTED_API_KEY]", scrubbed)
+
+        # 4. Redact Emails
         scrubbed = DataRedactor.EMAIL_REGEX.sub("[REDACTED_EMAIL]", scrubbed)
 
-        # 3. Redact Phone Numbers
+        # 5. Redact Phone Numbers
         scrubbed = DataRedactor.PHONE_REGEX.sub("[REDACTED_PHONE]", scrubbed)
 
-        # 4. Redact Luhn-valid Credit Cards
+        # 6. Redact Luhn-valid Credit Cards
         def replace_card(match: re.Match[str]) -> str:
             candidate = match.group(0)
             digits = re.sub(r"\D", "", candidate)

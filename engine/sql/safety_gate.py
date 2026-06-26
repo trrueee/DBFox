@@ -92,6 +92,21 @@ def guardrail_bypass_allowed() -> bool:
     return True
 
 
+def _block_unconfirmed_execution(decision: ExecutionSafetyDecision) -> ExecutionSafetyDecision:
+    if not decision.requires_confirmation:
+        return decision
+    blocked_reasons = list(decision.blocked_reasons)
+    if "requires_confirmation" not in blocked_reasons:
+        blocked_reasons.append("requires_confirmation")
+    return decision.model_copy(
+        update={
+            "can_execute": False,
+            "passed": False,
+            "blocked_reasons": blocked_reasons,
+        }
+    )
+
+
 def _resolve_execution_safety_decision(
     db: Session,
     datasource_id: str,
@@ -129,7 +144,7 @@ def _resolve_execution_safety_decision(
                     "message": "The supplied safety decision was created for different SQL text.",
                 }],
             )
-        return decision
+        return _block_unconfirmed_execution(decision)
 
     if bypass_guardrail:
         if not guardrail_bypass_allowed():
@@ -165,29 +180,33 @@ def _resolve_execution_safety_decision(
             "checks": [],
             "message": "Bypassed via system request (DBFOX_TESTING=1 + DBFOX_ALLOW_GUARDRAIL_BYPASS=1 + dev/test env)",
         }
-        return ExecutionSafetyDecision(
-            datasource_id=datasource_id,
-            policy=policy,
-            original_sql=sql_str,
-            safe_sql=sql_str,
-            passed=True,
-            can_execute=True,
-            requires_confirmation=False,
-            guardrail=guard_res,  # type: ignore[arg-type]
-            schema_warnings=[],
-            scope_state={
-                "datasource_id": datasource_id,
-                "bypass_guardrail": True,
-                "testing": os.environ.get("DBFOX_TESTING") == "1",
-            },
-            messages=["Guardrail bypass was used; prefer explicit non-query execution helpers."],
+        return _block_unconfirmed_execution(
+            ExecutionSafetyDecision(
+                datasource_id=datasource_id,
+                policy=policy,
+                original_sql=sql_str,
+                safe_sql=sql_str,
+                passed=True,
+                can_execute=True,
+                requires_confirmation=False,
+                guardrail=guard_res,  # type: ignore[arg-type]
+                schema_warnings=[],
+                scope_state={
+                    "datasource_id": datasource_id,
+                    "bypass_guardrail": True,
+                    "testing": os.environ.get("DBFOX_TESTING") == "1",
+                },
+                messages=["Guardrail bypass was used; prefer explicit non-query execution helpers."],
+            )
         )
 
     from engine.sql.dialect_context import DialectContext
     from engine.sql.safety.service import SqlSafetyService
 
     ctx = DialectContext.from_datasource_id(db, datasource_id)
-    return SqlSafetyService(db).build_execution_decision(sql_str, ctx, policy=policy)
+    return _block_unconfirmed_execution(
+        SqlSafetyService(db).build_execution_decision(sql_str, ctx, policy=policy)
+    )
 
 
 def _decision_checks_for_history(decision: ExecutionSafetyDecision) -> list[dict[str, Any]]:

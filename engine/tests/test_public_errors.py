@@ -20,3 +20,10 @@ def test_public_message_sanitizes_plain_string() -> None:
 
     assert "[REDACTED]" in message
     assert "hunter2" not in message
+
+
+def test_public_message_sanitizes_raw_api_key() -> None:
+    message = public_message("provider rejected sk-live-secret1234567890")
+
+    assert "sk-live-secret1234567890" not in message
+    assert "[REDACTED]" in message

@@ -302,6 +302,21 @@ def init_db() -> None:
                 Base.metadata.create_all(bind=conn)
                 _ensure_fts5(conn)
                 command.stamp(alembic_cfg, "head")
+            elif "alembic_version" not in tables:
+                model_tables = set(Base.metadata.tables.keys())
+                existing_tables = set(tables)
+                if model_tables.issubset(existing_tables):
+                    logger.warning(
+                        "Alembic migration: existing current schema has no version table; stamping head"
+                    )
+                    command.stamp(alembic_cfg, "head")
+                    _ensure_fts5(conn)
+                else:
+                    missing = ", ".join(sorted(model_tables - existing_tables))
+                    raise RuntimeError(
+                        "Metadata database has existing tables but no Alembic version; "
+                        f"cannot safely migrate because required tables are missing: {missing}"
+                    )
             else:
                 logger.info("Alembic migration: upgrading to head")
                 command.upgrade(alembic_cfg, "head")
@@ -316,3 +331,4 @@ def init_db() -> None:
                 logger.info("已从备份恢复数据库")
             except Exception as restore_err:
                 logger.error("恢复备份失败: %s", restore_err)
+        raise

@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 import engine.agent_core.event_store as event_store_module
 from engine.agent_core import persistence as agent_persistence
+from engine.agent_core.persistence._common import _safe_event_payload
 from engine.agent_core.persistence import get_conversation_detail
 from engine.agent_core.types import (
     AgentArtifact,
@@ -156,6 +157,40 @@ def test_sqlite_agent_event_store_initializes_the_resolved_session_id(tmp_path):
         engine.dispose()
 
 
+def test_runtime_event_payload_sanitizes_nested_sensitive_text() -> None:
+    event = AgentRuntimeEvent(
+        event_id="runtime_sensitive_1",
+        run_id="run-sensitive",
+        session_id="session-sensitive",
+        sequence=1,
+        created_at_ms=1,
+        type="agent.step.completed",
+        step={
+            "name": "call_model",
+            "input": {
+                "api_key": "sk-live-secret1234567890",
+                "sql": "SELECT * FROM users WHERE email = 'alice@example.com'",
+            },
+        },
+        artifact_delta={
+            "artifact_id": "result_1",
+            "payload_merge": {
+                "rows": [{"email": "alice@example.com", "token": "row-token"}],
+            },
+        },
+        error="request failed Authorization: Bearer bearer-secret",
+    )
+
+    payload = _safe_event_payload(event)
+    serialized = json.dumps(payload, ensure_ascii=False)
+
+    assert "sk-live-secret1234567890" not in serialized
+    assert "alice@example.com" not in serialized
+    assert "row-token" not in serialized
+    assert "bearer-secret" not in serialized
+    assert "[REDACTED]" in serialized
+
+
 def test_sqlite_agent_event_store_records_artifacts_for_conversation_detail(tmp_path):
     db_path = tmp_path / "dbfox-meta-artifacts.db"
     engine = create_engine(
@@ -221,6 +256,88 @@ def test_sqlite_agent_event_store_records_artifacts_for_conversation_detail(tmp_
         assert detail["artifacts"][0]["depends_on"] == ["result_view_1"]
         assert detail["runs"][0]["events"][0]["type"] == "agent.step.completed"
         assert detail["runs"][0]["events"][0]["step"]["tool_name"] == "sql.execute_readonly"
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_sqlite_agent_event_store_redacts_result_sample_rows_but_preserves_safe_sql(tmp_path):
+    db_path = tmp_path / "dbfox-meta-artifact-redaction.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    db = TestSessionLocal()
+    try:
+        datasource = DataSource(
+            id="ds-artifact-redaction",
+            name="Artifact Redaction Test",
+            db_type="sqlite",
+            host="localhost",
+            port=0,
+            database_name=str(db_path),
+            username="",
+            password_ciphertext="",
+            password_nonce="",
+            password_key_version="v1",
+            status="active",
+        )
+        db.add(datasource)
+        db.flush()
+
+        req = AgentRunRequest(
+            datasource_id=datasource.id,
+            question="Show sensitive users.",
+        )
+        store = event_store_module.SQLiteAgentEventStore(db)
+        store.start_run(req, run_id="run-artifact-redaction", session_id="session-artifact-redaction")
+
+        safe_sql = "SELECT email, token FROM users WHERE email = 'alice@example.com'"
+        artifact = AgentArtifact(
+            id="result_view_sensitive",
+            type="result_view",
+            title="Sensitive Result View",
+            payload={
+                "storageMode": "sql_backed",
+                "datasourceId": datasource.id,
+                "sourceSqlArtifactId": "sql_sensitive",
+                "sourceSqlSemanticId": "sql_sensitive",
+                "sourceSql": safe_sql,
+                "safeSql": safe_sql,
+                "columns": ["email", "token"],
+                "previewRows": [["alice@example.com", "row-token"]],
+                "rows": [["bob@example.com", "4111111111111111"]],
+                "previewRowCount": 1,
+                "rowCount": 2,
+            },
+            presentation=AgentArtifactPresentation(mode="inline", priority=20),
+        )
+
+        store.append_artifact("session-artifact-redaction", "run-artifact-redaction", artifact, 1)
+        db.commit()
+
+        record = db.query(AgentArtifactRecord).filter(AgentArtifactRecord.id == artifact.id).one()
+        stored_payload = json.loads(record.payload_json)
+        listed_payload = agent_persistence.list_run_artifacts(db, "run-artifact-redaction")[0]["payload"]
+
+        assert stored_payload["safeSql"] == safe_sql
+        assert listed_payload["safeSql"] == safe_sql
+        sample_blob = json.dumps(
+            {
+                "stored_preview": stored_payload["previewRows"],
+                "stored_rows": stored_payload["rows"],
+                "listed_preview": listed_payload["previewRows"],
+                "listed_rows": listed_payload["rows"],
+            },
+            ensure_ascii=False,
+        )
+        assert "alice@example.com" not in sample_blob
+        assert "bob@example.com" not in sample_blob
+        assert "row-token" not in sample_blob
+        assert "4111111111111111" not in sample_blob
     finally:
         db.close()
         engine.dispose()
@@ -297,6 +414,128 @@ def test_sqlite_agent_event_store_saves_checkpoint_and_marks_run_waiting_approva
         assert run.status == "waiting_approval"
         assert run.current_step_name == "sql.execute_readonly"
         assert run.waiting_approval_id == approval.id
+    finally:
+        db.close()
+        engine.dispose()
+
+
+def test_sqlite_agent_event_store_redacts_checkpoint_payloads_but_preserves_safe_sql(tmp_path):
+    db_path = tmp_path / "dbfox-meta-checkpoint-redaction.db"
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    db = TestSessionLocal()
+    try:
+        datasource = DataSource(
+            id="ds-checkpoint-redaction",
+            name="Checkpoint Redaction Test",
+            db_type="sqlite",
+            host="localhost",
+            port=0,
+            database_name=str(db_path),
+            username="",
+            password_ciphertext="",
+            password_nonce="",
+            password_key_version="v1",
+            status="active",
+        )
+        db.add(datasource)
+        db.flush()
+
+        req = AgentRunRequest(
+            datasource_id=datasource.id,
+            question="Need approval with sensitive runtime state.",
+        )
+        store = event_store_module.SQLiteAgentEventStore(db)
+        store.start_run(req, run_id="run-checkpoint-redaction", session_id="session-checkpoint-redaction")
+        safe_sql = "SELECT email, token FROM users WHERE id = 1"
+
+        checkpoint = store.save_checkpoint(
+            run_id="run-checkpoint-redaction",
+            session_id="session-checkpoint-redaction",
+            status="waiting_approval",
+            current_step_name="approval_interrupt",
+            next_step_name="approval_interrupt",
+            plan={"provider": {"api_key": "sk-live-checkpoint-secret"}},
+            state={
+                "api_key": "sk-live-checkpoint-secret",
+                "api_base": "https://internal-llm.example/v1",
+                "pending_sql": {"safeSql": safe_sql, "sql": safe_sql},
+                "result_preview": {
+                    "columns": ["email", "token"],
+                    "rows": [["alice@example.com", "row-token"]],
+                },
+            },
+            completed_steps=[
+                {
+                    "name": "call_model",
+                    "input": {"authorization_token": "step-token-secret"},
+                }
+            ],
+            pending_steps=[
+                {
+                    "name": "approval_interrupt",
+                    "payload": {"password": "database-password"},
+                }
+            ],
+            artifacts=[
+                {
+                    "id": "result_sensitive",
+                    "payload": {
+                        "safeSql": safe_sql,
+                        "columns": ["email", "token"],
+                        "previewRows": [["bob@example.com", "preview-token"]],
+                    },
+                }
+            ],
+        )
+        db.commit()
+
+        saved_checkpoint = db.get(AgentCheckpoint, checkpoint.id)
+        assert saved_checkpoint is not None
+        persisted_blob = json.dumps(
+            {
+                "plan": json.loads(saved_checkpoint.plan_json or "{}"),
+                "state": json.loads(saved_checkpoint.state_json),
+                "completed": json.loads(saved_checkpoint.completed_steps_json),
+                "pending": json.loads(saved_checkpoint.pending_steps_json),
+                "artifacts": json.loads(saved_checkpoint.artifacts_json or "[]"),
+            },
+            ensure_ascii=False,
+        )
+        restored_payload = agent_persistence.get_latest_checkpoint_payload(
+            db, "run-checkpoint-redaction"
+        )
+        assert restored_payload is not None
+        restored_blob = json.dumps(
+            {
+                "plan": restored_payload["plan"],
+                "state": restored_payload["state"],
+                "completed": restored_payload["completed_steps"],
+                "pending": restored_payload["pending_steps"],
+                "artifacts": restored_payload["artifacts"],
+            },
+            ensure_ascii=False,
+        )
+
+        assert safe_sql in persisted_blob
+        assert safe_sql in restored_blob
+        for secret in (
+            "sk-live-checkpoint-secret",
+            "https://internal-llm.example/v1",
+            "step-token-secret",
+            "database-password",
+            "alice@example.com",
+            "row-token",
+            "bob@example.com",
+            "preview-token",
+        ):
+            assert secret not in persisted_blob
+            assert secret not in restored_blob
     finally:
         db.close()
         engine.dispose()

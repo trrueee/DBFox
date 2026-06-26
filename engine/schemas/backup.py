@@ -1,20 +1,24 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.schemas import _to_iso
 
 
 class BackupCreateRequest(BaseModel):
-    datasource_id: str
-    label: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    datasource_id: str = Field(min_length=1, max_length=128)
+    label: str | None = Field(default=None, max_length=128)
     allow_fallback: bool = True
 
 
 class RestoreConfirmRequest(BaseModel):
     """Confirmation payload for backup restore (body, not query string)."""
-    confirm_token: str | None = None
-    confirm_text: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    confirm_token: str | None = Field(default=None, min_length=1, max_length=256)
+    confirm_text: str | None = Field(default=None, min_length=1, max_length=256)
     allow_fallback: bool = True
 
 
