@@ -1,6 +1,15 @@
-import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ExternalLink, ImageOff, X } from "lucide-react";
+import { useState } from "react";
+import { ExternalLink, ImageOff } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "./ui";
+import "./ImageCell.css";
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif"];
 
@@ -21,14 +30,7 @@ export function isImageUrl(value: string | null | undefined): value is string {
   }
 }
 
-interface PopoverPos {
-  left: number;
-  top: number;
-}
-
 export function ImageCell({ url }: { url: string }) {
-  const anchorRef = useRef<HTMLSpanElement>(null);
-  const [popoverPos, setPopoverPos] = useState<PopoverPos | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [broken, setBroken] = useState(false);
 
@@ -41,61 +43,41 @@ export function ImageCell({ url }: { url: string }) {
     );
   }
 
-  const showPopover = () => {
-    const rect = anchorRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const previewSize = 260;
-    const margin = 12;
-    let left = rect.left;
-    let top = rect.bottom + 6;
-    if (left + previewSize + margin > window.innerWidth) left = window.innerWidth - previewSize - margin;
-    if (top + previewSize + margin > window.innerHeight) top = rect.top - previewSize - 6;
-    setPopoverPos({ left: Math.max(margin, left), top: Math.max(margin, top) });
-  };
-
   return (
-    <>
-      <span
-        ref={anchorRef}
-        className="hifi-img-cell"
-        title={url}
-        onMouseEnter={showPopover}
-        onMouseLeave={() => setPopoverPos(null)}
-        onClick={(event) => {
-          event.stopPropagation();
-          setPopoverPos(null);
-          setLightboxOpen(true);
-        }}
-      >
-        <img className="hifi-img-thumb" src={url} loading="lazy" alt="" onError={() => setBroken(true)} />
-        <span className="hifi-img-url">{url}</span>
-      </span>
+    <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+      <HoverCard openDelay={160} closeDelay={80}>
+        <HoverCardTrigger asChild>
+          <button
+            type="button"
+            className="hifi-img-cell"
+            title={url}
+            aria-label={`预览图片 ${url}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setLightboxOpen(true);
+            }}
+          >
+            <img className="hifi-img-thumb" src={url} loading="lazy" alt="" onError={() => setBroken(true)} />
+            <span className="hifi-img-url">{url}</span>
+          </button>
+        </HoverCardTrigger>
+        <HoverCardContent className="hifi-img-hover-card" side="bottom" align="start">
+          <img src={url} alt="" />
+          <div className="hifi-img-hover-card-hint">点击查看大图</div>
+        </HoverCardContent>
+      </HoverCard>
 
-      {popoverPos && !lightboxOpen &&
-        createPortal(
-          <div className="hifi-img-popover" style={{ left: popoverPos.left, top: popoverPos.top }}>
-            <img src={url} alt="" />
-            <div className="hifi-img-popover-hint">点击查看大图</div>
-          </div>,
-          document.body,
-        )}
-
-      {lightboxOpen &&
-        createPortal(
-          <div className="hifi-img-lightbox" onClick={() => setLightboxOpen(false)}>
-            <button className="hifi-img-lightbox-close" onClick={() => setLightboxOpen(false)} title="关闭">
-              <X size={16} />
-            </button>
-            <img src={url} alt="" onClick={(event) => event.stopPropagation()} />
-            <div className="hifi-img-lightbox-bar" onClick={(event) => event.stopPropagation()}>
-              <span className="hifi-img-lightbox-url" title={url}>{url}</span>
-              <button onClick={() => window.open(url, "_blank", "noopener")} title="在浏览器打开">
-                <ExternalLink size={12} /> 打开原图
-              </button>
-            </div>
-          </div>,
-          document.body,
-        )}
-    </>
+      <DialogContent className="hifi-img-lightbox">
+        <DialogTitle className="hifi-img-lightbox-title">图片预览</DialogTitle>
+        <DialogDescription className="hifi-img-lightbox-description">{url}</DialogDescription>
+        <img className="hifi-img-lightbox-image" src={url} alt="" />
+        <div className="hifi-img-lightbox-bar">
+          <span className="hifi-img-lightbox-url" title={url}>{url}</span>
+          <button type="button" onClick={() => window.open(url, "_blank", "noopener")} title="在浏览器打开">
+            <ExternalLink size={12} /> 打开原图
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

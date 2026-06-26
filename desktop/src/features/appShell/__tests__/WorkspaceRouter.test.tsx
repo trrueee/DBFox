@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceRouter } from "../WorkspaceRouter";
 import { useDatasourceStore } from "../../../stores/datasourceStore";
@@ -7,6 +7,12 @@ import type { WorkspaceTab } from "../../../types/workspace";
 
 const tableWorkspaceProps = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
+}));
+
+const workspacePageProps = vi.hoisted(() => ({
+  diagnostics: null as Record<string, unknown> | null,
+  datasourceSettings: null as Record<string, unknown> | null,
+  llmConfig: null as Record<string, unknown> | null,
 }));
 
 vi.mock("../../workspace/SmartQueryHome", () => ({
@@ -43,10 +49,16 @@ vi.mock("../../../pages/AgentEvalPage", () => ({
   AgentEvalPage: () => <div data-testid="agent-eval" />,
 }));
 vi.mock("../../../pages/DataSourcesPage", () => ({
-  DataSourcesPage: () => <div data-testid="datasources-page" />,
+  DataSourcesPage: (props: Record<string, unknown>) => {
+    workspacePageProps.datasourceSettings = props;
+    return <div data-testid="datasources-page" />;
+  },
 }));
 vi.mock("../../../pages/DiagnosticsPage", () => ({
-  DiagnosticsPage: () => <div data-testid="diagnostics-page" />,
+  DiagnosticsPage: (props: Record<string, unknown>) => {
+    workspacePageProps.diagnostics = props;
+    return <div data-testid="diagnostics-page" />;
+  },
 }));
 vi.mock("../../../components/SettingsDialog", () => ({
   useApiConfig: () => ({
@@ -56,7 +68,10 @@ vi.mock("../../../components/SettingsDialog", () => ({
   }),
 }));
 vi.mock("../../../components/LlmConfigPanel", () => ({
-  LlmConfigPanel: () => <div data-testid="llm-config" />,
+  LlmConfigPanel: (props: Record<string, unknown>) => {
+    workspacePageProps.llmConfig = props;
+    return <div data-testid="llm-config" />;
+  },
 }));
 vi.mock("../../../lib/api/agent", () => ({
   testLlmConnection: vi.fn(),
@@ -88,6 +103,7 @@ const DS2 = {
 
 describe("WorkspaceRouter table tabs", () => {
   beforeEach(() => {
+    cleanup();
     tableWorkspaceProps.latest = null;
     useWorkspaceStore.setState({
       tabs: [{ id: "smart-query", title: "Ask", type: "smart-query" }],
@@ -128,5 +144,79 @@ describe("WorkspaceRouter table tabs", () => {
       datasourceId: "ds-1",
       datasourceDbType: "postgresql",
     });
+  });
+});
+
+describe("WorkspaceRouter desktop shell tabs", () => {
+  beforeEach(() => {
+    cleanup();
+    workspacePageProps.diagnostics = null;
+    workspacePageProps.datasourceSettings = null;
+    workspacePageProps.llmConfig = null;
+    useWorkspaceStore.setState({
+      tabs: [{ id: "smart-query", title: "Ask", type: "smart-query" }],
+      activeTabId: "smart-query",
+      sqlConsoleState: {},
+      selectedTables: [],
+      contextTables: [],
+      tableSubTabs: {},
+      _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
+    });
+    useDatasourceStore.setState({
+      datasources: [DS1, DS2] as never,
+      activeDatasourceId: "ds-2",
+      activeDatasourceForSettings: DS2 as never,
+      tables: [],
+      loadingSchema: false,
+      schemaError: "",
+      tableColumns: {},
+    });
+  });
+
+  it.each([
+    [
+      "diagnostics",
+      { id: "diagnostics", title: "Diagnostics", type: "diagnostics" } as WorkspaceTab,
+      "diagnostics-page",
+    ],
+    [
+      "datasource settings",
+      { id: "datasource-settings", title: "Data Sources", type: "datasource-settings" } as WorkspaceTab,
+      "datasources-page",
+    ],
+    [
+      "llm config",
+      { id: "llm-config", title: "LLM Config", type: "llm-config" } as WorkspaceTab,
+      "llm-config",
+    ],
+    [
+      "artifact result",
+      {
+        id: "artifact-result",
+        title: "Query Artifact",
+        type: "artifact-result",
+        artifactResult: { id: "artifact-1", title: "Query Artifact" },
+      } as unknown as WorkspaceTab,
+      "table-artifact",
+    ],
+  ])("wraps %s in WorkspaceShell chrome", (_label, activeTab, testId) => {
+    render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
+
+    const shell = screen.getByRole("region", { name: activeTab.title });
+    expect(within(shell).getByRole("heading", { name: activeTab.title })).toBeTruthy();
+    expect(within(shell).getByTestId(testId)).toBeTruthy();
+  });
+
+  it("passes workspace chrome to pages that already sit inside WorkspaceShell", () => {
+    render(<WorkspaceRouter activeTab={{ id: "diagnostics", title: "Diagnostics", type: "diagnostics" }} showToast={vi.fn()} />);
+    expect(workspacePageProps.diagnostics).toMatchObject({ chrome: "workspace" });
+
+    cleanup();
+    render(<WorkspaceRouter activeTab={{ id: "datasource-settings", title: "Data Sources", type: "datasource-settings" }} showToast={vi.fn()} />);
+    expect(workspacePageProps.datasourceSettings).toMatchObject({ chrome: "workspace" });
+
+    cleanup();
+    render(<WorkspaceRouter activeTab={{ id: "llm-config", title: "LLM Config", type: "llm-config" }} showToast={vi.fn()} />);
+    expect(workspacePageProps.llmConfig).toMatchObject({ chrome: "workspace" });
   });
 });

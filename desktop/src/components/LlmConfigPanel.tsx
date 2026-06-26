@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   Key, Globe, Layers, CheckCircle2, AlertCircle, Eye, EyeOff, Cpu, Server, Zap,
 } from "lucide-react";
@@ -12,6 +15,7 @@ import {
   applyModelPresetSelection,
   findModelPreset,
 } from "../lib/llmPresets";
+import "./LlmConfigPanel.css";
 
 interface LlmConfigPanelProps {
   config: ApiConfig;
@@ -20,14 +24,23 @@ interface LlmConfigPanelProps {
   onTestConnection?: () => void | Promise<void>;
   saved?: boolean;
   variant?: "dialog" | "page";
+  chrome?: "page" | "workspace";
 }
+
+const llmConfigSchema = z.object({
+  apiKey: z.string(),
+  apiBase: z.string().trim().refine((value) => value === "" || isHttpUrl(value), {
+    message: "API Base URL 必须是有效的 http(s) 地址",
+  }),
+  modelName: z.string(),
+});
 
 function SectionHeader({
   icon: Icon,
   title,
   subtitle,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number; className?: string }>;
   title: string;
   subtitle: string;
 }) {
@@ -51,11 +64,11 @@ function FieldRow({
   hint,
   children,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number; className?: string }>;
   label: string;
   htmlFor: string;
   hint?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="hifi-settings-field">
@@ -76,24 +89,69 @@ export function LlmConfigPanel({
   onTestConnection,
   saved = false,
   variant = "page",
+  chrome = "page",
 }: LlmConfigPanelProps) {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
+  const {
+    formState,
+    handleSubmit,
+    register,
+    setValue,
+    watch,
+  } = useForm<ApiConfig>({
+    values: config,
+    mode: "onChange",
+    resolver: zodResolver(llmConfigSchema),
+  });
+  const values = watch();
   const presetValues = LLM_MODEL_PRESETS.map((m) => m.value);
-  const isCustomModel = Boolean(config.modelName) && !presetValues.includes(config.modelName);
-  const activePreset = findModelPreset(config.modelName);
+  const isCustomModel = Boolean(values.modelName) && !presetValues.includes(values.modelName);
+  const activePreset = findModelPreset(values.modelName);
+  const embeddedWorkspace = chrome === "workspace";
+  const validationMessage = formState.errors.apiBase?.message || formState.errors.apiKey?.message || formState.errors.modelName?.message || "";
+
+  const applyConfigPatch = (partial: Partial<ApiConfig>) => {
+    for (const [key, value] of Object.entries(partial) as Array<[keyof ApiConfig, string]>) {
+      setValue(key, value, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    }
+    onChange(partial);
+  };
+
+  const inputProps = (key: keyof ApiConfig) => {
+    const field = register(key);
+    return {
+      ...field,
+      value: values[key] ?? "",
+      onChange: (event: ChangeEvent<HTMLInputElement>) => {
+        field.onChange(event);
+        onChange({ [key]: event.target.value });
+      },
+    };
+  };
+
+  const submitValidConfig = () => {
+    if (variant === "page") {
+      onSave?.();
+    }
+  };
+
+  const testValidConfig = async () => {
+    if (!onTestConnection) return;
+    setTesting(true);
+    try {
+      await onTestConnection();
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (variant === "page") {
-          onSave?.();
-        }
-      }}
-      className={variant === "page" ? "hifi-settings-page" : "hifi-settings-dialog-body"}
+      onSubmit={handleSubmit(submitValidConfig)}
+      className={variant === "page" ? `hifi-settings-page${embeddedWorkspace ? " hifi-settings-page--workspace" : ""}` : "hifi-settings-dialog-body"}
     >
-      {variant === "page" ? (
+      {variant === "page" && !embeddedWorkspace ? (
         <header className="hifi-settings-page-header">
           <div className="hifi-settings-page-icon">
             <Zap size={16} />
@@ -115,14 +173,13 @@ export function LlmConfigPanel({
         />
 
         <FieldRow icon={Key} label="API Key" htmlFor="llm-api-key" hint="接口密钥，仅存储在本地浏览器。">
-          <div className="relative">
+          <div className="hifi-settings-secret-field">
             <input
               id="llm-api-key"
               type={showKey ? "text" : "password"}
               placeholder="sk-••••••••••••••••"
-              value={config.apiKey}
-              onChange={(e) => onChange({ apiKey: e.target.value })}
-              className="hifi-settings-input pr-9 font-mono"
+              {...inputProps("apiKey")}
+              className="hifi-settings-input hifi-settings-input--secret hifi-settings-input--mono"
             />
             <button
               type="button"
@@ -141,9 +198,9 @@ export function LlmConfigPanel({
             id="llm-api-base"
             type="text"
             placeholder={DEFAULT_LLM_API_BASE}
-            value={config.apiBase}
-            onChange={(e) => onChange({ apiBase: e.target.value })}
-            className="hifi-settings-input font-mono"
+            aria-invalid={Boolean(formState.errors.apiBase)}
+            {...inputProps("apiBase")}
+            className="hifi-settings-input hifi-settings-input--mono"
           />
         </FieldRow>
 
@@ -151,16 +208,16 @@ export function LlmConfigPanel({
           hint={isCustomModel ? "使用自定义模型名称" : activePreset ? `${activePreset.label} · ${activePreset.provider}` : undefined}>
           <div className="hifi-model-chips">
             {LLM_MODEL_PRESETS.filter((m) => m.value !== "").map((m) => {
-              const active = config.modelName === m.value;
+              const active = values.modelName === m.value;
               return (
                 <button
                   key={m.value}
                   type="button"
                   onClick={() => {
                     if (active) {
-                      onChange({ modelName: "" });
+                      applyConfigPatch({ modelName: "" });
                     } else {
-                      onChange(applyModelPresetSelection(m.value, config.apiBase));
+                      applyConfigPatch(applyModelPresetSelection(m.value, values.apiBase));
                     }
                   }}
                   className={`hifi-model-chip${active ? " active" : ""}`}
@@ -175,22 +232,28 @@ export function LlmConfigPanel({
           <input
             id="llm-model"
             placeholder="或输入自定义模型名称…"
-            value={isCustomModel ? config.modelName : ""}
+            value={isCustomModel ? values.modelName : ""}
             onChange={(e) => {
               const name = e.target.value;
               if (!name) {
-                onChange({ modelName: "" });
+                applyConfigPatch({ modelName: "" });
                 return;
               }
-              onChange({
+              applyConfigPatch({
                 modelName: name,
-                apiBase: resolveApiBaseForCustomInput(name, config.apiBase),
+                apiBase: resolveApiBaseForCustomInput(name, values.apiBase),
               });
             }}
-            className="hifi-settings-input font-mono mt-2"
-            style={{ height: 30, fontSize: "0.65rem" }}
+            className="hifi-settings-input hifi-settings-input-compact hifi-settings-input--mono hifi-settings-input--custom-model"
           />
         </FieldRow>
+
+        {validationMessage ? (
+          <div className="hifi-settings-validation" role="alert">
+            <AlertCircle size={12} />
+            {validationMessage}
+          </div>
+        ) : null}
 
         <div className="hifi-settings-divider" />
 
@@ -198,25 +261,25 @@ export function LlmConfigPanel({
         <div className="hifi-settings-status-list">
           <div className="hifi-settings-status-row">
             <span>API Key</span>
-            {config.apiKey ? (
-              <Badge variant="success" className="gap-1 text-[var(--ui-font-caption)]">
+            {values.apiKey ? (
+              <Badge variant="success" className="hifi-settings-status-badge">
                 <CheckCircle2 size={9} />已配置
               </Badge>
             ) : (
-              <Badge variant="secondary" className="gap-1 text-[var(--ui-font-caption)]">
+              <Badge variant="secondary" className="hifi-settings-status-badge">
                 <AlertCircle size={9} />未设置
               </Badge>
             )}
           </div>
           <div className="hifi-settings-status-row">
             <span>Endpoint</span>
-            <span className="hifi-settings-mono truncate max-w-[280px]">
-              {config.apiBase || DEFAULT_LLM_API_BASE}
+            <span className="hifi-settings-mono hifi-settings-status-value">
+              {values.apiBase || DEFAULT_LLM_API_BASE}
             </span>
           </div>
           <div className="hifi-settings-status-row">
             <span>Model</span>
-            <span className="hifi-settings-mono">{config.modelName || "自动检测"}</span>
+            <span className="hifi-settings-mono">{values.modelName || "自动检测"}</span>
           </div>
         </div>
 
@@ -236,20 +299,13 @@ export function LlmConfigPanel({
               variant="outline"
               size="sm"
               disabled={testing}
-              onClick={async () => {
-                setTesting(true);
-                try {
-                  await onTestConnection();
-                } finally {
-                  setTesting(false);
-                }
-              }}
+              onClick={() => void handleSubmit(testValidConfig)()}
             >
               {testing ? "测试中…" : "测试连接"}
             </Button>
           ) : <span />}
           {onSave ? (
-            <Button type="submit" size="sm" className="gap-1.5">
+            <Button type="submit" size="sm" className="hifi-settings-submit-btn">
               <CheckCircle2 size={13} />
               保存配置
             </Button>
@@ -268,4 +324,13 @@ function resolveApiBaseForCustomInput(modelName: string, currentApiBase: string)
     return applyModelPresetSelection(modelName, currentApiBase).apiBase;
   }
   return currentApiBase;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }

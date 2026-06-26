@@ -3,6 +3,7 @@ import type { WorkspaceTab } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { getStoredApiConfig } from "../../components/SettingsDialog";
+import "./ContextDrawer.css";
 
 interface ContextDrawerProps {
   open: boolean;
@@ -16,17 +17,19 @@ export function ContextDrawer({ open, type, activeTab, onClose, onGenerateIndexS
   const contextTables = useWorkspaceStore((s) => s.contextTables);
 
   return (
-    <section className={`hifi-right-drawer ${open ? "open" : "closed"}`}>
-      <div className="h-full flex flex-col overflow-auto">
-        <div className="hifi-assistant-header border-b border-slate-200 p-3 flex-shrink-0 flex justify-between items-center bg-slate-50">
-          <span className="hifi-assistant-title flex items-center gap-1.5 font-bold text-[var(--ui-font-control)]">
-            {type === "ai-suggest" && <><Sparkles size={13} className="text-purple-600" /> AI 建议</>}
-            {type === "props" && <><Info size={13} className="text-blue-600" /> 对象属性</>}
+    <section className={`context-drawer ${open ? "is-open" : "is-closed"}`}>
+      <div className="context-drawer__surface">
+        <div className="context-drawer__header">
+          <span className="context-drawer__title">
+            {type === "ai-suggest" && <><Sparkles size={13} className="context-drawer__icon context-drawer__icon--suggest" /> AI 建议</>}
+            {type === "props" && <><Info size={13} className="context-drawer__icon context-drawer__icon--props" /> 对象属性</>}
           </span>
-          <X size={12} className="cursor-pointer text-slate-400 hover:text-slate-600" onClick={onClose} />
+          <button type="button" className="context-drawer__close" onClick={onClose} aria-label="关闭抽屉">
+            <X size={12} />
+          </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-3.5">
+        <div className="context-drawer__body">
           {type === "ai-suggest" ? <AiSuggest onGenerateIndexSql={onGenerateIndexSql} /> : <PropsPanel activeTab={activeTab} contextTables={contextTables} />}
         </div>
       </div>
@@ -38,10 +41,10 @@ function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
   // Keep onGenerateIndexSql to satisfy any potential callbacks, but display a premium empty state instead of hardcoded demo data
   void onGenerateIndexSql;
   return (
-    <div className="flex flex-col gap-3">
-      <span className="text-[var(--ui-font-caption)] text-slate-400 uppercase block mb-1">数据库诊断建议</span>
-      <div className="text-slate-400 text-center py-8 text-[var(--ui-font-caption)] flex flex-col items-center justify-center gap-2 border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50">
-        <Sparkles size={16} className="text-slate-300" />
+    <div className="context-drawer__stack">
+      <span className="context-drawer__eyebrow">数据库诊断建议</span>
+      <div className="context-drawer__empty">
+        <Sparkles size={16} className="context-drawer__empty-icon" />
         <span>暂无诊断建议。在 SQL 控制台执行查询或与智能助手交互时，相关的性能优化建议会呈现在此处。</span>
       </div>
     </div>
@@ -107,14 +110,14 @@ function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; con
 
 function InfoList({ rows }: { rows: string[][] }) {
   return (
-    <div className="flex flex-col gap-2.5 font-mono text-[var(--ui-font-caption)] text-slate-700">
-      <span className="text-[var(--ui-font-caption)] font-sans text-slate-400 uppercase block mb-1.5">当前对象物理与 AI 属性</span>
+    <div className="context-drawer__info-list">
+      <span className="context-drawer__eyebrow">当前对象物理与 AI 属性</span>
       {rows.map(([label, value]) => {
         const isLong = value.length > 25 || label.includes("描述");
         return (
-          <div key={label} className={`flex ${isLong ? "flex-col gap-1 items-start" : "justify-between"} border-b border-slate-100 pb-1.5`}>
-            <span className="text-slate-400">{label}</span>
-            <span className={`font-semibold text-slate-900 ${isLong ? "text-[var(--ui-font-caption)] break-all whitespace-pre-wrap text-left" : "text-right"}`}>{value}</span>
+          <div key={label} className={`context-drawer__info-row ${isLong ? "context-drawer__info-row--long" : ""}`}>
+            <span className="context-drawer__info-label">{label}</span>
+            <span className="context-drawer__info-value">{value}</span>
           </div>
         );
       })}

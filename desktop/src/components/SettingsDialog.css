@@ -1,0 +1,103 @@
+.settings-dialog-content {
+  width: min(520px, calc(100vw - 32px));
+  max-width: 520px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: hsl(var(--border));
+}
+
+.settings-dialog-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.settings-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--ui-font-section-title);
+  font-weight: 650;
+}
+
+.settings-dialog-title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+  border-radius: var(--radius);
+}
+
+.settings-dialog-title-glyph {
+  color: currentColor;
+}
+
+.settings-dialog-description {
+  margin-top: 4px;
+  font-size: var(--ui-font-label);
+}
+
+.settings-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  background: hsl(var(--secondary) / 0.4);
+  border-top: 1px solid hsl(var(--border));
+}
+
+.settings-dialog-caption {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: var(--ui-font-caption);
+}
+
+.settings-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-dialog-save {
+  gap: 6px;
+}
+
+.settings-button-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-button-icon {
+  color: hsl(var(--muted-foreground));
+}
+
+.settings-button-status[data-configured="true"] .settings-button-icon {
+  color: var(--color-success);
+}
+
+.settings-button-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  background: var(--color-success);
+  border-radius: 999px;
+}
+
+@media (max-width: 520px) {
+  .settings-dialog-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-dialog-actions {
+    justify-content: flex-end;
+  }
+}

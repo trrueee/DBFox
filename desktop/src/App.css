@@ -1,16 +1,16 @@
-/* ═══════════════════════════════════════════════════════
+/* 闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?
    DBFox Design System CSS
    Tokens imported from styles/tokens.css
-   ═══════════════════════════════════════════════════════ */
+   闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?*/
 
 @import "./styles/tokens.css";
 
-/* ═══════════════════════════════════════════════════════
-   Window Shell — replaces the old fixed 1598×1066 canvas board.
+/* 闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?
+   Window Shell 闂?replaces the old fixed 1598闁?066 canvas board.
    The whole app now lives in one fluid window: TitleBar on top,
    app-body (sidebar + main surface + drawer) in the middle,
    status bar at the bottom. No transform/scale, no letterbox.
-   ═══════════════════════════════════════════════════════ */
+   闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?*/
 .app-shell {
   position: fixed;
   inset: 0;
@@ -32,40 +32,42 @@
   position: relative;
 }
 
-/* Main body: sidebar | resizer | main surface | right drawer */
-.app-body {
+/* Main body: sidebar split | main surface | right drawer */
+.app-body {
   grid-row: 2;
   min-height: 0;
   min-width: 0;
   display: flex;
   gap: 0;
   overflow: hidden;
-  padding: 0;
-}
-
-/* Vertical resizer between sidebar and main */
-.app-resizer {
-  width: 1px;
-  flex-shrink: 0;
-  cursor: col-resize;
-  background: var(--hairline);
-  position: relative;
-  transition: background 0.15s, width 0.15s;
-}
-.app-resizer::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -3px;
-  right: -3px;
-}
-.app-resizer:hover {
-  background: var(--color-primary);
-  width: 2px;
-}
-
-/* Main surface — the "raised card" that holds tabs + content.
+  padding: 0;
+}
+
+.app-body-split {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-sidebar-panel {
+  background: var(--sidebar-bg);
+}
+
+.app-sidebar-panel--collapsed {
+  flex-basis: 36px;
+}
+
+.app-sidebar-resize-handle {
+  margin: 0 -4px;
+}
+
+.app-workspace-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Main surface 闂?the "raised card" that holds tabs + content.
    Tints slightly above the app backdrop so it reads as a panel. */
 .app-main {
   flex: 1;
@@ -254,7 +256,7 @@
   box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
 }
 
-/* Grid Layout — now driven by .app-body flex; kept for legacy nesting */
+/* Grid Layout 闂?now driven by .app-body flex; kept for legacy nesting */
 .hifi-workspace {
   flex: 1;
   display: flex;
@@ -341,9 +343,9 @@
   flex: 1; overflow-y: auto; margin-right: -4px; padding-right: 4px;
 }
 
-.hifi-tree-node {
-  display: flex; align-items: center; height: 32px; padding: 0 6px;
-  border-radius: 6px; cursor: pointer; font-size: 13.5px;
+.hifi-tree-node {
+  display: flex; align-items: center; height: 32px; padding: 0 6px;
+  border-radius: 6px; cursor: pointer; font-size: var(--ui-font-control);
   color: var(--color-text-secondary); transition: background 0.1s ease, color 0.1s ease;
 }
 .hifi-tree-node:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
@@ -370,288 +372,6 @@
   gap: 10px;
   height: 100%;
   overflow: hidden;
-}
-
-/* Middle Top - Smart Query Welcome */
-.hifi-query-home {
-  flex: 11;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.hifi-query-home-content {
-  max-width: 680px;
-  width: 100%;
-  margin: auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: stretch;
-}
-
-.hifi-hero {
-  margin-bottom: 24px;
-  position: relative;
-  z-index: 1;
-  text-align: center;
-}
-
-.hifi-hero-title {
-  font-size: var(--ui-font-display);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin-bottom: 6px;
-  text-align: center;
-}
-
-.hifi-gradient-text {
-  background: linear-gradient(90deg, #7667F2 0%, #55D4CF 100%);
-  -webkit-background-clip: text;
-  color: transparent;
-}
-
-.hifi-hero-subtitle {
-  font-size: var(--ui-font-body);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.hifi-hero-fox {
-  width: 86px;
-  height: 86px;
-  margin: 0 auto 14px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: 0;
-  box-shadow: 0 18px 34px rgba(118, 103, 242, 0.10);
-}
-
-.hifi-hero-pattern {
-  display: none;
-}
-
-/* Ask Box Input styling */
-.hifi-ask-input-container {
-  position: relative;
-  margin-bottom: 24px;
-}
-
-.hifi-ask-input {
-  width: 100%;
-  height: 100px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: var(--surface-card);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.03), 0 1px 3px rgba(0, 0, 0, 0.02);
-  padding: 14px 50px 14px 16px;
-  font-size: var(--ui-font-input);
-  color: var(--color-text-primary);
-  outline: none;
-  resize: none;
-  box-sizing: border-box;
-  font-family: inherit;
-  line-height: 1.6;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hifi-ask-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-soft), 0 8px 24px rgba(118, 103, 242, 0.08);
-}
-
-.hifi-ask-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.hifi-ask-send-btn {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, #6366f1 100%);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(118, 103, 242, 0.2);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hifi-ask-send-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(118, 103, 242, 0.35);
-  background: linear-gradient(135deg, #8b7ef5 0%, #7578f3 100%);
-}
-
-/* Recommended questions styling */
-.hifi-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.hifi-section-title {
-  font-size: var(--ui-font-input);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.hifi-text-btn {
-  font-size: var(--ui-font-control);
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hifi-text-btn:hover {
-  text-decoration: underline;
-}
-
-.hifi-recommend-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 24px;
-}
-
-.hifi-recommend-card {
-  height: 112px;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-sizing: border-box;
-  cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-
-.hifi-recommend-card:hover {
-  border-color: #C7D2FE;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.06);
-  transform: translateY(-2px);
-}
-
-.hifi-recommend-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.hifi-recommend-text {
-  font-size: var(--ui-font-label);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  line-height: 1.4;
-  white-space: pre-line;
-}
-
-.hifi-tag {
-  align-self: flex-start;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--ui-font-micro);
-  font-weight: 400;
-  display: flex;
-  align-items: center;
-}
-
-/* Recent Visits Styling */
-.hifi-recent-tabs {
-  display: flex;
-  gap: 16px;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 10px;
-}
-
-.hifi-recent-tab {
-  font-size: var(--ui-font-control);
-  font-weight: 400;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding-bottom: 6px;
-  position: relative;
-}
-
-.hifi-recent-tab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-recent-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-recent-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-
-.hifi-recent-card {
-  padding: 10px;
-  border-radius: 8px;
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  box-sizing: border-box;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.hifi-recent-card:hover {
-  background: var(--surface-panel-muted);
-  border-color: var(--border-strong);
-}
-
-.hifi-recent-name {
-  font-size: var(--ui-font-label);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hifi-recent-desc {
-  font-size: var(--ui-font-micro);
-  color: var(--color-text-muted);
-  margin-top: 2px;
 }
 
 /* Middle Bottom - Workspace Panels */
@@ -856,150 +576,11 @@
   background: var(--surface-card-hover);
 }
 
-.hifi-table td.hifi-cell-null {
-  color: #B6C2D2;
-  font-style: italic;
-}
-
-/* Image cell: inline thumbnail + hover popover + lightbox */
-.hifi-img-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  cursor: zoom-in;
-}
-
-.hifi-img-thumb {
-  width: 24px;
-  height: 24px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: var(--surface-panel-muted);
-  flex-shrink: 0;
-}
-
-.hifi-img-thumb-broken {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #94A3B8;
-}
-
-.hifi-img-url {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-img-popover {
-  position: fixed;
-  z-index: 1000;
-  padding: 6px;
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-  pointer-events: none;
-}
-
-.hifi-img-popover img {
-  display: block;
-  max-width: 248px;
-  max-height: 248px;
-  border-radius: 4px;
-}
-
-.hifi-img-popover-hint {
-  margin-top: 4px;
-  font-size: var(--ui-font-caption);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
-.hifi-img-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: rgba(2, 6, 23, 0.82);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  cursor: zoom-out;
-}
-
-.hifi-img-lightbox img {
-  max-width: 86vw;
-  max-height: 78vh;
-  border-radius: 8px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
-  cursor: default;
-  background: var(--surface-card);
-}
-
-.hifi-img-lightbox-close {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
-  color: #E2E8F0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.hifi-img-lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.hifi-img-lightbox-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: 86vw;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  cursor: default;
-}
-
-.hifi-img-lightbox-url {
-  font-size: var(--ui-font-label);
-  color: #CBD5E1;
-  max-width: 520px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hifi-img-lightbox-bar button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  background: rgba(255, 255, 255, 0.12);
-  color: #E2E8F0;
-  font-size: var(--ui-font-caption);
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.hifi-img-lightbox-bar button:hover {
-  background: rgba(255, 255, 255, 0.22);
-}
-
+.hifi-table td.hifi-cell-null {
+  color: #B6C2D2;
+  font-style: italic;
+}
+
 /* Table preview pane: loading / notice / empty states */
 .hifi-preview-loading-bar {
   position: sticky;
@@ -1066,15 +647,15 @@
   gap: 8px;
 }
 
-.hifi-preview-skeleton-row {
-  height: 26px;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #F1F5F9 25%, #F8FAFC 50%, #F1F5F9 75%);
-  background-size: 200% 100%;
-  animation: hifi-skeleton-shimmer 1.3s ease-in-out infinite;
-}
-
-@keyframes hifi-skeleton-shimmer {
+.hifi-preview-skeleton-row {
+  height: 26px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #F1F5F9 25%, #F8FAFC 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: hifi-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes hifi-skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
@@ -1145,299 +726,6 @@
   color: var(--color-warning);
 }
 
-.hifi-table-footer {
-  height: 32px;
-  border-top: 1px solid var(--color-border);
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--ui-font-caption);
-  color: var(--color-text-muted);
-  background: var(--surface-panel-muted);
-  flex-shrink: 0;
-}
-
-.hifi-pagination {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hifi-page-num {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  cursor: pointer;
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-}
-
-.hifi-page-num.active {
-  background: var(--color-primary);
-  color: #FFFFFF;
-  border-color: var(--color-primary);
-}
-
-/* Schema Specifics */
-.hifi-breadcrumb {
-  padding: 6px 10px;
-  font-size: var(--ui-font-label);
-  color: var(--color-primary);
-  font-weight: 400;
-  background: var(--surface-panel-muted);
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.hifi-subtabs {
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--surface-card);
-  flex-shrink: 0;
-  padding: 0 10px;
-}
-
-.hifi-subtab {
-  padding: 6px 12px;
-  font-size: var(--ui-font-label);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  position: relative;
-}
-
-.hifi-subtab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-subtab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-constraint-badge {
-  display: inline-flex;
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-size: var(--ui-font-nano);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.hifi-constraint-badge.pk {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-
-.hifi-constraint-badge.index {
-  background: var(--color-info-soft);
-  color: var(--color-info);
-}
-
-.hifi-constraint-badge.unique {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-/* ER Diagram Specifics */
-.hifi-er-container {
-  flex: 1;
-  background: var(--surface-panel-muted);
-  position: relative;
-  overflow: hidden;
-}
-
-.hifi-er-zoom-controls {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.hifi-er-zoom-btn {
-  width: 24px;
-  height: 24px;
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.hifi-er-zoom-btn:hover {
-  background: var(--surface-card-hover);
-  color: var(--color-text-primary);
-}
-
-/* AI Assistant Sidebar (Column 3) */
-.hifi-assistant-panel {
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.hifi-assistant-header {
-  height: 44px;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  flex-shrink: 0;
-}
-
-.hifi-assistant-title {
-  font-size: var(--ui-font-body);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hifi-ai-badge {
-  padding: 1px 4px;
-  background: #F3E8FF;
-  color: var(--color-primary);
-  font-size: var(--ui-font-micro);
-  font-weight: 600;
-  border-radius: 3px;
-}
-
-.hifi-context-bar {
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--ui-font-caption);
-  flex-shrink: 0;
-}
-
-.hifi-context-chips {
-  display: flex;
-  gap: 4px;
-}
-
-.hifi-context-chip {
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 2px 6px;
-  color: var(--color-text-secondary);
-}
-
-.hifi-assistant-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.hifi-ai-bubble {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  line-height: 1.5;
-  align-self: flex-start;
-  max-width: 90%;
-  white-space: pre-line;
-}
-
-.hifi-ai-msg-container {
-  display: flex;
-  gap: 8px;
-  align-self: flex-start;
-  max-width: 90%;
-}
-
-.hifi-ai-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #FFFFFF 0%, #EAF6FF 100%);
-  border: 1px solid rgba(221, 234, 248, 0.9);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 4px 10px rgba(118, 103, 242, 0.08);
-}
-
-.hifi-ai-msg-bubble {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  line-height: 1.5;
-  white-space: pre-line;
-}
-.hifi-ai-msg-bubble .hifi-markdown-content {
-  white-space: normal;
-}
-
-.hifi-user-bubble {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: var(--ui-font-label);
-  line-height: 1.5;
-  align-self: flex-end;
-  max-width: 85%;
-  font-weight: 400;
-}
-
-.hifi-suggest-chip {
-  align-self: flex-end;
-  padding: 6px 12px;
-  border-radius: 10px;
-  background: var(--surface-card-hover);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 85%;
-}
-
-.hifi-suggest-chip:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
 /* AI Visual Card (Chart) */
 .hifi-ai-card {
   border: 1px solid var(--color-border);
@@ -1460,276 +748,25 @@
   padding: 12px;
 }
 
-.hifi-artifact-description {
-  font-size: var(--ui-font-caption);
-  color: var(--agent-text-muted);
-}
-
-.hifi-artifact-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: var(--agent-text-muted);
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-artifact-pill {
-  border: 1px solid var(--agent-border);
-  border-radius: 6px;
-  background: var(--agent-surface-muted);
-  color: var(--agent-text-secondary);
-  padding: 4px 8px;
-}
-
-.hifi-artifact-pill-warning {
-  border-color: var(--trust-warning-border);
-  background: var(--trust-warning-bg);
-  color: var(--trust-warning);
-}
-
-.hifi-artifact-action-btn {
-  height: 24px;
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-artifact-action-btn-sm {
-  height: 22px;
-  font-size: var(--ui-font-micro);
-}
-
-.hifi-artifact-muted-text {
-  color: var(--agent-text-muted);
-}
-
-.hifi-artifact-warning-text {
-  color: var(--trust-warning);
-}
-
-.hifi-artifact-sort-indicator {
-  color: var(--agent-accent);
-  font-size: var(--ui-font-caption);
-}
-
-.artifact-card {
-  border: 1px solid var(--agent-border);
-  border-radius: var(--radius-card);
-  background: var(--agent-surface);
-  box-shadow: var(--shadow-card, var(--agent-shadow-soft));
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.artifact-card + .artifact-card {
-  margin-top: 8px;
-}
-
-.artifact-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--agent-border);
-  background: var(--agent-surface-muted);
-}
-
-.artifact-card-title {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-  color: var(--agent-text);
-  font-size: var(--ui-font-label);
-  font-weight: 650;
-}
-
-.artifact-card-title span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artifact-card-badge {
-  flex: 0 0 auto;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill, 999px);
-  padding: 1px 8px;
-  background: var(--agent-accent-soft);
-  color: var(--agent-accent);
-  font-size: var(--ui-font-micro);
-  font-weight: 650;
-}
-
-.artifact-card-table .artifact-card-badge {
-  border-color: #BFDBFE;
-  background: #EFF6FF;
-  color: var(--color-info);
-}
-
-.artifact-card-chart .artifact-card-badge {
-  border-color: #DDD6FE;
-  background: #F5F3FF;
-  color: var(--color-primary);
-}
-
-.artifact-card-sql .artifact-card-badge {
-  border-color: #FDE68A;
-  background: #FFFBEB;
-  color: #B45309;
-}
-
-.artifact-card-insight .artifact-card-badge {
-  border-color: #A7F3D0;
-  background: #ECFDF5;
-  color: #059669;
-}
-
-.artifact-card-desc,
-.artifact-card-meta,
-.artifact-card-actions {
-  padding-inline: 12px;
-}
-
-.artifact-card-desc {
-  margin: 8px 0 0;
-  color: var(--agent-text-muted);
-  font-size: var(--ui-font-caption);
-}
-
-.artifact-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding-top: 8px;
-  color: var(--agent-text-muted);
-  font-size: var(--ui-font-caption);
-}
-
-.artifact-card-body {
-  padding: 12px;
-}
-
-.artifact-card-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: 12px;
-}
-
-.artifact-card-body .hifi-sql-card {
-  margin: 0;
-}
-
-.artifact-sql-editor {
-  overflow: hidden;
-  border: 1px solid var(--agent-border);
-  border-radius: var(--radius-control);
-  background: var(--agent-surface-elevated);
-}
-
-.artifact-card-chart .hifi-chart-body {
-  padding: 4px 8px 8px;
-}
-
-.artifact-table-grid tr {
-  border-left: 2px solid transparent;
-}
-
-.artifact-table-grid tbody tr:hover {
-  border-left-color: var(--agent-accent);
-  background: var(--agent-surface-subtle);
-}
-
-.artifact-table-head-button {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  text-align: left;
-  font-weight: 600;
-}
-
-.artifact-table-cell {
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.artifact-table-cell.is-numeric {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.artifact-table-null-pill {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-pill, 999px);
-  padding: 0 6px;
-  background: var(--agent-surface-muted);
-  color: var(--agent-text-muted);
-  font-size: var(--ui-font-caption);
-  font-style: italic;
-}
-
-.artifact-table-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
 .hifi-result-workspace {
   background: var(--agent-surface);
   color: var(--agent-text);
 }
 
-.hifi-result-toolbar {
-  border-bottom: 1px solid var(--agent-border);
-  background: var(--agent-surface);
-  justify-content: flex-start;
-}
-
-.hifi-result-toolbar-stack {
-  border-bottom: 1px solid var(--agent-border);
-  background: var(--agent-surface);
-}
-
-.hifi-table-toolbar-stack {
-  border-bottom: 1px solid var(--agent-border);
-  background: var(--agent-surface);
-}
-
-.hifi-table-toolbar-stack .hifi-panel-toolbar {
-  border-bottom: 0;
-}
-
-.hifi-result-toolbar-stack .hifi-result-toolbar {
-  border-bottom: 0;
-}
-
-.hifi-result-toolbar-main {
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.hifi-result-control-row {
-  display: flex;
-  min-height: 34px;
+.hifi-result-control-row {
+  display: flex;
+  min-height: 34px;
   align-items: center;
   gap: 6px;
   border-top: 1px solid var(--agent-border-subtle);
   background: var(--agent-surface-muted);
   color: var(--agent-text-secondary);
-  font-size: var(--ui-font-label);
-}
-
-.hifi-result-control-field {
-  display: inline-flex;
-  align-items: center;
+  font-size: var(--ui-font-label);
+}
+
+.hifi-result-control-field {
+  display: inline-flex;
+  align-items: center;
   gap: 5px;
   white-space: nowrap;
 }
@@ -1750,12 +787,12 @@
   outline: none;
 }
 
-.hifi-result-control-field input {
-  width: 148px;
-  padding: 0 7px;
-}
-
-.hifi-result-control-value {
+.hifi-result-control-field input {
+  width: 148px;
+  padding: 0 7px;
+}
+
+.hifi-result-control-value {
   flex: 1 1 180px;
 }
 
@@ -1764,54 +801,8 @@
   min-width: 120px;
 }
 
-.hifi-result-search-icon {
-  color: var(--agent-text-muted);
-  pointer-events: none;
-}
-
-.hifi-result-search-shell {
-  width: min(240px, 32vw);
-  min-width: 176px;
-}
-
-.hifi-result-search {
-  border-color: var(--agent-border);
-  width: 100%;
-  height: 24px;
-  border-radius: 6px;
-  font-size: var(--ui-font-label);
-  box-shadow: none;
-}
-
 .hifi-result-table-wrap {
   background: var(--agent-surface);
-}
-
-.hifi-result-empty {
-  color: var(--agent-text-muted);
-  text-align: center;
-}
-
-.hifi-result-footer-text {
-  color: var(--agent-text-muted);
-}
-
-.hifi-result-truncated {
-  color: var(--trust-warning);
-}
-
-.hifi-result-page-btn {
-  height: 20px;
-  padding: 0 6px;
-}
-
-.hifi-result-page-size {
-  height: 20px;
-  border: 1px solid var(--agent-border);
-  border-radius: 4px;
-  background: var(--agent-surface);
-  color: var(--agent-text-secondary);
-  font-size: var(--ui-font-caption);
 }
 
 .hifi-result-inline-table {
@@ -1874,66 +865,6 @@
   margin-top: 8px;
   display: flex;
   justify-content: flex-end;
-}
-
-/* Assistant input footer */
-.hifi-assistant-footer {
-  border-top: 1px solid var(--color-border);
-  padding: 10px;
-  background: var(--surface-card);
-  flex-shrink: 0;
-}
-
-.hifi-chat-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  max-width: 680px;
-  width: 100%;
-  margin: 0 auto;
-  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.08);
-  border-radius: 12px;
-}
-
-.hifi-chat-input {
-  width: 100%;
-  height: 44px;
-  border-radius: 12px;
-  border: 2px solid var(--color-secondary);
-  background: var(--surface-card);
-  padding: 0 48px 0 16px;
-  font-size: var(--ui-font-body);
-  outline: none;
-  box-sizing: border-box;
-  font-family: inherit;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.hifi-chat-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-soft);
-}
-
-.hifi-chat-send-btn {
-  position: absolute;
-  right: 6px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: #FFFFFF;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(124, 58, 237, 0.2);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.hifi-chat-send-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 12px rgba(196, 90, 60, 0.2);
 }
 
 /* Design Guide Panel (Column 4) */
@@ -2010,16 +941,7 @@
   cursor: pointer;
 }
 
-.hifi-guide-chip-prod {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  font-size: var(--ui-font-micro);
-  font-weight: 600;
-}
-
-.hifi-guide-chip-test {
+.hifi-guide-chip-test {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--color-warning-soft);
@@ -2072,9 +994,9 @@
   border-color: var(--color-secondary);
 }
 
-/* ═══════════════════════════════════════════════════════
+/* 闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?
    New Tabbed Workspace & Context Action Styles
-   ═══════════════════════════════════════════════════════ */
+   闂佸磭鍎ら崝蹇涘疾閺屻儱鐓涢柟鑸妽濞呮粓鏌嶉悜妯哄闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺锟犲箛閵婏附鐝抽梺宕囧劋閸斿繘寮查弻銉ョ厸闁硅埇鍔嶅▍婊堟煃閻戞ê濮€闁哄懏鐓￠崺?*/
 
 .hifi-sidebar-col {
   width: 240px;
@@ -2092,124 +1014,7 @@
   overflow: hidden;
 }
 
-.hifi-right-drawer {
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface-raised);
-  border-left: 1px solid var(--hairline);
-  overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
-  height: 100%;
-}
-
-.hifi-right-drawer.closed {
-  width: 0px;
-  border-left: none;
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Tab bar container */
-.hifi-workspace-tab-bar {
-  height: 36px;
-  border-bottom: 1px solid var(--color-border);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 8px;
-  flex-shrink: 0;
-}
-
-.hifi-workspace-tabs-scroll {
-  display: flex; align-items: center; gap: 2px;
-  overflow-x: auto; flex: 1; height: 100%; padding-right: 8px;
-}
-.hifi-workspace-tabs-scroll::-webkit-scrollbar { display: none; }
-
-.hifi-workspace-tab {
-  height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 6px;
-  font-size: var(--ui-font-control); font-weight: 400; color: var(--color-text-secondary);
-  border: none; background: transparent; border-radius: 6px;
-  cursor: pointer; max-width: 150px; transition: all 0.1s ease;
-  position: relative; user-select: none;
-}
-.hifi-workspace-tab:hover { background: hsl(var(--primary) / 0.05); color: var(--color-text-primary); }
-.hifi-workspace-tab.active {
-  background: hsl(var(--primary) / 0.08); color: hsl(var(--primary)); font-weight: 600;
-}
-
-.hifi-tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.1s;
-}
-
-.hifi-tab-close:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: var(--color-text-primary);
-}
-
-.hifi-tab-add-btn {
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  border: 1px solid var(--color-border);
-  background: var(--surface-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.hifi-tab-add-btn:hover {
-  background: var(--surface-card-hover);
-  border-color: var(--border-strong);
-}
-
-.hifi-workspace-tab-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.hifi-right-drawer-toggle-btn {
-  height: 24px;
-  padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--surface-card);
-  font-size: var(--ui-font-caption);
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.hifi-right-drawer-toggle-btn:hover {
-  background: var(--surface-card-hover);
-}
-
-.hifi-right-drawer-toggle-btn.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: #C7D2FE;
-}
-
+
 /* Tab panes */
 .hifi-tab-pane {
   flex: 1;
@@ -2218,53 +1023,6 @@
   flex-direction: column;
   overflow: auto;
   background: var(--surface-card);
-}
-
-/* Table Workspace view */
-.hifi-table-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.hifi-workspace-subtabs {
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  background: transparent;
-  flex-shrink: 0;
-  padding: 0 16px;
-  height: 36px;
-  align-items: flex-end;
-  gap: 20px;
-}
-
-.hifi-workspace-subtab {
-  padding: 8px 0 6px;
-  font-size: var(--ui-font-control);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-weight: 400;
-  transition: color 0.15s ease;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-
-.hifi-workspace-subtab:hover {
-  color: var(--color-text-primary);
-}
-
-.hifi-workspace-subtab.active {
-  color: hsl(var(--primary));
-  font-weight: 600;
-  border-bottom-color: hsl(var(--primary));
-}
-
-.hifi-subtab-content {
-  flex: 1;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Context Menu overlay */
@@ -2316,35 +1074,6 @@
   margin: 4px 0;
 }
 
-/* Drag and Drop Zone */
-.hifi-drop-zone {
-  margin: 8px 0 16px 0;
-  padding: 8px 12px;
-  border: 1px dashed var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.hifi-drop-zone:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  box-shadow: 0 0 0 2px var(--color-primary-soft);
-}
-
-.hifi-context-chip {
-  animation: scaleIn 0.2s ease-out;
-}
-
-@keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
 /* Toast popup styling */
 .hifi-toast {
   position: fixed;
@@ -2370,331 +1099,8 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* SQL Workspace Editor */
-.hifi-sql-workspace {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--surface-card);
-  overflow: hidden;
-}
-
-.hifi-sql-editor-container {
-  flex: 1;
-  display: flex;
-  border-bottom: 1px solid var(--color-border);
-  min-height: 150px;
-  position: relative;
-}
-
-.hifi-sql-editor-lines {
-  width: 28px;
-  background: var(--surface-panel-muted);
-  border-right: 1px solid var(--color-border);
-  font-family: monospace;
-  font-size: var(--ui-font-label);
-  color: var(--color-text-muted);
-  text-align: right;
-  padding: 10px 6px 10px 0;
-  user-select: none;
-  line-height: 1.6;
-}
-
-.hifi-sql-textarea-wrapper {
-  flex: 1;
-  position: relative;
-  height: 100%;
-}
-
-.hifi-sql-textarea {
-  width: 100%;
-  height: 100%;
-  border: none;
-  resize: none;
-  outline: none;
-  padding: 10px;
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: var(--ui-font-label);
-  line-height: 1.6;
-  color: #0F172A;
-  background: var(--surface-card);
-}
-
-.hifi-sql-editor-actions {
-  position: absolute;
-  right: 12px;
-  top: 12px;
-  display: flex;
-  gap: 6px;
-  z-index: 5;
-}
-
-.hifi-sql-console-run-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--color-success);
-  color: #FFFFFF;
-  font-size: var(--ui-font-caption);
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 2px 4px rgba(22, 163, 74, 0.2);
-  transition: all 0.15s;
-}
-
-.hifi-sql-console-run-btn:hover {
-  background: #15803d;
-}
-
-/* SQL Console outputs pane */
-.hifi-sql-output-pane {
-  height: 240px;
-  background: var(--surface-card);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.hifi-sql-output-tabs {
-  height: 32px;
-  background: var(--surface-panel-muted);
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  padding: 0 12px;
-  align-items: center;
-  gap: 16px;
-}
-
-.hifi-sql-output-tab {
-  font-size: var(--ui-font-caption);
-  color: var(--color-text-secondary);
-  font-weight: 400;
-  cursor: pointer;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.hifi-sql-output-tab.active {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-.hifi-sql-output-tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--color-primary);
-}
-
-.hifi-sql-output-content {
-  flex: 1;
-  overflow: auto;
-  padding: 10px;
-  font-size: var(--ui-font-label);
-}
-
-.hifi-sql-history-item {
-  padding: 6px;
-  border-bottom: 1px solid #F1F5F9;
-  font-family: monospace;
-}
-
-.hifi-sql-ai-explain-card {
-  padding: 12px;
-  background: var(--color-primary-soft);
-  border: 1px solid #C7D2FE;
-  border-radius: 8px;
-  color: #3730A3;
-  line-height: 1.5;
-}
-
-/* Navicat-style unified SQL console (statements + results interleaved) */
-.sql-console {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: #020617;
-  cursor: text;
-}
-
-.sql-console-scroll {
-  flex: 1;
-  overflow: auto;
-  padding: 12px 14px 18px;
-  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-  font-size: var(--ui-font-control);
-  line-height: 1.6;
-  color: #DBEAFE;
-}
-
-.sql-console-info {
-  color: #64748B;
-  margin: 2px 0;
-  white-space: pre-wrap;
-}
-
-.sql-console-info.warn {
-  color: #FBBF24;
-}
-
-.sql-console-stmt {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.sql-console-prompt-label {
-  color: #34D399;
-  font-weight: 600;
-  flex-shrink: 0;
-  user-select: none;
-  line-height: 1.6;
-}
-
-.sql-console-sql {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: #E0E7FF;
-}
-
-.sql-console-running {
-  color: #D08060;
-  margin: 6px 0;
-}
-
-.sql-console-error {
-  margin: 6px 0 4px;
-  padding: 6px 10px;
-  border-left: 2px solid #EF4444;
-  background: rgba(239, 68, 68, 0.08);
-  color: #FCA5A5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.sql-console-error strong {
-  color: #EF4444;
-  margin-right: 8px;
-}
-
-.sql-console-result {
-  margin: 6px 0 4px;
-}
-
-.sql-console-result-meta {
-  color: #64748B;
-  font-size: var(--ui-font-label);
-  margin-bottom: 4px;
-}
-
-.sql-console-table-wrap {
-  max-height: 320px;
-  overflow: auto;
-  border: 1px solid #1E293B;
-  border-radius: 4px;
-  background: #0B1120;
-}
-
-.sql-console-table {
-  border-collapse: collapse;
-  width: max-content;
-  min-width: 100%;
-  font-size: var(--ui-font-label);
-}
-
-.sql-console-table th {
-  position: sticky;
-  top: 0;
-  background: #111A2E;
-  color: #93C5FD;
-  text-align: left;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-bottom: 1px solid #1E293B;
-  border-right: 1px solid #1A2740;
-  white-space: nowrap;
-}
-
-.sql-console-table th:last-child {
-  border-right: none;
-}
-
-.sql-console-table td {
-  padding: 3px 10px;
-  border-bottom: 1px solid #15233D;
-  border-right: 1px solid #131F36;
-  color: #CBD5E1;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sql-console-table td:last-child {
-  border-right: none;
-}
-
-.sql-console-table tbody tr:hover td {
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.sql-console-null {
-  color: #475569;
-  font-style: italic;
-}
-
-.sql-console-empty {
-  text-align: center;
-  color: #64748B;
-}
-
-.sql-console-prompt {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.sql-console-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  resize: none;
-  color: #E0E7FF;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: 1.6;
-  padding: 0;
-  caret-color: #34D399;
-}
-
-.sql-console-input::placeholder {
-  color: #334155;
-}
-
-/* Multi-table joint Workspace styles */
-.hifi-multi-table-workspace {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* Query result full-width view */
-.hifi-query-result-workspace {
+/* Query result full-width view */
+.hifi-query-result-workspace {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -2825,328 +1231,9 @@
   border-color: #FCA5A5;
 }
 
-/* ===== Agent eval page ===== */
-.hifi-eval-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--color-panel);
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.hifi-eval-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-panel);
-}
-
-.hifi-eval-header-title {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--ui-font-body);
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.hifi-eval-header-ds {
-  font-size: var(--ui-font-label);
-  font-weight: 400;
-  color: #64748B;
-  background: var(--surface-card-hover);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.hifi-eval-header-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.hifi-eval-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--ui-font-body);
-  font-weight: 600;
-  padding: 0 14px;
-  height: 34px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: var(--surface-card);
-  color: #334155;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-
-.hifi-eval-btn:hover:not(:disabled) {
-  background: var(--color-bg);
-  color: var(--color-primary);
-  border-color: var(--color-border-hover);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-}
-
-.hifi-eval-btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), #6366f1);
-  border: none;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(118, 103, 242, 0.25);
-}
-
-.hifi-eval-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #8b7ef5, #7578f3);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(118, 103, 242, 0.35);
-  color: #ffffff;
-}
-
-.hifi-eval-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.hifi-eval-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--surface-card);
-}
-
-.hifi-eval-form-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.hifi-eval-form-row label {
-  font-size: var(--ui-font-label);
-  color: #64748B;
-}
-
-.hifi-eval-form-row input[type="text"],
-.hifi-eval-form-row input:not([type]) {
-  font-size: var(--ui-font-control);
-  padding: 6px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--surface-panel-muted);
-}
-
-.hifi-eval-form-inline {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.hifi-eval-form-inline label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--ui-font-control);
-  color: #334155;
-}
-
-.hifi-eval-body {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  padding: 14px 16px;
-  overflow: auto;
-}
-
-.hifi-eval-panel {
-  background: var(--surface-card);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.hifi-eval-panel-title {
-  font-size: var(--ui-font-control);
-  font-weight: 600;
-  color: #334155;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--surface-panel-muted);
-}
-
-.hifi-eval-empty {
-  padding: 18px 14px;
-  font-size: var(--ui-font-control);
-  color: #94A3B8;
-  line-height: 1.6;
-}
-
-.hifi-eval-task-list,
-.hifi-eval-run-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow: auto;
-}
-
-.hifi-eval-task {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.hifi-eval-task-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.hifi-eval-task-name {
-  font-size: var(--ui-font-control);
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.hifi-eval-task-question {
-  font-size: var(--ui-font-label);
-  color: #64748B;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hifi-eval-task-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 5px;
-}
-
-.hifi-eval-chip {
-  font-size: var(--ui-font-caption);
-  font-weight: 600;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: #EFF6FF;
-  color: var(--color-primary);
-}
-
-.hifi-eval-chip-keyword {
-  background: #F0FDF4;
-  color: #16A34A;
-}
-
-.hifi-eval-icon-btn {
-  border: none;
-  background: transparent;
-  color: #94A3B8;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.hifi-eval-icon-btn:hover {
-  color: #DC2626;
-  background: #FEF2F2;
-}
-
-.hifi-eval-run {
-  border-bottom: 1px solid #F1F5F9;
-}
-
-.hifi-eval-run-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 14px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: var(--ui-font-control);
-  color: #334155;
-  text-align: left;
-}
-
-.hifi-eval-run-head:hover {
-  background: var(--surface-panel-muted);
-}
-
-.hifi-eval-run-rate {
-  font-size: var(--ui-font-body);
-  font-weight: 600;
-  min-width: 44px;
-}
-
-.hifi-eval-rate-good { color: #16A34A; }
-.hifi-eval-rate-warn { color: #D97706; }
-.hifi-eval-rate-bad { color: #DC2626; }
-
-.hifi-eval-run-counts { color: #475569; }
-.hifi-eval-run-latency { color: #94A3B8; font-size: var(--ui-font-label); }
-
-.hifi-eval-run-time {
-  margin-left: auto;
-  font-size: var(--ui-font-label);
-  color: #94A3B8;
-}
-
-.hifi-eval-cases {
-  padding: 4px 14px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--surface-panel-muted);
-}
-
-.hifi-eval-case {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: var(--ui-font-label);
-  color: #475569;
-  padding: 6px 8px;
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-}
-
-.hifi-eval-case-status {
-  font-weight: 600;
-  font-size: var(--ui-font-caption);
-  padding: 1px 7px;
-  border-radius: 999px;
-}
-
-.hifi-eval-case-passed { background: #F0FDF4; color: #16A34A; }
-.hifi-eval-case-failed { background: #FEF2F2; color: #DC2626; }
-.hifi-eval-case-error { background: #FEF3C7; color: #B45309; }
-
-.hifi-eval-case-task {
-  font-weight: 600;
-  color: #1E293B;
-}
-
-.hifi-eval-case-reasons {
-  flex-basis: 100%;
-  font-size: var(--ui-font-label);
-  color: #B91C1C;
-  line-height: 1.5;
-}
-
-/* ===== Agent running indicator ===== */
-.hifi-agent-running-bar {
-  display: flex;
+/* ===== Agent running indicator ===== */
+.hifi-agent-running-bar {
+  display: flex;
   align-items: center;
   gap: 7px;
   padding: 6px 16px;
@@ -3404,47 +1491,6 @@
   background: #ECFDF5;
   color: #059669;
   border: 1px solid #A7F3D0;
-}
-
-/* ===== Chart Card ===== */
-.hifi-chart-card .hifi-chart-body {
-  height: 280px;
-  padding: 4px 8px 8px;
-  transition: height 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-.hifi-chart-card.is-compact .hifi-chart-body {
-  height: 180px;
-}
-.hifi-chart-card .hifi-chart-body.is-expanded {
-  height: min(520px, 62vh);
-}
-.hifi-chart-type-btn {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
-  font-size: var(--ui-font-micro);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  background: var(--surface-card);
-  color: #64748B;
-  cursor: pointer;
-  transition: all 0.15s;
-  height: 22px;
-}
-.hifi-chart-type-btn.active {
-  background: #EEF2FF;
-  border-color: #4F46E5;
-  color: #4F46E5;
-}
-.hifi-chart-type-btn:hover:not(.active) {
-  background: var(--surface-panel-muted);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hifi-chart-card .hifi-chart-body {
-    transition: none;
-  }
 }
 
 /* ===== Markdown Content ===== */
@@ -3768,155 +1814,6 @@
 }
 
 /* ===== Command Palette ===== */
-.hifi-command-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: flex;
-  justify-content: center;
-  padding-top: 14vh;
-  background: rgba(15, 23, 42, 0.22);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.hifi-command-panel {
-  width: min(620px, 94vw);
-  max-height: 440px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.14), 0 0 0 1px rgba(15, 23, 42, 0.04);
-}
-
-.hifi-command-search {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
-}
-
-.hifi-command-search-icon {
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.hifi-command-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: var(--ui-font-body);
-  color: var(--color-text-primary);
-  font-family: var(--font-family);
-}
-
-.hifi-command-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.hifi-command-kbd {
-  font-size: var(--ui-font-caption);
-  font-family: "Fira Code", monospace;
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  flex-shrink: 0;
-}
-
-.hifi-command-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.hifi-command-empty {
-  padding: 32px 20px;
-  text-align: center;
-  font-size: var(--ui-font-control);
-  color: var(--color-text-muted);
-}
-
-.hifi-command-group {
-  margin-bottom: 4px;
-}
-
-.hifi-command-category {
-  padding: 4px 12px 2px;
-  font-size: var(--ui-font-caption);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.hifi-command-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 10px;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  padding: 9px 12px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.08s;
-  font-family: var(--font-family);
-}
-
-.hifi-command-item:hover,
-.hifi-command-item.active {
-  background: var(--color-primary-soft);
-}
-
-.hifi-command-item-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  background: var(--color-bg);
-  color: var(--color-text-muted);
-}
-
-.hifi-command-item.active .hifi-command-item-icon {
-  background: rgba(79, 70, 229, 0.12);
-  color: var(--color-primary);
-}
-
-.hifi-command-item-label {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--ui-font-body);
-  font-weight: 400;
-  color: var(--color-text-primary);
-}
-
-.hifi-command-item.active .hifi-command-item-label {
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.hifi-command-footer {
-  display: flex;
-  gap: 16px;
-  padding: 6px 16px;
-  border-top: 1px solid var(--color-border);
-  font-size: var(--ui-font-caption);
-  color: var(--color-text-muted);
-  background: var(--color-bg);
-}
-
 /* ===== Settings panels (LLM + System) ===== */
 .hifi-settings-page,
 .hifi-settings-dialog-body {
@@ -4041,7 +1938,17 @@
   box-shadow: 0 0 0 2px var(--color-primary-soft);
 }
 
-.hifi-settings-eye-btn {
+.hifi-settings-input-compact {
+
+  height: 30px;
+
+  font-size: var(--ui-font-caption);
+
+}
+
+
+
+.hifi-settings-eye-btn {
   position: absolute;
   right: 6px;
   top: 50%;
@@ -4508,374 +2415,17 @@
   color: var(--color-text-secondary);
 }
 
-.hifi-datasource-page {
-  gap: 18px;
-}
-
-.hifi-datasource-form {
-  padding: 20px 22px 28px;
-}
-
-.hifi-datasource-console {
-  min-height: 0;
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--color-panel);
-}
-
-.hifi-datasource-list {
-  min-width: 0;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--hairline);
-  display: flex;
-  flex-direction: column;
-}
-
-.hifi-datasource-list-item {
-  width: 100%;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-primary);
-  cursor: pointer;
-  text-align: left;
-  padding: 10px;
-}
-
-.hifi-datasource-list-item.active {
-  background: var(--color-panel);
-  border-color: var(--color-primary-soft);
-  box-shadow: var(--shadow-panel);
-}
-
-.hifi-datasource-detail {
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--color-panel);
-}
-
-.hifi-datasource-metrics,
-.hifi-datasource-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-}
-
-.hifi-datasource-config-grid {
-  display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 10px 14px;
-}
-
-.hifi-diagnostics-page {
-  height: 100%;
-  padding: 20px 24px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  overflow: hidden;
-}
-
-.hifi-diagnostics-toggle-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--ui-font-label);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  margin-right: 8px;
-  user-select: none;
-}
-
-.hifi-diagnostics-toggle-label input[type="checkbox"] {
-  width: 12px;
-  height: 12px;
-  cursor: pointer;
-  accent-color: var(--color-primary);
-}
-
-.hifi-diagnostics-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.hifi-diagnostics-badge,
-.hifi-log-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: var(--ui-font-label);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.hifi-diagnostics-badge,
-.hifi-log-status.ok {
-  color: #047857;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.24);
-}
-
-.hifi-log-status.missing {
-  color: #9a3412;
-  background: rgba(249, 115, 22, 0.1);
-  border: 1px solid rgba(249, 115, 22, 0.24);
-}
-
-.hifi-diagnostics-error,
-.hifi-diagnostics-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 8px;
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.08);
-  font-size: var(--ui-font-control);
-}
-
-.hifi-diagnostics-empty {
-  justify-content: center;
-  color: var(--color-text-secondary);
-  border-color: var(--color-border);
-  background: var(--color-bg);
-}
-
-.hifi-diagnostics-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-
-.hifi-diagnostics-source-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--color-panel);
-}
-
-.hifi-diagnostics-source-picker {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  font-weight: 700;
-}
-
-.hifi-diagnostics-source-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 168px;
-  max-width: min(280px, 52vw);
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  color: var(--color-text-primary);
-  background: var(--color-panel);
-  font-size: var(--ui-font-control);
-  font-weight: 700;
-  cursor: pointer;
-  outline: none;
-}
-
-.hifi-diagnostics-source-trigger:hover,
-.hifi-diagnostics-source-trigger:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent);
-}
-
-.hifi-diagnostics-source-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 6px);
-  left: 74px;
-  width: min(360px, 70vw);
-  max-height: 180px;
-  overflow-y: auto;
-  padding: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-panel);
-  box-shadow: var(--shadow-floating);
-}
-
-.hifi-diagnostics-source-option {
-  width: 100%;
-  min-height: 48px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 16px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--color-text-primary);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.hifi-diagnostics-source-option:hover,
-.hifi-diagnostics-source-option.active {
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-}
-
-.hifi-diagnostics-source-option span {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.hifi-diagnostics-source-option strong,
-.hifi-diagnostics-source-option small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hifi-diagnostics-source-option small {
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  font-weight: 600;
-}
-
-.hifi-diagnostics-source-option em {
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  font-style: normal;
-  white-space: nowrap;
-}
-
-.hifi-diagnostics-source-count {
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  white-space: nowrap;
-}
-
-.hifi-diagnostics-metric {
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--color-panel);
-}
-
-.hifi-diagnostics-metric span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  font-weight: 600;
-}
-
-.hifi-diagnostics-metric strong {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-input);
-}
-
-.hifi-diagnostics-sources {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-right: 4px;
-}
-
-.hifi-diagnostics-source {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--color-panel);
-}
-
-.hifi-diagnostics-source-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.hifi-diagnostics-source-header h3 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-input);
-  font-weight: 700;
-}
-
-.hifi-diagnostics-source-header p {
-  margin: 4px 0 0;
-  max-width: 72vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-  white-space: nowrap;
-}
-
-.hifi-diagnostics-source pre {
-  margin: 0;
-  max-height: 360px;
-  overflow: auto;
-  padding: 12px 14px;
-  color: var(--color-text-primary);
-  background: color-mix(in srgb, var(--color-bg) 72%, #ffffff);
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  font-size: var(--ui-font-label);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ── UI Text Copy Prevention ── */
+/* 闂佸啿鍘滈崑鎾绘煃閸忓浜?UI Text Copy Prevention 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
 .u-select-none,
 .hifi-btn,
 .hifi-tree-node,
 .ds-quick-nav-item,
-.hifi-datasource-list-item,
-.hifi-tab-pane button,
-.hifi-ai-badge,
-.hifi-guide-chip-prod,
-.artifact-card-badge,
-.hifi-artifact-chip-table,
+
+.hifi-tab-pane button,
+.hifi-artifact-chip-table,
 .hifi-artifact-chip-chart,
 .hifi-artifact-chip-sql,
-.hifi-eval-chip,
-.hifi-eval-chip-keyword,
-.field-label,
+.field-label,
 .hifi-page-title,
 .hifi-search-icon,
 .hifi-settings-page-icon,
@@ -4886,7 +2436,7 @@
   -ms-user-select: none;
 }
 
-/* ── Custom Premium Scrollbars ── */
+/* 闂佸啿鍘滈崑鎾绘煃閸忓浜?Custom Premium Scrollbars 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -4903,7 +2453,7 @@
   background: rgba(100, 116, 139, 0.4);
 }
 
-/* ── Tauri Inactive Window State Dimming ── */
+/* 闂佸啿鍘滈崑鎾绘煃閸忓浜?Tauri Inactive Window State Dimming 闂佸啿鍘滈崑鎾绘煃閸忓浜?*/
 .window-inactive .titlebar {
   opacity: 0.72;
   filter: grayscale(15%);

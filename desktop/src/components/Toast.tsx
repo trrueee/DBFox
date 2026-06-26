@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, X, AlertTriangle, Info, XCircle } from "lucide-react";
-import gsap from "gsap";
+import * as ToastPrimitive from "@radix-ui/react-toast";
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import "./Toast.css";
 
 type ToastType = "success" | "error" | "warning" | "info";
 
@@ -27,155 +28,66 @@ let nextId = 0;
 let toastRoot: HTMLElement | null = null;
 export function setToastRoot(el: HTMLElement | null) { toastRoot = el; }
 
+function ToastIcon({ type }: { type: ToastType }) {
+  switch (type) {
+    case "success":
+      return <CheckCircle2 className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+    case "error":
+      return <XCircle className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+    case "warning":
+      return <AlertTriangle className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+    case "info":
+      return <Info className="dbfox-toast-icon-glyph" aria-hidden="true" />;
+  }
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
-  const [exitingIds, setExitingIds] = useState<Set<number>>(new Set());
-  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
-  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const remove = useCallback((id: number) => {
-    if (exitingIds.has(id)) return;
-    setExitingIds((prev) => new Set(prev).add(id));
-
-    const el = itemRefs.current.get(id);
-    if (el) {
-      gsap.to(el, {
-        opacity: 0,
-        x: 40,
-        duration: 0.25,
-        ease: "power2.in",
-        onComplete: () => {
-          setItems((prev) => prev.filter((it) => it.id !== id));
-          setExitingIds((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
-          itemRefs.current.delete(id);
-        },
-      });
-    } else {
-      setItems((prev) => prev.filter((it) => it.id !== id));
-      setExitingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-
-    const t = timersRef.current.get(id);
-    if (t) {
-      clearTimeout(t);
-      timersRef.current.delete(id);
-    }
-  }, [exitingIds]);
-
-  const toast = useCallback(
-    (message: string, type: ToastType = "info") => {
-      const id = nextId++;
-      setItems((prev) => [...prev.slice(-4), { id, type, message }]);
-      const timer = setTimeout(() => remove(id), 3500);
-      timersRef.current.set(id, timer);
-    },
-    [remove],
-  );
-
-  const setItemRef = useCallback((id: number, el: HTMLDivElement | null) => {
-    if (el) {
-      itemRefs.current.set(id, el);
-      gsap.fromTo(el, { opacity: 0, x: 20, scale: 0.95 }, { opacity: 1, x: 0, scale: 1, duration: 0.3, ease: "back.out(1.3)" });
-    }
+    setItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => {
-      timers.forEach((t) => clearTimeout(t));
-    };
+  const toast = useCallback((message: string, type: ToastType = "info") => {
+    const id = nextId++;
+    setItems((prev) => [...prev.slice(-4), { id, type, message }]);
   }, []);
 
-  const icon = (type: ToastType) => {
-    switch (type) {
-      case "success": return <CheckCircle2 size={15} style={{ color: "hsl(var(--success))", flexShrink: 0 }} />;
-      case "error":   return <XCircle size={15} style={{ color: "hsl(var(--destructive))", flexShrink: 0 }} />;
-      case "warning": return <AlertTriangle size={15} style={{ color: "hsl(var(--warning))", flexShrink: 0 }} />;
-      case "info":    return <Info size={15} style={{ color: "hsl(var(--primary))", flexShrink: 0 }} />;
-    }
-  };
-
-  const toastElement = items.length > 0 ? createPortal(
-    <div
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      style={{
-        position: "absolute",
-        bottom: 20,
-        right: 20,
-        zIndex: 9999,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        pointerEvents: "none",
-      }}
-    >
+  const toastStack = (
+    <>
       {items.map((item) => (
-        <div
+        <ToastPrimitive.Root
           key={item.id}
-          ref={(el) => setItemRef(item.id, el)}
+          className={`dbfox-toast-root dbfox-toast-root--${item.type}`}
+          duration={3500}
           role={item.type === "error" ? "alert" : "status"}
           aria-live={item.type === "error" ? "assertive" : "polite"}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 14px",
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
-            borderLeft: `3px solid ${
-              item.type === "success" ? "hsl(var(--success))" :
-              item.type === "error" ? "hsl(var(--destructive))" :
-              item.type === "warning" ? "hsl(var(--warning))" :
-              "hsl(var(--primary))"
-            }`,
-            borderRadius: "var(--radius)",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-            fontSize: "13px",
-            color: "hsl(var(--foreground))",
-            minWidth: 200,
-            maxWidth: 400,
-            pointerEvents: "auto",
+          onOpenChange={(open) => {
+            if (!open) remove(item.id);
           }}
+          type={item.type === "error" ? "foreground" : "background"}
         >
-          {icon(item.type)}
-          <span style={{ flex: 1, lineHeight: 1.4 }}>{item.message}</span>
-          <button
-            onClick={() => remove(item.id)}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "hsl(var(--muted-foreground))",
-              padding: 2,
-              display: "flex",
-              opacity: 0.6,
-              transition: "opacity 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
-          >
-            <X size={13} />
-          </button>
-        </div>
+          <span className="dbfox-toast-icon" aria-hidden="true">
+            <ToastIcon type={item.type} />
+          </span>
+          <ToastPrimitive.Description asChild>
+            <span className="dbfox-toast-message">{item.message}</span>
+          </ToastPrimitive.Description>
+          <ToastPrimitive.Close className="dbfox-toast-close" aria-label="关闭通知">
+            <X className="dbfox-toast-close-icon" aria-hidden="true" />
+          </ToastPrimitive.Close>
+        </ToastPrimitive.Root>
       ))}
-    </div>,
-    toastRoot || document.body,
-  ) : null;
+      <ToastPrimitive.Viewport className="dbfox-toast-viewport" />
+    </>
+  );
 
   return (
     <ToastContext.Provider value={{ toast }}>
-      {children}
-      {toastElement}
+      <ToastPrimitive.Provider swipeDirection="right" duration={3500}>
+        {children}
+        {toastRoot ? createPortal(toastStack, toastRoot) : toastStack}
+      </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );
 }

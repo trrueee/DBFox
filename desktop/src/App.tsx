@@ -9,7 +9,7 @@ import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
 import type { ContextMenuState } from "./types/workspace";
 import { CommandPalette } from "./components/CommandPalette";
 import TitleBar from "./components/TitleBar";
-import { useSidebarLayout } from "./features/appShell/useSidebarLayout";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui";
 import { useAppCommands } from "./features/appShell/useAppCommands";
 import { WorkspaceRouter } from "./features/appShell/WorkspaceRouter";
 import { installClientErrorLogging } from "./lib/diagnostics/clientLog";
@@ -60,7 +60,8 @@ export default function App() {
 
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const { collapsed: sidebarCollapsed, width: sidebarWidth, handleResizeStart, toggleCollapse: toggleSidebarCollapse } = useSidebarLayout();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed((value) => !value), []);
 
   useEffect(() => {
     const handleDocumentClick = () => setContextMenu((prev) => ({ ...prev, visible: false }));
@@ -143,28 +144,47 @@ export default function App() {
         <TitleBar />
         {/* Window body: sidebar + main surface + right drawer */}
         <main className="app-body">
-          <DataSourceTree
-            treeSearch={treeSearch}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={toggleSidebarCollapse}
-            onTreeSearchChange={setTreeSearch}
-            onTableClick={handleTableClick}
-            onTableDoubleClick={openTableTabForActiveDatasource}
-            onNodeContextMenu={handleNodeContextMenu}
-            onRefresh={refreshSchema}
-            onNewConnection={openNewConnectionTab}
-            sidebarWidth={sidebarWidth}
-          />
+          <ResizablePanelGroup
+            key={sidebarCollapsed ? "collapsed" : "expanded"}
+            id="app-body-split"
+            direction="horizontal"
+            className="app-body-split"
+          >
+            <ResizablePanel
+              id="app-sidebar-panel"
+              className={`app-sidebar-panel ${sidebarCollapsed ? "app-sidebar-panel--collapsed" : ""}`}
+              defaultSize={sidebarCollapsed ? 36 : 260}
+              minSize={sidebarCollapsed ? 36 : 220}
+              maxSize={sidebarCollapsed ? 36 : 420}
+              disabled={sidebarCollapsed}
+              groupResizeBehavior="preserve-pixel-size"
+            >
+              <DataSourceTree
+                treeSearch={treeSearch}
+                collapsed={sidebarCollapsed}
+                onToggleCollapse={toggleSidebarCollapse}
+                onTreeSearchChange={setTreeSearch}
+                onTableClick={handleTableClick}
+                onTableDoubleClick={openTableTabForActiveDatasource}
+                onNodeContextMenu={handleNodeContextMenu}
+                onRefresh={refreshSchema}
+                onNewConnection={openNewConnectionTab}
+              />
+            </ResizablePanel>
 
-          {/* Resize handle */}
-          {!sidebarCollapsed && (
-            <div
-              className="app-resizer"
-              onMouseDown={handleResizeStart}
-            />
-          )}
+            {!sidebarCollapsed && (
+              <ResizableHandle
+                aria-label="Resize datasource sidebar"
+                className="app-sidebar-resize-handle"
+              />
+            )}
 
-          <section className="app-main">
+            <ResizablePanel
+              id="app-workspace-panel"
+              className="app-workspace-panel"
+              minSize={420}
+            >
+              <section className="app-main">
             {/* Top Workspace Tab Bar */}
             <div className="app-tabbar">
               <WorkspaceTabs
@@ -190,7 +210,9 @@ export default function App() {
                 showToast={toast}
               />
             </div>
-          </section>
+              </section>
+            </ResizablePanel>
+          </ResizablePanelGroup>
 
           <ContextDrawer
             open={rightDrawerOpen}

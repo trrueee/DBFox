@@ -1,0 +1,128 @@
+.dbfox-command-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 94vw);
+  max-height: 440px;
+  overflow: hidden;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  box-shadow:
+    0 20px 60px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.dbfox-command-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dbfox-command-search-icon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.dbfox-command-input {
+  flex: 1;
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: var(--ui-font-body);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.dbfox-command-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.dbfox-command-kbd {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  color: var(--color-text-muted);
+  font-family: "Fira Code", monospace;
+  font-size: var(--ui-font-caption);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.dbfox-command-list {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.dbfox-command-empty {
+  padding: 32px 20px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-control);
+  text-align: center;
+}
+
+.dbfox-command-group {
+  margin-bottom: 4px;
+}
+
+.dbfox-command-category {
+  display: block;
+  padding: 4px 12px 2px;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dbfox-command-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 12px;
+  color: inherit;
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 80ms ease;
+}
+
+.dbfox-command-item:hover,
+.dbfox-command-item[data-selected="true"] {
+  background: var(--color-primary-soft);
+}
+
+.dbfox-command-item-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-radius: 6px;
+}
+
+.dbfox-command-item[data-selected="true"] .dbfox-command-item-icon {
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.dbfox-command-item-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-body);
+  font-weight: 400;
+}
+
+.dbfox-command-item[data-selected="true"] .dbfox-command-item-label {
+  color: var(--color-primary);
+  font-weight: 600;
+}

@@ -1,0 +1,137 @@
+.dbfox-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: hsl(var(--foreground));
+  font-size: var(--ui-font-body);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition:
+    color 150ms ease-out,
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.dbfox-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 1px hsl(var(--background)),
+    0 0 0 3px hsl(var(--ring));
+}
+
+.dbfox-button:disabled {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.dbfox-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.dbfox-button svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.dbfox-button--default {
+  color: hsl(var(--primary-foreground));
+  background: hsl(var(--primary));
+}
+
+.dbfox-button--default:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.dbfox-button--destructive {
+  color: hsl(var(--destructive-foreground));
+  background: hsl(var(--destructive));
+}
+
+.dbfox-button--destructive:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.dbfox-button--outline {
+  color: hsl(var(--foreground));
+  background: transparent;
+  border-color: hsl(var(--border));
+}
+
+.dbfox-button--outline:hover:not(:disabled) {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.06);
+  border-color: hsl(var(--primary) / 0.3);
+}
+
+.dbfox-button--secondary {
+  color: hsl(var(--secondary-foreground));
+  background: hsl(var(--secondary));
+}
+
+.dbfox-button--secondary:hover:not(:disabled) {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+}
+
+.dbfox-button--ghost {
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+}
+
+.dbfox-button--ghost:hover:not(:disabled) {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.06);
+}
+
+.dbfox-button--link {
+  height: auto;
+  padding: 0;
+  color: hsl(var(--primary));
+  background: transparent;
+  border-color: transparent;
+  text-underline-offset: 4px;
+}
+
+.dbfox-button--link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.dbfox-button--default-size {
+  height: 36px;
+  padding: 8px 16px;
+}
+
+.dbfox-button--sm {
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--ui-font-control);
+}
+
+.dbfox-button--lg {
+  height: 40px;
+  padding: 0 24px;
+}
+
+.dbfox-button--icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.dbfox-button--icon-sm {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}

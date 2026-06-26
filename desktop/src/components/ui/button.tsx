@@ -1,43 +1,51 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
+import type { ClassValue } from "clsx";
 import { cn } from "../../lib/utils";
+import "./button.css";
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius)] text-[var(--ui-font-body)] font-medium transition-all duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--ring))] focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:scale-[0.97]",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90",
-        destructive:
-          "bg-[hsl(var(--destructive))] text-[hsl(var(--destructive-foreground))] hover:opacity-90",
-        outline:
-          "border border-[hsl(var(--border))] bg-transparent hover:bg-[hsl(var(--primary)/0.06)] hover:border-[hsl(var(--primary)/0.3)] hover:text-[hsl(var(--primary))]",
-        secondary:
-          "bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] hover:bg-[hsl(var(--primary)/0.08)] hover:text-[hsl(var(--primary))]",
-        ghost:
-          "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--primary)/0.06)] hover:text-[hsl(var(--primary))]",
-        link: "text-[hsl(var(--primary))] underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 px-3 text-[var(--ui-font-control)]",
-        lg: "h-10 px-6",
-        icon: "h-9 w-9",
-        "icon-sm": "h-7 w-7",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-);
+type ButtonVariant = "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
+type ButtonSize = "default" | "sm" | "lg" | "icon" | "icon-sm";
+
+interface ButtonVariantOptions {
+  variant?: ButtonVariant | null;
+  size?: ButtonSize | null;
+  className?: ClassValue;
+}
+
+const buttonVariantClasses: Record<ButtonVariant, string> = {
+  default: "dbfox-button--default",
+  destructive: "dbfox-button--destructive",
+  outline: "dbfox-button--outline",
+  secondary: "dbfox-button--secondary",
+  ghost: "dbfox-button--ghost",
+  link: "dbfox-button--link",
+};
+
+const buttonSizeClasses: Record<ButtonSize, string> = {
+  default: "dbfox-button--default-size",
+  sm: "dbfox-button--sm",
+  lg: "dbfox-button--lg",
+  icon: "dbfox-button--icon",
+  "icon-sm": "dbfox-button--icon-sm",
+};
+
+function buttonVariants({ variant, size, className }: ButtonVariantOptions = {}) {
+  const normalizedVariant = variant ?? "default";
+  const normalizedSize = size ?? "default";
+
+  return cn(
+    "dbfox-button",
+    buttonVariantClasses[normalizedVariant],
+    buttonSizeClasses[normalizedSize],
+    className
+  );
+}
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant | null;
+  size?: ButtonSize | null;
   asChild?: boolean;
 }
 
