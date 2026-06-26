@@ -1,0 +1,56 @@
+{
+  "cases_path": "engine\\tests\\fixtures\\spider_tiny\\dev_expanded.json",
+  "case_count": 20,
+  "variants": [
+    "keyword",
+    "vector",
+    "hybrid"
+  ],
+  "mode": "ai-assisted-retrieval",
+  "planner_model": "qwen-plus",
+  "embedding_provider": "dashscope-openai-compatible",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "tiny_school",
+      "datasource_id": "spider_tiny_school_e921078b",
+      "synced_tables": [
+        "courses",
+        "students"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 7,
+      "schema_search_doc_count": 9,
+      "embedding_total_docs": 9,
+      "embedding_built_count": 9,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 9,
+      "embedding_build_time_ms": 3179.848,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "sample_checks": [
+    {
+      "db_id": "tiny_school",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 9,
+      "retrieval_latency_ms": 552.909,
+      "embedding_build_time_ms": 1.183,
+      "error": null
+    },
+    {
+      "db_id": "tiny_school",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 9,
+      "retrieval_latency_ms": 549.815,
+      "embedding_build_time_ms": 1.105,
+      "error": null
+    }
+  ]
+}

@@ -294,6 +294,38 @@ class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
+class SchemaSearchEmbedding(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "schema_search_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "datasource_id",
+            "entity_type",
+            "entity_id",
+            "embedding_model",
+            "embedding_dimension",
+            name="uq_schema_search_embeddings_doc_model_dim",
+        ),
+        Index("ix_schema_search_embeddings_datasource", "datasource_id"),
+        Index(
+            "ix_schema_search_embeddings_lookup",
+            "datasource_id",
+            "embedding_model",
+            "embedding_dimension",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(String, nullable=False)
+    embedding_model = Column(String, nullable=False)
+    embedding_dimension = Column(Integer, nullable=False)
+    search_text_hash = Column(String, nullable=False)
+    embedding_blob = Column(LargeBinary, nullable=False)
+    embedding_json = Column(Text, nullable=False)
+    synced_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
 FTS5_DDL = """
 CREATE VIRTUAL TABLE IF NOT EXISTS schema_search_fts
 USING fts5(search_text, content='schema_search_docs', content_rowid='id')

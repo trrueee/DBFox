@@ -1,0 +1,102 @@
+[
+  {
+    "db_id": "tiny_school",
+    "question": "How many students are there?",
+    "query": "SELECT COUNT(*) FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is the average score?",
+    "query": "SELECT AVG(score) FROM courses"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "List all student names.",
+    "query": "SELECT name FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Show the highest score for each student.",
+    "query": "SELECT students.name, MAX(courses.score) FROM students JOIN courses ON students.id = courses.student_id GROUP BY students.id"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Who scored above 85?",
+    "query": "SELECT students.name FROM students JOIN courses ON students.id = courses.student_id WHERE courses.score > 85"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Which courses did Alice take?",
+    "query": "SELECT courses.name FROM courses JOIN students ON courses.student_id = students.id WHERE students.name = 'Alice'"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What are the scores for Bob?",
+    "query": "SELECT courses.score FROM courses JOIN students ON courses.student_id = students.id WHERE students.name = 'Bob'"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "How many courses are recorded?",
+    "query": "SELECT COUNT(*) FROM courses"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "List student names and ages.",
+    "query": "SELECT name, age FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is the youngest student age?",
+    "query": "SELECT MIN(age) FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is the oldest student age?",
+    "query": "SELECT MAX(age) FROM students"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Which students are older than 20?",
+    "query": "SELECT name FROM students WHERE age > 20"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Show each course name with its score.",
+    "query": "SELECT name, score FROM courses"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Which students took Math?",
+    "query": "SELECT students.name FROM students JOIN courses ON students.id = courses.student_id WHERE courses.name = 'Math'"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Which students took English?",
+    "query": "SELECT students.name FROM students JOIN courses ON students.id = courses.student_id WHERE courses.name = 'English'"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is Alice's highest score?",
+    "query": "SELECT MAX(courses.score) FROM courses JOIN students ON courses.student_id = students.id WHERE students.name = 'Alice'"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "How many courses does each student have?",
+    "query": "SELECT students.name, COUNT(courses.id) FROM students JOIN courses ON students.id = courses.student_id GROUP BY students.id"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "What is the average score for each student?",
+    "query": "SELECT students.name, AVG(courses.score) FROM students JOIN courses ON students.id = courses.student_id GROUP BY students.id"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "List students with course names and scores.",
+    "query": "SELECT students.name, courses.name, courses.score FROM students JOIN courses ON students.id = courses.student_id"
+  },
+  {
+    "db_id": "tiny_school",
+    "question": "Which course has the top score?",
+    "query": "SELECT name FROM courses ORDER BY score DESC LIMIT 1"
+  }
+]

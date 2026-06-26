@@ -11,6 +11,13 @@ from engine.agent.graph.message_utils import first_user_text
 
 logger = logging.getLogger("dbfox.dbfox_agent.progress.fast_path")
 
+_NON_PROGRESS_REPEAT_TOOLS = {
+    "db.inspect",
+    "db.preview",
+    "sql.execute_readonly",
+    "sql.validate",
+}
+
 
 def _arg_signature(tool_name: str, args: dict[str, Any]) -> str:
     """Deterministic hash signature for tool name + canonical args.
@@ -261,7 +268,7 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
             if not exec_between:
                 decision = progress_decision_dict(
                     status="failed",
-                    reason_summary="SQL validated twice without execution. Call sql.execute_readonly with the validated SQL, not sql.validate again.",
+                    reason_summary="SQL validated twice without execution. Call sql.execute_readonly without passing SQL text, not sql.validate again.",
                     should_finalize=True,
                     root_cause="sql.validate loop — agent re-validated instead of executing",
                 )
@@ -339,6 +346,22 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
         return {
             "status": "failed",
             "error": f"Tool '{name}' failed twice with same arguments.",
+            "progress_decision": decision,
+            "trace_events": [progress_trace(decision, fastpath=True)],
+        }
+
+    # 9. Deterministic non-progress repeat: these tools return the same
+    # evidence for identical args, so a second identical call indicates a loop.
+    if name in _NON_PROGRESS_REPEAT_TOOLS:
+        decision = progress_decision_dict(
+            status="failed",
+            reason_summary=f"Tool '{name}' repeated with the same arguments without new progress.",
+            should_finalize=True,
+            root_cause=f"Repeated non-progress tool call: {name}",
+        )
+        return {
+            "status": "failed",
+            "error": f"Tool '{name}' repeated with same arguments without progress.",
             "progress_decision": decision,
             "trace_events": [progress_trace(decision, fastpath=True)],
         }

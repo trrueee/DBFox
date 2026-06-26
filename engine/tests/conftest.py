@@ -33,10 +33,13 @@ from engine import models  # ensure all models are registered with Base
 from engine.models import DataSource
 
 # ---------------------------------------------------------------------------
-# Spider SQLite database paths (from .agent_eval/spider/database/)
+# Spider SQLite database paths. Set DBFOX_SPIDER_ROOT (or SPIDER_ROOT) to a
+# Spider root containing dev.json and database/<db_id>/<db_id>.sqlite.
 # ---------------------------------------------------------------------------
 
-_SPIDER_DIR = Path(__file__).resolve().parent.parent.parent / ".agent_eval" / "spider" / "database"
+_DEFAULT_SPIDER_ROOT = Path(__file__).resolve().parent / "fixtures" / "spider_tiny"
+_SPIDER_ROOT = Path(os.environ.get("DBFOX_SPIDER_ROOT") or os.environ.get("SPIDER_ROOT") or _DEFAULT_SPIDER_ROOT)
+_SPIDER_DIR = _SPIDER_ROOT / "database"
 
 SPIDER_SQLITE_DBS = {
     "concert_singer": str(_SPIDER_DIR / "concert_singer" / "concert_singer.sqlite"),

@@ -102,6 +102,8 @@ artifacts/*.json
 artifacts/*_report*.md
 artifacts/runtime-logs/
 !artifacts/spider_*.json
+reports/retrieval_ab_smoke_*/
+reports/retrieval_ab_three_method_*/
 tmp_tables.json
 
 # ============================================================

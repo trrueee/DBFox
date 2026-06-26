@@ -138,6 +138,33 @@ class TestSqlExecutionPolicy:
         decision = gate.check(state, "sql.execute_readonly", {})
         assert decision.status == "blocked"
 
+    def test_execute_with_can_execute_false_blocked(self):
+        gate = PolicyGate(self._registry_with_execute_tool())
+        state = {
+            "execute": True,
+            "safety": {
+                "can_execute": False,
+                "safe_sql": "SELECT 1",
+                "original_sql": "SELECT 1",
+                "blocked_reasons": [],
+            },
+        }
+        decision = gate.check(state, "sql.execute_readonly", {})
+        assert decision.status == "blocked"
+
+    def test_execute_with_missing_safe_sql_blocked(self):
+        gate = PolicyGate(self._registry_with_execute_tool())
+        state = {
+            "execute": True,
+            "safety": {
+                "can_execute": True,
+                "original_sql": "SELECT 1",
+                "blocked_reasons": [],
+            },
+        }
+        decision = gate.check(state, "sql.execute_readonly", {})
+        assert decision.status == "blocked"
+
     def test_execute_with_validated_sql_allowed(self):
         gate = PolicyGate(self._registry_with_execute_tool())
         state = {
@@ -166,7 +193,7 @@ class TestSqlExecutionPolicy:
         decision = gate.check(state, "sql.execute_readonly", {})
         assert decision.status == "approval_required"
 
-    def test_sql_mismatch_blocked(self):
+    def test_model_supplied_sql_is_ignored_not_blocked(self):
         gate = PolicyGate(self._registry_with_execute_tool())
         state = {
             "execute": True,
@@ -177,5 +204,5 @@ class TestSqlExecutionPolicy:
             },
         }
         decision = gate.check(state, "sql.execute_readonly", {"sql": "DROP TABLE users"})
-        assert decision.status == "blocked"
-        assert "does not match" in decision.reason.lower()
+        assert decision.status == "allowed"
+        assert decision.safe_args == {"ignored_model_sql": "DROP TABLE users"}

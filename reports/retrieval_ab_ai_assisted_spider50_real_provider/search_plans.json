@@ -1,0 +1,552 @@
+[
+  {
+    "case_id": "spider_concert_singer_001",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "search_expressions": [
+      "singer",
+      "singers count",
+      "number of singers",
+      "singer table"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_002",
+    "db_id": "concert_singer",
+    "question": "What is the total number of singers?",
+    "search_expressions": [
+      "singer",
+      "total count",
+      "number of singers",
+      "singer count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_003",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer age order"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_004",
+    "db_id": "concert_singer",
+    "question": "What are the names, countries, and ages for every singer in descending order of age?",
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_005",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age of all singers from France?",
+    "search_expressions": [
+      "singer age France",
+      "singers average min max age",
+      "concert_singer singer table",
+      "country nationality age"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_006",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age for all French singers?",
+    "search_expressions": [
+      "French singers age",
+      "singer age average min max",
+      "concert_singer singer nationality age",
+      "singers nationality = French"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_007",
+    "db_id": "concert_singer",
+    "question": "Show the name and the release year of the song by the youngest singer.",
+    "search_expressions": [
+      "song name release year",
+      "youngest singer",
+      "singer age birth year",
+      "song singer"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_008",
+    "db_id": "concert_singer",
+    "question": "What are the names and release years for all the songs of the youngest singer?",
+    "search_expressions": [
+      "youngest singer",
+      "song name release year",
+      "singer age song",
+      "songs release_year"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_009",
+    "db_id": "concert_singer",
+    "question": "What are all distinct countries where singers above age 20 are from?",
+    "search_expressions": [
+      "singer country",
+      "singer age",
+      "singers above 20",
+      "distinct countries"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_010",
+    "db_id": "concert_singer",
+    "question": "What are  the different countries with singers above age 20?",
+    "search_expressions": [
+      "singer country age",
+      "singers countries",
+      "country singer",
+      "age > 20"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_011",
+    "db_id": "concert_singer",
+    "question": "Show all countries and the number of singers in each country.",
+    "search_expressions": [
+      "countries",
+      "singers",
+      "country count",
+      "singer country"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_012",
+    "db_id": "concert_singer",
+    "question": "How many singers are from each country?",
+    "search_expressions": [
+      "singer country count",
+      "singers by nationality",
+      "country singer count",
+      "singer origin"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_013",
+    "db_id": "concert_singer",
+    "question": "List all song names by singers above the average age.",
+    "search_expressions": [
+      "song name singer age",
+      "songs singers average age",
+      "song_name singer_age",
+      "concert_singer songs age"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_014",
+    "db_id": "concert_singer",
+    "question": "What are all the song names by singers who are older than average?",
+    "search_expressions": [
+      "song name",
+      "singer age",
+      "average age",
+      "singer song"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_015",
+    "db_id": "concert_singer",
+    "question": "Show location and name for all stadiums with a capacity between 5000 and 10000.",
+    "search_expressions": [
+      "stadium location name capacity",
+      "stadiums capacity range",
+      "venue location name",
+      "stadium capacity 5000 10000"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_016",
+    "db_id": "concert_singer",
+    "question": "What are the locations and names of all stations with capacity between 5000 and 10000?",
+    "search_expressions": [
+      "station location name capacity",
+      "stations locations names capacity range",
+      "station capacity 5000 10000",
+      "station location name"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_017",
+    "db_id": "concert_singer",
+    "question": "What is the maximum capacity and the average of all stadiums ?",
+    "search_expressions": [
+      "stadium capacity",
+      "max capacity",
+      "average stadium",
+      "stadium average"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_018",
+    "db_id": "concert_singer",
+    "question": "What is the average and maximum capacities for all stadiums ?",
+    "search_expressions": [
+      "stadium capacity",
+      "average maximum capacity",
+      "stadiums avg max",
+      "capacity"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_019",
+    "db_id": "concert_singer",
+    "question": "What is the name and capacity for the stadium with highest average attendance?",
+    "search_expressions": [
+      "stadium name capacity attendance",
+      "average attendance highest stadium",
+      "stadium_capacity stadium_name",
+      "avg_attendance"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_020",
+    "db_id": "concert_singer",
+    "question": "What is the name and capacity for the stadium with the highest average attendance?",
+    "search_expressions": [
+      "stadium name capacity attendance",
+      "average attendance highest stadium",
+      "stadium capacity avg_attendance",
+      "stadium attendance"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_021",
+    "db_id": "concert_singer",
+    "question": "How many concerts are there in year 2014 or 2015?",
+    "search_expressions": [
+      "concert",
+      "year",
+      "2014",
+      "2015"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_022",
+    "db_id": "concert_singer",
+    "question": "How many concerts occurred in 2014 or 2015?",
+    "search_expressions": [
+      "concert",
+      "year",
+      "2014",
+      "2015"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_023",
+    "db_id": "concert_singer",
+    "question": "Show the stadium name and the number of concerts in each stadium.",
+    "search_expressions": [
+      "stadium name",
+      "concert count",
+      "stadium",
+      "concert"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_024",
+    "db_id": "concert_singer",
+    "question": "For each stadium, how many concerts play there?",
+    "search_expressions": [
+      "stadium concerts count",
+      "stadium concert frequency",
+      "concerts per stadium",
+      "stadium_id concert_count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_025",
+    "db_id": "concert_singer",
+    "question": "Show the stadium name and capacity with most number of concerts in year 2014 or after.",
+    "search_expressions": [
+      "stadium name capacity concerts 2014",
+      "stadium concert count year",
+      "stadium capacity number of concerts",
+      "concert stadium year >= 2014"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_026",
+    "db_id": "concert_singer",
+    "question": "What is the name and capacity of the stadium with the most concerts after 2013 ?",
+    "search_expressions": [
+      "stadium name capacity",
+      "concert date after 2013",
+      "most concerts stadium",
+      "stadium concert count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_027",
+    "db_id": "concert_singer",
+    "question": "Which year has most number of concerts?",
+    "search_expressions": [
+      "year",
+      "concert",
+      "number of concerts",
+      "concerts count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_028",
+    "db_id": "concert_singer",
+    "question": "What is the year that had the most concerts?",
+    "search_expressions": [
+      "year",
+      "concert",
+      "most concerts",
+      "concerts count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_029",
+    "db_id": "concert_singer",
+    "question": "Show the stadium names without any concert.",
+    "search_expressions": [
+      "stadium name",
+      "stadium without concert",
+      "stadium concert count",
+      "stadium concert"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_030",
+    "db_id": "concert_singer",
+    "question": "What are the names of the stadiums without any concerts?",
+    "search_expressions": [
+      "stadium name",
+      "concert stadium",
+      "stadium without concert",
+      "stadium concert count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_031",
+    "db_id": "concert_singer",
+    "question": "Show countries where a singer above age 40 and a singer below 30 are from.",
+    "search_expressions": [
+      "singer age country",
+      "singer age > 40 AND age < 30",
+      "singer country",
+      "singer birth_year or age"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_032",
+    "db_id": "concert_singer",
+    "question": "Show names for all stadiums except for stadiums having a concert in year 2014.",
+    "search_expressions": [
+      "stadium name",
+      "concert year",
+      "stadium",
+      "2014"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_033",
+    "db_id": "concert_singer",
+    "question": "What are the names of all stadiums that did not have a concert in 2014?",
+    "search_expressions": [
+      "stadium name",
+      "concert 2014",
+      "stadium concert",
+      "stadium no concert"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_034",
+    "db_id": "concert_singer",
+    "question": "Show the name and theme for all concerts and the number of singers in each concert.",
+    "search_expressions": [
+      "concert name theme",
+      "singer count concert",
+      "concert_singer",
+      "concert singer"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_035",
+    "db_id": "concert_singer",
+    "question": "What are the names , themes , and number of singers for every concert ?",
+    "search_expressions": [
+      "concert name theme singer",
+      "concerts names themes singers count",
+      "concert singer count",
+      "concert theme number_of_singers"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_036",
+    "db_id": "concert_singer",
+    "question": "List singer names and number of concerts for each singer.",
+    "search_expressions": [
+      "singer name concert count",
+      "singer concerts",
+      "singer number of concerts",
+      "singer concert_count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_037",
+    "db_id": "concert_singer",
+    "question": "What are the names of the singers and number of concerts for each person?",
+    "search_expressions": [
+      "singer name concert count",
+      "singers concerts",
+      "name number of concerts",
+      "singer concert_count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_038",
+    "db_id": "concert_singer",
+    "question": "List all singer names in concerts in year 2014.",
+    "search_expressions": [
+      "singer name concert 2014",
+      "singer concerts year",
+      "singer_name concert_year",
+      "singer concert"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_039",
+    "db_id": "concert_singer",
+    "question": "What are the names of the singers who performed in a concert in 2014?",
+    "search_expressions": [
+      "singer name",
+      "concert 2014",
+      "performed",
+      "singer concert"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_040",
+    "db_id": "concert_singer",
+    "question": "what is the name and nation of the singer who have a song having 'Hey' in its name?",
+    "search_expressions": [
+      "singer name nation",
+      "song name Hey",
+      "singer song",
+      "singer nation"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_041",
+    "db_id": "concert_singer",
+    "question": "What is the name and country of origin of every singer who has a song with the word 'Hey' in its title?",
+    "search_expressions": [
+      "singer name country song title",
+      "singer origin song_name Hey",
+      "singer country song title like",
+      "singer song Hey"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_042",
+    "db_id": "concert_singer",
+    "question": "Find the name and location of the stadiums which some concerts happened in the years of both 2014 and 2015.",
+    "search_expressions": [
+      "stadium name location",
+      "concert year 2014 2015",
+      "stadium concert",
+      "stadium year"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_043",
+    "db_id": "concert_singer",
+    "question": "What are the names and locations of the stadiums that had concerts that occurred in both 2014 and 2015?",
+    "search_expressions": [
+      "stadium name location concert year",
+      "stadium concert 2014 2015",
+      "stadiums concerts both years",
+      "stadium concert_date year"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_044",
+    "db_id": "concert_singer",
+    "question": "Find the number of concerts happened in the stadium with the highest capacity .",
+    "search_expressions": [
+      "concert",
+      "stadium capacity",
+      "number of concerts",
+      "stadium"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_045",
+    "db_id": "concert_singer",
+    "question": "What are the number of concerts that occurred in the stadium with the largest capacity ?",
+    "search_expressions": [
+      "concert count stadium capacity",
+      "concerts stadium largest capacity",
+      "number of concerts stadium capacity",
+      "concert stadium capacity"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_046",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "search_expressions": [
+      "weight",
+      "pets",
+      "heavier than 10",
+      "number of pets"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_047",
+    "db_id": "pets_1",
+    "question": "How many pets have a greater weight than 10?",
+    "search_expressions": [
+      "pets weight",
+      "pet weight > 10",
+      "animal weight",
+      "pets count weight"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_048",
+    "db_id": "pets_1",
+    "question": "Find the weight of the youngest dog.",
+    "search_expressions": [
+      "weight",
+      "youngest dog",
+      "age",
+      "dogs"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_049",
+    "db_id": "pets_1",
+    "question": "How much does the youngest dog weigh?",
+    "search_expressions": [
+      "youngest dog weight",
+      "dog age weight",
+      "pets age weight",
+      "dog youngest weight"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_050",
+    "db_id": "pets_1",
+    "question": "Find the maximum weight for each type of pet. List the maximum weight and pet type.",
+    "search_expressions": [
+      "max weight pet type",
+      "pets weight type",
+      "pet_weight pet_type",
+      "maximum weight by pet type"
+    ]
+  }
+]

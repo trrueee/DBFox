@@ -1,0 +1,462 @@
+from __future__ import annotations
+
+import argparse
+import os
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Sequence
+
+from sqlalchemy import create_engine
+from sqlalchemy import event as sa_event
+from sqlalchemy.orm import Session, sessionmaker
+
+from engine.db import Base
+from engine.evaluation.retrieval_ab.config import DEFAULT_ENV_FILE, RetrievalAbConfig, load_env_file
+from engine.evaluation.retrieval_ab.query_planner import plan_search_expressions
+from engine.evaluation.retrieval_ab.report import write_reports
+from engine.evaluation.retrieval_ab.runner import AgentRunArtifacts, evaluate_artifacts
+from engine.evaluation.retrieval_ab.spider_fixture import load_spider_cases
+from engine.evaluation.spider.spider_eval import _ensure_spider_sqlite_datasource, create_dbfox_sqlite_run_fn
+from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_examples
+from engine.evaluation.spider.sql_prediction_extractor import extract_final_sql
+from engine.evaluation.spider.sql_result_comparator import compare_sqlite_execution
+from engine.tools.db.embedding import ensure_schema_embeddings
+from engine.tools.db.search import db_search
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
+    load_env_file(os.getenv("DBFOX_EVAL_ENV_FILE") or DEFAULT_ENV_FILE)
+    _configure_eval_runtime_env()
+    cfg = RetrievalAbConfig.from_mapping(vars(args))
+    if cfg.benchmark != "spider":
+        raise ValueError("Only the spider benchmark is supported in Phase 0.")
+
+    cases = load_spider_cases(cfg.cases_path, db_ids=cfg.db_ids, limit=args.limit)
+    examples = _load_examples_for_cases(cfg.cases_path, db_ids=cfg.db_ids, limit=args.limit)
+    if len(cases) != len(examples):
+        raise RuntimeError(f"Loaded {len(cases)} cases but {len(examples)} Spider examples.")
+
+    results = []
+    search_expression_cache: dict[str, tuple[str, ...]] = {}
+    with tempfile.TemporaryDirectory(prefix="dbfox-retrieval-ab-") as tmp:
+        db_session = _create_temp_metadata_session(Path(tmp) / "dbfox_eval.sqlite")
+        try:
+            run_fn = None
+            if cfg.mode == "live":
+                run_fn = create_dbfox_sqlite_run_fn(
+                    db_session=db_session,
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    api_base=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE"),
+                    model_name=cfg.model,
+                    execute=cfg.execute,
+                    pre_run=_prewarm_schema_embeddings_if_needed,
+                )
+            for variant in cfg.variants:
+                os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = variant
+                for case, example in zip(cases, examples, strict=True):
+                    if cfg.mode == "retrieval-only":
+                        datasource_id, _synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
+                        artifacts = _run_retrieval_only_case(
+                            db_session=db_session,
+                            datasource_id=datasource_id,
+                            case=case,
+                            limit=cfg.retrieval_top_k,
+                        )
+                    elif cfg.mode == "ai-assisted-retrieval":
+                        datasource_id, _synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
+                        prewarm_event = _prewarm_schema_embeddings_if_needed(db_session, datasource_id)
+                        search_expressions = search_expression_cache.get(case.case_id)
+                        if search_expressions is None:
+                            search_expressions = plan_search_expressions(case, model=cfg.model)
+                            search_expression_cache[case.case_id] = search_expressions
+                        artifacts = _run_ai_assisted_retrieval_case(
+                            db_session=db_session,
+                            datasource_id=datasource_id,
+                            case=case,
+                            limit=cfg.retrieval_top_k,
+                            model=cfg.model,
+                            search_expressions=search_expressions,
+                            pre_events=_event_tuple(prewarm_event),
+                        )
+                    else:
+                        artifacts = (
+                            _run_live_case(run_fn, example, execute=cfg.execute)
+                            if cfg.execute
+                            else AgentRunArtifacts(
+                                actual_sql=None,
+                                query_execution_success=False,
+                                error="Execution disabled. Re-run with --execute for live Agent evaluation.",
+                            )
+                        )
+                    results.append(evaluate_artifacts(case, variant, artifacts, mode=cfg.mode))
+        finally:
+            _close_metadata_session(db_session)
+
+    from engine.evaluation.retrieval_ab.metrics import summarize_variant
+
+    summaries = tuple(
+        summarize_variant(variant, (row for row in results if row.variant == variant))
+        for variant in cfg.variants
+    )
+    paths = write_reports(
+        output_dir=cfg.report_dir,
+        benchmark=cfg.benchmark,
+        variants=cfg.variants,
+        summaries=summaries,
+        cases=tuple(results),
+    )
+    print(f"summary: {paths.summary_json}")
+    print(f"cases: {paths.cases_csv}")
+    print(f"report: {paths.markdown_report}")
+    return 0
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run DBFox retrieval A/B/n evaluation.")
+    parser.add_argument("--benchmark", default="spider")
+    parser.add_argument("--cases", default=None)
+    parser.add_argument("--dbs", default="")
+    parser.add_argument("--variants", default="")
+    parser.add_argument("--model", default="")
+    parser.add_argument("--mode", choices=("live", "retrieval-only", "ai-assisted-retrieval"), default=None)
+    parser.add_argument("--report-dir", default="reports/retrieval_ab")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--execute", action="store_true")
+    return parser.parse_args(argv)
+
+
+def _load_examples_for_cases(
+    cases_path: Path,
+    *,
+    db_ids: tuple[str, ...],
+    limit: int | None,
+) -> tuple[SpiderExample, ...]:
+    path = Path(cases_path)
+    if path.suffix.lower() == ".json":
+        root = path.parent
+        split = path.stem
+    else:
+        root = path
+        split = "dev"
+    return tuple(load_spider_examples(root, split=split, limit=limit, db_ids=set(db_ids) or None))
+
+
+def _run_live_case(run_fn: object, example: SpiderExample, *, execute: bool) -> AgentRunArtifacts:
+    response = None
+    events = []
+    latency_ms = 0
+    error = None
+    try:
+        response, events, latency_ms, _datasource_id, _synced_tables = run_fn(example)  # type: ignore[misc]
+    except Exception as exc:
+        error = str(exc)
+    actual_sql = extract_final_sql(response, events)
+    query_success = False
+    if execute and actual_sql:
+        comparison = compare_sqlite_execution(example.db_path, example.gold_sql, actual_sql)
+        query_success = comparison.predicted_success
+        error = error or comparison.predicted_error
+    elif actual_sql:
+        query_success = True
+    return AgentRunArtifacts(
+        actual_sql=actual_sql,
+        query_execution_success=query_success,
+        events=tuple(events),
+        latency_ms=latency_ms,
+        error=error,
+    )
+
+
+def _run_retrieval_only_case(
+    *,
+    db_session: Session,
+    datasource_id: str,
+    case: Any,
+    limit: int,
+) -> AgentRunArtifacts:
+    started = time.perf_counter()
+    output = db_search(db_session, datasource_id, case.question, limit)
+    latency_ms = int(round(float(output.get("retrieval_latency_ms") or ((time.perf_counter() - started) * 1000))))
+    error = str(output.get("error")) if output.get("error") else None
+    return AgentRunArtifacts(
+        actual_sql=None,
+        query_execution_success=False,
+        events=({"step": {"tool_name": "db.search", "output": output}},),
+        latency_ms=latency_ms,
+        error=error,
+    )
+
+
+def _run_ai_assisted_retrieval_case(
+    *,
+    db_session: Session,
+    datasource_id: str,
+    case: Any,
+    limit: int,
+    model: str | None = None,
+    search_expressions: tuple[str, ...] | None = None,
+    pre_events: tuple[dict[str, Any], ...] = (),
+) -> AgentRunArtifacts:
+    started = time.perf_counter()
+    expressions = search_expressions or plan_search_expressions(case, model=model)
+    events: list[dict[str, Any]] = list(pre_events)
+    events.append(
+        {
+            "step": {
+                "tool_name": "search.plan",
+                "output": {
+                    "search_expressions": list(expressions),
+                    "planner_model": model,
+                },
+            }
+        }
+    )
+
+    search_outputs: list[dict[str, Any]] = []
+    for expression in expressions:
+        output = db_search(db_session, datasource_id, expression, limit)
+        search_outputs.append({"query": expression, "output": output})
+        events.append(
+            {
+                "step": {
+                    "tool_name": "db.search",
+                    "input": {"query": expression, "limit": limit},
+                    "output": output,
+                }
+            }
+        )
+
+    fused_output = fuse_multi_query_search_outputs(
+        search_outputs,
+        original_query=case.question,
+        limit=limit,
+    )
+    events.append({"step": {"tool_name": "db.search.fused", "output": fused_output}})
+    latency_ms = int(round((time.perf_counter() - started) * 1000))
+    error = str(fused_output.get("error")) if fused_output.get("error") else None
+    return AgentRunArtifacts(
+        actual_sql=None,
+        query_execution_success=False,
+        events=tuple(events),
+        latency_ms=latency_ms,
+        error=error,
+    )
+
+
+def fuse_multi_query_search_outputs(
+    search_outputs: Sequence[dict[str, Any]],
+    *,
+    original_query: str,
+    limit: int,
+    rrf_k: int = 60,
+) -> dict[str, Any]:
+    expressions = [str(item.get("query") or "").strip() for item in search_outputs if str(item.get("query") or "").strip()]
+    fused: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    vector_values: list[bool] = []
+    errors: list[str] = []
+    retrieval_latency_ms = 0.0
+    embedding_build_time_ms = 0.0
+
+    for query_index, item in enumerate(search_outputs, start=1):
+        output = item.get("output")
+        if not isinstance(output, dict):
+            continue
+        retrieval_latency_ms += _float_value(output.get("retrieval_latency_ms"))
+        embedding_build_time_ms += _float_value(output.get("embedding_build_time_ms"))
+        vector_available = output.get("vector_available")
+        if isinstance(vector_available, bool):
+            vector_values.append(vector_available)
+        if output.get("error"):
+            errors.append(str(output.get("error")))
+        results = output.get("results")
+        if not isinstance(results, list):
+            continue
+        output_source = _source_from_engine(str(output.get("engine") or ""))
+        for rank, raw in enumerate(results, start=1):
+            if not isinstance(raw, dict):
+                continue
+            key = _search_result_key(raw)
+            merged = fused.setdefault(key, dict(raw))
+            merged["_rrf_score"] = float(merged.get("_rrf_score", 0.0)) + 1.0 / (rrf_k + rank)
+            merged.setdefault("query_ranks", [])
+            if isinstance(merged["query_ranks"], list):
+                merged["query_ranks"].append({"query_index": query_index, "rank": rank})
+            merged["matched_by"] = _ordered_unique([
+                "multi_query",
+                *merged.get("matched_by", []),
+                *(raw.get("matched_by") or [output_source]),
+            ])
+            merged["matched_fields"] = sorted(set(merged.get("matched_fields", [])) | set(raw.get("matched_fields", [])))
+            merged["reasons"] = _ordered_unique([
+                *merged.get("reasons", []),
+                *raw.get("reasons", []),
+                f"query {query_index} rank {rank}",
+            ])
+
+    results = list(fused.values())
+    for item in results:
+        item["score"] = round(float(item.pop("_rrf_score", 0.0)), 6)
+        item["reason"] = "; ".join(str(reason) for reason in item.get("reasons", []) if str(reason).strip())
+    results.sort(
+        key=lambda item: (
+            -float(item.get("score", 0.0)),
+            str(item.get("table_name") or ""),
+            str(item.get("type") or ""),
+            str(item.get("column_name") or ""),
+            str(item.get("name") or ""),
+        )
+    )
+
+    vector_available_result = None
+    if vector_values:
+        vector_available_result = all(vector_values)
+    response: dict[str, Any] = {
+        "engine": "multi_query_fused",
+        "original_query": original_query,
+        "search_expressions": expressions,
+        "db_search_call_count": len(search_outputs),
+        "limit": limit,
+        "results": results[:limit],
+        "total_matches": len(results[:limit]),
+        "retrieval_latency_ms": round(retrieval_latency_ms, 3),
+        "embedding_build_time_ms": round(embedding_build_time_ms, 3),
+        "vector_available": vector_available_result,
+    }
+    if errors and len(errors) == len(search_outputs):
+        response["error"] = errors[0]
+    return response
+
+
+def _prewarm_schema_embeddings_if_needed(db_session: Session, datasource_id: str) -> dict[str, Any] | None:
+    mode = os.getenv("DBFOX_SCHEMA_RETRIEVAL_MODE", "keyword").strip().lower()
+    if mode not in {"vector", "hybrid"}:
+        return None
+
+    started = time.perf_counter()
+    try:
+        build = ensure_schema_embeddings(db_session, datasource_id)
+    except Exception:
+        return {
+            "step": {
+                "tool_name": "schema.embedding.prewarm",
+                "output": {
+                    "retrieval_latency_ms": round((time.perf_counter() - started) * 1000, 3),
+                    "embedding_build_time_ms": 0.0,
+                    "vector_available": False,
+                    "error": "Vector retrieval unavailable. Check embedding configuration and provider connectivity.",
+                },
+            }
+        }
+
+    return {
+        "step": {
+            "tool_name": "schema.embedding.prewarm",
+            "output": {
+                "retrieval_latency_ms": round((time.perf_counter() - started) * 1000, 3),
+                "embedding_build_time_ms": build.embedding_build_time_ms,
+                "vector_available": True,
+                "embedding_built_count": build.built_count,
+                "embedding_model": build.model,
+                "embedding_dimension": build.dimension,
+            },
+        }
+    }
+
+
+def _event_tuple(event: dict[str, Any] | None) -> tuple[dict[str, Any], ...]:
+    return (event,) if isinstance(event, dict) else ()
+
+
+def _float_value(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _search_result_key(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(item.get("type") or ""),
+        str(item.get("table_name") or ""),
+        str(item.get("column_name") or ""),
+        str(item.get("name") or ""),
+    )
+
+
+def _source_from_engine(engine: str) -> str:
+    lowered = engine.lower()
+    if "hybrid" in lowered:
+        return "hybrid"
+    if "vector" in lowered:
+        return "vector"
+    return "keyword"
+
+
+def _ordered_unique(values: Sequence[Any]) -> list[Any]:
+    unique: list[Any] = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
+
+
+def _configure_eval_runtime_env() -> None:
+    os.environ.setdefault("DBFOX_DISABLE_QUERY_HISTORY", "1")
+
+
+def _create_temp_metadata_session(db_path: Path) -> Session:
+    import engine.models as _models  # noqa: F401  # ensure models are registered
+    from sqlalchemy import text as sa_text
+    from engine.models import FTS5_DDL
+
+    timeout_seconds = _sqlite_timeout_seconds()
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False, "timeout": timeout_seconds},
+    )
+
+    @sa_event.listens_for(engine, "connect")
+    def _apply_eval_sqlite_pragmas(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute(f"PRAGMA busy_timeout={int(timeout_seconds * 1000)}")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
+
+    Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.execute(sa_text("PRAGMA journal_mode=WAL"))
+        conn.execute(sa_text(f"PRAGMA busy_timeout={int(timeout_seconds * 1000)}"))
+        conn.execute(sa_text("PRAGMA synchronous=NORMAL"))
+        conn.execute(sa_text(FTS5_DDL))
+        conn.commit()
+    SessionLocal = sessionmaker(bind=engine)
+    return SessionLocal()
+
+
+def _sqlite_timeout_seconds() -> float:
+    try:
+        return float(os.getenv("DBFOX_SQLITE_TIMEOUT_SECONDS", "30"))
+    except ValueError:
+        return 30.0
+
+
+def _close_metadata_session(db_session: Session) -> None:
+    bind = None
+    try:
+        get_bind = getattr(db_session, "get_bind", None)
+        if callable(get_bind):
+            bind = get_bind()
+    finally:
+        db_session.close()
+    dispose = getattr(bind, "dispose", None)
+    if callable(dispose):
+        dispose()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import time
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from engine.ai_index import tokenize_query
+from engine.tools.db.embedding import vector_search_results
 
 logger = logging.getLogger("dbfox.tools.db.search")
 
@@ -45,19 +48,115 @@ REASON_FIELD_MAP = {
 
 
 def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> dict[str, Any]:
-    """FTS5 search + rule-based scoring against SchemaSearchDoc. Falls back to keyword if FTS unavailable."""
+    """Search schema docs with keyword, vector, or hybrid retrieval."""
+    started = time.perf_counter()
+    mode = os.getenv("DBFOX_SCHEMA_RETRIEVAL_MODE", "keyword").strip().lower() or "keyword"
     tokens = _tokenize_search_query(query)
     if not tokens:
-        return _search_response("empty", query, tokens, limit, [])
+        return _with_latency(_search_response("empty", query, tokens, limit, []), started)
+
+    if mode == "vector":
+        return _vector_search_response(db, datasource_id, query, tokens, limit, started)
+    if mode == "hybrid":
+        return _hybrid_search_response(db, datasource_id, query, tokens, limit, started)
+
+    results, engine = _keyword_search(db, datasource_id, tokens, limit)
+    _annotate_keyword_results(results)
+    return _with_latency(_search_response(engine, query, tokens, limit, results), started)
+
+
+def _keyword_search(
+    db: Session,
+    datasource_id: str,
+    tokens: list[str],
+    limit: int,
+) -> tuple[list[dict[str, Any]], str]:
+    """FTS5 search + rule-based scoring against SchemaSearchDoc. Falls back to keyword if FTS unavailable."""
 
     try:
         fts_results = _fts_search(db, datasource_id, tokens, limit)
         if fts_results:
-            return _search_response("fts5", query, tokens, limit, fts_results)
+            return fts_results, "fts5"
     except Exception:
         logger.debug("FTS5 search unavailable, falling back to keyword search", exc_info=True)
     fallback = _fallback_keyword_search(db, datasource_id, tokens, limit)
-    return _search_response("keyword_fallback", query, tokens, limit, fallback)
+    return fallback, "keyword_fallback"
+
+
+def _vector_search_response(
+    db: Session,
+    datasource_id: str,
+    query: str,
+    tokens: list[str],
+    limit: int,
+    started: float,
+) -> dict[str, Any]:
+    try:
+        results, build = vector_search_results(db, datasource_id, query, limit)
+    except Exception:
+        logger.debug("Vector search unavailable", exc_info=True)
+        response = _search_response("vector_unavailable", query, tokens, limit, [])
+        response.update(
+            {
+                "vector_available": False,
+                "embedding_build_time_ms": 0.0,
+                "error": "Vector retrieval unavailable. Check embedding configuration and provider connectivity.",
+            }
+        )
+        return _with_latency(response, started)
+
+    response = _search_response("vector", query, tokens, limit, results)
+    response.update(
+        {
+            "vector_available": True,
+            "embedding_build_time_ms": build.embedding_build_time_ms,
+            "embedding_built_count": build.built_count,
+            "embedding_model": build.model,
+            "embedding_dimension": build.dimension,
+        }
+    )
+    return _with_latency(response, started)
+
+
+def _hybrid_search_response(
+    db: Session,
+    datasource_id: str,
+    query: str,
+    tokens: list[str],
+    limit: int,
+    started: float,
+) -> dict[str, Any]:
+    keyword_limit = _env_int("DBFOX_RETRIEVAL_KEYWORD_TOP_K", max(limit, 20))
+    vector_limit = _env_int("DBFOX_RETRIEVAL_VECTOR_TOP_K", max(limit, 20))
+    keyword_results, _engine = _keyword_search(db, datasource_id, tokens, keyword_limit)
+    _annotate_keyword_results(keyword_results)
+
+    try:
+        vector_results, build = vector_search_results(db, datasource_id, query, vector_limit)
+    except Exception:
+        logger.debug("Hybrid vector leg unavailable", exc_info=True)
+        response = _search_response("hybrid_vector_unavailable", query, tokens, limit, keyword_results[:limit])
+        response.update(
+            {
+                "vector_available": False,
+                "embedding_build_time_ms": 0.0,
+                "error": "Vector retrieval unavailable. Check embedding configuration and provider connectivity.",
+            }
+        )
+        return _with_latency(response, started)
+
+    fused = _fuse_rrf(keyword_results, vector_results, limit)
+    response = _search_response("hybrid", query, tokens, limit, fused)
+    response.update(
+        {
+            "vector_available": True,
+            "embedding_build_time_ms": build.embedding_build_time_ms,
+            "embedding_built_count": build.built_count,
+            "embedding_model": build.model,
+            "embedding_dimension": build.dimension,
+        }
+    )
+    return _with_latency(response, started)
 
 
 def _tokenize_search_query(query: str) -> list[str]:
@@ -91,6 +190,103 @@ def _search_response(engine: str, query: str, tokens: list[str], limit: int, res
         "results": results,
         "total_matches": len(results),
     }
+
+
+def _with_latency(response: dict[str, Any], started: float) -> dict[str, Any]:
+    response["retrieval_latency_ms"] = round((time.perf_counter() - started) * 1000, 3)
+    response.setdefault("embedding_build_time_ms", 0.0)
+    response.setdefault("vector_available", None)
+    return response
+
+
+def _annotate_keyword_results(results: list[dict[str, Any]]) -> None:
+    for index, result in enumerate(results, start=1):
+        result.setdefault("matched_by", ["keyword"])
+        result.setdefault("keyword_rank", index)
+        if "reason" not in result:
+            fields = ", ".join(result.get("matched_fields", [])) or "keyword score"
+            result["reason"] = f"keyword rank {index} via {fields}"
+
+
+def _fuse_rrf(
+    keyword_results: list[dict[str, Any]],
+    vector_results: list[dict[str, Any]],
+    limit: int,
+    *,
+    k: int = 60,
+) -> list[dict[str, Any]]:
+    fused: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+
+    for rank, item in enumerate(keyword_results, start=1):
+        key = _result_key(item)
+        merged = fused.setdefault(key, dict(item))
+        merged["keyword_rank"] = rank
+        merged["matched_by"] = _ordered_unique([*merged.get("matched_by", []), "keyword"])
+        merged["_rrf_score"] = float(merged.get("_rrf_score", 0.0)) + 1.0 / (k + rank)
+        merged["keyword_score"] = item.get("score")
+
+    for rank, item in enumerate(vector_results, start=1):
+        key = _result_key(item)
+        merged = fused.setdefault(key, dict(item))
+        merged["vector_rank"] = rank
+        merged["matched_by"] = _ordered_unique([*merged.get("matched_by", []), "vector"])
+        merged["matched_fields"] = sorted(set(merged.get("matched_fields", [])) | set(item.get("matched_fields", [])))
+        merged["reasons"] = _ordered_unique([*merged.get("reasons", []), *item.get("reasons", [])])
+        merged["_rrf_score"] = float(merged.get("_rrf_score", 0.0)) + 1.0 / (k + rank)
+        merged["vector_score"] = item.get("score")
+        for field in ("ai_description", "table_role", "semantic_tags", "column_role", "metric_type"):
+            if field not in merged and field in item:
+                merged[field] = item[field]
+
+    results = list(fused.values())
+    for item in results:
+        keyword_rank = item.get("keyword_rank")
+        vector_rank = item.get("vector_rank")
+        reason_parts = []
+        if keyword_rank is not None:
+            reason_parts.append(f"keyword rank {keyword_rank}")
+        if vector_rank is not None:
+            reason_parts.append(f"vector rank {vector_rank}")
+        item["reason"] = "; ".join(reason_parts)
+        item["score"] = round(float(item.pop("_rrf_score", 0.0)), 6)
+
+    results.sort(
+        key=lambda item: (
+            -float(item.get("score", 0.0)),
+            item.get("keyword_rank") or 999999,
+            item.get("vector_rank") or 999999,
+            str(item.get("type") or ""),
+            str(item.get("name") or ""),
+        )
+    )
+    return results[:limit]
+
+
+def _result_key(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(item.get("type") or ""),
+        str(item.get("table_name") or ""),
+        str(item.get("column_name") or ""),
+        str(item.get("name") or ""),
+    )
+
+
+def _ordered_unique(values: list[Any]) -> list[Any]:
+    unique: list[Any] = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.getenv(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
 
 
 def _fts_search(db: Session, datasource_id: str, tokens: list[str], limit: int) -> list[dict[str, Any]]:

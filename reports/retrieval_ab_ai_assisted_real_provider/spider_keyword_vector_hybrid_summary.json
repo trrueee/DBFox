@@ -1,0 +1,119 @@
+{
+  "benchmark": "spider",
+  "variants": [
+    "keyword",
+    "vector",
+    "hybrid"
+  ],
+  "summaries": [
+    {
+      "variant": "keyword",
+      "total_cases": 20,
+      "table_recall_at_5": 0.95,
+      "column_recall_at_10": 0.95,
+      "task_solve_rate": 0.0,
+      "query_generated_rate": 0.0,
+      "query_execution_success_rate": 0.0,
+      "answer_grounded_rate": 0.0,
+      "wrong_table_rate": 0.0,
+      "missing_key_table_rate": 0.05,
+      "avg_latency_ms": 8.5,
+      "p50_latency_ms": 9,
+      "p95_latency_ms": 12,
+      "avg_retrieval_latency_ms": 8.403,
+      "p50_retrieval_latency_ms": 8.811,
+      "p95_retrieval_latency_ms": 12.361,
+      "avg_embedding_build_time_ms": null,
+      "p50_embedding_build_time_ms": null,
+      "p95_embedding_build_time_ms": null,
+      "vector_available_rate": null,
+      "avg_steps": 6.0,
+      "avg_tool_calls": 6.0,
+      "db_search_call_count": 80,
+      "schema_observe_count": 0,
+      "replan_count": 0,
+      "clarification_count": 0,
+      "safety_violations": 0,
+      "failure_class_counts": {
+        "none": 19,
+        "retrieval_miss": 1
+      },
+      "failure_class_rates": {
+        "none": 0.95,
+        "retrieval_miss": 0.05
+      }
+    },
+    {
+      "variant": "vector",
+      "total_cases": 20,
+      "table_recall_at_5": 0.95,
+      "column_recall_at_10": 1.0,
+      "task_solve_rate": 0.0,
+      "query_generated_rate": 0.0,
+      "query_execution_success_rate": 0.0,
+      "answer_grounded_rate": 0.0,
+      "wrong_table_rate": 0.0,
+      "missing_key_table_rate": 0.05,
+      "avg_latency_ms": 2367.3,
+      "p50_latency_ms": 2116,
+      "p95_latency_ms": 3567,
+      "avg_retrieval_latency_ms": 2369.16,
+      "p50_retrieval_latency_ms": 2117.932,
+      "p95_retrieval_latency_ms": 3567.847,
+      "avg_embedding_build_time_ms": 7.98,
+      "p50_embedding_build_time_ms": 7.688,
+      "p95_embedding_build_time_ms": 10.024,
+      "vector_available_rate": 1.0,
+      "avg_steps": 7.0,
+      "avg_tool_calls": 7.0,
+      "db_search_call_count": 80,
+      "schema_observe_count": 0,
+      "replan_count": 0,
+      "clarification_count": 0,
+      "safety_violations": 0,
+      "failure_class_counts": {
+        "none": 19,
+        "retrieval_miss": 1
+      },
+      "failure_class_rates": {
+        "none": 0.95,
+        "retrieval_miss": 0.05
+      }
+    },
+    {
+      "variant": "hybrid",
+      "total_cases": 20,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "task_solve_rate": 0.0,
+      "query_generated_rate": 0.0,
+      "query_execution_success_rate": 0.0,
+      "answer_grounded_rate": 0.0,
+      "wrong_table_rate": 0.0,
+      "missing_key_table_rate": 0.0,
+      "avg_latency_ms": 1782.35,
+      "p50_latency_ms": 1784,
+      "p95_latency_ms": 1920,
+      "avg_retrieval_latency_ms": 1783.759,
+      "p50_retrieval_latency_ms": 1785.495,
+      "p95_retrieval_latency_ms": 1920.253,
+      "avg_embedding_build_time_ms": 5.935,
+      "p50_embedding_build_time_ms": 5.55,
+      "p95_embedding_build_time_ms": 8.22,
+      "vector_available_rate": 1.0,
+      "avg_steps": 7.0,
+      "avg_tool_calls": 7.0,
+      "db_search_call_count": 80,
+      "schema_observe_count": 0,
+      "replan_count": 0,
+      "clarification_count": 0,
+      "safety_violations": 0,
+      "failure_class_counts": {
+        "none": 20
+      },
+      "failure_class_rates": {
+        "none": 1.0
+      }
+    }
+  ]
+}

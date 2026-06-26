@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import time
 import uuid
@@ -35,6 +36,9 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
     caller's transaction (history must survive a caller rollback).
     Also populates the FTS5 index for query history search.
     """
+    if os.getenv("DBFOX_DISABLE_QUERY_HISTORY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return None
+
     from sqlalchemy.orm import sessionmaker
 
     audit_db = sessionmaker(bind=db.get_bind())()

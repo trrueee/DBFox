@@ -106,6 +106,28 @@ def _semantic_resolution_payload(context_bundle: dict[str, Any]) -> dict[str, An
     return payload or None
 
 
+def _environment_context_payload(
+    db: Session,
+    datasource_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        from engine.environment.tools import environment_get_profile
+
+        profile = environment_get_profile(db, datasource_id)
+    except Exception:
+        logger.warning(
+            "Failed to build agent environment context for datasource %s",
+            datasource_id,
+            exc_info=True,
+        )
+        return None, None
+
+    if not isinstance(profile, dict):
+        return None, None
+    database_map = profile.get("database_map")
+    return profile, database_map if isinstance(database_map, dict) else None
+
+
 def _memory_list(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -479,6 +501,7 @@ class DBFoxAgentService:
         pending_approval = pending_approval_from_workspace(self.db, req)
         context_bundle = _build_context_bundle(self.db, req)
         context_summary = context_bundle.get("context_summary")
+        environment_profile, database_map = _environment_context_payload(self.db, req.datasource_id)
         if req.execution_mode:
             execution_mode = req.execution_mode
         else:
@@ -505,8 +528,8 @@ class DBFoxAgentService:
             replan_count=0,
             consecutive_blocks=0,
             # ---- Environment / Semantic layers ----
-            environment_profile=None,
-            database_map=None,
+            environment_profile=environment_profile,
+            database_map=database_map,
             semantic_resolution=_semantic_resolution_payload(context_bundle),
             db_search_results=None,
             db_inspection=None,
