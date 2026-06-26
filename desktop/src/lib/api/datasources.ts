@@ -26,8 +26,10 @@ export const datasourcesApi = {
     request<DataSourceHealthResult>(`/datasources/${id}/health`, { method: "POST" }),
 
   deleteDatasource: (id: string, confirm?: DeleteConfirm) => {
-    const query = confirm ? `?confirm_token=${encodeURIComponent(confirm.token)}&confirm_text=${encodeURIComponent(confirm.text)}` : "";
-    return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}${query}`, { method: "DELETE" });
+    return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}`, {
+      method: "DELETE",
+      body: confirm ? JSON.stringify({ confirm_token: confirm.token, confirm_text: confirm.text }) : undefined,
+    });
   },
 
   updateDatasource: (id: string, params: DataSourceUpdateParams) =>

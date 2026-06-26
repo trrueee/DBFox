@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDatasourceStore } from "../datasourceStore";
+import type { EngineColumn, EngineSchemaTable } from "../../lib/api/schema";
 
 vi.mock("../../lib/api/schema", () => ({
   listTables: vi.fn().mockResolvedValue([]),
@@ -153,5 +154,102 @@ describe("datasourceStore — CRUD operations", () => {
 
     expect(useDatasourceStore.getState().activeDatasourceId).toBe("ds-1");
     expect(datasourcesApi.listDatasources).not.toHaveBeenCalled();
+  });
+});
+
+describe("datasourceStore — schema column loading", () => {
+  beforeEach(resetAll);
+
+  it("does not fetch every table's columns just because the table list changed", async () => {
+    const tables: EngineSchemaTable[] = [
+      { id: "table-1", table_name: "users", table_comment: "" },
+      { id: "table-2", table_name: "orders", table_comment: "" },
+    ];
+
+    useDatasourceStore.setState({ tables });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(listColumns).not.toHaveBeenCalled();
+    expect(useDatasourceStore.getState().tableColumns).toEqual({});
+  });
+
+  it("loads a single table's columns on demand and caches them by table name", async () => {
+    const tables: EngineSchemaTable[] = [
+      { id: "table-users", table_name: "users", table_comment: "" },
+      { id: "table-orders", table_name: "orders", table_comment: "" },
+    ];
+    const columns: EngineColumn[] = [
+      {
+        id: "col-users-id",
+        column_name: "id",
+        data_type: "INTEGER",
+        column_type: "INTEGER",
+        is_nullable: false,
+        column_default: "",
+        column_comment: "",
+        is_primary_key: true,
+        is_foreign_key: false,
+      },
+    ];
+    vi.mocked(listColumns).mockResolvedValue(columns);
+    useDatasourceStore.setState({ tables });
+
+    const result = await useDatasourceStore.getState().loadTableColumns("table-users");
+
+    expect(result).toEqual(columns);
+    expect(listColumns).toHaveBeenCalledWith("table-users");
+    expect(useDatasourceStore.getState().tableColumns).toEqual({ users: columns });
+  });
+
+  it("keeps concurrency limited for explicit batch column loads", async () => {
+    const tables: EngineSchemaTable[] = Array.from({ length: 10 }, (_, index) => ({
+      id: `table-${index}`,
+      table_name: `table_${index}`,
+      table_comment: "",
+    }));
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const pending: Array<() => void> = [];
+
+    vi.mocked(listColumns).mockImplementation(
+      (tableId: string) =>
+        new Promise<EngineColumn[]>((resolve) => {
+          activeRequests += 1;
+          maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+          pending.push(() => {
+            activeRequests -= 1;
+            resolve([
+              {
+                id: `${tableId}-column`,
+                column_name: "id",
+                data_type: "INTEGER",
+                column_type: "INTEGER",
+                is_nullable: false,
+                column_default: "",
+                column_comment: "",
+                is_primary_key: true,
+                is_foreign_key: false,
+              },
+            ]);
+          });
+        }),
+    );
+
+    useDatasourceStore.setState({ tables });
+    const loadPromise = useDatasourceStore.getState().loadColumnsForTables(tables.map((table) => table.id));
+
+    await vi.waitFor(() => expect(listColumns).toHaveBeenCalledTimes(4));
+    expect(maxActiveRequests).toBeLessThanOrEqual(4);
+
+    while (pending.length > 0) {
+      pending.shift()?.();
+      await vi.waitFor(() => expect(activeRequests).toBeLessThanOrEqual(4));
+    }
+
+    await loadPromise;
+
+    expect(Object.keys(useDatasourceStore.getState().tableColumns)).toHaveLength(10);
+    expect(listColumns).toHaveBeenCalledTimes(10);
+    expect(maxActiveRequests).toBeLessThanOrEqual(4);
   });
 });

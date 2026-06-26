@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { Check, ChevronDown, Database, FileText, Plus, RefreshCw, Search, Sparkles, MessageSquare } from "lucide-react";
+import { useState, type MouseEvent } from "react";
+import { Check, ChevronDown, Database, FileText, MessageSquare, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  ScrollArea,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../components/ui";
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { EngineSchemaTable } from "../../lib/api/schema";
@@ -15,7 +25,6 @@ interface DataSourceTreeProps {
   onNodeContextMenu: (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => void;
   onRefresh: () => void;
   onNewConnection: () => void;
-  sidebarWidth: number;
 }
 
 export function DataSourceTree({
@@ -28,7 +37,6 @@ export function DataSourceTree({
   onNodeContextMenu,
   onRefresh,
   onNewConnection,
-  sidebarWidth,
 }: DataSourceTreeProps) {
   const datasources = useDatasourceStore((s) => s.datasources);
   const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
@@ -42,21 +50,8 @@ export function DataSourceTree({
   const openConversationHistoryTab = useWorkspaceStore((s) => s.openConversationHistoryTab);
 
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
-  const [dbDropdownOpen, setDbDropdownOpen] = useState(false);
-  const dbDropdownRef = useRef<HTMLDivElement>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [schemaCollapsed, setSchemaCollapsed] = useState(false);
-
-  useEffect(() => {
-    if (!dbDropdownOpen) return;
-    const handleClick = (e: Event) => {
-      if (dbDropdownRef.current && !dbDropdownRef.current.contains(e.target as Node)) {
-        setDbDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [dbDropdownOpen]);
 
   const toggleGroup = (groupName: string) => {
     setCollapsedGroups((prev) => {
@@ -81,67 +76,90 @@ export function DataSourceTree({
   if (collapsed) {
     return (
       <section className="hifi-col hifi-sidebar-col ds-tree-collapsed">
-        <button onClick={onToggleCollapse} title="展开侧栏" className="ds-tree-expand-btn">
-          <ChevronDown size={14} className="ds-tree-chevron-left" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" onClick={onToggleCollapse} aria-label="展开侧栏" className="ds-tree-expand-btn">
+              <ChevronDown size={14} className="ds-tree-chevron-left" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>展开侧栏</TooltipContent>
+        </Tooltip>
       </section>
     );
   }
 
   return (
-    <section className="hifi-col hifi-sidebar-col ds-tree-main" style={{ width: sidebarWidth, "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}>
+    <section className="hifi-col hifi-sidebar-col ds-tree-main">
       <div className="hifi-sidebar-panel">
         <div className="hifi-sidebar-header ds-tree-header-row">
           <span className="ds-tree-title">数据源</span>
           <div className="ds-tree-actions">
-            <button onClick={onNewConnection} title="新建连接" className="ds-tree-icon-btn">
-              <Plus size={15} strokeWidth={1.5} />
-            </button>
-            <span title="刷新" onClick={onRefresh} className="cursor-pointer" style={{ display: "flex", alignItems: "center" }}>
-              <RefreshCw size={13} className={`text-gray-400 ${loading ? "animate-spin" : ""}`} />
-            </span>
-            <button onClick={onToggleCollapse} title="收起侧栏" className="ds-tree-icon-btn">
-              <ChevronDown size={14} className="ds-tree-chevron-right" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={onNewConnection} aria-label="新建连接" className="ds-tree-icon-btn">
+                  <Plus size={15} strokeWidth={1.5} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>新建连接</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={onRefresh} aria-label="刷新" className="ds-tree-icon-btn ds-tree-refresh-btn">
+                  <RefreshCw size={13} className={`ds-tree-refresh-icon ${loading ? "is-loading" : ""}`} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>刷新</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={onToggleCollapse} aria-label="收起侧栏" className="ds-tree-icon-btn">
+                  <ChevronDown size={14} className="ds-tree-chevron-right" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>收起侧栏</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
         {activeDatasource ? (
-          <div ref={dbDropdownRef} className="ds-db-select-wrapper">
-            <div
-              className="hifi-db-select ds-db-select-clickable"
-              onClick={() => setDbDropdownOpen((v) => !v)}
-              onContextMenu={(event) => onNodeContextMenu(event, "database", activeDatasource.name)}
-            >
-              <Database size={16} className="text-blue-600" />
-              <div className="hifi-db-info">
-                <span className="hifi-db-name">{activeDatasource.name}</span>
-                <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
-              </div>
-              <ChevronDown size={14} className={`text-gray-400 ds-db-chevron ${dbDropdownOpen ? "ds-db-chevron-open" : ""}`} />
-            </div>
-            {dbDropdownOpen && datasources.length > 0 && (
-              <div className="ds-db-dropdown">
+          <div className="ds-db-select-wrapper">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="hifi-db-select ds-db-select-trigger"
+                  aria-label={`选择数据源 ${activeDatasource.name}`}
+                  onContextMenu={(event) => onNodeContextMenu(event, "database", activeDatasource.name)}
+                >
+                  <Database size={16} className="ds-db-icon" />
+                  <div className="hifi-db-info">
+                    <span className="hifi-db-name">{activeDatasource.name}</span>
+                    <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
+                  </div>
+                  <ChevronDown size={14} className="ds-db-chevron" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="ds-db-dropdown" align="start" sideOffset={4}>
                 {datasources.map((ds) => (
-                  <div
+                  <DropdownMenuItem
                     key={ds.id}
-                    onClick={() => { setActiveDatasourceId(ds.id); setDbDropdownOpen(false); }}
                     className={`ds-db-dropdown-item ${ds.id === activeDatasourceId ? "active" : ""}`}
+                    onSelect={() => setActiveDatasourceId(ds.id)}
                   >
-                    <Database size={12} />
+                    <Database size={12} className="ds-db-item-icon" />
                     <div className="ds-db-item-info">
                       <div className="ds-db-item-name">{ds.name}</div>
                       <div className="ds-db-item-type">{ds.db_type}</div>
                     </div>
                     {ds.id === activeDatasourceId && <Check size={14} className="ds-db-item-check" />}
-                  </div>
+                  </DropdownMenuItem>
                 ))}
-              </div>
-            )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ) : (
-          <div className="hifi-db-select opacity-70">
-            <Database size={16} className="text-slate-400" />
+          <div className="hifi-db-select ds-db-select-empty">
+            <Database size={16} className="ds-db-empty-icon" />
             <div className="hifi-db-info">
               <span className="hifi-db-name">未连接数据源</span>
               <span className="hifi-db-version">DBFox</span>
@@ -167,7 +185,7 @@ export function DataSourceTree({
             className={`ds-quick-nav-item ${activeTabType === "smart-query" ? "active" : ""}`}
             aria-current={activeTabType === "smart-query" ? "page" : undefined}
           >
-            <Sparkles size={14} className="text-purple-500" />
+            <Sparkles size={14} className="ds-quick-nav-icon ds-quick-nav-icon--smart" />
             <span>智能问数</span>
           </button>
           <button
@@ -176,27 +194,27 @@ export function DataSourceTree({
             className={`ds-quick-nav-item ${activeTabType === "conversation-history" ? "active" : ""}`}
             aria-current={activeTabType === "conversation-history" ? "page" : undefined}
           >
-            <MessageSquare size={14} className="text-indigo-500" />
+            <MessageSquare size={14} className="ds-quick-nav-icon ds-quick-nav-icon--history" />
             <span>对话历史</span>
           </button>
         </div>
 
-        <div className="hifi-tree-container">
-          {error && <div className="text-[var(--ui-font-caption)] text-red-500 bg-red-50 rounded-lg p-2 mb-2">{error}</div>}
-          {loading && <div className="text-[var(--ui-font-caption)] text-slate-400 p-2">正在加载...</div>}
-          {!loading && !error && !activeDatasource && <div className="text-[var(--ui-font-caption)] text-slate-400 p-2">暂无数据源，请先创建连接。</div>}
+        <ScrollArea className="hifi-tree-container ds-tree-scroll-area">
+          {error && <div className="ds-tree-status ds-tree-status--error">{error}</div>}
+          {loading && <div className="ds-tree-status">正在加载...</div>}
+          {!loading && !error && !activeDatasource && <div className="ds-tree-status">暂无数据源，请先创建连接。</div>}
 
           {activeDatasource && (
             <div
-              className="hifi-tree-node font-semibold text-gray-900 cursor-pointer"
+              className="hifi-tree-node ds-schema-node"
               onClick={() => setSchemaCollapsed((v) => !v)}
               onContextMenu={(event) => onNodeContextMenu(event, "schema", activeDatasource.database_name || activeDatasource.name)}
             >
               <ChevronDown
                 size={14}
-                className={`mr-1 text-slate-500 ds-group-chevron ${schemaCollapsed ? "ds-group-chevron-collapsed" : ""}`}
+                className={`ds-group-chevron ds-schema-chevron ${schemaCollapsed ? "ds-group-chevron-collapsed" : ""}`}
               />
-              <Database size={14} className="mr-1 text-blue-600" />
+              <Database size={14} className="ds-schema-icon" />
               <span>{activeDatasource.database_name || activeDatasource.name}</span>
             </div>
           )}
@@ -204,44 +222,44 @@ export function DataSourceTree({
           {!schemaCollapsed && Object.entries(groupedTables).map(([moduleName, moduleTables]) => {
             const groupCollapsed = collapsedGroups.has(moduleName);
             return (
-            <div key={moduleName} className="ds-tree-group">
-              <div className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)}>
-                <ChevronDown
-                  size={12}
-                  className={`mr-1 text-gray-400 ds-group-chevron ${groupCollapsed ? "ds-group-chevron-collapsed" : ""}`}
-                />
-                <span className="text-gray-500 font-medium">{moduleName}</span>
-              </div>
+              <div key={moduleName} className="ds-tree-group">
+                <div className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)}>
+                  <ChevronDown
+                    size={12}
+                    className={`ds-group-chevron ds-group-chevron-muted ${groupCollapsed ? "ds-group-chevron-collapsed" : ""}`}
+                  />
+                  <span className="ds-tree-group-label">{moduleName}</span>
+                </div>
 
-              {!groupCollapsed && moduleTables.map((table) => {
-                const isSelected = selectedTables.includes(table.table_name);
-                return (
-                  <div
-                    key={table.id}
-                    className={`hifi-tree-node ds-tree-table-row ${isSelected ? "active" : ""}`}
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData("text/plain", table.table_name);
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
-                    onClick={(event) => onTableClick(table.table_name, event)}
-                    onDoubleClick={() => onTableDoubleClick(table.table_name)}
-                    onContextMenu={(event) => onNodeContextMenu(event, "table", table.table_name)}
-                  >
-                    <span className="hifi-tree-indent" />
-                    <FileText size={13} className="mr-1.5 opacity-70" />
-                    <span className="truncate" title={table.table_comment}>{table.table_name}</span>
-                  </div>
-                );
-              })}
-            </div>
-          );
+                {!groupCollapsed && moduleTables.map((table) => {
+                  const isSelected = selectedTables.includes(table.table_name);
+                  return (
+                    <div
+                      key={table.id}
+                      className={`hifi-tree-node ds-tree-table-row ${isSelected ? "active" : ""}`}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", table.table_name);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onClick={(event) => onTableClick(table.table_name, event)}
+                      onDoubleClick={() => onTableDoubleClick(table.table_name)}
+                      onContextMenu={(event) => onNodeContextMenu(event, "table", table.table_name)}
+                    >
+                      <span className="hifi-tree-indent" />
+                      <FileText size={13} className="ds-tree-table-icon" />
+                      <span className="ds-tree-table-name" title={table.table_comment}>{table.table_name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
           })}
 
           {activeDatasource && !loading && Object.keys(groupedTables).length === 0 && (
-            <div className="text-[var(--ui-font-caption)] text-slate-400 p-2">没有匹配的表。请先同步 Schema 或调整搜索词。</div>
+            <div className="ds-tree-status">没有匹配的表。请先同步 Schema 或调整搜索词。</div>
           )}
-        </div>
+        </ScrollArea>
       </div>
     </section>
   );
