@@ -34,11 +34,12 @@ def _confirmation_approval_update(state: DBFoxAgentState, ctx: Any) -> dict[str,
 
     run_id = state.get("run_id") or ""
     session_id = state.get("thread_id") or state.get("session_id") or run_id
-    requested_action = {"tool_name": "sql.execute_readonly", "args": {"sql": safe_sql}}
+    requested_action = {"tool_name": "sql.execute_readonly", "args": {"safe_sql": safe_sql}}
     policy_decision = {
         "reason": "SQL execution requires human approval.",
         "risk_level": safety.get("risk_level") or "warning",
         "requested_action": requested_action,
+        "safe_sql": safe_sql,
     }
 
     if ctx.event_store is not None:

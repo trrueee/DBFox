@@ -19,6 +19,17 @@ def safe_identifier(name: str, dialect: str) -> str:
         raise ToolInputError(f"Invalid SQL identifier: {name!r}")
     return escape_identifier(name, dialect)
 
+def catalog_identifier(name: str, dialect: str) -> str:
+    """Escape an identifier already validated against a trusted catalog."""
+    if not name or "\x00" in name:
+        raise ToolInputError(f"Invalid SQL identifier: {name!r}")
+    return escape_identifier(name, dialect)
+
+def _safe_or_catalog_identifier(name: str, dialect: str, catalog_validated: bool) -> str:
+    if catalog_validated:
+        return catalog_identifier(name, dialect)
+    return safe_identifier(name, dialect)
+
 def safe_table(schema: str | None, table: str, dialect: str) -> str:
     """Construct a safe schema-qualified or plain table identifier."""
     if schema:
@@ -27,11 +38,16 @@ def safe_table(schema: str | None, table: str, dialect: str) -> str:
 
 _SAFE_OPS: frozenset[str] = frozenset({
     "=", "!=", "<>", "<", ">", "<=", ">=",
-    "LIKE", "NOT LIKE", "IN", "NOT IN",
+    "LIKE", "NOT LIKE", "ILIKE", "NOT ILIKE", "IN", "NOT IN",
     "IS", "IS NOT",
 })
 
-def build_where_clause(where: dict[str, Any], dialect: str) -> str | None:
+def _normalize_where_op(op: str, dialect: str) -> str:
+    if op in {"ILIKE", "NOT ILIKE"} and normalize_dialect(dialect) != "postgres":
+        return op.replace("ILIKE", "LIKE")
+    return op
+
+def build_where_clause(where: dict[str, Any], dialect: str, *, catalog_validated: bool = False) -> str | None:
     """Build a safe WHERE clause, validating columns and operator safety."""
     col = str(where.get("column") or "")
     op = str(where.get("op") or "=").strip().upper()
@@ -40,8 +56,9 @@ def build_where_clause(where: dict[str, Any], dialect: str) -> str | None:
         return None
     if op not in _SAFE_OPS:
         raise ValueError(f"Unsafe operator in WHERE clause: {op}")
+    op = _normalize_where_op(op, dialect)
     
-    safe_col = safe_identifier(col, dialect)
+    safe_col = _safe_or_catalog_identifier(col, dialect, catalog_validated)
     if value is None:
         return f"{safe_col} IS NULL"
     if isinstance(value, (int, float)):
@@ -54,7 +71,7 @@ def build_where_clause(where: dict[str, Any], dialect: str) -> str | None:
     escaped = str(value).replace("'", "''")
     return f"{safe_col} {op} '{escaped}'"
 
-def build_order_clause(order: dict[str, Any], dialect: str) -> str | None:
+def build_order_clause(order: dict[str, Any], dialect: str, *, catalog_validated: bool = False) -> str | None:
     """Build a safe ORDER BY expression validating columns."""
     col = str(order.get("column") or "").strip()
     if not col:
@@ -62,7 +79,7 @@ def build_order_clause(order: dict[str, Any], dialect: str) -> str | None:
     direction = str(order.get("direction") or "ASC").strip().upper()
     if direction not in ("ASC", "DESC"):
         direction = "ASC"
-    safe_col = safe_identifier(col, dialect)
+    safe_col = _safe_or_catalog_identifier(col, dialect, catalog_validated)
     return f"{safe_col} {direction}"
 
 def build_select(
@@ -72,27 +89,34 @@ def build_select(
     order: Any | None,
     limit: int | None,
     dialect: str,
+    catalog_validated_identifiers: bool = False,
 ) -> str:
     """Build a complete SELECT query with strict parameter validation."""
-    safe_table = safe_identifier(table, dialect)
+    safe_table = _safe_or_catalog_identifier(table, dialect, catalog_validated_identifiers)
     if not columns:
         safe_cols = "*"
     else:
-        safe_cols = ", ".join(safe_identifier(c, dialect) for c in columns)
+        safe_cols = ", ".join(
+            _safe_or_catalog_identifier(c, dialect, catalog_validated_identifiers)
+            for c in columns
+        )
     
     sql = f"SELECT {safe_cols} FROM {safe_table}"
     if where:
-        cond = build_where_clause(where, dialect)
+        cond = build_where_clause(where, dialect, catalog_validated=catalog_validated_identifiers)
         if cond:
             sql += f" WHERE {cond}"
     
     if order:
         if isinstance(order, dict):
-            clause = build_order_clause(order, dialect)
+            clause = build_order_clause(order, dialect, catalog_validated=catalog_validated_identifiers)
             if clause:
                 sql += f" ORDER BY {clause}"
         elif isinstance(order, list):
-            clauses = [build_order_clause(o, dialect) for o in order if o]
+            clauses = [
+                build_order_clause(o, dialect, catalog_validated=catalog_validated_identifiers)
+                for o in order if o
+            ]
             clauses = [c for c in clauses if c]
             if clauses:
                 sql += f" ORDER BY {', '.join(clauses)}"
