@@ -1,3 +1,5 @@
+import pytest
+
 from engine.policy.redactor import DataRedactor
 
 def test_data_redactor_pii_and_credentials() -> None:
@@ -8,6 +10,11 @@ def test_data_redactor_pii_and_credentials() -> None:
     assert "test@example.com" not in redacted
     assert "[REDACTED_EMAIL]" in redacted
     assert "john_doe" in redacted
+
+    ddl_cred = "CREATE TABLE users (password TEXT DEFAULT 'secret-value');"
+    redacted_ddl = DataRedactor.redact_sql(ddl_cred)
+    assert "secret-value" not in redacted_ddl
+    assert "password TEXT DEFAULT '[REDACTED_SECURE]'" in redacted_ddl
 
     # Test phone numbers and credit cards
     sql_pii = "INSERT INTO customers (phone, card) VALUES ('13812345678', '4111-1111-1111-1111');"
@@ -37,6 +44,15 @@ def test_data_redactor_masks_common_phone_formats_without_card_false_positives()
     assert "[REDACTED_CARD]" not in redacted
 
 
+def test_data_redactor_masks_raw_api_key_tokens() -> None:
+    message = "model provider rejected key sk-live-secret1234567890 for request"
+
+    redacted = DataRedactor.redact_sql(message)
+
+    assert "sk-live-secret1234567890" not in redacted
+    assert "[REDACTED_API_KEY]" in redacted
+
+
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
     from engine.sql.test_executor import execute_query_for_test
     from engine.models import QueryHistory
@@ -54,4 +70,86 @@ def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None
     assert "supersecretpassword" not in history.submitted_sql
     assert "[REDACTED_EMAIL]" in history.submitted_sql
     assert "password = '[REDACTED_SECURE]'" in history.submitted_sql
+
+
+def test_executor_history_redacts_sensitive_error_messages(db_session, test_datasource, monkeypatch) -> None:
+    from engine.models import QueryHistory
+    from engine.sql.executor import _run_approved_query
+
+    def fail_with_sensitive_driver_message(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError("driver leaked user@example.com password='driver-secret'")
+
+    monkeypatch.setattr("engine.sql.executor._execute_on_sqlite_profiled", fail_with_sensitive_driver_message)
+    sql = "SELECT email FROM users WHERE email = 'user@example.com'; -- password = 'sql-secret'"
+
+    with pytest.raises(Exception):
+        _run_approved_query(
+            db=db_session,
+            ds=test_datasource,
+            datasource_id=test_datasource.id,
+            safe_sql=sql,
+            sql_str=sql,
+            question=None,
+            execution_id="exec-sensitive-error",
+            guard_res={"result": "pass", "safeSql": sql, "checks": [], "message": "ok"},
+            guard_checks_json="[]",
+            guardrail_ms=0,
+        )
+
+    history = (
+        db_session.query(QueryHistory)
+        .filter(QueryHistory.data_source_id == test_datasource.id)
+        .order_by(QueryHistory.created_at.desc())
+        .first()
+    )
+    assert history is not None
+    assert "user@example.com" not in history.error_message
+    assert "driver-secret" not in history.error_message
+    assert "[REDACTED_EMAIL]" in history.error_message
+    assert "[REDACTED]" in history.error_message
+
+
+def test_table_design_history_redacts_sensitive_ddl(db_session, tmp_path) -> None:
+    from engine.models import DataSource, QueryHistory
+    from engine.table_design import execute_table_design_ddl
+
+    sqlite_path = tmp_path / "table-design.db"
+    datasource = DataSource(
+        id="ds-table-design-redaction",
+        name="table-design-redaction",
+        host="",
+        port=0,
+        database_name=str(sqlite_path),
+        username="",
+        password_ciphertext="",
+        password_nonce="",
+        password_key_version="v1",
+        db_type="sqlite",
+        env="dev",
+        status="active",
+    )
+    db_session.add(datasource)
+    db_session.commit()
+
+    ddl = (
+        "CREATE TABLE redaction_check ("
+        "id INTEGER PRIMARY KEY, "
+        "email TEXT DEFAULT 'sensitive@example.com', "
+        "password TEXT DEFAULT 'secret-value'"
+        ")"
+    )
+
+    execute_table_design_ddl(db_session, datasource.id, ddl)
+
+    history = (
+        db_session.query(QueryHistory)
+        .filter(QueryHistory.data_source_id == datasource.id)
+        .order_by(QueryHistory.created_at.desc())
+        .first()
+    )
+    assert history is not None
+    for sql_field in (history.submitted_sql, history.generated_sql, history.safe_sql, history.executed_sql):
+        assert "sensitive@example.com" not in sql_field
+        assert "secret-value" not in sql_field
+        assert "[REDACTED_EMAIL]" in sql_field
 

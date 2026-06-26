@@ -12,6 +12,7 @@ from engine.agent_core.types import AgentCheckpointRecord
 from engine.models import AgentCheckpoint
 from engine.agent_core.persistence._common import (
     _safe_json,
+    _safe_checkpoint_payload,
     _checkpoint_record,
     _parse_json_any,
 )
@@ -54,11 +55,11 @@ def save_checkpoint(
         status=status,
         current_step_name=current_step_name,
         next_step_name=next_step_name,
-        plan_json=_safe_json(plan) if plan is not None else None,
-        state_json=_safe_json(state),
-        completed_steps_json=_safe_json(completed_steps),
-        pending_steps_json=_safe_json(pending_steps),
-        artifacts_json=_safe_json(artifacts) if artifacts is not None else None,
+        plan_json=_safe_json(_safe_checkpoint_payload(plan)) if plan is not None else None,
+        state_json=_safe_json(_safe_checkpoint_payload(state)),
+        completed_steps_json=_safe_json(_safe_checkpoint_payload(completed_steps)),
+        pending_steps_json=_safe_json(_safe_checkpoint_payload(pending_steps)),
+        artifacts_json=_safe_json(_safe_checkpoint_payload(artifacts)) if artifacts is not None else None,
         created_at=datetime.now(UTC),
     )
     db.add(checkpoint)
@@ -77,11 +78,15 @@ def get_latest_checkpoint_payload(db: Session, run_id: str) -> dict[str, Any] | 
         return None
     return {
         "record": _checkpoint_record(checkpoint),
-        "plan": _parse_json_any(checkpoint.plan_json),
-        "state": _parse_json_any(checkpoint.state_json),
-        "completed_steps": _parse_json_any(checkpoint.completed_steps_json) or [],
-        "pending_steps": _parse_json_any(checkpoint.pending_steps_json) or [],
-        "artifacts": _parse_json_any(checkpoint.artifacts_json) or [],
+        "plan": _safe_checkpoint_payload(_parse_json_any(checkpoint.plan_json)),
+        "state": _safe_checkpoint_payload(_parse_json_any(checkpoint.state_json)),
+        "completed_steps": _safe_checkpoint_payload(
+            _parse_json_any(checkpoint.completed_steps_json) or []
+        ),
+        "pending_steps": _safe_checkpoint_payload(
+            _parse_json_any(checkpoint.pending_steps_json) or []
+        ),
+        "artifacts": _safe_checkpoint_payload(_parse_json_any(checkpoint.artifacts_json) or []),
     }
 
 

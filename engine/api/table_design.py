@@ -8,7 +8,7 @@ from engine.app.errors import public_error
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.models import DataSource
-from engine.schemas import TestDataGenerateRequest
+from engine.schemas.table_design import TestDataGenerateRequest
 from engine.policy.engine import PolicyEngine
 
 logger = logging.getLogger("dbfox.api.table_design")

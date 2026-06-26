@@ -25,7 +25,6 @@ module = [
     "engine.sql.*",
     "engine.tools.*",
     "engine.evaluation.*",
-    "engine.test_data",
     "engine.ai_enrich",
 ]
 ignore_errors = true
@@ -33,6 +32,8 @@ ignore_errors = true
 [[tool.mypy.overrides]]
 module = [
     "engine.api.agent",
+    "engine.api.datasources",
+    "engine.api.table_design",
     "engine.agent.app.service",
     "engine.agent_core.event_store",
     "engine.agent_core.memory_projection",
@@ -46,6 +47,7 @@ module = [
     "engine.sql.safety.*",
     "engine.sql.safety_gate",
     "engine.sql.sql_backed_view",
+    "engine.test_data",
 ]
 ignore_errors = false
 

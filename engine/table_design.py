@@ -255,6 +255,8 @@ def generate_create_table_ddl(design: Mapping[str, Any]) -> dict[str, Any]:
 def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str, Any]:
     from engine.models import DataSource, QueryHistory
     from engine.datasource import get_mysql_connection_params
+    from engine.app.errors import public_message
+    from engine.policy.redactor import DataRedactor
     from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
     from engine.environment.schema_catalog_sync import ensure_catalog
     import sqlite3
@@ -325,20 +327,22 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
         raise TableDesignError(f"执行 DDL 语句失败: {error_message}")
     finally:
         latency_ms = int((time.time() - start_time) * 1000)
+        redacted_ddl = DataRedactor.redact_sql(ddl)
+        redacted_clean_ddl = DataRedactor.redact_sql(clean_ddl)
         # Log to QueryHistory for auditing
         history = QueryHistory(
             id=f"exec-{uuid.uuid4()}",
             data_source_id=datasource_id,
             question="Execute Designed DDL",
-            submitted_sql=ddl,
-            generated_sql=ddl,
-            safe_sql=clean_ddl,
-            executed_sql=clean_ddl if execution_status == "success" else "",
+            submitted_sql=redacted_ddl,
+            generated_sql=redacted_ddl,
+            safe_sql=redacted_clean_ddl,
+            executed_sql=redacted_clean_ddl if execution_status == "success" else "",
             guardrail_result="pass",
             guardrail_checks="[{\"rule\": \"table_design_ddl\", \"level\": \"pass\", \"message\": \"DDL executed via safe table design path\"}]",
             execution_status=execution_status,
             execution_time_ms=latency_ms,
-            error_message=error_message,
+            error_message=public_message(error_message) if error_message else None,
         )
         db.add(history)
         db.commit()

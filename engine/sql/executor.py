@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_message
 from engine.datasource import (
     datasource_connection_dict,
     get_mysql_connection_params,
@@ -25,6 +26,12 @@ from engine.policy.redactor import DataRedactor
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.persistence.search_index import SearchIndexService
 from engine.query_registry import QUERY_REGISTRY
+
+
+def _redact_error_message(message: str | None) -> str | None:
+    if not message:
+        return None
+    return public_message(DataRedactor.redact_sql(message))
 
 
 def _write_query_history(db: Session, history: QueryHistory) -> str | None:
@@ -143,7 +150,7 @@ def _run_approved_query(
             )
     except SQLQueryCancelledError as e:
         execution_status = "cancelled"
-        error_message = e.message
+        error_message = _redact_error_message(e.message)
         raise
     except TimeoutError as e:
         execution_status = "timeout"
@@ -151,8 +158,9 @@ def _run_approved_query(
         raise SQLQueryTimeoutError(error_message) from e
     except Exception as e:
         execution_status = "failed"
-        error_message = f"执行 SQL 遇到错误: {str(e)}"
-        raise SQLExecutionError(error_message) from e
+        redacted_error_message = _redact_error_message(f"执行 SQL 遇到错误: {str(e)}") or "执行 SQL 遇到错误"
+        error_message = redacted_error_message
+        raise SQLExecutionError(redacted_error_message) from e
 
     finally:
         latency_ms = int((time.time() - start_time) * 1000)

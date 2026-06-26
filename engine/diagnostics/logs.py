@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Iterable
 
+from engine.policy.redactor import DataRedactor
 from engine.runtime_paths import PROJECT_DIR, private_runtime_file
 
 LOG_FILE_NAME = "dbfox-engine.log"
@@ -55,7 +56,7 @@ def redact_sensitive_text(text: str) -> str:
         lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]{match.group(4)}",
         redacted,
     )
-    return redacted
+    return DataRedactor.redact_sql(redacted)
 
 
 class RedactingFormatter(logging.Formatter):

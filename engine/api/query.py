@@ -12,7 +12,9 @@ from engine.sql.dialect_context import DialectContext
 from engine.sql.safety.service import SqlSafetyService
 from engine.models import DataSource, QueryHistory
 from engine.persistence.search_index import SearchIndexService
+from engine.app.errors import public_message
 from engine.policy.engine import PolicyEngine
+from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
 from engine.schemas import SQLCancelRequest, SQLExecuteRequest, SQLExplainRequest, SQLValidateRequest
 
@@ -32,8 +34,28 @@ def _public_guardrail_result(result: dict[str, Any]) -> dict[str, Any]:
 from engine.schemas.query import QueryHistoryResponse
 
 
+_QUERY_HISTORY_PUBLIC_TEXT_FIELDS = (
+    "question",
+    "submitted_sql",
+    "generated_sql",
+    "safe_sql",
+    "executed_sql",
+    "guardrail_checks",
+    "error_message",
+)
+
+
+def _public_query_history_text(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    return public_message(DataRedactor.redact_sql(value))
+
+
 def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
-    return QueryHistoryResponse.model_validate(item).model_dump(mode="json")
+    payload = QueryHistoryResponse.model_validate(item).model_dump(mode="json")
+    for field in _QUERY_HISTORY_PUBLIC_TEXT_FIELDS:
+        payload[field] = _public_query_history_text(payload.get(field))
+    return payload
 
 
 @router.post("/query/validate")

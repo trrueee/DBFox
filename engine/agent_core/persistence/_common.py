@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -17,6 +18,7 @@ from engine.agent_core.types import (
     AgentRuntimeEvent,
 )
 from engine.models import AgentApproval, AgentCheckpoint
+from engine.policy.redactor import DataRedactor
 
 logger = logging.getLogger("dbfox.agent.persistence")
 
@@ -25,6 +27,23 @@ _SENSITIVE_KEYS = frozenset({
     "password_ciphertext", "password_nonce", "ssh_password_ciphertext",
     "ssh_password_nonce", "ssh_pkey_passphrase_ciphertext", "ssh_pkey_passphrase_nonce",
 })
+_SENSITIVE_KEY_PARTS = (
+    "api_key",
+    "apikey",
+    "password",
+    "passwd",
+    "token",
+    "secret",
+    "credential",
+    "passphrase",
+    "private_key",
+    "privatekey",
+    "ciphertext",
+    "nonce",
+)
+_SQL_KEY_PARTS = ("sql", "query")
+_SQL_LITERAL_PATTERN = re.compile(r"'(?:''|[^'])*'")
+_ARTIFACT_EXECUTABLE_SQL_KEYS = frozenset({"sql", "safeSql", "safe_sql", "sourceSql", "source_sql"})
 
 
 def _safe_json(payload: Any | None) -> str:
@@ -47,12 +66,91 @@ def _parse_json(raw: Any) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _redact_runtime_event_value(value: Any, key: str = "") -> Any:
+    key_lower = key.lower()
+    if key_lower in _SENSITIVE_KEYS or any(part in key_lower for part in _SENSITIVE_KEY_PARTS):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {
+            str(item_key): _redact_runtime_event_value(item_value, str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_runtime_event_value(item, key) for item in value]
+    if isinstance(value, str):
+        redacted = DataRedactor.redact_sql(value)
+        if any(part in key_lower for part in _SQL_KEY_PARTS):
+            redacted = _SQL_LITERAL_PATTERN.sub("'[REDACTED_LITERAL]'", redacted)
+        return redacted
+    return value
+
+
+def _safe_artifact_payload(payload: Any) -> Any:
+    return _redact_artifact_value(payload)
+
+
+def _safe_checkpoint_payload(payload: Any) -> Any:
+    return _redact_artifact_value(payload)
+
+
+def _redact_artifact_value(value: Any, key: str = "") -> Any:
+    key_lower = key.lower()
+    if key in _ARTIFACT_EXECUTABLE_SQL_KEYS:
+        return value
+    if key_lower in _SENSITIVE_KEYS or any(part in key_lower for part in _SENSITIVE_KEY_PARTS):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        columns = _artifact_column_names(value.get("columns"))
+        redacted: dict[str, Any] = {}
+        for item_key, item_value in value.items():
+            item_key_str = str(item_key)
+            if item_key_str in {"rows", "previewRows", "preview_rows", "sampleRows", "sample_rows"}:
+                redacted[item_key_str] = _redact_artifact_rows(item_value, columns)
+            else:
+                redacted[item_key_str] = _redact_artifact_value(item_value, item_key_str)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_artifact_value(item, key) for item in value]
+    if isinstance(value, str):
+        return DataRedactor.redact_sql(value)
+    return value
+
+
+def _artifact_column_names(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    columns: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            columns.append(item)
+        elif isinstance(item, dict):
+            columns.append(str(item.get("name") or ""))
+        else:
+            columns.append("")
+    return columns
+
+
+def _redact_artifact_rows(value: Any, columns: list[str]) -> Any:
+    if not isinstance(value, list):
+        return _redact_artifact_value(value)
+    redacted_rows: list[Any] = []
+    for row in value:
+        if isinstance(row, list):
+            redacted_rows.append([
+                _redact_artifact_value(cell, columns[index] if index < len(columns) else "")
+                for index, cell in enumerate(row)
+            ])
+        elif isinstance(row, dict):
+            redacted_rows.append(_redact_artifact_value(row))
+        else:
+            redacted_rows.append(_redact_artifact_value(row))
+    return redacted_rows
+
+
 def _safe_event_payload(event: AgentRuntimeEvent) -> dict[str, Any]:
-    data = event.model_dump()
-    if event.step and isinstance(event.step, dict):
-        data["step"] = {k: v for k, v in event.step.items() if k not in _SENSITIVE_KEYS}
+    data = _redact_runtime_event_value(event.model_dump())
     if event.response is not None:
-        resp_data = event.response.model_dump()
+        resp_data = _redact_runtime_event_value(event.response.model_dump())
         resp_data.pop("api_key", None)
         data["response"] = resp_data
     return data
@@ -184,6 +282,7 @@ def _load_run_artifacts(db: Session, run_id: str) -> list[Any]:
 
 def _artifact_to_dict(r: Any) -> dict[str, Any]:
     """Convert an AgentArtifactRecord to a plain dict (shared by list + restore)."""
+    payload = _parse_json(_model_optional_str(r, "payload_json")) or {}
     return {
         "id": _model_str(r, "id"),
         "run_id": _model_str(r, "run_id"),
@@ -192,7 +291,7 @@ def _artifact_to_dict(r: Any) -> dict[str, Any]:
         "title": _model_str(r, "title"),
         "produced_by_step": _model_str(r, "produced_by_step"),
         "depends_on": (_parse_json(_model_optional_str(r, "depends_on_json")) or {}).get("depends_on", []),
-        "payload": _parse_json(_model_optional_str(r, "payload_json")) or {},
+        "payload": _safe_artifact_payload(payload),
         "presentation": _parse_json(_model_optional_str(r, "presentation_json")) or {},
         "refs": _parse_json(_model_optional_str(r, "refs_json")) or {},
         "sequence": _model_int(r, "sequence"),
