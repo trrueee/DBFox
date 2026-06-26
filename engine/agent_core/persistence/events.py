@@ -18,6 +18,7 @@ from engine.models import (
 from engine.agent_core.persistence._common import (
     _safe_json,
     _safe_event_payload,
+    _safe_artifact_payload,
     _redact_trace_event,
     _artifact_to_dict,
     _parse_json,
@@ -68,7 +69,7 @@ def record_artifact(
             title=artifact.title,
             produced_by_step=artifact.produced_by_step,
             depends_on_json=_safe_json(artifact.depends_on) if artifact.depends_on else None,
-            payload_json=_safe_json(artifact.payload),
+            payload_json=_safe_json(_safe_artifact_payload(artifact.payload)),
             presentation_json=artifact.presentation.model_dump_json(),
             refs_json=_safe_json(artifact.refs) if artifact.refs else None,
             status="completed",

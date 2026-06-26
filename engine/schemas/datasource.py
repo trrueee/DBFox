@@ -1,7 +1,7 @@
 import json
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.schemas import _to_iso
 
@@ -74,79 +74,111 @@ class DataSourceResponse(BaseModel):
         return _to_iso(v)
 
 
-class DataSourceTestRequest(BaseModel):
-    db_type: str = "mysql"
-    host: str | None = None
-    port: int | None = None
-    database_name: str
-    username: str | None = None
-    password: str | None = None
+DbType = Literal["mysql", "postgresql", "sqlite"]
+DatasourceEnv = Literal["dev", "test", "prod"]
+ConnectionMode = Literal["direct"]
+
+
+class _DatasourceRequestStringNormalizer(BaseModel):
+    @field_validator(
+        "project_id",
+        "name",
+        "db_type",
+        "host",
+        "database_name",
+        "username",
+        "connection_mode",
+        "env",
+        "ssh_host",
+        "ssh_username",
+        "ssh_pkey_path",
+        "ssl_ca_path",
+        "ssl_cert_path",
+        "ssl_key_path",
+        mode="before",
+        check_fields=False,
+    )
+    @classmethod
+    def _strip_non_secret_strings(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+
+class DataSourceTestRequest(_DatasourceRequestStringNormalizer):
+
+    db_type: DbType = "mysql"
+    host: str | None = Field(default=None, max_length=255)
+    port: int | None = Field(default=None, ge=0, le=65_535)
+    database_name: str = Field(min_length=1, max_length=1024)
+    username: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, max_length=4096)
 
     ssh_enabled: bool = False
-    ssh_host: str | None = None
-    ssh_port: int = 22
-    ssh_username: str | None = None
-    ssh_password: str | None = None
-    ssh_pkey_path: str | None = None
-    ssh_pkey_passphrase: str | None = None
+    ssh_host: str | None = Field(default=None, max_length=255)
+    ssh_port: int = Field(default=22, ge=1, le=65_535)
+    ssh_username: str | None = Field(default=None, max_length=255)
+    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_pkey_path: str | None = Field(default=None, max_length=1024)
+    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
 
     ssl_enabled: bool = False
-    ssl_ca_path: str | None = None
-    ssl_cert_path: str | None = None
-    ssl_key_path: str | None = None
+    ssl_ca_path: str | None = Field(default=None, max_length=1024)
+    ssl_cert_path: str | None = Field(default=None, max_length=1024)
+    ssl_key_path: str | None = Field(default=None, max_length=1024)
     ssl_verify_identity: bool = True
 
 
-class DataSourceCreateRequest(BaseModel):
-    project_id: str | None = None
-    name: str
-    db_type: str = "mysql"
-    host: str | None = None
-    port: int | None = None
-    database_name: str
-    username: str | None = None
-    password: str | None = None
-    connection_mode: str = "direct"
+class DataSourceCreateRequest(_DatasourceRequestStringNormalizer):
+
+    project_id: str | None = Field(default=None, max_length=128)
+    name: str = Field(min_length=1, max_length=128)
+    db_type: DbType = "mysql"
+    host: str | None = Field(default=None, max_length=255)
+    port: int | None = Field(default=None, ge=0, le=65_535)
+    database_name: str = Field(min_length=1, max_length=1024)
+    username: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, max_length=4096)
+    connection_mode: ConnectionMode = "direct"
     is_read_only: bool = False
-    env: str = "dev"
+    env: DatasourceEnv = "dev"
 
     ssh_enabled: bool = False
-    ssh_host: str | None = None
-    ssh_port: int = 22
-    ssh_username: str | None = None
-    ssh_password: str | None = None
-    ssh_pkey_path: str | None = None
-    ssh_pkey_passphrase: str | None = None
+    ssh_host: str | None = Field(default=None, max_length=255)
+    ssh_port: int = Field(default=22, ge=1, le=65_535)
+    ssh_username: str | None = Field(default=None, max_length=255)
+    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_pkey_path: str | None = Field(default=None, max_length=1024)
+    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
 
     ssl_enabled: bool = False
-    ssl_ca_path: str | None = None
-    ssl_cert_path: str | None = None
-    ssl_key_path: str | None = None
+    ssl_ca_path: str | None = Field(default=None, max_length=1024)
+    ssl_cert_path: str | None = Field(default=None, max_length=1024)
+    ssl_key_path: str | None = Field(default=None, max_length=1024)
     ssl_verify_identity: bool = True
 
 
-class DataSourceUpdateRequest(BaseModel):
-    name: str
-    db_type: str = "mysql"
-    host: str | None = None
-    port: int | None = None
-    database_name: str
-    username: str | None = None
-    password: str | None = None
-    connection_mode: str = "direct"
+class DataSourceUpdateRequest(_DatasourceRequestStringNormalizer):
+
+    name: str = Field(min_length=1, max_length=128)
+    db_type: DbType = "mysql"
+    host: str | None = Field(default=None, max_length=255)
+    port: int | None = Field(default=None, ge=0, le=65_535)
+    database_name: str = Field(min_length=1, max_length=1024)
+    username: str | None = Field(default=None, max_length=255)
+    password: str | None = Field(default=None, max_length=4096)
+    connection_mode: ConnectionMode = "direct"
     is_read_only: bool = False
-    env: str = "dev"
+    env: DatasourceEnv = "dev"
 
     ssh_enabled: bool = False
-    ssh_host: str | None = None
-    ssh_port: int = 22
-    ssh_username: str | None = None
-    ssh_password: str | None = None
-    ssh_pkey_path: str | None = None
-    ssh_pkey_passphrase: str | None = None
+    ssh_host: str | None = Field(default=None, max_length=255)
+    ssh_port: int = Field(default=22, ge=1, le=65_535)
+    ssh_username: str | None = Field(default=None, max_length=255)
+    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_pkey_path: str | None = Field(default=None, max_length=1024)
+    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
 
     ssl_enabled: bool = False
-    ssl_ca_path: str | None = None
-    ssl_cert_path: str | None = None
-    ssl_key_path: str | None = None
+    ssl_ca_path: str | None = Field(default=None, max_length=1024)
+    ssl_cert_path: str | None = Field(default=None, max_length=1024)
+    ssl_key_path: str | None = Field(default=None, max_length=1024)
     ssl_verify_identity: bool = True

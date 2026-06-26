@@ -8,7 +8,9 @@ import pytest
 from engine.crypto import encrypt_password
 from engine.db import get_db
 from engine.main import LOCAL_SECURE_TOKEN, app
-from engine.models import DEFAULT_PROJECT_ID, DataSource
+from datetime import UTC, datetime
+
+from engine.models import DEFAULT_PROJECT_ID, BackupRecord, DataSource
 
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".dbfox_runtime" / "tests"
@@ -192,6 +194,77 @@ def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> Non
     )
     assert resp.status_code == 400
     assert resp.json()["detail"]["code"] == "MYSQLDUMP_NOT_FOUND"
+
+
+def test_failed_backup_error_message_is_sanitized(client, db_session, monkeypatch) -> None:
+    runtime_dir = _runtime_dir("test_backup_error_redaction")
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
+    datasource = _create_mysql_datasource(db_session)
+
+    from engine.backup import BackupError
+
+    def fake_dump_leaks_sensitive_error(ds: DataSource, output_path) -> None:
+        raise BackupError("mysqldump failed for user@example.com password='dump-secret'")
+
+    monkeypatch.setattr("engine.backup._run_mysqldump", fake_dump_leaks_sensitive_error)
+
+    resp = client.post(
+        "/api/v1/backups",
+        json={"datasource_id": datasource.id, "allow_fallback": False},
+        headers=_headers(),
+    )
+
+    assert resp.status_code == 400
+    message = resp.json()["detail"]["message"]
+    assert "user@example.com" not in message
+    assert "dump-secret" not in message
+
+    record = (
+        db_session.query(BackupRecord)
+        .filter(BackupRecord.datasource_id == datasource.id)
+        .order_by(BackupRecord.created_at.desc())
+        .first()
+    )
+    assert record is not None
+    assert record.status == "failed"
+    assert record.error_message is not None
+    assert "user@example.com" not in record.error_message
+    assert "dump-secret" not in record.error_message
+    assert "[REDACTED" in record.error_message
+
+
+def test_backup_response_sanitizes_legacy_error_message(client, db_session) -> None:
+    datasource = _create_mysql_datasource(db_session)
+    now = datetime.now(UTC)
+    record = BackupRecord(
+        id="legacy-sensitive-backup",
+        project_id=DEFAULT_PROJECT_ID,
+        datasource_id=datasource.id,
+        label="legacy sensitive failure",
+        backup_type="mysqldump",
+        status="failed",
+        file_path="C:\\Users\\alice\\.dbfox\\backup.sql",
+        error_message="mysqldump failed for admin@example.com password='legacy-secret'",
+        started_at=now,
+        completed_at=now,
+        created_at=now,
+    )
+    db_session.add(record)
+    db_session.commit()
+
+    detail_resp = client.get(f"/api/v1/backups/{record.id}", headers=_headers())
+    assert detail_resp.status_code == 200
+    detail_message = detail_resp.json()["error_message"]
+    assert "admin@example.com" not in detail_message
+    assert "legacy-secret" not in detail_message
+
+    list_resp = client.get(f"/api/v1/projects/{DEFAULT_PROJECT_ID}/backups", headers=_headers())
+    assert list_resp.status_code == 200
+    [listed] = [item for item in list_resp.json() if item["id"] == record.id]
+    list_message = listed["error_message"]
+    assert "admin@example.com" not in list_message
+    assert "legacy-secret" not in list_message
+    assert "[REDACTED" in list_message
 
 
 def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:

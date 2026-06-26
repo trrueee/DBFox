@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
+from engine.errors import GuardrailValidationError
 from engine.schema_sync import sync_schema
 from engine.schemas import SQLExecuteRequest
+from engine.sql.executor import execute_query
 from engine.sql.guardrail import GuardrailResult
 from engine.sql.dialect_context import DialectContext
 from engine.sql.safety.service import SqlSafetyService
@@ -133,6 +137,39 @@ def test_query_execute_api_passes_explicit_safety_decision(
     assert result == {"success": True}
     assert built == [("SELECT id FROM users LIMIT 3", test_datasource_module.id)]
     assert received == [decision]
+
+
+def test_execute_query_rejects_unconfirmed_safety_decision(db_session, test_datasource) -> None:
+    guardrail: GuardrailResult = {
+        "result": "pass",
+        "originalSql": "SELECT id FROM users LIMIT 3",
+        "safeSql": "SELECT id FROM users LIMIT 3",
+        "checks": [],
+        "message": "ok",
+    }
+    decision = ExecutionSafetyDecision(
+        datasource_id=test_datasource.id,
+        policy="agent_readonly",
+        original_sql="SELECT id FROM users LIMIT 3",
+        safe_sql="SELECT id FROM users LIMIT 3",
+        passed=True,
+        can_execute=True,
+        requires_confirmation=True,
+        guardrail=guardrail,
+        messages=["Production datasource requires confirmation before execution."],
+    )
+
+    with pytest.raises(GuardrailValidationError) as exc_info:
+        execute_query(
+            db_session,
+            test_datasource.id,
+            "SELECT id FROM users LIMIT 3",
+            safety_decision=decision,
+            safety_policy="agent_readonly",
+        )
+
+    assert exc_info.value.code == "GUARDRAIL_BLOCKED"
+    assert any(check["rule"] == "requires_confirmation" for check in exc_info.value.checks)
 
 
 def test_db_query_tool_passes_explicit_safety_decision(
@@ -340,12 +377,14 @@ def test_test_data_fk_prefetch_passes_explicit_safety_decision(
 
     inserted: list[dict[str, object]] = []
 
-    def fake_insert(_db, datasource_id: str, insert_sql: str, params: dict[str, object]) -> None:
-        inserted.append(params)
+    def fake_insert_batch(_db, datasource_id: str, statements: list[tuple[str, dict[str, object]]]) -> None:
+        inserted.extend(params for _insert_sql, params in statements)
+
+    from engine.test_data import fk_resolver, sqlite_insert_service
 
     monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
-    monkeypatch.setattr(test_data_module, "execute_query", fake_execute_query)
-    monkeypatch.setattr(test_data_module, "_execute_test_data_insert", fake_insert)
+    monkeypatch.setattr(fk_resolver, "execute_query", fake_execute_query)
+    monkeypatch.setattr(sqlite_insert_service, "execute_test_data_inserts", fake_insert_batch)
 
     result = test_data_module.generate_smart_test_data(
         db_session_module,

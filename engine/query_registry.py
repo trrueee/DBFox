@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 import pymysql
 
+from engine.app.errors import public_message
+
 BackendKind = Literal["sqlite", "mysql", "postgresql"]
 
 
@@ -133,7 +135,7 @@ class QueryRegistry:
                     "success": False,
                     "cancelled": False,
                     "executionId": execution_id,
-                    "message": f"Failed to issue PostgreSQL cancellation: {exc}",
+                    "message": f"Failed to issue PostgreSQL cancellation: {public_message(exc)}",
                 }
 
         if backend == "mysql" and mysql_thread_id is not None and mysql_params:
@@ -150,7 +152,7 @@ class QueryRegistry:
                     "success": False,
                     "cancelled": False,
                     "executionId": execution_id,
-                    "message": f"Failed to issue MySQL KILL QUERY: {exc}",
+                    "message": f"Failed to issue MySQL KILL QUERY: {public_message(exc)}",
                 }
 
         return {

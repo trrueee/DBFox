@@ -44,3 +44,26 @@ def test_trace_events_are_redacted_and_limited() -> None:
     assert isinstance(rows, list)
     assert len(rows) == 6
     assert rows[-1] == {"_truncated": 7}
+
+
+def test_trace_error_redacts_auth_headers() -> None:
+    step = AgentStep(
+        name="call_model",
+        status="failed",
+        input={},
+        output=None,
+        error=(
+            "request failed Authorization: Bearer trace-secret-token "
+            "X-Local-Token: local-runtime-token"
+        ),
+        latency_ms=1,
+    )
+
+    events = build_trace_events([step])
+    completed = events[1]
+
+    assert completed.error is not None
+    assert "trace-secret-token" not in completed.error
+    assert "local-runtime-token" not in completed.error
+    assert "Authorization: Bearer [REDACTED]" in completed.error
+    assert "X-Local-Token: [REDACTED]" in completed.error

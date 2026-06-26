@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_message
 from engine.backup import create_backup, execute_restore, precheck_restore
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
@@ -31,7 +32,10 @@ router = APIRouter()
 
 
 def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
-    return BackupResponse.model_validate(record).model_dump(mode="json")
+    payload = BackupResponse.model_validate(record).model_dump(mode="json")
+    if payload.get("error_message"):
+        payload["error_message"] = public_message(str(payload["error_message"]))
+    return payload
 
 
 def _restore_allow_fallback(req: RestoreConfirmRequest | None, query_allow_fallback: bool) -> bool:

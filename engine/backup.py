@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.app.errors import public_message
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params
 
 logger = logging.getLogger("dbfox.backup")
@@ -266,7 +267,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
         setattr(record, "status", "failed")
         setattr(record, "completed_at", completed)
         setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
-        setattr(record, "error_message", str(exc)[:2000])
+        setattr(record, "error_message", public_message(exc)[:2000])
         db.commit()  # independent commit so API rollback does not erase the audit trail
         raise
 

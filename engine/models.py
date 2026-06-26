@@ -1,8 +1,9 @@
+import os
 import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, LargeBinary
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 
 from engine.db import Base
 
@@ -390,6 +391,12 @@ class LLMLog(Base):  # type: ignore[misc,valid-type]
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     datasource = relationship("DataSource")
+
+    @validates("prompt_text", "response_text")
+    def _redact_plaintext_by_default(self, _key: str, value: str | None) -> str | None:
+        if os.getenv("DBFOX_ALLOW_LLM_PLAINTEXT_LOGS") == "1":
+            return value
+        return None
 
 
 

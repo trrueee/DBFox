@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.execute("DROP TABLE IF EXISTS query_history_fts")
+    op.execute("DROP TABLE IF EXISTS query_history_search_docs")
     op.create_table(
         "query_history_search_docs",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

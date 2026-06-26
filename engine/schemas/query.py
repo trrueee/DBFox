@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from engine.schemas import _to_iso
 
@@ -30,21 +30,29 @@ class QueryHistoryResponse(BaseModel):
 
 
 class SQLValidateRequest(BaseModel):
-    sql: str
-    datasource_id: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    sql: str = Field(min_length=1, max_length=200_000)
+    datasource_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class SQLExecuteRequest(BaseModel):
-    datasource_id: str
-    sql: str
-    question: str | None = None
-    execution_id: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    datasource_id: str = Field(min_length=1, max_length=128)
+    sql: str = Field(min_length=1, max_length=200_000)
+    question: str | None = Field(default=None, max_length=20_000)
+    execution_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class SQLCancelRequest(BaseModel):
-    execution_id: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    execution_id: str = Field(min_length=1, max_length=128)
 
 
 class SQLExplainRequest(BaseModel):
-    datasource_id: str
-    sql: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    datasource_id: str = Field(min_length=1, max_length=128)
+    sql: str = Field(min_length=1, max_length=200_000)
