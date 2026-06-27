@@ -18,6 +18,7 @@
 | Corpus profiles prepared | 40 |
 | Docs equal embeddings | pass |
 | Raw corpus AI metadata count | 0 for all raw corpora |
+| Enriched datasource exists | 20 / 20 databases |
 | Vector recall timing excludes query embedding | pass |
 | Query embedding timing reported separately | pass |
 | Runs below 100 cases labelled smoke/directional | pass |
@@ -35,9 +36,11 @@ For `hybrid_keyword_enriched_vector_raw_question` in multi mode:
 | expression embedding call count | 0 |
 | db search call count | 5 |
 
-## Corpus Caveat
+## Corpus Coverage Caveat
 
-All raw/enriched document corpora and embeddings were generated and row counts match. One enriched database needs a coverage caveat: `wta_1` has 46 schema search docs and 46 embeddings, but only 3 docs have direct AI metadata fields populated. Inspection shows those 3 are table docs; column docs remain raw column docs. This does not invalidate the retrieval run, but it means "AI metadata coverage is complete" is not true for `wta_1`.
+All 20 databases have both raw and enriched datasource profiles. All raw/enriched document corpora and embeddings were generated, and row counts match.
+
+The caveat is at the per-schema-doc AI metadata field level, not at the database level. In 19 of 20 enriched databases, every table and column search doc has direct AI metadata fields populated. In `wta_1`, the enriched profile exists and all 46 docs have embeddings, but only the 3 table docs have direct AI metadata fields; the 43 column docs remain raw column docs. This does not invalidate the retrieval run, but it means "every enriched schema doc has direct AI metadata fields" is not true for `wta_1`.
 
 ## Main Multi-Query Results
 
