@@ -1,0 +1,3181 @@
+[
+  {
+    "case_id": "spider_concert_singer_001",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "search_expressions": [
+      "singer",
+      "singers count",
+      "number of singers",
+      "singer table"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_002",
+    "db_id": "concert_singer",
+    "question": "What is the total number of singers?",
+    "search_expressions": [
+      "singer count",
+      "singers total",
+      "number of singers",
+      "singer"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_003",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_004",
+    "db_id": "concert_singer",
+    "question": "What are the names, countries, and ages for every singer in descending order of age?",
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_005",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age of all singers from France?",
+    "search_expressions": [
+      "singer age France",
+      "singers average min max age",
+      "singer country age",
+      "concert_singer singers"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_006",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age for all French singers?",
+    "search_expressions": [
+      "French singers age",
+      "singer nationality age",
+      "avg min max age",
+      "concert_singer singers table"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_007",
+    "db_id": "concert_singer",
+    "question": "Show the name and the release year of the song by the youngest singer.",
+    "search_expressions": [
+      "song name release year",
+      "youngest singer",
+      "singer age",
+      "song singer"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_008",
+    "db_id": "concert_singer",
+    "question": "What are the names and release years for all the songs of the youngest singer?",
+    "search_expressions": [
+      "youngest singer",
+      "song name release year",
+      "singer age song",
+      "songs release_year"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_009",
+    "db_id": "concert_singer",
+    "question": "What are all distinct countries where singers above age 20 are from?",
+    "search_expressions": [
+      "singer country",
+      "singers age",
+      "distinct countries",
+      "singer nationality"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_010",
+    "db_id": "concert_singer",
+    "question": "What are  the different countries with singers above age 20?",
+    "search_expressions": [
+      "singer country age",
+      "singers countries",
+      "country singer",
+      "age > 20"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_011",
+    "db_id": "concert_singer",
+    "question": "Show all countries and the number of singers in each country.",
+    "search_expressions": [
+      "countries singers count",
+      "country singer count",
+      "singer country group",
+      "singers by country"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_012",
+    "db_id": "concert_singer",
+    "question": "How many singers are from each country?",
+    "search_expressions": [
+      "singer country count",
+      "singers by country",
+      "singer nationality",
+      "country singer count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_013",
+    "db_id": "concert_singer",
+    "question": "List all song names by singers above the average age.",
+    "search_expressions": [
+      "song name",
+      "singer age",
+      "average age",
+      "singer song"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_014",
+    "db_id": "concert_singer",
+    "question": "What are all the song names by singers who are older than average?",
+    "search_expressions": [
+      "song name",
+      "singer age",
+      "average age",
+      "singer song"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_015",
+    "db_id": "concert_singer",
+    "question": "Show location and name for all stadiums with a capacity between 5000 and 10000.",
+    "search_expressions": [
+      "stadium location name capacity",
+      "stadiums capacity range",
+      "venue location name",
+      "stadium capacity 5000 10000"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_016",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "search_expressions": [
+      "weight",
+      "pets",
+      "heavier than 10",
+      "number of pets"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_017",
+    "db_id": "pets_1",
+    "question": "How many pets have a greater weight than 10?",
+    "search_expressions": [
+      "pets weight",
+      "pet weight",
+      "greater than 10",
+      "count pets"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_018",
+    "db_id": "pets_1",
+    "question": "Find the weight of the youngest dog.",
+    "search_expressions": [
+      "weight",
+      "youngest dog",
+      "age",
+      "pets dogs"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_019",
+    "db_id": "pets_1",
+    "question": "How much does the youngest dog weigh?",
+    "search_expressions": [
+      "youngest dog weight",
+      "dog age weight",
+      "pets age weight",
+      "animal youngest weight"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_020",
+    "db_id": "pets_1",
+    "question": "Find the maximum weight for each type of pet. List the maximum weight and pet type.",
+    "search_expressions": [
+      "max weight pet type",
+      "pet weight by type",
+      "pet_type weight_max",
+      "pets weight type"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_021",
+    "db_id": "pets_1",
+    "question": "List the maximum weight and type for each type of pet.",
+    "search_expressions": [
+      "max weight type pet",
+      "pet type weight",
+      "pets max weight by type",
+      "pet_weight pet_type"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_022",
+    "db_id": "pets_1",
+    "question": "Find number of pets owned by students who are older than 20.",
+    "search_expressions": [
+      "pets",
+      "students",
+      "age > 20",
+      "owned"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_023",
+    "db_id": "pets_1",
+    "question": "How many pets are owned by students that have an age greater than 20?",
+    "search_expressions": [
+      "pets",
+      "students",
+      "age",
+      "owned"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_024",
+    "db_id": "pets_1",
+    "question": "Find the number of dog pets that are raised by female students (with sex F).",
+    "search_expressions": [
+      "dog",
+      "female students",
+      "sex F",
+      "pets"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_025",
+    "db_id": "pets_1",
+    "question": "How many dog pets are raised by female students?",
+    "search_expressions": [
+      "dog",
+      "female",
+      "student",
+      "pet"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_026",
+    "db_id": "pets_1",
+    "question": "Find the number of distinct type of pets.",
+    "search_expressions": [
+      "distinct type",
+      "pet type count",
+      "pets type",
+      "pet_type"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_027",
+    "db_id": "pets_1",
+    "question": "How many different types of pet are there?",
+    "search_expressions": [
+      "pet types",
+      "pet type count",
+      "distinct pet",
+      "animal_type"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_028",
+    "db_id": "pets_1",
+    "question": "Find the first name of students who have cat or dog pet.",
+    "search_expressions": [
+      "student first name",
+      "cat dog pet",
+      "students pets",
+      "pet type"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_029",
+    "db_id": "pets_1",
+    "question": "What are the first names of every student who has a cat or dog as a pet?",
+    "search_expressions": [
+      "student first name",
+      "cat dog pet",
+      "student pet",
+      "pets_1 schema"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_030",
+    "db_id": "pets_1",
+    "question": "Find the first name of students who have both cat and dog pets .",
+    "search_expressions": [
+      "students first name",
+      "cat dog pets",
+      "student pet ownership",
+      "pets type"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_031",
+    "db_id": "car_1",
+    "question": "How many continents are there?",
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_032",
+    "db_id": "car_1",
+    "question": "What is the number of continents?",
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_033",
+    "db_id": "car_1",
+    "question": "How many countries does each continent have? List the continent id, continent name and the number of countries.",
+    "search_expressions": [
+      "continent country count",
+      "continent_id continent_name countries",
+      "continent countries number",
+      "continent country count group"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_034",
+    "db_id": "car_1",
+    "question": "For each continent, list its id, name, and how many countries it has?",
+    "search_expressions": [
+      "continent id name country count",
+      "continent country count",
+      "continent countries",
+      "continent continent_id continent_name"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_035",
+    "db_id": "car_1",
+    "question": "How many countries are listed?",
+    "search_expressions": [
+      "countries",
+      "country count",
+      "country list",
+      "num_countries"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_036",
+    "db_id": "car_1",
+    "question": "How many countries exist?",
+    "search_expressions": [
+      "countries",
+      "country count",
+      "num_countries",
+      "country"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_037",
+    "db_id": "car_1",
+    "question": "How many models does each car maker produce? List maker full name, id and the number.",
+    "search_expressions": [
+      "car maker models count",
+      "maker full name id",
+      "model count per maker",
+      "car_makers maker_id maker_name"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_038",
+    "db_id": "car_1",
+    "question": "What is the full name of each car maker, along with its id and how many models it produces?",
+    "search_expressions": [
+      "car maker full name id models",
+      "maker name id model count",
+      "manufacturer name id model_count",
+      "car_makers name maker_id num_models"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_039",
+    "db_id": "car_1",
+    "question": "Which model of the car has the minimum horsepower?",
+    "search_expressions": [
+      "horsepower",
+      "model",
+      "car",
+      "min horsepower"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_040",
+    "db_id": "car_1",
+    "question": "What is the model of the car with the smallest amount of horsepower?",
+    "search_expressions": [
+      "model",
+      "horsepower",
+      "car",
+      "smallest horsepower"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_041",
+    "db_id": "car_1",
+    "question": "Find the model of the car whose weight is below the average weight.",
+    "search_expressions": [
+      "car model weight",
+      "average weight car",
+      "model weight below average",
+      "car_weight model"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_042",
+    "db_id": "car_1",
+    "question": "What is the model for the car with a weight smaller than the average?",
+    "search_expressions": [
+      "car model weight average",
+      "model weight car",
+      "cars weight avg",
+      "model smaller than average weight"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_043",
+    "db_id": "car_1",
+    "question": "Find the name of the makers that produced some cars in the year of 1970?",
+    "search_expressions": [
+      "maker name",
+      "car year 1970",
+      "makers cars",
+      "producer year"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_044",
+    "db_id": "car_1",
+    "question": "What is the name of the different car makers who produced a car in 1970?",
+    "search_expressions": [
+      "car maker",
+      "manufacturer",
+      "1970",
+      "car"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_045",
+    "db_id": "car_1",
+    "question": "Find the make and production time of the cars that were produced in the earliest year?",
+    "search_expressions": [
+      "make",
+      "production year",
+      "earliest year",
+      "car production"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_046",
+    "db_id": "flight_2",
+    "question": "Which country does Airline \"JetBlue Airways\" belong to?",
+    "search_expressions": [
+      "JetBlue Airways country",
+      "airline country",
+      "airline origin",
+      "airline nationality"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_047",
+    "db_id": "flight_2",
+    "question": "What country is Jetblue Airways affiliated with?",
+    "search_expressions": [
+      "Jetblue Airways country",
+      "airline affiliation",
+      "airline country",
+      "airline origin"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_048",
+    "db_id": "flight_2",
+    "question": "What is the abbreviation of Airline \"JetBlue Airways\"?",
+    "search_expressions": [
+      "JetBlue Airways abbreviation",
+      "airline abbreviation",
+      "airline code",
+      "airline acronym"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_049",
+    "db_id": "flight_2",
+    "question": "Which abbreviation corresponds to Jetblue Airways?",
+    "search_expressions": [
+      "Jetblue Airways abbreviation",
+      "airline abbreviation",
+      "airline code",
+      "Jetblue code"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_050",
+    "db_id": "flight_2",
+    "question": "List all airline names and their abbreviations in \"USA\".",
+    "search_expressions": [
+      "airline name abbreviation USA",
+      "airline abbreviation country",
+      "airlines table columns",
+      "airline_name airline_code country_code"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_051",
+    "db_id": "flight_2",
+    "question": "What are the airline names and abbreviations for airlines in the USA?",
+    "search_expressions": [
+      "airline name abbreviation USA",
+      "airlines country code",
+      "airline airline_name abbr",
+      "USA airlines"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_052",
+    "db_id": "flight_2",
+    "question": "List the airport code and name in the city of Anthony.",
+    "search_expressions": [
+      "airport code name city",
+      "airport airport_code airport_name city",
+      "Anthony airport",
+      "airports city = Anthony"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_053",
+    "db_id": "flight_2",
+    "question": "Give the airport code and airport name corresonding to the city Anthony.",
+    "search_expressions": [
+      "airport code",
+      "airport name",
+      "city",
+      "Anthony"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_054",
+    "db_id": "flight_2",
+    "question": "How many airlines do we have?",
+    "search_expressions": [
+      "airlines",
+      "airline count",
+      "airline",
+      "airline_id"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_055",
+    "db_id": "flight_2",
+    "question": "What is the total number of airlines?",
+    "search_expressions": [
+      "airline",
+      "airlines count",
+      "total airlines",
+      "airline_id"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_056",
+    "db_id": "flight_2",
+    "question": "How many airports do we have?",
+    "search_expressions": [
+      "airports",
+      "airport count",
+      "num_airports",
+      "airport"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_057",
+    "db_id": "flight_2",
+    "question": "Return the number of  airports.",
+    "search_expressions": [
+      "airports",
+      "airport count",
+      "number of airports",
+      "airport"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_058",
+    "db_id": "flight_2",
+    "question": "How many flights do we have?",
+    "search_expressions": [
+      "flights",
+      "flight count",
+      "num_flights",
+      "flight"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_059",
+    "db_id": "flight_2",
+    "question": "Return the number of flights.",
+    "search_expressions": [
+      "flights",
+      "flight count",
+      "number of flights",
+      "flight"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_060",
+    "db_id": "flight_2",
+    "question": "Which airline has abbreviation 'UAL'?",
+    "search_expressions": [
+      "UAL",
+      "airline abbreviation",
+      "airline code",
+      "airline acronym"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_061",
+    "db_id": "employee_hire_evaluation",
+    "question": "How many employees are there?",
+    "search_expressions": [
+      "employees",
+      "count employees",
+      "employee count",
+      "emp"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_062",
+    "db_id": "employee_hire_evaluation",
+    "question": "Count the number of employees",
+    "search_expressions": [
+      "employee",
+      "count",
+      "employees",
+      "emp"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_063",
+    "db_id": "employee_hire_evaluation",
+    "question": "Sort employee names by their age in ascending order.",
+    "search_expressions": [
+      "employee name age",
+      "employees age ascending",
+      "name age sort",
+      "emp_name emp_age"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_064",
+    "db_id": "employee_hire_evaluation",
+    "question": "List the names of employees and sort in ascending order of age.",
+    "search_expressions": [
+      "employee name age",
+      "employees names sorted by age",
+      "employee age ascending",
+      "name age from employees"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_065",
+    "db_id": "employee_hire_evaluation",
+    "question": "What is the number of employees from each city?",
+    "search_expressions": [
+      "employees by city",
+      "city count employees",
+      "employee city distribution",
+      "employees city"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_066",
+    "db_id": "employee_hire_evaluation",
+    "question": "Count the number of employees for each city.",
+    "search_expressions": [
+      "employees city",
+      "count employees by city",
+      "employee location",
+      "city employee count"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_067",
+    "db_id": "employee_hire_evaluation",
+    "question": "Which cities do more than one employee under age 30 come from?",
+    "search_expressions": [
+      "cities employees age",
+      "employee city age < 30",
+      "hometown count > 1",
+      "location young staff"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_068",
+    "db_id": "employee_hire_evaluation",
+    "question": "Find the cities that have more than one employee under age 30.",
+    "search_expressions": [
+      "cities",
+      "employee age",
+      "under 30",
+      "count employees"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_069",
+    "db_id": "employee_hire_evaluation",
+    "question": "Find the number of shops in each location.",
+    "search_expressions": [
+      "shops",
+      "location",
+      "number of shops",
+      "shop location"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_070",
+    "db_id": "employee_hire_evaluation",
+    "question": "How many shops are there in each location?",
+    "search_expressions": [
+      "shops by location",
+      "shop count per location",
+      "location shop count",
+      "shops location"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_071",
+    "db_id": "employee_hire_evaluation",
+    "question": "Find the manager name and district of the shop whose number of products is the largest.",
+    "search_expressions": [
+      "manager name district shop products",
+      "shop manager district product count",
+      "shop_number products largest",
+      "manager district shop product_quantity"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_072",
+    "db_id": "employee_hire_evaluation",
+    "question": "What are the manager name and district of the shop that sells the largest number of products?",
+    "search_expressions": [
+      "manager name",
+      "district",
+      "shop",
+      "products sold"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_073",
+    "db_id": "employee_hire_evaluation",
+    "question": "find the minimum and maximum number of products of all stores.",
+    "search_expressions": [
+      "products",
+      "stores",
+      "min max count",
+      "product count store"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_074",
+    "db_id": "employee_hire_evaluation",
+    "question": "What are the minimum and maximum number of products across all the shops?",
+    "search_expressions": [
+      "products",
+      "shops",
+      "min max",
+      "number of products"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_075",
+    "db_id": "employee_hire_evaluation",
+    "question": "Return the name, location and district of all shops in descending order of number of products.",
+    "search_expressions": [
+      "shop name location district",
+      "shops products count",
+      "number of products per shop",
+      "shop product_count descending"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_076",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "How many documents do we have?",
+    "search_expressions": [
+      "document count",
+      "documents",
+      "doc",
+      "document"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_077",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Count the number of documents.",
+    "search_expressions": [
+      "document",
+      "count",
+      "doc",
+      "documents"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_078",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "List document IDs, document names, and document descriptions for all documents.",
+    "search_expressions": [
+      "document ID",
+      "document name",
+      "document description",
+      "documents"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_079",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "What are the ids, names, and descriptions for all documents?",
+    "search_expressions": [
+      "document id name description",
+      "docs table columns",
+      "document_id doc_name doc_desc",
+      "cre_Doc_Template_Mgt document schema"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_080",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "What is the document name and template id for document with description with the letter 'w' in it?",
+    "search_expressions": [
+      "document name",
+      "template id",
+      "description",
+      "doc template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_081",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Return the names and template ids for documents that contain the letter w in their description.",
+    "search_expressions": [
+      "document description",
+      "template id",
+      "name",
+      "w"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_082",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "What is the document id, template id and description for document named \"Robbin CV\"?",
+    "search_expressions": [
+      "document id template id description",
+      "Robbin CV",
+      "document name",
+      "doc_template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_083",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Return the document id, template id, and description for the document with the name Robbin CV.",
+    "search_expressions": [
+      "Robbin CV",
+      "document name",
+      "doc_id template_id description",
+      "document template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_084",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "How many different templates do all document use?",
+    "search_expressions": [
+      "templates",
+      "document templates",
+      "template count",
+      "doc_template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_085",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Count the number of different templates used for documents.",
+    "search_expressions": [
+      "templates",
+      "document templates",
+      "template count",
+      "doc_template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_086",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "How many documents are using the template with type code 'PPT'?",
+    "search_expressions": [
+      "documents",
+      "template",
+      "type code",
+      "PPT"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_087",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Count the number of documents that use the PPT template type.",
+    "search_expressions": [
+      "PPT template",
+      "document count",
+      "template type",
+      "doc_template"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_088",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "Show all template ids and number of documents using each template.",
+    "search_expressions": [
+      "template id",
+      "document count",
+      "templates",
+      "documents"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_089",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "What are all different template ids used for documents, and how many times were each of them used?",
+    "search_expressions": [
+      "template id",
+      "document template",
+      "template usage count",
+      "doc_template_id"
+    ]
+  },
+  {
+    "case_id": "spider_cre_Doc_Template_Mgt_090",
+    "db_id": "cre_Doc_Template_Mgt",
+    "question": "What is the id and type code for the template used by the most documents?",
+    "search_expressions": [
+      "template id type code",
+      "most documents template",
+      "template usage count",
+      "doc_template_mgt template type"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_091",
+    "db_id": "course_teach",
+    "question": "How many teachers are there?",
+    "search_expressions": [
+      "teacher",
+      "teachers count",
+      "instructor",
+      "staff"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_092",
+    "db_id": "course_teach",
+    "question": "What is the total count of teachers?",
+    "search_expressions": [
+      "teacher",
+      "count",
+      "total",
+      "instructor"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_093",
+    "db_id": "course_teach",
+    "question": "List the names of teachers in ascending order of age.",
+    "search_expressions": [
+      "teacher name age",
+      "teachers order by age",
+      "instructor age ascending",
+      "faculty name age"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_094",
+    "db_id": "course_teach",
+    "question": "What are the names of the teachers ordered by ascending age?",
+    "search_expressions": [
+      "teacher name age",
+      "teachers ordered by age",
+      "instructor name age ascending",
+      "faculty name age"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_095",
+    "db_id": "course_teach",
+    "question": "What are the age and hometown of teachers?",
+    "search_expressions": [
+      "age hometown teacher",
+      "teacher age hometown",
+      "instructor personal info",
+      "faculty demographic"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_096",
+    "db_id": "course_teach",
+    "question": "What is the age and hometown of every teacher?",
+    "search_expressions": [
+      "teacher age hometown",
+      "teachers table columns",
+      "instructor personal info",
+      "faculty birthplace age"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_097",
+    "db_id": "course_teach",
+    "question": "List the name of teachers whose hometown is not `` Little Lever Urban District '' .",
+    "search_expressions": [
+      "teacher name hometown",
+      "teachers not Little Lever Urban District",
+      "hometown != 'Little Lever Urban District'",
+      "instructor location"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_098",
+    "db_id": "course_teach",
+    "question": "What are the names of the teachers whose hometown is not `` Little Lever Urban District '' ?",
+    "search_expressions": [
+      "teacher name",
+      "hometown",
+      "Little Lever Urban District",
+      "teacher"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_099",
+    "db_id": "course_teach",
+    "question": "Show the name of teachers aged either 32 or 33?",
+    "search_expressions": [
+      "teacher name age",
+      "teachers 32 33",
+      "instructor name age",
+      "faculty name age"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_100",
+    "db_id": "course_teach",
+    "question": "What are the names of the teachers who are aged either 32 or 33?",
+    "search_expressions": [
+      "teacher name age",
+      "teachers aged 32 33",
+      "instructor age",
+      "faculty age"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_101",
+    "db_id": "course_teach",
+    "question": "What is the hometown of the youngest teacher?",
+    "search_expressions": [
+      "hometown",
+      "youngest teacher",
+      "teacher age",
+      "teacher birth"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_102",
+    "db_id": "course_teach",
+    "question": "Where is the youngest teacher from?",
+    "search_expressions": [
+      "youngest teacher",
+      "teacher age origin",
+      "teacher birthplace",
+      "teacher from"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_103",
+    "db_id": "course_teach",
+    "question": "Show different hometown of teachers and the number of teachers from each hometown.",
+    "search_expressions": [
+      "hometown",
+      "teacher",
+      "count",
+      "teacher_hometown"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_104",
+    "db_id": "course_teach",
+    "question": "For each hometown, how many teachers are there?",
+    "search_expressions": [
+      "hometown",
+      "teacher",
+      "count",
+      "teachers"
+    ]
+  },
+  {
+    "case_id": "spider_course_teach_105",
+    "db_id": "course_teach",
+    "question": "List the most common hometown of teachers.",
+    "search_expressions": [
+      "hometown",
+      "teacher hometown",
+      "most common hometown",
+      "teacher location"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_106",
+    "db_id": "museum_visit",
+    "question": "How many visitors below age 30 are there?",
+    "search_expressions": [
+      "visitors age",
+      "visitor age under 30",
+      "age < 30",
+      "visitor_count age_group"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_107",
+    "db_id": "museum_visit",
+    "question": "Find the names of the visitors whose membership level is higher than 4, and order the results by the level from high to low.",
+    "search_expressions": [
+      "visitor name membership level",
+      "visitors membership_level > 4",
+      "visitor names order by level descending",
+      "membership level visitor table"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_108",
+    "db_id": "museum_visit",
+    "question": "What is the average age of the visitors whose membership level is not higher than 4?",
+    "search_expressions": [
+      "average age visitor",
+      "membership level",
+      "visitor age",
+      "membership level <= 4"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_109",
+    "db_id": "museum_visit",
+    "question": "Find the name and membership level of the visitors whose membership level is higher than 4, and sort by their age from old to young.",
+    "search_expressions": [
+      "visitors",
+      "membership level",
+      "age",
+      "name"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_110",
+    "db_id": "museum_visit",
+    "question": "Find the id and name of the museum that has the most staff members?",
+    "search_expressions": [
+      "museum staff",
+      "museum id name",
+      "staff count",
+      "museum staff count"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_111",
+    "db_id": "museum_visit",
+    "question": "Find the average number of staff working for the museums that were open before 2009.",
+    "search_expressions": [
+      "staff count",
+      "museum open date",
+      "average staff",
+      "museum staff"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_112",
+    "db_id": "museum_visit",
+    "question": "What are the opening year and staff number of the museum named Plaza Museum?",
+    "search_expressions": [
+      "Plaza Museum",
+      "opening year",
+      "staff number",
+      "museum"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_113",
+    "db_id": "museum_visit",
+    "question": "find the names of museums which have more staff than the minimum staff number of all museums opened after 2010.",
+    "search_expressions": [
+      "museum staff count",
+      "museums opened after 2010",
+      "minimum staff number",
+      "museum name"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_114",
+    "db_id": "museum_visit",
+    "question": "find the id, name and age for visitors who visited some museums more than once.",
+    "search_expressions": [
+      "visitor id name age",
+      "visit count museum",
+      "visitor museum visit frequency",
+      "visitors multiple visits"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_115",
+    "db_id": "museum_visit",
+    "question": "What are the id, name and membership level of visitors who have spent the largest amount of money in total in all museum tickets?",
+    "search_expressions": [
+      "visitor id name membership",
+      "ticket total amount spent",
+      "visitor ticket purchase sum",
+      "museum visitor membership level"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_116",
+    "db_id": "museum_visit",
+    "question": "What are the id and name of the museum visited most times?",
+    "search_expressions": [
+      "museum id name",
+      "visit count",
+      "most visited museum",
+      "museum visit frequency"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_117",
+    "db_id": "museum_visit",
+    "question": "What is the name of the museum that had no visitor yet?",
+    "search_expressions": [
+      "museum name no visitor",
+      "museum visitor count zero",
+      "museum visit count 0",
+      "museum without visits"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_118",
+    "db_id": "museum_visit",
+    "question": "Find the name and age of the visitor who bought the most tickets at once.",
+    "search_expressions": [
+      "visitor name age",
+      "most tickets at once",
+      "visitor ticket count",
+      "buy ticket visitor"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_119",
+    "db_id": "museum_visit",
+    "question": "What are the average and maximum number of tickets bought in all visits?",
+    "search_expressions": [
+      "average tickets",
+      "max tickets",
+      "visit tickets",
+      "number_of_tickets"
+    ]
+  },
+  {
+    "case_id": "spider_museum_visit_120",
+    "db_id": "museum_visit",
+    "question": "What is the total ticket expense of the visitors whose membership level is 1?",
+    "search_expressions": [
+      "ticket expense",
+      "membership level",
+      "visitors",
+      "total"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_121",
+    "db_id": "wta_1",
+    "question": "Find the total number of players.",
+    "search_expressions": [
+      "players",
+      "player count",
+      "total players",
+      "player"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_122",
+    "db_id": "wta_1",
+    "question": "How many players are there?",
+    "search_expressions": [
+      "players",
+      "player count",
+      "player",
+      "num_players"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_123",
+    "db_id": "wta_1",
+    "question": "Find the total number of matches.",
+    "search_expressions": [
+      "matches",
+      "total matches",
+      "match count",
+      "num_matches"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_124",
+    "db_id": "wta_1",
+    "question": "Count the number of matches.",
+    "search_expressions": [
+      "matches",
+      "match count",
+      "number of matches",
+      "match"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_125",
+    "db_id": "wta_1",
+    "question": "List the first name and birth date of all players from the country with code USA.",
+    "search_expressions": [
+      "players first name birth date country code USA",
+      "player first_name birth_date country_code",
+      "players USA nationality",
+      "player country_code = 'USA'"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_126",
+    "db_id": "wta_1",
+    "question": "What are the first names and birth dates of players from the USA?",
+    "search_expressions": [
+      "players USA first name birth date",
+      "player country birth_date first_name",
+      "USA players personal info",
+      "wta_players nationality dob"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_127",
+    "db_id": "wta_1",
+    "question": "Find the average age of losers and winners of all matches.",
+    "search_expressions": [
+      "average age",
+      "winner loser match",
+      "age winner loser",
+      "match winner loser age"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_128",
+    "db_id": "wta_1",
+    "question": "What are the average ages of losers and winners across matches?",
+    "search_expressions": [
+      "average age",
+      "winner loser age",
+      "match ages",
+      "player age"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_129",
+    "db_id": "wta_1",
+    "question": "Find the average rank of winners in all matches.",
+    "search_expressions": [
+      "average rank winner",
+      "match winner rank",
+      "avg rank",
+      "winner_rank"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_130",
+    "db_id": "wta_1",
+    "question": "What is the average rank for winners in all matches?",
+    "search_expressions": [
+      "average rank winner",
+      "winner rank match",
+      "avg(rank) winners",
+      "rank winner"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_131",
+    "db_id": "wta_1",
+    "question": "Find the highest rank of losers in all matches.",
+    "search_expressions": [
+      "highest rank",
+      "losers",
+      "matches",
+      "rank"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_132",
+    "db_id": "wta_1",
+    "question": "What is the best rank of losers across all matches?",
+    "search_expressions": [
+      "best rank",
+      "losers",
+      "matches",
+      "rank"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_133",
+    "db_id": "wta_1",
+    "question": "find the number of distinct country codes of all players.",
+    "search_expressions": [
+      "country code",
+      "player country",
+      "distinct countries",
+      "player nationality"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_134",
+    "db_id": "wta_1",
+    "question": "How many distinct countries do players come from?",
+    "search_expressions": [
+      "countries",
+      "player country",
+      "distinct countries",
+      "players origin"
+    ]
+  },
+  {
+    "case_id": "spider_wta_1_135",
+    "db_id": "wta_1",
+    "question": "Find the number of distinct name of losers.",
+    "search_expressions": [
+      "loser",
+      "name",
+      "distinct",
+      "player"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_136",
+    "db_id": "battle_death",
+    "question": "How many ships ended up being 'Captured'?",
+    "search_expressions": [
+      "Captured",
+      "ships",
+      "outcome",
+      "status"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_137",
+    "db_id": "battle_death",
+    "question": "List the name and tonnage ordered by in descending alphaetical order for the names.",
+    "search_expressions": [
+      "name tonnage",
+      "ship name tonnage",
+      "name DESC",
+      "vessel tonnage"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_138",
+    "db_id": "battle_death",
+    "question": "List the name, date and result of each battle.",
+    "search_expressions": [
+      "battle name date result",
+      "battles table columns",
+      "battle_name battle_date battle_result",
+      "battle info"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_139",
+    "db_id": "battle_death",
+    "question": "What is maximum and minimum death toll caused each time?",
+    "search_expressions": [
+      "death toll",
+      "maximum minimum death",
+      "death count",
+      "casualties"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_140",
+    "db_id": "battle_death",
+    "question": "What is the average number of injuries caused each time?",
+    "search_expressions": [
+      "average injuries",
+      "injuries",
+      "number of injuries",
+      "avg injury"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_141",
+    "db_id": "battle_death",
+    "question": "What are the death and injury situations caused by the ship with tonnage 't'?",
+    "search_expressions": [
+      "death injury ship tonnage",
+      "ship tonnage death injury",
+      "battle_death ship tonnage",
+      "tonnage t death injury"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_142",
+    "db_id": "battle_death",
+    "question": "What are the name and results of the battles when the bulgarian commander is not 'Boril'",
+    "search_expressions": [
+      "battles name results",
+      "bulgarian commander Boril",
+      "battle commander",
+      "battle results"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_143",
+    "db_id": "battle_death",
+    "question": "What are the different ids and names of the battles that lost any 'Brig' type shipes?",
+    "search_expressions": [
+      "battles",
+      "ships",
+      "Brig",
+      "battle_id"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_144",
+    "db_id": "battle_death",
+    "question": "What are the ids and names of the battles that led to more than 10 people killed in total.",
+    "search_expressions": [
+      "battles",
+      "killed",
+      "total deaths",
+      "battle_id name"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_145",
+    "db_id": "battle_death",
+    "question": "What is the ship id and name that caused most total injuries?",
+    "search_expressions": [
+      "ship id",
+      "ship name",
+      "total injuries",
+      "caused injuries"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_146",
+    "db_id": "battle_death",
+    "question": "What are the distinct battle names which are between bulgarian commander 'Kaloyan' and latin commander 'Baldwin I'?",
+    "search_expressions": [
+      "battle name",
+      "commander",
+      "Bulgarian",
+      "Latin"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_147",
+    "db_id": "battle_death",
+    "question": "How many different results are there for the battles?",
+    "search_expressions": [
+      "battle result",
+      "battles results count",
+      "distinct battle outcomes",
+      "battle outcome"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_148",
+    "db_id": "battle_death",
+    "question": "How many battles did not lose any ship with tonnage '225'?",
+    "search_expressions": [
+      "battles",
+      "ships",
+      "tonnage",
+      "loss"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_149",
+    "db_id": "battle_death",
+    "question": "List the name and date the battle that has lost the ship named 'Lettice' and the ship named 'HMS Atalanta'",
+    "search_expressions": [
+      "battle name date ship",
+      "Lettice HMS Atalanta",
+      "ship loss battle",
+      "battle_ship"
+    ]
+  },
+  {
+    "case_id": "spider_battle_death_150",
+    "db_id": "battle_death",
+    "question": "Show names, results and bulgarian commanders of the battles with no ships lost in the 'English Channel'.",
+    "search_expressions": [
+      "battles names results commanders",
+      "English Channel ships lost",
+      "bulgarian commander",
+      "battle death"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_151",
+    "db_id": "student_transcripts_tracking",
+    "question": "what are all the addresses including line 1 and line 2?",
+    "search_expressions": [
+      "address",
+      "address_line1 address_line2",
+      "street address",
+      "addr1 addr2"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_152",
+    "db_id": "student_transcripts_tracking",
+    "question": "What is the first and second line for all addresses?",
+    "search_expressions": [
+      "address line",
+      "first line address",
+      "second line address",
+      "addr1 addr2"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_153",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many courses in total are listed?",
+    "search_expressions": [
+      "courses",
+      "course count",
+      "total courses",
+      "course list"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_154",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many courses are there?",
+    "search_expressions": [
+      "courses",
+      "course count",
+      "num_courses",
+      "course_id"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_155",
+    "db_id": "student_transcripts_tracking",
+    "question": "How is the math course described?",
+    "search_expressions": [
+      "math course description",
+      "course math",
+      "course_description",
+      "math_course"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_156",
+    "db_id": "student_transcripts_tracking",
+    "question": "What are the descriptions for all the math courses?",
+    "search_expressions": [
+      "math courses",
+      "course description",
+      "math course description",
+      "courses subject math"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_157",
+    "db_id": "student_transcripts_tracking",
+    "question": "What is the zip code of the address in the city Port Chelsea?",
+    "search_expressions": [
+      "zip code",
+      "address city",
+      "Port Chelsea",
+      "zip"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_158",
+    "db_id": "student_transcripts_tracking",
+    "question": "What is the zip code for Port Chelsea?",
+    "search_expressions": [
+      "zip code",
+      "Port Chelsea",
+      "zipcode",
+      "address"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_159",
+    "db_id": "student_transcripts_tracking",
+    "question": "Which department offers the most number of degrees? List department name and id.",
+    "search_expressions": [
+      "department degrees",
+      "department_id department_name",
+      "degree count by department",
+      "dept degrees"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_160",
+    "db_id": "student_transcripts_tracking",
+    "question": "What is the name and id of the department with the most number of degrees ?",
+    "search_expressions": [
+      "department name id degrees",
+      "dept name id count degrees",
+      "department degrees count",
+      "dept_id dept_name degree_count"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_161",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many departments offer any degree?",
+    "search_expressions": [
+      "departments degrees",
+      "department degree count",
+      "dept degree offering",
+      "departments with degrees"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_162",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many different departments offer degrees?",
+    "search_expressions": [
+      "departments",
+      "degrees",
+      "department",
+      "offer"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_163",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many different degree names are offered?",
+    "search_expressions": [
+      "degree name",
+      "degree",
+      "degree_names",
+      "degrees"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_164",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many different degrees are offered?",
+    "search_expressions": [
+      "degrees",
+      "degree",
+      "offered degrees",
+      "degree_name"
+    ]
+  },
+  {
+    "case_id": "spider_student_transcripts_tracking_165",
+    "db_id": "student_transcripts_tracking",
+    "question": "How many degrees does the engineering department offer?",
+    "search_expressions": [
+      "engineering department degrees",
+      "degrees offered by department",
+      "department degree count",
+      "engineering degrees"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_166",
+    "db_id": "tvshow",
+    "question": "List the title of all cartoons in alphabetical order.",
+    "search_expressions": [
+      "cartoon title",
+      "title alphabetical order",
+      "cartoons",
+      "tvshow cartoon"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_167",
+    "db_id": "tvshow",
+    "question": "What are the titles of the cartoons sorted alphabetically?",
+    "search_expressions": [
+      "cartoon title",
+      "titles sorted alphabetically",
+      "cartoon",
+      "title"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_168",
+    "db_id": "tvshow",
+    "question": "List all cartoon directed by \"Ben Jones\".",
+    "search_expressions": [
+      "cartoon",
+      "director",
+      "Ben Jones",
+      "tv_show"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_169",
+    "db_id": "tvshow",
+    "question": "What are the names of all cartoons directed by Ben Jones?",
+    "search_expressions": [
+      "cartoon",
+      "director",
+      "Ben Jones",
+      "name"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_170",
+    "db_id": "tvshow",
+    "question": "How many cartoons were written by \"Joseph Kuhr\"?",
+    "search_expressions": [
+      "cartoon",
+      "written by",
+      "Joseph Kuhr",
+      "writer"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_171",
+    "db_id": "tvshow",
+    "question": "What is the number of cartoones written by Joseph Kuhr?",
+    "search_expressions": [
+      "cartoon",
+      "Joseph Kuhr",
+      "writer",
+      "written by"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_172",
+    "db_id": "tvshow",
+    "question": "list all cartoon titles and their directors ordered by their air date",
+    "search_expressions": [
+      "cartoon title director air date",
+      "cartoon director air_date",
+      "titles directors broadcast_date",
+      "TV show animation director"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_173",
+    "db_id": "tvshow",
+    "question": "What is the name and directors of all the cartoons that are ordered by air date?",
+    "search_expressions": [
+      "cartoon name director air date",
+      "cartoons directors air_date",
+      "tvshow cartoon director order by air_date",
+      "name directors cartoons"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_174",
+    "db_id": "tvshow",
+    "question": "List the title of all cartoon directed by \"Ben Jones\" or \"Brandon Vietti\".",
+    "search_expressions": [
+      "cartoon",
+      "title",
+      "director",
+      "Ben Jones"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_175",
+    "db_id": "tvshow",
+    "question": "What are the titles of all cartoons directed by Ben Jones or Brandon Vietti?",
+    "search_expressions": [
+      "cartoon title director",
+      "titles Ben Jones Brandon Vietti",
+      "shows directed_by",
+      "animation director name"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_176",
+    "db_id": "tvshow",
+    "question": "Which country has the most of TV Channels? List the country and number of TV Channels it has.",
+    "search_expressions": [
+      "country TV channel count",
+      "TVChannels country",
+      "TV_Channel country",
+      "number of TV channels by country"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_177",
+    "db_id": "tvshow",
+    "question": "What is the country with the most number of TV Channels and how many does it have?",
+    "search_expressions": [
+      "country",
+      "TV channel count",
+      "TVChannels",
+      "num_channels"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_178",
+    "db_id": "tvshow",
+    "question": "List the number of different series names and contents in the TV Channel table.",
+    "search_expressions": [
+      "TV Channel table",
+      "series name",
+      "content",
+      "number of different"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_179",
+    "db_id": "tvshow",
+    "question": "How many different series and contents are listed in the TV Channel table?",
+    "search_expressions": [
+      "TV Channel table",
+      "series content count",
+      "distinct series content",
+      "TVChannel series content"
+    ]
+  },
+  {
+    "case_id": "spider_tvshow_180",
+    "db_id": "tvshow",
+    "question": "What is the content of TV Channel with serial name \"Sky Radio\"?",
+    "search_expressions": [
+      "Sky Radio",
+      "TV Channel content",
+      "serial name",
+      "channel_content"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_181",
+    "db_id": "poker_player",
+    "question": "How many poker players are there?",
+    "search_expressions": [
+      "poker players",
+      "player count",
+      "players",
+      "poker_player"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_182",
+    "db_id": "poker_player",
+    "question": "Count the number of poker players.",
+    "search_expressions": [
+      "poker player",
+      "player count",
+      "players",
+      "poker_player"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_183",
+    "db_id": "poker_player",
+    "question": "List the earnings of poker players in descending order.",
+    "search_expressions": [
+      "earnings",
+      "poker player earnings",
+      "player earnings descending",
+      "poker_player.earnings"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_184",
+    "db_id": "poker_player",
+    "question": "What are the earnings of poker players, ordered descending by value?",
+    "search_expressions": [
+      "earnings",
+      "poker player earnings",
+      "player earnings",
+      "poker_player.earnings"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_185",
+    "db_id": "poker_player",
+    "question": "List the final tables made and the best finishes of poker players.",
+    "search_expressions": [
+      "final tables",
+      "best finish",
+      "poker player",
+      "tables made"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_186",
+    "db_id": "poker_player",
+    "question": "What are the final tables made and best finishes for all poker players?",
+    "search_expressions": [
+      "final tables",
+      "best finishes",
+      "poker players",
+      "player_final_tables"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_187",
+    "db_id": "poker_player",
+    "question": "What is the average earnings of poker players?",
+    "search_expressions": [
+      "average earnings",
+      "poker players",
+      "earnings",
+      "player earnings"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_188",
+    "db_id": "poker_player",
+    "question": "Return the average earnings across all poker players.",
+    "search_expressions": [
+      "average earnings",
+      "poker players",
+      "earnings",
+      "avg"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_189",
+    "db_id": "poker_player",
+    "question": "What is the money rank of the poker player with the highest earnings?",
+    "search_expressions": [
+      "money rank",
+      "highest earnings",
+      "poker player earnings",
+      "player_rank"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_190",
+    "db_id": "poker_player",
+    "question": "Return the money rank of the player with the greatest earnings.",
+    "search_expressions": [
+      "money rank",
+      "greatest earnings",
+      "player earnings",
+      "rank by money"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_191",
+    "db_id": "poker_player",
+    "question": "What is the maximum number of final tables made among poker players with earnings less than 200000?",
+    "search_expressions": [
+      "final tables",
+      "earnings",
+      "poker players",
+      "max"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_192",
+    "db_id": "poker_player",
+    "question": "Return the maximum final tables made across all poker players who have earnings below 200000.",
+    "search_expressions": [
+      "final tables",
+      "earnings",
+      "poker players",
+      "maximum"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_193",
+    "db_id": "poker_player",
+    "question": "What are the names of poker players?",
+    "search_expressions": [
+      "poker player name",
+      "player names",
+      "poker_player",
+      "name"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_194",
+    "db_id": "poker_player",
+    "question": "Return the names of all the poker players.",
+    "search_expressions": [
+      "poker players",
+      "player names",
+      "players",
+      "name"
+    ]
+  },
+  {
+    "case_id": "spider_poker_player_195",
+    "db_id": "poker_player",
+    "question": "What are the names of poker players whose earnings is higher than 300000?",
+    "search_expressions": [
+      "poker player earnings",
+      "player name",
+      "earnings > 300000",
+      "poker_player"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_196",
+    "db_id": "voter_1",
+    "question": "How many states are there?",
+    "search_expressions": [
+      "states",
+      "state count",
+      "number of states",
+      "state"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_197",
+    "db_id": "voter_1",
+    "question": "List the contestant numbers and names, ordered by contestant name descending.",
+    "search_expressions": [
+      "contestant number name",
+      "contestant name descending",
+      "contestant_num contestant_name",
+      "voter contestant"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_198",
+    "db_id": "voter_1",
+    "question": "List the vote ids, phone numbers and states of all votes.",
+    "search_expressions": [
+      "vote id phone number state",
+      "votes phone states",
+      "vote_id phone_number state",
+      "voter contact info location"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_199",
+    "db_id": "voter_1",
+    "question": "What are the maximum and minimum values of area codes?",
+    "search_expressions": [
+      "area code",
+      "area_codes",
+      "max min area",
+      "area_code"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_200",
+    "db_id": "voter_1",
+    "question": "What is last date created of votes from the state 'CA'?",
+    "search_expressions": [
+      "last date created",
+      "votes CA",
+      "state CA",
+      "vote_date"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_201",
+    "db_id": "voter_1",
+    "question": "What are the names of the contestants whose names are not 'Jessie Alloway'",
+    "search_expressions": [
+      "contestant name",
+      "contestants",
+      "name",
+      "Jessie Alloway"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_202",
+    "db_id": "voter_1",
+    "question": "What are the distinct states and create time of all votes?",
+    "search_expressions": [
+      "states",
+      "create time",
+      "votes",
+      "state"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_203",
+    "db_id": "voter_1",
+    "question": "What are the contestant numbers and names of the contestants who had at least two votes?",
+    "search_expressions": [
+      "contestant number name vote",
+      "contestant votes count",
+      "contestant_id contestant_name",
+      "vote_count >= 2"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_204",
+    "db_id": "voter_1",
+    "question": "Of all the contestants who got voted, what is the contestant number and name of the contestant who got least votes?",
+    "search_expressions": [
+      "contestant number name votes",
+      "contestant vote count",
+      "least voted contestant",
+      "voter_1 contestant votes"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_205",
+    "db_id": "voter_1",
+    "question": "What are the number of votes from state 'NY' or 'CA'?",
+    "search_expressions": [
+      "votes",
+      "state",
+      "NY",
+      "CA"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_206",
+    "db_id": "voter_1",
+    "question": "How many contestants did not get voted?",
+    "search_expressions": [
+      "contestant",
+      "vote",
+      "voted",
+      "not voted"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_207",
+    "db_id": "voter_1",
+    "question": "What is the area code in which the most voters voted?",
+    "search_expressions": [
+      "area code",
+      "voter count",
+      "voters by area",
+      "phone_area_code"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_208",
+    "db_id": "voter_1",
+    "question": "What are the create dates, states, and phone numbers of the votes that were for the contestant named 'Tabatha Gehling'?",
+    "search_expressions": [
+      "create date",
+      "state",
+      "phone number",
+      "Tabatha Gehling"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_209",
+    "db_id": "voter_1",
+    "question": "List the area codes in which voters voted both for the contestant 'Tabatha Gehling' and the contestant 'Kelly Clauss'.",
+    "search_expressions": [
+      "area code",
+      "voter",
+      "contestant",
+      "Tabatha Gehling"
+    ]
+  },
+  {
+    "case_id": "spider_voter_1_210",
+    "db_id": "voter_1",
+    "question": "Return the names of the contestants whose names contain the substring 'Al' .",
+    "search_expressions": [
+      "contestant",
+      "name",
+      "Al",
+      "contestants"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_211",
+    "db_id": "world_1",
+    "question": "What are the names of all the countries that became independent after 1950?",
+    "search_expressions": [
+      "independent year",
+      "country name",
+      "independence date",
+      "countries after 1950"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_212",
+    "db_id": "world_1",
+    "question": "Give the names of the nations that were founded after 1950.",
+    "search_expressions": [
+      "nations founded after 1950",
+      "nation name founded year",
+      "countries independence year",
+      "country_name founding_year"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_213",
+    "db_id": "world_1",
+    "question": "How many countries have a republic as their form of government?",
+    "search_expressions": [
+      "republic",
+      "government form",
+      "country",
+      "form_of_government"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_214",
+    "db_id": "world_1",
+    "question": "How many countries have governments that are republics?",
+    "search_expressions": [
+      "republic",
+      "government",
+      "country",
+      "govt_type"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_215",
+    "db_id": "world_1",
+    "question": "What is the total surface area of the countries in the Caribbean region?",
+    "search_expressions": [
+      "Caribbean region surface area",
+      "countries surface_area",
+      "region Caribbean",
+      "total surface area"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_216",
+    "db_id": "world_1",
+    "question": "How much surface area do the countires in the Carribean cover together?",
+    "search_expressions": [
+      "Caribbean surface area",
+      "country area",
+      "region countries area sum",
+      "Carribean countries"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_217",
+    "db_id": "world_1",
+    "question": "Which continent is Anguilla in?",
+    "search_expressions": [
+      "Anguilla continent",
+      "country continent",
+      "continent name",
+      "Anguilla location"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_218",
+    "db_id": "world_1",
+    "question": "What is the continent name which Anguilla belongs to?",
+    "search_expressions": [
+      "Anguilla continent",
+      "country continent",
+      "continent name",
+      "Anguilla country"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_219",
+    "db_id": "world_1",
+    "question": "Which region is the city Kabul located in?",
+    "search_expressions": [
+      "Kabul region",
+      "city region",
+      "region city",
+      "Kabul city"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_220",
+    "db_id": "world_1",
+    "question": "What region is Kabul in?",
+    "search_expressions": [
+      "Kabul region",
+      "cities region",
+      "country region",
+      "city region"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_221",
+    "db_id": "world_1",
+    "question": "Which language is the most popular in Aruba?",
+    "search_expressions": [
+      "language",
+      "Aruba",
+      "most popular",
+      "countrylanguage"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_222",
+    "db_id": "world_1",
+    "question": "What language is predominantly spoken in Aruba?",
+    "search_expressions": [
+      "language",
+      "Aruba",
+      "spoken",
+      "country language"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_223",
+    "db_id": "world_1",
+    "question": "What are the population and life expectancies in Brazil?",
+    "search_expressions": [
+      "Brazil population life expectancy",
+      "country population life_expectancy",
+      "world countries demographics",
+      "Brazil pop life_exp"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_224",
+    "db_id": "world_1",
+    "question": "Give me Brazil’s population and life expectancies.",
+    "search_expressions": [
+      "Brazil population",
+      "life expectancy",
+      "country population",
+      "life_expectancy"
+    ]
+  },
+  {
+    "case_id": "spider_world_1_225",
+    "db_id": "world_1",
+    "question": "What are the region and population of Angola?",
+    "search_expressions": [
+      "Angola region population",
+      "countries region population",
+      "Angola country table",
+      "region pop"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_226",
+    "db_id": "orchestra",
+    "question": "How many conductors are there?",
+    "search_expressions": [
+      "conductors",
+      "conductor count",
+      "person conductor",
+      "role conductor"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_227",
+    "db_id": "orchestra",
+    "question": "Count the number of conductors.",
+    "search_expressions": [
+      "conductor",
+      "conductors",
+      "count conductor",
+      "conductor_id"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_228",
+    "db_id": "orchestra",
+    "question": "List the names of conductors in ascending order of age.",
+    "search_expressions": [
+      "conductor name age",
+      "conductors",
+      "age ascending",
+      "conductor"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_229",
+    "db_id": "orchestra",
+    "question": "What are the names of conductors, ordered by age?",
+    "search_expressions": [
+      "conductor name age",
+      "conductors",
+      "conductor age order",
+      "name conductor"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_230",
+    "db_id": "orchestra",
+    "question": "What are the names of conductors whose nationalities are not \"USA\"?",
+    "search_expressions": [
+      "conductor nationality",
+      "conductor name",
+      "not USA",
+      "conductors"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_231",
+    "db_id": "orchestra",
+    "question": "Return the names of conductors that do not have the nationality \"USA\".",
+    "search_expressions": [
+      "conductor nationality",
+      "conductors not USA",
+      "conductor name nationality",
+      "conductor country"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_232",
+    "db_id": "orchestra",
+    "question": "What are the record companies of orchestras in descending order of years in which they were founded?",
+    "search_expressions": [
+      "record company orchestra founded year",
+      "orchestra record_company founded_year",
+      "record_companies orchestras founded descending",
+      "orchestra label founding date"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_233",
+    "db_id": "orchestra",
+    "question": "Return the record companies of orchestras, sorted descending by the years in which they were founded.",
+    "search_expressions": [
+      "record company orchestra",
+      "founded year orchestra",
+      "orchestra record_company founded",
+      "orchestra company year"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_234",
+    "db_id": "orchestra",
+    "question": "What is the average attendance of shows?",
+    "search_expressions": [
+      "average attendance",
+      "shows attendance",
+      "attendance",
+      "avg attendance"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_235",
+    "db_id": "orchestra",
+    "question": "Return the average attendance across all shows.",
+    "search_expressions": [
+      "average attendance",
+      "attendance",
+      "shows",
+      "avg"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_236",
+    "db_id": "orchestra",
+    "question": "What are the maximum and minimum share of performances whose type is not \"Live final\".",
+    "search_expressions": [
+      "performances type",
+      "share min max",
+      "Live final",
+      "performance share"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_237",
+    "db_id": "orchestra",
+    "question": "Return the maximum and minimum shares for performances that do not have the type \"Live final\".",
+    "search_expressions": [
+      "shares",
+      "performance type",
+      "Live final",
+      "min max shares"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_238",
+    "db_id": "orchestra",
+    "question": "How many different nationalities do conductors have?",
+    "search_expressions": [
+      "nationality",
+      "conductor",
+      "count distinct",
+      "conductors nationality"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_239",
+    "db_id": "orchestra",
+    "question": "Count the number of different nationalities of conductors.",
+    "search_expressions": [
+      "nationality",
+      "conductor",
+      "count distinct",
+      "conductors"
+    ]
+  },
+  {
+    "case_id": "spider_orchestra_240",
+    "db_id": "orchestra",
+    "question": "List names of conductors in descending order of years of work.",
+    "search_expressions": [
+      "conductor",
+      "name year work",
+      "conductors years descending",
+      "conductor_name years_of_work"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_241",
+    "db_id": "network_1",
+    "question": "How many high schoolers are there?",
+    "search_expressions": [
+      "high schooler",
+      "student",
+      "grade level",
+      "hs"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_242",
+    "db_id": "network_1",
+    "question": "Count the number of high schoolers.",
+    "search_expressions": [
+      "high schooler",
+      "student grade level",
+      "school grade",
+      "hs student"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_243",
+    "db_id": "network_1",
+    "question": "Show the names and grades of each high schooler.",
+    "search_expressions": [
+      "high schooler",
+      "name grade",
+      "student name grade",
+      "highschooler"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_244",
+    "db_id": "network_1",
+    "question": "What are the names and grades for each high schooler?",
+    "search_expressions": [
+      "high schooler",
+      "name grade",
+      "student name grade",
+      "highschooler names grades"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_245",
+    "db_id": "network_1",
+    "question": "Show all the grades of the high schoolers.",
+    "search_expressions": [
+      "grades",
+      "high schoolers",
+      "student grades",
+      "high_school"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_246",
+    "db_id": "network_1",
+    "question": "What is the grade of each high schooler?",
+    "search_expressions": [
+      "grade",
+      "high schooler",
+      "student grade",
+      "school grade"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_247",
+    "db_id": "network_1",
+    "question": "What grade is Kyle in?",
+    "search_expressions": [
+      "grade",
+      "Kyle",
+      "student grade",
+      "students"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_248",
+    "db_id": "network_1",
+    "question": "Return the grade for the high schooler named Kyle.",
+    "search_expressions": [
+      "grade",
+      "high schooler",
+      "Kyle",
+      "student_name"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_249",
+    "db_id": "network_1",
+    "question": "Show the names of all high schoolers in grade 10.",
+    "search_expressions": [
+      "high schooler",
+      "grade 10",
+      "name",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_250",
+    "db_id": "network_1",
+    "question": "What are the names of all high schoolers in grade 10?",
+    "search_expressions": [
+      "high schooler",
+      "grade 10",
+      "name",
+      "student"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_251",
+    "db_id": "network_1",
+    "question": "Show the ID of the high schooler named Kyle.",
+    "search_expressions": [
+      "Kyle",
+      "high schooler",
+      "ID",
+      "student_id"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_252",
+    "db_id": "network_1",
+    "question": "What is Kyle's id?",
+    "search_expressions": [
+      "Kyle",
+      "id",
+      "user",
+      "name"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_253",
+    "db_id": "network_1",
+    "question": "How many high schoolers are there in grade 9 or 10?",
+    "search_expressions": [
+      "high schooler",
+      "grade 9",
+      "grade 10",
+      "student grade"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_254",
+    "db_id": "network_1",
+    "question": "Count the number of high schoolers in grades 9 or 10.",
+    "search_expressions": [
+      "high schooler",
+      "grade",
+      "9",
+      "10"
+    ]
+  },
+  {
+    "case_id": "spider_network_1_255",
+    "db_id": "network_1",
+    "question": "Show the number of high schoolers for each grade.",
+    "search_expressions": [
+      "high schooler grade count",
+      "grade enrollment",
+      "student grade level",
+      "high_schoolers grade"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_256",
+    "db_id": "dog_kennels",
+    "question": "Which states have both owners and professionals living there?",
+    "search_expressions": [
+      "owners professionals states",
+      "owner state professional",
+      "state owner professional",
+      "residence state owner professional"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_257",
+    "db_id": "dog_kennels",
+    "question": "Find the states where both owners and professionals live.",
+    "search_expressions": [
+      "owners",
+      "professionals",
+      "states",
+      "live"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_258",
+    "db_id": "dog_kennels",
+    "question": "What is the average age of the dogs who have gone through any treatments?",
+    "search_expressions": [
+      "average age",
+      "dogs treatments",
+      "age",
+      "treatment"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_259",
+    "db_id": "dog_kennels",
+    "question": "Find the average age of the dogs who went through treatments.",
+    "search_expressions": [
+      "average age dogs treatments",
+      "dog age treatment",
+      "avg_age",
+      "dogs_treatments"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_260",
+    "db_id": "dog_kennels",
+    "question": "Which professionals live in the state of Indiana or have done treatment on more than 2 treatments? List his or her id, last name and cell phone.",
+    "search_expressions": [
+      "professionals",
+      "state Indiana",
+      "treatment count",
+      "id last_name cell_phone"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_261",
+    "db_id": "dog_kennels",
+    "question": "Find the id, last name and cell phone of the professionals who live in the state of Indiana or have performed more than two treatments.",
+    "search_expressions": [
+      "professionals",
+      "state",
+      "cell phone",
+      "treatments"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_262",
+    "db_id": "dog_kennels",
+    "question": "Which dogs have not cost their owner more than 1000 for treatment ? List the dog names .",
+    "search_expressions": [
+      "dog treatment cost",
+      "dog name owner expense",
+      "treatment cost < 1000",
+      "dog treatment expenses"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_263",
+    "db_id": "dog_kennels",
+    "question": "What are the names of the dogs for which the owner has not spend more than 1000 for treatment ?",
+    "search_expressions": [
+      "dog name",
+      "owner treatment cost",
+      "treatment expense",
+      "dog owner spending"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_264",
+    "db_id": "dog_kennels",
+    "question": "Which first names are used for professionals or owners but are not used as dog names?",
+    "search_expressions": [
+      "first_name",
+      "professional",
+      "owner",
+      "dog_name"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_265",
+    "db_id": "dog_kennels",
+    "question": "Find the first names that are used for professionals or owners but are not used as dog names.",
+    "search_expressions": [
+      "first_name",
+      "professional",
+      "owner",
+      "dog_name"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_266",
+    "db_id": "dog_kennels",
+    "question": "Which professional did not operate any treatment on dogs? List the professional's id, role and email.",
+    "search_expressions": [
+      "professional no treatment",
+      "professional id role email",
+      "treatment on dogs",
+      "operated treatment"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_267",
+    "db_id": "dog_kennels",
+    "question": "Give me the id, role and email of the professionals who did not perform any treatment on dogs.",
+    "search_expressions": [
+      "professionals id role email",
+      "treatment dog",
+      "no treatment",
+      "professional treatment"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_268",
+    "db_id": "dog_kennels",
+    "question": "Which owner owns the most dogs? List the owner id, first name and last name.",
+    "search_expressions": [
+      "owner dogs",
+      "owner id first name last name",
+      "most dogs",
+      "owner dog count"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_269",
+    "db_id": "dog_kennels",
+    "question": "Return the owner id, first name and last name of the owner who has the most dogs.",
+    "search_expressions": [
+      "owner id first name last name most dogs",
+      "owner dogs count",
+      "owner_id owner_first_name owner_last_name",
+      "dog_count owner"
+    ]
+  },
+  {
+    "case_id": "spider_dog_kennels_270",
+    "db_id": "dog_kennels",
+    "question": "Which professionals have done at least two treatments? List the professional's id, role, and first name.",
+    "search_expressions": [
+      "professionals",
+      "treatments",
+      "professional_id role first_name",
+      "treatment count"
+    ]
+  },
+  {
+    "case_id": "spider_singer_271",
+    "db_id": "singer",
+    "question": "How many singers are there?",
+    "search_expressions": [
+      "singer count",
+      "singers",
+      "number of singers",
+      "singer"
+    ]
+  },
+  {
+    "case_id": "spider_singer_272",
+    "db_id": "singer",
+    "question": "What is the count of singers?",
+    "search_expressions": [
+      "singer count",
+      "singers",
+      "count singers",
+      "singer"
+    ]
+  },
+  {
+    "case_id": "spider_singer_273",
+    "db_id": "singer",
+    "question": "List the name of singers in ascending order of net worth.",
+    "search_expressions": [
+      "singer name net worth",
+      "singers ascending order",
+      "net_worth",
+      "singer"
+    ]
+  },
+  {
+    "case_id": "spider_singer_274",
+    "db_id": "singer",
+    "question": "What are the names of singers ordered by ascending net worth?",
+    "search_expressions": [
+      "singer name net worth",
+      "singers ordered by net_worth",
+      "singer table name and net_worth",
+      "net worth ascending singer"
+    ]
+  },
+  {
+    "case_id": "spider_singer_275",
+    "db_id": "singer",
+    "question": "What are the birth year and citizenship of singers?",
+    "search_expressions": [
+      "birth year citizenship singer",
+      "singer birth_year citizenship",
+      "singers year_of_birth nationality",
+      "singer date_of_birth country"
+    ]
+  },
+  {
+    "case_id": "spider_singer_276",
+    "db_id": "singer",
+    "question": "What are the birth years and citizenships of the singers?",
+    "search_expressions": [
+      "birth year citizenship",
+      "singer birth citizenship",
+      "year_of_birth nationality",
+      "singers birth_year country"
+    ]
+  },
+  {
+    "case_id": "spider_singer_277",
+    "db_id": "singer",
+    "question": "List the name of singers whose citizenship is not \"France\".",
+    "search_expressions": [
+      "singer name citizenship",
+      "singers not France",
+      "citizenship != France",
+      "singer country"
+    ]
+  },
+  {
+    "case_id": "spider_singer_278",
+    "db_id": "singer",
+    "question": "What are the names of the singers who are not French citizens?",
+    "search_expressions": [
+      "singer name",
+      "citizenship",
+      "nationality",
+      "not French"
+    ]
+  },
+  {
+    "case_id": "spider_singer_279",
+    "db_id": "singer",
+    "question": "Show the name of singers whose birth year is either 1948 or 1949?",
+    "search_expressions": [
+      "singer name birth year",
+      "singers birth_year",
+      "name year 1948 1949",
+      "singer birth_date"
+    ]
+  },
+  {
+    "case_id": "spider_singer_280",
+    "db_id": "singer",
+    "question": "What are the names of the singers whose birth years are either 1948 or 1949?",
+    "search_expressions": [
+      "singer name birth year",
+      "singers birth_year",
+      "name birth_year 1948 1949",
+      "singer birth_year"
+    ]
+  },
+  {
+    "case_id": "spider_singer_281",
+    "db_id": "singer",
+    "question": "What is the name of the singer with the largest net worth?",
+    "search_expressions": [
+      "singer net worth",
+      "singer name",
+      "largest net worth",
+      "singer financial"
+    ]
+  },
+  {
+    "case_id": "spider_singer_282",
+    "db_id": "singer",
+    "question": "What is the name of the singer who is worth the most?",
+    "search_expressions": [
+      "singer name worth",
+      "singer net_worth",
+      "singer value",
+      "singer richest"
+    ]
+  },
+  {
+    "case_id": "spider_singer_283",
+    "db_id": "singer",
+    "question": "Show different citizenship of singers and the number of singers of each citizenship.",
+    "search_expressions": [
+      "citizenship",
+      "singer citizenship count",
+      "singers by nationality",
+      "country of origin"
+    ]
+  },
+  {
+    "case_id": "spider_singer_284",
+    "db_id": "singer",
+    "question": "For each citizenship, how many singers are from that country?",
+    "search_expressions": [
+      "citizenship",
+      "singer country count",
+      "singers by nationality",
+      "citizenship count"
+    ]
+  },
+  {
+    "case_id": "spider_singer_285",
+    "db_id": "singer",
+    "question": "Please show the most common citizenship of singers.",
+    "search_expressions": [
+      "citizenship",
+      "singer citizenship",
+      "most common citizenship",
+      "singer country"
+    ]
+  },
+  {
+    "case_id": "spider_real_estate_properties_286",
+    "db_id": "real_estate_properties",
+    "question": "How many available features are there in total?",
+    "search_expressions": [
+      "available features",
+      "features count",
+      "feature availability",
+      "total_features"
+    ]
+  },
+  {
+    "case_id": "spider_real_estate_properties_287",
+    "db_id": "real_estate_properties",
+    "question": "What is the feature type name of feature AirCon?",
+    "search_expressions": [
+      "AirCon",
+      "feature type",
+      "feature_name",
+      "feature_type_name"
+    ]
+  },
+  {
+    "case_id": "spider_real_estate_properties_288",
+    "db_id": "real_estate_properties",
+    "question": "Show the property type descriptions of properties belonging to that code.",
+    "search_expressions": [
+      "property type description",
+      "property type",
+      "property code",
+      "type description"
+    ]
+  },
+  {
+    "case_id": "spider_real_estate_properties_289",
+    "db_id": "real_estate_properties",
+    "question": "What are the names of properties that are either houses or apartments with more than 1 room?",
+    "search_expressions": [
+      "properties",
+      "house apartment room",
+      "property_name type rooms",
+      "properties type rooms"
+    ]
+  }
+]

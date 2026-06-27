@@ -1,0 +1,799 @@
+{
+  "cases_path": "D:\\DBFoxData\\spider\\spider_data\\dev_stratified_289.json",
+  "case_count": 289,
+  "variants": [
+    "keyword",
+    "vector",
+    "hybrid"
+  ],
+  "mode": "ai-assisted-retrieval",
+  "planner_model": "qwen-plus",
+  "embedding_provider": "dashscope-openai-compatible",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_bf853122",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21,
+      "schema_search_doc_count": 25,
+      "embedding_total_docs": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 25,
+      "embedding_build_time_ms": 7060.169,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_d316dbf4",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14,
+      "schema_search_doc_count": 17,
+      "embedding_total_docs": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 17,
+      "embedding_build_time_ms": 1926.86,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_17efcebc",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23,
+      "schema_search_doc_count": 29,
+      "embedding_total_docs": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 29,
+      "embedding_build_time_ms": 2825.905,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "flight_2",
+      "datasource_id": "spider_flight_2_565a1629",
+      "synced_tables": [
+        "airlines",
+        "airports",
+        "flights"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 13,
+      "schema_search_doc_count": 16,
+      "embedding_total_docs": 16,
+      "embedding_built_count": 16,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 16,
+      "embedding_build_time_ms": 1870.025,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "employee_hire_evaluation",
+      "datasource_id": "spider_employee_hire_evaluation_7b20e468",
+      "synced_tables": [
+        "employee",
+        "evaluation",
+        "hiring",
+        "shop"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17,
+      "schema_search_doc_count": 21,
+      "embedding_total_docs": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 21,
+      "embedding_build_time_ms": 2693.054,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "cre_Doc_Template_Mgt",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_9055fef6",
+      "synced_tables": [
+        "Documents",
+        "Paragraphs",
+        "Ref_Template_Types",
+        "Templates"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17,
+      "schema_search_doc_count": 21,
+      "embedding_total_docs": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 21,
+      "embedding_build_time_ms": 2534.492,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "course_teach",
+      "datasource_id": "spider_course_teach_c61ac918",
+      "synced_tables": [
+        "course",
+        "course_arrange",
+        "teacher"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 10,
+      "schema_search_doc_count": 13,
+      "embedding_total_docs": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 13,
+      "embedding_build_time_ms": 1727.459,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "museum_visit",
+      "datasource_id": "spider_museum_visit_a6154b46",
+      "synced_tables": [
+        "museum",
+        "visit",
+        "visitor"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 12,
+      "schema_search_doc_count": 15,
+      "embedding_total_docs": 15,
+      "embedding_built_count": 15,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 15,
+      "embedding_build_time_ms": 1731.211,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "wta_1",
+      "datasource_id": "spider_wta_1_72185a40",
+      "synced_tables": [
+        "matches",
+        "players",
+        "rankings"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 43,
+      "schema_search_doc_count": 46,
+      "embedding_total_docs": 46,
+      "embedding_built_count": 46,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 46,
+      "embedding_build_time_ms": 4745.02,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "battle_death",
+      "datasource_id": "spider_battle_death_ed6d3bc6",
+      "synced_tables": [
+        "battle",
+        "death",
+        "ship"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 18,
+      "schema_search_doc_count": 21,
+      "embedding_total_docs": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 21,
+      "embedding_build_time_ms": 2589.857,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "student_transcripts_tracking",
+      "datasource_id": "spider_student_transcripts_tracking_5cad10c2",
+      "synced_tables": [
+        "Addresses",
+        "Courses",
+        "Degree_Programs",
+        "Departments",
+        "Sections",
+        "Semesters",
+        "Student_Enrolment",
+        "Student_Enrolment_Courses",
+        "Students",
+        "Transcript_Contents",
+        "Transcripts"
+      ],
+      "schema_table_count": 11,
+      "schema_column_count": 56,
+      "schema_search_doc_count": 67,
+      "embedding_total_docs": 67,
+      "embedding_built_count": 67,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 67,
+      "embedding_build_time_ms": 6868.0,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "tvshow",
+      "datasource_id": "spider_tvshow_dea120cd",
+      "synced_tables": [
+        "Cartoon",
+        "TV_Channel",
+        "TV_series"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 25,
+      "schema_search_doc_count": 28,
+      "embedding_total_docs": 28,
+      "embedding_built_count": 28,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 28,
+      "embedding_build_time_ms": 3048.635,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "poker_player",
+      "datasource_id": "spider_poker_player_c079ff24",
+      "synced_tables": [
+        "people",
+        "poker_player"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 11,
+      "schema_search_doc_count": 13,
+      "embedding_total_docs": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 13,
+      "embedding_build_time_ms": 2159.488,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "voter_1",
+      "datasource_id": "spider_voter_1_17e798ff",
+      "synced_tables": [
+        "AREA_CODE_STATE",
+        "CONTESTANTS",
+        "VOTES"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 9,
+      "schema_search_doc_count": 12,
+      "embedding_total_docs": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 12,
+      "embedding_build_time_ms": 1800.559,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "world_1",
+      "datasource_id": "spider_world_1_73476e97",
+      "synced_tables": [
+        "city",
+        "country",
+        "countrylanguage"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 24,
+      "schema_search_doc_count": 27,
+      "embedding_total_docs": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 27,
+      "embedding_build_time_ms": 2712.419,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "orchestra",
+      "datasource_id": "spider_orchestra_79a37ce4",
+      "synced_tables": [
+        "conductor",
+        "orchestra",
+        "performance",
+        "show"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 23,
+      "schema_search_doc_count": 27,
+      "embedding_total_docs": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 27,
+      "embedding_build_time_ms": 2917.326,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "network_1",
+      "datasource_id": "spider_network_1_f0f79de5",
+      "synced_tables": [
+        "Friend",
+        "Highschooler",
+        "Likes"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 7,
+      "schema_search_doc_count": 10,
+      "embedding_total_docs": 10,
+      "embedding_built_count": 10,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 10,
+      "embedding_build_time_ms": 1042.331,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "dog_kennels",
+      "datasource_id": "spider_dog_kennels_ae20a14c",
+      "synced_tables": [
+        "Breeds",
+        "Charges",
+        "Dogs",
+        "Owners",
+        "Professionals",
+        "Sizes",
+        "Treatment_Types",
+        "Treatments"
+      ],
+      "schema_table_count": 8,
+      "schema_column_count": 49,
+      "schema_search_doc_count": 57,
+      "embedding_total_docs": 57,
+      "embedding_built_count": 57,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 57,
+      "embedding_build_time_ms": 5942.646,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "singer",
+      "datasource_id": "spider_singer_bab966d7",
+      "synced_tables": [
+        "singer",
+        "song"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 10,
+      "schema_search_doc_count": 12,
+      "embedding_total_docs": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 12,
+      "embedding_build_time_ms": 1834.099,
+      "docs_equal_embeddings": true
+    },
+    {
+      "db_id": "real_estate_properties",
+      "datasource_id": "spider_real_estate_properties_3c8fe6ae",
+      "synced_tables": [
+        "Other_Available_Features",
+        "Other_Property_Features",
+        "Properties",
+        "Ref_Feature_Types",
+        "Ref_Property_Types"
+      ],
+      "schema_table_count": 5,
+      "schema_column_count": 37,
+      "schema_search_doc_count": 42,
+      "embedding_total_docs": 42,
+      "embedding_built_count": 42,
+      "embedding_stale_count": 0,
+      "embedding_row_count": 42,
+      "embedding_build_time_ms": 4661.401,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "sample_checks": [
+    {
+      "db_id": "concert_singer",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 757.529,
+      "embedding_build_time_ms": 3.9,
+      "error": null
+    },
+    {
+      "db_id": "concert_singer",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 716.462,
+      "embedding_build_time_ms": 3.797,
+      "error": null
+    },
+    {
+      "db_id": "pets_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 17,
+      "retrieval_latency_ms": 664.114,
+      "embedding_build_time_ms": 2.278,
+      "error": null
+    },
+    {
+      "db_id": "pets_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 18,
+      "retrieval_latency_ms": 773.485,
+      "embedding_build_time_ms": 2.479,
+      "error": null
+    },
+    {
+      "db_id": "car_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 740.984,
+      "embedding_build_time_ms": 2.454,
+      "error": null
+    },
+    {
+      "db_id": "car_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 671.206,
+      "embedding_build_time_ms": 3.195,
+      "error": null
+    },
+    {
+      "db_id": "flight_2",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 16,
+      "retrieval_latency_ms": 659.373,
+      "embedding_build_time_ms": 3.416,
+      "error": null
+    },
+    {
+      "db_id": "flight_2",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 16,
+      "retrieval_latency_ms": 747.822,
+      "embedding_build_time_ms": 2.067,
+      "error": null
+    },
+    {
+      "db_id": "employee_hire_evaluation",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 716.035,
+      "embedding_build_time_ms": 2.622,
+      "error": null
+    },
+    {
+      "db_id": "employee_hire_evaluation",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 742.159,
+      "embedding_build_time_ms": 2.158,
+      "error": null
+    },
+    {
+      "db_id": "cre_Doc_Template_Mgt",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 635.904,
+      "embedding_build_time_ms": 2.813,
+      "error": null
+    },
+    {
+      "db_id": "cre_Doc_Template_Mgt",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 733.258,
+      "embedding_build_time_ms": 2.179,
+      "error": null
+    },
+    {
+      "db_id": "course_teach",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 13,
+      "retrieval_latency_ms": 671.865,
+      "embedding_build_time_ms": 2.082,
+      "error": null
+    },
+    {
+      "db_id": "course_teach",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 13,
+      "retrieval_latency_ms": 693.567,
+      "embedding_build_time_ms": 1.735,
+      "error": null
+    },
+    {
+      "db_id": "museum_visit",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 15,
+      "retrieval_latency_ms": 677.154,
+      "embedding_build_time_ms": 2.467,
+      "error": null
+    },
+    {
+      "db_id": "museum_visit",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 15,
+      "retrieval_latency_ms": 658.696,
+      "embedding_build_time_ms": 2.415,
+      "error": null
+    },
+    {
+      "db_id": "wta_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 675.493,
+      "embedding_build_time_ms": 5.355,
+      "error": null
+    },
+    {
+      "db_id": "wta_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 768.606,
+      "embedding_build_time_ms": 5.461,
+      "error": null
+    },
+    {
+      "db_id": "battle_death",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 706.398,
+      "embedding_build_time_ms": 3.318,
+      "error": null
+    },
+    {
+      "db_id": "battle_death",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 682.541,
+      "embedding_build_time_ms": 3.896,
+      "error": null
+    },
+    {
+      "db_id": "student_transcripts_tracking",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 754.102,
+      "embedding_build_time_ms": 8.639,
+      "error": null
+    },
+    {
+      "db_id": "student_transcripts_tracking",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 815.488,
+      "embedding_build_time_ms": 6.089,
+      "error": null
+    },
+    {
+      "db_id": "tvshow",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 679.389,
+      "embedding_build_time_ms": 2.467,
+      "error": null
+    },
+    {
+      "db_id": "tvshow",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 694.229,
+      "embedding_build_time_ms": 2.806,
+      "error": null
+    },
+    {
+      "db_id": "poker_player",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 13,
+      "retrieval_latency_ms": 819.637,
+      "embedding_build_time_ms": 3.27,
+      "error": null
+    },
+    {
+      "db_id": "poker_player",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 13,
+      "retrieval_latency_ms": 680.308,
+      "embedding_build_time_ms": 1.608,
+      "error": null
+    },
+    {
+      "db_id": "voter_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 12,
+      "retrieval_latency_ms": 662.623,
+      "embedding_build_time_ms": 1.818,
+      "error": null
+    },
+    {
+      "db_id": "voter_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 12,
+      "retrieval_latency_ms": 720.154,
+      "embedding_build_time_ms": 1.986,
+      "error": null
+    },
+    {
+      "db_id": "world_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 723.156,
+      "embedding_build_time_ms": 3.131,
+      "error": null
+    },
+    {
+      "db_id": "world_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 794.456,
+      "embedding_build_time_ms": 3.3,
+      "error": null
+    },
+    {
+      "db_id": "orchestra",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 667.403,
+      "embedding_build_time_ms": 3.444,
+      "error": null
+    },
+    {
+      "db_id": "orchestra",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 705.706,
+      "embedding_build_time_ms": 2.475,
+      "error": null
+    },
+    {
+      "db_id": "network_1",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 10,
+      "retrieval_latency_ms": 646.854,
+      "embedding_build_time_ms": 2.248,
+      "error": null
+    },
+    {
+      "db_id": "network_1",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 10,
+      "retrieval_latency_ms": 675.435,
+      "embedding_build_time_ms": 1.745,
+      "error": null
+    },
+    {
+      "db_id": "dog_kennels",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 792.324,
+      "embedding_build_time_ms": 5.827,
+      "error": null
+    },
+    {
+      "db_id": "dog_kennels",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 714.844,
+      "embedding_build_time_ms": 6.845,
+      "error": null
+    },
+    {
+      "db_id": "singer",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 12,
+      "retrieval_latency_ms": 707.933,
+      "embedding_build_time_ms": 2.842,
+      "error": null
+    },
+    {
+      "db_id": "singer",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 12,
+      "retrieval_latency_ms": 694.555,
+      "embedding_build_time_ms": 3.571,
+      "error": null
+    },
+    {
+      "db_id": "real_estate_properties",
+      "mode": "vector",
+      "engine": "vector",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 758.809,
+      "embedding_build_time_ms": 4.056,
+      "error": null
+    },
+    {
+      "db_id": "real_estate_properties",
+      "mode": "hybrid",
+      "engine": "hybrid",
+      "vector_available": true,
+      "total_matches": 20,
+      "retrieval_latency_ms": 709.292,
+      "embedding_build_time_ms": 3.412,
+      "error": null
+    }
+  ]
+}
