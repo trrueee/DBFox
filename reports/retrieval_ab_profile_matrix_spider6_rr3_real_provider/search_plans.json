@@ -1,0 +1,74 @@
+[
+  {
+    "case_id": "spider_concert_singer_001",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "planner_latency_ms": 881.51,
+    "search_expressions": [
+      "singer count",
+      "singers",
+      "singer",
+      "num_singers"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_002",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "planner_latency_ms": 855.567,
+    "search_expressions": [
+      "pets weight",
+      "pet weight > 10",
+      "number of pets",
+      "heavier than 10"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_003",
+    "db_id": "car_1",
+    "question": "How many continents are there?",
+    "planner_latency_ms": 749.977,
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_004",
+    "db_id": "concert_singer",
+    "question": "What is the total number of singers?",
+    "planner_latency_ms": 818.483,
+    "search_expressions": [
+      "singer",
+      "total count",
+      "number of singers",
+      "singer count"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_005",
+    "db_id": "pets_1",
+    "question": "How many pets have a greater weight than 10?",
+    "planner_latency_ms": 830.959,
+    "search_expressions": [
+      "pets weight",
+      "pet weight > 10",
+      "animal weight",
+      "pets count weight"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_006",
+    "db_id": "car_1",
+    "question": "What is the number of continents?",
+    "planner_latency_ms": 787.642,
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  }
+]

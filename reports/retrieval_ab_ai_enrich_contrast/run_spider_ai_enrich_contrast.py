@@ -6,6 +6,8 @@ import os
 import shutil
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,9 +26,8 @@ from engine.evaluation.retrieval_ab.contrast import summarize_contrast_rows  # n
 from engine.evaluation.retrieval_ab.query_planner import plan_search_expressions  # noqa: E402
 from engine.evaluation.retrieval_ab.runner import evaluate_artifacts  # noqa: E402
 from engine.evaluation.retrieval_ab.spider_fixture import EvaluationCase, spider_example_to_case  # noqa: E402
-from engine.evaluation.spider.spider_eval import _ensure_spider_sqlite_datasource  # noqa: E402
 from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_examples  # noqa: E402
-from engine.models import SchemaColumn, SchemaSearchDoc, SchemaSearchEmbedding, SchemaTable  # noqa: E402
+from engine.models import DataSource, SchemaColumn, SchemaSearchDoc, SchemaSearchEmbedding, SchemaTable  # noqa: E402
 from engine.tools.db.embedding import ensure_schema_embeddings, resolve_embedding_config  # noqa: E402
 
 
@@ -53,9 +54,45 @@ SAMPLE_DB_LIMIT = int(os.getenv("DBFOX_EVAL_DB_LIMIT", "0"))
 RETRIEVAL_LIMIT = int(os.getenv("DBFOX_RETRIEVAL_TOP_K", "20"))
 PLANNER_MODEL = os.getenv("DBFOX_RETRIEVAL_PLANNER_MODEL", "qwen-plus")
 ENRICH_MODEL = os.getenv("DBFOX_AI_ENRICH_MODEL", PLANNER_MODEL)
-SCHEMA_VARIANTS = _split_env("DBFOX_SCHEMA_CORPUS_VARIANTS", "base,ai_enriched")
+EVAL_VARIANT_NAMES = _split_env(
+    "DBFOX_RETRIEVAL_EVAL_VARIANTS",
+    "keyword_raw,vector_raw,keyword_enriched,vector_enriched,hybrid_raw,hybrid_enriched",
+)
 RETRIEVERS = _split_env("DBFOX_RETRIEVAL_VARIANTS", "keyword,vector,hybrid")
 QUERY_MODES = _split_env("DBFOX_QUERY_MODES", "single,multi")
+
+
+@dataclass(frozen=True)
+class EvalVariant:
+    name: str
+    retriever: str
+    keyword_profile: str
+    vector_profile: str
+
+    @property
+    def needs_enriched_catalog(self) -> bool:
+        return "enriched" in {self.keyword_profile, self.vector_profile}
+
+    @property
+    def corpus_profile(self) -> str:
+        if self.retriever == "keyword":
+            return self.keyword_profile
+        if self.retriever == "vector":
+            return self.vector_profile
+        if self.keyword_profile != self.vector_profile:
+            raise RuntimeError(f"Hybrid variant {self.name} requires matching keyword/vector profiles.")
+        return self.keyword_profile
+
+
+DEFAULT_EVAL_VARIANTS: dict[str, EvalVariant] = {
+    "keyword_raw": EvalVariant("keyword_raw", "keyword", "raw", "none"),
+    "vector_raw": EvalVariant("vector_raw", "vector", "none", "raw"),
+    "keyword_enriched": EvalVariant("keyword_enriched", "keyword", "enriched", "none"),
+    "vector_enriched": EvalVariant("vector_enriched", "vector", "none", "enriched"),
+    "hybrid_raw": EvalVariant("hybrid_raw", "hybrid", "raw", "raw"),
+    "hybrid_enriched": EvalVariant("hybrid_enriched", "hybrid", "enriched", "enriched"),
+}
+LEGACY_SCHEMA_VARIANTS = {"base", "ai_enriched", "full_enrich", "keyword_only_enrich", "vector_only_enrich"}
 
 
 class ProgressWriter:
@@ -81,9 +118,80 @@ class ProgressWriter:
         self._fh.close()
 
 
+def resolve_eval_variants(names: tuple[str, ...]) -> tuple[EvalVariant, ...]:
+    requested = names or tuple(DEFAULT_EVAL_VARIANTS)
+    unknown = [name for name in requested if name not in DEFAULT_EVAL_VARIANTS]
+    if unknown:
+        if any(name in LEGACY_SCHEMA_VARIANTS for name in unknown):
+            raise RuntimeError(
+                "Use explicit retrieval eval variants such as keyword_raw, vector_raw, "
+                "keyword_enriched, vector_enriched, hybrid_raw, hybrid_enriched."
+            )
+        raise RuntimeError(f"Unsupported DBFOX_RETRIEVAL_EVAL_VARIANTS: {', '.join(unknown)}")
+    return tuple(DEFAULT_EVAL_VARIANTS[name] for name in requested)
+
+
+def _variant_dict(variant: EvalVariant) -> dict[str, str]:
+    return {
+        "name": variant.name,
+        "retriever": variant.retriever,
+        "keyword_profile": variant.keyword_profile,
+        "vector_profile": variant.vector_profile,
+        "active_doc_profile": _active_doc_profile(variant),
+    }
+
+
+def _active_doc_profile(variant: EvalVariant) -> str:
+    return variant.corpus_profile
+
+
+def _variants_by_doc_profile(variants: tuple[EvalVariant, ...]) -> list[tuple[str, list[EvalVariant]]]:
+    grouped: dict[str, list[EvalVariant]] = {"raw": [], "enriched": []}
+    for variant in variants:
+        grouped.setdefault(_active_doc_profile(variant), []).append(variant)
+    return [(profile, items) for profile, items in grouped.items() if items]
+
+
+def datasource_for_variant(
+    corpus_by_db: dict[str, dict[str, str]],
+    db_id: str,
+    variant: EvalVariant,
+) -> str:
+    try:
+        return corpus_by_db[db_id][variant.corpus_profile]
+    except KeyError as exc:
+        raise RuntimeError(f"Prepared corpus datasource missing for db={db_id}, profile={variant.corpus_profile}") from exc
+
+
+def run_planner_warmup(warmup: Callable[[], Any], progress: ProgressWriter) -> dict[str, Any]:
+    started = time.perf_counter()
+    warmup()
+    result = {
+        "planner_warmup_ms": round((time.perf_counter() - started) * 1000, 3),
+        "planner_warmup_in_case_latency": False,
+    }
+    progress.emit("planner_warmup_done", **result)
+    return result
+
+
+def _warmup_planner_client() -> None:
+    from engine.evaluation.retrieval_ab.query_planner import _planner_api_base, _planner_api_key
+    from engine.llm.factory import get_chat_model
+
+    get_chat_model(
+        model_name=PLANNER_MODEL,
+        api_key=_planner_api_key(),
+        api_base=_planner_api_base(),
+        temperature=0.0,
+        max_tokens=1,
+        timeout=60.0,
+    )
+
+
 def main() -> int:
     _require_credentials()
     _clean_report_dir()
+    eval_variants = resolve_eval_variants(EVAL_VARIANT_NAMES)
     progress = ProgressWriter(
         Path(os.getenv("DBFOX_EVAL_PROGRESS_PATH", str(REPORT_DIR / "progress_events.jsonl"))),
         stdout=os.getenv("DBFOX_EVAL_PROGRESS_STDOUT", "1").strip() != "0",
@@ -103,8 +211,8 @@ def main() -> int:
         "run_start",
         cases_path=str(CASES_PATH),
         case_count=len(cases),
-        schema_variants=list(SCHEMA_VARIANTS),
-        retrievers=list(RETRIEVERS),
+        eval_variants=[variant.name for variant in eval_variants],
+        retrievers=sorted({variant.retriever for variant in eval_variants}),
         query_modes=list(QUERY_MODES),
     )
 
@@ -115,10 +223,11 @@ def main() -> int:
         "sample_strategy": SAMPLE_STRATEGY,
         "sample_db_limit": SAMPLE_DB_LIMIT,
         "selected_db_counts": _db_counts(examples),
-        "schema_variants": list(SCHEMA_VARIANTS),
-        "retrievers": list(RETRIEVERS),
+        "eval_variants": [_variant_dict(variant) for variant in eval_variants],
+        "retrievers": sorted({variant.retriever for variant in eval_variants}),
         "query_modes": list(QUERY_MODES),
         "planner_model": PLANNER_MODEL,
+        "planner_warmup": None,
         "ai_enrich_model": ENRICH_MODEL,
         "embedding_base_url": config.base_url,
         "embedding_model": config.model,
@@ -132,23 +241,32 @@ def main() -> int:
 
     db_session = _create_temp_metadata_session(REPORT_DIR / "metadata.sqlite")
     try:
-        datasource_by_db: dict[str, str] = {}
+        corpus_by_db: dict[str, dict[str, str]] = {}
+        datasource_stats_seen: set[str] = set()
         for example in examples:
-            if example.db_id in datasource_by_db:
+            if example.db_id in corpus_by_db:
                 continue
-            progress.emit("datasource_sync_start", db_id=example.db_id)
-            datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
-            datasource_by_db[example.db_id] = datasource_id
-            prep["datasources"].append(_datasource_stats(db_session, datasource_id, example.db_id, synced_tables))
-            progress.emit(
-                "datasource_sync_done",
-                db_id=example.db_id,
-                datasource_id=datasource_id,
-                table_count=len(synced_tables),
-            )
+            corpus_by_db[example.db_id] = {}
+            for profile in ("raw", "enriched"):
+                progress.emit("datasource_sync_start", db_id=example.db_id, corpus_profile=profile)
+                datasource_id, synced_tables = _ensure_profiled_spider_datasource(db_session, example, profile)
+                corpus_by_db[example.db_id][profile] = datasource_id
+                if datasource_id not in datasource_stats_seen:
+                    prep["datasources"].append(
+                        _datasource_stats(db_session, datasource_id, example.db_id, synced_tables, corpus_profile=profile)
+                    )
+                    datasource_stats_seen.add(datasource_id)
+                progress.emit(
+                    "datasource_sync_done",
+                    db_id=example.db_id,
+                    corpus_profile=profile,
+                    datasource_id=datasource_id,
+                    table_count=len(synced_tables),
+                )
 
         plan_cache: dict[str, tuple[tuple[str, ...], float]] = {}
         if "multi" in QUERY_MODES:
+            prep["planner_warmup"] = run_planner_warmup(_warmup_planner_client, progress)
             for case in cases:
                 progress.emit("plan_start", case_id=case.case_id, db_id=case.db_id)
                 started = time.perf_counter()
@@ -172,42 +290,52 @@ def main() -> int:
                     expression_count=len(expressions),
                 )
 
-        ai_enriched = False
-        for schema_variant in SCHEMA_VARIANTS:
-            progress.emit("schema_variant_start", schema_variant=schema_variant)
-            if schema_variant == "ai_enriched" and not ai_enriched:
-                prep["ai_enrich_results"].extend(_run_ai_enrichment(db_session, datasource_by_db, progress))
-                ai_enriched = True
+        prep["ai_enrich_results"].extend(_run_ai_enrichment(db_session, _datasources_for_profile(corpus_by_db, "enriched"), progress))
 
-            include_ai_metadata = schema_variant == "ai_enriched"
-            for datasource_id in datasource_by_db.values():
-                progress.emit("corpus_rebuild_start", schema_variant=schema_variant, datasource_id=datasource_id)
+        for doc_profile, variants in _variants_by_doc_profile(eval_variants):
+            progress.emit(
+                "schema_profile_start",
+                doc_profile=doc_profile,
+                eval_variants=[variant.name for variant in variants],
+            )
+            include_ai_metadata = doc_profile == "enriched"
+            for datasource_id in _datasources_for_profile(corpus_by_db, doc_profile).values():
+                progress.emit("corpus_rebuild_start", schema_variant=doc_profile, datasource_id=datasource_id)
                 rebuild_search_docs(db_session, datasource_id, include_ai_metadata=include_ai_metadata)
-                progress.emit("corpus_rebuild_done", schema_variant=schema_variant, datasource_id=datasource_id)
+                progress.emit("corpus_rebuild_done", schema_variant=doc_profile, datasource_id=datasource_id)
             db_session.commit()
 
-            corpus_stats = _prepare_corpus_variant(db_session, datasource_by_db, schema_variant, progress)
+            corpus_stats = _prepare_corpus_variant(
+                db_session,
+                _datasources_for_profile(corpus_by_db, doc_profile),
+                doc_profile,
+                progress,
+                needs_vectors=any(variant.retriever in {"vector", "hybrid"} for variant in variants),
+            )
             prep["corpus_stats"].extend(corpus_stats)
-            if schema_variant == "ai_enriched" and not any(row["ai_metadata_doc_count"] > 0 for row in corpus_stats):
+            if doc_profile == "enriched" and not any(row["ai_metadata_doc_count"] > 0 for row in corpus_stats):
                 raise RuntimeError("AI-enriched corpus has no AI metadata in schema_search_docs.")
 
-            for retriever in RETRIEVERS:
-                os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = retriever
+            for variant in variants:
+                os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = variant.retriever
                 for query_mode in QUERY_MODES:
                     progress.emit(
                         "matrix_cell_start",
-                        schema_variant=schema_variant,
-                        retriever=retriever,
+                        schema_variant=variant.name,
+                        retriever=variant.retriever,
                         query_mode=query_mode,
+                        keyword_profile=variant.keyword_profile,
+                        vector_profile=variant.vector_profile,
+                        doc_profile=doc_profile,
                         case_count=len(cases),
                     )
                     for case, example in zip(cases, examples, strict=True):
-                        datasource_id = datasource_by_db[example.db_id]
+                        datasource_id = datasource_for_variant(corpus_by_db, example.db_id, variant)
                         expressions, planner_latency_ms = _expressions_for_case(case, query_mode, plan_cache)
                         progress.emit(
                             "case_start",
-                            schema_variant=schema_variant,
-                            retriever=retriever,
+                            schema_variant=variant.name,
+                            retriever=variant.retriever,
                             query_mode=query_mode,
                             case_id=case.case_id,
                             db_id=case.db_id,
@@ -221,13 +349,16 @@ def main() -> int:
                             model=PLANNER_MODEL,
                             search_expressions=expressions,
                         )
-                        evaluated = evaluate_artifacts(case, retriever, artifacts, mode="ai-assisted-retrieval")
+                        evaluated = evaluate_artifacts(case, variant.retriever, artifacts, mode="ai-assisted-retrieval")
                         fused = _fused_output(artifacts.events)
                         case_rows.append(
                             _case_row(
-                                schema_variant=schema_variant,
-                                retriever=retriever,
+                                schema_variant=variant.name,
+                                retriever=variant.retriever,
                                 query_mode=query_mode,
+                                keyword_profile=variant.keyword_profile,
+                                vector_profile=variant.vector_profile,
+                                doc_profile=doc_profile,
                                 evaluated=evaluated,
                                 fused=fused,
                                 planner_latency_ms=planner_latency_ms,
@@ -235,8 +366,8 @@ def main() -> int:
                         )
                         progress.emit(
                             "case_done",
-                            schema_variant=schema_variant,
-                            retriever=retriever,
+                            schema_variant=variant.name,
+                            retriever=variant.retriever,
                             query_mode=query_mode,
                             case_id=case.case_id,
                             db_id=case.db_id,
@@ -248,11 +379,11 @@ def main() -> int:
                         )
                     progress.emit(
                         "matrix_cell_done",
-                        schema_variant=schema_variant,
-                        retriever=retriever,
+                        schema_variant=variant.name,
+                        retriever=variant.retriever,
                         query_mode=query_mode,
                     )
-            progress.emit("schema_variant_done", schema_variant=schema_variant)
+            progress.emit("schema_profile_done", doc_profile=doc_profile)
     finally:
         _close_metadata_session(db_session)
 
@@ -290,9 +421,69 @@ def _clean_report_dir() -> None:
             child.unlink()
 
 
-def _datasource_stats(db_session, datasource_id: str, db_id: str, synced_tables: list[str]) -> dict[str, Any]:
+def _datasources_for_profile(corpus_by_db: dict[str, dict[str, str]], profile: str) -> dict[str, str]:
+    return {db_id: profiles[profile] for db_id, profiles in corpus_by_db.items() if profile in profiles}
+
+
+def _ensure_profiled_spider_datasource(
+    db_session,
+    example: SpiderExample,
+    corpus_profile: str,
+) -> tuple[str, list[str]]:
+    import uuid
+    from engine.environment.schema_catalog_sync import ensure_catalog
+
+    db_path = str(example.db_path.resolve())
+    host = f"spider-eval-{corpus_profile}"
+    existing = (
+        db_session.query(DataSource)
+        .filter(DataSource.host == host, DataSource.database_name == db_path)
+        .first()
+    )
+    if existing is not None:
+        if existing.last_sync_status != "success":
+            ensure_catalog(db_session, str(existing.id))
+        return str(existing.id), _get_synced_table_names(db_session, str(existing.id))
+
+    ds_id = f"spider_{example.db_id}_{corpus_profile}_{uuid.uuid4().hex[:8]}"
+    datasource = DataSource(
+        id=ds_id,
+        name=f"Spider {example.db_id} {corpus_profile}",
+        db_type="sqlite",
+        host=host,
+        port=0,
+        database_name=db_path,
+        username="",
+        password_ciphertext="",
+        password_nonce="",
+        status="active",
+    )
+    db_session.add(datasource)
+    db_session.commit()
+    ensure_catalog(db_session, ds_id)
+    return ds_id, _get_synced_table_names(db_session, ds_id)
+
+
+def _get_synced_table_names(db_session, datasource_id: str) -> list[str]:
+    rows = (
+        db_session.query(SchemaTable.table_name)
+        .filter(SchemaTable.data_source_id == datasource_id)
+        .all()
+    )
+    return sorted([row[0] for row in rows])
+
+
+def _datasource_stats(
+    db_session,
+    datasource_id: str,
+    db_id: str,
+    synced_tables: list[str],
+    *,
+    corpus_profile: str,
+) -> dict[str, Any]:
     return {
         "db_id": db_id,
+        "corpus_profile": corpus_profile,
         "datasource_id": datasource_id,
         "synced_tables": synced_tables,
         "schema_table_count": db_session.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).count(),
@@ -399,12 +590,18 @@ def _run_ai_enrichment(db_session, datasource_by_db: dict[str, str], progress: P
     return results
 
 
-def _prepare_corpus_variant(db_session, datasource_by_db: dict[str, str], schema_variant: str, progress: ProgressWriter) -> list[dict[str, Any]]:
+def _prepare_corpus_variant(
+    db_session,
+    datasource_by_db: dict[str, str],
+    doc_profile: str,
+    progress: ProgressWriter,
+    *,
+    needs_vectors: bool,
+) -> list[dict[str, Any]]:
     rows = []
-    needs_vectors = any(retriever in {"vector", "hybrid"} for retriever in RETRIEVERS)
     config = resolve_embedding_config()
     for db_id, datasource_id in datasource_by_db.items():
-        progress.emit("corpus_prepare_start", schema_variant=schema_variant, db_id=db_id, datasource_id=datasource_id)
+        progress.emit("corpus_prepare_start", schema_variant=doc_profile, doc_profile=doc_profile, db_id=db_id, datasource_id=datasource_id)
         build = ensure_schema_embeddings(db_session, datasource_id) if needs_vectors else None
         doc_count = db_session.query(SchemaSearchDoc).filter(SchemaSearchDoc.datasource_id == datasource_id).count()
         ai_doc_count = (
@@ -431,7 +628,8 @@ def _prepare_corpus_variant(db_session, datasource_by_db: dict[str, str], schema
         )
         rows.append(
             {
-                "schema_variant": schema_variant,
+                "schema_variant": doc_profile,
+                "doc_profile": doc_profile,
                 "db_id": db_id,
                 "datasource_id": datasource_id,
                 "schema_search_doc_count": doc_count,
@@ -445,7 +643,8 @@ def _prepare_corpus_variant(db_session, datasource_by_db: dict[str, str], schema
         )
         progress.emit(
             "corpus_prepare_done",
-            schema_variant=schema_variant,
+            schema_variant=doc_profile,
+            doc_profile=doc_profile,
             db_id=db_id,
             datasource_id=datasource_id,
             schema_search_doc_count=doc_count,
@@ -473,13 +672,27 @@ def _fused_output(events: tuple[dict[str, Any], ...]) -> dict[str, Any]:
     return {}
 
 
-def _case_row(*, schema_variant: str, retriever: str, query_mode: str, evaluated, fused: dict[str, Any], planner_latency_ms: float) -> dict[str, Any]:
+def _case_row(
+    *,
+    schema_variant: str,
+    retriever: str,
+    query_mode: str,
+    keyword_profile: str,
+    vector_profile: str,
+    doc_profile: str,
+    evaluated,
+    fused: dict[str, Any],
+    planner_latency_ms: float,
+) -> dict[str, Any]:
     query_embedding_ms = _float_value(fused.get("query_embedding_ms"))
     retrieval_only_ms = _float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms"))
     return {
         "schema_variant": schema_variant,
         "retriever": retriever,
         "query_mode": query_mode,
+        "keyword_profile": keyword_profile,
+        "vector_profile": vector_profile,
+        "doc_profile": doc_profile,
         "case_id": evaluated.case_id,
         "db_id": evaluated.db_id,
         "question": evaluated.question,
@@ -523,18 +736,30 @@ def _write_outputs(prep: dict[str, Any], search_plans: list[dict[str, Any]], cas
 
 def _markdown_report(summaries: list[dict[str, Any]]) -> str:
     lines = [
-        "# Spider AI Enrich Contrast Report",
+        "# Spider Retrieval Profile Contrast Report",
         "",
-        "| schema_variant | retriever | query_mode | cases | table@5 | column@10 | mrr_table | mrr_column | planner p95 | query embedding p95 | retrieval p95 | e2e p95 | vector_available |",
+        "| variant | retriever | query_mode | cases | table@5 | column@10 | mrr_table | mrr_column | planner p50/p90/p95/max | query embedding p95 | retrieval p50/p90/p95/max | e2e p50/p90/p95/max | vector_available |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         lines.append(
             "| {schema_variant} | {retriever} | {query_mode} | {total_cases} | {table_recall_at_5:.2%} | "
-            "{column_recall_at_10:.2%} | {mrr_table:.4f} | {mrr_column:.4f} | {p95_planner_latency_ms} | "
-            "{p95_query_embedding_ms} | {p95_retrieval_only_ms} | {p95_e2e_ms} | {vector_available_rate} |".format(**row)
+            "{column_recall_at_10:.2%} | {mrr_table:.4f} | {mrr_column:.4f} | "
+            "{p50_planner_latency_ms}/{p90_planner_latency_ms}/{p95_planner_latency_ms}/{max_planner_latency_ms} | "
+            "{p95_query_embedding_ms} | "
+            "{p50_retrieval_only_ms}/{p90_retrieval_only_ms}/{p95_retrieval_only_ms}/{max_retrieval_only_ms} | "
+            "{p50_e2e_ms}/{p90_e2e_ms}/{p95_e2e_ms}/{max_e2e_ms} | {vector_available_rate} |".format(**row)
         )
-    lines.extend(["", "## Notes", "", "- `e2e p95` includes LLM query expansion for `multi` mode and retrieval-only time.", "- Corpus embedding build is reported in `prep_check.json`, not counted as per-query e2e latency."])
+    lines.extend(
+        [
+            "",
+            "## Notes",
+            "",
+            "- `multi` mode uses pre-generated search expressions; planner warmup is reported in `prep_check.json` and excluded from per-case planner latency.",
+            "- Corpus embedding build is reported in `prep_check.json`, not counted as per-query e2e latency.",
+            "- `query embedding` is online query-vectorization time and remains visible separately from retrieval and planner time.",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
