@@ -388,6 +388,84 @@ def test_run_ai_assisted_retrieval_case_uses_planned_expressions_and_fused_resul
     assert fused["results"][0]["matched_by"] == ["multi_query", "vector"]
 
 
+def test_ai_assisted_hybrid_question_policy_uses_keyword_expressions_and_vector_question_only(monkeypatch) -> None:
+    case = EvaluationCase(
+        case_id="spider_concert_singer_001",
+        db_id="concert_singer",
+        question="Which singers performed in 2014?",
+        gold_sql="SELECT singer.name FROM singer",
+        expected_tables=("singer", "concert"),
+        expected_columns=("singer.name", "concert.year"),
+    )
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_db_search(_session, datasource_id: str, query: str, _limit: int):
+        mode = os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"]
+        calls.append((mode, datasource_id, query))
+        if mode == "keyword":
+            return {
+                "engine": "keyword",
+                "original_query": query,
+                "retrieval_latency_ms": 6.0,
+                "embedding_build_time_ms": 0.0,
+                "keyword_recall_ms": 6.0,
+                "query_embedding_ms": 0.0,
+                "vector_recall_ms": 0.0,
+                "merge_ms": 0.0,
+                "retrieval_only_ms": 6.0,
+                "vector_available": None,
+                "results": [{"type": "table", "table_name": "singer", "score": 1.0}],
+            }
+        return {
+            "engine": "vector",
+            "original_query": query,
+            "retrieval_latency_ms": 14.0,
+            "embedding_build_time_ms": 0.0,
+            "keyword_recall_ms": 0.0,
+            "query_embedding_ms": 11.0,
+            "vector_recall_ms": 3.0,
+            "merge_ms": 0.0,
+            "retrieval_only_ms": 14.0,
+            "vector_available": True,
+            "results": [{"type": "column", "table_name": "concert", "column_name": "year", "score": 0.9}],
+        }
+
+    monkeypatch.setattr(retrieval_cli, "db_search", fake_db_search)
+    monkeypatch.setenv("DBFOX_SCHEMA_RETRIEVAL_MODE", "hybrid")
+
+    artifacts = retrieval_cli._run_ai_assisted_retrieval_case(
+        db_session=object(),
+        datasource_id="enriched-ds",
+        vector_datasource_id="raw-ds",
+        case=case,
+        limit=5,
+        model="qwen-plus",
+        search_expressions=("singer aliases", "concert year"),
+        query_policy="multi_keyword_vector_question",
+    )
+
+    assert calls == [
+        ("keyword", "enriched-ds", "singer aliases"),
+        ("keyword", "enriched-ds", "concert year"),
+        ("vector", "raw-ds", "Which singers performed in 2014?"),
+    ]
+    assert os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] == "hybrid"
+    fused = artifacts.events[-1]["step"]["output"]
+    assert fused["query_policy"] == "multi_keyword_vector_question"
+    assert fused["keyword_expressions"] == ["singer aliases", "concert year"]
+    assert fused["vector_expressions"] == ["Which singers performed in 2014?"]
+    assert fused["planner_expression_count"] == 2
+    assert fused["vector_expression_count"] == 1
+    assert fused["question_embedding_call_count"] == 1
+    assert fused["expression_embedding_call_count"] == 0
+    assert fused["embedding_call_count"] == 1
+    assert fused["question_embedding_ms"] == 11.0
+    assert fused["expression_embedding_ms"] == 0.0
+    assert fused["query_embedding_ms"] == 11.0
+    assert fused["vector_recall_ms"] == 3.0
+    assert fused["db_search_call_count"] == 3
+
+
 def test_write_reports_outputs_summary_json_cases_csv_and_markdown(tmp_path: Path) -> None:
     case = evaluate_case(
         CaseEvaluationInput(

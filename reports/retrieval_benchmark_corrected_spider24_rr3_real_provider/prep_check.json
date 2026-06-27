@@ -1,0 +1,332 @@
+{
+  "cases_path": "D:\\DBFoxData\\spider\\spider_data\\dev.json",
+  "case_count": 24,
+  "sample_strategy": "round_robin_db",
+  "sample_db_limit": 3,
+  "selected_db_counts": {
+    "concert_singer": 8,
+    "pets_1": 8,
+    "car_1": 8
+  },
+  "eval_variants": [
+    {
+      "name": "keyword_raw",
+      "retriever": "keyword",
+      "keyword_profile": "raw",
+      "vector_profile": "none",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "none",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "vector_raw",
+      "retriever": "vector",
+      "keyword_profile": "none",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "none",
+      "vector_corpus_profile": "raw",
+      "query_policy": "single_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "keyword_enriched",
+      "retriever": "keyword",
+      "keyword_profile": "enriched",
+      "vector_profile": "none",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "none",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "vector_enriched",
+      "retriever": "vector",
+      "keyword_profile": "none",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "none",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "single_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_raw_question",
+      "retriever": "hybrid",
+      "keyword_profile": "raw",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "raw",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "hybrid_keyword_enriched_vector_raw_question",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "raw",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_keyword_raw_vector_enriched_question",
+      "retriever": "hybrid",
+      "keyword_profile": "raw",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "hybrid_enriched_question",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_keyword_enriched_vector_raw_expression_each",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "raw",
+      "query_policy": "multi_keyword_vector_expression_each",
+      "diagnostic": "true",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_enriched_expression_each",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "multi_keyword_vector_expression_each",
+      "diagnostic": "true",
+      "active_doc_profile": "enriched"
+    }
+  ],
+  "retrievers": [
+    "hybrid",
+    "keyword",
+    "vector"
+  ],
+  "query_modes": [
+    "single",
+    "multi"
+  ],
+  "planner_model": "qwen-plus",
+  "planner_warmup": {
+    "planner_warmup_ms": 11401.319,
+    "planner_warmup_in_case_latency": false
+  },
+  "ai_enrich_model": "qwen-plus",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "concert_singer",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_concert_singer_raw_d40fa4bc",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21
+    },
+    {
+      "db_id": "concert_singer",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_concert_singer_enriched_ce83fcd3",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21
+    },
+    {
+      "db_id": "pets_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_pets_1_raw_8076b516",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14
+    },
+    {
+      "db_id": "pets_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_pets_1_enriched_9e65a8f2",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14
+    },
+    {
+      "db_id": "car_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_car_1_raw_87cd3295",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23
+    },
+    {
+      "db_id": "car_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_car_1_enriched_2c898005",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23
+    }
+  ],
+  "corpus_stats": [
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_raw_d40fa4bc",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1869.382,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_raw_8076b516",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1116.705,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_raw_87cd3295",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1912.705,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_enriched_ce83fcd3",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 25,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2095.741,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_enriched_9e65a8f2",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 17,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1470.231,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_enriched_2c898005",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 29,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2133.054,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "ai_enrich_results": [
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_enriched_ce83fcd3",
+      "ai_enrich_latency_ms": 40703.74
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_enriched_9e65a8f2",
+      "ai_enrich_latency_ms": 27188.689
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 6,
+      "reason": "",
+      "errors": [],
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_enriched_2c898005",
+      "ai_enrich_latency_ms": 52695.287
+    }
+  ]
+}

@@ -227,3 +227,62 @@ def test_hybrid_search_fuses_keyword_and_vector_results_with_rrf(
     assert result["results"][0]["keyword_rank"] == 1
     assert result["results"][0]["vector_rank"] == 2
     assert "keyword rank 1" in result["results"][0]["reason"]
+
+
+def test_hybrid_search_can_use_separate_vector_datasource(
+    db_session,
+    test_datasource,
+    monkeypatch,
+) -> None:
+    from engine.models import DataSource
+
+    vector_datasource = DataSource(
+        id="vector-profile-ds",
+        name="Vector Profile",
+        db_type="sqlite",
+        host="test",
+        port=0,
+        database_name="vector.sqlite",
+        username="",
+        password_ciphertext="",
+        password_nonce="",
+        status="active",
+    )
+    db_session.add(vector_datasource)
+    db_session.commit()
+    _add_doc(
+        db_session,
+        datasource_id=test_datasource.id,
+        entity_type="table",
+        entity_id="orders-keyword-doc",
+        table_name="orders",
+        search_text="orders revenue gross merchandise value",
+    )
+    _add_doc(
+        db_session,
+        datasource_id=vector_datasource.id,
+        entity_type="table",
+        entity_id="payments-vector-doc",
+        table_name="payments",
+        search_text="payments revenue settlement",
+    )
+
+    def fake_embed_texts(texts: Sequence[str], **_kwargs) -> list[list[float]]:
+        vectors = {
+            "payments revenue settlement": [1.0, 0.0],
+            "revenue": [1.0, 0.0],
+        }
+        return [vectors[str(text)] for text in texts]
+
+    monkeypatch.setattr("engine.tools.db.embedding.embed_texts", fake_embed_texts)
+    monkeypatch.setenv("DBFOX_SCHEMA_RETRIEVAL_MODE", "hybrid")
+    monkeypatch.setenv("DBFOX_SCHEMA_VECTOR_DATASOURCE_ID", vector_datasource.id)
+
+    result = db_search(db_session, test_datasource.id, "revenue", 5)
+
+    table_names = [item["table_name"] for item in result["results"]]
+    assert result["engine"] == "hybrid"
+    assert "orders" in table_names
+    assert "payments" in table_names
+    assert next(item for item in result["results"] if item["table_name"] == "orders")["matched_by"] == ["keyword"]
+    assert next(item for item in result["results"] if item["table_name"] == "payments")["matched_by"] == ["vector"]

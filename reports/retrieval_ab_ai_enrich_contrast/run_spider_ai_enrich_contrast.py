@@ -56,7 +56,11 @@ PLANNER_MODEL = os.getenv("DBFOX_RETRIEVAL_PLANNER_MODEL", "qwen-plus")
 ENRICH_MODEL = os.getenv("DBFOX_AI_ENRICH_MODEL", PLANNER_MODEL)
 EVAL_VARIANT_NAMES = _split_env(
     "DBFOX_RETRIEVAL_EVAL_VARIANTS",
-    "keyword_raw,vector_raw,keyword_enriched,vector_enriched,hybrid_raw,hybrid_enriched",
+    (
+        "keyword_raw,vector_raw,keyword_enriched,vector_enriched,"
+        "hybrid_raw_question,hybrid_keyword_enriched_vector_raw_question,"
+        "hybrid_keyword_raw_vector_enriched_question,hybrid_enriched_question"
+    ),
 )
 RETRIEVERS = _split_env("DBFOX_RETRIEVAL_VARIANTS", "keyword,vector,hybrid")
 QUERY_MODES = _split_env("DBFOX_QUERY_MODES", "single,multi")
@@ -68,6 +72,16 @@ class EvalVariant:
     retriever: str
     keyword_profile: str
     vector_profile: str
+    query_policy: str
+    diagnostic: bool = False
+
+    @property
+    def keyword_corpus_profile(self) -> str:
+        return self.keyword_profile if self.retriever in {"keyword", "hybrid"} else "none"
+
+    @property
+    def vector_corpus_profile(self) -> str:
+        return self.vector_profile if self.retriever in {"vector", "hybrid"} else "none"
 
     @property
     def needs_enriched_catalog(self) -> bool:
@@ -79,19 +93,71 @@ class EvalVariant:
             return self.keyword_profile
         if self.retriever == "vector":
             return self.vector_profile
-        if self.keyword_profile != self.vector_profile:
-            raise RuntimeError(f"Hybrid variant {self.name} requires matching keyword/vector profiles.")
         return self.keyword_profile
 
 
 DEFAULT_EVAL_VARIANTS: dict[str, EvalVariant] = {
-    "keyword_raw": EvalVariant("keyword_raw", "keyword", "raw", "none"),
-    "vector_raw": EvalVariant("vector_raw", "vector", "none", "raw"),
-    "keyword_enriched": EvalVariant("keyword_enriched", "keyword", "enriched", "none"),
-    "vector_enriched": EvalVariant("vector_enriched", "vector", "none", "enriched"),
-    "hybrid_raw": EvalVariant("hybrid_raw", "hybrid", "raw", "raw"),
-    "hybrid_enriched": EvalVariant("hybrid_enriched", "hybrid", "enriched", "enriched"),
+    "keyword_raw": EvalVariant("keyword_raw", "keyword", "raw", "none", "multi_keyword_vector_question"),
+    "vector_raw": EvalVariant("vector_raw", "vector", "none", "raw", "single_question"),
+    "keyword_enriched": EvalVariant("keyword_enriched", "keyword", "enriched", "none", "multi_keyword_vector_question"),
+    "vector_enriched": EvalVariant("vector_enriched", "vector", "none", "enriched", "single_question"),
+    "hybrid_raw_question": EvalVariant("hybrid_raw_question", "hybrid", "raw", "raw", "multi_keyword_vector_question"),
+    "hybrid_keyword_enriched_vector_raw_question": EvalVariant(
+        "hybrid_keyword_enriched_vector_raw_question",
+        "hybrid",
+        "enriched",
+        "raw",
+        "multi_keyword_vector_question",
+    ),
+    "hybrid_keyword_raw_vector_enriched_question": EvalVariant(
+        "hybrid_keyword_raw_vector_enriched_question",
+        "hybrid",
+        "raw",
+        "enriched",
+        "multi_keyword_vector_question",
+    ),
+    "hybrid_enriched_question": EvalVariant(
+        "hybrid_enriched_question",
+        "hybrid",
+        "enriched",
+        "enriched",
+        "multi_keyword_vector_question",
+    ),
+    "hybrid_keyword_enriched_vector_raw_expression_each": EvalVariant(
+        "hybrid_keyword_enriched_vector_raw_expression_each",
+        "hybrid",
+        "enriched",
+        "raw",
+        "multi_keyword_vector_expression_each",
+        True,
+    ),
+    "hybrid_enriched_expression_each": EvalVariant(
+        "hybrid_enriched_expression_each",
+        "hybrid",
+        "enriched",
+        "enriched",
+        "multi_keyword_vector_expression_each",
+        True,
+    ),
 }
+DEFAULT_EVAL_VARIANTS.update(
+    {
+        "hybrid_raw": DEFAULT_EVAL_VARIANTS["hybrid_raw_question"],
+        "hybrid_keyword_enriched_vector_raw": DEFAULT_EVAL_VARIANTS["hybrid_keyword_enriched_vector_raw_question"],
+        "hybrid_keyword_raw_vector_enriched": DEFAULT_EVAL_VARIANTS["hybrid_keyword_raw_vector_enriched_question"],
+        "hybrid_enriched": DEFAULT_EVAL_VARIANTS["hybrid_enriched_question"],
+    }
+)
+DEFAULT_EVAL_VARIANT_NAMES = (
+    "keyword_raw",
+    "vector_raw",
+    "keyword_enriched",
+    "vector_enriched",
+    "hybrid_raw_question",
+    "hybrid_keyword_enriched_vector_raw_question",
+    "hybrid_keyword_raw_vector_enriched_question",
+    "hybrid_enriched_question",
+)
 LEGACY_SCHEMA_VARIANTS = {"base", "ai_enriched", "full_enrich", "keyword_only_enrich", "vector_only_enrich"}
 
 
@@ -119,13 +185,15 @@ class ProgressWriter:
 
 
 def resolve_eval_variants(names: tuple[str, ...]) -> tuple[EvalVariant, ...]:
-    requested = names or tuple(DEFAULT_EVAL_VARIANTS)
+    requested = names or DEFAULT_EVAL_VARIANT_NAMES
     unknown = [name for name in requested if name not in DEFAULT_EVAL_VARIANTS]
     if unknown:
         if any(name in LEGACY_SCHEMA_VARIANTS for name in unknown):
             raise RuntimeError(
                 "Use explicit retrieval eval variants such as keyword_raw, vector_raw, "
-                "keyword_enriched, vector_enriched, hybrid_raw, hybrid_enriched."
+                "keyword_enriched, vector_enriched, hybrid_raw_question, "
+                "hybrid_keyword_enriched_vector_raw_question, "
+                "hybrid_keyword_raw_vector_enriched_question, hybrid_enriched_question."
             )
         raise RuntimeError(f"Unsupported DBFOX_RETRIEVAL_EVAL_VARIANTS: {', '.join(unknown)}")
     return tuple(DEFAULT_EVAL_VARIANTS[name] for name in requested)
@@ -137,6 +205,10 @@ def _variant_dict(variant: EvalVariant) -> dict[str, str]:
         "retriever": variant.retriever,
         "keyword_profile": variant.keyword_profile,
         "vector_profile": variant.vector_profile,
+        "keyword_corpus_profile": variant.keyword_corpus_profile,
+        "vector_corpus_profile": variant.vector_corpus_profile,
+        "query_policy": variant.query_policy,
+        "diagnostic": str(variant.diagnostic).lower(),
         "active_doc_profile": _active_doc_profile(variant),
     }
 
@@ -161,6 +233,26 @@ def datasource_for_variant(
         return corpus_by_db[db_id][variant.corpus_profile]
     except KeyError as exc:
         raise RuntimeError(f"Prepared corpus datasource missing for db={db_id}, profile={variant.corpus_profile}") from exc
+
+
+def vector_datasource_for_variant(
+    corpus_by_db: dict[str, dict[str, str]],
+    db_id: str,
+    variant: EvalVariant,
+) -> str:
+    profile = variant.vector_corpus_profile
+    if profile == "none":
+        return datasource_for_variant(corpus_by_db, db_id, variant)
+    try:
+        return corpus_by_db[db_id][profile]
+    except KeyError as exc:
+        raise RuntimeError(f"Prepared vector corpus datasource missing for db={db_id}, profile={profile}") from exc
+
+
+def query_policy_for_variant(variant: EvalVariant, query_mode: str) -> str:
+    if query_mode == "single":
+        return "single_question"
+    return variant.query_policy
 
 
 def run_planner_warmup(warmup: Callable[[], Any], progress: ProgressWriter) -> dict[str, Any]:
@@ -239,6 +331,8 @@ def main() -> int:
     case_rows: list[dict[str, Any]] = []
     search_plans: list[dict[str, Any]] = []
 
+    previous_retrieval_mode = os.environ.get("DBFOX_SCHEMA_RETRIEVAL_MODE")
+    previous_vector_datasource_id = os.environ.get("DBFOX_SCHEMA_VECTOR_DATASOURCE_ID")
     db_session = _create_temp_metadata_session(REPORT_DIR / "metadata.sqlite")
     try:
         corpus_by_db: dict[str, dict[str, str]] = {}
@@ -292,11 +386,11 @@ def main() -> int:
 
         prep["ai_enrich_results"].extend(_run_ai_enrichment(db_session, _datasources_for_profile(corpus_by_db, "enriched"), progress))
 
-        for doc_profile, variants in _variants_by_doc_profile(eval_variants):
+        for doc_profile in ("raw", "enriched"):
             progress.emit(
                 "schema_profile_start",
                 doc_profile=doc_profile,
-                eval_variants=[variant.name for variant in variants],
+                eval_variants=[variant.name for variant in eval_variants if doc_profile in {variant.keyword_corpus_profile, variant.vector_corpus_profile}],
             )
             include_ai_metadata = doc_profile == "enriched"
             for datasource_id in _datasources_for_profile(corpus_by_db, doc_profile).values():
@@ -310,81 +404,115 @@ def main() -> int:
                 _datasources_for_profile(corpus_by_db, doc_profile),
                 doc_profile,
                 progress,
-                needs_vectors=any(variant.retriever in {"vector", "hybrid"} for variant in variants),
+                needs_vectors=True,
             )
             prep["corpus_stats"].extend(corpus_stats)
             if doc_profile == "enriched" and not any(row["ai_metadata_doc_count"] > 0 for row in corpus_stats):
                 raise RuntimeError("AI-enriched corpus has no AI metadata in schema_search_docs.")
-
-            for variant in variants:
-                os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = variant.retriever
-                for query_mode in QUERY_MODES:
-                    progress.emit(
-                        "matrix_cell_start",
-                        schema_variant=variant.name,
-                        retriever=variant.retriever,
-                        query_mode=query_mode,
-                        keyword_profile=variant.keyword_profile,
-                        vector_profile=variant.vector_profile,
-                        doc_profile=doc_profile,
-                        case_count=len(cases),
-                    )
-                    for case, example in zip(cases, examples, strict=True):
-                        datasource_id = datasource_for_variant(corpus_by_db, example.db_id, variant)
-                        expressions, planner_latency_ms = _expressions_for_case(case, query_mode, plan_cache)
-                        progress.emit(
-                            "case_start",
-                            schema_variant=variant.name,
-                            retriever=variant.retriever,
-                            query_mode=query_mode,
-                            case_id=case.case_id,
-                            db_id=case.db_id,
-                            expression_count=len(expressions),
-                        )
-                        artifacts = _run_ai_assisted_retrieval_case(
-                            db_session=db_session,
-                            datasource_id=datasource_id,
-                            case=case,
-                            limit=RETRIEVAL_LIMIT,
-                            model=PLANNER_MODEL,
-                            search_expressions=expressions,
-                        )
-                        evaluated = evaluate_artifacts(case, variant.retriever, artifacts, mode="ai-assisted-retrieval")
-                        fused = _fused_output(artifacts.events)
-                        case_rows.append(
-                            _case_row(
-                                schema_variant=variant.name,
-                                retriever=variant.retriever,
-                                query_mode=query_mode,
-                                keyword_profile=variant.keyword_profile,
-                                vector_profile=variant.vector_profile,
-                                doc_profile=doc_profile,
-                                evaluated=evaluated,
-                                fused=fused,
-                                planner_latency_ms=planner_latency_ms,
-                            )
-                        )
-                        progress.emit(
-                            "case_done",
-                            schema_variant=variant.name,
-                            retriever=variant.retriever,
-                            query_mode=query_mode,
-                            case_id=case.case_id,
-                            db_id=case.db_id,
-                            table_recall_at_5=evaluated.table_recall_at_5,
-                            column_recall_at_10=evaluated.column_recall_at_10,
-                            retrieval_only_ms=_float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms")),
-                            e2e_ms=round(planner_latency_ms + _float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms")), 3),
-                            failure_class=evaluated.failure_class,
-                        )
-                    progress.emit(
-                        "matrix_cell_done",
-                        schema_variant=variant.name,
-                        retriever=variant.retriever,
-                        query_mode=query_mode,
-                    )
             progress.emit("schema_profile_done", doc_profile=doc_profile)
+
+        for variant in eval_variants:
+            os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = variant.retriever
+            doc_profile = _active_doc_profile(variant)
+            for query_mode in QUERY_MODES:
+                query_policy = query_policy_for_variant(variant, query_mode)
+                progress.emit(
+                    "matrix_cell_start",
+                    schema_variant=variant.name,
+                    retriever=variant.retriever,
+                    query_mode=query_mode,
+                    query_policy=query_policy,
+                    keyword_profile=variant.keyword_profile,
+                    vector_profile=variant.vector_profile,
+                    keyword_corpus_profile=variant.keyword_corpus_profile,
+                    vector_corpus_profile=variant.vector_corpus_profile,
+                    diagnostic=variant.diagnostic,
+                    doc_profile=doc_profile,
+                    case_count=len(cases),
+                )
+                for case, example in zip(cases, examples, strict=True):
+                    datasource_id = datasource_for_variant(corpus_by_db, example.db_id, variant)
+                    vector_datasource_id = vector_datasource_for_variant(corpus_by_db, example.db_id, variant)
+                    if variant.retriever == "hybrid":
+                        os.environ["DBFOX_SCHEMA_VECTOR_DATASOURCE_ID"] = vector_datasource_id
+                    else:
+                        os.environ.pop("DBFOX_SCHEMA_VECTOR_DATASOURCE_ID", None)
+                    expressions, planner_latency_ms = _expressions_for_case(case, query_mode, query_policy, plan_cache)
+                    progress.emit(
+                        "case_start",
+                        schema_variant=variant.name,
+                        retriever=variant.retriever,
+                        query_mode=query_mode,
+                        query_policy=query_policy,
+                        case_id=case.case_id,
+                        db_id=case.db_id,
+                        datasource_id=datasource_id,
+                        vector_datasource_id=vector_datasource_id if variant.retriever == "hybrid" else None,
+                        expression_count=len(expressions),
+                    )
+                    artifacts = _run_ai_assisted_retrieval_case(
+                        db_session=db_session,
+                        datasource_id=datasource_id,
+                        vector_datasource_id=vector_datasource_id,
+                        case=case,
+                        limit=RETRIEVAL_LIMIT,
+                        model=PLANNER_MODEL,
+                        search_expressions=expressions,
+                        query_policy=query_policy,
+                    )
+                    evaluated = evaluate_artifacts(case, variant.retriever, artifacts, mode="ai-assisted-retrieval")
+                    fused = _fused_output(artifacts.events)
+                    case_rows.append(
+                        _case_row(
+                            schema_variant=variant.name,
+                            retriever=variant.retriever,
+                            query_mode=query_mode,
+                            query_policy=query_policy,
+                            keyword_profile=variant.keyword_profile,
+                            vector_profile=variant.vector_profile,
+                            keyword_corpus_profile=variant.keyword_corpus_profile,
+                            vector_corpus_profile=variant.vector_corpus_profile,
+                            doc_profile=doc_profile,
+                            diagnostic=variant.diagnostic,
+                            evaluated=evaluated,
+                            fused=fused,
+                            planner_latency_ms=planner_latency_ms,
+                        )
+                    )
+                    progress.emit(
+                        "case_done",
+                        schema_variant=variant.name,
+                        retriever=variant.retriever,
+                        query_mode=query_mode,
+                        query_policy=query_policy,
+                        case_id=case.case_id,
+                        db_id=case.db_id,
+                        table_recall_at_5=evaluated.table_recall_at_5,
+                        column_recall_at_10=evaluated.column_recall_at_10,
+                        query_embedding_ms=_float_value(fused.get("query_embedding_ms")),
+                        keyword_recall_ms=_float_value(fused.get("keyword_recall_ms")),
+                        vector_recall_ms=_float_value(fused.get("vector_recall_ms")),
+                        merge_ms=_float_value(fused.get("merge_ms")),
+                        retrieval_only_ms=_float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms")),
+                        e2e_ms=round(planner_latency_ms + _float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms")), 3),
+                        failure_class=evaluated.failure_class,
+                    )
+                progress.emit(
+                    "matrix_cell_done",
+                    schema_variant=variant.name,
+                    retriever=variant.retriever,
+                    query_mode=query_mode,
+                    query_policy=query_policy,
+                )
     finally:
+        if previous_retrieval_mode is None:
+            os.environ.pop("DBFOX_SCHEMA_RETRIEVAL_MODE", None)
+        else:
+            os.environ["DBFOX_SCHEMA_RETRIEVAL_MODE"] = previous_retrieval_mode
+        if previous_vector_datasource_id is None:
+            os.environ.pop("DBFOX_SCHEMA_VECTOR_DATASOURCE_ID", None)
+        else:
+            os.environ["DBFOX_SCHEMA_VECTOR_DATASOURCE_ID"] = previous_vector_datasource_id
         _close_metadata_session(db_session)
 
     summaries = summarize_contrast_rows(case_rows)
@@ -655,8 +783,13 @@ def _prepare_corpus_variant(
     return rows
 
 
-def _expressions_for_case(case, query_mode: str, plan_cache: dict[str, tuple[tuple[str, ...], float]]) -> tuple[tuple[str, ...], float]:
-    if query_mode == "single":
+def _expressions_for_case(
+    case,
+    query_mode: str,
+    query_policy: str,
+    plan_cache: dict[str, tuple[tuple[str, ...], float]],
+) -> tuple[tuple[str, ...], float]:
+    if query_mode == "single" or query_policy == "single_question":
         return (case.question,), 0.0
     expressions, planner_latency_ms = plan_cache[case.case_id]
     return expressions, planner_latency_ms
@@ -677,41 +810,63 @@ def _case_row(
     schema_variant: str,
     retriever: str,
     query_mode: str,
+    query_policy: str,
     keyword_profile: str,
     vector_profile: str,
+    keyword_corpus_profile: str,
+    vector_corpus_profile: str,
     doc_profile: str,
+    diagnostic: bool,
     evaluated,
     fused: dict[str, Any],
     planner_latency_ms: float,
 ) -> dict[str, Any]:
     query_embedding_ms = _float_value(fused.get("query_embedding_ms"))
     retrieval_only_ms = _float_value(fused.get("retrieval_only_ms") or fused.get("retrieval_latency_ms"))
+    modeled_online_ms = round(planner_latency_ms + retrieval_only_ms, 3)
+    measured_provider_ms = round(planner_latency_ms + query_embedding_ms, 3)
     return {
         "schema_variant": schema_variant,
         "retriever": retriever,
         "query_mode": query_mode,
+        "query_policy": query_policy,
         "keyword_profile": keyword_profile,
         "vector_profile": vector_profile,
+        "keyword_corpus_profile": keyword_corpus_profile,
+        "vector_corpus_profile": vector_corpus_profile,
         "doc_profile": doc_profile,
+        "diagnostic": diagnostic,
         "case_id": evaluated.case_id,
         "db_id": evaluated.db_id,
         "question": evaluated.question,
         "search_expressions": json.dumps(list(evaluated.search_expressions), ensure_ascii=False),
+        "keyword_expressions": json.dumps(list(fused.get("keyword_expressions") or []), ensure_ascii=False),
+        "vector_expressions": json.dumps(list(fused.get("vector_expressions") or []), ensure_ascii=False),
         "table_recall_at_5": evaluated.table_recall_at_5,
         "column_recall_at_10": evaluated.column_recall_at_10,
         "mrr_table": evaluated.mrr_table,
         "mrr_column": evaluated.mrr_column,
         "planner_latency_ms": planner_latency_ms,
         "query_embedding_ms": query_embedding_ms,
+        "question_embedding_ms": _float_value(fused.get("question_embedding_ms")),
+        "expression_embedding_ms": _float_value(fused.get("expression_embedding_ms")),
         "keyword_recall_ms": _float_value(fused.get("keyword_recall_ms")),
         "vector_recall_ms": _float_value(fused.get("vector_recall_ms")),
         "merge_ms": _float_value(fused.get("merge_ms")),
+        "multi_fuse_ms": _float_value(fused.get("multi_fuse_ms")),
         "rerank_ms": _float_value(fused.get("rerank_ms")),
         "retrieval_only_ms": retrieval_only_ms,
         "query_preprocess_ms": round(planner_latency_ms + query_embedding_ms, 3),
-        "e2e_ms": round(planner_latency_ms + retrieval_only_ms, 3),
+        "e2e_ms": modeled_online_ms,
+        "modeled_online_ms": modeled_online_ms,
+        "measured_provider_ms": measured_provider_ms,
+        "planner_expression_count": int(_float_value(fused.get("planner_expression_count"))),
+        "vector_expression_count": int(_float_value(fused.get("vector_expression_count"))),
+        "question_embedding_call_count": int(_float_value(fused.get("question_embedding_call_count"))),
+        "expression_embedding_call_count": int(_float_value(fused.get("expression_embedding_call_count"))),
+        "embedding_call_count": int(_float_value(fused.get("embedding_call_count"))),
         "vector_available": evaluated.vector_available,
-        "db_search_call_count": evaluated.db_search_call_count,
+        "db_search_call_count": int(_float_value(fused.get("db_search_call_count")) or evaluated.db_search_call_count),
         "failure_class": evaluated.failure_class,
         "failure_reason": evaluated.failure_reason or "",
     }
@@ -738,26 +893,53 @@ def _markdown_report(summaries: list[dict[str, Any]]) -> str:
     lines = [
         "# Spider Retrieval Profile Contrast Report",
         "",
-        "| variant | retriever | query_mode | cases | table@5 | column@10 | mrr_table | mrr_column | planner p50/p90/p95/max | query embedding p95 | retrieval p50/p90/p95/max | e2e p50/p90/p95/max | vector_available |",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "## Main Recommendation Candidates",
+        "",
+        "| variant | retriever | query_mode | query_policy | keyword corpus | vector corpus | cases | table@5 | column@10 | mrr_table | mrr_column | planner expr avg | q-embed calls avg | expr-embed calls avg | db.search calls avg | measured provider p95 | modeled online p95 | query embed p95 | keyword recall p95 | vector recall p95 | vector_available |",
+        "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for row in summaries:
+    main_rows = [row for row in summaries if not row.get("diagnostic")]
+    diagnostic_rows = [row for row in summaries if row.get("diagnostic")]
+    for row in main_rows:
         lines.append(
-            "| {schema_variant} | {retriever} | {query_mode} | {total_cases} | {table_recall_at_5:.2%} | "
+            "| {schema_variant} | {retriever} | {query_mode} | {query_policy} | {keyword_corpus_profile} | "
+            "{vector_corpus_profile} | {total_cases} | {table_recall_at_5:.2%} | "
             "{column_recall_at_10:.2%} | {mrr_table:.4f} | {mrr_column:.4f} | "
-            "{p50_planner_latency_ms}/{p90_planner_latency_ms}/{p95_planner_latency_ms}/{max_planner_latency_ms} | "
-            "{p95_query_embedding_ms} | "
-            "{p50_retrieval_only_ms}/{p90_retrieval_only_ms}/{p95_retrieval_only_ms}/{max_retrieval_only_ms} | "
-            "{p50_e2e_ms}/{p90_e2e_ms}/{p95_e2e_ms}/{max_e2e_ms} | {vector_available_rate} |".format(**row)
+            "{avg_planner_expression_count} | {avg_question_embedding_call_count} | "
+            "{avg_expression_embedding_call_count} | {avg_db_search_call_count} | "
+            "{p95_measured_provider_ms} | {p95_modeled_online_ms} | {p95_query_embedding_ms} | "
+            "{p95_keyword_recall_ms} | {p95_vector_recall_ms} | {vector_available_rate} |".format(**row)
         )
+    if diagnostic_rows:
+        lines.extend(
+            [
+                "",
+                "## Diagnostic / Stress Variants",
+                "",
+                "These rows use `multi_keyword_vector_expression_each`, which embeds every planner expression. They are diagnostic/stress only and are excluded from the main recommendation table.",
+                "",
+                "| variant | retriever | query_mode | query_policy | keyword corpus | vector corpus | cases | table@5 | column@10 | expr-embed calls avg | measured provider p95 | modeled online p95 | query embed p95 |",
+                "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for row in diagnostic_rows:
+            lines.append(
+                "| {schema_variant} | {retriever} | {query_mode} | {query_policy} | {keyword_corpus_profile} | "
+                "{vector_corpus_profile} | {total_cases} | {table_recall_at_5:.2%} | "
+                "{column_recall_at_10:.2%} | {avg_expression_embedding_call_count} | "
+                "{p95_measured_provider_ms} | {p95_modeled_online_ms} | {p95_query_embedding_ms} |".format(**row)
+            )
     lines.extend(
         [
             "",
             "## Notes",
             "",
-            "- `multi` mode uses pre-generated search expressions; planner warmup is reported in `prep_check.json` and excluded from per-case planner latency.",
+            "- Main hybrid policy uses planner expressions for keyword search and embeds the original question once for vector search.",
+            "- `multi_keyword_vector_expression_each` embeds every planner expression and is diagnostic/stress only.",
+            "- Planner warmup is reported in `prep_check.json` and excluded from per-case planner latency.",
             "- Corpus embedding build is reported in `prep_check.json`, not counted as per-query e2e latency.",
-            "- `query embedding` is online query-vectorization time and remains visible separately from retrieval and planner time.",
+            "- `vector_recall_ms` excludes `query_embedding_ms`; query embedding is reported separately.",
+            "- Runs below 100 cases are smoke/directional, not final decision support.",
         ]
     )
     return "\n".join(lines) + "\n"

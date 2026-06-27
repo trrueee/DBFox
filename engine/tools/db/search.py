@@ -137,6 +137,7 @@ def _hybrid_search_response(
 ) -> dict[str, Any]:
     keyword_limit = _env_int("DBFOX_RETRIEVAL_KEYWORD_TOP_K", max(limit, 20))
     vector_limit = _env_int("DBFOX_RETRIEVAL_VECTOR_TOP_K", max(limit, 20))
+    vector_datasource_id = os.getenv("DBFOX_SCHEMA_VECTOR_DATASOURCE_ID", "").strip() or datasource_id
     keyword_started = time.perf_counter()
     keyword_results, _engine = _keyword_search(db, datasource_id, tokens, keyword_limit)
     _annotate_keyword_results(keyword_results)
@@ -144,13 +145,15 @@ def _hybrid_search_response(
 
     vector_started = time.perf_counter()
     try:
-        vector_results, build, metrics = vector_search_results_with_metrics(db, datasource_id, query, vector_limit)
+        vector_results, build, metrics = vector_search_results_with_metrics(db, vector_datasource_id, query, vector_limit)
     except Exception:
         logger.debug("Hybrid vector leg unavailable", exc_info=True)
         response = _search_response("hybrid_vector_unavailable", query, tokens, limit, keyword_results[:limit])
         response.update(
             {
                 "vector_available": False,
+                "keyword_datasource_id": datasource_id,
+                "vector_datasource_id": vector_datasource_id,
                 "embedding_build_time_ms": 0.0,
                 "keyword_recall_ms": keyword_recall_ms,
                 "error": "Vector retrieval unavailable. Check embedding configuration and provider connectivity.",
@@ -167,6 +170,8 @@ def _hybrid_search_response(
     response.update(
         {
             "vector_available": True,
+            "keyword_datasource_id": datasource_id,
+            "vector_datasource_id": vector_datasource_id,
             "embedding_build_time_ms": build.embedding_build_time_ms,
             "embedding_built_count": build.built_count,
             "embedding_model": build.model,

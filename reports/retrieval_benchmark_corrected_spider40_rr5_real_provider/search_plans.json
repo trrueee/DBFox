@@ -1,0 +1,482 @@
+[
+  {
+    "case_id": "spider_concert_singer_001",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "planner_latency_ms": 1172.417,
+    "search_expressions": [
+      "singer count",
+      "singers",
+      "singer",
+      "num_singers"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_002",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "planner_latency_ms": 1015.739,
+    "search_expressions": [
+      "pets weight",
+      "pet weight",
+      "heavier than 10",
+      "number of pets"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_003",
+    "db_id": "car_1",
+    "question": "How many continents are there?",
+    "planner_latency_ms": 691.343,
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_004",
+    "db_id": "flight_2",
+    "question": "Which country does Airline \"JetBlue Airways\" belong to?",
+    "planner_latency_ms": 936.803,
+    "search_expressions": [
+      "JetBlue Airways country",
+      "airline country",
+      "airline origin",
+      "airline nationality"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_005",
+    "db_id": "employee_hire_evaluation",
+    "question": "How many employees are there?",
+    "planner_latency_ms": 744.683,
+    "search_expressions": [
+      "employees",
+      "count employees",
+      "employee count",
+      "emp"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_006",
+    "db_id": "concert_singer",
+    "question": "What is the total number of singers?",
+    "planner_latency_ms": 768.188,
+    "search_expressions": [
+      "singer count",
+      "singers",
+      "total singers",
+      "singer"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_007",
+    "db_id": "pets_1",
+    "question": "How many pets have a greater weight than 10?",
+    "planner_latency_ms": 945.083,
+    "search_expressions": [
+      "weight",
+      "pets",
+      "greater than 10",
+      "count"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_008",
+    "db_id": "car_1",
+    "question": "What is the number of continents?",
+    "planner_latency_ms": 761.007,
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_009",
+    "db_id": "flight_2",
+    "question": "What country is Jetblue Airways affiliated with?",
+    "planner_latency_ms": 833.915,
+    "search_expressions": [
+      "Jetblue Airways country",
+      "airline affiliation country",
+      "airline country",
+      "Jetblue nationality"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_010",
+    "db_id": "employee_hire_evaluation",
+    "question": "Count the number of employees",
+    "planner_latency_ms": 692.636,
+    "search_expressions": [
+      "employee",
+      "count employees",
+      "employees",
+      "emp"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_011",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "planner_latency_ms": 1123.55,
+    "search_expressions": [
+      "singer name country age",
+      "singers table",
+      "age descending",
+      "oldest youngest"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_012",
+    "db_id": "pets_1",
+    "question": "Find the weight of the youngest dog.",
+    "planner_latency_ms": 636.79,
+    "search_expressions": [
+      "weight",
+      "youngest dog",
+      "age",
+      "dog"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_013",
+    "db_id": "car_1",
+    "question": "How many countries does each continent have? List the continent id, continent name and the number of countries.",
+    "planner_latency_ms": 996.495,
+    "search_expressions": [
+      "continent country count",
+      "continent_id continent_name countries",
+      "continent continent_name num_countries",
+      "continent country relationship"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_014",
+    "db_id": "flight_2",
+    "question": "What is the abbreviation of Airline \"JetBlue Airways\"?",
+    "planner_latency_ms": 798.36,
+    "search_expressions": [
+      "JetBlue Airways abbreviation",
+      "airline abbreviation",
+      "airline code",
+      "airline acronym"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_015",
+    "db_id": "employee_hire_evaluation",
+    "question": "Sort employee names by their age in ascending order.",
+    "planner_latency_ms": 736.6,
+    "search_expressions": [
+      "employee name age",
+      "employees age ascending",
+      "name age sort",
+      "emp_name employee_age"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_016",
+    "db_id": "concert_singer",
+    "question": "What are the names, countries, and ages for every singer in descending order of age?",
+    "planner_latency_ms": 970.983,
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_017",
+    "db_id": "pets_1",
+    "question": "How much does the youngest dog weigh?",
+    "planner_latency_ms": 801.592,
+    "search_expressions": [
+      "youngest dog weight",
+      "dog age weight",
+      "pets age weight",
+      "animal youngest weight"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_018",
+    "db_id": "car_1",
+    "question": "For each continent, list its id, name, and how many countries it has?",
+    "planner_latency_ms": 892.55,
+    "search_expressions": [
+      "continent id name country count",
+      "continent country count",
+      "continent countries",
+      "continent_id continent_name num_countries"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_019",
+    "db_id": "flight_2",
+    "question": "Which abbreviation corresponds to Jetblue Airways?",
+    "planner_latency_ms": 1035.606,
+    "search_expressions": [
+      "Jetblue Airways abbreviation",
+      "airline abbreviation",
+      "airline_code",
+      "airline_name"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_020",
+    "db_id": "employee_hire_evaluation",
+    "question": "List the names of employees and sort in ascending order of age.",
+    "planner_latency_ms": 841.739,
+    "search_expressions": [
+      "employee name age",
+      "employees names ascending age",
+      "employee table name age column",
+      "emp_name emp_age"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_021",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age of all singers from France?",
+    "planner_latency_ms": 1207.038,
+    "search_expressions": [
+      "singer age France",
+      "singers average min max age",
+      "concert_singer singers table",
+      "country = 'France'"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_022",
+    "db_id": "pets_1",
+    "question": "Find the maximum weight for each type of pet. List the maximum weight and pet type.",
+    "planner_latency_ms": 750.437,
+    "search_expressions": [
+      "max weight",
+      "pet type",
+      "weight",
+      "pet"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_023",
+    "db_id": "car_1",
+    "question": "How many countries are listed?",
+    "planner_latency_ms": 808.884,
+    "search_expressions": [
+      "countries",
+      "country count",
+      "num_countries",
+      "country_list"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_024",
+    "db_id": "flight_2",
+    "question": "List all airline names and their abbreviations in \"USA\".",
+    "planner_latency_ms": 994.351,
+    "search_expressions": [
+      "airline name abbreviation USA",
+      "airline abbreviation country",
+      "airlines table columns",
+      "airline_name airline_code country_code"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_025",
+    "db_id": "employee_hire_evaluation",
+    "question": "What is the number of employees from each city?",
+    "planner_latency_ms": 840.289,
+    "search_expressions": [
+      "employees city count",
+      "employee city",
+      "number of employees by city",
+      "city employee count"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_026",
+    "db_id": "concert_singer",
+    "question": "What is the average, minimum, and maximum age for all French singers?",
+    "planner_latency_ms": 977.959,
+    "search_expressions": [
+      "French singers age",
+      "singer nationality age",
+      "avg min max age",
+      "singer country age"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_027",
+    "db_id": "pets_1",
+    "question": "List the maximum weight and type for each type of pet.",
+    "planner_latency_ms": 849.876,
+    "search_expressions": [
+      "max weight type pet",
+      "pet type weight",
+      "pets maximum weight",
+      "pet_weight pet_type"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_028",
+    "db_id": "car_1",
+    "question": "How many countries exist?",
+    "planner_latency_ms": 710.734,
+    "search_expressions": [
+      "countries",
+      "country count",
+      "number of countries",
+      "country"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_029",
+    "db_id": "flight_2",
+    "question": "What are the airline names and abbreviations for airlines in the USA?",
+    "planner_latency_ms": 1000.085,
+    "search_expressions": [
+      "airline name abbreviation USA",
+      "airlines country USA",
+      "airline airline_name code",
+      "airline usa"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_030",
+    "db_id": "employee_hire_evaluation",
+    "question": "Count the number of employees for each city.",
+    "planner_latency_ms": 1073.791,
+    "search_expressions": [
+      "employees city",
+      "employee count by city",
+      "city employee count",
+      "employees location"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_031",
+    "db_id": "concert_singer",
+    "question": "Show the name and the release year of the song by the youngest singer.",
+    "planner_latency_ms": 771.003,
+    "search_expressions": [
+      "song name release year",
+      "youngest singer",
+      "singer age",
+      "song singer"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_032",
+    "db_id": "pets_1",
+    "question": "Find number of pets owned by students who are older than 20.",
+    "planner_latency_ms": 789.508,
+    "search_expressions": [
+      "pets",
+      "students",
+      "age",
+      "owned"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_033",
+    "db_id": "car_1",
+    "question": "How many models does each car maker produce? List maker full name, id and the number.",
+    "planner_latency_ms": 952.241,
+    "search_expressions": [
+      "car maker models count",
+      "maker full name id",
+      "models per maker",
+      "car_makers makers model_count"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_034",
+    "db_id": "flight_2",
+    "question": "List the airport code and name in the city of Anthony.",
+    "planner_latency_ms": 877.777,
+    "search_expressions": [
+      "airport code name city",
+      "airport city = Anthony",
+      "airport_code airport_name city",
+      "Anthony airport"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_035",
+    "db_id": "employee_hire_evaluation",
+    "question": "Which cities do more than one employee under age 30 come from?",
+    "planner_latency_ms": 1031.666,
+    "search_expressions": [
+      "cities employees age",
+      "employee city age < 30",
+      "hometown count group by",
+      "city employee count under 30"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_036",
+    "db_id": "concert_singer",
+    "question": "What are the names and release years for all the songs of the youngest singer?",
+    "planner_latency_ms": 871.368,
+    "search_expressions": [
+      "youngest singer",
+      "song name release year",
+      "singer age song",
+      "songs singers"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_037",
+    "db_id": "pets_1",
+    "question": "How many pets are owned by students that have an age greater than 20?",
+    "planner_latency_ms": 735.738,
+    "search_expressions": [
+      "pets",
+      "students",
+      "age",
+      "owned"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_038",
+    "db_id": "car_1",
+    "question": "What is the full name of each car maker, along with its id and how many models it produces?",
+    "planner_latency_ms": 1096.504,
+    "search_expressions": [
+      "car maker full name id models",
+      "maker name id model count",
+      "manufacturer name id model_count",
+      "car_makers name maker_id num_models"
+    ]
+  },
+  {
+    "case_id": "spider_flight_2_039",
+    "db_id": "flight_2",
+    "question": "Give the airport code and airport name corresonding to the city Anthony.",
+    "planner_latency_ms": 813.102,
+    "search_expressions": [
+      "airport code",
+      "airport name",
+      "city",
+      "Anthony"
+    ]
+  },
+  {
+    "case_id": "spider_employee_hire_evaluation_040",
+    "db_id": "employee_hire_evaluation",
+    "question": "Find the cities that have more than one employee under age 30.",
+    "planner_latency_ms": 889.061,
+    "search_expressions": [
+      "cities",
+      "employee age < 30",
+      "count employees per city",
+      "city employee count"
+    ]
+  }
+]

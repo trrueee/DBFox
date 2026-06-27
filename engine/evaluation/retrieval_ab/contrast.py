@@ -6,19 +6,20 @@ from typing import Any, Iterable
 
 
 def summarize_contrast_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[
             (
                 str(row.get("schema_variant") or ""),
                 str(row.get("retriever") or ""),
                 str(row.get("query_mode") or ""),
+                str(row.get("query_policy") or ""),
             )
         ].append(row)
 
     summaries: list[dict[str, Any]] = []
-    for schema_variant, retriever, query_mode in sorted(grouped):
-        items = grouped[(schema_variant, retriever, query_mode)]
+    for schema_variant, retriever, query_mode, query_policy in sorted(grouped):
+        items = grouped[(schema_variant, retriever, query_mode, query_policy)]
         total = len(items)
         vector_values = [
             bool(row.get("vector_available"))
@@ -34,6 +35,10 @@ def summarize_contrast_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, An
             "schema_variant": schema_variant,
             "retriever": retriever,
             "query_mode": query_mode,
+            "query_policy": query_policy,
+            "keyword_corpus_profile": _common_value(items, "keyword_corpus_profile"),
+            "vector_corpus_profile": _common_value(items, "vector_corpus_profile"),
+            "diagnostic": any(bool(row.get("diagnostic")) for row in items),
             "total_cases": total,
             "table_recall_at_5": _rate(row.get("table_recall_at_5") for row in items),
             "column_recall_at_10": _rate(row.get("column_recall_at_10") for row in items),
@@ -48,10 +53,25 @@ def summarize_contrast_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, An
         }
         summary.update(_latency_distribution("planner_latency_ms", items))
         summary.update(_latency_distribution("query_embedding_ms", items))
+        summary.update(_latency_distribution("question_embedding_ms", items))
+        summary.update(_latency_distribution("expression_embedding_ms", items))
+        summary.update(_latency_distribution("keyword_recall_ms", items))
+        summary.update(_latency_distribution("vector_recall_ms", items))
         summary.update(_latency_distribution("retrieval_only_ms", items))
         summary.update(_latency_distribution("merge_ms", items))
+        summary.update(_latency_distribution("multi_fuse_ms", items))
         summary.update(_latency_distribution("rerank_ms", items))
         summary.update(_latency_distribution("e2e_ms", items))
+        summary.update(_latency_distribution("modeled_online_ms", items))
+        summary.update(_latency_distribution("measured_provider_ms", items))
+        for field in (
+            "planner_expression_count",
+            "question_embedding_call_count",
+            "expression_embedding_call_count",
+            "embedding_call_count",
+            "db_search_call_count",
+        ):
+            summary[f"avg_{field}"] = _avg_float(row.get(field) for row in items)
         summaries.append(summary)
     return summaries
 
@@ -104,6 +124,13 @@ def _latency_distribution(field: str, rows: list[dict[str, Any]]) -> dict[str, f
         f"p95_{label}_ms": _percentile_float(values, percentile=95),
         f"max_{label}_ms": _max_float(values),
     }
+
+
+def _common_value(rows: list[dict[str, Any]], field: str) -> str:
+    values = {str(row.get(field) or "") for row in rows}
+    if len(values) == 1:
+        return next(iter(values))
+    return "mixed"
 
 
 def _float_value(value: Any) -> float:
