@@ -18,6 +18,32 @@ The issue is narrower: final answer text currently arrives only at completion ti
 - `synthesize_agent_answer()` currently uses `model.invoke(...)`, so it returns the final model response at once rather than streaming chunks.
 - The frontend conversation reducer currently replaces assistant message content when it sees a completed answer; it does not have append semantics for answer deltas.
 
+## True Streaming Criterion
+
+Real answer streaming means the final-answer model call must expose chunks while the model is still generating text.
+
+The clearest implementation is to use the model streaming API inside answer synthesis:
+
+```text
+for chunk in model.stream(messages):
+    emit agent.answer.delta(content=chunk_text)
+    buffer chunk_text
+```
+
+Then DBFox builds the final `AgentAnswer` from the buffered text and emits `agent.answer.completed`.
+
+By contrast, this is not real model streaming:
+
+```text
+response = model.invoke(messages)
+for chunk in split(response.content):
+    emit agent.answer.delta(content=chunk)
+```
+
+That can create a typing effect and test the frontend append path, but it does not reduce time-to-first-answer-token because the model has already completed before any delta is emitted.
+
+LangGraph `stream_mode=["updates", "messages"]` may also be a real streaming route, but only if its `messages` stream actually captures the LLM call that happens inside `answer.synthesize` and lets DBFox reliably identify those chunks as final-answer chunks. If that is not reliable, DBFox should implement explicit `model.stream(...)` in answer synthesis.
+
 ## Design Decision
 
 Final answer text belongs to the `answer` semantic channel.
@@ -78,7 +104,22 @@ Cons:
 
 Use only as a temporary UI/protocol test.
 
-### Option B: Real answer streaming in answer synthesis
+### Option B: LangGraph messages streaming
+
+Run LangGraph with `stream_mode=["updates", "messages"]` and inspect message metadata.
+
+Expected mapping:
+
+```text
+updates  -> progress / context / artifact / step events
+messages -> answer.delta only when the chunk belongs to answer synthesis
+```
+
+This option is only valid if message chunks from the final answer synthesis LLM call are actually visible to LangGraph streaming and can be filtered reliably.
+
+Do not map all `messages` chunks to `agent.answer.delta`. ReAct planner/tool-selection model text and answer synthesis text are different product concepts.
+
+### Option C: Explicit answer synthesis streaming
 
 Change final answer generation so the LLM streams chunks while building the final `AgentAnswer`.
 
@@ -93,11 +134,11 @@ synthesize_agent_answer_stream(...)
   emit agent.answer.completed(answer_payload=agent_answer)
 ```
 
-This is the correct long-term shape.
+This is the most deterministic real streaming path if Option B cannot reliably capture the tool-internal LLM call.
 
 The main design choice is how answer synthesis gets access to the event emitter.
 
-#### B1. Preferred clean shape: answer synthesis node
+#### C1. Preferred clean shape: answer synthesis node
 
 Move final answer synthesis into an explicit graph node/path that can emit runtime events directly through the service-level mapper.
 
@@ -111,7 +152,7 @@ Cons:
 
 - Requires a slightly larger graph refactor.
 
-#### B2. Smaller incremental shape: tool callback
+#### C2. Smaller incremental shape: tool callback
 
 Keep `answer.synthesize` as a tool, but extend `ToolRunContext` with an optional answer-delta callback.
 
@@ -224,7 +265,7 @@ Frontend tests:
 
 ## Next Discussion Points
 
-1. Choose implementation path: answer synthesis node vs. tool callback.
+1. Choose implementation path: LangGraph messages stream vs. explicit `model.stream(...)` in answer synthesis.
 2. Decide whether to first land protocol/frontend append support with fake streaming.
 3. Decide delta persistence policy implementation detail.
 4. Audit current `answer.synthesize` and `synthesize_agent_answer()` tests before changing them to stream.
