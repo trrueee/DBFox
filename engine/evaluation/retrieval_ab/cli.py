@@ -258,13 +258,24 @@ def fuse_multi_query_search_outputs(
     errors: list[str] = []
     retrieval_latency_ms = 0.0
     embedding_build_time_ms = 0.0
+    keyword_recall_ms = 0.0
+    query_embedding_ms = 0.0
+    vector_recall_ms = 0.0
+    child_merge_ms = 0.0
+    retrieval_only_ms = 0.0
 
+    merge_started = time.perf_counter()
     for query_index, item in enumerate(search_outputs, start=1):
         output = item.get("output")
         if not isinstance(output, dict):
             continue
         retrieval_latency_ms += _float_value(output.get("retrieval_latency_ms"))
         embedding_build_time_ms += _float_value(output.get("embedding_build_time_ms"))
+        keyword_recall_ms += _float_value(output.get("keyword_recall_ms"))
+        query_embedding_ms += _float_value(output.get("query_embedding_ms"))
+        vector_recall_ms += _float_value(output.get("vector_recall_ms"))
+        child_merge_ms += _float_value(output.get("merge_ms"))
+        retrieval_only_ms += _float_value(output.get("retrieval_only_ms") or output.get("retrieval_latency_ms"))
         vector_available = output.get("vector_available")
         if isinstance(vector_available, bool):
             vector_values.append(vector_available)
@@ -312,6 +323,7 @@ def fuse_multi_query_search_outputs(
     vector_available_result = None
     if vector_values:
         vector_available_result = all(vector_values)
+    merge_ms = child_merge_ms + ((time.perf_counter() - merge_started) * 1000)
     response: dict[str, Any] = {
         "engine": "multi_query_fused",
         "original_query": original_query,
@@ -322,6 +334,12 @@ def fuse_multi_query_search_outputs(
         "total_matches": len(results[:limit]),
         "retrieval_latency_ms": round(retrieval_latency_ms, 3),
         "embedding_build_time_ms": round(embedding_build_time_ms, 3),
+        "keyword_recall_ms": round(keyword_recall_ms, 3),
+        "query_embedding_ms": round(query_embedding_ms, 3),
+        "vector_recall_ms": round(vector_recall_ms, 3),
+        "merge_ms": round(merge_ms, 3),
+        "rerank_ms": 0.0,
+        "retrieval_only_ms": round(retrieval_only_ms, 3),
         "vector_available": vector_available_result,
     }
     if errors and len(errors) == len(search_outputs):

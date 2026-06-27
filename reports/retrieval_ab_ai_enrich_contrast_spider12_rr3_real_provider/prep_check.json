@@ -1,0 +1,171 @@
+{
+  "cases_path": "D:\\DBFoxData\\spider\\spider_data\\dev_stratified_156.json",
+  "case_count": 12,
+  "sample_strategy": "round_robin_db",
+  "sample_db_limit": 3,
+  "selected_db_counts": {
+    "concert_singer": 4,
+    "pets_1": 4,
+    "car_1": 4
+  },
+  "schema_variants": [
+    "base",
+    "ai_enriched"
+  ],
+  "retrievers": [
+    "keyword",
+    "vector",
+    "hybrid"
+  ],
+  "query_modes": [
+    "single",
+    "multi"
+  ],
+  "planner_model": "qwen-plus",
+  "ai_enrich_model": "qwen-plus",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_239feefc",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21
+    },
+    {
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_9fff675d",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14
+    },
+    {
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_b9b36fff",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23
+    }
+  ],
+  "corpus_stats": [
+    {
+      "schema_variant": "base",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_239feefc",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2047.167,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "base",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_9fff675d",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1385.05,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "base",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_b9b36fff",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2127.721,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_239feefc",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 25,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 25,
+      "embedding_build_time_ms": 2334.526,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_9fff675d",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 17,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 17,
+      "embedding_build_time_ms": 1379.625,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_b9b36fff",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 29,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 29,
+      "embedding_build_time_ms": 2370.953,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "ai_enrich_results": [
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_239feefc",
+      "ai_enrich_latency_ms": 38063.572
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_9fff675d",
+      "ai_enrich_latency_ms": 27575.631
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 6,
+      "reason": "",
+      "errors": [],
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_b9b36fff",
+      "ai_enrich_latency_ms": 55983.41
+    }
+  ]
+}

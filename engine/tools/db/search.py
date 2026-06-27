@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.ai_index import tokenize_query
-from engine.tools.db.embedding import vector_search_results
+from engine.tools.db.embedding import vector_search_results_with_metrics
 
 logger = logging.getLogger("dbfox.tools.db.search")
 
@@ -60,9 +60,13 @@ def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> d
     if mode == "hybrid":
         return _hybrid_search_response(db, datasource_id, query, tokens, limit, started)
 
+    keyword_started = time.perf_counter()
     results, engine = _keyword_search(db, datasource_id, tokens, limit)
+    keyword_recall_ms = round((time.perf_counter() - keyword_started) * 1000, 3)
     _annotate_keyword_results(results)
-    return _with_latency(_search_response(engine, query, tokens, limit, results), started)
+    response = _search_response(engine, query, tokens, limit, results)
+    response.update({"keyword_recall_ms": keyword_recall_ms})
+    return _with_latency(response, started)
 
 
 def _keyword_search(
@@ -91,8 +95,9 @@ def _vector_search_response(
     limit: int,
     started: float,
 ) -> dict[str, Any]:
+    vector_started = time.perf_counter()
     try:
-        results, build = vector_search_results(db, datasource_id, query, limit)
+        results, build, metrics = vector_search_results_with_metrics(db, datasource_id, query, limit)
     except Exception:
         logger.debug("Vector search unavailable", exc_info=True)
         response = _search_response("vector_unavailable", query, tokens, limit, [])
@@ -105,6 +110,8 @@ def _vector_search_response(
         )
         return _with_latency(response, started)
 
+    vector_total_ms = round((time.perf_counter() - vector_started) * 1000, 3)
+    query_embedding_ms = float(metrics.get("query_embedding_ms") or 0.0)
     response = _search_response("vector", query, tokens, limit, results)
     response.update(
         {
@@ -113,6 +120,8 @@ def _vector_search_response(
             "embedding_built_count": build.built_count,
             "embedding_model": build.model,
             "embedding_dimension": build.dimension,
+            "query_embedding_ms": query_embedding_ms,
+            "vector_recall_ms": round(max(0.0, vector_total_ms - query_embedding_ms), 3),
         }
     )
     return _with_latency(response, started)
@@ -128,11 +137,14 @@ def _hybrid_search_response(
 ) -> dict[str, Any]:
     keyword_limit = _env_int("DBFOX_RETRIEVAL_KEYWORD_TOP_K", max(limit, 20))
     vector_limit = _env_int("DBFOX_RETRIEVAL_VECTOR_TOP_K", max(limit, 20))
+    keyword_started = time.perf_counter()
     keyword_results, _engine = _keyword_search(db, datasource_id, tokens, keyword_limit)
     _annotate_keyword_results(keyword_results)
+    keyword_recall_ms = round((time.perf_counter() - keyword_started) * 1000, 3)
 
+    vector_started = time.perf_counter()
     try:
-        vector_results, build = vector_search_results(db, datasource_id, query, vector_limit)
+        vector_results, build, metrics = vector_search_results_with_metrics(db, datasource_id, query, vector_limit)
     except Exception:
         logger.debug("Hybrid vector leg unavailable", exc_info=True)
         response = _search_response("hybrid_vector_unavailable", query, tokens, limit, keyword_results[:limit])
@@ -140,12 +152,17 @@ def _hybrid_search_response(
             {
                 "vector_available": False,
                 "embedding_build_time_ms": 0.0,
+                "keyword_recall_ms": keyword_recall_ms,
                 "error": "Vector retrieval unavailable. Check embedding configuration and provider connectivity.",
             }
         )
         return _with_latency(response, started)
 
+    vector_total_ms = round((time.perf_counter() - vector_started) * 1000, 3)
+    query_embedding_ms = float(metrics.get("query_embedding_ms") or 0.0)
+    merge_started = time.perf_counter()
     fused = _fuse_rrf(keyword_results, vector_results, limit)
+    merge_ms = round((time.perf_counter() - merge_started) * 1000, 3)
     response = _search_response("hybrid", query, tokens, limit, fused)
     response.update(
         {
@@ -154,6 +171,10 @@ def _hybrid_search_response(
             "embedding_built_count": build.built_count,
             "embedding_model": build.model,
             "embedding_dimension": build.dimension,
+            "keyword_recall_ms": keyword_recall_ms,
+            "query_embedding_ms": query_embedding_ms,
+            "vector_recall_ms": round(max(0.0, vector_total_ms - query_embedding_ms), 3),
+            "merge_ms": merge_ms,
         }
     )
     return _with_latency(response, started)
@@ -196,6 +217,12 @@ def _with_latency(response: dict[str, Any], started: float) -> dict[str, Any]:
     response["retrieval_latency_ms"] = round((time.perf_counter() - started) * 1000, 3)
     response.setdefault("embedding_build_time_ms", 0.0)
     response.setdefault("vector_available", None)
+    response.setdefault("keyword_recall_ms", 0.0)
+    response.setdefault("query_embedding_ms", 0.0)
+    response.setdefault("vector_recall_ms", 0.0)
+    response.setdefault("merge_ms", 0.0)
+    response.setdefault("rerank_ms", 0.0)
+    response.setdefault("retrieval_only_ms", response["retrieval_latency_ms"])
     return response
 
 

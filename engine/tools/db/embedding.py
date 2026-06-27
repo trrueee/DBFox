@@ -205,6 +205,28 @@ def vector_search_results(
     dimension: int | None = None,
     batch_size: int | None = None,
 ) -> tuple[list[dict[str, Any]], EmbeddingBuildResult]:
+    results, build, _metrics = vector_search_results_with_metrics(
+        db,
+        datasource_id,
+        query,
+        limit,
+        model=model,
+        dimension=dimension,
+        batch_size=batch_size,
+    )
+    return results, build
+
+
+def vector_search_results_with_metrics(
+    db: Session,
+    datasource_id: str,
+    query: str,
+    limit: int,
+    *,
+    model: str | None = None,
+    dimension: int | None = None,
+    batch_size: int | None = None,
+) -> tuple[list[dict[str, Any]], EmbeddingBuildResult, dict[str, float]]:
     config = resolve_embedding_config(model=model, dimension=dimension, batch_size=batch_size)
     build = ensure_schema_embeddings(
         db,
@@ -213,6 +235,7 @@ def vector_search_results(
         dimension=config.dimension,
         batch_size=config.batch_size,
     )
+    query_embedding_started = time.perf_counter()
     query_vector = embed_texts(
         [query],
         model=config.model,
@@ -220,7 +243,9 @@ def vector_search_results(
         api_key=config.api_key,
         base_url=config.base_url,
     )[0]
+    query_embedding_ms = round((time.perf_counter() - query_embedding_started) * 1000, 3)
 
+    scoring_started = time.perf_counter()
     rows = (
         db.query(SchemaSearchDoc, SchemaSearchEmbedding)
         .join(
@@ -249,7 +274,11 @@ def vector_search_results(
     scored.sort(key=lambda item: (-float(item["score"]), item["type"], item["name"]))
     for index, item in enumerate(scored[:limit], start=1):
         item["vector_rank"] = index
-    return scored[:limit], build
+    metrics = {
+        "query_embedding_ms": query_embedding_ms,
+        "vector_scoring_ms": round((time.perf_counter() - scoring_started) * 1000, 3),
+    }
+    return scored[:limit], build, metrics
 
 
 def search_text_hash(text: str) -> str:

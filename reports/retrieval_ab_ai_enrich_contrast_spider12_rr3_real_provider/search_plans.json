@@ -1,0 +1,145 @@
+[
+  {
+    "case_id": "spider_concert_singer_001",
+    "db_id": "concert_singer",
+    "question": "How many singers do we have?",
+    "planner_latency_ms": 21832.129,
+    "search_expressions": [
+      "singer",
+      "singers count",
+      "number of singers",
+      "singer table"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_002",
+    "db_id": "pets_1",
+    "question": "Find the number of pets whose weight is heavier than 10.",
+    "planner_latency_ms": 911.922,
+    "search_expressions": [
+      "pets weight",
+      "pet weight > 10",
+      "number of pets",
+      "heavier than 10"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_003",
+    "db_id": "car_1",
+    "question": "How many continents are there?",
+    "planner_latency_ms": 881.501,
+    "search_expressions": [
+      "continents",
+      "continent count",
+      "number of continents",
+      "continent"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_004",
+    "db_id": "concert_singer",
+    "question": "What is the total number of singers?",
+    "planner_latency_ms": 738.515,
+    "search_expressions": [
+      "singer count",
+      "total singers",
+      "singer",
+      "num_singers"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_005",
+    "db_id": "pets_1",
+    "question": "How many pets have a greater weight than 10?",
+    "planner_latency_ms": 830.329,
+    "search_expressions": [
+      "pets weight",
+      "pet weight > 10",
+      "animal weight",
+      "pets count weight"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_006",
+    "db_id": "car_1",
+    "question": "What is the number of continents?",
+    "planner_latency_ms": 761.065,
+    "search_expressions": [
+      "continent",
+      "number of continents",
+      "continents count",
+      "continent_id"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_007",
+    "db_id": "concert_singer",
+    "question": "Show name, country, age for all singers ordered by age from the oldest to the youngest.",
+    "planner_latency_ms": 867.874,
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_008",
+    "db_id": "pets_1",
+    "question": "Find the weight of the youngest dog.",
+    "planner_latency_ms": 743.602,
+    "search_expressions": [
+      "weight",
+      "youngest dog",
+      "age",
+      "dog"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_009",
+    "db_id": "car_1",
+    "question": "How many countries does each continent have? List the continent id, continent name and the number of countries.",
+    "planner_latency_ms": 816.39,
+    "search_expressions": [
+      "continent country count",
+      "continent_id continent_name countries",
+      "continent country relationship"
+    ]
+  },
+  {
+    "case_id": "spider_concert_singer_010",
+    "db_id": "concert_singer",
+    "question": "What are the names, countries, and ages for every singer in descending order of age?",
+    "planner_latency_ms": 834.344,
+    "search_expressions": [
+      "singer name country age",
+      "singers table columns",
+      "age descending order",
+      "singer demographics"
+    ]
+  },
+  {
+    "case_id": "spider_pets_1_011",
+    "db_id": "pets_1",
+    "question": "How much does the youngest dog weigh?",
+    "planner_latency_ms": 969.662,
+    "search_expressions": [
+      "youngest dog weight",
+      "dog age weight",
+      "pets age weight",
+      "animal youngest weight"
+    ]
+  },
+  {
+    "case_id": "spider_car_1_012",
+    "db_id": "car_1",
+    "question": "For each continent, list its id, name, and how many countries it has?",
+    "planner_latency_ms": 839.056,
+    "search_expressions": [
+      "continent id name country count",
+      "continent countries",
+      "continent_id continent_name country_count",
+      "continents countries"
+    ]
+  }
+]

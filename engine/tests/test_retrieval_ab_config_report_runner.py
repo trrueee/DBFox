@@ -331,6 +331,11 @@ def test_run_ai_assisted_retrieval_case_uses_planned_expressions_and_fused_resul
                 "original_query": query,
                 "retrieval_latency_ms": 5.0,
                 "embedding_build_time_ms": 1.0,
+                "keyword_recall_ms": 0.5,
+                "query_embedding_ms": 2.0,
+                "vector_recall_ms": 2.5,
+                "merge_ms": 0.0,
+                "retrieval_only_ms": 5.0,
                 "vector_available": True,
                 "results": [
                     {"type": "table", "table_name": "teachers", "score": 0.9},
@@ -342,6 +347,11 @@ def test_run_ai_assisted_retrieval_case_uses_planned_expressions_and_fused_resul
             "original_query": query,
             "retrieval_latency_ms": 7.0,
             "embedding_build_time_ms": 0.0,
+            "keyword_recall_ms": 0.7,
+            "query_embedding_ms": 3.0,
+            "vector_recall_ms": 3.3,
+            "merge_ms": 0.0,
+            "retrieval_only_ms": 7.0,
             "vector_available": True,
             "results": [
                 {"type": "column", "table_name": "students", "column_name": "name", "score": 0.95},
@@ -369,6 +379,11 @@ def test_run_ai_assisted_retrieval_case_uses_planned_expressions_and_fused_resul
     fused = artifacts.events[-1]["step"]["output"]
     assert fused["search_expressions"] == ["student entity", "student names column"]
     assert fused["db_search_call_count"] == 2
+    assert fused["query_embedding_ms"] == 5.0
+    assert fused["keyword_recall_ms"] == 1.2
+    assert fused["vector_recall_ms"] == 5.8
+    assert fused["retrieval_only_ms"] == 12.0
+    assert fused["merge_ms"] >= 0
     assert [row["table_name"] for row in fused["results"][:2]] == ["students", "students"]
     assert fused["results"][0]["matched_by"] == ["multi_query", "vector"]
 

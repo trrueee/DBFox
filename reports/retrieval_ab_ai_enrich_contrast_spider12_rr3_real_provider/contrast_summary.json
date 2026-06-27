@@ -1,0 +1,251 @@
+{
+  "summaries": [
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "hybrid",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 0.8333,
+      "mrr_table": 1.0,
+      "mrr_column": 0.3472,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 1790.822,
+      "p95_retrieval_only_ms": 1844.068,
+      "p95_merge_ms": 0.968,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 23581.727,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 10,
+        "retrieval_miss": 2
+      }
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "hybrid",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 0.9167,
+      "column_recall_at_10": 0.9167,
+      "mrr_table": 0.9306,
+      "mrr_column": 0.375,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 471.13,
+      "p95_retrieval_only_ms": 491.225,
+      "p95_merge_ms": 0.308,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 491.225,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 10,
+        "retrieval_miss": 2
+      }
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "keyword",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "mrr_table": 1.0,
+      "mrr_column": 0.2639,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 0.0,
+      "p95_retrieval_only_ms": 19.021,
+      "p95_merge_ms": 0.499,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 21845.331,
+      "vector_available_rate": null,
+      "failure_class_counts": {
+        "none": 12
+      }
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "keyword",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 0.9167,
+      "column_recall_at_10": 0.75,
+      "mrr_table": 0.8611,
+      "mrr_column": 0.4167,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 0.0,
+      "p95_retrieval_only_ms": 13.356,
+      "p95_merge_ms": 0.2,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 13.356,
+      "vector_available_rate": null,
+      "failure_class_counts": {
+        "none": 8,
+        "retrieval_miss": 4
+      }
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "vector",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 0.8333,
+      "mrr_table": 0.9028,
+      "mrr_column": 0.3333,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 1879.262,
+      "p95_retrieval_only_ms": 1920.197,
+      "p95_merge_ms": 0.384,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 23709.657,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 10,
+        "retrieval_miss": 2
+      }
+    },
+    {
+      "schema_variant": "ai_enriched",
+      "retriever": "vector",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "mrr_table": 0.8889,
+      "mrr_column": 0.2847,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 549.835,
+      "p95_retrieval_only_ms": 561.309,
+      "p95_merge_ms": 0.205,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 561.309,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 12
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "hybrid",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 0.8333,
+      "mrr_table": 1.0,
+      "mrr_column": 0.4028,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 1942.105,
+      "p95_retrieval_only_ms": 2010.606,
+      "p95_merge_ms": 1.187,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 23842.735,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 10,
+        "retrieval_miss": 2
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "hybrid",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "mrr_table": 0.9375,
+      "mrr_column": 0.3944,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 526.606,
+      "p95_retrieval_only_ms": 550.072,
+      "p95_merge_ms": 0.393,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 550.072,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 12
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "keyword",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 0.9167,
+      "mrr_table": 1.0,
+      "mrr_column": 0.2917,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 0.0,
+      "p95_retrieval_only_ms": 23.152,
+      "p95_merge_ms": 0.276,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 21855.281,
+      "vector_available_rate": null,
+      "failure_class_counts": {
+        "none": 11,
+        "retrieval_miss": 1
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "keyword",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 0.9167,
+      "column_recall_at_10": 0.5833,
+      "mrr_table": 0.875,
+      "mrr_column": 0.4167,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 0.0,
+      "p95_retrieval_only_ms": 21.176,
+      "p95_merge_ms": 0.152,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 21.176,
+      "vector_available_rate": null,
+      "failure_class_counts": {
+        "none": 6,
+        "retrieval_miss": 6
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "vector",
+      "query_mode": "multi",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "mrr_table": 1.0,
+      "mrr_column": 0.5,
+      "p95_planner_latency_ms": 21832.129,
+      "p95_query_embedding_ms": 1967.205,
+      "p95_retrieval_only_ms": 2025.698,
+      "p95_merge_ms": 0.457,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 23774.927,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 12
+      }
+    },
+    {
+      "schema_variant": "base",
+      "retriever": "vector",
+      "query_mode": "single",
+      "total_cases": 12,
+      "table_recall_at_5": 1.0,
+      "column_recall_at_10": 1.0,
+      "mrr_table": 1.0,
+      "mrr_column": 0.3472,
+      "p95_planner_latency_ms": 0.0,
+      "p95_query_embedding_ms": 498.558,
+      "p95_retrieval_only_ms": 514.132,
+      "p95_merge_ms": 0.147,
+      "p95_rerank_ms": 0.0,
+      "p95_e2e_ms": 514.132,
+      "vector_available_rate": 1.0,
+      "failure_class_counts": {
+        "none": 12
+      }
+    }
+  ]
+}

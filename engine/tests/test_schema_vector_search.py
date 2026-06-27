@@ -72,6 +72,9 @@ def test_vector_search_builds_schema_embeddings_and_ranks_by_cosine(
     assert result["engine"] == "vector"
     assert result["vector_available"] is True
     assert result["embedding_build_time_ms"] >= 0
+    assert result["query_embedding_ms"] >= 0
+    assert result["vector_recall_ms"] >= 0
+    assert result["retrieval_only_ms"] == result["retrieval_latency_ms"]
     assert result["results"][0]["table_name"] == "orders"
     assert result["results"][0]["matched_by"] == ["vector"]
     assert result["results"][0]["vector_rank"] == 1
@@ -214,6 +217,11 @@ def test_hybrid_search_fuses_keyword_and_vector_results_with_rrf(
 
     assert result["engine"] == "hybrid"
     assert result["vector_available"] is True
+    assert result["keyword_recall_ms"] >= 0
+    assert result["query_embedding_ms"] >= 0
+    assert result["vector_recall_ms"] >= 0
+    assert result["merge_ms"] >= 0
+    assert result["retrieval_only_ms"] == result["retrieval_latency_ms"]
     assert result["results"][0]["table_name"] == "orders"
     assert result["results"][0]["matched_by"] == ["keyword", "vector"]
     assert result["results"][0]["keyword_rank"] == 1

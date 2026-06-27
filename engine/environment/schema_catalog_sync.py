@@ -29,9 +29,18 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def rebuild_search_docs(db: Session, datasource_id: str) -> None:
+def rebuild_search_docs(
+    db: Session,
+    datasource_id: str,
+    *,
+    include_ai_metadata: bool = True,
+) -> None:
     """Rebuild all schema_search_docs rows for a datasource based on current SchemaTable/SchemaColumn metadata.
     This generates search text offline using table/column names, types, comments, and any existing AI metadata.
+
+    ``include_ai_metadata=False`` materializes the base corpus from raw schema
+    structure while preserving any AI metadata stored on SchemaTable/SchemaColumn
+    for a later enriched rebuild.
     """
     from engine.ai_index import build_table_search_text, build_column_search_text
 
@@ -55,13 +64,17 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
                 pass
             return []
 
-        tags = _parse_list(table.semantic_tags)
-        terms = _parse_list(table.business_terms)
-        aliases = _parse_list(table.aliases)
+        tags = _parse_list(table.semantic_tags) if include_ai_metadata else []
+        terms = _parse_list(table.business_terms) if include_ai_metadata else []
+        aliases = _parse_list(table.aliases) if include_ai_metadata else []
 
         cols = sorted(list(table.columns or []), key=lambda c: (c.ordinal_position or 0, str(c.column_name)))
         col_names = [str(c.column_name) for c in cols]
-        col_descs = {str(c.column_name): c.ai_description for c in cols if c.ai_description}
+        col_descs = (
+            {str(c.column_name): c.ai_description for c in cols if c.ai_description}
+            if include_ai_metadata
+            else {}
+        )
 
         # Connected tables
         fk_ids = {col.foreign_table_id for col in cols if col.is_foreign_key and col.foreign_table_id}
@@ -72,12 +85,12 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
 
         search_text = build_table_search_text(
             table_name=str(table.table_name),
-            ai_description=table.ai_description,
+            ai_description=table.ai_description if include_ai_metadata else None,
             semantic_tags=tags,
             business_terms=terms,
             aliases=aliases,
-            table_role=table.table_role,
-            grain=table.grain,
+            table_role=table.table_role if include_ai_metadata else None,
+            grain=table.grain if include_ai_metadata else None,
             column_names=col_names,
             column_ai_descriptions=col_descs,
             relation_text=relation_text,
@@ -90,32 +103,32 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
             table_name=str(table.table_name),
             column_name=None,
             name=str(table.table_name),
-            ai_description=table.ai_description,
-            semantic_tags=table.semantic_tags,
-            business_terms=table.business_terms,
-            aliases=table.aliases,
-            table_role=table.table_role,
-            grain=table.grain,
-            subject_area=table.subject_area,
+            ai_description=table.ai_description if include_ai_metadata else None,
+            semantic_tags=table.semantic_tags if include_ai_metadata else None,
+            business_terms=table.business_terms if include_ai_metadata else None,
+            aliases=table.aliases if include_ai_metadata else None,
+            table_role=table.table_role if include_ai_metadata else None,
+            grain=table.grain if include_ai_metadata else None,
+            subject_area=table.subject_area if include_ai_metadata else None,
             column_summary=", ".join(col_names),
             relation_summary=relation_text,
             search_text=search_text,
-            ai_confidence=table.ai_confidence,
+            ai_confidence=table.ai_confidence if include_ai_metadata else None,
             updated_at=utcnow(),
         ))
 
         for col in cols:
-            ctags = _parse_list(col.semantic_tags)
-            cterms = _parse_list(col.business_terms)
+            ctags = _parse_list(col.semantic_tags) if include_ai_metadata else []
+            cterms = _parse_list(col.business_terms) if include_ai_metadata else []
 
             col_search_text = build_column_search_text(
                 column_name=str(col.column_name),
                 table_name=str(table.table_name),
-                ai_description=col.ai_description,
+                ai_description=col.ai_description if include_ai_metadata else None,
                 semantic_tags=ctags,
                 business_terms=cterms,
-                column_role=col.column_role,
-                metric_type=col.metric_type,
+                column_role=col.column_role if include_ai_metadata else None,
+                metric_type=col.metric_type if include_ai_metadata else None,
             )
 
             db.add(SchemaSearchDoc(
@@ -125,16 +138,16 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
                 table_name=str(table.table_name),
                 column_name=str(col.column_name),
                 name=str(col.column_name),
-                ai_description=col.ai_description,
-                semantic_tags=col.semantic_tags,
-                business_terms=col.business_terms,
-                aliases=col.aliases,
-                column_role=col.column_role,
-                metric_type=col.metric_type,
+                ai_description=col.ai_description if include_ai_metadata else None,
+                semantic_tags=col.semantic_tags if include_ai_metadata else None,
+                business_terms=col.business_terms if include_ai_metadata else None,
+                aliases=col.aliases if include_ai_metadata else None,
+                column_role=col.column_role if include_ai_metadata else None,
+                metric_type=col.metric_type if include_ai_metadata else None,
                 column_summary=None,
                 relation_summary=None,
                 search_text=col_search_text,
-                ai_confidence=col.ai_confidence,
+                ai_confidence=col.ai_confidence if include_ai_metadata else None,
                 updated_at=utcnow(),
             ))
 
