@@ -1,0 +1,1362 @@
+{
+  "cases_path": "D:\\DBFoxData\\spider\\spider_data\\dev.json",
+  "case_count": 1034,
+  "sample_strategy": "round_robin_db",
+  "sample_db_limit": 20,
+  "selected_db_counts": {
+    "concert_singer": 45,
+    "pets_1": 42,
+    "car_1": 92,
+    "flight_2": 80,
+    "employee_hire_evaluation": 38,
+    "cre_Doc_Template_Mgt": 84,
+    "course_teach": 30,
+    "museum_visit": 18,
+    "wta_1": 62,
+    "battle_death": 16,
+    "student_transcripts_tracking": 78,
+    "tvshow": 62,
+    "poker_player": 40,
+    "voter_1": 15,
+    "world_1": 120,
+    "orchestra": 40,
+    "network_1": 56,
+    "dog_kennels": 82,
+    "singer": 30,
+    "real_estate_properties": 4
+  },
+  "eval_variants": [
+    {
+      "name": "keyword_raw",
+      "retriever": "keyword",
+      "keyword_profile": "raw",
+      "vector_profile": "none",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "none",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "vector_raw",
+      "retriever": "vector",
+      "keyword_profile": "none",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "none",
+      "vector_corpus_profile": "raw",
+      "query_policy": "single_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "keyword_enriched",
+      "retriever": "keyword",
+      "keyword_profile": "enriched",
+      "vector_profile": "none",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "none",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "vector_enriched",
+      "retriever": "vector",
+      "keyword_profile": "none",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "none",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "single_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_raw_question",
+      "retriever": "hybrid",
+      "keyword_profile": "raw",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "raw",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "hybrid_keyword_enriched_vector_raw_question",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "raw",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "raw",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    },
+    {
+      "name": "hybrid_keyword_raw_vector_enriched_question",
+      "retriever": "hybrid",
+      "keyword_profile": "raw",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "raw",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "raw"
+    },
+    {
+      "name": "hybrid_enriched_question",
+      "retriever": "hybrid",
+      "keyword_profile": "enriched",
+      "vector_profile": "enriched",
+      "keyword_corpus_profile": "enriched",
+      "vector_corpus_profile": "enriched",
+      "query_policy": "multi_keyword_vector_question",
+      "diagnostic": "false",
+      "active_doc_profile": "enriched"
+    }
+  ],
+  "retrievers": [
+    "hybrid",
+    "keyword",
+    "vector"
+  ],
+  "query_modes": [
+    "single",
+    "multi"
+  ],
+  "planner_model": "qwen-plus",
+  "planner_warmup": {
+    "planner_warmup_ms": 11065.86,
+    "planner_warmup_in_case_latency": false
+  },
+  "ai_enrich_model": "qwen-plus",
+  "embedding_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "embedding_model": "text-embedding-v4",
+  "embedding_dimension": 1024,
+  "datasources": [
+    {
+      "db_id": "concert_singer",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_concert_singer_raw_eef1faa4",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21
+    },
+    {
+      "db_id": "concert_singer",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_concert_singer_enriched_83dd62d1",
+      "synced_tables": [
+        "concert",
+        "singer",
+        "singer_in_concert",
+        "stadium"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 21
+    },
+    {
+      "db_id": "pets_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_pets_1_raw_53a01ab4",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14
+    },
+    {
+      "db_id": "pets_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_pets_1_enriched_83846461",
+      "synced_tables": [
+        "Has_Pet",
+        "Pets",
+        "Student"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 14
+    },
+    {
+      "db_id": "car_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_car_1_raw_586cc312",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23
+    },
+    {
+      "db_id": "car_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_car_1_enriched_c25b0179",
+      "synced_tables": [
+        "car_makers",
+        "car_names",
+        "cars_data",
+        "continents",
+        "countries",
+        "model_list"
+      ],
+      "schema_table_count": 6,
+      "schema_column_count": 23
+    },
+    {
+      "db_id": "flight_2",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_flight_2_raw_b5a6cff9",
+      "synced_tables": [
+        "airlines",
+        "airports",
+        "flights"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 13
+    },
+    {
+      "db_id": "flight_2",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_flight_2_enriched_60ffb1b4",
+      "synced_tables": [
+        "airlines",
+        "airports",
+        "flights"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 13
+    },
+    {
+      "db_id": "employee_hire_evaluation",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_employee_hire_evaluation_raw_d7364fc4",
+      "synced_tables": [
+        "employee",
+        "evaluation",
+        "hiring",
+        "shop"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17
+    },
+    {
+      "db_id": "employee_hire_evaluation",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_employee_hire_evaluation_enriched_a4270e95",
+      "synced_tables": [
+        "employee",
+        "evaluation",
+        "hiring",
+        "shop"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17
+    },
+    {
+      "db_id": "cre_Doc_Template_Mgt",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_raw_c7029cff",
+      "synced_tables": [
+        "Documents",
+        "Paragraphs",
+        "Ref_Template_Types",
+        "Templates"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17
+    },
+    {
+      "db_id": "cre_Doc_Template_Mgt",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_enriched_912eafc6",
+      "synced_tables": [
+        "Documents",
+        "Paragraphs",
+        "Ref_Template_Types",
+        "Templates"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 17
+    },
+    {
+      "db_id": "course_teach",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_course_teach_raw_64b12566",
+      "synced_tables": [
+        "course",
+        "course_arrange",
+        "teacher"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 10
+    },
+    {
+      "db_id": "course_teach",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_course_teach_enriched_bf0fcbad",
+      "synced_tables": [
+        "course",
+        "course_arrange",
+        "teacher"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 10
+    },
+    {
+      "db_id": "museum_visit",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_museum_visit_raw_95b782da",
+      "synced_tables": [
+        "museum",
+        "visit",
+        "visitor"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 12
+    },
+    {
+      "db_id": "museum_visit",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_museum_visit_enriched_26b1a21e",
+      "synced_tables": [
+        "museum",
+        "visit",
+        "visitor"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 12
+    },
+    {
+      "db_id": "wta_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_wta_1_raw_ee7bffad",
+      "synced_tables": [
+        "matches",
+        "players",
+        "rankings"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 43
+    },
+    {
+      "db_id": "wta_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_wta_1_enriched_3f7bc616",
+      "synced_tables": [
+        "matches",
+        "players",
+        "rankings"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 43
+    },
+    {
+      "db_id": "battle_death",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_battle_death_raw_90e83963",
+      "synced_tables": [
+        "battle",
+        "death",
+        "ship"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 18
+    },
+    {
+      "db_id": "battle_death",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_battle_death_enriched_022db669",
+      "synced_tables": [
+        "battle",
+        "death",
+        "ship"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 18
+    },
+    {
+      "db_id": "student_transcripts_tracking",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_student_transcripts_tracking_raw_f0991091",
+      "synced_tables": [
+        "Addresses",
+        "Courses",
+        "Degree_Programs",
+        "Departments",
+        "Sections",
+        "Semesters",
+        "Student_Enrolment",
+        "Student_Enrolment_Courses",
+        "Students",
+        "Transcript_Contents",
+        "Transcripts"
+      ],
+      "schema_table_count": 11,
+      "schema_column_count": 56
+    },
+    {
+      "db_id": "student_transcripts_tracking",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_student_transcripts_tracking_enriched_3df45f08",
+      "synced_tables": [
+        "Addresses",
+        "Courses",
+        "Degree_Programs",
+        "Departments",
+        "Sections",
+        "Semesters",
+        "Student_Enrolment",
+        "Student_Enrolment_Courses",
+        "Students",
+        "Transcript_Contents",
+        "Transcripts"
+      ],
+      "schema_table_count": 11,
+      "schema_column_count": 56
+    },
+    {
+      "db_id": "tvshow",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_tvshow_raw_4fdeb3e9",
+      "synced_tables": [
+        "Cartoon",
+        "TV_Channel",
+        "TV_series"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 25
+    },
+    {
+      "db_id": "tvshow",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_tvshow_enriched_6b215a23",
+      "synced_tables": [
+        "Cartoon",
+        "TV_Channel",
+        "TV_series"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 25
+    },
+    {
+      "db_id": "poker_player",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_poker_player_raw_be2ff932",
+      "synced_tables": [
+        "people",
+        "poker_player"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 11
+    },
+    {
+      "db_id": "poker_player",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_poker_player_enriched_d56b50a6",
+      "synced_tables": [
+        "people",
+        "poker_player"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 11
+    },
+    {
+      "db_id": "voter_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_voter_1_raw_1f9f4f62",
+      "synced_tables": [
+        "AREA_CODE_STATE",
+        "CONTESTANTS",
+        "VOTES"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 9
+    },
+    {
+      "db_id": "voter_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_voter_1_enriched_daafddf6",
+      "synced_tables": [
+        "AREA_CODE_STATE",
+        "CONTESTANTS",
+        "VOTES"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 9
+    },
+    {
+      "db_id": "world_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_world_1_raw_82cde2c3",
+      "synced_tables": [
+        "city",
+        "country",
+        "countrylanguage"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 24
+    },
+    {
+      "db_id": "world_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_world_1_enriched_3183ad20",
+      "synced_tables": [
+        "city",
+        "country",
+        "countrylanguage"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 24
+    },
+    {
+      "db_id": "orchestra",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_orchestra_raw_211d1e6f",
+      "synced_tables": [
+        "conductor",
+        "orchestra",
+        "performance",
+        "show"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 23
+    },
+    {
+      "db_id": "orchestra",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_orchestra_enriched_dd0bbfaf",
+      "synced_tables": [
+        "conductor",
+        "orchestra",
+        "performance",
+        "show"
+      ],
+      "schema_table_count": 4,
+      "schema_column_count": 23
+    },
+    {
+      "db_id": "network_1",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_network_1_raw_ab4e2fdb",
+      "synced_tables": [
+        "Friend",
+        "Highschooler",
+        "Likes"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 7
+    },
+    {
+      "db_id": "network_1",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_network_1_enriched_dc9dbd60",
+      "synced_tables": [
+        "Friend",
+        "Highschooler",
+        "Likes"
+      ],
+      "schema_table_count": 3,
+      "schema_column_count": 7
+    },
+    {
+      "db_id": "dog_kennels",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_dog_kennels_raw_cb63f611",
+      "synced_tables": [
+        "Breeds",
+        "Charges",
+        "Dogs",
+        "Owners",
+        "Professionals",
+        "Sizes",
+        "Treatment_Types",
+        "Treatments"
+      ],
+      "schema_table_count": 8,
+      "schema_column_count": 49
+    },
+    {
+      "db_id": "dog_kennels",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_dog_kennels_enriched_6bf5b257",
+      "synced_tables": [
+        "Breeds",
+        "Charges",
+        "Dogs",
+        "Owners",
+        "Professionals",
+        "Sizes",
+        "Treatment_Types",
+        "Treatments"
+      ],
+      "schema_table_count": 8,
+      "schema_column_count": 49
+    },
+    {
+      "db_id": "singer",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_singer_raw_36f4e288",
+      "synced_tables": [
+        "singer",
+        "song"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 10
+    },
+    {
+      "db_id": "singer",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_singer_enriched_2298a725",
+      "synced_tables": [
+        "singer",
+        "song"
+      ],
+      "schema_table_count": 2,
+      "schema_column_count": 10
+    },
+    {
+      "db_id": "real_estate_properties",
+      "corpus_profile": "raw",
+      "datasource_id": "spider_real_estate_properties_raw_f2c8bdca",
+      "synced_tables": [
+        "Other_Available_Features",
+        "Other_Property_Features",
+        "Properties",
+        "Ref_Feature_Types",
+        "Ref_Property_Types"
+      ],
+      "schema_table_count": 5,
+      "schema_column_count": 37
+    },
+    {
+      "db_id": "real_estate_properties",
+      "corpus_profile": "enriched",
+      "datasource_id": "spider_real_estate_properties_enriched_a5559799",
+      "synced_tables": [
+        "Other_Available_Features",
+        "Other_Property_Features",
+        "Properties",
+        "Ref_Feature_Types",
+        "Ref_Property_Types"
+      ],
+      "schema_table_count": 5,
+      "schema_column_count": 37
+    }
+  ],
+  "corpus_stats": [
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_raw_eef1faa4",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2035.294,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_raw_53a01ab4",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1223.882,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_raw_586cc312",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1855.671,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "flight_2",
+      "datasource_id": "spider_flight_2_raw_b5a6cff9",
+      "schema_search_doc_count": 16,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 16,
+      "embedding_built_count": 16,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1196.982,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "employee_hire_evaluation",
+      "datasource_id": "spider_employee_hire_evaluation_raw_d7364fc4",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1506.721,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "cre_Doc_Template_Mgt",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_raw_c7029cff",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1653.724,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "course_teach",
+      "datasource_id": "spider_course_teach_raw_64b12566",
+      "schema_search_doc_count": 13,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1007.515,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "museum_visit",
+      "datasource_id": "spider_museum_visit_raw_95b782da",
+      "schema_search_doc_count": 15,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 15,
+      "embedding_built_count": 15,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1109.393,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "wta_1",
+      "datasource_id": "spider_wta_1_raw_ee7bffad",
+      "schema_search_doc_count": 46,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 46,
+      "embedding_built_count": 46,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 3085.177,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "battle_death",
+      "datasource_id": "spider_battle_death_raw_90e83963",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1654.689,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "student_transcripts_tracking",
+      "datasource_id": "spider_student_transcripts_tracking_raw_f0991091",
+      "schema_search_doc_count": 67,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 67,
+      "embedding_built_count": 67,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 4398.447,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "tvshow",
+      "datasource_id": "spider_tvshow_raw_4fdeb3e9",
+      "schema_search_doc_count": 28,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 28,
+      "embedding_built_count": 28,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1890.185,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "poker_player",
+      "datasource_id": "spider_poker_player_raw_be2ff932",
+      "schema_search_doc_count": 13,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1066.002,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "voter_1",
+      "datasource_id": "spider_voter_1_raw_1f9f4f62",
+      "schema_search_doc_count": 12,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1059.898,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "world_1",
+      "datasource_id": "spider_world_1_raw_82cde2c3",
+      "schema_search_doc_count": 27,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1856.917,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "orchestra",
+      "datasource_id": "spider_orchestra_raw_211d1e6f",
+      "schema_search_doc_count": 27,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1742.965,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "network_1",
+      "datasource_id": "spider_network_1_raw_ab4e2fdb",
+      "schema_search_doc_count": 10,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 10,
+      "embedding_built_count": 10,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 652.166,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "dog_kennels",
+      "datasource_id": "spider_dog_kennels_raw_cb63f611",
+      "schema_search_doc_count": 57,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 57,
+      "embedding_built_count": 57,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 3729.833,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "singer",
+      "datasource_id": "spider_singer_raw_36f4e288",
+      "schema_search_doc_count": 12,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 999.997,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "raw",
+      "doc_profile": "raw",
+      "db_id": "real_estate_properties",
+      "datasource_id": "spider_real_estate_properties_raw_f2c8bdca",
+      "schema_search_doc_count": 42,
+      "ai_metadata_doc_count": 0,
+      "embedding_row_count": 42,
+      "embedding_built_count": 42,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2939.61,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_enriched_83dd62d1",
+      "schema_search_doc_count": 25,
+      "ai_metadata_doc_count": 25,
+      "embedding_row_count": 25,
+      "embedding_built_count": 25,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1889.89,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_enriched_83846461",
+      "schema_search_doc_count": 17,
+      "ai_metadata_doc_count": 17,
+      "embedding_row_count": 17,
+      "embedding_built_count": 17,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1346.856,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_enriched_c25b0179",
+      "schema_search_doc_count": 29,
+      "ai_metadata_doc_count": 29,
+      "embedding_row_count": 29,
+      "embedding_built_count": 29,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2152.95,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "flight_2",
+      "datasource_id": "spider_flight_2_enriched_60ffb1b4",
+      "schema_search_doc_count": 16,
+      "ai_metadata_doc_count": 16,
+      "embedding_row_count": 16,
+      "embedding_built_count": 16,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1304.912,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "employee_hire_evaluation",
+      "datasource_id": "spider_employee_hire_evaluation_enriched_a4270e95",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 21,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1794.176,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "cre_Doc_Template_Mgt",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_enriched_912eafc6",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 21,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2298.826,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "course_teach",
+      "datasource_id": "spider_course_teach_enriched_bf0fcbad",
+      "schema_search_doc_count": 13,
+      "ai_metadata_doc_count": 13,
+      "embedding_row_count": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1139.94,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "museum_visit",
+      "datasource_id": "spider_museum_visit_enriched_26b1a21e",
+      "schema_search_doc_count": 15,
+      "ai_metadata_doc_count": 15,
+      "embedding_row_count": 15,
+      "embedding_built_count": 15,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1390.785,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "wta_1",
+      "datasource_id": "spider_wta_1_enriched_3f7bc616",
+      "schema_search_doc_count": 46,
+      "ai_metadata_doc_count": 3,
+      "embedding_row_count": 46,
+      "embedding_built_count": 46,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 3041.201,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "battle_death",
+      "datasource_id": "spider_battle_death_enriched_022db669",
+      "schema_search_doc_count": 21,
+      "ai_metadata_doc_count": 21,
+      "embedding_row_count": 21,
+      "embedding_built_count": 21,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1919.662,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "student_transcripts_tracking",
+      "datasource_id": "spider_student_transcripts_tracking_enriched_3df45f08",
+      "schema_search_doc_count": 67,
+      "ai_metadata_doc_count": 67,
+      "embedding_row_count": 67,
+      "embedding_built_count": 67,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 4921.044,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "tvshow",
+      "datasource_id": "spider_tvshow_enriched_6b215a23",
+      "schema_search_doc_count": 28,
+      "ai_metadata_doc_count": 28,
+      "embedding_row_count": 28,
+      "embedding_built_count": 28,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2269.038,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "poker_player",
+      "datasource_id": "spider_poker_player_enriched_d56b50a6",
+      "schema_search_doc_count": 13,
+      "ai_metadata_doc_count": 13,
+      "embedding_row_count": 13,
+      "embedding_built_count": 13,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1213.352,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "voter_1",
+      "datasource_id": "spider_voter_1_enriched_daafddf6",
+      "schema_search_doc_count": 12,
+      "ai_metadata_doc_count": 12,
+      "embedding_row_count": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1158.148,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "world_1",
+      "datasource_id": "spider_world_1_enriched_3183ad20",
+      "schema_search_doc_count": 27,
+      "ai_metadata_doc_count": 27,
+      "embedding_row_count": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2138.063,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "orchestra",
+      "datasource_id": "spider_orchestra_enriched_dd0bbfaf",
+      "schema_search_doc_count": 27,
+      "ai_metadata_doc_count": 27,
+      "embedding_row_count": 27,
+      "embedding_built_count": 27,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 2015.848,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "network_1",
+      "datasource_id": "spider_network_1_enriched_dc9dbd60",
+      "schema_search_doc_count": 10,
+      "ai_metadata_doc_count": 10,
+      "embedding_row_count": 10,
+      "embedding_built_count": 10,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 614.25,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "dog_kennels",
+      "datasource_id": "spider_dog_kennels_enriched_6bf5b257",
+      "schema_search_doc_count": 57,
+      "ai_metadata_doc_count": 57,
+      "embedding_row_count": 57,
+      "embedding_built_count": 57,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 4091.996,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "singer",
+      "datasource_id": "spider_singer_enriched_2298a725",
+      "schema_search_doc_count": 12,
+      "ai_metadata_doc_count": 12,
+      "embedding_row_count": 12,
+      "embedding_built_count": 12,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 1137.617,
+      "docs_equal_embeddings": true
+    },
+    {
+      "schema_variant": "enriched",
+      "doc_profile": "enriched",
+      "db_id": "real_estate_properties",
+      "datasource_id": "spider_real_estate_properties_enriched_a5559799",
+      "schema_search_doc_count": 42,
+      "ai_metadata_doc_count": 42,
+      "embedding_row_count": 42,
+      "embedding_built_count": 42,
+      "embedding_stale_count": 0,
+      "embedding_build_time_ms": 4145.55,
+      "docs_equal_embeddings": true
+    }
+  ],
+  "ai_enrich_results": [
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "concert_singer",
+      "datasource_id": "spider_concert_singer_enriched_83dd62d1",
+      "ai_enrich_latency_ms": 39056.3
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "pets_1",
+      "datasource_id": "spider_pets_1_enriched_83846461",
+      "ai_enrich_latency_ms": 28721.857
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 6,
+      "reason": "",
+      "errors": [],
+      "db_id": "car_1",
+      "datasource_id": "spider_car_1_enriched_c25b0179",
+      "ai_enrich_latency_ms": 52946.596
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "flight_2",
+      "datasource_id": "spider_flight_2_enriched_60ffb1b4",
+      "ai_enrich_latency_ms": 27608.075
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "employee_hire_evaluation",
+      "datasource_id": "spider_employee_hire_evaluation_enriched_a4270e95",
+      "ai_enrich_latency_ms": 36407.757
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "cre_Doc_Template_Mgt",
+      "datasource_id": "spider_cre_Doc_Template_Mgt_enriched_912eafc6",
+      "ai_enrich_latency_ms": 37072.684
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "course_teach",
+      "datasource_id": "spider_course_teach_enriched_bf0fcbad",
+      "ai_enrich_latency_ms": 22372.593
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "museum_visit",
+      "datasource_id": "spider_museum_visit_enriched_26b1a21e",
+      "ai_enrich_latency_ms": 25686.115
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "wta_1",
+      "datasource_id": "spider_wta_1_enriched_3f7bc616",
+      "ai_enrich_latency_ms": 76512.559
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "battle_death",
+      "datasource_id": "spider_battle_death_enriched_022db669",
+      "ai_enrich_latency_ms": 33750.843
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 11,
+      "reason": "",
+      "errors": [],
+      "db_id": "student_transcripts_tracking",
+      "datasource_id": "spider_student_transcripts_tracking_enriched_3df45f08",
+      "ai_enrich_latency_ms": 111178.605
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "tvshow",
+      "datasource_id": "spider_tvshow_enriched_6b215a23",
+      "ai_enrich_latency_ms": 49298.116
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 2,
+      "reason": "",
+      "errors": [],
+      "db_id": "poker_player",
+      "datasource_id": "spider_poker_player_enriched_d56b50a6",
+      "ai_enrich_latency_ms": 32522.002
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "voter_1",
+      "datasource_id": "spider_voter_1_enriched_daafddf6",
+      "ai_enrich_latency_ms": 20437.185
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "world_1",
+      "datasource_id": "spider_world_1_enriched_3183ad20",
+      "ai_enrich_latency_ms": 47537.577
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 4,
+      "reason": "",
+      "errors": [],
+      "db_id": "orchestra",
+      "datasource_id": "spider_orchestra_enriched_dd0bbfaf",
+      "ai_enrich_latency_ms": 66030.444
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 3,
+      "reason": "",
+      "errors": [],
+      "db_id": "network_1",
+      "datasource_id": "spider_network_1_enriched_dc9dbd60",
+      "ai_enrich_latency_ms": 17671.661
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 8,
+      "reason": "",
+      "errors": [],
+      "db_id": "dog_kennels",
+      "datasource_id": "spider_dog_kennels_enriched_6bf5b257",
+      "ai_enrich_latency_ms": 102689.642
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 2,
+      "reason": "",
+      "errors": [],
+      "db_id": "singer",
+      "datasource_id": "spider_singer_enriched_2298a725",
+      "ai_enrich_latency_ms": 20222.993
+    },
+    {
+      "ai_enriched": true,
+      "enriched_count": 5,
+      "reason": "",
+      "errors": [],
+      "db_id": "real_estate_properties",
+      "datasource_id": "spider_real_estate_properties_enriched_a5559799",
+      "ai_enrich_latency_ms": 73025.63
+    }
+  ]
+}
