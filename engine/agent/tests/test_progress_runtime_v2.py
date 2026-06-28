@@ -328,6 +328,62 @@ class TestModelNodeStepLimit:
         assert result["messages"][0].content == "你好"
         assert result["trace_events"][0]["content"] == "你好"
 
+    def test_tool_call_model_text_stays_in_progress_not_answer_delta(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from engine.agent.nodes import model_node
+
+        deltas: list[dict[str, str]] = []
+
+        class FakeModel:
+            def bind_tools(self, tools):
+                return self
+
+            def stream(self, messages, config):
+                yield AIMessageChunk(content="I will inspect the database first.")
+                yield AIMessageChunk(
+                    content="",
+                    tool_call_chunks=[{
+                        "name": "db.observe",
+                        "args": "{}",
+                        "id": "call-observe",
+                        "index": 0,
+                    }],
+                )
+
+            def invoke(self, messages, config):
+                raise AssertionError("stream should be used")
+
+        monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
+        monkeypatch.setattr("langgraph.config.get_stream_writer", lambda: deltas.append)
+        registry = MagicMock()
+        registry.get.return_value = MagicMock()
+
+        result = model_node.call_model(
+            {
+                "messages": [HumanMessage(content="inspect")],
+                "status": "running",
+                "step_count": 0,
+                "max_steps": 20,
+                "allowed_tool_groups": ["db"],
+            },
+            {
+                "configurable": {
+                    "thread_id": "run-tool-stream",
+                    "model_name": "test-model",
+                    "api_key": "sk-test",
+                    "api_base": "http://example.test/v1",
+                    "registry": registry,
+                    "db": MagicMock(),
+                    "request": MagicMock(),
+                }
+            },
+        )
+
+        assert deltas == []
+        assert result["trace_events"][0]["content"] == "I will inspect the database first."
+        assert result["trace_events"][0]["tool_calls"][0]["name"] == "db.observe"
+
     def test_allows_post_query_analysis_after_max_steps(self, monkeypatch):
         from unittest.mock import MagicMock
 
