@@ -32,7 +32,7 @@ function approvalRun(): ConversationRun {
       risk_level: "warning",
       reason: "生产环境需要确认",
       policy_decision: {},
-      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
       created_at: "2026-06-22T00:00:00Z",
     },
     events: [],

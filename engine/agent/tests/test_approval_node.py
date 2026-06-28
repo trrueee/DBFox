@@ -15,7 +15,7 @@ class TestApprovalNode:
                 "tool_name": "sql.execute_readonly",
                 "requested_action": {
                     "tool_name": "sql.execute_readonly",
-                    "args": {"sql": "SELECT 1"},
+                    "args": {"safe_sql": "SELECT 1"},
                 },
             },
             "status": "waiting_approval",
@@ -42,7 +42,7 @@ class TestApprovalNode:
                 "tool_name": "sql.execute_readonly",
                 "requested_action": {
                     "tool_name": "sql.execute_readonly",
-                    "args": {"sql": "SELECT 1"},
+                    "args": {"safe_sql": "SELECT 1"},
                 },
             },
             "status": "waiting_approval",

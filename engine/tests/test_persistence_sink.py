@@ -385,7 +385,7 @@ def test_sqlite_agent_event_store_saves_checkpoint_and_marks_run_waiting_approva
             risk_level="warning",
             reason="requires approval",
             policy_decision={"requires_confirmation": True},
-            requested_action={"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}},
+            requested_action={"tool_name": "sql.execute_readonly", "args": {"safe_sql": "SELECT 1"}},
         )
 
         checkpoint = store.save_checkpoint(
@@ -807,7 +807,7 @@ def test_sqlite_agent_event_store_resolves_approval_and_marks_run_resumed(tmp_pa
             risk_level="warning",
             reason="requires approval",
             policy_decision={"requires_confirmation": True},
-            requested_action={"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}},
+            requested_action={"tool_name": "sql.execute_readonly", "args": {"safe_sql": "SELECT 1"}},
         )
         store.save_checkpoint(
             run_id="run-resume",
@@ -889,7 +889,7 @@ def test_sqlite_agent_event_store_creates_approval(tmp_path):
             risk_level="warning",
             reason="requires approval",
             policy_decision={"requires_confirmation": True},
-            requested_action={"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}},
+            requested_action={"tool_name": "sql.execute_readonly", "args": {"safe_sql": "SELECT 1"}},
         )
         db.commit()
 
@@ -897,7 +897,7 @@ def test_sqlite_agent_event_store_creates_approval(tmp_path):
         assert saved is not None
         assert saved.status == "pending"
         assert saved.run_id == "run-create-approval"
-        assert saved.requested_action == {"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}}
+        assert saved.requested_action == {"tool_name": "sql.execute_readonly", "args": {"safe_sql": "SELECT 1"}}
     finally:
         db.close()
         engine.dispose()
@@ -947,7 +947,7 @@ def test_approval_checkpoint_draft_does_not_write_metadata(tmp_path):
             risk_level="warning",
             reason="requires approval",
             policy_decision={"requires_confirmation": True},
-            requested_action={"tool_name": "sql.execute_readonly", "args": {"sql": "SELECT 1"}},
+            requested_action={"tool_name": "sql.execute_readonly", "args": {"safe_sql": "SELECT 1"}},
         )
         db.flush()
 
