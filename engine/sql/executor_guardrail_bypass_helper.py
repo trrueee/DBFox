@@ -29,7 +29,7 @@ from engine.errors import GuardrailValidationError
 from engine.models import DataSource
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
 
-logger = logging.getLogger("dbfox.sql.executor.test")
+logger = logging.getLogger("dbfox.sql.executor.guardrail_bypass_helper")
 
 
 def execute_query_for_test(
