@@ -258,7 +258,7 @@ def bind_observation_to_state(
 def build_tool_history_entry(tool_name: str, observation: ToolObservation) -> dict[str, Any]:
     entry = {
         "name": tool_name,
-        "input": observation.input or {},
+        "input": _effective_tool_history_input(tool_name, observation),
         "status": observation.status,
         "error": observation.error,
     }
@@ -281,6 +281,24 @@ def build_tool_history_entry(tool_name: str, observation: ToolObservation) -> di
     elif "returned_rows" in observation.output:
         entry["returned_rows"] = observation.output["returned_rows"]
     return entry
+
+
+def _effective_tool_history_input(tool_name: str, observation: ToolObservation) -> dict[str, Any]:
+    raw_input = dict(observation.input or {})
+    if tool_name != "sql.execute_readonly":
+        return raw_input
+
+    output = observation.output or {}
+    safe_sql = str(output.get("safe_sql") or "").strip() if isinstance(output, dict) else ""
+    if not safe_sql:
+        return raw_input
+
+    return {
+        "effective_sql_fingerprint": _arg_signature(
+            "sql.execute_readonly.safe_sql",
+            {"safe_sql": safe_sql},
+        ),
+    }
 
 
 def derive_catalog_exploration_state(tool_name: str, observation: ToolObservation) -> dict[str, list[str]]:
