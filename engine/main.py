@@ -152,7 +152,7 @@ async def lifespan(application: FastAPI) -> Any:
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan,
     # 如果是在生产打包（frozen）模式下，关闭自动生成的交互式接口文档，提高安全性
     docs_url=None if is_frozen else "/docs",
@@ -327,7 +327,7 @@ def api_health() -> dict[str, str]:
     """
     系统健康检查接口
     """
-    return {"status": "healthy", "version": "1.0.0", "mode": "standalone"}
+    return {"status": "healthy", "version": "1.0.1", "mode": "standalone"}
 
 
 # 将 api 目录下的多模块业务路由（路由组）挂载进应用

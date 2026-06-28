@@ -27,7 +27,7 @@ def test_fastapi_app_startup_and_health() -> None:
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
-    assert data["version"] == "1.0.0"
+    assert data["version"] == "1.0.1"
 
 
 def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:
