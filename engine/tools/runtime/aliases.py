@@ -18,7 +18,6 @@ ALIAS_TO_INTERNAL: dict[str, str] = {
     "db_query": "db.query",
     "escalate_tool_group": "escalate.tool_group",
     "chart_suggest": "chart.suggest",
-    "answer_synthesize": "answer.synthesize",
 }
 
 INTERNAL_TO_ALIAS: dict[str, str] = {v: k for k, v in ALIAS_TO_INTERNAL.items()}
@@ -38,7 +37,6 @@ STEP_NAME_MAP: dict[str, str] = {
     "db.preview": "preview_table",
     "db.query": "query_database",
     "chart.suggest": "suggest_chart",
-    "answer.synthesize": "synthesize_answer",
 }
 
 STEP_NAME_TO_INTERNAL: dict[str, str] = {}

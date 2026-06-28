@@ -26,6 +26,7 @@ class TestGraphCompilation:
         assert "progress" in nodes
         assert "repair" in nodes
         assert "approval" in nodes
+        assert "answer" in nodes
         assert "finalize" in nodes
         assert "finalize_turn" in nodes
 
@@ -123,9 +124,16 @@ class TestApprovalRoute:
 
 
 class TestProgressRoute:
-    def test_complete_routes_to_finalize(self):
+    def test_ready_for_answer_routes_to_answer(self):
+        state: DBFoxAgentState = {
+            "progress_decision": {"status": "ready_for_answer"},
+        }
+        assert route_progress_output(state) == "answer"
+
+    def test_complete_with_answer_routes_to_finalize(self):
         state: DBFoxAgentState = {
             "progress_decision": {"status": "complete"},
+            "answer": {"answer": "完成。"},
         }
         assert route_progress_output(state) == "finalize"
 
@@ -153,13 +161,13 @@ class TestProgressRoute:
         }
         assert route_progress_output(state) == "model"
 
-    def test_replan_exceeded_routes_to_finalize(self):
-        """Replan with exhausted budget (no retry_budget set) → finalize."""
+    def test_replan_exceeded_routes_to_answer(self):
+        """Replan with exhausted budget should synthesize a partial final answer."""
         state: DBFoxAgentState = {
             "progress_decision": {"status": "replan", "retry_budget": 0},
             "replan_count": 3,
         }
-        assert route_progress_output(state) == "finalize"
+        assert route_progress_output(state) == "answer"
 
     def test_clarify_routes_to_finalize(self):
         state: DBFoxAgentState = {

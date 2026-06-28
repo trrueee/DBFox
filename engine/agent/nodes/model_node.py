@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
@@ -128,7 +128,6 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         model_with_tools,
         messages,
         config,
-        emit_answer_delta=_answer_delta_writer(),
     )
 
     result: dict[str, Any] = {
@@ -149,20 +148,19 @@ def _stream_or_invoke_model_message(
     model: Any,
     messages: list[Any],
     config: RunnableConfig,
-    *,
-    emit_answer_delta: Callable[[str], None] | None = None,
 ) -> Any:
     stream = getattr(model, "stream", None)
     if not callable(stream):
         return model.invoke(messages, config)
 
-    streamed = _try_stream_model_message(model, messages, config)
+    streamed = _try_stream_model_message(
+        model,
+        messages,
+        config,
+    )
     if streamed is None:
         return model.invoke(messages, config)
 
-    if emit_answer_delta is not None and not streamed.has_tool_calls:
-        for text in streamed.text_chunks:
-            emit_answer_delta(text)
     return streamed.message
 
 
@@ -261,21 +259,6 @@ def _has_tool_call_signal(message: Any) -> bool:
     )
 
 
-def _answer_delta_writer() -> Callable[[str], None] | None:
-    try:
-        from langgraph.config import get_stream_writer
-
-        stream_writer = get_stream_writer()
-    except Exception:
-        return None
-
-    def emit(content: str) -> None:
-        if content:
-            stream_writer({"type": "agent.answer.delta", "content": content})
-
-    return emit
-
-
 def _build_escalate_tool(registry: Any) -> Any | None:
     """Build a LangChain StructuredTool for escalate.tool_group.
 
@@ -294,7 +277,7 @@ def _build_escalate_tool(registry: Any) -> Any | None:
 
     class EscalateInput(BaseModel):
         group: str = Field(description=(
-            "Tool group you need: environment, schema, db, semantic, execution, result, chart, answer, sql."
+            "Tool group you need: environment, schema, db, semantic, execution, result, chart, sql."
         ))
         reason: str = Field(description="Why you need this tool group.")
 

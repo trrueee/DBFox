@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -26,7 +26,6 @@ class ToolRuntime:
         state: dict[str, Any],
         request: Any | None,
         db: Any | None,
-        emit_answer_delta: Callable[[str], None] | None = None,
     ) -> ToolObservation:
         tool = self.registry.require(tool_name)
         start = time.perf_counter()
@@ -64,7 +63,6 @@ class ToolRuntime:
                     db=db,
                     read_only=tool.policy.side_effect not in {"write", "destructive"},
                     raw_input=coerced_input,
-                    emit_answer_delta=emit_answer_delta,
                 ),
             )
             parsed_output = tool.output_model.model_validate(output)

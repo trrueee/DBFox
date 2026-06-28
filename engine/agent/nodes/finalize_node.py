@@ -5,7 +5,6 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.state import DBFoxAgentState
-from engine.agent.graph.message_utils import is_ai_message, message_content_text, message_tool_calls
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 
@@ -13,7 +12,6 @@ logger = logging.getLogger("dbfox.dbfox_agent.nodes.finalize_node")
 def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """Finalize the agent run and produce the terminal state update."""
 
-    messages = state.get("messages", [])
     error = state.get("error")
     pending_approval = state.get("pending_approval")
     terminal_failed = state.get("status") == "failed"
@@ -23,24 +21,10 @@ def finalize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[str,
     has_answer = bool(answer_dict.get("answer") or "")
     had_error_before_finalize = bool(error)
 
-    if not has_answer and not terminal_failed:
-        for msg in reversed(messages):
-            if is_ai_message(msg) and not message_tool_calls(msg):
-                content = message_content_text(msg)
-                if content:
-                    answer_dict = {
-                        "answer": content,
-                        "key_findings": [],
-                        "caveats": [],
-                        "recommendations": [],
-                        "follow_up_questions": [],
-                    }
-                    has_answer = True
-                    break
-
     if pending_approval:
         status = "waiting_approval"
     elif has_answer:
+        answer_dict = _normalize_answer_dict(answer_dict)
         status = "completed"
         if had_error_before_finalize:
             answer_dict.setdefault("caveats", []).append(
@@ -110,6 +94,16 @@ def _build_artifact_evidence(artifacts: list[Any]) -> list[dict[str, Any]]:
             label = f"结果 {row_count} 行" if row_count is not None else f"结果 #{result_count}"
             evidence.append({"artifact_id": artifact_id, "label": label, "value": row_count})
     return evidence
+
+
+def _normalize_answer_dict(answer: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(answer)
+    normalized.setdefault("key_findings", [])
+    normalized.setdefault("evidence", [])
+    normalized.setdefault("caveats", [])
+    normalized.setdefault("recommendations", [])
+    normalized.setdefault("follow_up_questions", [])
+    return normalized
 
 
 def _artifact_field(artifact: Any, key: str) -> str:

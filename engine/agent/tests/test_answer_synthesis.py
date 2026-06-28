@@ -38,6 +38,88 @@ def test_synthesize_agent_answer_streams_delta_chunks(mock_get_chat_model):
 
 
 @patch("engine.llm.get_chat_model")
+def test_synthesize_agent_answer_emits_each_chunk_before_stream_finishes(mock_get_chat_model):
+    class Chunk:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+    deltas: list[str] = []
+
+    def stream(_messages):
+        yield Chunk("第一段")
+        assert deltas == ["第一段"]
+        yield Chunk("第二段")
+        assert deltas == ["第一段", "第二段"]
+
+    mock_model = MagicMock()
+    mock_model.stream.side_effect = stream
+    mock_get_chat_model.return_value = mock_model
+
+    with patch.dict("os.environ", {"DBFOX_TESTING": "1"}):
+        result = synthesize_agent_answer(
+            question="How many orders?",
+            analysis_units=[{
+                "id": "unit-stream-timing",
+                "sql": "SELECT COUNT(*) AS count FROM orders",
+                "execution": {
+                    "success": True,
+                    "rowCount": 1,
+                    "columns": ["count"],
+                    "rows": [[10]],
+                },
+            }],
+            emit_answer_delta=deltas.append,
+        )
+
+    assert result.answer == "第一段第二段"
+    mock_model.invoke.assert_not_called()
+
+
+@patch("engine.llm.get_chat_model")
+def test_synthesize_direct_answer_streams_without_query_fallback(mock_get_chat_model):
+    class Chunk:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+    mock_model = MagicMock()
+    mock_model.stream.return_value = [Chunk("我可以"), Chunk("帮你分析数据库。")]
+    mock_get_chat_model.return_value = mock_model
+    deltas: list[str] = []
+
+    with patch.dict("os.environ", {"DBFOX_TESTING": "1"}):
+        result = synthesize_agent_answer(
+            question="你可以帮我做什么？",
+            analysis_units=[],
+            mode="direct",
+            context={
+                "direct_context": "Model said it can answer without database tools.",
+                "workspace_context": {"datasource_id": "ds-1"},
+                "recent_turns": [{"question": "之前的问题", "answer": "之前的回答"}],
+            },
+            emit_answer_delta=deltas.append,
+        )
+
+    assert deltas == ["我可以", "帮你分析数据库。"]
+    assert result.answer == "我可以帮你分析数据库。"
+    assert "已完成查询" not in result.answer
+    messages = mock_model.stream.call_args.args[0]
+    assert "DBFox" in messages[0].content
+    assert "数据库查询" in messages[0].content
+    assert "SQL" in messages[0].content
+    assert "图表" in messages[0].content
+    assert "示例" in messages[0].content
+    assert "基于大语言模型" in messages[0].content
+    assert "不要编造具体模型厂商" in messages[0].content
+    assert "不要只用一两句话带过" in messages[0].content
+    assert "分组说明能力" in messages[0].content
+    assert "主动给出可直接复制的示例问题" in messages[0].content
+    assert "上一轮过程文本只是上下文" in messages[0].content
+    assert "不要声称已经查询数据库" in messages[0].content
+    assert "最终回答阶段" not in messages[0].content
+    assert "内部节点" not in messages[0].content
+
+
+@patch("engine.llm.get_chat_model")
 def test_synthesize_agent_answer_falls_back_to_invoke_when_stream_fails(mock_get_chat_model):
     class Chunk:
         def __init__(self, content: str) -> None:
@@ -77,7 +159,7 @@ def test_synthesize_agent_answer_falls_back_to_invoke_when_stream_fails(mock_get
 
 
 def test_synthesize_agent_answer_no_analysis_units_no_credentials():
-    """No analysis units, no credentials — should fallback to default behavior."""
+    """No analysis units, no credentials — should use direct-answer fallback."""
     with patch.dict("os.environ", {
         "OPENAI_API_KEY": "",
         "QWEN_API_KEY": "",
@@ -90,7 +172,7 @@ def test_synthesize_agent_answer_no_analysis_units_no_credentials():
         )
     assert "total sales" in result.answer.lower()
     assert result.key_findings == []
-    assert result.evidence[0].value == 0
+    assert result.evidence == []
 
 
 def test_synthesize_agent_answer_empty_result_set():
@@ -157,5 +239,16 @@ def test_synthesize_agent_answer_with_llm(mock_get_chat_model):
     system_content = messages[0].content
     assert "自适应 Markdown" in system_content
     assert "不要强制使用固定章节" in system_content
+    assert "比较、评估、口径说明或设计判断" in system_content
+    assert "Markdown 表格" in system_content
+    assert "分层观察" in system_content
+    assert "优质回答的共性" in system_content
+    assert "不要照搬固定模板" in system_content
+    assert "不要为了凑格式而使用表格" in system_content
+    assert "表格写作规则" in system_content
+    assert "不要在表格单元格里堆叠粗体标记" in system_content
+    assert "不要使用 HTML <br>" in system_content
+    assert "多个示例更适合放在表格外的短列表" in system_content
+    assert "数据库结构或分表设计" in system_content
     assert "## 结论" not in system_content
     assert "## 建议" not in system_content

@@ -24,7 +24,7 @@ class TestSafeToolGroups:
     def test_full_safe_groups_include_analysis_tools(self):
         from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
         assert "chart" in FULL_SAFE_TOOL_GROUPS
-        assert "answer" in FULL_SAFE_TOOL_GROUPS
+        assert "answer" not in FULL_SAFE_TOOL_GROUPS
 
     def test_full_safe_groups_still_include_db_groups(self):
         from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
@@ -44,25 +44,25 @@ class TestEscalateGroups:
         )
         assert result.model_dump(mode="json")["group"] == "chart"
 
-    def test_escalate_accepts_answer_group(self):
+    def test_escalate_rejects_answer_group(self):
         from engine.tools.dbfox_tools import EscalateTool
         from engine.tools.runtime.context import ToolRunContext
 
-        result = EscalateTool().run(
-            EscalateTool.input_model(group="answer", reason="test"),
-            ToolRunContext(state={"allowed_tool_groups": ["db"]}),
-        )
-        assert result.model_dump(mode="json")["group"] == "answer"
+        with pytest.raises(RuntimeError, match="Unknown tool group 'answer'"):
+            EscalateTool().run(
+                EscalateTool.input_model(group="answer", reason="test"),
+                ToolRunContext(state={"allowed_tool_groups": ["db"]}),
+            )
 
 
 class TestBuiltinRegistry:
     def test_registry_loads_analysis_tools(self):
         from engine.tools.dbfox_tools import register_dbfox_tools
         registry = register_dbfox_tools()
-        for name in ["chart.suggest", "answer.synthesize"]:
-            tool = registry.get(name)
-            assert tool is not None, f"{name} not found in registry"
-            assert tool.spec.group in ("result", "chart", "answer")
+        chart = registry.get("chart.suggest")
+        assert chart is not None
+        assert chart.spec.group == "chart"
+        assert registry.get("answer.synthesize") is None
 
     def test_analysis_tools_are_exposed_with_model_safe_aliases(self):
         from engine.agent.tools.registry_bridge import build_langchain_tools
@@ -73,7 +73,7 @@ class TestBuiltinRegistry:
         tool_names = {tool.name for tool in tools}
 
         assert "chart_suggest" in tool_names
-        assert "answer_synthesize" in tool_names
+        assert "answer_synthesize" not in tool_names
         assert all("." not in name for name in tool_names)
 
 
@@ -132,7 +132,7 @@ class TestDatabinding:
 class TestProgressGuard:
     def test_guard_does_not_block_single_query_without_profile(self):
         """With relaxed guard, a single db.query without analysis does NOT trigger
-        the analysis guard. The model is free to answer directly or call answer.synthesize."""
+        the analysis guard. The model is free to stop tool calls and enter answer."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
             "status": "running",
@@ -167,7 +167,9 @@ class TestProgressGuard:
         result = deterministic_progress_fastpath(state)
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "answer.synthesize" in result["progress_decision"]["next_action_hint"]
+        assert "answer.synthesize" not in result["progress_decision"]["next_action_hint"]
+        assert "summarize the current conclusion" in result["progress_decision"]["next_action_hint"]
+        assert "停止调用工具" not in result["progress_decision"]["next_action_hint"]
 
     def test_guard_allows_finalize_with_answer(self):
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
@@ -205,7 +207,9 @@ class TestProgressGuard:
 
         assert result is not None
         assert result["progress_decision"]["status"] == "continue"
-        assert "answer.synthesize" in result["progress_decision"]["next_action_hint"]
+        assert "answer.synthesize" not in result["progress_decision"]["next_action_hint"]
+        assert "summarize the current conclusion" in result["progress_decision"]["next_action_hint"]
+        assert "停止调用工具" not in result["progress_decision"]["next_action_hint"]
         assert "error" not in result
 
     def test_guard_final_text_wins_over_max_steps_without_error(self):
@@ -225,7 +229,7 @@ class TestProgressGuard:
         result = deterministic_progress_fastpath(state)
 
         assert result is not None
-        assert result["progress_decision"]["status"] == "complete"
+        assert result["progress_decision"]["status"] == "ready_for_answer"
         assert "error" not in result
 
 # ---------------------------------------------------------------------------
@@ -237,6 +241,22 @@ class TestSystemPrompt:
         from engine.agent.model.system_prompt import SYSTEM_PROMPT
         assert "STOP and answer" not in SYSTEM_PROMPT
         assert "chart.suggest" in SYSTEM_PROMPT
+        assert "answer.synthesize" not in SYSTEM_PROMPT
+        assert "最终回答阶段" not in SYSTEM_PROMPT
+        assert "answer-stage" not in SYSTEM_PROMPT
+        assert "answer-ready context" not in SYSTEM_PROMPT
+        assert "write one short Chinese sentence saying" not in SYSTEM_PROMPT
+
+    def test_prompt_preserves_old_agentic_analysis_tone(self):
+        from engine.agent.model.system_prompt import SYSTEM_PROMPT
+
+        assert "You are DBFox, an autonomous data analysis agent." in SYSTEM_PROMPT
+        assert "Producing a grounded final answer." in SYSTEM_PROMPT
+        assert "respond directly with a brief answer" in SYSTEM_PROMPT
+        assert "You decide when to answer." in SYSTEM_PROMPT
+        assert "**5. Answer.**" in SYSTEM_PROMPT
+        assert "think like a data engineer" in SYSTEM_PROMPT
+        assert "data speaks through analysis, not raw rows" in SYSTEM_PROMPT
 
     def test_prompt_requires_text_with_tool_calls(self):
         """The prompt must instruct the model to include Chinese text alongside tool calls.

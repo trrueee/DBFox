@@ -66,7 +66,7 @@ RESET_SELF_HEALING: dict[str, Any] = {
 
 RESET_ALL_ERROR_STATE = ("error", "last_error_telemetry", "last_failed_tool_call")
 ERROR_CLEARING_TOOLS = {"db.query", "db.preview", "db.inspect", "sql.execute_readonly"}
-ARTIFACT_TOOLS = {"db.preview", "db.query", "sql.execute_readonly", "chart.suggest", "answer.synthesize"}
+ARTIFACT_TOOLS = {"db.preview", "db.query", "sql.execute_readonly", "chart.suggest"}
 
 
 def apply_tool_observation_to_state(
@@ -194,8 +194,6 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
         return result
     if tool_name == "chart.suggest":
         return {"chart_suggestion": output}
-    if tool_name == "answer.synthesize":
-        return {"answer": output, "final_answer": output}
     return {}
 
 

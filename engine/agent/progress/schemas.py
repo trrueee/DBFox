@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 ProgressStatus = Literal[
+    "ready_for_answer",
     "complete",
     "continue",
     "replan",
@@ -40,7 +41,8 @@ class ProgressDecision(BaseModel):
     # ---- Primary status -------------------------------------------------------
     status: ProgressStatus = Field(
         description=(
-            "complete  — user goal satisfied, finalize.\n"
+            "ready_for_answer — enough context has been collected; enter answer node.\n"
+            "complete  — state.answer already exists; finalize.\n"
             "continue  — more tool work under same plan.\n"
             "replan    — plan insufficient; go back to Planner with recovery hints.\n"
             "clarify   — user intent ambiguous; ask user.\n"

@@ -14,7 +14,6 @@ use_when:
 
 allowed_tool_groups:
   - chart
-  - answer
 
 forbidden_tool_groups:
   - sql_generation
@@ -23,7 +22,8 @@ forbidden_tool_groups:
   - execution
 
 steps:
-  - answer.synthesize
+  - stop tool calls when enough evidence is available
+  - summarize the grounded conclusion naturally
 
 success_criteria:
   - answer includes row count, column summaries, notable facts, anomalies
@@ -34,10 +34,10 @@ success_criteria:
 recovery:
   no_execution_data:
     - condition: "no execution result available to analyze"
-      action: "explain that data must be queried first, then use db.observe/db.search/sql.validate/sql.execute_readonly before answer.synthesize"
+      action: "explain that data must be queried first, then use db.observe/db.search/sql.validate/sql.execute_readonly before synthesizing an answer"
   empty_result:
     - condition: "result set is empty"
       action: "explain that empty results mean no matching data, check if filters were too restrictive"
   answer_error:
-    - condition: "answer.synthesize fails"
+    - condition: "answer synthesis fails"
       action: "report the error and suggest re-running the query"

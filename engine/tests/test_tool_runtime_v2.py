@@ -146,7 +146,7 @@ def test_builtin_registry_loads_base_tools_without_yaml():
 
     assert "db.query" in names
     assert "chart.suggest" in names
-    assert "answer.synthesize" in names
+    assert "answer.synthesize" not in names
     assert "analyze_data" not in names
 
 
@@ -207,4 +207,3 @@ def test_agent_runtime_does_not_expose_semantic_memory_write_tool():
     assert "db.remember" not in names
     tools = build_langchain_tools(registry, allowed_groups=["db"])
     assert "db_remember" not in {tool.name for tool in tools}
-
