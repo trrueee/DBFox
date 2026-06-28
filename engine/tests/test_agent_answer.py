@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from engine.agent_core.answer import synthesize_agent_answer
+from engine.agent_core.recommendations import suggest_followups
 
 
 def test_synthesize_agent_answer_uses_chinese_summary_for_small_results():
@@ -25,3 +26,15 @@ def test_synthesize_agent_answer_uses_chinese_summary_for_small_results():
     assert "Query returned" not in answer.answer
     assert "tool_name | usage_count" not in answer.answer
     assert "publish_note 使用次数最高。" in answer.key_findings
+
+
+def test_followups_do_not_offer_chart_for_non_chartable_suggestion():
+    suggestions = suggest_followups(
+        question="show users",
+        chart_suggestion={"type": "none", "chartable": False, "series": []},
+        sql=None,
+        safety=None,
+        execution=None,
+    )
+
+    assert all(suggestion.action_type != "chart" for suggestion in suggestions)

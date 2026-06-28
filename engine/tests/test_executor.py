@@ -288,7 +288,7 @@ class TestPerformanceAndExplain:
 
     def test_execute_query_bypass_requires_testing_env(self, db_session_module, test_datasource_module, monkeypatch) -> None:
         from engine.errors import GuardrailValidationError
-        from engine.sql.test_executor import execute_query_for_test
+        from engine.sql.executor_guardrail_bypass_helper import execute_query_for_test
 
         monkeypatch.delenv("DBFOX_TESTING", raising=False)
 
@@ -352,6 +352,6 @@ class TestExecuteQueryBoundary:
 
     def test_execute_query_for_test_accepts_bypass(self) -> None:
         """execute_query_for_test should be available for test bypass."""
-        from engine.sql.test_executor import execute_query_for_test
+        from engine.sql.executor_guardrail_bypass_helper import execute_query_for_test
         sig = inspect.signature(execute_query_for_test)
         assert "bypass_guardrail" not in sig.parameters
