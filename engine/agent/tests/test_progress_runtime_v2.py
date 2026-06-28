@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.model.context_builder import build_context_message, build_progress_guidance_message
@@ -277,6 +277,57 @@ class TestStreamingContext:
 
 
 class TestModelNodeStepLimit:
+    def test_streams_direct_model_answer_deltas(self, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from engine.agent.nodes import model_node
+
+        deltas: list[dict[str, str]] = []
+
+        class FakeModel:
+            def bind_tools(self, tools):
+                return self
+
+            def stream(self, messages, config):
+                yield AIMessageChunk(content="你")
+                yield AIMessageChunk(content="好")
+
+            def invoke(self, messages, config):
+                return AIMessage(content="你好")
+
+        monkeypatch.setattr(model_node, "get_chat_model", lambda **kwargs: FakeModel())
+        monkeypatch.setattr("langgraph.config.get_stream_writer", lambda: deltas.append)
+        registry = MagicMock()
+        registry.get.return_value = None
+
+        result = model_node.call_model(
+            {
+                "messages": [HumanMessage(content="打个招呼")],
+                "status": "running",
+                "step_count": 0,
+                "max_steps": 20,
+                "allowed_tool_groups": [],
+            },
+            {
+                "configurable": {
+                    "thread_id": "run-stream",
+                    "model_name": "test-model",
+                    "api_key": "sk-test",
+                    "api_base": "http://example.test/v1",
+                    "registry": registry,
+                    "db": MagicMock(),
+                    "request": MagicMock(),
+                }
+            },
+        )
+
+        assert deltas == [
+            {"type": "agent.answer.delta", "content": "你"},
+            {"type": "agent.answer.delta", "content": "好"},
+        ]
+        assert result["messages"][0].content == "你好"
+        assert result["trace_events"][0]["content"] == "你好"
+
     def test_allows_post_query_analysis_after_max_steps(self, monkeypatch):
         from unittest.mock import MagicMock
 

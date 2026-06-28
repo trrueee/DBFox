@@ -37,6 +37,45 @@ def test_synthesize_agent_answer_streams_delta_chunks(mock_get_chat_model):
     mock_model.invoke.assert_not_called()
 
 
+@patch("engine.llm.get_chat_model")
+def test_synthesize_agent_answer_falls_back_to_invoke_when_stream_fails(mock_get_chat_model):
+    class Chunk:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+    def broken_stream(_messages):
+        yield Chunk("半句")
+        raise RuntimeError("stream failed")
+
+    mock_model = MagicMock()
+    mock_model.stream.side_effect = broken_stream
+    mock_response = MagicMock()
+    mock_response.content = "完整答案"
+    mock_model.invoke.return_value = mock_response
+    mock_get_chat_model.return_value = mock_model
+    deltas: list[str] = []
+
+    with patch.dict("os.environ", {"DBFOX_TESTING": "1"}):
+        result = synthesize_agent_answer(
+            question="How many orders?",
+            analysis_units=[{
+                "id": "unit-stream-fallback",
+                "sql": "SELECT COUNT(*) AS count FROM orders",
+                "execution": {
+                    "success": True,
+                    "rowCount": 1,
+                    "columns": ["count"],
+                    "rows": [[10]],
+                },
+            }],
+            emit_answer_delta=deltas.append,
+        )
+
+    assert deltas == ["半句"]
+    assert result.answer == "完整答案"
+    mock_model.invoke.assert_called_once()
+
+
 def test_synthesize_agent_answer_no_analysis_units_no_credentials():
     """No analysis units, no credentials — should fallback to default behavior."""
     with patch.dict("os.environ", {

@@ -259,6 +259,7 @@ function makeAgentEventHandler(
 ): (event: AgentRuntimeEvent) => void {
   const store = useAgentStore;
   const ws = () => useWorkspaceStore.getState();
+  let streamedAnswer = "";
 
   return (event: AgentRuntimeEvent) => {
     if (event.run_id && !store.getState()._runIds.has(tabId)) {
@@ -269,8 +270,20 @@ function makeAgentEventHandler(
       timelineBox.list = nextTimeline;
       ws().patchTabTimeline(tabId, () => nextTimeline);
     }
+
+    if (event.type === "agent.answer.delta" && typeof event.content === "string" && event.content) {
+      streamedAnswer += event.content;
+      ws().updateTabMessage(tabId, progressId, streamedAnswer);
+      return;
+    }
+    if (event.type === "agent.answer.completed" && event.answer?.answer) {
+      streamedAnswer = buildAnswerText(event.answer);
+      ws().updateTabMessage(tabId, progressId, streamedAnswer);
+      return;
+    }
+
     const progressText = describeRuntimeEvent(event);
-    if (progressText) ws().updateTabMessage(tabId, progressId, progressText);
+    if (progressText && !streamedAnswer) ws().updateTabMessage(tabId, progressId, progressText);
     if (event.type === "agent.artifact.created" && event.artifact) {
       artifactsBox.list = mergeApiArtifacts(artifactsBox.list, [event.artifact]);
       ws().patchTab(tabId, { artifacts: toViewArtifacts(artifactsBox.list) });

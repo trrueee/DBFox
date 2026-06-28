@@ -79,4 +79,45 @@ describe("MessageList", () => {
 
     expect(screen.getByRole("button", { name: "SQL #1" })).toBeTruthy();
   });
+
+  it("scrolls when the latest message content grows during streaming", () => {
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollTo = scrollTo;
+    const baseMessage: ConversationMessage = {
+      id: "assistant-stream",
+      conversation_id: "conv-stream",
+      role: "assistant",
+      content: "Hel",
+      status: "streaming",
+      sequence: 1,
+      created_at: null,
+      updated_at: null,
+    };
+
+    const { rerender } = render(
+      <MessageList
+        messages={[baseMessage]}
+        runs={[]}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+        onResolveApproval={vi.fn()}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageList
+        messages={[{ ...baseMessage, content: "Hello" }]}
+        runs={[]}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+        onResolveApproval={vi.fn()}
+      />,
+    );
+
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+  });
 });

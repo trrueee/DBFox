@@ -109,8 +109,8 @@ def synthesize_agent_answer(
         HumanMessage(content=user_content),
     ]
 
-    try:
-        if emit_answer_delta is not None:
+    if emit_answer_delta is not None:
+        try:
             chunks: list[str] = []
             for chunk in model.stream(messages):
                 text = _chunk_content_text(chunk)
@@ -131,7 +131,10 @@ def synthesize_agent_answer(
                     recommendations=[],
                     follow_up_questions=[],
                 )
+        except Exception:
+            pass
 
+    try:
         response = model.invoke(messages)
         if response and response.content:
             report_text = response.content.strip()

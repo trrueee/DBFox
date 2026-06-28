@@ -169,6 +169,52 @@ describe("agentStore — stream event rendering guards", () => {
     expect(tab?.agentApproval?.sql).toBe("SELECT * FROM orders LIMIT 1000");
   });
 
+  it("appends answer deltas to the live smart query message", async () => {
+    vi.mocked(agentApi.streamAgentQuery).mockImplementation(async (_datasourceId, question, _request, options) => {
+      options?.onEvent?.({
+        event_id: "delta-1",
+        run_id: "run-delta",
+        sequence: 1,
+        created_at_ms: 1,
+        type: "agent.answer.delta",
+        content: "Hel",
+      });
+      options?.onEvent?.({
+        event_id: "delta-2",
+        run_id: "run-delta",
+        sequence: 2,
+        created_at_ms: 2,
+        type: "agent.answer.delta",
+        content: "lo",
+      });
+
+      const streamingTab = useWorkspaceStore.getState().tabs.find((item) => item.id === "smart-query");
+      expect(streamingTab?.chatMessages?.at(-1)?.text).toBe("Hello");
+
+      return {
+        run_id: "run-delta",
+        session_id: "session-delta",
+        success: true,
+        status: "completed",
+        question,
+        artifacts: [],
+        answer: {
+          answer: "Hello!",
+          key_findings: [],
+          evidence: [],
+          caveats: [],
+          recommendations: [],
+          follow_up_questions: [],
+        },
+      };
+    });
+
+    await useAgentStore.getState().runAgentForTab("smart-query", "hello");
+
+    const finalTab = useWorkspaceStore.getState().tabs.find((item) => item.id === "smart-query");
+    expect(finalTab?.chatMessages?.at(-1)?.text).toBe("mocked answer");
+  });
+
   it("does not patch the timeline when a runtime event leaves it unchanged", async () => {
     let emittedEvent = false;
     vi.mocked(agentApi.streamAgentQuery).mockImplementation(async (_datasourceId, question, _request, options) => {
