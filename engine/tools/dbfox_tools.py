@@ -4,9 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from engine.agent_core.answer import synthesize_agent_answer
 from engine.agent_core.chart_builder import suggest_plotly_chart
-from engine.agent_core.types import AgentAnswer
 from engine.environment.tools import (
     environment_get_profile,
     schema_describe_table,
@@ -109,10 +107,6 @@ class ChartSuggestInput(BaseModel):
     force: bool = Field(default=False, description="Force chart generation even if data seems unsuitable.")
 
 
-class AnswerSynthesizeInput(BaseModel):
-    question: str | None = Field(default=None, description="The original user question (uses session question if omitted).")
-
-
 # ── Control ────────────────────────────────────────────────────────────────────
 
 
@@ -134,7 +128,7 @@ class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
     def run(self, tool_input: EscalateInput, context: ToolRunContext) -> LooseOutput:
         valid_groups = {
             "environment", "schema", "db", "semantic",
-            "execution", "result", "chart", "answer", "sql",
+            "execution", "result", "chart", "sql",
         }
         group = tool_input.group.strip()
         reason = tool_input.reason.strip()
@@ -477,43 +471,6 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
         return LooseOutput.model_validate(suggest_plotly_chart(execution))
 
 
-class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
-    name = "answer.synthesize"
-    group = "answer"
-    description = (
-        "Synthesize a structured final answer from all collected evidence: "
-        "query results, profile, chart, safety decisions, and any errors. "
-        "Produces an AgentAnswer with key findings, evidence references, "
-        "caveats, recommendations, and follow-up questions."
-    )
-    input_model = AnswerSynthesizeInput
-    output_model = AgentAnswer
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(
-        consumes=("analysis_units", "error"),
-        produces=("answer", "final_answer"),
-        merge_strategy="always_new",
-    )
-    artifacts = ArtifactSpec(emit=True, artifact_types=("sql", "table", "chart"))
-
-    def run(self, tool_input: AnswerSynthesizeInput, context: ToolRunContext) -> AgentAnswer:
-        question = tool_input.question or getattr(context.request, "question", "") or ""
-        model_name = getattr(context.request, "model_name", None)
-        api_key = getattr(context.request, "api_key", None)
-        api_base = getattr(context.request, "api_base", None)
-
-        return synthesize_agent_answer(
-            question=question,
-            analysis_units=list(context.state.get("analysis_units") or []),
-            model_name=model_name,
-            api_key=api_key,
-            api_base=api_base,
-            error=context.state.get("error"),
-            emit_answer_delta=context.emit_answer_delta,
-        )
-
-
 # ── Registry ───────────────────────────────────────────────────────────────────
 
 
@@ -535,5 +492,4 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(SqlExecuteReadonlyTool())
 
     registry.register(ChartSuggestTool())
-    registry.register(AnswerSynthesizeTool())
     return registry

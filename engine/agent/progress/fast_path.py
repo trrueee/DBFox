@@ -431,15 +431,15 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
             "trace_events": [progress_trace(decision, fastpath=True)],
         }
 
-    # ---- Analysis hint: db.query succeeded but no analysis step yet --------
-    # The answer.synthesize tool handles analysis and final answer in one step.
-    # We only emit a gentle hint when the model appears stuck (cycling).
+    # ---- Analysis hint: query succeeded but the model keeps cycling --------
+    # The answer node owns final synthesis. We only emit a gentle hint when the
+    # model appears stuck instead of stopping tool calls.
     execution = state.get("execution")
     if (isinstance(execution, dict) and execution.get("success")
             and not state.get("answer")
             and not state.get("final_answer")):
         # Only intervene if model has been cycling (called db.query multiple times
-        # without producing text or calling answer.synthesize)
+        # without stopping tool calls for final answer synthesis).
         last_tool_results = state.get("last_tool_results") or []
         query_call_count = sum(
             1 for r in last_tool_results
@@ -448,8 +448,8 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
         if query_call_count >= 2 and step_count > 4:
             decision = progress_decision_dict(
                 status="continue",
-                reason_summary="Multiple db.query calls without analysis or answer — consider calling answer.synthesize or answering the user.",
-                next_action_hint="You have query results. Consider calling answer.synthesize for analysis, or answer the user directly if the results are simple.",
+                reason_summary="Multiple db.query calls without settling on a conclusion.",
+                next_action_hint="You have query results. If the evidence is enough, summarize the current conclusion naturally in Chinese; otherwise run a targeted follow-up query.",
             )
             return {
                 "progress_decision": decision,
@@ -463,9 +463,9 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
             content = message_content_text(last)
             if content:
                 decision = progress_decision_dict(
-                    status="complete",
-                    reason_summary="Model produced a final text response.",
-                    should_finalize=True,
+                    status="ready_for_answer",
+                    reason_summary="Model stopped tool calls and produced answer-ready context.",
+                    completion_reason="model_ready_for_answer",
                 )
                 return {
                     "progress_decision": decision,
@@ -492,7 +492,7 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
         decision = progress_decision_dict(
             status="continue",
             reason_summary="Tool observation received; continuing ReAct loop.",
-            next_action_hint="Use the latest tool observation to decide the next step or final answer.",
+            next_action_hint="Use the latest tool observation to decide the next step. If enough evidence is available, summarize the current conclusion naturally in Chinese.",
         )
         return {
             "progress_decision": decision,
@@ -609,8 +609,8 @@ def rule_fallback(state: DBFoxAgentState) -> dict[str, Any]:
             and not state.get("answer")):
         decision = ProgressDecision(
             status="continue",
-            reason_summary="Query succeeded. You may call answer.synthesize for analysis, or answer directly.",
-            next_action_hint="Consider calling answer.synthesize for analysis, or answer the user directly if the results are simple.",
+            reason_summary="Query succeeded. The model may continue analysis or summarize a grounded conclusion.",
+            next_action_hint="If the evidence is enough, summarize the current conclusion naturally in Chinese; otherwise run a targeted follow-up query.",
         )
     elif step_count >= max_steps:
         max_steps_error = _max_steps_reason(state, max_steps)

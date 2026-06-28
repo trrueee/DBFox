@@ -156,8 +156,8 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
             )
         elif int(state.get("step_count", 0)) >= int(state.get("max_steps", 50)):
             decision = ProgressDecision(
-                status="complete",
-                reason_summary="Progress Judge LLM call failed, max steps reached — finalizing.",
+                status="ready_for_answer",
+                reason_summary="Progress Judge LLM call failed, max steps reached — ready to synthesize an answer.",
             )
         else:
             decision = ProgressDecision(

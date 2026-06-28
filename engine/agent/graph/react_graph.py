@@ -16,7 +16,7 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
     """Build the DBFox Agent ReAct graph — pure ReAct loop with state-machine guarantees.
 
     Flow:
-        START → model → policy → tools → observe → progress → model/repair/finalize
+        START → model → policy → tools → observe → progress → model/repair/answer/finalize
 
     The Model decides every action by observing state (messages, tool results,
     environment).  There is no separate Planner — the ReAct loop IS the plan.
@@ -33,6 +33,7 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
     from engine.agent.nodes.observe_node import observe_tools
     from engine.agent.nodes.progress_node import judge_progress
     from engine.agent.nodes.prepare_repair_node import prepare_repair
+    from engine.agent.nodes.answer_node import synthesize_answer
     from engine.agent.nodes.finalize_node import finalize_answer
     from engine.agent.nodes.approval_node import approval_interrupt
     from engine.agent.nodes.turn_node import finalize_turn, start_turn
@@ -48,6 +49,7 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
     graph.add_node("progress", judge_progress)
     graph.add_node("repair", prepare_repair)
     graph.add_node("approval", approval_interrupt)
+    graph.add_node("answer", synthesize_answer)
     graph.add_node("finalize", finalize_answer)
     graph.add_node("finalize_turn", finalize_turn)
 
@@ -95,12 +97,14 @@ def build_dbfox_react_graph(*, checkpointer=None) -> Any:
             "model": "model",
             "repair": "repair",
             "approval": "approval",
+            "answer": "answer",
             "finalize": "finalize",
         },
     )
 
     graph.add_edge("repair", "model")
 
+    graph.add_edge("answer", "finalize")
     graph.add_edge("finalize", "finalize_turn")
     graph.add_edge("finalize_turn", END)
 

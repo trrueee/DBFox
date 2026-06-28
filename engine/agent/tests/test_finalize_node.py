@@ -9,12 +9,13 @@ from engine.tools.runtime import ToolRegistry
 
 
 class TestFinalizeNode:
-    def test_finalize_with_answer_content(self):
+    def test_finalize_with_answer_payload(self):
         state: DBFoxAgentState = {
             "messages": [
                 HumanMessage(content="What is 1+1?"),
-                AIMessage(content="1+1 equals 2."),
+                AIMessage(content="我已经准备好回答。"),
             ],
+            "answer": {"answer": "1+1 equals 2."},
             "status": "running",
             "error": None,
             "pending_approval": None,
@@ -54,6 +55,7 @@ class TestFinalizeNode:
                 HumanMessage(content="Inspect users"),
                 AIMessage(content="Found the users table and sample rows."),
             ],
+            "answer": {"answer": "Found the users table and sample rows."},
             "status": "running",
             "error": "Inspect error: 'int' object has no attribute 'fetchone'",
             "pending_approval": None,
@@ -92,6 +94,7 @@ class TestFinalizeNode:
     def test_finalize_output_has_answer_payload(self):
         state: DBFoxAgentState = {
             "messages": [AIMessage(content="Analysis complete.")],
+            "answer": {"answer": "Analysis complete."},
             "status": "running",
             "error": None,
             "pending_approval": None,
@@ -104,7 +107,23 @@ class TestFinalizeNode:
         assert "follow_up_questions" in result["answer"]
         assert "final_answer" in result
 
-    def test_finalize_does_not_display_answer_synthesize_tool_envelope(self):
+    def test_finalize_does_not_promote_model_message_to_answer(self):
+        state: DBFoxAgentState = {
+            "messages": [
+                HumanMessage(content="What is 1+1?"),
+                AIMessage(content="1+1 equals 2."),
+            ],
+            "status": "running",
+            "error": None,
+            "pending_approval": None,
+        }
+
+        result = finalize_answer(state, {})
+
+        assert result["status"] == "failed"
+        assert result["error"] == "Agent completed without producing an answer."
+
+    def test_finalize_does_not_display_legacy_answer_tool_envelope(self):
         state: DBFoxAgentState = {
             "messages": [
                 HumanMessage(content="分析小红书工具使用情况"),

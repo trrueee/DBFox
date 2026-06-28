@@ -9,7 +9,6 @@ const TOOL_LABELS: Record<string, string> = {
   "sql.validate": "校验 SQL 安全性",
   "sql.execute_readonly": "执行只读查询",
   "chart.suggest": "生成图表建议",
-  "answer.synthesize": "整理最终答案",
 };
 
 const EVENT_LABELS: Record<string, string> = {

@@ -277,12 +277,13 @@ class TestStreamingContext:
 
 
 class TestModelNodeStepLimit:
-    def test_streams_direct_model_answer_deltas(self, monkeypatch):
+    def test_model_node_does_not_emit_direct_answer_deltas(self, monkeypatch):
         from unittest.mock import MagicMock
 
         from engine.agent.nodes import model_node
 
         deltas: list[dict[str, str]] = []
+        stream_observations: list[list[dict[str, str]]] = []
 
         class FakeModel:
             def bind_tools(self, tools):
@@ -290,6 +291,7 @@ class TestModelNodeStepLimit:
 
             def stream(self, messages, config):
                 yield AIMessageChunk(content="你")
+                stream_observations.append(list(deltas))
                 yield AIMessageChunk(content="好")
 
             def invoke(self, messages, config):
@@ -321,10 +323,8 @@ class TestModelNodeStepLimit:
             },
         )
 
-        assert deltas == [
-            {"type": "agent.answer.delta", "content": "你"},
-            {"type": "agent.answer.delta", "content": "好"},
-        ]
+        assert deltas == []
+        assert stream_observations == [[]]
         assert result["messages"][0].content == "你好"
         assert result["trace_events"][0]["content"] == "你好"
 
@@ -621,7 +621,7 @@ class TestAdaptiveReplan:
             "progress_decision": {"status": "replan", "retry_budget": 1},
         }
         assert allow_replan(state, state["progress_decision"]) is False
-        assert route_progress_output(state) == "finalize"
+        assert route_progress_output(state) == "answer"
 
 
 class TestPrepareRepairNode:

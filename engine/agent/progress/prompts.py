@@ -16,6 +16,7 @@ Decide whether the user's task has been completed based on the FULL execution tr
 Choose ONE:
 
 - **complete**: The user's goal is SATISFIED. A grounded answer has been given. The task is done.
+- **ready_for_answer**: The agent has enough context or evidence to synthesize the answer.
 - **continue**: More work is needed. The model should call more tools or continue reasoning.
 - **replan**: The current approach is insufficient. Provide failure diagnosis + revised direction.
 - **clarify**: The user's goal CANNOT be safely inferred. Ask a specific question. Do NOT guess.
@@ -53,8 +54,9 @@ For each failure, provide:
 1. Do NOT mark complete if the answer claims facts not grounded in tool results.
 2. Do NOT require database execution if the user's goal does not require actual data.
 3. If the model is stuck (same tool calls blocked repeatedly), return replan or failed.
-4. If the model has already generated a good answer with evidence, return complete even if optional tools were skipped.
-5. If the user's question is ambiguous and the model guessed without asking, return clarify.
+4. If state.answer already exists, return complete.
+5. If the model has stopped tool calls and the available context is enough to answer, return ready_for_answer.
+6. If the user's question is ambiguous and the model guessed without asking, return clarify.
 
 ## Coding-Agent Supervisor Output (REQUIRED for continue / replan)
 

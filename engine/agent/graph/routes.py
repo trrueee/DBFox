@@ -46,8 +46,8 @@ def route_approval_output(state: DBFoxAgentState) -> Literal["tools", "model", "
     return "progress"
 
 
-def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize", "repair", "approval"]:
-    """After progress judge: complete/clarify → finalize; continue → model
+def route_progress_output(state: DBFoxAgentState) -> Literal["model", "answer", "finalize", "repair", "approval"]:
+    """After progress judge: ready_for_answer → answer; complete → finalize; continue → model
     (model receives progress guidance); replan → model with anti-loop check;
     repair → repair."""
     decision = state.get("progress_decision") or {}
@@ -56,15 +56,24 @@ def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize"
     if state.get("status") == "waiting_approval" or state.get("pending_approval"):
         return "approval"
 
-    if status == "complete":
+    answer = state.get("answer") or state.get("final_answer")
+    if isinstance(answer, dict) and answer.get("answer"):
         return "finalize"
+
+    if state.get("status") == "waiting_user":
+        return "finalize"
+
+    if status == "ready_for_answer":
+        return "answer"
+    if status == "complete":
+        return "answer"
     if status == "clarify":
         return "finalize"
     if status == "replan":
         # Anti-loop: if replan budget is exhausted, finalize instead.
         from engine.agent.graph.replan_policy import allow_replan
         if not allow_replan(state, decision):
-            return "finalize"
+            return "answer"
         if decision.get("recovery_strategy") or state.get("repair_mode"):
             return "repair"
         return "model"
@@ -72,5 +81,5 @@ def route_progress_output(state: DBFoxAgentState) -> Literal["model", "finalize"
         if decision.get("recovery_strategy") or state.get("repair_mode"):
             return "repair"
         return "model"
-    # blocked / failed → finalize
+    # blocked / failed / no decision → terminal normalize
     return "finalize"

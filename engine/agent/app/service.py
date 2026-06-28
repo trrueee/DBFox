@@ -48,7 +48,7 @@ logger = logging.getLogger("dbfox.dbfox_agent.service")
 # The policy gate and execution_mode control what actually executes.
 FULL_SAFE_TOOL_GROUPS = [
     "environment", "schema", "db",
-    "result", "chart", "answer", "sql",
+    "result", "chart", "sql",
 ]
 
 

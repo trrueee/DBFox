@@ -153,8 +153,8 @@ class DBFoxAgentState(TypedDict, total=False):
 
     Each successful ``sql.execute_readonly`` appends a new unit.  Subsequent
     ``chart.suggest`` calls enrich the matching unit
-    (keyed by SQL fingerprint).  The final ``answer.synthesize`` can consume
-    all units instead of only the latest execution.
+    (keyed by SQL fingerprint). The answer node consumes all units instead of
+    only the latest execution.
     """
     current_analysis_unit_id: str | None
     """SQL fingerprint of the most recently executed query, used to match
