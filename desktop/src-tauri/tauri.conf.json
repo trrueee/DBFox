@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickknapton88/tauri-docs/v2.11.2/src/content/docs/reference/config/schema.json",
   "productName": "DBFox",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.dbfox.desktop",
   "build": {
     "frontendDist": "../dist",

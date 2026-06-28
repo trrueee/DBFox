@@ -1,7 +1,7 @@
 
 [package]
 name = "dbfox"
-version = "1.0.0"
+version = "1.0.1"
 description = "DBFox - AI-powered Database Client"
 authors = ["DBFox"]
 edition = "2021"
