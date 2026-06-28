@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DataSourceForm } from "../DataSourceForm";
-import { emptyDatasourceForm, type DatasourceFormState } from "../formState";
+import { emptyDatasourceForm, formFromDataSource, type DatasourceFormState } from "../formState";
 
 function renderForm(overrides: Partial<React.ComponentProps<typeof DataSourceForm>> = {}) {
   const updateForm = vi.fn();
@@ -27,6 +27,37 @@ function renderForm(overrides: Partial<React.ComponentProps<typeof DataSourceFor
 
 describe("DataSourceForm", () => {
   beforeEach(() => cleanup());
+
+  it("keeps datasource form defaults and datasource normalization stable", () => {
+    expect(emptyDatasourceForm()).toMatchObject({
+      db_type: "mysql",
+      port: 3306,
+      env: "dev",
+      ssh_port: 22,
+      ssl_verify_identity: true,
+    });
+
+    expect(
+      formFromDataSource({
+        id: "ds-structure",
+        name: "Local",
+        db_type: "sqlite",
+        connection_mode: "direct",
+        host: null,
+        port: 0,
+        database_name: "local.db",
+        username: null,
+        status: "active",
+        created_at: "",
+      }),
+    ).toMatchObject({
+      db_type: "sqlite",
+      host: "",
+      port: 0,
+      username: "",
+      database_name: "local.db",
+    });
+  });
 
   it("validates required MySQL fields through the form schema before submit", async () => {
     const onSubmit = vi.fn();

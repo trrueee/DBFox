@@ -54,7 +54,7 @@ def test_data_redactor_masks_raw_api_key_tokens() -> None:
 
 
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
-    from engine.sql.test_executor import execute_query_for_test
+    from engine.sql.executor_guardrail_bypass_helper import execute_query_for_test
     from engine.models import QueryHistory
 
     # Execute a query containing a sensitive email and password assignment
