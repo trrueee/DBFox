@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -17,6 +18,13 @@ import logging
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.model_node")
 
 POST_QUERY_ANALYSIS_GRACE_STEPS = 4
+
+
+@dataclass
+class StreamedModelResult:
+    message: AIMessage
+    text_chunks: list[str]
+    has_tool_calls: bool
 
 
 def _within_post_query_analysis_grace(
@@ -148,32 +156,55 @@ def _stream_or_invoke_model_message(
     if not callable(stream):
         return model.invoke(messages, config)
 
+    streamed = _try_stream_model_message(model, messages, config)
+    if streamed is None:
+        return model.invoke(messages, config)
+
+    if emit_answer_delta is not None and not streamed.has_tool_calls:
+        for text in streamed.text_chunks:
+            emit_answer_delta(text)
+    return streamed.message
+
+
+def _try_stream_model_message(
+    model: Any,
+    messages: list[Any],
+    config: RunnableConfig,
+) -> StreamedModelResult | None:
     chunks: list[Any] = []
+    text_chunks: list[str] = []
+    has_tool_call_signal = False
     try:
         try:
-            iterator = stream(messages, config)
+            iterator = model.stream(messages, config)
         except TypeError:
-            iterator = stream(messages)
+            iterator = model.stream(messages)
 
         for chunk in iterator:
             chunks.append(chunk)
+            has_tool_call_signal = has_tool_call_signal or _has_tool_call_signal(chunk)
             text = _raw_message_content_text(chunk)
-            if text and emit_answer_delta is not None:
-                emit_answer_delta(text)
+            if text:
+                text_chunks.append(text)
     except Exception:
-        return model.invoke(messages, config)
+        return None
 
     if not chunks:
-        return model.invoke(messages, config)
+        return None
 
     merged = chunks[0]
     try:
         for chunk in chunks[1:]:
             merged = merged + chunk
     except Exception:
-        return AIMessage(content="".join(_raw_message_content_text(chunk) for chunk in chunks))
+        return None
 
-    return _coerce_ai_message(merged)
+    has_tool_call_signal = has_tool_call_signal or _has_tool_call_signal(merged)
+    return StreamedModelResult(
+        message=_coerce_ai_message(merged),
+        text_chunks=text_chunks,
+        has_tool_calls=has_tool_call_signal,
+    )
 
 
 def _coerce_ai_message(message: Any) -> AIMessage:
@@ -214,6 +245,20 @@ def _raw_message_content_text(message: Any) -> str:
                     parts.append(text)
         return "".join(parts)
     return str(content or "")
+
+
+def _has_tool_call_signal(message: Any) -> bool:
+    if isinstance(message, dict):
+        return bool(
+            message.get("tool_calls")
+            or message.get("tool_call_chunks")
+            or message.get("invalid_tool_calls")
+        )
+    return bool(
+        getattr(message, "tool_calls", None)
+        or getattr(message, "tool_call_chunks", None)
+        or getattr(message, "invalid_tool_calls", None)
+    )
 
 
 def _answer_delta_writer() -> Callable[[str], None] | None:
