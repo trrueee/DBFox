@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
-from langchain_core.messages import SystemMessage
+from typing import Any, Callable
+from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
 from engine.llm import get_chat_model
@@ -116,7 +116,12 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
 
     messages.extend(history)
 
-    ai_msg = model_with_tools.invoke(messages, config)
+    ai_msg = _stream_or_invoke_model_message(
+        model_with_tools,
+        messages,
+        config,
+        emit_answer_delta=_answer_delta_writer(),
+    )
 
     result: dict[str, Any] = {
         "messages": [ai_msg],
@@ -130,6 +135,100 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
         "step_count": state.get("step_count", 0) + 1,
     }
     return result
+
+
+def _stream_or_invoke_model_message(
+    model: Any,
+    messages: list[Any],
+    config: RunnableConfig,
+    *,
+    emit_answer_delta: Callable[[str], None] | None = None,
+) -> Any:
+    stream = getattr(model, "stream", None)
+    if not callable(stream):
+        return model.invoke(messages, config)
+
+    chunks: list[Any] = []
+    try:
+        try:
+            iterator = stream(messages, config)
+        except TypeError:
+            iterator = stream(messages)
+
+        for chunk in iterator:
+            chunks.append(chunk)
+            text = _raw_message_content_text(chunk)
+            if text and emit_answer_delta is not None:
+                emit_answer_delta(text)
+    except Exception:
+        return model.invoke(messages, config)
+
+    if not chunks:
+        return model.invoke(messages, config)
+
+    merged = chunks[0]
+    try:
+        for chunk in chunks[1:]:
+            merged = merged + chunk
+    except Exception:
+        return AIMessage(content="".join(_raw_message_content_text(chunk) for chunk in chunks))
+
+    return _coerce_ai_message(merged)
+
+
+def _coerce_ai_message(message: Any) -> AIMessage:
+    if isinstance(message, AIMessage):
+        return message
+    kwargs: dict[str, Any] = {
+        "content": getattr(message, "content", ""),
+        "additional_kwargs": getattr(message, "additional_kwargs", {}) or {},
+        "response_metadata": getattr(message, "response_metadata", {}) or {},
+    }
+    message_id = getattr(message, "id", None)
+    if message_id is not None:
+        kwargs["id"] = message_id
+    tool_calls = getattr(message, "tool_calls", None)
+    if tool_calls:
+        kwargs["tool_calls"] = tool_calls
+    invalid_tool_calls = getattr(message, "invalid_tool_calls", None)
+    if invalid_tool_calls:
+        kwargs["invalid_tool_calls"] = invalid_tool_calls
+    usage_metadata = getattr(message, "usage_metadata", None)
+    if usage_metadata is not None:
+        kwargs["usage_metadata"] = usage_metadata
+    return AIMessage(**kwargs)
+
+
+def _raw_message_content_text(message: Any) -> str:
+    content = message.get("content", "") if isinstance(message, dict) else getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return str(content or "")
+
+
+def _answer_delta_writer() -> Callable[[str], None] | None:
+    try:
+        from langgraph.config import get_stream_writer
+
+        stream_writer = get_stream_writer()
+    except Exception:
+        return None
+
+    def emit(content: str) -> None:
+        if content:
+            stream_writer({"type": "agent.answer.delta", "content": content})
+
+    return emit
 
 
 def _build_escalate_tool(registry: Any) -> Any | None:

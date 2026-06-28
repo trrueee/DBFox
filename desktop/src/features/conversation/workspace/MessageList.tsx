@@ -44,10 +44,14 @@ export function MessageList({
     }
     return map;
   }, [artifacts]);
+  const latestMessageScrollKey = useMemo(() => {
+    const latest = messages[messages.length - 1];
+    return latest ? `${latest.id}:${latest.status}:${latest.content}` : "";
+  }, [messages]);
 
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, artifacts.length]);
+  }, [messages.length, artifacts.length, latestMessageScrollKey]);
   return (
     <div className="conv-message-scroll" ref={ref}>
       <div className="conv-message-column">
