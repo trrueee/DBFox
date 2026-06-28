@@ -38,11 +38,13 @@ class EventEmitter:
         step: dict[str, Any] | None = None,
         artifact: AgentArtifact | None = None,
         artifact_delta: dict[str, Any] | None = None,
+        content: str | None = None,
         answer_payload: AgentAnswer | None = None,
         response: AgentRunResponse | None = None,
         approval: AgentApprovalRecord | None = None,
         checkpoint: AgentCheckpointRecord | None = None,
         error: str | None = None,
+        persist: bool = True,
     ) -> AgentRuntimeEvent:
         self.sequence += 1
         event = AgentRuntimeEvent(
@@ -54,13 +56,14 @@ class EventEmitter:
             step=step,
             artifact=artifact,
             artifact_delta=artifact_delta,
+            content=content,
             answer=answer_payload,
             response=response,
             approval=approval,
             checkpoint=checkpoint,
             error=error,
         )
-        if self.recorder is not None:
+        if persist and self.recorder is not None:
             self.recorder(event)
         return event
 

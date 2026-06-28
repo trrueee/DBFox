@@ -599,8 +599,22 @@ class DBFoxAgentService:
         emitted_artifact_ids: set[str],
     ) -> Iterator[AgentRuntimeEvent]:
         last_context_summary = ""
-        for chunk in app.stream(input_value, config=config, stream_mode="updates"):
-            for node_name, update in chunk.items():
+        for chunk in app.stream(input_value, config=config, stream_mode=["updates", "custom"]):
+            mode = "updates"
+            payload = chunk
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                mode, payload = chunk
+
+            if mode == "custom":
+                event = self._custom_stream_event(emit, payload)
+                if event is not None:
+                    yield event
+                continue
+
+            if mode != "updates" or not isinstance(payload, dict):
+                continue
+
+            for node_name, update in payload.items():
                 if not isinstance(update, dict):
                     continue
 
@@ -631,6 +645,14 @@ class DBFoxAgentService:
                     for te in update["trace_events"]:
                         if isinstance(te, dict):
                             yield from trace_to_events(emit, te)
+
+    def _custom_stream_event(self, emit: Any, payload: Any) -> AgentRuntimeEvent | None:
+        if not isinstance(payload, dict) or payload.get("type") != "agent.answer.delta":
+            return None
+        content = payload.get("content")
+        if not isinstance(content, str) or not content:
+            return None
+        return emit("agent.answer.delta", content=content, persist=False)
 
     def _merge_state(self, target: dict[str, Any], update: dict[str, Any]) -> None:
         from typing import get_origin, get_args

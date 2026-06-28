@@ -11,6 +11,7 @@ class AgentRuntimeEventType:
     PROGRESS_UPDATE = "agent.progress.update"
     CONTEXT_UPDATE = "agent.context.update"
     ARTIFACT_CREATED = "agent.artifact.created"
+    ANSWER_DELTA = "agent.answer.delta"
     ANSWER_COMPLETED = "agent.answer.completed"
     RUN_COMPLETED = "agent.run.completed"
     RUN_FAILED = "agent.run.failed"
@@ -37,6 +38,7 @@ class AgentRuntimeEvent(BaseModel):
     type: str
     step: dict[str, Any] | None = None
     artifact: dict[str, Any] | None = None
+    content: str | None = None
     answer: dict[str, Any] | None = None
     response: Any | None = None
     approval: dict[str, Any] | None = None

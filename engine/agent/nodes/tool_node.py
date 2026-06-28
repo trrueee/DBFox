@@ -25,6 +25,7 @@ def execute_allowed_tools(state: DBFoxAgentState, config: RunnableConfig) -> dic
     messages = []
     tool_results = []
     trace_events = []
+    emit_answer_delta = _answer_delta_writer()
 
     for call in allowed_tool_calls:
         raw_name = call["name"]
@@ -40,7 +41,10 @@ def execute_allowed_tools(state: DBFoxAgentState, config: RunnableConfig) -> dic
             "tool_name": internal_name,
         })
 
-        observation = _execute_tool(registry, db, req, state, internal_name, args)
+        observation = _execute_tool(
+            registry, db, req, state, internal_name, args,
+            emit_answer_delta=emit_answer_delta,
+        )
 
         tool_results.append(observation.model_dump(mode="json"))
 
@@ -79,6 +83,8 @@ def _execute_tool(
     state: dict[str, Any],
     tool_name: str,
     args: dict[str, Any],
+    *,
+    emit_answer_delta: Callable[[str], None] | None = None,
 ) -> ToolObservation:
     """Execute a single tool call through the typed ToolRuntime."""
     logger.debug(
@@ -91,7 +97,23 @@ def _execute_tool(
         state=dict(state),
         request=req,
         db=db,
+        emit_answer_delta=emit_answer_delta,
     )
+
+
+def _answer_delta_writer() -> Callable[[str], None] | None:
+    try:
+        from langgraph.config import get_stream_writer
+
+        stream_writer = get_stream_writer()
+    except Exception:
+        return None
+
+    def emit(content: str) -> None:
+        if content:
+            stream_writer({"type": "agent.answer.delta", "content": content})
+
+    return emit
 
 
 # ---------------------------------------------------------------------------

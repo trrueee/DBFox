@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Callable
 
 from engine.agent_core.types import AgentAnswer, AnswerEvidence
 
@@ -14,6 +14,7 @@ def synthesize_agent_answer(
     api_key: str | None = None,
     api_base: str | None = None,
     error: str | None = None,
+    emit_answer_delta: Callable[[str], None] | None = None,
 ) -> AgentAnswer:
     """Generate a structured answer from collected analysis units via LLM.
 
@@ -103,11 +104,35 @@ def synthesize_agent_answer(
 
     user_content = "\n".join(user_parts)
 
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_content),
+    ]
+
     try:
-        response = model.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_content),
-        ])
+        if emit_answer_delta is not None:
+            chunks: list[str] = []
+            for chunk in model.stream(messages):
+                text = _chunk_content_text(chunk)
+                if text:
+                    emit_answer_delta(text)
+                    chunks.append(text)
+            report_text = "".join(chunks).strip()
+            if report_text:
+                key_findings = _extract_key_findings(report_text)
+                evidence = _build_evidence(units)
+                caveats = _collect_caveats(units, error)
+
+                return AgentAnswer(
+                    answer=report_text,
+                    key_findings=key_findings[:8],
+                    evidence=evidence,
+                    caveats=caveats[:5],
+                    recommendations=[],
+                    follow_up_questions=[],
+                )
+
+        response = model.invoke(messages)
         if response and response.content:
             report_text = response.content.strip()
 
@@ -130,6 +155,23 @@ def synthesize_agent_answer(
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _chunk_content_text(chunk: Any) -> str:
+    content = getattr(chunk, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return str(content or "")
 
 
 def _format_rows(columns: list[str], rows: list[list[Any]]) -> str:

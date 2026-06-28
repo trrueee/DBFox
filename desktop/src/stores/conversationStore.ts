@@ -52,6 +52,10 @@ function answerText(event: ConversationStreamEvent): string | null {
   return null;
 }
 
+function answerDeltaText(event: ConversationStreamEvent): string | null {
+  return event.type === "agent.answer.delta" && typeof event.content === "string" ? event.content : null;
+}
+
 function messageStatusForEvent(event: ConversationStreamEvent): ConversationMessage["status"] {
   if (event.type === "agent.run.failed") return "failed";
   if (event.type === "agent.run.cancelled") return "cancelled";
@@ -201,6 +205,7 @@ function reduceStreamEvent(state: ConversationStore, event: ConversationStreamEv
   const conversationId = event.conversation_id || event.response?.conversation_id || "";
   const messageId = event.message_id || event.assistant_message_id || event.response?.assistant_message_id || null;
   const text = answerText(event);
+  const deltaText = answerDeltaText(event);
 
   if (event.run_id) {
     const current = next.runsById[event.run_id];
@@ -258,7 +263,10 @@ function reduceStreamEvent(state: ConversationStore, event: ConversationStreamEv
     }
   }
 
-  if (messageId && text) {
+  if (messageId && deltaText) {
+    const currentContent = next.messagesById[messageId]?.content || "";
+    next = upsertMessage(next, messageId, { content: `${currentContent}${deltaText}`, status: "streaming" });
+  } else if (messageId && text) {
     next = upsertMessage(next, messageId, { content: text, status: messageStatusForEvent(event) });
   }
 

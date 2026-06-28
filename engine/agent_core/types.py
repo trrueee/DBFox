@@ -32,6 +32,7 @@ AgentRuntimeEventType = Literal[
     "agent.context.update",
     "agent.artifact.created",
     "agent.artifact.delta",
+    "agent.answer.delta",
     "agent.answer.completed",
     "agent.run.completed",
     "agent.run.failed",
@@ -332,6 +333,7 @@ class AgentRuntimeEvent(BaseModel):
     artifact_delta: dict[str, Any] | None = None
     # artifact_delta format: {"artifact_id": str, "payload_merge": dict}
     # payload_merge list fields → append, scalar fields → replace
+    content: str | None = None
     answer: AgentAnswer | None = None
     response: AgentRunResponse | None = None
     approval: AgentApprovalRecord | None = None
