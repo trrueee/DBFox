@@ -25,6 +25,11 @@ const MARKDOWN_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className="hifi-md-quote">{children}</blockquote>,
 };
 
+const TABLE_CELL_MARKDOWN_COMPONENTS: Components = {
+  ...MARKDOWN_COMPONENTS,
+  p: ({ children }) => <>{children}</>,
+};
+
 export function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
   const segments = splitMarkdownTables(content);
 
@@ -91,7 +96,9 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
         <thead>
           <tr>
             {headers.map((header, index) => (
-              <th key={index}>{header}</th>
+              <th key={index}>
+                <MarkdownTableCell content={header} />
+              </th>
             ))}
           </tr>
         </thead>
@@ -99,13 +106,29 @@ function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] 
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {headers.map((_, cellIndex) => (
-                <td key={cellIndex}>{row[cellIndex]}</td>
+                <td key={cellIndex}>
+                  <MarkdownTableCell content={row[cellIndex] || ""} />
+                </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function MarkdownTableCell({ content }: { content: string }) {
+  const parts = content.split(/<br\s*\/?>/gi);
+  return (
+    <>
+      {parts.map((part, index) => (
+        <span key={index} className="hifi-md-table-cell-line">
+          {index > 0 && <br />}
+          <ReactMarkdown components={TABLE_CELL_MARKDOWN_COMPONENTS}>{part}</ReactMarkdown>
+        </span>
+      ))}
+    </>
   );
 }
 
