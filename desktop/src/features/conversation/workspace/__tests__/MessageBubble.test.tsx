@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationMessage, ConversationRun } from "../../../../types/conversation";
 import { MessageBubble } from "../MessageBubble";
 
@@ -42,6 +42,10 @@ function approvalRun(): ConversationRun {
 describe("MessageBubble", () => {
   beforeEach(() => {
     cleanup();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders an approval card for pending approvals", () => {
@@ -174,5 +178,86 @@ describe("MessageBubble", () => {
     );
 
     expect(screen.getByText("未执行查询，仅基于 schema 推断")).toBeTruthy();
+  });
+
+  it("reveals streaming assistant text progressively when a large delta lands", async () => {
+    vi.useFakeTimers();
+    const longAnswer = "这是一个较长的流式回答片段，用来模拟模型在很短时间内吐出一整段内容。";
+    const { rerender } = render(
+      <MessageBubble
+        message={{ ...assistantMessage, content: "", status: "streaming" }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Thinking...")).toBeTruthy();
+
+    rerender(
+      <MessageBubble
+        message={{ ...assistantMessage, content: longAnswer, status: "streaming" }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText(longAnswer)).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+
+    expect(screen.getByText(/这是一个/)).toBeTruthy();
+    expect(screen.queryByText(longAnswer)).toBeNull();
+
+    for (let i = 0; i < 80; i += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+    }
+
+    expect(screen.getByText(longAnswer)).toBeTruthy();
+  });
+
+  it("renders completed assistant text immediately without typewriter smoothing", () => {
+    const completedAnswer = "历史消息应该直接完整显示。";
+
+    render(
+      <MessageBubble
+        message={{ ...assistantMessage, content: completedAnswer, status: "completed" }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(completedAnswer)).toBeTruthy();
+  });
+
+  it("renders table cell markdown cleanly inside assistant answers", () => {
+    render(
+      <MessageBubble
+        message={{
+          ...assistantMessage,
+          status: "completed",
+          content: [
+            "| 维度 | DBFox | 普通 AI |",
+            "| --- | --- | --- |",
+            "| **SQL 能力** | 自动验证 `sql.validate`<br>执行只读查询 | 只能给示例 SQL |",
+          ].join("\n"),
+        }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("SQL 能力")).toBeTruthy();
+    expect(screen.getByText("sql.validate")).toBeTruthy();
+    expect(screen.getByText("执行只读查询")).toBeTruthy();
+    expect(screen.queryByText(/\*\*SQL 能力\*\*/)).toBeNull();
+    expect(screen.queryByText(/<br>/)).toBeNull();
   });
 });

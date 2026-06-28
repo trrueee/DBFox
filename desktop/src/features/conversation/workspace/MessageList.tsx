@@ -52,6 +52,18 @@ export function MessageList({
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: "smooth" });
   }, [messages.length, artifacts.length, latestMessageScrollKey]);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    });
+    const content = node.firstElementChild;
+    observer.observe(content || node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="conv-message-scroll" ref={ref}>
       <div className="conv-message-column">

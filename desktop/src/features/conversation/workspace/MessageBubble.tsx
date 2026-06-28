@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { AgentAnswer, AgentApproval } from "../../../lib/api/types";
 import type {
@@ -29,6 +30,8 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const messageClass = isUser ? `conv-message conv-message-${message.role}` : "conv-message conv-message-answer";
+  const smoothedAnswer = useSmoothedStreamingText(message.content, !isUser && message.status === "streaming", message.id);
+  const answerContent = smoothedAnswer.text || (message.status === "streaming" ? "Thinking..." : "");
   return (
     <article className={messageClass}>
       <div className="conv-message-body">
@@ -51,8 +54,8 @@ export function MessageBubble({
             {run?.approval && run.approval.status !== "pending" && (
               <ApprovalAuditCard approval={run.approval} onOpenSqlConsole={onOpenSqlConsole} />
             )}
-            <div className="conv-answer-document">
-              <MarkdownContent content={message.content || (message.status === "streaming" ? "Thinking..." : "")} />
+            <div className="conv-answer-document" data-streaming-reveal={smoothedAnswer.isRevealing || undefined}>
+              <MarkdownContent content={answerContent} />
             </div>
             <AnswerEvidenceChips
               answer={run?.answer || null}
@@ -72,6 +75,104 @@ export function MessageBubble({
       </div>
     </article>
   );
+}
+
+interface SmoothedStreamingText {
+  text: string;
+  isRevealing: boolean;
+}
+
+export function useSmoothedStreamingText(
+  targetText: string,
+  active: boolean,
+  identity: string,
+): SmoothedStreamingText {
+  const reducedMotion = usePrefersReducedMotion();
+  const initialText = active && targetText ? "" : targetText;
+  const [displayed, setDisplayed] = useState(initialText);
+  const streamWasActiveRef = useRef(active);
+  const identityRef = useRef(identity);
+
+  useEffect(() => {
+    if (identityRef.current !== identity) {
+      identityRef.current = identity;
+      streamWasActiveRef.current = active;
+      setDisplayed(active && targetText ? "" : targetText);
+      return;
+    }
+
+    if (active) streamWasActiveRef.current = true;
+    if (reducedMotion || !streamWasActiveRef.current) {
+      setDisplayed(targetText);
+    }
+  }, [active, identity, reducedMotion, targetText]);
+
+  useEffect(() => {
+    if (reducedMotion || !streamWasActiveRef.current) return;
+    if (displayed === targetText) {
+      if (!active) streamWasActiveRef.current = false;
+      return;
+    }
+    if (!targetText.startsWith(displayed) || displayed.length > targetText.length) {
+      setDisplayed(targetText);
+      return;
+    }
+
+    const remaining = targetText.slice(displayed.length);
+    const delay = revealDelay(displayed);
+    const timer = window.setTimeout(() => {
+      const nextText = targetText.slice(0, displayed.length + revealCount(remaining));
+      setDisplayed(nextText);
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [active, displayed, reducedMotion, targetText]);
+
+  return useMemo(
+    () => ({
+      text: displayed,
+      isRevealing: streamWasActiveRef.current && displayed.length < targetText.length,
+    }),
+    [displayed, targetText],
+  );
+}
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduced(media.matches);
+    onChange();
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, []);
+
+  return reduced;
+}
+
+function revealCount(remaining: string): number {
+  if (!remaining) return 0;
+  const leadingWhitespace = remaining.match(/^\s+/)?.[0].length || 0;
+  const backlog = remaining.length;
+  const base = backlog > 240 ? 42 : backlog > 120 ? 26 : backlog > 60 ? 14 : backlog > 24 ? 8 : 4;
+  const budget = Math.min(Math.max(base, leadingWhitespace + 2), remaining.length);
+  const punctuation = remaining.slice(0, budget).search(/[。！？!?；;，,、\n]/);
+  if (punctuation >= 1) return punctuation + 1;
+  return budget;
+}
+
+function revealDelay(displayed: string): number {
+  const last = displayed.at(-1);
+  if (!last) return 12;
+  if (last === "\n") return 70;
+  if (/[。！？!?；;]/.test(last)) return 90;
+  if (/[，,、]/.test(last)) return 54;
+  return 24;
 }
 
 function AnswerEvidenceChips({
