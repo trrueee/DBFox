@@ -792,6 +792,7 @@ export type AgentRuntimeEventType =
   | "agent.context.update"
   | "agent.artifact.created"
   | "agent.artifact.delta"
+  | "agent.answer.delta"
   | "agent.answer.completed"
   | "agent.approval.required"
   | "agent.approval.resolved"
@@ -823,6 +824,7 @@ export interface AgentRuntimeEvent {
   step?: Record<string, unknown> | null;
   artifact?: AgentArtifact | null;
   artifact_delta?: Record<string, unknown> | null;
+  content?: string | null;
   // artifact_delta: { artifact_id: string; payload_merge: Record<string, unknown> }
   // list fields in payload_merge → append; scalar fields → replace
   answer?: AgentAnswer | null;

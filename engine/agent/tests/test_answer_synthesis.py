@@ -4,6 +4,39 @@ from unittest.mock import MagicMock, patch
 from engine.agent_core.answer import synthesize_agent_answer
 
 
+@patch("engine.llm.get_chat_model")
+def test_synthesize_agent_answer_streams_delta_chunks(mock_get_chat_model):
+    class Chunk:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+    mock_model = MagicMock()
+    mock_model.stream.return_value = [Chunk("结论："), Chunk("共 10 条记录。")]
+    mock_get_chat_model.return_value = mock_model
+    deltas: list[str] = []
+
+    with patch.dict("os.environ", {"DBFOX_TESTING": "1"}):
+        result = synthesize_agent_answer(
+            question="How many orders?",
+            analysis_units=[{
+                "id": "unit-stream",
+                "sql": "SELECT COUNT(*) AS count FROM orders",
+                "execution": {
+                    "success": True,
+                    "rowCount": 1,
+                    "columns": ["count"],
+                    "rows": [[10]],
+                },
+            }],
+            emit_answer_delta=deltas.append,
+        )
+
+    assert deltas == ["结论：", "共 10 条记录。"]
+    assert result.answer == "结论：共 10 条记录。"
+    mock_model.stream.assert_called_once()
+    mock_model.invoke.assert_not_called()
+
+
 def test_synthesize_agent_answer_no_analysis_units_no_credentials():
     """No analysis units, no credentials — should fallback to default behavior."""
     with patch.dict("os.environ", {

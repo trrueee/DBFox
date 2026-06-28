@@ -510,6 +510,7 @@ class AnswerSynthesizeTool(BaseTool[AnswerSynthesizeInput, AgentAnswer]):
             api_key=api_key,
             api_base=api_base,
             error=context.state.get("error"),
+            emit_answer_delta=context.emit_answer_delta,
         )
 
 

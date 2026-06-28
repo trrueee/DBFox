@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getConversation, listConversations } from "../../features/conversation/conversationRepository";
 import { agentApi } from "../../lib/api/agent";
+import type { AgentAnswer } from "../../lib/api/types";
+import type { ConversationDetail, ConversationMessage, ConversationRun } from "../../types/conversation";
 import { useConversationStore } from "../conversationStore";
 
 vi.mock("../../components/SettingsDialog", () => ({
@@ -28,6 +30,86 @@ vi.mock("../../lib/api/agent", () => ({
     streamResumeAgentRun: vi.fn(),
   },
 }));
+
+type ConversationStoreState = ReturnType<typeof useConversationStore.getState>;
+
+function answerFixture(answer: string): AgentAnswer {
+  return {
+    answer,
+    key_findings: [],
+    evidence: [],
+    caveats: [],
+    recommendations: [],
+    follow_up_questions: [],
+  };
+}
+
+function assistantMessageFixture(
+  conversationId: string,
+  id: string,
+  overrides: Partial<ConversationMessage> = {},
+): ConversationMessage {
+  return {
+    id,
+    conversation_id: conversationId,
+    role: "assistant",
+    content: "",
+    status: "streaming",
+    sequence: 1,
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function conversationFixture(
+  id: string,
+  {
+    title = "Test",
+    messages = [],
+    runs = [],
+  }: {
+    title?: string;
+    messages?: ConversationMessage[];
+    runs?: ConversationRun[];
+  },
+): ConversationDetail {
+  return {
+    id,
+    title,
+    datasource_id: "ds-1",
+    context_tables: [],
+    created_at: null,
+    updated_at: null,
+    messages,
+    runs,
+    artifacts: [],
+    approvals: [],
+  };
+}
+
+function loadAssistantConversation(
+  store: ConversationStoreState,
+  {
+    conversationId,
+    title,
+    assistantId,
+    runs,
+  }: {
+    conversationId: string;
+    title?: string;
+    assistantId: string;
+    runs?: ConversationRun[];
+  },
+) {
+  store.loadConversation(
+    conversationFixture(conversationId, {
+      title,
+      messages: [assistantMessageFixture(conversationId, assistantId)],
+      runs,
+    }),
+  );
+}
 
 describe("conversationStore", () => {
   beforeEach(() => {
@@ -97,30 +179,66 @@ describe("conversationStore", () => {
     expect(state.runsById["run-1"].answer?.answer).toBe("world");
   });
 
+  it("appends answer deltas and reconciles with the completed answer", () => {
+    const store = useConversationStore.getState();
+    loadAssistantConversation(store, {
+      conversationId: "conv-stream",
+      title: "Stream",
+      assistantId: "assistant-stream",
+    });
+
+    store.applyStreamEvent({
+      event_id: "delta-1",
+      run_id: "run-stream",
+      sequence: 1,
+      created_at_ms: 1,
+      type: "agent.answer.delta",
+      conversation_id: "conv-stream",
+      message_id: "assistant-stream",
+      assistant_message_id: "assistant-stream",
+      content: "Hel",
+    });
+    store.applyStreamEvent({
+      event_id: "delta-2",
+      run_id: "run-stream",
+      sequence: 2,
+      created_at_ms: 2,
+      type: "agent.answer.delta",
+      conversation_id: "conv-stream",
+      message_id: "assistant-stream",
+      assistant_message_id: "assistant-stream",
+      content: "lo",
+    });
+
+    let state = useConversationStore.getState();
+    expect(state.messagesById["assistant-stream"].content).toBe("Hello");
+    expect(state.messagesById["assistant-stream"].status).toBe("streaming");
+    expect(state.runsById["run-stream"].answer).toBeNull();
+
+    store.applyStreamEvent({
+      event_id: "completed-stream",
+      run_id: "run-stream",
+      sequence: 3,
+      created_at_ms: 3,
+      type: "agent.answer.completed",
+      conversation_id: "conv-stream",
+      message_id: "assistant-stream",
+      assistant_message_id: "assistant-stream",
+      answer: answerFixture("Hello!"),
+    });
+
+    state = useConversationStore.getState();
+    expect(state.messagesById["assistant-stream"].content).toBe("Hello!");
+    expect(state.messagesById["assistant-stream"].status).toBe("completed");
+    expect(state.runsById["run-stream"].answer?.answer).toBe("Hello!");
+  });
+
   it("stores pending approval details from stream events", () => {
     const store = useConversationStore.getState();
-    store.loadConversation({
-      id: "conv-approval",
+    loadAssistantConversation(store, {
+      conversationId: "conv-approval",
       title: "Approval",
-      datasource_id: "ds-1",
-      context_tables: [],
-      created_at: null,
-      updated_at: null,
-      messages: [
-        {
-          id: "assistant-approval",
-          conversation_id: "conv-approval",
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sequence: 1,
-          created_at: null,
-          updated_at: null,
-        },
-      ],
-      runs: [],
-      artifacts: [],
-      approvals: [],
+      assistantId: "assistant-approval",
     });
 
     store.applyStreamEvent({
@@ -141,7 +259,7 @@ describe("conversationStore", () => {
         risk_level: "warning",
         reason: "生产环境需要确认",
         policy_decision: {},
-        requested_action: { args: { sql: "SELECT * FROM orders" } },
+        requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
         created_at: "2026-06-22T00:00:00Z",
       },
     });
@@ -153,25 +271,10 @@ describe("conversationStore", () => {
 
   it("streams approved approval decisions back into the conversation", async () => {
     const store = useConversationStore.getState();
-    store.loadConversation({
-      id: "conv-approval",
+    loadAssistantConversation(store, {
+      conversationId: "conv-approval",
       title: "Approval",
-      datasource_id: "ds-1",
-      context_tables: [],
-      created_at: null,
-      updated_at: null,
-      messages: [
-        {
-          id: "assistant-approval",
-          conversation_id: "conv-approval",
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sequence: 1,
-          created_at: null,
-          updated_at: null,
-        },
-      ],
+      assistantId: "assistant-approval",
       runs: [
         {
           id: "run-approval",
@@ -190,7 +293,7 @@ describe("conversationStore", () => {
             risk_level: "warning",
             reason: "生产环境需要确认",
             policy_decision: {},
-            requested_action: { args: { sql: "SELECT * FROM orders" } },
+            requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
             created_at: "2026-06-22T00:00:00Z",
           },
           events: [],
@@ -209,7 +312,7 @@ describe("conversationStore", () => {
       risk_level: "warning",
       reason: "生产环境需要确认",
       policy_decision: {},
-      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
       created_at: "2026-06-22T00:00:00Z",
     });
     vi.mocked(agentApi.streamResumeAgentRun).mockImplementation(async (_runId, _approvalId, options) => {
@@ -277,25 +380,10 @@ describe("conversationStore", () => {
 
   it("resolves rejected approval decisions without resuming the run", async () => {
     const store = useConversationStore.getState();
-    store.loadConversation({
-      id: "conv-reject",
+    loadAssistantConversation(store, {
+      conversationId: "conv-reject",
       title: "Reject",
-      datasource_id: "ds-1",
-      context_tables: [],
-      created_at: null,
-      updated_at: null,
-      messages: [
-        {
-          id: "assistant-reject",
-          conversation_id: "conv-reject",
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sequence: 1,
-          created_at: null,
-          updated_at: null,
-        },
-      ],
+      assistantId: "assistant-reject",
       runs: [
         {
           id: "run-reject",
@@ -314,14 +402,12 @@ describe("conversationStore", () => {
             risk_level: "warning",
             reason: "生产环境需要确认",
             policy_decision: {},
-            requested_action: { args: { sql: "SELECT * FROM orders" } },
+            requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
             created_at: "2026-06-22T00:00:00Z",
           },
           events: [],
         },
       ],
-      artifacts: [],
-      approvals: [],
     });
     const rejectedApproval = {
       id: "approval-reject",
@@ -333,7 +419,7 @@ describe("conversationStore", () => {
       risk_level: "warning",
       reason: "生产环境需要确认",
       policy_decision: {},
-      requested_action: { args: { sql: "SELECT * FROM orders" } },
+      requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
       created_at: "2026-06-22T00:00:00Z",
     };
     vi.mocked(agentApi.resolveAgentApproval).mockResolvedValue(rejectedApproval);
@@ -363,28 +449,10 @@ describe("conversationStore", () => {
 
   it("does not replace a run when a duplicate event is ignored", () => {
     const store = useConversationStore.getState();
-    store.loadConversation({
-      id: "conv-events",
+    loadAssistantConversation(store, {
+      conversationId: "conv-events",
       title: "Events",
-      datasource_id: "ds-1",
-      context_tables: [],
-      created_at: null,
-      updated_at: null,
-      messages: [
-        {
-          id: "assistant-events",
-          conversation_id: "conv-events",
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sequence: 1,
-          created_at: null,
-          updated_at: null,
-        },
-      ],
-      runs: [],
-      artifacts: [],
-      approvals: [],
+      assistantId: "assistant-events",
     });
     const event = {
       event_id: "event-same",
@@ -406,28 +474,10 @@ describe("conversationStore", () => {
 
   it("applies a batch of stream events in order", () => {
     const store = useConversationStore.getState();
-    store.loadConversation({
-      id: "conv-batch",
+    loadAssistantConversation(store, {
+      conversationId: "conv-batch",
       title: "Batch",
-      datasource_id: "ds-1",
-      context_tables: [],
-      created_at: null,
-      updated_at: null,
-      messages: [
-        {
-          id: "assistant-batch",
-          conversation_id: "conv-batch",
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          sequence: 1,
-          created_at: null,
-          updated_at: null,
-        },
-      ],
-      runs: [],
-      artifacts: [],
-      approvals: [],
+      assistantId: "assistant-batch",
     });
 
     store.applyStreamEvents([
