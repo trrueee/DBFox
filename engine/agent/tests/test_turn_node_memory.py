@@ -799,7 +799,9 @@ def test_progress_routes_confirmation_only_safety_to_approval(monkeypatch) -> No
     assert update["status"] == "waiting_approval"
     assert update["pending_approval"]["id"] == "approval-progress-event-store"
     assert update["pending_approval"]["tool_name"] == "sql.execute_readonly"
-    assert update["pending_approval"]["requested_action"]["args"]["sql"] == "SELECT * FROM users LIMIT 1000"
+    action_args = update["pending_approval"]["requested_action"]["args"]
+    assert action_args["safe_sql"] == "SELECT * FROM users LIMIT 1000"
+    assert "sql" not in action_args
     assert store.created_approvals[0]["run_id"] == "run_confirm"
     routed_state = dict(state)
     routed_state.update(update)

@@ -139,6 +139,36 @@ describe("agentStore — sendFollowUp", () => {
 describe("agentStore — stream event rendering guards", () => {
   beforeEach(resetAll);
 
+  it("uses safe_sql from approval requested action", async () => {
+    vi.mocked(agentApi.streamAgentQuery).mockResolvedValue({
+      run_id: "run-approval",
+      session_id: "session-approval",
+      success: false,
+      status: "waiting_approval",
+      question: "orders",
+      artifacts: [],
+      approval: {
+        id: "approval-1",
+        run_id: "run-approval",
+        session_id: "session-approval",
+        step_name: "sql.execute_readonly",
+        tool_name: "sql.execute_readonly",
+        status: "pending",
+        risk_level: "warning",
+        reason: "requires approval",
+        policy_decision: {},
+        requested_action: { args: { safe_sql: "SELECT * FROM orders LIMIT 1000" } },
+        created_at: "2026-06-22T00:00:00Z",
+      },
+    });
+
+    await useAgentStore.getState().runAgentForTab("smart-query", "orders");
+
+    const tab = useWorkspaceStore.getState().tabs.find((item) => item.id === "smart-query");
+    expect(tab?.agentStatus).toBe("waiting_approval");
+    expect(tab?.agentApproval?.sql).toBe("SELECT * FROM orders LIMIT 1000");
+  });
+
   it("does not patch the timeline when a runtime event leaves it unchanged", async () => {
     let emittedEvent = false;
     vi.mocked(agentApi.streamAgentQuery).mockImplementation(async (_datasourceId, question, _request, options) => {

@@ -318,11 +318,18 @@ function finishAgentRun(
 
   if (response.status === "waiting_approval") {
     const approval = response.approval;
-    const requestedAction = (approval?.requested_action || {}) as { args?: { sql?: unknown } };
+    const requestedAction = (approval?.requested_action || {}) as {
+      sql?: unknown;
+      safe_sql?: unknown;
+      args?: { sql?: unknown; safe_sql?: unknown };
+    };
     const approvalSql =
-      typeof requestedAction.args?.sql === "string"
-        ? requestedAction.args.sql
-        : response.sql || undefined;
+      stringValue(requestedAction.args?.safe_sql) ??
+      stringValue(requestedAction.args?.sql) ??
+      stringValue(requestedAction.safe_sql) ??
+      stringValue(requestedAction.sql) ??
+      response.sql ??
+      undefined;
     ws.updateTabMessage(
       tabId,
       progressId,
@@ -372,4 +379,8 @@ function finishAgentRun(
     agentSuggestions: response.suggestions || null,
   });
 
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }

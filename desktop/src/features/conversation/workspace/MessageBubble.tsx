@@ -202,9 +202,13 @@ function approvalSql(approval: AgentApproval): string {
   if (!action || typeof action !== "object") return "";
   const record = action as Record<string, unknown>;
   if (typeof record.sql === "string") return record.sql;
+  if (typeof record.safe_sql === "string") return record.safe_sql;
   const args = record.args;
   if (args && typeof args === "object" && typeof (args as Record<string, unknown>).sql === "string") {
     return (args as Record<string, string>).sql;
+  }
+  if (args && typeof args === "object" && typeof (args as Record<string, unknown>).safe_sql === "string") {
+    return (args as Record<string, string>).safe_sql;
   }
   return "";
 }
