@@ -95,6 +95,42 @@ def test_build_tool_history_entry_summarizes_output_shape():
     assert set(entry["output_keys"]) == {"results", "blocked_reasons", "returned_rows"}
 
 
+def test_sql_execute_history_uses_executed_safe_sql_identity_when_args_are_empty():
+    first = ToolObservation(
+        name="sql.execute_readonly",
+        status="success",
+        input={},
+        output={
+            "status": "success",
+            "success": True,
+            "rowCount": 4,
+            "safe_sql": "SELECT table_name, COUNT(*) FROM information_schema.tables GROUP BY table_name",
+        },
+        error=None,
+        latency_ms=5,
+    )
+    second = ToolObservation(
+        name="sql.execute_readonly",
+        status="success",
+        input={},
+        output={
+            "status": "success",
+            "success": True,
+            "rowCount": 7,
+            "safe_sql": "SELECT DATE(created_at), COUNT(*) FROM content_drafts GROUP BY DATE(created_at)",
+        },
+        error=None,
+        latency_ms=5,
+    )
+
+    first_entry = build_tool_history_entry("sql.execute_readonly", first)
+    second_entry = build_tool_history_entry("sql.execute_readonly", second)
+
+    assert first_entry["input"]["effective_sql_fingerprint"]
+    assert second_entry["input"]["effective_sql_fingerprint"]
+    assert first_entry["input"] != second_entry["input"]
+
+
 def test_derive_catalog_exploration_state_collects_tables_terms_and_exhausted_paths():
     search_observation = ToolObservation(
         name="db.search",

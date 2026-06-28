@@ -737,6 +737,30 @@ class TestLoopPrevention:
         assert result["progress_decision"]["status"] == "failed"
         assert "syntax error" in result["error"]
 
+    def test_distinct_sql_execute_effective_inputs_do_not_trigger_repeat_guard(self):
+        state = self._state(
+            tool_call_history=[
+                {
+                    "name": "sql.execute_readonly",
+                    "input": {"effective_sql_fingerprint": "counts-by-table"},
+                    "status": "success",
+                    "returned_rows": 4,
+                },
+                {
+                    "name": "sql.execute_readonly",
+                    "input": {"effective_sql_fingerprint": "drafts-by-day"},
+                    "status": "success",
+                    "returned_rows": 7,
+                },
+            ]
+        )
+
+        result = deterministic_progress_fastpath(state)
+
+        if result is not None:
+            assert result.get("status") != "failed"
+            assert "sql.execute_readonly" not in str(result.get("error", ""))
+
     def test_one_empty_search_does_not_trigger_loop(self):
         state = self._state(
             tool_call_history=[
