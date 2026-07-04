@@ -14,7 +14,6 @@ This module is a thin re-export layer. The actual implementations live in
   - ``search.py``   — ``db.search`` handler
   - ``inspect.py``  — ``db.inspect`` handler
   - ``preview.py``  — ``db.preview`` handler
-  - ``query.py``    — ``db.query`` handler
   - ``sql_execution.py`` — ``sql.validate`` / ``sql.execute_readonly`` handlers
 """
 
@@ -27,7 +26,6 @@ from engine.tools.db.observe import db_observe
 from engine.tools.db.search import db_search
 from engine.tools.db.inspect import db_inspect
 from engine.tools.db.preview import db_preview
-from engine.tools.db.query import db_query
 from engine.tools.db.sql_execution import sql_validate, sql_execute_readonly
 
 __all__ = [
@@ -35,7 +33,6 @@ __all__ = [
     "db_search",
     "db_inspect",
     "db_preview",
-    "db_query",
     "sql_validate",
     "sql_execute_readonly",
 ]

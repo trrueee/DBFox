@@ -22,7 +22,7 @@ def _observation(name: str, *, status: str = "success", output: dict | None = No
 
 
 def test_db_tools_clear_error_on_success():
-    for name in {"db.query", "db.preview", "db.inspect"}:
+    for name in {"sql.execute_readonly", "db.preview", "db.inspect"}:
         assert name in ERROR_CLEARING_TOOLS
         update = apply_tool_observation_to_state(
             state={"error": "old", "last_error_telemetry": {"old": True}},
@@ -36,23 +36,23 @@ def test_db_tools_clear_error_on_success():
 
 def test_failure_preserves_telemetry():
     update = apply_tool_observation_to_state(
-        state={"pending_tool_call": {"tool_name": "db.query", "args": {"sql": "SELECT bad"}}},
-        tool_name="db.query",
-        observation=_observation("db.query", status="failed", output={"retryable": False}),
+        state={"pending_tool_call": {"tool_name": "sql.execute_readonly", "args": {}}},
+        tool_name="sql.execute_readonly",
+        observation=_observation("sql.execute_readonly", status="failed", output={"retryable": False}),
     )
 
-    assert update["last_failed_tool_call"]["tool_name"] == "db.query"
+    assert update["last_failed_tool_call"]["tool_name"] == "sql.execute_readonly"
     assert update["last_error_telemetry"] == {"retryable": False}
     assert update["execution"]["success"] is False
     assert update["error"] == "boom"
 
 
-def test_db_query_contract_writes_execution_and_sql():
+def test_execute_readonly_contract_writes_execution_and_sql():
     update = apply_tool_observation_to_state(
         state={},
-        tool_name="db.query",
+        tool_name="sql.execute_readonly",
         observation=_observation(
-            "db.query",
+            "sql.execute_readonly",
             output={"status": "success", "returned_rows": 1, "safe_sql": "SELECT 1"},
         ),
     )

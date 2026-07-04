@@ -65,8 +65,8 @@ RESET_SELF_HEALING: dict[str, Any] = {
 }
 
 RESET_ALL_ERROR_STATE = ("error", "last_error_telemetry", "last_failed_tool_call")
-ERROR_CLEARING_TOOLS = {"db.query", "db.preview", "db.inspect", "sql.execute_readonly"}
-ARTIFACT_TOOLS = {"db.preview", "db.query", "sql.execute_readonly", "chart.suggest"}
+ERROR_CLEARING_TOOLS = {"db.preview", "db.inspect", "sql.execute_readonly"}
+ARTIFACT_TOOLS = {"db.preview", "sql.execute_readonly", "chart.suggest"}
 
 
 def apply_tool_observation_to_state(
@@ -141,7 +141,7 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
         return {"db_inspection": output}
     if tool_name == "db.preview":
         return {"db_preview": output}
-    if tool_name == "db.query" or tool_name == "sql.execute_readonly":
+    if tool_name == "sql.execute_readonly":
         execution = dict(output)
         execution["success"] = bool(output.get("success")) or output.get("status") == "success"
         execution["rowCount"] = output.get("rowCount", output.get("returned_rows", 0))
@@ -225,7 +225,7 @@ def _apply_failed_telemetry(
             "retryable": bool(update["last_error_telemetry"].get("retryable")),
         },
     })
-    if tool_name == "db.query":
+    if tool_name == "sql.execute_readonly":
         update["execution"] = {
             "success": False,
             "error": observation.error,

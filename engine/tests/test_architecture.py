@@ -151,23 +151,75 @@ def test_agent_state_declares_each_field_once() -> None:
     assert not duplicates, f"DBFoxAgentState declares duplicate fields: {duplicates}"
 
 
+def test_agent_app_service_delegates_runtime_boundaries() -> None:
+    """DBFoxAgentService should orchestrate, not own context/stream/persistence internals."""
+    service_path = ENGINE_DIR / "agent" / "app" / "service.py"
+    tree = ast.parse(service_path.read_text(encoding="utf-8"))
+    forbidden_defs = {
+        "_build_context_bundle",
+        "_workspace_context_payload",
+        "_schema_context_payload",
+        "_semantic_resolution_payload",
+        "_environment_context_payload",
+        "_memory_list",
+        "_restore_session_memory",
+        "_load_session_memory_safe",
+        "_list_reusable_sqls_safe",
+        "_initial_state",
+        "_stream_and_merge",
+        "_custom_stream_event",
+        "_merge_state",
+        "_build_emitter",
+        "_persist_artifact_event",
+        "_flush_event_store",
+        "_persist_memory_projection",
+        "_finalize_persistence",
+    }
+    definitions = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    violations = sorted(forbidden_defs & definitions)
+    assert not violations, f"service.py still owns runtime boundary helpers: {violations}"
+
+    modules = {
+        "engine.agent.app.context_builder": "AgentContextBuilder",
+        "engine.agent.app.stream_runner": "AgentStreamRunner",
+        "engine.agent.app.persistence_coordinator": "AgentPersistenceCoordinator",
+        "engine.agent.app.memory_projection": "AgentMemoryProjectionCoordinator",
+    }
+    for module_name, public_name in modules.items():
+        module = importlib.import_module(module_name)
+        assert hasattr(module, public_name), f"{module_name} must export {public_name}"
+
+
 def test_sql_lifecycle_tools_have_one_model_visible_path() -> None:
-    """Model-authored SQL must use validate -> execute, while db.query stays internal."""
+    """Model-authored SQL must use validate -> execute, with the retired db.query tool removed."""
     from engine.agent.model.system_prompt import SYSTEM_PROMPT
     from engine.tools.dbfox_tools import register_dbfox_tools
 
     registry = register_dbfox_tools()
-    db_query = registry.require("db.query").spec
     validate = registry.require("sql.validate").spec
     execute = registry.require("sql.execute_readonly").spec
 
-    assert db_query.policy.visible_to_model is False
+    assert registry.get("db.query") is None
     assert validate.policy.visible_to_model is True
     assert execute.policy.visible_to_model is True
     assert execute.policy.requires_validated_sql is True
-    assert "db.query is an internal backend fast path" in SYSTEM_PROMPT
+    assert "db.query" not in SYSTEM_PROMPT
+    assert "query_database" not in SYSTEM_PROMPT
     assert "sql.validate" in SYSTEM_PROMPT
     assert "sql.execute_readonly" in SYSTEM_PROMPT
+
+
+def test_public_query_api_does_not_expose_rows_returning_execute_endpoint() -> None:
+    """HTTP query execution must create artifacts via /agent/console/execute, not return rows directly."""
+    query_api = (ENGINE_DIR / "api" / "query.py").read_text(encoding="utf-8")
+
+    assert '"/query/execute"' not in query_api
+    assert "SQLExecuteRequest" not in query_api
+    assert "execute_query" not in query_api
 
 
 # ---------------------------------------------------------------------------

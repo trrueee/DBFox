@@ -16,7 +16,6 @@ from engine.environment.tools import (
 from engine.tools.db_tools import (
     db_inspect,
     db_observe,
-    db_query,
     db_search,
 )
 from engine.tools.runtime import (
@@ -60,11 +59,6 @@ class PreviewInput(BaseModel):
     limit: int = Field(default=10, description="Max rows to return.")
     where: dict[str, Any] | None = Field(default=None, description="Structured filter: {column, op, value}.")
     order_by: dict[str, Any] | list[dict[str, Any]] | None = Field(default=None, description="Structured sort: {column, direction} or [{...}].")
-
-
-class QueryInput(BaseModel):
-    sql: str = Field(description="A single read-only SELECT statement to execute through TrustGate safety validation.")
-    question: str | None = Field(default=None, description="The original user question this SQL answers.")
 
 
 class SqlValidateInput(BaseModel):
@@ -367,30 +361,6 @@ class DbPreviewTool(BaseTool[PreviewInput, LooseOutput]):
         ))
 
 
-class DbQueryTool(BaseTool[QueryInput, LooseOutput]):
-    name = "db.query"
-    group = "db"
-    description = (
-        "Internal fast path for backend-owned read-only SELECT execution. "
-        "This tool is not model-visible; model-authored SQL must use the "
-        "explicit sql.validate then sql.execute_readonly lifecycle. "
-        "The internal path still runs Guardrail, TrustGate, PolicyEngine, "
-        "and sensitive-column redaction."
-    )
-    input_model = QueryInput
-    output_model = LooseOutput
-    policy = ToolPolicy(side_effect="read", risk_level="warning", visible_to_model=False)
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(
-        produces=("execution",),
-        clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
-    )
-    artifacts = ArtifactSpec(emit=True, artifact_types=("table",))
-
-    def run(self, tool_input: QueryInput, context: ToolRunContext) -> LooseOutput:
-        return LooseOutput.model_validate(db_query(context.db_session, context.request.datasource_id, tool_input.sql, tool_input.question or ""))
-
-
 class SqlValidateTool(BaseTool[SqlValidateInput, LooseOutput]):
     name = "sql.validate"
     group = "sql"
@@ -487,7 +457,6 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(DbSearchTool())
     registry.register(DbInspectTool())
     registry.register(DbPreviewTool())
-    registry.register(DbQueryTool())
     registry.register(SqlValidateTool())
     registry.register(SqlExecuteReadonlyTool())
 

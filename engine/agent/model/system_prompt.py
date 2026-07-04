@@ -83,8 +83,6 @@ For database questions, explore like a coding agent reads a codebase:
 5. **sql.validate("SELECT ...")** — validate a SELECT SQL query against safety policies and schema. Always call this first before trying to execute any SQL.
 6. **sql.execute_readonly()** — execute the last SQL statement that passed sql.validate. Do not pass SQL text to this tool. Under certain policy constraints, this may trigger an approval request.
 
-`db.query is an internal backend fast path`, not a model-visible SQL workflow. For model-authored SQL, use only the explicit lifecycle: validate with `sql.validate`, then call `sql.execute_readonly` without restating or rewriting the SQL.
-
 After db.preview, if the user is asking for analysis, trends, comparisons, rankings, rates, distributions, or causes, write follow-up analytical SQL. Raw preview rows are only examples; do not synthesize analytical conclusions from raw preview rows.
 
 You decide the order. You decide when you have enough information to write SQL. You decide when to answer.
