@@ -61,11 +61,12 @@ cd desktop && npm test
 
 ## Agent Tool Chain
 Registered tools (see `engine/tools/dbfox_tools.py`):
-- `db.observe`, `db.search`, `db.inspect`, `db.preview`, `db.query`
+- `db.observe`, `db.search`, `db.inspect`, `db.preview`
 - `sql.validate`, `sql.execute_readonly`
 - `chart.suggest`
 - `answer.synthesize`
 - `escalate.tool_group`
+- Model-authored SQL must use `sql.validate` followed by `sql.execute_readonly`; the retired `db.query` fast path must not be referenced.
 
 Agent skills (YAML): `engine/agent/skills/builtin/` — `result_analysis.yaml`, `schema_exploration.yaml`
 
