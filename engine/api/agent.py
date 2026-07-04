@@ -14,15 +14,18 @@ import logging
 import os
 import time as _time
 from typing import Any, Literal
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
 from engine.agent_core import persistence as agent_persistence
+from engine.agent_core.artifacts import AgentArtifactIdentity, build_agent_artifacts
 from engine.agent_core.types import (
+    AgentArtifact,
     AgentApprovalDecisionRequest,
     AgentResumeRequest,
     AgentRunRequest,
@@ -35,6 +38,9 @@ from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.llm.errors import llm_error_from_exception
 from engine.llm.providers.openai import create_openai_client
+from engine.models import DataSource
+from engine.policy.engine import PolicyEngine
+from engine.sql.dialect_context import DialectContext
 from engine.sql.execution.streaming_executor import export_max_rows_from_env
 from engine.sql.result_view.models import (
     ResultExportQuery as ServiceResultExportQuery,
@@ -42,9 +48,13 @@ from engine.sql.result_view.models import (
     ResultPageQuery as ServiceResultPageQuery,
     ResultSort as ServiceResultSort,
     ResultSourceRef,
+    TableExportQuery as ServiceTableExportQuery,
+    TablePageQuery as ServiceTablePageQuery,
+    TableSourceRef,
     ResultViewError,
 )
 from engine.sql.result_view.service import ResultViewService
+from engine.sql.safety.service import SqlSafetyService
 
 logger = logging.getLogger("dbfox.api.agent")
 router = APIRouter()
@@ -389,6 +399,168 @@ def api_agent_run_resume_stream(
         },
     )
 
+
+# ---------------------------------------------------------------------------
+# SQL Console — artifact-backed execution
+# ---------------------------------------------------------------------------
+
+class ConsoleExecuteRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    datasourceId: str = Field(min_length=1, max_length=128)
+    sql: str = Field(min_length=1, max_length=200_000)
+    question: str | None = Field(default=None, max_length=20_000)
+    sessionId: str | None = Field(default=None, min_length=1, max_length=128)
+    executionId: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class ConsoleExecuteResponse(BaseModel):
+    runId: str
+    sessionId: str
+    sqlArtifactId: str
+    safetyArtifactId: str | None = None
+    resultArtifactId: str | None = None
+    artifacts: list[AgentArtifact]
+    warnings: list[str] = Field(default_factory=list)
+    notices: list[str] = Field(default_factory=list)
+
+
+def _console_safety_payload(decision: Any, *, dialect: str) -> dict[str, Any]:
+    return {
+        "passed": bool(decision.passed),
+        "can_execute": bool(decision.can_execute),
+        "requires_confirmation": bool(decision.requires_confirmation),
+        "guardrail": decision.guardrail,
+        "schema_warnings": list(decision.schema_warnings or []),
+        "messages": list(decision.messages or []),
+        "policy": decision.policy,
+        "safe_sql": decision.safe_sql,
+        "original_sql": decision.original_sql,
+        "dialect": dialect,
+    }
+
+
+def _console_execution_summary(execution: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "success": bool(execution.get("success")),
+        "rowCount": int(execution.get("rowCount") or 0),
+        "columns": list(execution.get("columns") or []),
+        "latencyMs": int(execution.get("latencyMs") or 0),
+        "truncated": bool(execution.get("truncated")),
+        "historyId": execution.get("historyId"),
+        "executionId": execution.get("executionId"),
+        "warnings": list(execution.get("warnings") or []),
+        "notices": list(execution.get("notices") or []),
+    }
+
+
+def _artifact_id_by_type(artifacts: list[AgentArtifact], artifact_type: str) -> str | None:
+    for artifact in artifacts:
+        if artifact.type == artifact_type:
+            return artifact.id
+    return None
+
+
+@router.post("/agent/console/execute", response_model=ConsoleExecuteResponse)
+def api_agent_console_execute(req: ConsoleExecuteRequest, db: Session = Depends(get_db)) -> ConsoleExecuteResponse:
+    datasource = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
+    if not datasource:
+        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+
+    sql = req.sql.strip()
+    if not sql:
+        raise HTTPException(status_code=400, detail=public_error("SQL_EMPTY", "SQL cannot be empty."))
+
+    run_id = f"console-run-{uuid4()}"
+    session_id = (req.sessionId or f"console-session-{req.datasourceId}").strip()
+    question = (req.question or "SQL Console").strip() or "SQL Console"
+
+    try:
+        PolicyEngine.enforce_query_policy(datasource, sql)
+        ctx = DialectContext.from_datasource(datasource)
+        decision = SqlSafetyService(db).build_execution_decision(sql, ctx, policy="user_readonly")
+
+        from engine.sql.executor import execute_query
+
+        execution = execute_query(
+            db,
+            req.datasourceId,
+            sql,
+            question,
+            req.executionId,
+            safety_decision=decision,
+            safety_policy="user_readonly",
+        )
+
+        safe_sql = str(decision.safe_sql or "").strip()
+        execution_for_artifact = {
+            **execution,
+            "sql": safe_sql,
+            "safe_sql": safe_sql,
+            "dialect": ctx.sqlglot_dialect,
+        }
+        safety = _console_safety_payload(decision, dialect=ctx.sqlglot_dialect)
+        identity = AgentArtifactIdentity(run_id)
+        artifacts = build_agent_artifacts(
+            query_plan=None,
+            sql=safe_sql,
+            safety=safety,
+            execution=execution_for_artifact,
+            chart_suggestion=None,
+            answer=None,
+            datasource_id=req.datasourceId,
+            identity=identity,
+        )
+        sql_artifact_id = _artifact_id_by_type(artifacts, "sql")
+        if not sql_artifact_id:
+            raise DBFoxError("Console execution did not produce a SQL artifact.", code="CONSOLE_SQL_ARTIFACT_MISSING")
+
+        run_req = AgentRunRequest(
+            datasource_id=req.datasourceId,
+            question=question,
+            session_id=session_id,
+            conversation_id=session_id,
+            execute=True,
+            execution_mode="user_requested_read",
+        )
+        agent_persistence.create_or_get_session(db, run_req, run_id)
+        agent_persistence.start_run(db, run_req, run_id, session_id)
+        for index, artifact in enumerate(artifacts, start=1):
+            agent_persistence.record_artifact(db, session_id, run_id, artifact, index)
+
+        response_for_storage = AgentRunResponse(
+            run_id=run_id,
+            session_id=session_id,
+            conversation_id=session_id,
+            success=True,
+            status="completed",
+            question=question,
+            sql=safe_sql,
+            safety=safety,
+            execution=_console_execution_summary(execution),
+            artifacts=artifacts,
+            explanation="SQL Console execution completed as SQL-backed artifacts.",
+        )
+        agent_persistence.complete_run(db, response_for_storage)
+        db.commit()
+        return ConsoleExecuteResponse(
+            runId=run_id,
+            sessionId=session_id,
+            sqlArtifactId=sql_artifact_id,
+            safetyArtifactId=_artifact_id_by_type(artifacts, "safety"),
+            resultArtifactId=_artifact_id_by_type(artifacts, "result_view"),
+            artifacts=artifacts,
+            warnings=list(execution.get("warnings") or []),
+            notices=list(execution.get("notices") or []),
+        )
+    except DBFoxError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=_http_detail(exc))
+    except Exception as exc:
+        db.rollback()
+        logger.exception("SQL Console artifact execution failed")
+        raise HTTPException(status_code=500, detail=public_error("CONSOLE_EXECUTION_ERROR", exc))
+
 # ---------------------------------------------------------------------------
 # Agent Result Pagination API
 # ---------------------------------------------------------------------------
@@ -412,6 +584,25 @@ class ResultPageRequest(BaseModel):
     filters: list[ResultFilter] | None = None
     search: str | None = None
     countMode: Literal["none", "exact", "estimate"] = "none"
+
+class TableResultPageRequest(BaseModel):
+    datasourceId: str
+    tableId: str | None = None
+    tableName: str
+    page: int = Field(ge=1)
+    pageSize: int = Field(ge=1, le=500)
+    sort: list[ResultSort] | None = None
+    filters: list[ResultFilter] | None = None
+    search: str | None = None
+    countMode: Literal["none", "exact", "estimate"] = "none"
+
+class TableResultExportRequest(BaseModel):
+    datasourceId: str
+    tableId: str | None = None
+    tableName: str
+    sort: list[ResultSort] | None = None
+    filters: list[ResultFilter] | None = None
+    search: str | None = None
 
 class ResultExportRequest(BaseModel):
     datasourceId: str
@@ -442,6 +633,14 @@ def _result_source_ref(req: ResultPageRequest | ResultExportRequest) -> ResultSo
     )
 
 
+def _table_source_ref(req: TableResultPageRequest | TableResultExportRequest) -> TableSourceRef:
+    return TableSourceRef(
+        datasource_id=req.datasourceId,
+        table_id=req.tableId,
+        table_name=req.tableName,
+    )
+
+
 def _result_filters(filters: list[ResultFilter] | None) -> list[ServiceResultFilter]:
     return [ServiceResultFilter.model_validate(item.model_dump()) for item in (filters or [])]
 
@@ -462,7 +661,7 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail="Datasource not found.")
+        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
 
     try:
         result = ResultViewService(db).page(
@@ -498,13 +697,90 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
     )
 
 
+@router.post("/agent/results/table/page", response_model=ResultPageResponse)
+def api_agent_table_result_page(req: TableResultPageRequest, db: Session = Depends(get_db)) -> ResultPageResponse:
+    from engine.models import DataSource
+
+    ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
+    if not ds:
+        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+
+    try:
+        result = ResultViewService(db).page_table(
+            ServiceTablePageQuery(
+                source=_table_source_ref(req),
+                filters=_result_filters(req.filters),
+                sort=_result_sorts(req.sort),
+                search=req.search,
+                page=req.page,
+                page_size=req.pageSize,
+                count_mode=req.countMode,
+            )
+        )
+    except ResultViewError as e:
+        raise _result_view_http_error(e)
+    except DBFoxError as e:
+        raise HTTPException(status_code=400, detail=_http_detail(e))
+    except Exception as e:
+        logger.exception("Failed to execute table data view query")
+        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+
+    return ResultPageResponse(
+        columns=result.columns,
+        rows=result.rows,
+        page=result.page,
+        pageSize=result.page_size,
+        rowCount=result.row_count,
+        hasNextPage=result.has_next_page,
+        executedSql=result.executed_sql,
+        latencyMs=result.latency_ms,
+        warnings=result.warnings,
+        notices=result.notices,
+    )
+
+
+@router.post("/agent/results/table/export")
+def api_agent_table_result_export(req: TableResultExportRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+    from engine.models import DataSource
+
+    ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
+    if not ds:
+        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+
+    try:
+        stream, _columns = ResultViewService(db).export_table_csv_stream(
+            ServiceTableExportQuery(
+                source=_table_source_ref(req),
+                filters=_result_filters(req.filters),
+                sort=_result_sorts(req.sort),
+                search=req.search,
+            )
+        )
+    except ResultViewError as e:
+        raise _result_view_http_error(e)
+    except DBFoxError as e:
+        raise HTTPException(status_code=400, detail=_http_detail(e))
+    except Exception as e:
+        logger.exception("Failed to export table data view query")
+        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+
+    return StreamingResponse(
+        stream,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="dbfox-table.csv"',
+            "X-DBFox-Export-Max-Rows": str(export_max_rows_from_env()),
+        },
+    )
+
+
 @router.post("/agent/results/export")
 def api_agent_result_export(req: ResultExportRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     from engine.models import DataSource
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail="Datasource not found.")
+        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
 
     try:
         stream, _columns = ResultViewService(db).export_csv_stream(

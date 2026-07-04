@@ -4,7 +4,6 @@ import pytest
 
 from engine.errors import GuardrailValidationError
 from engine.schema_sync import sync_schema
-from engine.schemas import SQLExecuteRequest
 from engine.sql.executor import execute_query
 from engine.sql.guardrail import GuardrailResult
 from engine.sql.dialect_context import DialectContext
@@ -67,12 +66,12 @@ def test_build_execution_decision_uses_dialect_context(
     assert decision.safe_sql == "SELECT id, username FROM users LIMIT 3"
 
 
-def test_query_execute_api_passes_explicit_safety_decision(
+def test_console_execute_api_passes_explicit_safety_decision(
     db_session_module,
     test_datasource_module,
     monkeypatch,
 ) -> None:
-    import engine.api.query as query_api
+    import engine.api.agent as agent_api
 
     guardrail: GuardrailResult = {
         "result": "pass",
@@ -119,22 +118,35 @@ def test_query_execute_api_passes_explicit_safety_decision(
         assert question == "question"
         assert execution_id == "exec-test"
         received.append(safety_decision)
-        return {"success": True}
+        return {
+            "success": True,
+            "columns": ["id"],
+            "rows": [{"id": 1}],
+            "rowCount": 1,
+            "latencyMs": 1,
+            "warnings": [],
+            "notices": [],
+            "truncated": False,
+            "executionId": execution_id,
+            "safetyDecision": decision.model_dump(mode="json"),
+        }
 
     monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
-    monkeypatch.setattr(query_api, "execute_query", fake_execute_query)
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
 
-    result = query_api.api_execute_sql(
-        SQLExecuteRequest(
-            datasource_id=test_datasource_module.id,
+    result = agent_api.api_agent_console_execute(
+        agent_api.ConsoleExecuteRequest(
+            datasourceId=test_datasource_module.id,
             sql="SELECT id FROM users LIMIT 3",
             question="question",
-            execution_id="exec-test",
+            executionId="exec-test",
+            sessionId="safety-console-session",
         ),
         db_session_module,
     )
 
-    assert result == {"success": True}
+    assert result.sqlArtifactId
+    assert result.resultArtifactId
     assert built == [("SELECT id FROM users LIMIT 3", test_datasource_module.id)]
     assert received == [decision]
 
@@ -172,26 +184,17 @@ def test_execute_query_rejects_unconfirmed_safety_decision(db_session, test_data
     assert any(check["rule"] == "requires_confirmation" for check in exc_info.value.checks)
 
 
-def test_db_query_tool_passes_explicit_safety_decision(
+def test_execute_readonly_tool_passes_explicit_safety_decision(
     db_session_module,
     test_datasource_module,
     monkeypatch,
 ) -> None:
-    import engine.tools.db.query as query_tool
+    import engine.tools.db.sql_execution as sql_execution_tool
 
     decision = _test_decision(test_datasource_module.id, policy="agent_readonly")
-    built: list[tuple[str, str, str]] = []
-    received: list[ExecutionSafetyDecision | None] = []
-
-    def fake_build_execution_decision(
-        self: SqlSafetyService,
-        sql: str,
-        ctx: DialectContext,
-        *,
-        policy: str = "readonly",
-    ) -> ExecutionSafetyDecision:
-        built.append((sql, ctx.datasource_id, policy))
-        return decision
+    safety = decision.model_dump(mode="json")
+    received: list[object | None] = []
+    calls: list[tuple[str, str, str | None]] = []
 
     def fake_execute_query(
         _db,
@@ -200,6 +203,7 @@ def test_db_query_tool_passes_explicit_safety_decision(
         **kwargs,
     ) -> dict[str, object]:
         received.append(kwargs.get("safety_decision"))
+        calls.append((datasource_id, sql, kwargs.get("safety_policy")))
         return {
             "columns": ["id"],
             "rows": [{"id": "1"}],
@@ -208,18 +212,17 @@ def test_db_query_tool_passes_explicit_safety_decision(
             "guardrail": decision.guardrail,
         }
 
-    monkeypatch.setattr(SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
-    monkeypatch.setattr(query_tool, "execute_query", fake_execute_query)
+    monkeypatch.setattr(sql_execution_tool, "execute_query", fake_execute_query)
 
-    result = query_tool.db_query(
+    result = sql_execution_tool.sql_execute_readonly(
         db_session_module,
         test_datasource_module.id,
-        "SELECT id FROM users LIMIT 3",
+        safety=safety,
     )
 
     assert result["status"] == "success"
-    assert built == [("SELECT id FROM users LIMIT 3", test_datasource_module.id, "agent_readonly")]
-    assert received == [decision]
+    assert calls == [(test_datasource_module.id, decision.safe_sql, "agent_readonly")]
+    assert received == [safety]
 
 
 def test_db_preview_tool_passes_explicit_safety_decision(

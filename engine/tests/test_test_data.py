@@ -1,3 +1,5 @@
+import sqlite3
+
 from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.orm import Session
@@ -20,6 +22,12 @@ def client(db_session):
 
 def _headers() -> dict[str, str]:
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
+
+
+def _count_users(database_path: str) -> int:
+    with sqlite3.connect(database_path) as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM users")
+        return int(cursor.fetchone()[0])
 
 
 def test_generate_test_data_success(client, db_session, test_datasource) -> None:
@@ -54,16 +62,8 @@ def test_generate_test_data_success(client, db_session, test_datasource) -> None
     assert data["insertedRows"] == 5
     assert "users" in data["tableName"]
     
-    # 5. Query user preview data to confirm the data is inserted
-    exec_resp = client.post("/api/v1/query/execute", json={
-        "datasource_id": ds_id,
-        "sql": "SELECT id, username, email FROM users LIMIT 10",
-        "execution_id": "test-data-preview-exec",
-    }, headers=_headers())
-    assert exec_resp.status_code == 200
-    exec_data = exec_resp.json()
-    assert exec_data["success"] is True
-    assert len(exec_data["rows"]) >= 1
+    # 5. Confirm the generator wrote rows into the target SQLite table.
+    assert _count_users(test_datasource.database_name) >= 5
 
 
 def test_generate_test_data_confirmation_binds_language(client, test_datasource, monkeypatch) -> None:

@@ -10,12 +10,16 @@ from engine.sql.trust_gate import TrustGate
 from engine.sql.safety_gate import validate_sql_schema
 
 def parse_types_ts_interface(interface_name: str) -> set[str]:
-    path = Path(__file__).resolve().parents[2] / "desktop" / "src" / "lib" / "api" / "types.ts"
-    content = path.read_text(encoding="utf-8")
     pattern = rf"export\s+interface\s+{interface_name}\s*\{{([^}}]*)\}}"
-    match = re.search(pattern, content, re.DOTALL)
+    api_types_dir = Path(__file__).resolve().parents[2] / "desktop" / "src" / "lib" / "api" / "types"
+    match = None
+    for path in sorted(api_types_dir.rglob("*.ts")):
+        content = path.read_text(encoding="utf-8")
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            break
     if not match:
-        raise ValueError(f"Interface {interface_name} not found in types.ts")
+        raise ValueError(f"Interface {interface_name} not found in desktop API type modules")
     block = match.group(1)
     fields = set()
     for line in block.splitlines():
@@ -263,25 +267,26 @@ def test_query_history_response_sanitizes_legacy_sensitive_fields(client, db_ses
     assert "[REDACTED_EMAIL]" in serialized
 
 
-def test_query_result_response_shape_matches_types_ts(client, test_datasource):
+def test_console_execute_response_is_artifact_backed(client, test_datasource):
     resp = client.post(
-        "/api/v1/query/execute",
-        json={"datasource_id": test_datasource.id, "sql": "SELECT 1"},
+        "/api/v1/agent/console/execute",
+        json={"datasourceId": test_datasource.id, "sql": "SELECT 1", "sessionId": "contract-console"},
         headers={"X-Local-Token": LOCAL_SECURE_TOKEN}
     )
     assert resp.status_code == 200, resp.json()
     result = resp.json()
 
-    # QueryResult fields check
-    for field in {"columns", "rows", "rowCount", "latencyMs", "success"}:
-        assert field in result, f"Field '{field}' not found in QueryResult response"
-
-    # GuardrailCheckResult fields check
-    assert "guardrail" in result
-    guardrail = result["guardrail"]
-    expected_guardrail = parse_types_ts_interface("GuardrailCheckResult")
-    for field in expected_guardrail:
-        assert field in guardrail, f"Field '{field}' not found in guardrail checks result: {guardrail}"
+    for field in {"runId", "sessionId", "sqlArtifactId", "resultArtifactId", "artifacts", "warnings", "notices"}:
+        assert field in result, f"Field '{field}' not found in ConsoleExecuteResponse"
+    assert result["sessionId"] == "contract-console"
+    assert result["sqlArtifactId"]
+    assert result["resultArtifactId"]
+    assert any(item["type"] == "sql" for item in result["artifacts"])
+    assert any(item["type"] == "safety" for item in result["artifacts"])
+    result_view = next(item for item in result["artifacts"] if item["type"] == "result_view")
+    assert result_view["payload"]["storageMode"] == "sql_backed"
+    assert result_view["payload"]["sourceSqlArtifactKey"] == result["sqlArtifactId"]
+    assert "rows" not in result_view["payload"]
 
 def test_trust_gate_result_matches_types_ts(db_session, test_datasource):
     tg = TrustGate(db_session, validate_sql_schema)
@@ -292,7 +297,7 @@ def test_trust_gate_result_matches_types_ts(db_session, test_datasource):
         assert key in result, f"Field '{key}' not found in TrustGate evaluate result"
 
 @pytest.mark.parametrize("endpoint,payload,expected_code", [
-    ("/api/v1/query/execute", {"datasource_id": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),
+    ("/api/v1/agent/console/execute", {"datasourceId": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),
     ("/api/v1/datasources/non-existent/health", None, "NOT_FOUND"),
 ])
 def test_error_response_always_has_detail_code_key(client, test_datasource, endpoint, payload, expected_code):
@@ -310,8 +315,8 @@ def test_error_response_always_has_detail_code_key(client, test_datasource, endp
 
 def test_error_response_for_guardrail_blocked(client, test_datasource):
     resp = client.post(
-        "/api/v1/query/execute",
-        json={"datasource_id": test_datasource.id, "sql": "DROP TABLE t"},
+        "/api/v1/agent/console/execute",
+        json={"datasourceId": test_datasource.id, "sql": "DROP TABLE t"},
         headers={"X-Local-Token": LOCAL_SECURE_TOKEN}
     )
     assert resp.status_code == 400, resp.json()

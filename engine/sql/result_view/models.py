@@ -33,6 +33,12 @@ class ResultSourceRef(BaseModel):
     safe_sql: str
 
 
+class TableSourceRef(BaseModel):
+    datasource_id: str
+    table_id: str | None = None
+    table_name: str
+
+
 class ResultFilter(BaseModel):
     column: str
     operator: ResultFilterOperator
@@ -58,6 +64,23 @@ class ResultPageQuery(ResultViewQuery):
 
 
 class ResultExportQuery(ResultViewQuery):
+    format: Literal["csv"] = "csv"
+
+
+class TableViewQuery(BaseModel):
+    source: TableSourceRef
+    filters: list[ResultFilter] = Field(default_factory=list)
+    sort: list[ResultSort] = Field(default_factory=list)
+    search: str | None = None
+
+
+class TablePageQuery(TableViewQuery):
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=500)
+    count_mode: Literal["none", "exact", "estimate"] = "none"
+
+
+class TableExportQuery(TableViewQuery):
     format: Literal["csv"] = "csv"
 
 

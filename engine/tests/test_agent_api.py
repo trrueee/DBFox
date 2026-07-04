@@ -13,12 +13,15 @@ from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRu
 from engine.api.agent import ResultPageRequest, sse_failed_event
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
-from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource
+from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
+from engine.sql.trust_gate import ExecutionSafetyDecision
 
 
 def _add_pagination_source(
     db_session,
     *,
+    artifact_id: str = "artifact-sql-page",
+    artifact_type: str = "sql",
     safe_sql: str = "SELECT id, amount FROM orders",
     columns: list[str] | None = None,
 ) -> None:
@@ -52,12 +55,12 @@ def _add_pagination_source(
         updated_at=now,
     )
     artifact = AgentArtifactRecord(
-        id="artifact-result-page",
+        id=artifact_id,
         run_id="run-page",
         session_id="conv-page",
-        semantic_id="result_view_1",
-        type="result_view",
-        title="Orders result",
+        semantic_id="sql_candidate",
+        type=artifact_type,
+        title="Orders SQL",
         payload_json=json.dumps(
             {
                 "safeSql": safe_sql,
@@ -66,13 +69,174 @@ def _add_pagination_source(
             }
         ),
         presentation_json=json.dumps({"mode": "both", "priority": 1, "collapsed": False}),
-        depends_on_json=json.dumps(["sql_candidate"]),
+        depends_on_json=json.dumps(["safety_candidate"]),
         status="completed",
         sequence=1,
         created_at=now,
     )
     db_session.add_all([datasource, session, run, artifact])
     db_session.commit()
+
+
+def _add_table_result_source(
+    db_session,
+    *,
+    datasource_id: str = "ds-table-page",
+    table_id: str = "schema-table-page-orders",
+    table_name: str = "orders",
+) -> None:
+    datasource = DataSource(
+        id=datasource_id,
+        name="Table Page DS",
+        db_type="mysql",
+        host="localhost",
+        port=3306,
+        database_name="dbfox",
+        username="root",
+        password_ciphertext="cipher",
+        password_nonce="nonce",
+    )
+    table = SchemaTable(
+        id=table_id,
+        data_source_id=datasource_id,
+        table_schema="dbfox",
+        table_name=table_name,
+        table_type="BASE TABLE",
+    )
+    columns = [
+        SchemaColumn(id="schema-col-page-id", table_id=table_id, column_name="id", data_type="integer", ordinal_position=1),
+        SchemaColumn(id="schema-col-page-amount", table_id=table_id, column_name="amount", data_type="decimal", ordinal_position=2),
+        SchemaColumn(id="schema-col-page-status", table_id=table_id, column_name="status", data_type="text", ordinal_position=3),
+    ]
+    db_session.add_all([datasource, table, *columns])
+    db_session.commit()
+
+
+def _add_console_datasource(db_session, *, datasource_id: str = "ds-console") -> None:
+    db_session.add(
+        DataSource(
+            id=datasource_id,
+            name="Console DS",
+            db_type="mysql",
+            host="localhost",
+            port=3306,
+            database_name="dbfox",
+            username="root",
+            password_ciphertext="cipher",
+            password_nonce="nonce",
+        )
+    )
+    db_session.commit()
+
+
+def test_reusable_sql_memory_is_not_public_agent_api():
+    route_paths = {getattr(route, "path", "") for route in agent_module.router.routes}
+
+    assert "/agent/reusable-sqls" not in route_paths
+
+
+def _console_decision(datasource_id: str, sql: str) -> ExecutionSafetyDecision:
+    return ExecutionSafetyDecision(
+        datasource_id=datasource_id,
+        policy="user_readonly",
+        original_sql=sql,
+        safe_sql=sql,
+        passed=True,
+        can_execute=True,
+        requires_confirmation=False,
+        guardrail={
+            "result": "pass",
+            "originalSql": sql,
+            "safeSql": sql,
+            "checks": [],
+            "message": "ok",
+        },
+        schema_warnings=[],
+        scope_state={"source": "sql_console"},
+        messages=[],
+    )
+
+
+def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_session):
+    _add_console_datasource(db_session)
+    request_model = getattr(agent_module, "ConsoleExecuteRequest", None)
+    assert request_model is not None
+    execute_api = getattr(agent_module, "api_agent_console_execute", None)
+    assert execute_api is not None
+    sql = "SELECT id, name FROM users"
+
+    def fake_build_execution_decision(_self, requested_sql, ctx, policy):
+        assert policy == "user_readonly"
+        assert ctx.datasource_id == "ds-console"
+        return _console_decision("ds-console", requested_sql)
+
+    def fake_execute_query(_db, datasource_id, requested_sql, question=None, execution_id=None, **kwargs):
+        safety_decision = kwargs["safety_decision"]
+        assert datasource_id == "ds-console"
+        assert requested_sql == sql
+        assert question == "SQL Console"
+        assert safety_decision.safe_sql == sql
+        return {
+            "success": True,
+            "columns": ["id", "name"],
+            "rows": [{"id": 1, "name": "Ada"}],
+            "rowCount": 1,
+            "latencyMs": 5,
+            "warnings": ["preview warning"],
+            "notices": ["preview notice"],
+            "truncated": False,
+            "historyId": "history-console-1",
+            "executionId": execution_id,
+            "safetyDecision": safety_decision.model_dump(mode="json"),
+        }
+
+    monkeypatch.setattr(agent_module.SqlSafetyService, "build_execution_decision", fake_build_execution_decision)
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = execute_api(
+        request_model(
+            datasourceId="ds-console",
+            sql=sql,
+            question="SQL Console",
+            sessionId="console-session",
+            executionId="console-exec-1",
+        ),
+        db_session,
+    )
+
+    assert response.sessionId == "console-session"
+    assert response.sqlArtifactId
+    assert response.safetyArtifactId
+    assert response.resultArtifactId
+    assert response.warnings == ["preview warning"]
+    assert response.notices == ["preview notice"]
+
+    records = (
+        db_session.query(AgentArtifactRecord)
+        .filter(AgentArtifactRecord.run_id == response.runId)
+        .order_by(AgentArtifactRecord.sequence)
+        .all()
+    )
+    assert [record.type for record in records] == ["result_view", "sql", "safety"]
+    result_record = next(record for record in records if record.type == "result_view")
+    sql_record = next(record for record in records if record.type == "sql")
+    safety_record = next(record for record in records if record.type == "safety")
+    result_payload = json.loads(result_record.payload_json)
+
+    assert result_payload["storageMode"] == "sql_backed"
+    assert result_payload["sourceSqlArtifactKey"] == sql_record.id
+    assert result_payload["sourceSqlSemanticKey"] == sql_record.semantic_id
+    assert result_payload["safetyArtifactKey"] == safety_record.id
+    assert result_payload["safetySemanticKey"] == safety_record.semantic_id
+    assert result_payload["safeSql"] == sql
+    assert "rows" not in result_payload
+    assert result_payload["previewRows"] == [{"id": 1, "name": "Ada"}]
+
+    run = db_session.get(AgentRun, response.runId)
+    assert run is not None
+    assert run.status == "completed"
+    run_payload = json.loads(run.response_json)
+    assert "rows" not in (run_payload.get("execution") or {})
 
 
 def test_result_page_rejects_safe_sql_that_differs_from_source_artifact(db_session):
@@ -82,7 +246,7 @@ def test_result_page_rejects_safe_sql_that_differs_from_source_artifact(db_sessi
         agent_module.api_agent_result_page(
             ResultPageRequest(
                 datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
+                sourceSqlArtifactId="artifact-sql-page",
                 safeSql="SELECT id FROM users",
                 page=1,
                 pageSize=20,
@@ -92,6 +256,134 @@ def test_result_page_rejects_safe_sql_that_differs_from_source_artifact(db_sessi
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail["code"] == "SOURCE_SQL_MISMATCH"
+
+
+def test_table_result_page_uses_schema_table_source_for_derived_query(monkeypatch, db_session):
+    _add_table_result_source(db_session)
+    request_model = getattr(agent_module, "TableResultPageRequest", None)
+    assert request_model is not None
+    executed_sql: dict[str, str] = {}
+
+    def fake_execute_query(_db, datasource_id, sql, **kwargs):
+        safety_decision = kwargs["safety_decision"]
+        executed_sql["datasource_id"] = datasource_id
+        executed_sql["sql"] = sql
+        assert safety_decision.can_execute is True
+        return {
+            "columns": ["id", "amount", "status"],
+            "rows": [
+                {"id": 1, "amount": 20, "status": "paid"},
+                {"id": 2, "amount": 30, "status": "paid"},
+            ],
+            "latencyMs": 3,
+            "warnings": [],
+            "notices": [],
+        }
+
+    monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
+
+    response = agent_module.api_agent_table_result_page(
+        request_model(
+            datasourceId="ds-table-page",
+            tableId="schema-table-page-orders",
+            tableName="orders",
+            page=1,
+            pageSize=1,
+            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            search="paid",
+            sort=[agent_module.ResultSort(column="amount", direction="desc")],
+        ),
+        db_session,
+    )
+
+    assert response.rows == [{"id": 1, "amount": 20, "status": "paid"}]
+    assert response.hasNextPage is True
+    assert "FROM `dbfox`.`orders`" in executed_sql["sql"]
+    assert "`status` = 'paid'" in executed_sql["sql"]
+    assert "LIKE '%paid%'" in executed_sql["sql"]
+    assert "ORDER BY `amount` DESC" in executed_sql["sql"]
+
+
+def test_table_result_export_streams_schema_table_source(monkeypatch, db_session):
+    _add_table_result_source(db_session)
+    request_model = getattr(agent_module, "TableResultExportRequest", None)
+    assert request_model is not None
+    executed_sql: dict[str, str] = {}
+
+    def fake_stream_rows(_self, datasource_id, sql, safety_decision, chunk_size=1000):
+        executed_sql["datasource_id"] = datasource_id
+        executed_sql["sql"] = sql
+        assert safety_decision.can_execute is True
+        yield {"id": 2, "amount": 30, "status": "paid"}
+        yield {"id": 1, "amount": 20, "status": "paid"}
+
+    monkeypatch.setattr(
+        "engine.sql.execution.streaming_executor.StreamingQueryExecutor.stream_rows",
+        fake_stream_rows,
+    )
+
+    response = agent_module.api_agent_table_result_export(
+        request_model(
+            datasourceId="ds-table-page",
+            tableId="schema-table-page-orders",
+            tableName="orders",
+            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            search="paid",
+            sort=[agent_module.ResultSort(column="amount", direction="desc")],
+        ),
+        db_session,
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    assert response.status_code == 200
+    assert response.media_type == "text/csv"
+    assert body.splitlines()[0] == "id,amount,status"
+    assert "2,30,paid" in body
+    assert "FROM `dbfox`.`orders`" in executed_sql["sql"]
+    assert "`status` = 'paid'" in executed_sql["sql"]
+    assert "LIKE '%paid%'" in executed_sql["sql"]
+    assert "ORDER BY `amount` DESC" in executed_sql["sql"]
+    assert "LIMIT" not in executed_sql["sql"].upper()
+
+
+def test_table_result_page_returns_structured_datasource_not_found_error(db_session):
+    request_model = getattr(agent_module, "TableResultPageRequest", None)
+    assert request_model is not None
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_table_result_page(
+            request_model(
+                datasourceId="missing-ds",
+                tableId="missing-table",
+                tableName="orders",
+                page=1,
+                pageSize=20,
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["code"] == "DATASOURCE_NOT_FOUND"
+    assert "Datasource not found" in exc_info.value.detail["message"]
+
+
+def test_result_page_rejects_result_view_as_source_sql_artifact(db_session):
+    _add_pagination_source(db_session, artifact_id="artifact-result-page", artifact_type="result_view")
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-result-page",
+                safeSql="SELECT id, amount FROM orders",
+                page=1,
+                pageSize=20,
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["code"] == "SOURCE_ARTIFACT_UNSUPPORTED"
 
 
 def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_session):
@@ -116,7 +408,7 @@ def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_s
     response = agent_module.api_agent_result_page(
         ResultPageRequest(
             datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-result-page",
+            sourceSqlArtifactId="artifact-sql-page",
             safeSql="SELECT id, amount FROM orders",
             page=1,
             pageSize=20,
@@ -139,7 +431,7 @@ def test_result_page_rejects_persisted_non_select_source_sql(db_session):
         agent_module.api_agent_result_page(
             ResultPageRequest(
                 datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
+                sourceSqlArtifactId="artifact-sql-page",
                 safeSql="DELETE FROM orders",
                 page=1,
                 pageSize=20,
@@ -163,7 +455,7 @@ def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, d
         agent_module.api_agent_result_page(
             ResultPageRequest(
                 datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
+                sourceSqlArtifactId="artifact-sql-page",
                 safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
@@ -202,7 +494,7 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
     response = agent_module.api_agent_result_page(
         ResultPageRequest(
             datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-result-page",
+            sourceSqlArtifactId="artifact-sql-page",
             safeSql="SELECT id, name, status, amount FROM orders",
             page=1,
             pageSize=20,
@@ -252,7 +544,7 @@ def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_ses
     response = agent_module.api_agent_result_page(
         ResultPageRequest(
             datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-result-page",
+            sourceSqlArtifactId="artifact-sql-page",
             safeSql="SELECT id, name, status, amount FROM orders",
             page=1,
             pageSize=20,
@@ -284,7 +576,7 @@ def test_result_page_request_rejects_invalid_pagination_bounds(page, page_size):
     with pytest.raises(ValidationError):
         ResultPageRequest(
             datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-result-page",
+            sourceSqlArtifactId="artifact-sql-page",
             safeSql="SELECT id, amount FROM orders",
             page=page,
             pageSize=page_size,
@@ -303,7 +595,7 @@ def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch,
         agent_module.api_agent_result_page(
             ResultPageRequest(
                 datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
+                sourceSqlArtifactId="artifact-sql-page",
                 safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
@@ -339,7 +631,7 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
     response = agent_module.api_agent_result_export(
         agent_module.ResultExportRequest(
             datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-result-page",
+            sourceSqlArtifactId="artifact-sql-page",
             safeSql="SELECT id, created_at, status FROM orders",
             filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
             search="2026",
@@ -371,7 +663,7 @@ def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatc
         agent_module.api_agent_result_export(
             agent_module.ResultExportRequest(
                 datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
+                sourceSqlArtifactId="artifact-sql-page",
                 safeSql="SELECT id, amount FROM orders",
                 filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
             ),

@@ -7,16 +7,14 @@ from sqlalchemy.orm import Session
 
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
-from engine.sql.executor import execute_query
 from engine.sql.dialect_context import DialectContext
 from engine.sql.safety.service import SqlSafetyService
 from engine.models import DataSource, QueryHistory
 from engine.persistence.search_index import SearchIndexService
 from engine.app.errors import public_message
-from engine.policy.engine import PolicyEngine
 from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
-from engine.schemas import SQLCancelRequest, SQLExecuteRequest, SQLExplainRequest, SQLValidateRequest
+from engine.schemas import SQLCancelRequest, SQLExplainRequest, SQLValidateRequest
 
 logger = logging.getLogger("dbfox.api.query")
 router = APIRouter()
@@ -68,37 +66,6 @@ def api_validate_sql(req: SQLValidateRequest, db: Session = Depends(get_db)) -> 
         ctx = DialectContext.from_datasource(ds)
     result = SqlSafetyService(db).public_validate_sql(req.sql, ctx)
     return _public_guardrail_result(dict(result))
-
-
-@router.post("/query/execute")
-def api_execute_sql(req: SQLExecuteRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    datasource = db.query(DataSource).filter(DataSource.id == req.datasource_id).first()
-    if not datasource:
-        raise NotFoundError("Datasource not found", "DATASOURCE_NOT_FOUND")
-
-    PolicyEngine.enforce_query_policy(datasource, req.sql)
-
-    try:
-        ctx = DialectContext.from_datasource(datasource)
-        decision = SqlSafetyService(db).build_execution_decision(
-            req.sql,
-            ctx,
-            policy="user_readonly",
-        )
-        return execute_query(
-            db,
-            req.datasource_id,
-            req.sql,
-            req.question,
-            req.execution_id,
-            safety_decision=decision,
-            safety_policy="user_readonly",
-        )
-    except DBFoxError:
-        raise
-    except Exception as exc:
-        logger.exception("SQL execution failed")
-        raise DBFoxError(f"SQL execution failed: {str(exc)}", "EXECUTION_ERROR")
 
 
 @router.post("/query/explain")

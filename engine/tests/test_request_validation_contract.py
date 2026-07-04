@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from engine.schemas.backup import BackupCreateRequest, RestoreConfirmRequest
 from engine.schemas.datasource import DataSourceCreateRequest, DataSourceTestRequest, DataSourceUpdateRequest
-from engine.schemas.query import SQLExecuteRequest
+from engine.api.agent import ConsoleExecuteRequest
 from engine.schemas.table_design import (
     TableDesignAIRequest,
     TableDesignDDLRequest,
@@ -76,15 +76,17 @@ def test_datasource_secret_fields_preserve_surrounding_whitespace(
 @pytest.mark.parametrize(
     "payload",
     [
-        {"datasource_id": "", "sql": "SELECT 1"},
-        {"datasource_id": "ds-1", "sql": ""},
-        {"datasource_id": "ds-1", "sql": "   "},
-        {"datasource_id": "ds-1", "sql": "SELECT 1", "execution_id": "x" * 129},
+        {"datasourceId": "", "sql": "SELECT 1"},
+        {"datasourceId": "ds-1", "sql": ""},
+        {"datasourceId": "ds-1", "sql": "   "},
+        {"datasourceId": "d" * 129, "sql": "SELECT 1"},
+        {"datasourceId": "ds-1", "sql": "SELECT 1", "sessionId": "x" * 129},
+        {"datasourceId": "ds-1", "sql": "SELECT 1", "executionId": "x" * 129},
     ],
 )
-def test_sql_execute_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
+def test_console_execute_request_rejects_invalid_core_fields(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
-        SQLExecuteRequest(**payload)
+        ConsoleExecuteRequest(**payload)
 
 
 def _table_design_column(**overrides: object) -> dict[str, object]:

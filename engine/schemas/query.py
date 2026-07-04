@@ -36,15 +36,6 @@ class SQLValidateRequest(BaseModel):
     datasource_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
-class SQLExecuteRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    datasource_id: str = Field(min_length=1, max_length=128)
-    sql: str = Field(min_length=1, max_length=200_000)
-    question: str | None = Field(default=None, max_length=20_000)
-    execution_id: str | None = Field(default=None, min_length=1, max_length=128)
-
-
 class SQLCancelRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
