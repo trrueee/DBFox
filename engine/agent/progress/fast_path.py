@@ -279,8 +279,8 @@ def check_loop_prevention(state: DBFoxAgentState) -> dict[str, Any] | None:
                     "trace_events": [progress_trace(decision, fastpath=True)],
                 }
 
-    # 5. same db.query / sql.execute_readonly error twice → stop.
-    if name in ("db.query", "sql.execute_readonly"):
+    # 5. same sql.execute_readonly error twice -> stop.
+    if name == "sql.execute_readonly":
         curr_status = current.get("status")
         prev_status = prev.get("status")
         curr_err = current.get("error")
@@ -438,17 +438,17 @@ def deterministic_progress_fastpath(state: DBFoxAgentState) -> dict[str, Any] | 
     if (isinstance(execution, dict) and execution.get("success")
             and not state.get("answer")
             and not state.get("final_answer")):
-        # Only intervene if model has been cycling (called db.query multiple times
+        # Only intervene if model has been cycling (called sql.execute_readonly multiple times
         # without stopping tool calls for final answer synthesis).
         last_tool_results = state.get("last_tool_results") or []
         query_call_count = sum(
             1 for r in last_tool_results
-            if isinstance(r, dict) and r.get("name") == "db.query"
+            if isinstance(r, dict) and r.get("name") == "sql.execute_readonly"
         )
         if query_call_count >= 2 and step_count > 4:
             decision = progress_decision_dict(
                 status="continue",
-                reason_summary="Multiple db.query calls without settling on a conclusion.",
+                reason_summary="Multiple sql.execute_readonly calls without settling on a conclusion.",
                 next_action_hint="You have query results. If the evidence is enough, summarize the current conclusion naturally in Chinese; otherwise run a targeted follow-up query.",
             )
             return {

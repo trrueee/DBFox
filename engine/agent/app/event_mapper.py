@@ -223,7 +223,7 @@ def artifacts_from_state(
 
 def _artifact_timeline_step(artifact_type: str) -> str | None:
     mapping = {
-        "table": "query_database",
+        "table": "execute_readonly",
         "agent_plan": "planner",
     }
     return mapping.get(artifact_type)
@@ -254,7 +254,7 @@ def _phase_for_tool(tool_name: str) -> str:
         return "inspecting"
     if "sql.validate" in lowered or "safety" in lowered or "guardrail" in lowered:
         return "validating"
-    if "sql.execute" in lowered or lowered.startswith("db.query") or "readonly" in lowered:
+    if "sql.execute" in lowered or "readonly" in lowered:
         return "executing"
     if "chart" in lowered or "answer" in lowered:
         return "synthesizing"

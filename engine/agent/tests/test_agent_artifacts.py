@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from engine.agent_core.artifacts import (
+    AgentArtifactIdentity,
     build_agent_artifacts,
     build_chart_artifact,
     build_sql_artifact,
@@ -45,6 +46,8 @@ def test_result_view_artifact_preserves_result_browsing_metadata():
         },
         datasource_id="ds_123",
         safety=None,
+        source_sql_artifact_id="sql-artifact-metadata",
+        source_sql_semantic_id="sql_candidate_metadata",
     )
 
     assert artifact.payload["rowCount"] == 128
@@ -79,6 +82,8 @@ def test_result_view_artifact_stores_typed_columns_dialect_and_fingerprint():
         },
         datasource_id="ds_123",
         safety={"can_execute": True},
+        source_sql_artifact_id="sql-artifact-preview",
+        source_sql_semantic_id="sql_candidate_preview",
     )
 
     assert artifact.payload["safeSql"] == "SELECT id, name FROM users"
@@ -104,6 +109,8 @@ def test_result_view_artifact_keeps_preview_not_full_rows():
         },
         datasource_id="ds_123",
         safety={"can_execute": True},
+        source_sql_artifact_id="sql-artifact-preview-full",
+        source_sql_semantic_id="sql_candidate_preview_full",
     )
 
     assert artifact.payload["storageMode"] == "sql_backed"
@@ -112,6 +119,40 @@ def test_result_view_artifact_keeps_preview_not_full_rows():
     assert artifact.payload["rowCount"] == 100
     assert artifact.payload["returnedRows"] == 100
     assert "rows" not in artifact.payload
+
+
+def test_agent_artifacts_bind_result_view_to_emitted_sql_and_safety_ids():
+    artifacts = build_agent_artifacts(
+        query_plan=None,
+        sql="SELECT id, amount FROM orders",
+        safety={
+            "passed": True,
+            "can_execute": True,
+            "safe_sql": "SELECT id, amount FROM orders",
+        },
+        execution={
+            "success": True,
+            "columns": ["id", "amount"],
+            "rows": [{"id": 1, "amount": 20}],
+            "rowCount": 1,
+            "safe_sql": "SELECT id, amount FROM orders",
+        },
+        chart_suggestion=None,
+        answer=None,
+        datasource_id="ds-orders",
+        identity=AgentArtifactIdentity("run-chain"),
+    )
+
+    sql_artifact = next(artifact for artifact in artifacts if artifact.type == "sql")
+    safety_artifact = next(artifact for artifact in artifacts if artifact.type == "safety")
+    result_view = next(artifact for artifact in artifacts if artifact.type == "result_view")
+
+    assert result_view.depends_on == [sql_artifact.id, safety_artifact.id]
+    assert safety_artifact.depends_on == [sql_artifact.id]
+    assert result_view.payload["sourceSqlArtifactKey"] == sql_artifact.id
+    assert result_view.payload["sourceSqlSemanticKey"] == sql_artifact.semantic_id
+    assert result_view.payload["safetyArtifactKey"] == safety_artifact.id
+    assert result_view.payload["safetySemanticKey"] == safety_artifact.semantic_id
 
 
 def test_chart_artifact_links_metrics_to_source_fields():

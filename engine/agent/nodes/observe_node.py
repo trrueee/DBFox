@@ -124,7 +124,7 @@ def _derive_query_plan(state: dict[str, Any], observation: ToolObservation) -> d
         "metrics": [],
         "dimensions": [],
         "filters": [],
-        "derived_from": "db.query",
+        "derived_from": "sql.execute_readonly",
     }
 
 
@@ -143,7 +143,7 @@ def emit_artifacts_from_observation(
     # Artifact emission for execution tools
     execution = state.get("execution") if isinstance(state.get("execution"), dict) else {}
     if (
-        step_name in ("db.query", "sql.execute_readonly")
+        step_name == "sql.execute_readonly"
         and execution
         and execution.get("success")
         and _has_result_rows(execution)
@@ -185,10 +185,12 @@ def emit_artifacts_from_observation(
             safety=state.get("safety"),
             identity=identity,
             source_sql_artifact_id=source_sql_artifact_id,
+            source_sql_semantic_id=sql_artifact.semantic_id if sql_artifact is not None else None,
             safety_artifact_id=safety_artifact_id,
+            safety_semantic_id=safety_artifact.semantic_id if safety_artifact is not None else None,
         ))
 
-    if step_name in ("db.query", "sql.execute_readonly") and observation.output and observation.status == "success":
+    if step_name == "sql.execute_readonly" and observation.output and observation.status == "success":
         payload = dict(observation.output)
         payload["produced_by_step"] = step_name
         if _has_result_rows(payload) and _has_sql_suggestion_payload(payload):

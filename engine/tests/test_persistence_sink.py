@@ -303,8 +303,8 @@ def test_sqlite_agent_event_store_redacts_result_sample_rows_but_preserves_safe_
             payload={
                 "storageMode": "sql_backed",
                 "datasourceId": datasource.id,
-                "sourceSqlArtifactId": "sql_sensitive",
-                "sourceSqlSemanticId": "sql_sensitive",
+                "sourceSqlArtifactKey": "sql_sensitive",
+                "sourceSqlSemanticKey": "sql_sensitive",
                 "sourceSql": safe_sql,
                 "safeSql": safe_sql,
                 "columns": ["email", "token"],

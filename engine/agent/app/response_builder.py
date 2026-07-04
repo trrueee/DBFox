@@ -467,7 +467,7 @@ def _activity_title(step_name: str) -> str:
         "search_database": "Searched database",
         "inspect_database": "Inspected table",
         "preview_table": "Previewed data",
-        "query_database": "Executed query",
+        "execute_readonly": "Executed query",
         "list_tables": "Listed tables",
         "describe_table": "Described table",
         "refresh_catalog": "Refreshed catalog",
@@ -492,7 +492,7 @@ def _activity_summary(step_name: str, status: str, output: Any) -> str:
             return f"{len(cols)} columns"
         if step_name == "preview_table":
             return f"{output.get('returned_rows', 0)} rows"
-        if step_name == "query_database":
+        if step_name == "execute_readonly":
             return f"{output.get('returned_rows', output.get('rowCount', 0))} rows"
         if step_name == "list_tables":
             tables = output.get("tables") or []
@@ -512,7 +512,7 @@ def _step_to_tool(step_name: str) -> str:
         "search_database": "db.search",
         "inspect_database": "db.inspect",
         "preview_table": "db.preview",
-        "query_database": "db.query",
+        "execute_readonly": "sql.execute_readonly",
         "load_follow_up_context": "followup.load_context",
     }
     return mapping.get(step_name, step_name)

@@ -12,7 +12,10 @@ from engine.agent.nodes.observe_node import (
     observe_tools,
     rebuild_context_pack,
 )
-from engine.agent.app.service import DBFoxAgentService
+from engine.agent.app.context_builder import AgentContextBuilder
+from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
+from engine.agent.app.persistence_coordinator import AgentPersistenceCoordinator
+from engine.agent.app.stream_runner import AgentStreamRunner
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.types import (
     AgentArtifact,
@@ -232,7 +235,10 @@ def test_emit_artifacts_from_observation_resolves_existing_semantic_dependencies
 
     result_view = next(artifact for artifact in artifacts if artifact.type == "result_view")
     assert result_view.depends_on == ["sql-physical-id", "safety-physical-id"]
-    assert result_view.payload["sourceSqlSemanticId"] == "sql-physical-id"
+    assert result_view.payload["sourceSqlArtifactKey"] == "sql-physical-id"
+    assert result_view.payload["sourceSqlSemanticKey"] == "sql_candidate_b1698e52"
+    assert result_view.payload["safetyArtifactKey"] == "safety-physical-id"
+    assert result_view.payload["safetySemanticKey"] == "safety_report_b1698e52"
 
 
 def test_emit_artifacts_from_execution_creates_bound_sql_safety_and_result_view():
@@ -281,7 +287,10 @@ def test_emit_artifacts_from_execution_creates_bound_sql_safety_and_result_view(
     result_view = next(artifact for artifact in artifacts if artifact.type == "result_view")
     assert sql_artifact.semantic_id.startswith("sql_candidate_")
     assert safety_artifact.semantic_id.startswith("safety_report_")
-    assert result_view.payload["sourceSqlSemanticId"] == sql_artifact.id
+    assert result_view.payload["sourceSqlArtifactKey"] == sql_artifact.id
+    assert result_view.payload["sourceSqlSemanticKey"] == sql_artifact.semantic_id
+    assert result_view.payload["safetyArtifactKey"] == safety_artifact.id
+    assert result_view.payload["safetySemanticKey"] == safety_artifact.semantic_id
     assert result_view.depends_on == [sql_artifact.id, safety_artifact.id]
 
 
@@ -385,6 +394,10 @@ def test_observe_tools_does_not_write_artifacts_with_graph_db(db_session, monkey
 
 
 def test_service_persists_artifact_created_events_via_event_store():
+    class FakeDb:
+        def rollback(self):
+            pass
+
     class FakeEventStore:
         def __init__(self):
             self.artifacts = []
@@ -393,9 +406,12 @@ def test_service_persists_artifact_created_events_via_event_store():
             self.artifacts.append((session_id, run_id, artifact, index))
 
     store = FakeEventStore()
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
-    service._persist_events = True
-    service.event_store = store
+    coordinator = AgentPersistenceCoordinator(
+        FakeDb(),
+        store,
+        AgentMemoryProjectionCoordinator(SimpleNamespace()),
+        enabled=True,
+    )
 
     artifact = AgentArtifact(
         id="artifact-1",
@@ -414,7 +430,7 @@ def test_service_persists_artifact_created_events_via_event_store():
         artifact=artifact,
     )
 
-    service._persist_artifact_event("session-1", event, index=3)
+    coordinator.persist_artifact_event("session-1", event, index=3)
 
     assert store.artifacts == [("session-1", "run-1", artifact, 3)]
 
@@ -433,17 +449,18 @@ def test_service_initial_state_exposes_schema_linking_semantic_aliases(monkeypat
         }
 
     monkeypatch.setattr("engine.agent_core.workspace_context.build_agent_context_bundle", fake_context_bundle)
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
-    service.db = object()
-    service.memory_projection = SimpleNamespace(
-        load_session_memory=lambda _session_id: None,
-        list_reusable_sqls=lambda **_kwargs: [],
+    builder = AgentContextBuilder(
+        object(),
+        AgentMemoryProjectionCoordinator(SimpleNamespace(
+            load_session_memory=lambda _session_id: None,
+            list_reusable_sqls=lambda **_kwargs: [],
+        )),
     )
 
-    state = service._initial_state(
+    state = builder.build_initial_state(
         AgentRunRequest(datasource_id="ds-test", question="分析新注册用户"),
-        "run-semantic",
-        "session-semantic",
+        run_id="run-semantic",
+        session_id="session-semantic",
     )
 
     assert state["context_summary"] == "Datasource demo"
@@ -458,17 +475,18 @@ def test_service_initial_state_exposes_state_namespaces(monkeypatch):
         "engine.agent_core.workspace_context.build_agent_context_bundle",
         lambda _db, _req: {"context_summary": "Datasource demo"},
     )
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
-    service.db = object()
-    service.memory_projection = SimpleNamespace(
-        load_session_memory=lambda _session_id: None,
-        list_reusable_sqls=lambda **_kwargs: [],
+    builder = AgentContextBuilder(
+        object(),
+        AgentMemoryProjectionCoordinator(SimpleNamespace(
+            load_session_memory=lambda _session_id: None,
+            list_reusable_sqls=lambda **_kwargs: [],
+        )),
     )
 
-    state = service._initial_state(
+    state = builder.build_initial_state(
         AgentRunRequest(datasource_id="ds-test", question="分析订单", execute=False),
-        "run-namespaced",
-        "session-namespaced",
+        run_id="run-namespaced",
+        session_id="session-namespaced",
     )
 
     assert state["run"] == {
@@ -494,7 +512,7 @@ def test_service_initial_state_exposes_state_namespaces(monkeypatch):
 
 
 def test_service_merge_state_keeps_namespaces_in_sync():
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    runner = AgentStreamRunner(SimpleNamespace(persist_artifact_event=lambda *_args, **_kwargs: None))
     state = {
         "run_id": "run-sync",
         "thread_id": "session-sync",
@@ -517,7 +535,7 @@ def test_service_merge_state_keeps_namespaces_in_sync():
         "runtime_events": [],
         "context_summary": "initial",
     }
-    service._merge_state(
+    runner._merge_state(
         state,
         {
             "step_count": 2,
