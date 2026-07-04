@@ -7,10 +7,10 @@ def extract_final_sql(response: Any, events: list[dict[str, Any]]) -> str | None
     """Extract the single final predicted SQL from a DBFox agent run.
 
     Priority:
-      1. Last db.query safe_sql from events
+      1. Last sql.execute_readonly safe_sql from events
       2. Last sql.validate safe_sql from events
       3. response.sql
-      4. Last model.sql_draft / db.query sql from events
+      4. Last model.sql_draft sql from events
     """
     candidates: list[str] = []
 
@@ -20,13 +20,13 @@ def extract_final_sql(response: Any, events: list[dict[str, Any]]) -> str | None
             if sql:
                 candidates.append(sql)
 
-    # 1. db.query safe_sql from events (preferred).
+    # 1. sql.execute_readonly safe_sql from events (preferred).
     for event in events:
         step = event.get("step")
         if not isinstance(step, dict):
             continue
         tool_name = str(step.get("tool_name") or "")
-        if tool_name == "db.query":
+        if tool_name == "sql.execute_readonly":
             output = step.get("output")
             if isinstance(output, dict):
                 add(output.get("safe_sql"))
@@ -58,7 +58,7 @@ def extract_final_sql(response: Any, events: list[dict[str, Any]]) -> str | None
         if not isinstance(step, dict):
             continue
         tool_name = str(step.get("tool_name") or "")
-        if tool_name in ("model.sql_draft", "db.query"):
+        if tool_name == "model.sql_draft":
             add(step.get("sql"))
             output = step.get("output")
             if isinstance(output, dict):

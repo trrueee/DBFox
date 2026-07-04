@@ -239,16 +239,6 @@ def _summarize_db_preview(output: dict[str, Any]) -> str:
     )
 
 
-def _summarize_db_query(output: dict[str, Any]) -> str:
-    rows = output.get("rows") or []
-    columns = output.get("columns") or []
-    return (
-        f"[db.query] status={output.get('status')}, rows={output.get('returned_rows')}, "
-        f"columns={', '.join(str(c) for c in columns[:15])}. "
-        f"Sample={json.dumps(rows[:5], ensure_ascii=False, default=str)[:700]}"
-    )
-
-
 def _summarize_default(output: dict[str, Any]) -> str:
     """Generic fallback — compact JSON without huge data."""
     compact: dict[str, Any] = {}
@@ -274,7 +264,6 @@ _SUMMARIZERS: dict[str, _Summarizer] = {
     "db.search": _summarize_db_search,
     "db.inspect": _summarize_db_inspect,
     "db.preview": _summarize_db_preview,
-    "db.query": _summarize_db_query,
     "sql.validate": _summarize_sql_validate,
     "sql.execute_readonly": _summarize_sql_execute_readonly,
 }

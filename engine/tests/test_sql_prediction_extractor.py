@@ -9,9 +9,9 @@ class _FakeResponse:
 
 
 class TestExtractFinalSql:
-    def test_prefers_db_query_safe_sql(self) -> None:
+    def test_prefers_execute_readonly_safe_sql(self) -> None:
         events = [
-            {"step": {"tool_name": "db.query", "output": {"safe_sql": "SELECT * FROM t LIMIT 10"}}},
+            {"step": {"tool_name": "sql.execute_readonly", "output": {"safe_sql": "SELECT * FROM t LIMIT 10"}}},
         ]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT * FROM t LIMIT 10"
@@ -43,10 +43,14 @@ class TestExtractFinalSql:
         events = [{"step": {"tool_name": "sql.validate", "safe_sql": ""}}]
         assert extract_final_sql(_FakeResponse(), events) is None
 
-    def test_output_dict_safe_sql(self) -> None:
-        events = [{"step": {"tool_name": "db.query", "output": {"safe_sql": "SELECT out FROM t"}}}]
+    def test_execute_readonly_output_dict_safe_sql(self) -> None:
+        events = [{"step": {"tool_name": "sql.execute_readonly", "output": {"safe_sql": "SELECT out FROM t"}}}]
         sql = extract_final_sql(_FakeResponse(), events)
         assert sql == "SELECT out FROM t"
+
+    def test_ignores_retired_db_query_events(self) -> None:
+        events = [{"step": {"tool_name": "db.query", "output": {"safe_sql": "SELECT old FROM t"}}}]
+        assert extract_final_sql(_FakeResponse(), events) is None
 
     def test_tool_name_match(self) -> None:
         events = [{"step": {"tool_name": "model.sql_draft", "output": {"sql": "SELECT gen FROM t"}}}]

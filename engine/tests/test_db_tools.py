@@ -8,8 +8,9 @@ from engine.tools.db_tools import (
     db_inspect,
     db_observe,
     db_preview,
-    db_query,
     db_search,
+    sql_execute_readonly,
+    sql_validate,
 )
 from engine.models import DomainTagRule, QueryHistory, SchemaSearchDoc
 from engine.schema_sync import sync_schema
@@ -278,9 +279,15 @@ def test_db_preview_rejects_unknown_columns_before_query(db_session, test_dataso
     assert db_session.query(QueryHistory).count() == 0
 
 
-def test_db_query_revalidates_and_executes_readonly_sql(db_session, test_datasource) -> None:
+def test_sql_lifecycle_validates_and_executes_readonly_sql(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    result = db_query(db_session, test_datasource.id, "SELECT id, email FROM users", question="count users")
+    safety = sql_validate(db_session, test_datasource.id, "SELECT id, email FROM users", question="count users")
+    result = sql_execute_readonly(
+        db_session,
+        test_datasource.id,
+        question="count users",
+        safety=safety["execution_safety_decision"],
+    )
     assert result["status"] == "success"
     assert result["columns"] == ["id", "email"]
     assert result["returned_rows"] >= 1
@@ -289,8 +296,12 @@ def test_db_query_revalidates_and_executes_readonly_sql(db_session, test_datasou
     assert "LIMIT" in result["safe_sql"].upper()
 
 
-def test_db_query_blocks_writes_inside_tool(db_session, test_datasource) -> None:
-    from engine.errors import DBFoxError
+def test_sql_lifecycle_blocks_writes_inside_execute_tool(db_session, test_datasource) -> None:
     sync_schema(db_session, test_datasource.id)
-    with pytest.raises(DBFoxError):
-        db_query(db_session, test_datasource.id, "DELETE FROM users")
+    safety = sql_validate(db_session, test_datasource.id, "DELETE FROM users")
+    with pytest.raises(RuntimeError):
+        sql_execute_readonly(
+            db_session,
+            test_datasource.id,
+            safety=safety["execution_safety_decision"],
+        )

@@ -117,11 +117,11 @@ def test_runtime_reports_validation_failure_as_failed_observation():
     assert "Input contract failed" in (observation.error or "")
 
 
-def test_state_reducer_clears_db_query_errors():
+def test_state_reducer_clears_execute_readonly_errors():
     from engine.tools.runtime.state_reducer import apply_tool_observation_to_state
 
     obs = ToolObservation(
-        name="db.query",
+        name="sql.execute_readonly",
         status="success",
         output={"status": "success", "returned_rows": 1, "safe_sql": "SELECT 1"},
         latency_ms=1,
@@ -129,7 +129,7 @@ def test_state_reducer_clears_db_query_errors():
 
     update = apply_tool_observation_to_state(
         state={"error": "old"},
-        tool_name="db.query",
+        tool_name="sql.execute_readonly",
         observation=obs,
     )
 
@@ -144,7 +144,9 @@ def test_builtin_registry_loads_base_tools_without_yaml():
     registry = register_dbfox_tools()
     names = {tool.name for tool in registry.list_tools()}
 
-    assert "db.query" in names
+    assert "db.query" not in names
+    assert "sql.validate" in names
+    assert "sql.execute_readonly" in names
     assert "chart.suggest" in names
     assert "answer.synthesize" not in names
     assert "analyze_data" not in names
@@ -158,6 +160,7 @@ def test_model_visible_sql_lifecycle_excludes_internal_db_query():
     names = {tool.name for tool in tools}
 
     assert "db_query" not in names
+    assert "query_database" not in names
     assert "sql_validate" in names
     assert "sql_execute_readonly" in names
 
@@ -169,17 +172,19 @@ def test_execute_readonly_model_schema_does_not_accept_sql_text():
     assert "question" in SqlExecuteReadonlyInput.model_fields
 
 
-def test_internal_db_query_is_documented_as_backend_fast_path():
+def test_retired_db_query_tool_has_no_registry_alias_or_prompt_entry():
     from engine.agent.model.system_prompt import SYSTEM_PROMPT
     from engine.tools.dbfox_tools import register_dbfox_tools
+    from engine.tools.runtime.aliases import ALIAS_TO_INTERNAL, STEP_NAME_MAP, STEP_NAME_TO_INTERNAL
 
     registry = register_dbfox_tools()
-    db_query = registry.get("db.query")
-    assert db_query is not None
+    assert registry.get("db.query") is None
 
-    assert db_query.spec.policy.visible_to_model is False
-    assert "internal fast path" in db_query.spec.description.lower()
-    assert "db.query is an internal backend fast path" in SYSTEM_PROMPT
+    assert "db_query" not in ALIAS_TO_INTERNAL
+    assert "db.query" not in STEP_NAME_MAP
+    assert "query_database" not in STEP_NAME_TO_INTERNAL
+    assert "db.query" not in SYSTEM_PROMPT
+    assert "query_database" not in SYSTEM_PROMPT
     assert "sql.validate" in SYSTEM_PROMPT
     assert "sql.execute_readonly" in SYSTEM_PROMPT
 
