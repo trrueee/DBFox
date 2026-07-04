@@ -263,8 +263,35 @@ describe("ImageCell foundation", () => {
 
 const panelSource = join(process.cwd(), "src/components/LlmConfigPanel.tsx");
 const panelCss = join(process.cwd(), "src/components/LlmConfigPanel.css");
+const appCssForLlmPanel = join(process.cwd(), "src/App.css");
 
 const requiredSelectors = [
+  ".hifi-settings-page",
+  ".hifi-settings-dialog-body",
+  ".hifi-settings-page-header",
+  ".hifi-settings-page-icon",
+  ".hifi-settings-page-title",
+  ".hifi-settings-page-desc",
+  ".hifi-settings-body",
+  ".hifi-settings-section-head",
+  ".hifi-settings-section-icon",
+  ".hifi-settings-section-title",
+  ".hifi-settings-section-subtitle",
+  ".hifi-settings-field",
+  ".hifi-settings-label",
+  ".hifi-settings-hint",
+  ".hifi-settings-input",
+  ".hifi-settings-input-compact",
+  ".hifi-settings-eye-btn",
+  ".hifi-model-chips",
+  ".hifi-model-chip",
+  ".hifi-model-chip.active",
+  ".hifi-settings-divider",
+  ".hifi-settings-status-list",
+  ".hifi-settings-status-row",
+  ".hifi-settings-mono",
+  ".hifi-settings-saved",
+  ".hifi-settings-footer",
   ".hifi-settings-secret-field",
   ".hifi-settings-input--secret",
   ".hifi-settings-input--mono",
@@ -279,11 +306,15 @@ describe("LlmConfigPanel form foundation", () => {
   it("uses react-hook-form and zod while keeping visual classes local", () => {
     const source = readFileSync(panelSource, "utf8");
     const css = readFileSync(panelCss, "utf8");
+    const appCss = readFileSync(appCssForLlmPanel, "utf8");
 
     expect(source).toContain('from "react-hook-form"');
     expect(source).toContain('from "@hookform/resolvers/zod"');
     expect(source).toContain('from "zod"');
     expect(source).toContain("useForm<ApiConfig>");
+    expect(source).toContain("useWatch");
+    expect(source).not.toContain("watch,");
+    expect(source).not.toContain("watch();");
     expect(source).toContain("zodResolver");
     expect(source).toContain("llmConfigSchema");
     expect(source).toContain('import "./LlmConfigPanel.css"');
@@ -291,6 +322,7 @@ describe("LlmConfigPanel form foundation", () => {
     for (const selector of requiredSelectors) {
       expect(css).toContain(selector);
     }
+    expect(appCss).not.toMatch(/\.hifi-settings-|\.hifi-model-|\.hifi-shortcuts-/);
   });
 });
 
@@ -1400,6 +1432,9 @@ describe("datasource management styles", () => {
     expect(formSource).toContain('from "react-hook-form"');
     expect(formSource).toContain('from "@hookform/resolvers/zod"');
     expect(formSource).toContain('from "zod"');
+    expect(formSource).toContain("useWatch");
+    expect(formSource).not.toContain("watch,");
+    expect(formSource).not.toContain("watch();");
     expect(formSource).toContain("datasourceFormSchema");
     expect(formSource).toContain("zodResolver");
     expect(pageSource).not.toContain("const validateForm");
@@ -2043,6 +2078,18 @@ const tablePreviewSelectors = [
   ".hifi-preview-toolbar-btn",
   ".hifi-preview-search",
   ".hifi-preview-control-row",
+  ".hifi-result-control-field",
+  ".hifi-result-control-value",
+  ".hifi-preview-loading-bar",
+  ".hifi-preview-notice",
+  ".hifi-preview-error",
+  ".hifi-preview-skeleton",
+  ".hifi-preview-skeleton-row",
+  ".hifi-preview-empty",
+  ".hifi-preview-empty-icon",
+  ".hifi-preview-empty-title",
+  ".hifi-preview-empty-copy",
+  ".hifi-preview-empty-actions",
   ".table-preview-grid",
   ".table-preview-head",
   ".table-preview-row",
@@ -2052,6 +2099,18 @@ const tablePreviewSelectors = [
   ".hifi-pagination",
   ".hifi-page-num",
   ".hifi-preview-page-btn",
+];
+
+const retiredResultSelectors = [
+  ".hifi-result-workspace",
+  ".hifi-result-control-row",
+  ".hifi-result-table-wrap",
+  ".hifi-result-inline-table",
+  ".hifi-result-table-head",
+  ".hifi-result-table-head-button",
+  ".hifi-result-error",
+  ".hifi-sql-card",
+  ".hifi-sql-card-action",
 ];
 
 describe("TablePreviewPane styles", () => {
@@ -2065,6 +2124,9 @@ describe("TablePreviewPane styles", () => {
     const localCss = readFileSync(tablePreviewCss, "utf8");
     for (const selector of tablePreviewSelectors) {
       expect(localCss).toContain(selector);
+      expect(globalCss).not.toContain(selector);
+    }
+    for (const selector of retiredResultSelectors) {
       expect(globalCss).not.toContain(selector);
     }
   });
@@ -2093,6 +2155,41 @@ describe("TablePreviewPane styles", () => {
     expect(css).toContain(".table-preview-popover-content");
     expect(css).toContain(".table-preview-popover-actions");
     expect(css).toContain("box-shadow: inset 0 0 0 1px var(--agent-border)");
+  });
+});
+
+}
+
+// Source: desktop/src/features/workspace/artifacts/__tests__/EmptyArtifactsState.styles.test.ts
+{
+
+const emptyArtifactsSource = join(process.cwd(), "src/features/workspace/artifacts/EmptyArtifactsState.tsx");
+const emptyArtifactsCss = join(process.cwd(), "src/features/workspace/artifacts/EmptyArtifactsState.css");
+const emptyArtifactsAppCss = join(process.cwd(), "src/App.css");
+
+const emptyArtifactsSelectors = [
+  ".hifi-ai-card",
+  ".hifi-ai-card-header",
+  ".hifi-ai-card-body",
+  ".hifi-artifact-empty",
+  ".hifi-artifact-empty-header",
+  ".hifi-artifact-empty-icon",
+  ".hifi-artifact-empty-body",
+];
+
+describe("EmptyArtifactsState styles", () => {
+  it("keeps empty artifact presentation in the artifact feature stylesheet", () => {
+    const source = readFileSync(emptyArtifactsSource, "utf8");
+    const globalCss = readFileSync(emptyArtifactsAppCss, "utf8");
+
+    expect(source).toContain('import "./EmptyArtifactsState.css";');
+    expect(existsSync(emptyArtifactsCss)).toBe(true);
+
+    const localCss = readFileSync(emptyArtifactsCss, "utf8");
+    for (const selector of emptyArtifactsSelectors) {
+      expect(localCss).toContain(selector);
+      expect(globalCss).not.toContain(selector);
+    }
   });
 });
 
@@ -2480,6 +2577,25 @@ describe("agent visual tokens", () => {
     expect(css).toMatch(/\.conv-message-user \.conv-message-body p,[\s\S]*?font-size:\s*var\(--agent-font-body\);/);
     expect(css).toMatch(/\.conv-answer-document \.hifi-md-p,[\s\S]*?font-size:\s*var\(--agent-font-body\);/);
     expect(css).toMatch(/\.conv-run-status-copy strong\s*{[\s\S]*?font-size:\s*var\(--agent-font-ui\);/);
+  });
+
+  it("keeps MarkdownContent base styles owned by the query result feature", () => {
+    const source = read("features/workspace/queryResult/MarkdownContent.tsx");
+    const css = read("features/workspace/queryResult/MarkdownContent.css");
+    const appCss = read("App.css");
+
+    expect(source).toContain('import "./MarkdownContent.css";');
+    expect(css).toContain(".hifi-markdown-content");
+    expect(css).toContain(".hifi-md-table");
+    expect(appCss).not.toContain("/* ===== Markdown Content ===== */");
+    expect(appCss).not.toMatch(/^\.hifi-markdown-content/m);
+    expect(appCss).not.toMatch(/^\.hifi-md-/m);
+  });
+
+  it("keeps retired agent conversation hifi styles out of App.css", () => {
+    const appCss = read("App.css");
+
+    expect(appCss).not.toMatch(/\.(?:hifi-query-result|hifi-approval|hifi-agent-running|hifi-agent-cancel|hifi-agent-regenerate|hifi-answer|hifi-followup|hifi-artifact-chip|hifi-thinking|hifi-agent-timeline|hifi-agent-json)/);
   });
 
   it("keeps conversation workspace colors behind tokens", () => {

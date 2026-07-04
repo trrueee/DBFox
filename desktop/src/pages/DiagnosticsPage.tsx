@@ -36,7 +36,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     setLoading(true);
     setError(null);
     try {
-      setLogs(withClientLogs(await diagnosticsApi.getLogs()));
+      setLogs(await loadDiagnosticLogs());
     } catch (err) {
       const message = getUserErrorMessage(err, "诊断日志加载失败");
       setError(message);
@@ -48,8 +48,28 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
   }, [onToast]);
 
   useEffect(() => {
-    void loadLogs();
-  }, [loadLogs]);
+    let cancelled = false;
+
+    async function loadInitialLogs() {
+      setLoading(true);
+      setError(null);
+      try {
+        const nextLogs = await loadDiagnosticLogs();
+        if (!cancelled) setLogs(nextLogs);
+      } catch (err) {
+        if (cancelled) return;
+        const message = getUserErrorMessage(err, "诊断日志加载失败");
+        setError(message);
+        setLogs(frontendOnlyLogs());
+        onToast(message, "error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadInitialLogs();
+    return () => { cancelled = true; };
+  }, [onToast]);
 
   const bundleText = useMemo(() => {
     if (!logs) return "";
@@ -85,14 +105,14 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     return buildDiagnosticGroups(logs.sources, showEmptyLogs);
   }, [logs, showEmptyLogs]);
 
-  useEffect(() => {
-    if (visibleGroups.length === 0) return;
-    if (!visibleGroups.some((group) => group.key === selectedGroupKey)) {
-      setSelectedGroupKey(visibleGroups[0].key);
-    }
-  }, [selectedGroupKey, visibleGroups]);
+  const resolvedSelectedGroupKey = visibleGroups.some((group) => group.key === selectedGroupKey)
+    ? selectedGroupKey
+    : visibleGroups[0]?.key ?? selectedGroupKey;
+  if (resolvedSelectedGroupKey !== selectedGroupKey) {
+    setSelectedGroupKey(resolvedSelectedGroupKey);
+  }
 
-  const selectedGroup = visibleGroups.find((group) => group.key === selectedGroupKey) || visibleGroups[0] || null;
+  const selectedGroup = visibleGroups.find((group) => group.key === resolvedSelectedGroupKey) || visibleGroups[0] || null;
   const totalSourcesCount = logs?.sources.length ?? 0;
   const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
   const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取...";
@@ -181,8 +201,8 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                     type="button"
                     variant="ghost"
                     role="option"
-                    aria-selected={group.key === selectedGroupKey}
-                    className={`diagnostics-source-option${group.key === selectedGroupKey ? " is-active" : ""}`}
+                    aria-selected={group.key === resolvedSelectedGroupKey}
+                    className={`diagnostics-source-option${group.key === resolvedSelectedGroupKey ? " is-active" : ""}`}
                     onClick={() => {
                       setSelectedGroupKey(group.key);
                       setGroupMenuOpen(false);
@@ -193,7 +213,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
                       <small>{group.sourceNames.join(", ") || "无原始源"}</small>
                     </span>
                     <em>{formatBytes(group.sizeBytes)}</em>
-                    {group.key === selectedGroupKey ? <Check size={14} /> : null}
+                    {group.key === resolvedSelectedGroupKey ? <Check size={14} /> : null}
                   </Button>
                 ))}
               </div>
@@ -247,6 +267,10 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+async function loadDiagnosticLogs(): Promise<DiagnosticLogsResponse> {
+  return withClientLogs(await diagnosticsApi.getLogs());
 }
 
 function withClientLogs(logs: DiagnosticLogsResponse): DiagnosticLogsResponse {

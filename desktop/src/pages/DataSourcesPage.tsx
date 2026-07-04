@@ -132,19 +132,17 @@ export const DataSourcesPage = ({
     await onRefreshDatasources();
   };
 
-  useEffect(() => {
-    if (initialShowAddForm !== prevInitialShowAddForm) {
-      setPrevInitialShowAddForm(initialShowAddForm);
-      if (initialShowAddForm) {
-        setMode("create");
-        setForm(emptyDatasourceForm());
-        setFormError("");
-        setTestResult({ status: "idle", message: "" });
-      } else {
-        setMode("detail");
-      }
+  if (initialShowAddForm !== prevInitialShowAddForm) {
+    setPrevInitialShowAddForm(initialShowAddForm);
+    if (initialShowAddForm) {
+      setMode("create");
+      setForm(emptyDatasourceForm());
+      setFormError("");
+      setTestResult({ status: "idle", message: "" });
+    } else {
+      setMode("detail");
     }
-  }, [initialShowAddForm, prevInitialShowAddForm]);
+  }
 
   useEffect(() => {
     let preferredId: string | null = null;

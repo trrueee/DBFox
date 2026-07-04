@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import type { ChangeEvent } from "react";
-import { useForm, type FieldErrors } from "react-hook-form";
+import { useForm, useWatch, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -85,12 +85,12 @@ export const DataSourceForm = ({
     handleSubmit,
     register,
     setValue,
-    watch,
+    control,
   } = useForm<DatasourceFormState>({
     values: form,
     resolver: zodResolver(datasourceFormSchema),
   });
-  const values = watch();
+  const values = useWatch({ control }) as DatasourceFormState;
   const validationError = firstFormError(formState.errors);
   const actionsDisabled = actionState !== "idle";
   const isSqlite = values.db_type === "sqlite";
