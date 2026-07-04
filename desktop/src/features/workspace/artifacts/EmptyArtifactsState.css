@@ -1,0 +1,43 @@
+.hifi-ai-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--agent-surface);
+}
+
+.hifi-ai-card-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-label);
+  font-weight: 600;
+}
+
+.hifi-ai-card-body {
+  padding: 12px;
+}
+
+.hifi-artifact-empty {
+  margin-top: 8px;
+  background: var(--color-bg);
+}
+
+.hifi-artifact-empty-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-panel);
+}
+
+.hifi-artifact-empty-icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.hifi-artifact-empty-body {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-label);
+  line-height: 1.5;
+}

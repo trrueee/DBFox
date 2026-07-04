@@ -68,7 +68,11 @@ export function useArtifactTableData(
   const [pageSize, setPageSize] = useState(50);
   const [expanded, setExpanded] = useState(false);
 
-  const isSqlBackedWorkspace = mode === "workspace" && artifact.type === "result_view" && artifact.storageMode === "sql_backed";
+  const isSqlBackedWorkspace =
+    mode === "workspace" &&
+    artifact.type === "result_view" &&
+    artifact.storageMode === "sql_backed" &&
+    artifact.sourceSqlArtifactId.trim().length > 0;
   const columnMetadata = useMemo(
     () =>
       artifact.columns
@@ -86,11 +90,11 @@ export function useArtifactTableData(
     return {
       kind: "artifact-result",
       datasourceId: artifact.datasourceId,
-      sourceSqlArtifactId: artifact.id,
+      sourceSqlArtifactId: artifact.sourceSqlArtifactId,
       safeSql: artifact.safeSql,
       columns,
     };
-  }, [artifact, columns]);
+  }, [artifact.datasourceId, artifact.safeSql, artifact.sourceSqlArtifactId, columns]);
 
   const fetchSqlBackedPage = useCallback(async (request: SqlBackedPageRequest) => {
     if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");

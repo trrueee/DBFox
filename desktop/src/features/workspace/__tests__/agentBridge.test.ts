@@ -34,7 +34,8 @@ describe("agentBridge", () => {
         payload: {
           storageMode: "sql_backed",
           datasourceId: "ds-1",
-          sourceSqlArtifactId: "sql-1",
+          sourceSqlArtifactKey: "sql-1",
+          sourceSqlSemanticKey: "sql_candidate",
           sourceSql: "SELECT SUM(amount) AS gmv FROM orders",
           safeSql: "SELECT SUM(amount) AS gmv FROM orders",
           columns: ["gmv"],
@@ -123,7 +124,10 @@ describe("agentBridge", () => {
         payload: {
           storageMode: "sql_backed",
           datasourceId: "ds-1",
-          sourceSqlSemanticId: "sql_candidate",
+          sourceSqlArtifactKey: "artifact-sql-1",
+          sourceSqlSemanticKey: "sql_candidate",
+          safetyArtifactKey: "artifact-safety-1",
+          safetySemanticKey: "safety_report_1",
           sourceSql: "SELECT id, amount FROM orders",
           safeSql: "SELECT id, amount FROM orders",
           columns: ["id", "amount"],
@@ -144,12 +148,50 @@ describe("agentBridge", () => {
     if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
     expect(resultView.storageMode).toBe("sql_backed");
     expect(resultView.datasourceId).toBe("ds-1");
+    expect(resultView.sourceSqlArtifactId).toBe("artifact-sql-1");
     expect(resultView.sourceSqlSemanticId).toBe("sql_candidate");
+    expect(resultView.safetyArtifactId).toBe("artifact-safety-1");
+    expect(resultView.safetySemanticId).toBe("safety_report_1");
     expect(resultView.safeSql).toBe("SELECT id, amount FROM orders");
     expect(resultView.columns).toEqual(["id", "amount"]);
     expect(resultView.previewRows).toEqual([["1", "20"]]);
     expect(resultView.rowCount).toBe(128);
     expect(resultView.depends_on).toEqual(["sql_candidate"]);
+  });
+
+  it("maps legacy result_view source artifact ids for existing conversations", () => {
+    const artifacts: AgentArtifact[] = [
+      {
+        id: "result-view-legacy",
+        semantic_id: "result_view_legacy",
+        type: "result_view",
+        title: "Legacy result view",
+        status: "completed",
+        presentation: { mode: "both", priority: 1, collapsed: false },
+        payload: {
+          storageMode: "sql_backed",
+          datasourceId: "ds-1",
+          sourceSqlArtifactId: "legacy-sql-artifact",
+          sourceSqlSemanticId: "legacy_sql_candidate",
+          safetyArtifactId: "legacy-safety-artifact",
+          safetySemanticId: "legacy_safety_report",
+          safeSql: "SELECT id FROM orders",
+          columns: ["id"],
+          previewRows: [{ id: 1 }],
+        },
+        depends_on: ["legacy_sql_candidate"],
+        refs: [],
+      },
+    ];
+
+    const [resultView] = toViewArtifacts(artifacts);
+
+    expect(resultView?.type).toBe("result_view");
+    if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
+    expect(resultView.sourceSqlArtifactId).toBe("legacy-sql-artifact");
+    expect(resultView.sourceSqlSemanticId).toBe("legacy_sql_candidate");
+    expect(resultView.safetyArtifactId).toBe("legacy-safety-artifact");
+    expect(resultView.safetySemanticId).toBe("legacy_safety_report");
   });
 
   it("preserves backend pie and scatter chart types with metadata", () => {

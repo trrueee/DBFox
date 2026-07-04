@@ -1,4 +1,5 @@
 import { FoxIcon } from "../../../components/brand/FoxIcon";
+import "./EmptyArtifactsState.css";
 
 export function EmptyArtifactsState() {
   return (

@@ -16,21 +16,13 @@ const ErDiagram = lazy(async () => {
   return { default: module.ErDiagram };
 });
 
+const EMPTY_ER_NODES: ERDiagramData["nodes"] = [];
+const EMPTY_ER_EDGES: ERDiagramData["edges"] = [];
+
 export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
   const [data, setData] = useState<ERDiagramData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [focusTable, setFocusTable] = useState(tableId);
-  const [viewMode, setViewMode] = useState<ErViewMode>("focus");
-  const [depth, setDepth] = useState<1 | 2>(1);
-  const [showInferred, setShowInferred] = useState(true);
-
-  useEffect(() => {
-    setFocusTable(tableId);
-    setViewMode("focus");
-    setDepth(1);
-    setShowInferred(true);
-  }, [datasourceId, tableId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,13 +46,8 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
     return () => { cancelled = true; };
   }, [datasourceId]);
 
-  const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
-  const edges = Array.isArray(data?.edges) ? data.edges : [];
-  const inferredEdgeCount = useMemo(
-    () => edges.filter((edge) => edge.edge_type === "inferred").length,
-    [edges],
-  );
-  const resolvedFocusTable = nodes.some((node) => node.label === focusTable) ? focusTable : tableId;
+  const nodes = Array.isArray(data?.nodes) ? data.nodes : EMPTY_ER_NODES;
+  const edges = Array.isArray(data?.edges) ? data.edges : EMPTY_ER_EDGES;
 
   if (loading) {
     return (
@@ -96,6 +83,38 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
       </div>
     );
   }
+
+  return (
+    <TableErPaneContent
+      key={`${datasourceId}:${tableId}`}
+      data={data}
+      nodes={nodes}
+      edges={edges}
+      tableId={tableId}
+    />
+  );
+}
+
+function TableErPaneContent({
+  data,
+  nodes,
+  edges,
+  tableId,
+}: {
+  data: ERDiagramData;
+  nodes: ERDiagramData["nodes"];
+  edges: ERDiagramData["edges"];
+  tableId: string;
+}) {
+  const [focusTable, setFocusTable] = useState(tableId);
+  const [viewMode, setViewMode] = useState<ErViewMode>("focus");
+  const [depth, setDepth] = useState<1 | 2>(1);
+  const [showInferred, setShowInferred] = useState(true);
+  const inferredEdgeCount = useMemo(
+    () => edges.filter((edge) => edge.edge_type === "inferred").length,
+    [edges],
+  );
+  const resolvedFocusTable = nodes.some((node) => node.label === focusTable) ? focusTable : tableId;
 
   return (
     <div className="table-er-pane">

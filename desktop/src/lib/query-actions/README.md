@@ -20,8 +20,10 @@ The execution shape should stay:
 SQL + @ annotations
   -> query-actions.parse/validate
   -> compile pureSql / compiledSql
-  -> /query/validate or /query/execute
-  -> afterExecute processors such as export/chart
+  -> /query/validate
+  -> /agent/console/execute
+  -> persisted SQL/safety/result_view artifacts
+  -> SQL-backed Data View page/export APIs
 ```
 
 Do not make the Agent emit `@chart`, `@limit`, or other SQL editor annotations. If Agent needs a chart or table, it should create an Agent artifact.

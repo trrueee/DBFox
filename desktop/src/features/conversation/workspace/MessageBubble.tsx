@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { AgentAnswer, AgentApproval } from "../../../lib/api/types";
 import type {
@@ -82,58 +82,81 @@ interface SmoothedStreamingText {
   isRevealing: boolean;
 }
 
+interface SmoothedStreamingState {
+  identity: string;
+  displayed: string;
+  streamWasActive: boolean;
+}
+
 export function useSmoothedStreamingText(
   targetText: string,
   active: boolean,
   identity: string,
 ): SmoothedStreamingText {
   const reducedMotion = usePrefersReducedMotion();
-  const initialText = active && targetText ? "" : targetText;
-  const [displayed, setDisplayed] = useState(initialText);
-  const streamWasActiveRef = useRef(active);
-  const identityRef = useRef(identity);
+  const [state, setState] = useState<SmoothedStreamingState>(() => ({
+    identity,
+    displayed: active && targetText && !reducedMotion ? "" : targetText,
+    streamWasActive: active,
+  }));
+
+  let renderState = state;
+  const applyRenderState = (nextState: SmoothedStreamingState) => {
+    renderState = nextState;
+    setState(nextState);
+  };
+
+  if (renderState.identity !== identity) {
+    applyRenderState({
+      identity,
+      displayed: active && targetText && !reducedMotion ? "" : targetText,
+      streamWasActive: active,
+    });
+  } else if (active && !renderState.streamWasActive) {
+    applyRenderState({ ...renderState, streamWasActive: true });
+  } else if ((reducedMotion || !renderState.streamWasActive) && renderState.displayed !== targetText) {
+    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });
+  } else if (
+    renderState.streamWasActive
+    && renderState.displayed
+    && (!targetText.startsWith(renderState.displayed) || renderState.displayed.length > targetText.length)
+  ) {
+    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });
+  } else if (!active && renderState.streamWasActive && renderState.displayed === targetText) {
+    applyRenderState({ ...renderState, streamWasActive: false });
+  }
 
   useEffect(() => {
-    if (identityRef.current !== identity) {
-      identityRef.current = identity;
-      streamWasActiveRef.current = active;
-      setDisplayed(active && targetText ? "" : targetText);
-      return;
-    }
+    if (reducedMotion || !renderState.streamWasActive) return;
+    if (renderState.displayed === targetText) return;
+    if (!targetText.startsWith(renderState.displayed) || renderState.displayed.length > targetText.length) return;
 
-    if (active) streamWasActiveRef.current = true;
-    if (reducedMotion || !streamWasActiveRef.current) {
-      setDisplayed(targetText);
-    }
-  }, [active, identity, reducedMotion, targetText]);
-
-  useEffect(() => {
-    if (reducedMotion || !streamWasActiveRef.current) return;
-    if (displayed === targetText) {
-      if (!active) streamWasActiveRef.current = false;
-      return;
-    }
-    if (!targetText.startsWith(displayed) || displayed.length > targetText.length) {
-      setDisplayed(targetText);
-      return;
-    }
-
-    const remaining = targetText.slice(displayed.length);
-    const delay = revealDelay(displayed);
+    const delay = revealDelay(renderState.displayed);
     const timer = window.setTimeout(() => {
-      const nextText = targetText.slice(0, displayed.length + revealCount(remaining));
-      setDisplayed(nextText);
+      setState((current) => {
+        if (current.identity !== identity || reducedMotion || !current.streamWasActive) return current;
+        if (!targetText.startsWith(current.displayed) || current.displayed.length > targetText.length) {
+          return { ...current, displayed: targetText, streamWasActive: active };
+        }
+        const nextRemaining = targetText.slice(current.displayed.length);
+        const nextText = targetText.slice(0, current.displayed.length + revealCount(nextRemaining));
+        return {
+          ...current,
+          displayed: nextText,
+          streamWasActive: active || nextText.length < targetText.length,
+        };
+      });
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [active, displayed, reducedMotion, targetText]);
+  }, [active, identity, reducedMotion, renderState.displayed, renderState.streamWasActive, targetText]);
 
   return useMemo(
     () => ({
-      text: displayed,
-      isRevealing: streamWasActiveRef.current && displayed.length < targetText.length,
+      text: renderState.displayed,
+      isRevealing: renderState.streamWasActive && renderState.displayed.length < targetText.length,
     }),
-    [displayed, targetText],
+    [renderState.displayed, renderState.streamWasActive, targetText],
   );
 }
 

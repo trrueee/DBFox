@@ -193,6 +193,10 @@ export function toResultViewArtifactModel(artifact: ConversationArtifact): Resul
   );
   const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? rows.length;
   const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? rows.length;
+  const sourceSqlArtifactId = payloadString(artifact.payload, ["sourceSqlArtifactKey", "sourceSqlArtifactId", "source_sql_artifact_id"]) || "";
+  const sourceSqlSemanticId = payloadString(artifact.payload, ["sourceSqlSemanticKey", "sourceSqlSemanticId", "source_sql_semantic_id"]) || "";
+  const safetyArtifactId = payloadString(artifact.payload, ["safetyArtifactKey", "safetyArtifactId", "safety_artifact_id"]) || "";
+  const safetySemanticId = payloadString(artifact.payload, ["safetySemanticKey", "safetySemanticId", "safety_semantic_id"]) || "";
 
   return {
     id: artifact.id,
@@ -200,12 +204,10 @@ export function toResultViewArtifactModel(artifact: ConversationArtifact): Resul
     title: artifact.title,
     storageMode: payloadString(artifact.payload, ["storageMode", "storage_mode"]) === "sql_backed" ? "sql_backed" : "payload",
     datasourceId: payloadString(artifact.payload, ["datasourceId", "datasource_id"]) || "",
-    sourceSqlSemanticId: payloadString(artifact.payload, [
-      "sourceSqlArtifactId",
-      "source_sql_artifact_id",
-      "sourceSqlSemanticId",
-      "source_sql_semantic_id",
-    ]) || "",
+    sourceSqlArtifactId,
+    sourceSqlSemanticId,
+    safetyArtifactId: safetyArtifactId || undefined,
+    safetySemanticId: safetySemanticId || undefined,
     sourceSql: payloadString(artifact.payload, ["sourceSql", "source_sql"]) || "",
     safeSql: payloadString(artifact.payload, ["safeSql", "safe_sql"]) || "",
     columns,

@@ -1,12 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DataSource } from "../../../lib/api/types";
-import { executeSql } from "../../engine/engineApi";
+import type { ConsoleExecuteResponse, DataSource } from "../../../lib/api/types";
+import { agentApi } from "../../../lib/api/agent";
 import { SqlConsoleWorkspace, type ConsoleEntry, type SqlConsoleTabState } from "../SqlConsoleWorkspace";
 
-vi.mock("../../engine/engineApi", () => ({
-  executeSql: vi.fn(),
+vi.mock("../../../lib/api/agent", () => ({
+  agentApi: {
+    executeSqlConsole: vi.fn(),
+    fetchResultPage: vi.fn(),
+    exportResultCsv: vi.fn(),
+  },
 }));
 
 vi.mock("../../../components/SqlEditor", () => ({
@@ -24,6 +28,77 @@ const datasource: DataSource = {
   connection_mode: "direct",
   status: "active",
   created_at: "2026-01-01T00:00:00Z",
+};
+
+const consoleArtifactResponse: ConsoleExecuteResponse = {
+  runId: "console-run-1",
+  sessionId: "sql-1",
+  sqlArtifactId: "agent/run/console-run-1/artifact/001/sql_query_a1",
+  safetyArtifactId: "agent/run/console-run-1/artifact/002/safety_report_a1",
+  resultArtifactId: "agent/run/console-run-1/artifact/003/result_view_a1",
+  warnings: [],
+  notices: [],
+  artifacts: [
+    {
+      id: "agent/run/console-run-1/artifact/001/sql_query_a1",
+      semantic_id: "sql_query_a1",
+      type: "sql",
+      title: "Validated SQL",
+      payload: {
+        sql: "SELECT 1 AS id, 'Ada' AS name",
+        validation_status: "passed",
+        execution_status: "completed",
+        rowCount: 1,
+        latencyMs: 7,
+      },
+      presentation: { mode: "dock", priority: 70, collapsed: true },
+      depends_on: [],
+    },
+    {
+      id: "agent/run/console-run-1/artifact/002/safety_report_a1",
+      semantic_id: "safety_report_a1",
+      type: "safety",
+      title: "Safety report",
+      payload: {
+        passed: true,
+        can_execute: true,
+        requires_confirmation: false,
+        safe_sql: "SELECT 1 AS id, 'Ada' AS name",
+      },
+      presentation: { mode: "dock", priority: 75, collapsed: true },
+      depends_on: ["agent/run/console-run-1/artifact/001/sql_query_a1"],
+    },
+    {
+      id: "agent/run/console-run-1/artifact/003/result_view_a1",
+      semantic_id: "result_view_a1",
+      type: "result_view",
+      title: "Result view",
+      payload: {
+        storageMode: "sql_backed",
+        datasourceId: "ds-1",
+        sourceSqlArtifactKey: "agent/run/console-run-1/artifact/001/sql_query_a1",
+        sourceSqlSemanticKey: "sql_query_a1",
+        safetyArtifactKey: "agent/run/console-run-1/artifact/002/safety_report_a1",
+        safetySemanticKey: "safety_report_a1",
+        sourceSql: "SELECT 1 AS id, 'Ada' AS name",
+        safeSql: "SELECT 1 AS id, 'Ada' AS name",
+        columns: [
+          { name: "id", type: "integer" },
+          { name: "name", type: "text" },
+        ],
+        previewRows: [],
+        previewRowCount: 0,
+        rowCount: 1,
+        returnedRows: 1,
+        latencyMs: 7,
+      },
+      presentation: { mode: "both", priority: 20, collapsed: false },
+      depends_on: [
+        "agent/run/console-run-1/artifact/001/sql_query_a1",
+        "agent/run/console-run-1/artifact/002/safety_report_a1",
+      ],
+    },
+  ],
 };
 
 function renderConsole(
@@ -58,17 +133,23 @@ function renderConsole(
 describe("SqlConsoleWorkspace", () => {
   beforeEach(() => {
     cleanup();
-    vi.mocked(executeSql).mockReset();
-    vi.mocked(executeSql).mockResolvedValue({
-      success: true,
+    vi.mocked(agentApi.executeSqlConsole).mockReset();
+    vi.mocked(agentApi.executeSqlConsole).mockResolvedValue(consoleArtifactResponse);
+    vi.mocked(agentApi.fetchResultPage).mockReset();
+    vi.mocked(agentApi.fetchResultPage).mockResolvedValue({
       columns: ["id", "name"],
       rows: [{ id: 1, name: "Ada" }],
-      rowCount: 1,
+      page: 1,
+      pageSize: 50,
+      rowCount: null,
+      hasNextPage: false,
+      executedSql: "SELECT * FROM (SELECT 1 AS id, 'Ada' AS name) AS dbfox_result_source LIMIT 51 OFFSET 0",
       latencyMs: 7,
       warnings: [],
       notices: [],
-      truncated: false,
     });
+    vi.mocked(agentApi.exportResultCsv).mockReset();
+    vi.mocked(agentApi.exportResultCsv).mockResolvedValue(new Blob(["id,name\n1,Ada\n"]));
   });
 
   it("renders a terminal textarea without the boxed Monaco editor and disables execute for empty SQL", () => {
@@ -83,17 +164,31 @@ describe("SqlConsoleWorkspace", () => {
     expect((screen.getByRole("button", { name: /运行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("executes the current SQL once and renders result metadata", async () => {
+  it("executes the current SQL as artifact-backed result data", async () => {
     renderConsole({ draftSql: "SELECT 1 AS id, 'Ada' AS name", entries: [], running: false });
 
     fireEvent.click(screen.getByRole("button", { name: /运行/ }));
 
     await waitFor(() => {
-      expect(executeSql).toHaveBeenCalledTimes(1);
-      expect(executeSql).toHaveBeenCalledWith("ds-1", "SELECT 1 AS id, 'Ada' AS name", "SQL Console");
+      expect(agentApi.executeSqlConsole).toHaveBeenCalledTimes(1);
+      expect(agentApi.executeSqlConsole).toHaveBeenCalledWith({
+        datasourceId: "ds-1",
+        sql: "SELECT 1 AS id, 'Ada' AS name",
+        question: "SQL Console",
+        sessionId: "sql-1",
+      });
     });
-    expect(await screen.findByText(/1 行 · 7ms/)).toBeTruthy();
-    expect(screen.getByText("Ada")).toBeTruthy();
+    await waitFor(() => {
+      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(expect.objectContaining({
+        datasourceId: "ds-1",
+        sourceSqlArtifactId: "agent/run/console-run-1/artifact/001/sql_query_a1",
+        safeSql: "SELECT 1 AS id, 'Ada' AS name",
+        page: 1,
+        pageSize: 50,
+        countMode: "estimate",
+      }));
+    });
+    expect(await screen.findByText("Ada")).toBeTruthy();
   });
 
   it("executes selected SQL without clearing the full editor draft", async () => {
@@ -110,7 +205,12 @@ describe("SqlConsoleWorkspace", () => {
     fireEvent.keyDown(editor, { key: "F9" });
 
     await waitFor(() => {
-      expect(executeSql).toHaveBeenCalledWith("ds-1", "SELECT selected_id FROM orders", "SQL Console");
+      expect(agentApi.executeSqlConsole).toHaveBeenCalledWith({
+        datasourceId: "ds-1",
+        sql: "SELECT selected_id FROM orders",
+        question: "SQL Console",
+        sessionId: "sql-1",
+      });
     });
     expect(editor.value).toContain("SELECT * FROM orders");
   });
@@ -157,7 +257,7 @@ describe("SqlConsoleWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /运行/ }));
 
-    expect(executeSql).not.toHaveBeenCalled();
+    expect(agentApi.executeSqlConsole).not.toHaveBeenCalled();
     expect(onToast).not.toHaveBeenCalled();
   });
 });

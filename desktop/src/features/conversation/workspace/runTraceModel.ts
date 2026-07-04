@@ -294,7 +294,7 @@ function phaseForTool(tool: string, name: string): TimelinePhase {
   if (value.includes("db.search") || (value.includes("schema") && !value.includes("inspect"))) return "searching_schema";
   if (value.includes("db.inspect") || value.includes("db.preview") || value.includes("inspect")) return "inspecting";
   if (value.includes("sql.validate") || value.includes("safety") || value.includes("guardrail")) return "validating";
-  if (value.includes("sql.execute") || value.includes("readonly") || value.includes("db.query")) return "executing";
+  if (value.includes("sql.execute") || value.includes("readonly")) return "executing";
   if (value.includes("chart") || value.includes("answer") || value.includes("memory")) return "synthesizing";
   if (value.includes("sql")) return "generating_sql";
   return "understanding";

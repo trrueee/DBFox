@@ -44,7 +44,10 @@ export type ResultViewArtifact = AgentArtifactBase & {
   type: "result_view";
   storageMode: "payload" | "sql_backed";
   datasourceId: string;
+  sourceSqlArtifactId: string;
   sourceSqlSemanticId: string;
+  safetyArtifactId?: string;
+  safetySemanticId?: string;
   sourceSql: string;
   safeSql: string;
   dialect?: string;

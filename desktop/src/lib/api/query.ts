@@ -1,5 +1,5 @@
 import { request } from "./client";
-import type { GuardrailCheckResult, QueryResult } from "./types";
+import type { GuardrailCheckResult } from "./types";
 
 export const queryApi = {
   validateSql: (sql: string, options?: { datasourceId?: string; signal?: AbortSignal }) =>
@@ -7,13 +7,6 @@ export const queryApi = {
       method: "POST",
       body: JSON.stringify({ sql, datasource_id: options?.datasourceId }),
       signal: options?.signal,
-    }),
-
-  executeSql: (datasourceId: string, sql: string, question?: string, executionId?: string, signal?: AbortSignal) =>
-    request<QueryResult>("/query/execute", {
-      method: "POST",
-      body: JSON.stringify({ datasource_id: datasourceId, sql, question, execution_id: executionId }),
-      signal,
     }),
 
   cancelQuery: (executionId: string) =>
