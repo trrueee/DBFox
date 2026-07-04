@@ -6,7 +6,7 @@ import { useSqlBackedDataView } from "../useSqlBackedDataView";
 const source = {
   kind: "artifact-result" as const,
   datasourceId: "ds-1",
-  sourceSqlArtifactId: "result_view_1",
+  sourceSqlArtifactId: "sql-artifact-1",
   safeSql: "SELECT id FROM users",
   columns: ["id"],
 };

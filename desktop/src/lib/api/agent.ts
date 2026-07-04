@@ -12,9 +12,13 @@ import type {
   AgentRuntimeEventRecord,
   AgentSessionRunSummary,
   AgentTraceEventRecord,
+  ConsoleExecuteRequest,
+  ConsoleExecuteResponse,
   ResultExportRequest,
   ResultPageRequest,
   ResultPageResponse,
+  TableResultExportRequest,
+  TableResultPageRequest,
 } from "./types";
 
 export function createAgentRunDraft(question: string): AgentRunDraftState {
@@ -422,6 +426,12 @@ export const agentApi = {
 
   streamResumeAgentRun,
 
+  executeSqlConsole: (req: ConsoleExecuteRequest) =>
+    request<ConsoleExecuteResponse>("/agent/console/execute", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
   fetchResultPage: (req: ResultPageRequest) =>
     request<ResultPageResponse>("/agent/results/page", {
       method: "POST",
@@ -430,6 +440,18 @@ export const agentApi = {
 
   exportResultCsv: (req: ResultExportRequest) =>
     requestBlob("/agent/results/export", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  fetchTableResultPage: (req: TableResultPageRequest) =>
+    request<ResultPageResponse>("/agent/results/table/page", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+
+  exportTableResultCsv: (req: TableResultExportRequest) =>
+    requestBlob("/agent/results/table/export", {
       method: "POST",
       body: JSON.stringify(req),
     }),

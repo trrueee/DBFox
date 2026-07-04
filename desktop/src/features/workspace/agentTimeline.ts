@@ -220,7 +220,7 @@ function toolStepSummary(toolName: string, output: Record<string, unknown> | nul
   if (error) return error;
   if (!output) return undefined;
 
-  if (toolName === "db.query" || toolName === "query_database") {
+  if (toolName === "sql.execute_readonly" || toolName === "execute_readonly") {
     const rows = numberValue(output.returned_rows) ?? numberValue(output.rowCount) ?? arrayLength(output.rows);
     const cols = arrayLength(output.columns);
     return `返回 ${rows ?? 0} 行${cols !== null ? ` · ${cols} 列` : ""}`;

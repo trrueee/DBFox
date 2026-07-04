@@ -19,7 +19,8 @@ function makeArtifact(): ResultViewArtifact {
     description: "订单按日聚合结果",
     storageMode: "payload",
     datasourceId: "ds-1",
-    sourceSqlSemanticId: "sql-artifact-payload-1",
+    sourceSqlArtifactId: "sql-artifact-payload-1",
+    sourceSqlSemanticId: "sql_candidate_payload_1",
     sourceSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
     safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
     columns: ["day", "order_count", "note"],
@@ -72,7 +73,8 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
     description: "Agent result view",
     storageMode: "sql_backed",
     datasourceId: "ds-1",
-    sourceSqlSemanticId: "sql-artifact-1",
+    sourceSqlArtifactId: "sql-artifact-1",
+    sourceSqlSemanticId: "sql_candidate_1",
     sourceSql: "SELECT day, order_count FROM daily_orders",
     safeSql: "SELECT day, order_count FROM daily_orders",
     columns: ["day", "order_count"],
@@ -82,14 +84,6 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
     returnedRows: 1,
     latencyMs: 42,
     truncated: false,
-  };
-}
-
-function makeLegacySqlBackedArtifact(): ResultViewArtifact {
-  return {
-    ...makeSqlBackedArtifact(),
-    id: "result-view-legacy",
-    sourceSqlSemanticId: "sql_candidate",
   };
 }
 
@@ -299,7 +293,7 @@ describe("TableArtifactView", () => {
     await waitFor(() =>
       expect(agentApi.exportResultCsv).toHaveBeenCalledWith({
         datasourceId: "ds-1",
-        sourceSqlArtifactId: "result-view-1",
+        sourceSqlArtifactId: "sql-artifact-1",
         safeSql: "SELECT day, order_count FROM daily_orders",
         search: "daily",
         sort: [{ column: "order_count", direction: "desc" }],
@@ -308,26 +302,13 @@ describe("TableArtifactView", () => {
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
 
-  it("uses the result view artifact as source for sql-backed pagination", async () => {
+  it("uses the source SQL artifact as source for sql-backed pagination", async () => {
     render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
 
     await waitFor(() =>
       expect(agentApi.fetchResultPage).toHaveBeenCalledWith(
         expect.objectContaining({
-          sourceSqlArtifactId: "result-view-1",
-          safeSql: "SELECT day, order_count FROM daily_orders",
-        }),
-      ),
-    );
-  });
-
-  it("uses the result view artifact as source for legacy generic sql ids", async () => {
-    render(<TableArtifactView artifact={makeLegacySqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
-
-    await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sourceSqlArtifactId: "result-view-legacy",
+          sourceSqlArtifactId: "sql-artifact-1",
           safeSql: "SELECT day, order_count FROM daily_orders",
         }),
       ),

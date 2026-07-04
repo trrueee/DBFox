@@ -43,7 +43,8 @@ function artifacts(): ConversationArtifact[] {
       payload: {
         storageMode: "sql_backed",
         datasourceId: "ds-1",
-        sourceSqlArtifactId: "sql-1",
+        sourceSqlArtifactKey: "sql-1",
+        sourceSqlSemanticKey: "sql_candidate",
         safeSql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
         columns: ["day", "gmv"],
         previewRows: [{ day: "2026-06-01", gmv: 120 }],

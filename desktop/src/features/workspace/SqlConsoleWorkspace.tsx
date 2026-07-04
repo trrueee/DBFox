@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent, type UIEvent } from "react";
 import { Play, Trash2 } from "lucide-react";
-import { ImageCell, isImageUrl } from "../../components/ImageCell";
 import { Button } from "../../components/ui/button";
 import { Panel } from "../../components/ui/panel";
 import { LoadingState } from "../../components/ui/state";
 import { Toolbar, ToolbarGroup, ToolbarTitle } from "../../components/ui/toolbar";
-import { executeSql, type EngineSqlResult } from "../engine/engineApi";
+import { agentApi } from "../../lib/api/agent";
 import type { DataSource } from "../../lib/api/types";
+import type { ResultViewArtifact } from "../../types/agentArtifact";
+import { toViewArtifacts } from "./agentBridge";
+import { TableArtifactView } from "./artifacts/TableArtifactView";
 import { firstSqlKeyword, splitSqlStatements, tokenizeSql, type SqlStatementKind, type SqlTokenKind } from "./artifacts/sqlTokenizer";
 import "./SqlConsoleWorkspace.css";
 
@@ -19,7 +21,7 @@ export type SqlConsoleTabState = {
 export type ConsoleEntry =
   | { id: number; kind: "info"; text: string; time: string }
   | { id: number; kind: "sql"; sql: string; time: string }
-  | { id: number; kind: "result"; result: EngineSqlResult; time: string }
+  | { id: number; kind: "result"; artifact: ResultViewArtifact; runId: string; time: string }
   | { id: number; kind: "error"; message: string; time: string };
 
 interface SqlConsoleWorkspaceProps {
@@ -132,8 +134,17 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
       onPatchState(tabId, { draftSql: "" });
     }
     try {
-      const result = await executeSql(resolvedDatasource.id, sql, "SQL Console");
-      const extras: ConsoleEntryDraft[] = [{ kind: "result", result }];
+      const result = await agentApi.executeSqlConsole({
+        datasourceId: resolvedDatasource.id,
+        sql,
+        question: "SQL Console",
+        sessionId: tabId,
+      });
+      const resultArtifact = toViewArtifacts(result.artifacts)
+        .find((artifact): artifact is ResultViewArtifact => artifact.type === "result_view");
+      const extras: ConsoleEntryDraft[] = resultArtifact
+        ? [{ kind: "result", artifact: resultArtifact, runId: result.runId }]
+        : [{ kind: "info", text: "执行成功，无结果集。" }];
       for (const warning of result.warnings ?? []) {
         extras.push({ kind: "info", text: `[WARN] ${warning}` });
       }
@@ -181,7 +192,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
 
       <div className="sql-console">
         <div className="sql-console-scroll" ref={scrollRef}>
-          {entries.map((entry) => renderEntry(entry))}
+          {entries.map((entry) => renderEntry(entry, onToast))}
 
           {running && <LoadingState className="sql-console-running" label="执行中..." />}
 
@@ -221,7 +232,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
   );
 }
 
-function renderEntry(entry: ConsoleEntry) {
+function renderEntry(entry: ConsoleEntry, onToast: (message: string) => void) {
   switch (entry.kind) {
     case "info":
       return (
@@ -243,7 +254,7 @@ function renderEntry(entry: ConsoleEntry) {
         </div>
       );
     case "result":
-      return <ResultBlock key={entry.id} result={entry.result} time={entry.time} />;
+      return <ResultBlock key={entry.id} artifact={entry.artifact} runId={entry.runId} time={entry.time} onToast={onToast} />;
   }
 }
 
@@ -293,49 +304,26 @@ function statementKindLabel(kind: SqlStatementKind) {
   return "语句";
 }
 
-function ResultBlock({ result, time }: { result: EngineSqlResult; time: string }) {
+function ResultBlock({
+  artifact,
+  runId,
+  time,
+  onToast,
+}: {
+  artifact: ResultViewArtifact;
+  runId: string;
+  time: string;
+  onToast: (message: string) => void;
+}) {
+  const rowCount = artifact.rowCount ?? artifact.returnedRows ?? artifact.previewRowCount;
+  const latencyText = artifact.latencyMs !== undefined ? ` · ${artifact.latencyMs}ms` : "";
   return (
     <div className="sql-console-result">
       <div className="sql-console-result-meta">
-        {result.rowCount} 行 · {result.latencyMs}ms · {time}
-        {result.truncated ? " · 结果已截断" : ""}
+        SQL-backed result · {rowCount} 行{latencyText} · {time} · {runId}
+        {artifact.truncated ? " · 结果已截断" : ""}
       </div>
-      {result.columns.length > 0 ? (
-        <div className="sql-console-table-wrap">
-          <table className="sql-console-table">
-            <thead>
-              <tr>{result.columns.map((column) => <th key={column}>{column}</th>)}</tr>
-            </thead>
-            <tbody>
-              {result.rows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  {result.columns.map((column) => {
-                    const rawValue = row[column];
-                    const value = rawValue == null ? null : String(rawValue);
-                    if (isImageUrl(value)) {
-                      return (
-                        <td key={column}>
-                          <ImageCell url={value ?? ""} />
-                        </td>
-                      );
-                    }
-                    return (
-                      <td key={column} title={value ?? ""}>
-                        {value ?? <span className="sql-console-null">NULL</span>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-              {result.rows.length === 0 && (
-                <tr><td colSpan={Math.max(result.columns.length, 1)} className="sql-console-empty">执行成功，无结果集。</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="sql-console-info">执行成功。</div>
-      )}
+      <TableArtifactView artifact={artifact} onToast={onToast} mode="workspace" />
     </div>
   );
 }

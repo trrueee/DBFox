@@ -1,0 +1,133 @@
+.hifi-markdown-content {
+  font-size: var(--ui-font-label);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.hifi-md-h1 {
+  margin: 10px 0 4px;
+  font-size: var(--ui-font-body);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hifi-md-h2 {
+  margin: 8px 0 4px;
+  font-size: var(--ui-font-control);
+  font-weight: 650;
+  color: var(--color-text-secondary);
+}
+
+.hifi-md-h3 {
+  margin: 8px 0 4px;
+  font-size: var(--ui-font-label);
+  font-weight: 650;
+  color: var(--color-text-muted);
+}
+
+.hifi-md-p {
+  margin: 4px 0;
+}
+
+.hifi-md-ul,
+.hifi-md-ol {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.hifi-md-ul {
+  list-style: disc;
+}
+
+.hifi-md-ol {
+  list-style: decimal;
+}
+
+.hifi-md-li {
+  margin: 2px 0;
+}
+
+.hifi-md-strong {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hifi-md-em {
+  font-style: italic;
+}
+
+.hifi-md-code {
+  border-radius: 4px;
+  background: var(--surface-panel-muted);
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: var(--ui-font-input);
+  padding: 1px 4px;
+}
+
+.hifi-md-pre {
+  margin: 8px 0;
+  padding: 8px;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-panel-muted);
+}
+
+.hifi-md-pre .hifi-md-code {
+  padding: 0;
+  background: transparent;
+}
+
+.hifi-md-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
+.hifi-md-quote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--color-text-muted);
+}
+
+.hifi-md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.hifi-md-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  background: var(--surface-card);
+  white-space: normal;
+}
+
+.hifi-md-table th,
+.hifi-md-table td {
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.hifi-md-table th {
+  background: var(--surface-panel-muted);
+  color: var(--color-text-primary);
+  font-weight: 650;
+}
+
+.hifi-md-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.hifi-md-table th:last-child,
+.hifi-md-table td:last-child {
+  border-right: 0;
+}

@@ -145,7 +145,8 @@ function conversationArtifacts(): ConversationArtifact[] {
       payload: {
         storageMode: "sql_backed",
         datasourceId: "ds-1",
-        sourceSqlArtifactId: "sql-1",
+        sourceSqlArtifactKey: "sql-1",
+        sourceSqlSemanticKey: "sql_candidate",
         safeSql: "SELECT revenue FROM orders",
         columns: ["revenue"],
         previewRows: [["42"]],

@@ -127,6 +127,33 @@ describe("TableErPane", () => {
     expect(await screen.findByText("暂无可视化关系")).toBeTruthy();
     expect(screen.queryByTestId("er-diagram")).toBeNull();
   });
+
+  it("resets focused controls when table changes without refetching the datasource diagram", async () => {
+    apiMocks.request.mockResolvedValue(diagramData);
+
+    const { rerender } = render(<TableErPane tableId="users" datasourceId="ds-1" />);
+
+    await screen.findByTestId("er-diagram");
+    chooseSelectOption("关系深度", "两跳");
+    chooseSelectOption("视图范围", "全库");
+    fireEvent.click(screen.getByRole("button", { name: "隐藏推断关系" }));
+
+    await waitFor(() => {
+      expect(erDiagramMocks.props.at(-1)?.depth).toBe(2);
+      expect(erDiagramMocks.props.at(-1)?.viewMode).toBe("full");
+      expect(erDiagramMocks.props.at(-1)?.showInferred).toBe(false);
+    });
+
+    rerender(<TableErPane tableId="orders" datasourceId="ds-1" />);
+
+    await waitFor(() => {
+      expect(erDiagramMocks.props.at(-1)?.focusTable).toBe("orders");
+      expect(erDiagramMocks.props.at(-1)?.depth).toBe(1);
+      expect(erDiagramMocks.props.at(-1)?.viewMode).toBe("focus");
+      expect(erDiagramMocks.props.at(-1)?.showInferred).toBe(true);
+    });
+    expect(apiMocks.request).toHaveBeenCalledTimes(1);
+  });
 });
 
 function chooseSelectOption(label: string, optionName: string) {

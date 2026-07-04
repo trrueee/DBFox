@@ -4,9 +4,9 @@ import { AlertTriangle, ArrowUpDown, Code, Database, Download, Filter, RefreshCw
 import { ImageCell, isImageUrl } from "../../../components/ImageCell";
 import { CellValuePreview } from "../../../components/data-grid/CellValuePreview";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
-import { executeSql, quoteIdentifier } from "../../engine/engineApi";
+import { agentApi } from "../../../lib/api/agent";
 import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
-import { copyText, downloadTextFile, toCsv } from "../artifacts/artifactActions";
+import { copyText, downloadBlobFile } from "../artifacts/artifactActions";
 import "./TablePreviewPane.css";
 
 interface TablePreviewPaneProps {
@@ -65,6 +65,9 @@ interface PreviewColumnMeta {
 // Keeps the last loaded page per table so re-opening a tab shows data instantly
 // (then revalidates in the background) instead of flashing an empty loading view.
 const previewCache = new Map<string, PreviewData>();
+const EMPTY_PREVIEW_COLUMNS: string[] = [];
+const EMPTY_PREVIEW_ROWS: PreviewData["rows"] = [];
+const EMPTY_PREVIEW_MESSAGES: string[] = [];
 
 export function TablePreviewPane({
   tableId,
@@ -146,29 +149,27 @@ export function TablePreviewPane({
       const types = new Map<string, string>();
       cols.forEach((c: EngineColumn) => types.set(c.column_name, c.data_type));
       setColumnTypes(types);
-      // Request one extra row to know whether a next page exists.
-      const offset = (page - 1) * pageSize;
-      const previewSql = buildTableSelectSql({
+      const result = await agentApi.fetchTableResultPage({
+        datasourceId,
+        tableId: table.id,
         tableName: tableId,
-        dbType: datasourceDbType ?? "mysql",
-        columns: cols.map((column: EngineColumn) => column.column_name),
-        search,
-        filter: activeFilter,
-        sort: activeSort,
-        limit: pageSize + 1,
-        offset,
+        page,
+        pageSize,
+        filters: activeFilter ? [activeFilter] : undefined,
+        sort: activeSort ? [activeSort] : undefined,
+        search: search.trim() || undefined,
+        countMode: "estimate",
       });
-      const result = await executeSql(datasourceId, previewSql, `preview table ${tableId}`);
       if (seq !== requestSeqRef.current) return;
       const next: PreviewData = {
         columns: result.columns,
-        rows: result.rows.slice(0, pageSize),
+        rows: result.rows,
         latencyMs: result.latencyMs,
-        hasNext: result.rows.length > pageSize,
+        hasNext: result.hasNextPage,
         warnings: result.warnings ?? [],
         notices: result.notices ?? [],
-        page,
-        pageSize,
+        page: result.page,
+        pageSize: result.pageSize,
       };
       previewCache.set(cacheKey, next);
       setData(next);
@@ -186,10 +187,10 @@ export function TablePreviewPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasourceId, datasourceDbType, tableId, page, pageSize, querySignature]);
 
-  const columns = data?.columns ?? [];
-  const rows = data?.rows ?? [];
-  const warnings = data?.warnings ?? [];
-  const notices = data?.notices ?? [];
+  const columns = data?.columns ?? EMPTY_PREVIEW_COLUMNS;
+  const rows = data?.rows ?? EMPTY_PREVIEW_ROWS;
+  const warnings = data?.warnings ?? EMPTY_PREVIEW_MESSAGES;
+  const notices = data?.notices ?? EMPTY_PREVIEW_MESSAGES;
   const initialLoading = loading && !data;
   const refreshing = loading && !!data;
   const displayPage = data?.page ?? page;
@@ -277,21 +278,15 @@ export function TablePreviewPane({
         onToast("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
         return;
       }
-      const cols = await listColumns(table.id);
-      const exportSql = buildTableSelectSql({
+      const blob = await agentApi.exportTableResultCsv({
+        datasourceId,
+        tableId: table.id,
         tableName: tableId,
-        dbType: datasourceDbType ?? "mysql",
-        columns: cols.map((column: EngineColumn) => column.column_name),
-        search,
-        filter: activeFilter,
-        sort: activeSort,
+        filters: activeFilter ? [activeFilter] : undefined,
+        sort: activeSort ? [activeSort] : undefined,
+        search: search.trim() || undefined,
       });
-      const result = await executeSql(datasourceId, exportSql, `export table ${tableId}`);
-      const csv = toCsv(
-        result.columns,
-        result.rows.map((row) => result.columns.map((column) => cellToText(row[column]))),
-      );
-      const ok = downloadTextFile(`${tableId}.csv`, csv, "text/csv;charset=utf-8");
+      const ok = downloadBlobFile(`${tableId}.csv`, blob);
       onToast(ok ? "已导出 CSV" : "CSV 导出失败");
     } catch {
       onToast("CSV 导出失败");
@@ -645,88 +640,17 @@ function EmptyTableState({
   );
 }
 
-function buildTableSelectSql({
-  tableName,
-  dbType,
-  columns,
-  search,
-  filter,
-  sort,
-  limit,
-  offset = 0,
-}: {
-  tableName: string;
-  dbType: string;
-  columns: string[];
-  search: string;
-  filter: TableFilterState | null;
-  sort: TableSortState | null;
-  limit?: number;
-  offset?: number;
-}) {
-  const predicates: string[] = [];
-  const normalizedSearch = search.trim();
-  if (normalizedSearch && columns.length > 0) {
-    const like = sqlLiteral(`%${normalizedSearch}%`);
-    predicates.push(`(${columns.map((column) => `${quoteIdentifier(column, dbType)} LIKE ${like}`).join(" OR ")})`);
-  }
-  if (filter) {
-    const predicate = tableFilterPredicate(filter, dbType);
-    if (predicate) predicates.push(predicate);
-  }
-
-  const whereClause = predicates.length > 0 ? ` WHERE ${predicates.join(" AND ")}` : "";
-  const orderClause = sort ? ` ORDER BY ${quoteIdentifier(sort.column, dbType)} ${sort.direction.toUpperCase()}` : "";
-  const limitClause = limit === undefined ? "" : ` LIMIT ${limit}${offset > 0 ? ` OFFSET ${offset}` : ""}`;
-  return `SELECT * FROM ${quoteIdentifier(tableName, dbType)}${whereClause}${orderClause}${limitClause};`;
-}
-
-function tableFilterPredicate(filter: TableFilterState, dbType: string) {
-  const column = quoteIdentifier(filter.column, dbType);
-  const value = filter.value ?? "";
-  switch (filter.operator) {
-    case "contains":
-      return `${column} LIKE ${sqlLiteral(`%${value}%`)}`;
-    case "equals":
-      return `${column} = ${sqlLiteral(value)}`;
-    case "not_equals":
-      return `${column} <> ${sqlLiteral(value)}`;
-    case "starts_with":
-      return `${column} LIKE ${sqlLiteral(`${value}%`)}`;
-    case "ends_with":
-      return `${column} LIKE ${sqlLiteral(`%${value}`)}`;
-    case "gt":
-      return `${column} > ${sqlLiteral(value)}`;
-    case "gte":
-      return `${column} >= ${sqlLiteral(value)}`;
-    case "lt":
-      return `${column} < ${sqlLiteral(value)}`;
-    case "lte":
-      return `${column} <= ${sqlLiteral(value)}`;
-    case "is_null":
-      return `${column} IS NULL`;
-    case "is_not_null":
-      return `${column} IS NOT NULL`;
-    default:
-      return "";
-  }
-}
-
-function sqlLiteral(value: string) {
-  return `'${value.replaceAll("'", "''")}'`;
+function cellDisplayText(value: unknown, dataType?: string) {
+  if (value === null || value === undefined) return "NULL";
+  const temporalDisplay = formatTemporalCell(value, dataType);
+  if (temporalDisplay) return temporalDisplay;
+  return cellToText(value);
 }
 
 function cellToText(value: unknown) {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
-}
-
-function cellDisplayText(value: unknown, dataType?: string) {
-  if (value === null || value === undefined) return "NULL";
-  const temporalDisplay = formatTemporalCell(value, dataType);
-  if (temporalDisplay) return temporalDisplay;
-  return cellToText(value);
 }
 
 function formatTemporalCell(value: unknown, dataType?: string) {

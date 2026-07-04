@@ -63,7 +63,8 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       payload: {
         storageMode: "sql_backed",
         datasourceId: "ds-1",
-        sourceSqlArtifactId: "artifact-sql",
+        sourceSqlArtifactKey: "artifact-sql",
+        sourceSqlSemanticKey: "sql_candidate",
         safeSql: "SELECT id, amount FROM orders",
         columns: ["id", "amount"],
         previewRows: [{ id: 1, amount: 20 }],

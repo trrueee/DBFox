@@ -102,6 +102,10 @@ function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact |
         : [];
   if (columnNames.length === 0) return null;
   const rows = rowsFromPayload(columnNames, rawRows);
+  const sourceSqlArtifactId = firstString(payload, ["sourceSqlArtifactKey", "sourceSqlArtifactId", "source_sql_artifact_id"]);
+  const sourceSqlSemanticId = firstString(payload, ["sourceSqlSemanticKey", "sourceSqlSemanticId", "source_sql_semantic_id"]);
+  const safetyArtifactId = firstString(payload, ["safetyArtifactKey", "safetyArtifactId", "safety_artifact_id"]);
+  const safetySemanticId = firstString(payload, ["safetySemanticKey", "safetySemanticId", "safety_semantic_id"]);
   return {
     id: artifact.id,
     type: "result_view",
@@ -109,12 +113,10 @@ function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact |
     description: `${numberValue(payload, ["rowCount", "row_count"]) ?? rows.length} 行 · ${columnNames.length} 列`,
     storageMode: "sql_backed",
     datasourceId: firstString(payload, ["datasourceId", "datasource_id"]),
-    sourceSqlSemanticId: firstString(payload, [
-      "sourceSqlArtifactId",
-      "source_sql_artifact_id",
-      "sourceSqlSemanticId",
-      "source_sql_semantic_id",
-    ]),
+    sourceSqlArtifactId,
+    sourceSqlSemanticId,
+    safetyArtifactId: safetyArtifactId || undefined,
+    safetySemanticId: safetySemanticId || undefined,
     sourceSql: firstString(payload, ["sourceSql", "source_sql"]),
     safeSql: firstString(payload, ["safeSql", "safe_sql"]),
     columns,

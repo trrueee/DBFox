@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import "./MarkdownContent.css";
 
 type MarkdownSegment =
   | { type: "markdown"; content: string }

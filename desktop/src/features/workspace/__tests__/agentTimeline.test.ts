@@ -54,8 +54,8 @@ describe("agentTimeline", () => {
       sequence: 2,
       type: "agent.step.completed",
       step: {
-        name: "query_database",
-        tool_name: "db.query",
+        name: "execute_readonly",
+        tool_name: "sql.execute_readonly",
         status: "failed",
         input: { sql: "SELECT bad_column FROM audit_logs" },
         error: "TrustGate blocked execution because schema validation found unknown tables or columns.",
@@ -66,8 +66,8 @@ describe("agentTimeline", () => {
       sequence: 3,
       type: "agent.step.completed",
       step: {
-        name: "query_database",
-        tool_name: "db.query",
+        name: "execute_readonly",
+        tool_name: "sql.execute_readonly",
         status: "success",
         input: { sql: "SELECT COUNT(*) AS total_logs FROM audit_logs" },
         output: { rows: [{ total_logs: "3024" }] },
@@ -222,8 +222,8 @@ describe("agentTimeline", () => {
       sequence: 2,
       type: "agent.step.completed",
       step: {
-        name: "query_database",
-        tool_name: "db.query",
+        name: "execute_readonly",
+        tool_name: "sql.execute_readonly",
         status: "failed",
         error: "TrustGate Error",
         merge_strategy: "reuse",
@@ -237,8 +237,8 @@ describe("agentTimeline", () => {
       sequence: 3,
       type: "agent.step.completed",
       step: {
-        name: "query_database",
-        tool_name: "db.query",
+        name: "execute_readonly",
+        tool_name: "sql.execute_readonly",
         status: "success",
         output: { rows: [{ cnt: 42 }] },
         merge_strategy: "reuse",

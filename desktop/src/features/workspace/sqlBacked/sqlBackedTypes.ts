@@ -13,6 +13,7 @@ export type SqlBackedDataViewSource =
   | {
       kind: "database-table";
       datasourceId: string;
+      tableId?: string | null;
       tableName: string;
       columns: string[];
     };

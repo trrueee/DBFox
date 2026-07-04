@@ -2,12 +2,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TablePreviewPane } from "../TablePreviewPane";
 
-const engineMocks = vi.hoisted(() => ({
-  executeSql: vi.fn(),
-  quoteIdentifier: vi.fn((identifier: string) => `\`${identifier}\``),
+const agentApiMocks = vi.hoisted(() => ({
+  fetchTableResultPage: vi.fn(),
+  exportTableResultCsv: vi.fn(),
 }));
 
-vi.mock("../../../engine/engineApi", () => engineMocks);
+vi.mock("../../../../lib/api/agent", () => ({
+  agentApi: agentApiMocks,
+}));
 
 const schemaMocks = vi.hoisted(() => ({
   findTableByName: vi.fn(),
@@ -16,12 +18,20 @@ const schemaMocks = vi.hoisted(() => ({
 
 vi.mock("../../../../lib/api/schema", () => schemaMocks);
 
-function sqlResult(rows: Array<Record<string, unknown>>, latencyMs = 5, columns = ["id", "name"]) {
+function pageResult(
+  rows: Array<Record<string, unknown>>,
+  latencyMs = 5,
+  columns = ["id", "name"],
+  hasNextPage = false,
+) {
   return {
-    success: true,
     columns,
     rows,
+    page: 1,
+    pageSize: 20,
     rowCount: rows.length,
+    hasNextPage,
+    executedSql: "SELECT * FROM users",
     latencyMs,
     warnings: [],
     notices: [],
@@ -46,15 +56,17 @@ describe("TablePreviewPane", () => {
       { column_name: "id", data_type: "bigint" },
       { column_name: "name", data_type: "varchar" },
     ]);
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
+    agentApiMocks.exportTableResultCsv.mockResolvedValue(new Blob(["id,name\n1,amy\n"], { type: "text/csv" }));
   });
 
   it("keeps the current page visible while loading the next page", async () => {
-    const firstPageRows = Array.from({ length: 21 }, (_, index) => ({
+    const firstPageRows = Array.from({ length: 20 }, (_, index) => ({
       id: String(index + 1),
       name: `user-${index + 1}`,
     }));
-    engineMocks.executeSql
-      .mockResolvedValueOnce(sqlResult(firstPageRows))
+    agentApiMocks.fetchTableResultPage
+      .mockResolvedValueOnce(pageResult(firstPageRows, 5, ["id", "name"], true))
       .mockReturnValueOnce(new Promise(() => {}));
 
     const { container } = render(
@@ -66,7 +78,7 @@ describe("TablePreviewPane", () => {
 
     fireEvent.click(screen.getByText(">"));
 
-    await waitFor(() => expect(engineMocks.executeSql).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(agentApiMocks.fetchTableResultPage).toHaveBeenCalledTimes(2));
     expect(screen.getByText("user-1")).toBeTruthy();
     expect(container.querySelector(".hifi-preview-skeleton")).toBeNull();
     expect(container.querySelector(".hifi-page-num.active")?.textContent).toBe("1");
@@ -80,8 +92,8 @@ describe("TablePreviewPane", () => {
       { column_name: "name", data_type: "varchar" },
       { column_name: "created_at", data_type: "datetime" },
     ]);
-    engineMocks.executeSql.mockResolvedValue(
-      sqlResult(
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(
+      pageResult(
         [{ id: "1", name: "monthly_basic", created_at: "2026-05-09T10:22:57.506000" }],
         5,
         ["id", "name", "created_at"],
@@ -96,8 +108,8 @@ describe("TablePreviewPane", () => {
     expect(screen.queryByText("2026-05-09T10:22:57.506000")).toBeNull();
   });
 
-  it("pushes search, filter, and sort into the preview SQL", async () => {
-    engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
+  it("pushes search, filter, and sort into the table data view request", async () => {
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
 
     render(<TablePreviewPane tableId="users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />);
 
@@ -114,15 +126,21 @@ describe("TablePreviewPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用排序" }));
 
     await waitFor(() => {
-      const sql = engineMocks.executeSql.mock.calls.at(-1)?.[1] as string;
-      expect(sql).toContain("`name` = 'amy'");
-      expect(sql).toContain("`name` LIKE '%amy%'");
-      expect(sql).toContain("ORDER BY `name` ASC");
+      expect(agentApiMocks.fetchTableResultPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          datasourceId: "ds-1",
+          tableId: "table-1",
+          tableName: "users",
+          search: "amy",
+          filters: [{ column: "name", operator: "equals", value: "amy" }],
+          sort: [{ column: "name", direction: "asc" }],
+        }),
+      );
     });
   });
 
   it("uses UI primitives for the table preview toolbar controls", async () => {
-    engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
 
     const { container } = render(
       <TablePreviewPane tableId="toolbar_users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />,
@@ -150,7 +168,7 @@ describe("TablePreviewPane", () => {
   });
 
   it("uses UI primitives for preview pagination and empty actions", async () => {
-    engineMocks.executeSql.mockResolvedValue(sqlResult([]));
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([]));
 
     const { container } = render(
       <TablePreviewPane tableId="empty_users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={vi.fn()} />,
@@ -172,7 +190,7 @@ describe("TablePreviewPane", () => {
   });
 
   it("exports the current matching table result without page limits", async () => {
-    engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
     const onToast = vi.fn();
 
     render(<TablePreviewPane tableId="users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={onToast} />);
@@ -181,16 +199,20 @@ describe("TablePreviewPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "导出" }));
 
     await waitFor(() => {
-      const [, sql, purpose] = engineMocks.executeSql.mock.calls.at(-1) ?? [];
-      expect(purpose).toBe("export table users");
-      expect(String(sql)).not.toContain("LIMIT");
+      expect(agentApiMocks.exportTableResultCsv).toHaveBeenCalledWith(
+        expect.objectContaining({
+          datasourceId: "ds-1",
+          tableId: "table-1",
+          tableName: "users",
+        }),
+      );
     });
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
 
   it("copies and marks the clicked preview cell as selected", async () => {
     const onToast = vi.fn();
-    engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: "amy" }]));
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: "amy" }]));
 
     render(
       <TablePreviewPane tableId="copyable_users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={onToast} />,
@@ -209,7 +231,7 @@ describe("TablePreviewPane", () => {
 
   it("renders null preview cells as a stable NULL pill and copies NULL", async () => {
     const onToast = vi.fn();
-    engineMocks.executeSql.mockResolvedValue(sqlResult([{ id: "1", name: null }]));
+    agentApiMocks.fetchTableResultPage.mockResolvedValue(pageResult([{ id: "1", name: null }]));
 
     render(
       <TablePreviewPane tableId="nullable_users" datasourceId="ds-1" datasourceDbType="mysql" onOpenSqlConsole={vi.fn()} onToast={onToast} />,
