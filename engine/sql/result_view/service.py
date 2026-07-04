@@ -7,7 +7,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.models import AgentArtifactRecord, AgentRun, DataSource
+from engine.models import AgentArtifactRecord, AgentRun, DataSource, SchemaColumn, SchemaTable
+from engine.sql.builder import catalog_identifier
 from engine.sql.dialect_context import DialectContext
 from engine.sql.execution.csv_export import CsvExportService
 from engine.sql.execution.streaming_executor import StreamingQueryExecutor
@@ -20,6 +21,9 @@ from engine.sql.result_view.models import (
     ResultPage,
     ResultPageQuery,
     ResultSourceRef,
+    TableExportQuery,
+    TablePageQuery,
+    TableSourceRef,
     ResultViewError,
     ResultViewQuery,
     VerifiedResultSource,
@@ -52,11 +56,11 @@ class ResultViewService:
         if source is None:
             raise ResultViewError(
                 "SOURCE_ARTIFACT_NOT_FOUND",
-                "Source result artifact was not found.",
+                "Source SQL artifact was not found.",
                 status_code=404,
             )
-        if source.type not in {"result_view", "sql"}:
-            raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Source artifact cannot back pagination.")
+        if source.type != "sql":
+            raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Source artifact must be a SQL artifact.")
 
         payload = _artifact_payload(source)
         persisted_safe_sql = _safe_sql_from_payload(payload)
@@ -106,6 +110,109 @@ class ResultViewService:
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
         return export_sql
+
+    def load_table_source(self, source_ref: TableSourceRef, ctx: DialectContext | None = None) -> VerifiedResultSource:
+        ctx = ctx or DialectContext.from_datasource_id(self.db, source_ref.datasource_id)
+        table = self._load_schema_table(source_ref.datasource_id, source_ref.table_id, source_ref.table_name)
+        if table is None:
+            raise ResultViewError(
+                "TABLE_SOURCE_NOT_FOUND",
+                "Table source was not found in synced schema metadata.",
+                status_code=404,
+            )
+        columns = self._load_schema_columns(str(table.id))
+        if not columns:
+            raise ResultViewError("TABLE_COLUMNS_NOT_FOUND", "Table source does not have synced columns.")
+
+        table_name = str(table.table_name or "")
+        table_schema = str(table.table_schema or "").strip() or None
+        table_identifier = _qualified_table_identifier(table_schema, table_name, ctx.sqlglot_dialect)
+        safe_sql = f"SELECT * FROM {table_identifier}"
+        fingerprint = result_source_fingerprint(safe_sql, ctx.sqlglot_dialect)
+        return VerifiedResultSource(
+            datasource_id=source_ref.datasource_id,
+            source_sql_artifact_id=f"table:{table.id}",
+            safe_sql=safe_sql,
+            dialect=ctx.sqlglot_dialect,
+            columns=[
+                ResultColumn(
+                    name=str(column.column_name or ""),
+                    type=str(column.data_type or "") or None,
+                )
+                for column in columns
+                if str(column.column_name or "").strip()
+            ],
+            fingerprint=fingerprint,
+        )
+
+    def page_table(self, query: TablePageQuery) -> ResultPage:
+        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
+        source = self.load_table_source(query.source, ctx)
+        page_sql = self.compiler.build_page_sql(query, source, ctx)
+        self._validate_derived_sql(page_sql, ctx)
+        page_decision = self._result_view_decision(query.source.datasource_id, source.safe_sql, page_sql, scope="table_page")
+        res = self._execute_query(
+            self.db,
+            query.source.datasource_id,
+            page_sql,
+            safety_decision=page_decision,
+            safety_policy="readonly",
+        )
+
+        rows = list(res.get("rows") or [])
+        has_next = len(rows) > query.page_size
+        returned_rows = rows[: query.page_size]
+        row_count: int | None = None
+        if query.count_mode == "exact":
+            try:
+                count_sql = self.compiler.build_count_sql(query, source, ctx)
+                self._validate_derived_sql(count_sql, ctx)
+                count_decision = self._result_view_decision(
+                    query.source.datasource_id,
+                    source.safe_sql,
+                    count_sql,
+                    scope="table_count",
+                )
+                count_res = self._execute_query(
+                    self.db,
+                    query.source.datasource_id,
+                    count_sql,
+                    safety_decision=count_decision,
+                    safety_policy="readonly",
+                )
+                count_rows = list(count_res.get("rows") or [])
+                if count_rows and count_rows[0]:
+                    row_count = int(list(count_rows[0].values())[0])
+            except Exception as exc:
+                logger.warning("Failed to execute exact table count query: %s", exc)
+
+        return ResultPage(
+            columns=list(res.get("columns") or []),
+            rows=returned_rows,
+            page=query.page,
+            page_size=query.page_size,
+            row_count=row_count,
+            has_next_page=has_next,
+            executed_sql=page_sql,
+            latency_ms=int(res.get("latencyMs") or 0),
+            warnings=res.get("warnings"),
+            notices=res.get("notices"),
+        )
+
+    def export_table_csv_stream(self, query: TableExportQuery, *, chunk_size: int = 1000) -> tuple[Iterator[str], list[str]]:
+        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
+        source = self.load_table_source(query.source, ctx)
+        export_sql = self.compiler.build_export_sql(query, source, ctx)
+        self._validate_derived_sql(export_sql, ctx)
+        decision = self._result_view_decision(query.source.datasource_id, source.safe_sql, export_sql, scope="export")
+        columns = source.column_names
+        rows = self.streaming_executor.stream_rows(
+            query.source.datasource_id,
+            export_sql,
+            decision,
+            chunk_size=chunk_size,
+        )
+        return CsvExportService.stream_csv(rows, columns), columns
 
     def page(self, query: ResultPageQuery) -> ResultPage:
         ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
@@ -192,10 +299,20 @@ class ResultViewService:
         by_id = base_query.filter(AgentArtifactRecord.id == source_artifact_id).first()
         if by_id is not None:
             return by_id
+        return None
+
+    def _load_schema_table(self, datasource_id: str, table_id: str | None, table_name: str) -> SchemaTable | None:
+        query = self.db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id)
+        if table_id:
+            return query.filter(SchemaTable.id == table_id).first()
+        return query.filter(SchemaTable.table_name == table_name).first()
+
+    def _load_schema_columns(self, table_id: str) -> list[SchemaColumn]:
         return (
-            base_query.filter(AgentArtifactRecord.semantic_id == source_artifact_id)
-            .order_by(AgentArtifactRecord.created_at.desc())
-            .first()
+            self.db.query(SchemaColumn)
+            .filter(SchemaColumn.table_id == table_id)
+            .order_by(SchemaColumn.ordinal_position.asc(), SchemaColumn.column_name.asc())
+            .all()
         )
 
     def _validate_derived_sql(self, sql: str, ctx: DialectContext) -> None:
@@ -288,3 +405,10 @@ def _artifact_fingerprint(payload: dict[str, object], safe_sql: str, dialect: st
 
 def _result_source_fingerprint(sql: str, dialect: str) -> str:
     return result_source_fingerprint(sql, dialect)
+
+
+def _qualified_table_identifier(schema: str | None, table: str, dialect: str) -> str:
+    safe_table = catalog_identifier(table, dialect)
+    if not schema:
+        return safe_table
+    return f"{catalog_identifier(schema, dialect)}.{safe_table}"

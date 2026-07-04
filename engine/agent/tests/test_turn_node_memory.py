@@ -179,8 +179,8 @@ def test_extract_sql_backed_refs_keeps_safe_sql_for_follow_up_analysis() -> None
                 "payload": {
                     "storageMode": "sql_backed",
                     "datasourceId": "ds_1",
-                    "sourceSqlArtifactId": "art_sql_1",
-                    "sourceSqlSemanticId": "sql_candidate_1",
+                    "sourceSqlArtifactKey": "art_sql_1",
+                    "sourceSqlSemanticKey": "sql_candidate_1",
                     "sourceSql": "SELECT day, usage_count FROM ai_tool_invocations",
                     "safeSql": "SELECT day, usage_count FROM ai_tool_invocations",
                     "columns": ["day", "usage_count"],
@@ -205,6 +205,7 @@ def test_extract_sql_backed_refs_keeps_safe_sql_for_follow_up_analysis() -> None
     assert artifact_refs[0]["id"] == "mem_result_art_result_1"
     assert artifact_refs[0]["artifact_id"] == "art_result_1"
     assert artifact_refs[0]["source_sql_artifact_id"] == "art_sql_1"
+    assert artifact_refs[0]["source_sql_semantic_id"] == "sql_candidate_1"
     assert artifact_refs[0]["source_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert artifact_refs[0]["safe_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert artifact_refs[0]["columns"] == ["day", "usage_count"]
@@ -213,9 +214,69 @@ def test_extract_sql_backed_refs_keeps_safe_sql_for_follow_up_analysis() -> None
     assert len(sql_refs) == 1
     assert sql_refs[0]["kind"] == "sql_ref"
     assert sql_refs[0]["source_sql_artifact_id"] == "art_sql_1"
+    assert sql_refs[0]["source_sql_semantic_id"] == "sql_candidate_1"
     assert sql_refs[0]["source_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert sql_refs[0]["safe_sql"] == "SELECT day, usage_count FROM ai_tool_invocations"
     assert sql_refs[0]["tables"] == ["ai_tool_invocations"]
+
+
+def test_extract_sql_backed_refs_keeps_semantic_sql_id_separate_from_artifact_id() -> None:
+    state = {
+        "run_id": "run_semantic_only",
+        "datasource_id": "ds_1",
+        "artifacts": [
+            {
+                "id": "art_result_semantic_only",
+                "type": "result_view",
+                "title": "Semantic only result",
+                "payload": {
+                    "storageMode": "sql_backed",
+                    "datasourceId": "ds_1",
+                    "sourceSqlSemanticKey": "sql_candidate_semantic_only",
+                    "sourceSql": "SELECT day, usage_count FROM ai_tool_invocations",
+                    "safeSql": "SELECT day, usage_count FROM ai_tool_invocations",
+                    "columns": ["day", "usage_count"],
+                },
+            }
+        ],
+    }
+
+    artifact_refs, sql_refs = extract_sql_backed_refs(state, now="2026-06-23T00:00:00Z")
+
+    assert artifact_refs[0]["source_sql_artifact_id"] is None
+    assert artifact_refs[0]["source_sql_semantic_id"] == "sql_candidate_semantic_only"
+    assert sql_refs[0]["source_sql_artifact_id"] is None
+    assert sql_refs[0]["source_sql_semantic_id"] == "sql_candidate_semantic_only"
+
+
+def test_extract_sql_backed_refs_accepts_legacy_source_artifact_keys() -> None:
+    state = {
+        "run_id": "run_legacy",
+        "datasource_id": "ds_1",
+        "artifacts": [
+            {
+                "id": "art_result_legacy",
+                "type": "result_view",
+                "title": "Legacy result",
+                "payload": {
+                    "storageMode": "sql_backed",
+                    "datasourceId": "ds_1",
+                    "sourceSqlArtifactId": "legacy_sql_artifact",
+                    "sourceSqlSemanticId": "legacy_sql_candidate",
+                    "sourceSql": "SELECT id FROM orders",
+                    "safeSql": "SELECT id FROM orders",
+                    "columns": ["id"],
+                },
+            }
+        ],
+    }
+
+    artifact_refs, sql_refs = extract_sql_backed_refs(state, now="2026-06-23T00:00:00Z")
+
+    assert artifact_refs[0]["source_sql_artifact_id"] == "legacy_sql_artifact"
+    assert artifact_refs[0]["source_sql_semantic_id"] == "legacy_sql_candidate"
+    assert sql_refs[0]["source_sql_artifact_id"] == "legacy_sql_artifact"
+    assert sql_refs[0]["source_sql_semantic_id"] == "legacy_sql_candidate"
 
 
 def test_finalize_turn_upserts_sql_backed_refs_without_duplicate_memory_items() -> None:
@@ -238,9 +299,10 @@ def test_finalize_turn_upserts_sql_backed_refs_without_duplicate_memory_items() 
                 "type": "result_view",
                 "title": "Tool usage trend",
                 "payload": {
-                    "storageMode": "sql_backed",
-                    "datasourceId": "ds_1",
-                    "sourceSqlSemanticId": "art_sql_2",
+                        "storageMode": "sql_backed",
+                        "datasourceId": "ds_1",
+                        "sourceSqlArtifactKey": "art_sql_2",
+                        "sourceSqlSemanticKey": "sql_candidate_2",
                     "safeSql": "SELECT day, usage_count FROM ai_tool_invocations",
                     "columns": ["day", "usage_count"],
                     "previewRows": [],
@@ -301,7 +363,7 @@ def test_finalize_turn_records_result_and_sql_artifact_ids_for_current_task_memo
                     "payload": {
                         "storageMode": "sql_backed",
                         "datasourceId": "ds_1",
-                        "sourceSqlArtifactId": "art_sql_recent",
+                        "sourceSqlArtifactKey": "art_sql_recent",
                         "sourceSql": safe_sql,
                         "safeSql": safe_sql,
                         "columns": [{"name": "day"}, {"name": "usage_count"}],
@@ -526,6 +588,63 @@ def test_agent_service_persists_graph_memory_projection(db_session, monkeypatch)
     assert reusable.verified is True
 
 
+def test_final_response_persistence_survives_memory_projection_failure() -> None:
+    from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
+    from engine.agent.app.persistence_coordinator import AgentPersistenceCoordinator
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.commits = 0
+            self.rollbacks = 0
+
+        def commit(self) -> None:
+            self.commits += 1
+
+        def rollback(self) -> None:
+            self.rollbacks += 1
+
+    class FakeEventStore:
+        def __init__(self) -> None:
+            self.completed: list[str] = []
+
+        def complete_run(self, response: AgentRunResponse) -> None:
+            self.completed.append(response.run_id)
+
+    class FailingMemoryProjectionStore:
+        def save_run_projection(self, response, *, final_state, datasource_id):
+            raise RuntimeError("memory projection unavailable")
+
+    db = FakeDb()
+    event_store = FakeEventStore()
+    coordinator = AgentPersistenceCoordinator(
+        db,
+        event_store,
+        AgentMemoryProjectionCoordinator(FailingMemoryProjectionStore()),
+        enabled=True,
+    )
+    response = AgentRunResponse(
+        run_id="run-memory-failure",
+        session_id="session-memory-failure",
+        conversation_id="session-memory-failure",
+        success=True,
+        status="completed",
+        question="分析订单",
+        answer={"answer": "完成"},
+    )
+
+    event = coordinator.finalize(
+        lambda event_type, **kwargs: {"type": event_type, **kwargs},
+        response,
+        final_state={"status": "completed"},
+        datasource_id="ds-memory-failure",
+    )
+
+    assert event["type"] == "agent.run.completed"
+    assert event_store.completed == ["run-memory-failure"]
+    assert db.commits == 1
+    assert db.rollbacks == 0
+
+
 def test_agent_service_initial_state_restores_persisted_session_memory(db_session) -> None:
     from engine.agent.app.service import DBFoxAgentService
     from engine.agent_core.persistence import save_session_memory
@@ -598,7 +717,11 @@ def test_agent_service_initial_state_restores_persisted_session_memory(db_sessio
         conversation_id=session.id,
     )
 
-    state = service._initial_state(req, "run_restore", session.id)
+    state = service.context_builder.build_initial_state(
+        req,
+        run_id="run_restore",
+        session_id=session.id,
+    )
 
     assert state["conversation_summary"] == "用户正在分析工具调用趋势。"
     assert state["summary_cursor_message_id"] == "msg_9"
@@ -669,7 +792,11 @@ def test_agent_service_initial_state_recalls_datasource_reusable_sql(db_session)
         conversation_id="session_service_reusable_sql",
     )
 
-    state = service._initial_state(req, "run_reusable", req.session_id)
+    state = service.context_builder.build_initial_state(
+        req,
+        run_id="run_reusable",
+        session_id=req.session_id,
+    )
 
     assert len(state["reusable_sql_candidates"]) == 1
     assert state["reusable_sql_candidates"][0]["safe_sql"] == safe_sql
@@ -677,7 +804,8 @@ def test_agent_service_initial_state_recalls_datasource_reusable_sql(db_session)
 
 
 def test_agent_service_initial_state_uses_memory_projection_store(monkeypatch) -> None:
-    from engine.agent.app.service import DBFoxAgentService
+    from engine.agent.app.context_builder import AgentContextBuilder
+    from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
     from engine.agent_core import persistence as agent_persistence
 
     def fail_load_session_memory(*_args, **_kwargs):
@@ -689,18 +817,19 @@ def test_agent_service_initial_state_uses_memory_projection_store(monkeypatch) -
     monkeypatch.setattr(agent_persistence, "load_session_memory", fail_load_session_memory)
     monkeypatch.setattr(agent_persistence, "list_reusable_sqls", fail_list_reusable_sqls)
 
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
-    service.db = object()
-    service.memory_projection = FakeMemoryProjectionStore()
+    builder = AgentContextBuilder(
+        object(),
+        AgentMemoryProjectionCoordinator(FakeMemoryProjectionStore()),
+    )
 
-    state = service._initial_state(
+    state = builder.build_initial_state(
         AgentRunRequest(
             datasource_id="ds_projection_boundary",
             question="继续",
             session_id="session_projection_boundary",
         ),
-        "run_projection_boundary",
-        "session_projection_boundary",
+        run_id="run_projection_boundary",
+        session_id="session_projection_boundary",
     )
 
     assert state["conversation_summary"] == "来自 projection store 的摘要"
@@ -709,7 +838,7 @@ def test_agent_service_initial_state_uses_memory_projection_store(monkeypatch) -
 
 
 def test_agent_service_persists_memory_projection_through_store(monkeypatch) -> None:
-    from engine.agent.app.service import DBFoxAgentService
+    from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
     from engine.agent_core import persistence as agent_persistence
 
     def fail_save_session_memory(*_args, **_kwargs):
@@ -721,9 +850,8 @@ def test_agent_service_persists_memory_projection_through_store(monkeypatch) -> 
     monkeypatch.setattr(agent_persistence, "save_session_memory", fail_save_session_memory)
     monkeypatch.setattr(agent_persistence, "upsert_reusable_sql", fail_upsert_reusable_sql)
 
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
     store = FakeMemoryProjectionStore()
-    service.memory_projection = store
+    memory_projection = AgentMemoryProjectionCoordinator(store)
     response = AgentRunResponse(
         run_id="run_projection_save",
         session_id="session_projection_save",
@@ -745,7 +873,7 @@ def test_agent_service_persists_memory_projection_through_store(monkeypatch) -> 
         ],
     }
 
-    service._persist_memory_projection(
+    memory_projection.save_run_projection(
         response,
         final_state=final_state,
         datasource_id="ds_projection_save",

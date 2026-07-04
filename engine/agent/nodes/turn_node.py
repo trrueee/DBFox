@@ -180,8 +180,12 @@ def extract_sql_backed_refs(
         tables = _str_list(payload.get("used_tables"))
         source_sql_artifact_id = _first_str(
             payload,
-            ("sourceSqlArtifactId", "source_sql_artifact_id", "sourceSqlSemanticId"),
-        )
+            ("sourceSqlArtifactKey", "sourceSqlArtifactId", "source_sql_artifact_id"),
+        ) or None
+        source_sql_semantic_id = _first_str(
+            payload,
+            ("sourceSqlSemanticKey", "sourceSqlSemanticId", "source_sql_semantic_id"),
+        ) or None
         title = str(artifact.get("title") or "Result view")
 
         artifact_refs.append(
@@ -191,6 +195,7 @@ def extract_sql_backed_refs(
                 "datasource_id": ref_datasource_id,
                 "artifact_id": artifact_id,
                 "source_sql_artifact_id": source_sql_artifact_id,
+                "source_sql_semantic_id": source_sql_semantic_id,
                 "source_sql": source_sql,
                 "safe_sql": safe_sql,
                 "sql_fingerprint": fingerprint,
@@ -211,6 +216,7 @@ def extract_sql_backed_refs(
                 "datasource_id": ref_datasource_id,
                 "artifact_id": artifact_id,
                 "source_sql_artifact_id": source_sql_artifact_id,
+                "source_sql_semantic_id": source_sql_semantic_id,
                 "source_sql": source_sql,
                 "safe_sql": safe_sql,
                 "sql_fingerprint": fingerprint,

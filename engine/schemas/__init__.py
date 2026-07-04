@@ -24,7 +24,7 @@ from engine.schemas.table_design import (
     TestDataGenerateRequest,
 )
 from engine.schemas.datasource import DataSourceTestRequest, DataSourceCreateRequest, DataSourceUpdateRequest
-from engine.schemas.query import SQLValidateRequest, SQLExecuteRequest, SQLCancelRequest, SQLExplainRequest
+from engine.schemas.query import SQLValidateRequest, SQLCancelRequest, SQLExplainRequest
 from engine.schemas.ai import SQLGenerateRequest, SchemaAlterationRequest, GoldenSQLCreateRequest, BenchmarkRequest
 from engine.schemas.semantic import (
     WorkspaceTableScopeUpdateRequest,
@@ -45,7 +45,6 @@ __all__ = [
     "DataSourceCreateRequest",
     "DataSourceUpdateRequest",
     "SQLValidateRequest",
-    "SQLExecuteRequest",
     "SQLCancelRequest",
     "SQLExplainRequest",
     "SQLGenerateRequest",

@@ -22,12 +22,12 @@ from engine.agent_core.types import ToolObservation
 
 class TestSafeToolGroups:
     def test_full_safe_groups_include_analysis_tools(self):
-        from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
+        from engine.agent.app.context_builder import FULL_SAFE_TOOL_GROUPS
         assert "chart" in FULL_SAFE_TOOL_GROUPS
         assert "answer" not in FULL_SAFE_TOOL_GROUPS
 
     def test_full_safe_groups_still_include_db_groups(self):
-        from engine.agent.app.service import FULL_SAFE_TOOL_GROUPS
+        from engine.agent.app.context_builder import FULL_SAFE_TOOL_GROUPS
         for group in ["environment", "schema", "db"]:
             assert group in FULL_SAFE_TOOL_GROUPS
         assert "memory" not in FULL_SAFE_TOOL_GROUPS
@@ -98,16 +98,16 @@ class TestDatabinding:
         from engine.tools.runtime.state_reducer import ARTIFACT_TOOLS
         assert "chart.suggest" in ARTIFACT_TOOLS
 
-    def test_successful_db_query_clears_stale_error_state(self):
+    def test_successful_execute_readonly_clears_stale_error_state(self):
         from engine.agent_core.databinding import apply_tool_result_to_state
 
         state = {
             "error": "TrustGate blocked execution because schema validation found unknown tables or columns.",
             "last_error_telemetry": {"error_type": "GuardrailValidationError"},
-            "last_failed_tool_call": {"tool_name": "db.query", "args": {"sql": "SELECT bad FROM audit_logs"}},
+            "last_failed_tool_call": {"tool_name": "sql.execute_readonly", "args": {}},
         }
         obs = ToolObservation(
-            name="db.query",
+            name="sql.execute_readonly",
             status="success",
             output={
                 "status": "success",
@@ -118,7 +118,7 @@ class TestDatabinding:
             latency_ms=1,
         )
 
-        result = apply_tool_result_to_state(state=state, tool_name="db.query", observation=obs)
+        result = apply_tool_result_to_state(state=state, tool_name="sql.execute_readonly", observation=obs)
 
         assert result["error"] is None
         assert result["last_error_telemetry"] is None
@@ -131,7 +131,7 @@ class TestDatabinding:
 
 class TestProgressGuard:
     def test_guard_does_not_block_single_query_without_profile(self):
-        """With relaxed guard, a single db.query without analysis does NOT trigger
+        """With relaxed guard, a single sql.execute_readonly without analysis does NOT trigger
         the analysis guard. The model is free to stop tool calls and enter answer."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
@@ -149,7 +149,7 @@ class TestProgressGuard:
             assert "profiling" not in result["progress_decision"].get("reason_summary", "").lower()
 
     def test_guard_blocks_cycling_queries_without_profile(self):
-        """Relaxed guard fires when model calls db.query >=2 times without
+        """Relaxed guard fires when model calls sql.execute_readonly >=2 times without
         analysis or answer, AND step_count > 4."""
         from engine.agent.progress.fast_path import deterministic_progress_fastpath
         state = {
@@ -160,8 +160,8 @@ class TestProgressGuard:
             "answer": None,
             "messages": [],
             "last_tool_results": [
-                {"name": "db.query", "status": "success"},
-                {"name": "db.query", "status": "success"},
+                {"name": "sql.execute_readonly", "status": "success"},
+                {"name": "sql.execute_readonly", "status": "success"},
             ],
         }
         result = deterministic_progress_fastpath(state)
@@ -198,8 +198,8 @@ class TestProgressGuard:
             "answer": None,
             "messages": [],
             "last_tool_results": [
-                {"name": "db.query", "status": "success"},
-                {"name": "db.query", "status": "success"},
+                {"name": "sql.execute_readonly", "status": "success"},
+                {"name": "sql.execute_readonly", "status": "success"},
             ],
         }
 
