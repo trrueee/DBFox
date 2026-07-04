@@ -67,7 +67,7 @@ class AgentEventStore:
     ) -> Any | None:
         return None
 
-    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "query_database") -> None:
+    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "execute_readonly") -> None:
         pass
 
     def flush(self) -> None:
@@ -226,7 +226,7 @@ class SQLiteAgentEventStore(AgentEventStore):
             note=note,
         )
 
-    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "query_database") -> None:
+    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "execute_readonly") -> None:
         from engine.agent_core import persistence as ap
 
         ap.mark_run_resumed(self.db, run_id=run_id, current_step_name=current_step_name)
@@ -355,7 +355,7 @@ class BufferedAgentEventStore(AgentEventStore):
         self.flush()
         return result[0] if result else None
 
-    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "query_database") -> None:
+    def mark_run_resumed(self, run_id: str, current_step_name: str | None = "execute_readonly") -> None:
         self._operations.append(lambda: self.target.mark_run_resumed(run_id, current_step_name))
         self.flush()
 

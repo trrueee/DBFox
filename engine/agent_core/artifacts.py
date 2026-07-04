@@ -41,17 +41,46 @@ def build_agent_artifacts(
     if query_plan:
         artifacts.append(build_query_plan_artifact(query_plan, identity=identity))
 
+    sql_artifact: AgentArtifact | None = None
     if sql:
-        artifacts.append(build_sql_artifact(sql, safety=safety, execution=execution, identity=identity))
+        sql_artifact = build_sql_artifact(sql, safety=safety, execution=execution, identity=identity)
+        artifacts.append(sql_artifact)
 
+    safety_artifact: AgentArtifact | None = None
     if safety:
-        artifacts.append(build_safety_artifact(safety, identity=identity))
+        safety_artifact = build_safety_artifact(
+            safety,
+            identity=identity,
+            source_sql=sql,
+            source_sql_artifact_id=sql_artifact.id if sql_artifact else None,
+        )
+        artifacts.append(safety_artifact)
 
+    result_view_artifact: AgentArtifact | None = None
     if execution and execution.get("success"):
-        artifacts.append(build_result_view_artifact(execution, datasource_id=datasource_id, safety=safety, identity=identity))
+        result_view_artifact = build_result_view_artifact(
+            execution,
+            datasource_id=datasource_id,
+            safety=safety,
+            identity=identity,
+            source_sql_artifact_id=sql_artifact.id if sql_artifact else None,
+            source_sql_semantic_id=sql_artifact.semantic_id if sql_artifact else None,
+            safety_artifact_id=safety_artifact.id if safety_artifact else None,
+            safety_semantic_id=safety_artifact.semantic_id if safety_artifact else None,
+        )
+        artifacts.append(result_view_artifact)
 
     if is_chartable_suggestion(chart_suggestion):
-        artifacts.append(build_chart_artifact(chart_suggestion, safety=safety, execution=execution, identity=identity))
+        artifacts.append(
+            build_chart_artifact(
+                chart_suggestion,
+                safety=safety,
+                execution=execution,
+                identity=identity,
+                source_result_artifact_id=result_view_artifact.id if result_view_artifact else None,
+                source_result_semantic_id=result_view_artifact.semantic_id if result_view_artifact else None,
+            )
+        )
 
     if error:
         artifacts.append(build_error_artifact(error, safety=safety, execution=execution, identity=identity))
@@ -120,7 +149,7 @@ def build_sql_suggestion_artifact(
         mode="both",
         priority=25,
         identity=identity,
-        produced_by_step=str(payload.get("produced_by_step") or "db.query"),
+        produced_by_step=str(payload.get("produced_by_step") or "sql.execute_readonly"),
         depends_on=["agent_plan_draft"],
     )
 
@@ -191,7 +220,9 @@ def build_result_view_artifact(
     safety: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
     source_sql_artifact_id: str | None = None,
+    source_sql_semantic_id: str | None = None,
     safety_artifact_id: str | None = None,
+    safety_semantic_id: str | None = None,
 ) -> AgentArtifact:
     # Fingerprint the SQL so each distinct query gets its own result view artifact.
     sql = _execution_sql(execution)
@@ -201,15 +232,17 @@ def build_result_view_artifact(
     
     all_rows = execution.get("rows") or []
     preview_rows = all_rows[:10]
-    is_sql_backed = bool(datasource_id and sql)
     typed_columns = _result_view_columns(execution)
-    source_sql_ref = source_sql_artifact_id or _sql_artifact_semantic_id(sql)
-    safety_ref = safety_artifact_id or _safety_artifact_semantic_id(sql)
+    source_sql_semantic_key = source_sql_semantic_id or _sql_artifact_semantic_id(sql)
+    source_sql_artifact_key = source_sql_artifact_id or ""
+    safety_semantic_key = safety_semantic_id or (_safety_artifact_semantic_id(sql) if safety else "")
+    safety_artifact_key = safety_artifact_id or ""
+    is_sql_backed = bool(datasource_id and sql and source_sql_artifact_key)
     payload: dict[str, Any] = {
         "storageMode": "sql_backed" if is_sql_backed else "payload",
         "datasourceId": datasource_id or "",
-        "sourceSqlArtifactId": source_sql_ref,
-        "sourceSqlSemanticId": source_sql_ref,
+        "sourceSqlArtifactKey": source_sql_artifact_key,
+        "sourceSqlSemanticKey": source_sql_semantic_key,
         "sourceSql": sql,
         "safeSql": sql,
         "dialect": dialect,
@@ -227,9 +260,18 @@ def build_result_view_artifact(
         "used_tables": _used_tables(sql or ""),
         "safety_state": _safety_state(safety),
     }
+    if safety or safety_artifact_key or safety_semantic_key:
+        if safety_artifact_key:
+            payload["safetyArtifactKey"] = safety_artifact_key
+        if safety_semantic_key:
+            payload["safetySemanticKey"] = safety_semantic_key
     if not is_sql_backed:
         payload["rows"] = all_rows
-    
+
+    source_dependency = source_sql_artifact_key or source_sql_semantic_key
+    safety_dependency = safety_artifact_key or safety_semantic_key
+    dependencies = [item for item in (source_dependency, safety_dependency) if item]
+
     return _artifact(
         semantic_id,
         "result_view",
@@ -239,7 +281,7 @@ def build_result_view_artifact(
         priority=20,
         identity=identity,
         produced_by_step="execute_sql",
-        depends_on=[source_sql_ref, safety_ref] if safety or safety_artifact_id else [source_sql_ref],
+        depends_on=dependencies,
     )
 
 
@@ -249,9 +291,12 @@ def build_chart_artifact(
     safety: dict[str, Any] | None,
     execution: dict[str, Any] | None = None,
     identity: AgentArtifactIdentity | None = None,
+    source_result_artifact_id: str | None = None,
+    source_result_semantic_id: str | None = None,
 ) -> AgentArtifact:
     sql = _execution_sql(execution) if execution else None
     result_view_sem = "result_view" if not sql else f"result_view_{_sql_fingerprint(sql)}"
+    result_view_ref = source_result_artifact_id or result_view_sem
     sem_id = "chart_suggestion" if not sql else f"chart_suggestion_{_sql_fingerprint(sql)}"
     chart_type = str(chart_suggestion.get("chart_type") or chart_suggestion.get("type") or "bar").strip().lower()
     return _artifact(
@@ -267,7 +312,8 @@ def build_chart_artifact(
             "aggregation": chart_suggestion.get("aggregation") or "",
             "reason": chart_suggestion.get("reason") or "",
             "series": chart_suggestion.get("series") or [],
-            "source_result_semantic_id": result_view_sem,
+            "source_result_artifact_id": result_view_ref,
+            "source_result_semantic_id": source_result_semantic_id or result_view_sem,
             "source_sql": sql or "",
             "source_refs": _chart_source_refs(chart_suggestion),
             "safety_state": _safety_state(safety),
@@ -276,7 +322,7 @@ def build_chart_artifact(
         priority=30,
         identity=identity,
         produced_by_step="suggest_chart",
-        depends_on=[result_view_sem],
+        depends_on=[result_view_ref],
     )
 
 

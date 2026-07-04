@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 from engine.agent.app.event_mapper import trace_to_events
 from engine.agent.app.service import DBFoxAgentService, _runtime_error_message
+from engine.agent.app.stream_runner import AgentStreamRunner
 from engine.agent_core.events import EventEmitter
 
 
@@ -17,9 +20,9 @@ def test_event_emitter_can_emit_live_only_answer_delta():
 def test_custom_answer_delta_payload_maps_to_live_only_runtime_event():
     recorded = []
     emitter = EventEmitter("run-custom", recorder=recorded.append)
-    service = DBFoxAgentService.__new__(DBFoxAgentService)
+    runner = AgentStreamRunner(SimpleNamespace(persist_artifact_event=lambda *_args, **_kwargs: None))
 
-    event = service._custom_stream_event(
+    event = runner._custom_stream_event(
         emitter.emit,
         {"type": "agent.answer.delta", "content": "partial"},
     )

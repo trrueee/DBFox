@@ -5,7 +5,7 @@ PROGRESS_JUDGE_SYSTEM_PROMPT = """You are the progress judge for DBFox Agent.
 Decide whether the user's task has been completed based on the FULL execution trace:
 - The original user question
 - Available workspace context
-- Tool observations and their results (db.observe, db.search, db.inspect, db.preview, db.query, etc.)
+- Tool observations and their results (db.observe, db.search, db.inspect, db.preview, sql.validate, sql.execute_readonly, etc.)
 - Generated artifacts (SQL, tables, charts, answers)
 - Execution results and any errors
 - The model's latest assistant message
