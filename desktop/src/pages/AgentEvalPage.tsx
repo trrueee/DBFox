@@ -25,6 +25,11 @@ interface AgentEvalPageProps {
   onToast: (message: string) => void;
 }
 
+interface AgentEvalData {
+  tasks: AgentGoldenTask[];
+  runs: AgentEvalRun[];
+}
+
 export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: AgentEvalPageProps) {
   const [tasks, setTasks] = useState<AgentGoldenTask[]>([]);
   const [runs, setRuns] = useState<AgentEvalRun[]>([]);
@@ -47,15 +52,11 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       setRuns([]);
       return;
     }
-    await Promise.resolve();
     setLoading(true);
     try {
-      const [nextTasks, nextRuns] = await Promise.all([
-        agentEvalApi.listTasks(activeDatasourceId),
-        agentEvalApi.listRuns(activeDatasourceId),
-      ]);
-      setTasks(nextTasks);
-      setRuns(nextRuns);
+      const nextData = await loadAgentEvalData(activeDatasourceId);
+      setTasks(nextData.tasks);
+      setRuns(nextData.runs);
     } catch (err) {
       onToast(err instanceof Error ? err.message : "读取评测数据失败");
     } finally {
@@ -64,8 +65,30 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
   }, [activeDatasourceId, onToast]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+
+    async function loadInitialData() {
+      if (!activeDatasourceId) {
+        setTasks([]);
+        setRuns([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const nextData = await loadAgentEvalData(activeDatasourceId);
+        if (cancelled) return;
+        setTasks(nextData.tasks);
+        setRuns(nextData.runs);
+      } catch (err) {
+        if (!cancelled) onToast(err instanceof Error ? err.message : "读取评测数据失败");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadInitialData();
+    return () => { cancelled = true; };
+  }, [activeDatasourceId, onToast]);
 
   const createTask = async () => {
     const name = formName.trim();
@@ -330,6 +353,14 @@ function parseJsonArray(text: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+async function loadAgentEvalData(datasourceId: string): Promise<AgentEvalData> {
+  const [tasks, runs] = await Promise.all([
+    agentEvalApi.listTasks(datasourceId),
+    agentEvalApi.listRuns(datasourceId),
+  ]);
+  return { tasks, runs };
 }
 
 function taskName(tasks: AgentGoldenTask[], taskId: string): string {

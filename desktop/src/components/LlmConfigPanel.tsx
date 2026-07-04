@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import {
   Key, Globe, Layers, CheckCircle2, AlertCircle, Eye, EyeOff, Cpu, Server, Zap,
@@ -98,13 +98,13 @@ export function LlmConfigPanel({
     handleSubmit,
     register,
     setValue,
-    watch,
+    control,
   } = useForm<ApiConfig>({
     values: config,
     mode: "onChange",
     resolver: zodResolver(llmConfigSchema),
   });
-  const values = watch();
+  const values = useWatch({ control }) as ApiConfig;
   const presetValues = LLM_MODEL_PRESETS.map((m) => m.value);
   const isCustomModel = Boolean(values.modelName) && !presetValues.includes(values.modelName);
   const activePreset = findModelPreset(values.modelName);
