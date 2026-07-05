@@ -143,15 +143,22 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
 # helpers
 # ---------------------------------------------------------------------------
 
-def _check_llm_credentials(req: AgentRunRequest) -> None:
+def _normalize_agent_run_llm_config(req: AgentRunRequest) -> AgentRunRequest:
     try:
-        resolve_product_llm_config(
+        llm_config = resolve_product_llm_config(
             api_key=req.api_key,
             api_base=req.api_base,
             model_name=req.model_name,
         )
     except LlmConfigurationError as exc:
         raise DBFoxError(str(exc), code=exc.code) from exc
+    return req.model_copy(
+        update={
+            "api_key": llm_config.api_key,
+            "api_base": llm_config.api_base,
+            "model_name": llm_config.model_name,
+        }
+    )
 
 
 def _format_sse_event(event: AgentRuntimeEvent) -> str:
@@ -247,8 +254,8 @@ def api_get_run_checkpoints(run_id: str, db: Session = Depends(get_db)) -> list[
 @router.post("/agent/run", response_model=AgentRunResponse)
 def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentRunResponse:
     try:
-        _check_llm_credentials(req)
-        return DBFoxAgentRuntime(db).run(req)
+        normalized_req = _normalize_agent_run_llm_config(req)
+        return DBFoxAgentRuntime(db).run(normalized_req)
     except DBFoxError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=_http_detail(exc))
@@ -356,9 +363,9 @@ def api_resolve_agent_approval(
 def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     def stream_events() -> Any:  # noqa
         try:
-            _check_llm_credentials(req)
-            for event in DBFoxAgentRuntime(db).run_iter(req):
-                attach_conversation_event_ids(event, req)
+            normalized_req = _normalize_agent_run_llm_config(req)
+            for event in DBFoxAgentRuntime(db).run_iter(normalized_req):
+                attach_conversation_event_ids(event, normalized_req)
                 yield _format_sse_event(event)
         except DBFoxError as exc:
             db.rollback()

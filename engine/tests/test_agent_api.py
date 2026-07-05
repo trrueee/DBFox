@@ -9,7 +9,7 @@ from pydantic import ValidationError
 import engine.api.agent as agent_module
 from fastapi import HTTPException
 
-from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRuntimeEvent
+from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
 from engine.api.agent import ResultPageRequest, sse_failed_event
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
@@ -762,6 +762,132 @@ def test_sse_failed_event_sanitizes_error_message() -> None:
     assert "[REDACTED]" in payload["error"]
     assert "secret" not in payload["error"]
     assert "mysql://root" not in payload["error"]
+
+
+def _smoke_response(req: AgentRunRequest, *, run_id: str = "run-smoke") -> AgentRunResponse:
+    return AgentRunResponse(
+        run_id=run_id,
+        session_id=req.session_id or "session-smoke",
+        conversation_id=req.conversation_id or req.session_id,
+        user_message_id=req.user_message_id,
+        assistant_message_id=req.assistant_message_id,
+        success=True,
+        status="completed",
+        question=req.question,
+        explanation="mock LLM smoke completed",
+    )
+
+
+def test_api_agent_run_normalizes_product_llm_config_before_runtime(monkeypatch) -> None:
+    captured: dict[str, AgentRunRequest] = {}
+
+    class FakeDb:
+        def rollback(self) -> None:
+            raise AssertionError("successful smoke run should not rollback")
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run(self, req: AgentRunRequest) -> AgentRunResponse:
+            captured["req"] = req
+            return _smoke_response(req)
+
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    response = agent_module.api_agent_run(
+        AgentRunRequest(
+            datasource_id="ds-1",
+            question="orders",
+            api_key=" sk-product ",
+            api_base=" https://dashscope.example/v1 ",
+            model_name=" qwen-plus ",
+        ),
+        FakeDb(),  # type: ignore[arg-type]
+    )
+
+    runtime_req = captured["req"]
+    assert response.success is True
+    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.api_base == "https://dashscope.example/v1"
+    assert runtime_req.model_name == "qwen-plus"
+
+
+def test_api_agent_run_applies_default_product_llm_base_and_model(monkeypatch) -> None:
+    captured: dict[str, AgentRunRequest] = {}
+
+    class FakeDb:
+        def rollback(self) -> None:
+            raise AssertionError("successful smoke run should not rollback")
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run(self, req: AgentRunRequest) -> AgentRunResponse:
+            captured["req"] = req
+            return _smoke_response(req)
+
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    agent_module.api_agent_run(
+        AgentRunRequest(
+            datasource_id="ds-1",
+            question="orders",
+            api_key="sk-product",
+            api_base=" ",
+            model_name=" ",
+        ),
+        FakeDb(),  # type: ignore[arg-type]
+    )
+
+    runtime_req = captured["req"]
+    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.api_base == "https://api.openai.com/v1"
+    assert runtime_req.model_name == "gpt-4o-mini"
+
+
+def test_api_agent_run_stream_normalizes_product_llm_config_before_runtime(monkeypatch) -> None:
+    captured: dict[str, AgentRunRequest] = {}
+
+    class FakeDb:
+        def rollback(self) -> None:
+            raise AssertionError("successful smoke stream should not rollback")
+
+    class FakeRuntime:
+        def __init__(self, _db) -> None:
+            pass
+
+        def run_iter(self, req: AgentRunRequest):
+            captured["req"] = req
+            yield AgentRuntimeEvent(
+                event_id="evt-smoke-final",
+                run_id="run-smoke",
+                sequence=1,
+                created_at_ms=1,
+                type="agent.run.completed",
+                response=_smoke_response(req, run_id="run-smoke"),
+            )
+
+    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
+
+    response = agent_module.api_agent_run_stream(
+        AgentRunRequest(
+            datasource_id="ds-1",
+            question="orders",
+            api_key=" sk-product ",
+            api_base=" https://dashscope.example/v1 ",
+            model_name=" qwen-plus ",
+        ),
+        FakeDb(),  # type: ignore[arg-type]
+    )
+    body = asyncio.run(_streaming_response_text(response))
+
+    runtime_req = captured["req"]
+    assert "agent.run.completed" in body
+    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.api_base == "https://dashscope.example/v1"
+    assert runtime_req.model_name == "qwen-plus"
 
 
 def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
