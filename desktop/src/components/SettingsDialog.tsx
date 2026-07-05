@@ -5,54 +5,25 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { LlmConfigPanel } from "./LlmConfigPanel";
-import { DEFAULT_LLM_API_BASE } from "../lib/llmPresets";
-import { validateApiConfig } from "../lib/api/types";
 import type { ApiConfig } from "../lib/api/types";
+import { getStoredApiConfig, saveStoredApiConfig } from "../lib/llmConfig";
 import "./SettingsDialog.css";
 
-const DEFAULT_CONFIG: ApiConfig = {
-  apiKey: "",
-  apiBase: DEFAULT_LLM_API_BASE,
-  modelName: "",
-};
-
-const STORAGE_KEY = "dbfox-api-config";
-
-function loadConfig(): ApiConfig {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (validateApiConfig(parsed)) return parsed;
-    }
-  } catch { /* ignore */ }
-  return { ...DEFAULT_CONFIG };
-}
-
-function saveConfig(config: ApiConfig): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
-}
-
-/** Read the persisted LLM config without subscribing to React state. */
-export function getStoredApiConfig(): ApiConfig {
-  return loadConfig();
-}
-
 export function useApiConfig() {
-  const [config, setConfig] = useState<ApiConfig>(loadConfig);
+  const [config, setConfig] = useState<ApiConfig>(getStoredApiConfig);
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const updateConfig = useCallback((partial: Partial<ApiConfig>) => {
     setConfig((prev) => {
       const next = { ...prev, ...partial };
-      saveConfig(next);
+      saveStoredApiConfig(next);
       return next;
     });
   }, []);
 
   const handleSave = useCallback(() => {
-    saveConfig(config);
+    saveStoredApiConfig(config);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     setOpen(false);

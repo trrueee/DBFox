@@ -13,6 +13,7 @@ import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { testLlmConnection } from "../../lib/api/agent";
+import { buildLlmTestValues } from "../../lib/llmConfig";
 import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
@@ -306,10 +307,11 @@ function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab
         onTestConnection={async () => {
           showToast("正在测试与模型接口握手…");
           try {
+            const llm = buildLlmTestValues(config);
             const result = await testLlmConnection(
-              config.apiKey || "",
-              config.apiBase || "https://api.openai.com/v1",
-              config.modelName || "gpt-4o-mini",
+              llm.apiKey,
+              llm.apiBase,
+              llm.modelName,
             );
             if (result.ok) {
               showToast(`连接测试通过 (${result.latency_ms}ms)，模型 ${result.model} 可达`);

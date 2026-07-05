@@ -13,9 +13,13 @@ vi.mock("../../lib/api/agent", () => ({
   mergeArtifactDelta: vi.fn((artifacts) => artifacts),
 }));
 
-vi.mock("../../components/SettingsDialog", () => ({
-  getStoredApiConfig: vi.fn(() => ({ apiKey: "test-key", apiBase: "", modelName: "gpt-4o" })),
-}));
+vi.mock("../../lib/llmConfig", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/llmConfig")>();
+  return {
+    ...actual,
+    getStoredApiConfig: vi.fn(() => ({ apiKey: "test-key", apiBase: "", modelName: "gpt-4o" })),
+  };
+});
 
 vi.mock("../../features/workspace/agentTimeline", () => ({
   createInitialAgentTimeline: vi.fn(() => []),
@@ -138,6 +142,38 @@ describe("agentStore — sendFollowUp", () => {
 
 describe("agentStore — stream event rendering guards", () => {
   beforeEach(resetAll);
+
+  it("passes normalized stored LLM config to agent runs", async () => {
+    vi.mocked(agentApi.streamAgentQuery).mockResolvedValue({
+      run_id: "run-config",
+      session_id: "session-config",
+      success: true,
+      status: "completed",
+      question: "orders",
+      artifacts: [],
+      answer: {
+        answer: "done",
+        key_findings: [],
+        evidence: [],
+        caveats: [],
+        recommendations: [],
+        follow_up_questions: [],
+      },
+    });
+
+    await useAgentStore.getState().runAgentForTab("smart-query", "orders");
+
+    expect(agentApi.streamAgentQuery).toHaveBeenCalledWith(
+      "ds-1",
+      "orders",
+      expect.objectContaining({
+        apiKey: "test-key",
+        apiBase: "https://api.openai.com/v1",
+        model: "gpt-4o",
+      }),
+      expect.any(Object),
+    );
+  });
 
   it("uses safe_sql from approval requested action", async () => {
     vi.mocked(agentApi.streamAgentQuery).mockResolvedValue({

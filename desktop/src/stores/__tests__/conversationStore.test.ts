@@ -5,9 +5,13 @@ import type { AgentAnswer } from "../../lib/api/types";
 import type { ConversationDetail, ConversationMessage, ConversationRun } from "../../types/conversation";
 import { useConversationStore } from "../conversationStore";
 
-vi.mock("../../components/SettingsDialog", () => ({
-  getStoredApiConfig: () => ({ apiKey: "test-key", apiBase: "", modelName: "test-model" }),
-}));
+vi.mock("../../lib/llmConfig", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/llmConfig")>();
+  return {
+    ...actual,
+    getStoredApiConfig: () => ({ apiKey: "test-key", apiBase: "", modelName: "test-model" }),
+  };
+});
 
 vi.mock("../datasourceStore", () => ({
   useDatasourceStore: {

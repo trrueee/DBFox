@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlaskConical, Loader2, Play, Plus, Trash2 } from "lucide-react";
-import { getStoredApiConfig } from "../components/SettingsDialog";
 import {
   Button,
   EmptyState,
@@ -17,6 +16,7 @@ import {
   type AgentEvalRun,
   type AgentGoldenTask,
 } from "../lib/api/agentEval";
+import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
 import "./AgentEvalPage.css";
 
 interface AgentEvalPageProps {
@@ -140,14 +140,13 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       return;
     }
     const llm = getStoredApiConfig();
+    const llmPayload = buildConversationLlmPayload(llm);
     setRunning(true);
     onToast(`开始评测 ${tasks.length} 个任务，请耐心等待…`);
     try {
       const result = await agentEvalApi.runEval({
         datasource_id: activeDatasourceId,
-        api_key: llm.apiKey || undefined,
-        api_base: llm.apiBase || undefined,
-        model_name: llm.modelName || undefined,
+        ...llmPayload,
         execute: false,
       });
       onToast(`评测完成：${result.passed_cases}/${result.total_cases} 通过`);

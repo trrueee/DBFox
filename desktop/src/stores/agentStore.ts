@@ -7,7 +7,7 @@ import {
   resolveAgentApproval,
   streamResumeAgentRun,
 } from "../lib/api/agent";
-import { getStoredApiConfig } from "../components/SettingsDialog";
+import { buildAgentRunLlmConfig, getStoredApiConfig, normalizeProductLlmConfig } from "../lib/llmConfig";
 import {
   appendAgentRuntimeEvent,
   createInitialAgentTimeline,
@@ -72,7 +72,8 @@ export const useAgentStore = create<AgentStore>()((_set, get) => ({
     }
 
     const llm = getStoredApiConfig();
-    if (!llm.apiKey?.trim()) {
+    const normalizedLlm = normalizeProductLlmConfig(llm);
+    if (!normalizedLlm.hasApiKey) {
       ws.appendTabMessages(tabId, [
         {
           id: ws._nextMsgId(),
@@ -106,9 +107,7 @@ export const useAgentStore = create<AgentStore>()((_set, get) => ({
         ds.activeDatasourceId,
         question,
         {
-          apiKey: llm.apiKey || undefined,
-          apiBase: llm.apiBase || undefined,
-          model: llm.modelName || undefined,
+          ...buildAgentRunLlmConfig(llm),
           sessionId: opts?.sessionId,
           parentRunId: opts?.parentRunId,
           workspaceContext: {

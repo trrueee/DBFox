@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentEvalPage } from "../AgentEvalPage";
 
@@ -61,6 +61,7 @@ describe("AgentEvalPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("loads golden tasks and eval runs for the active datasource", async () => {
@@ -111,6 +112,55 @@ describe("AgentEvalPage", () => {
     expect(await screen.findByText("任务 ds-2")).toBeTruthy();
     await waitFor(() => {
       expect(screen.queryByText("任务 ds-1")).toBeNull();
+    });
+  });
+
+  it("passes stored product LLM config when running evals", async () => {
+    localStorage.setItem(
+      "dbfox-api-config",
+      JSON.stringify({
+        apiKey: " sk-eval ",
+        apiBase: " https://dashscope.aliyuncs.com/compatible-mode/v1 ",
+        modelName: " qwen-plus ",
+      }),
+    );
+    apiMocks.listTasks.mockResolvedValue([goldenTask("task-1", "ds-1", "订单统计")]);
+    apiMocks.listRuns.mockResolvedValue([]);
+    apiMocks.runEval.mockResolvedValue({
+      id: "run-new",
+      datasource_id: "ds-1",
+      project_id: null,
+      status: "completed",
+      total_cases: 1,
+      passed_cases: 1,
+      failed_cases: 0,
+      pass_rate: 1,
+      avg_latency_ms: 500,
+      summary_json: "{}",
+      created_at: null,
+      completed_at: null,
+      case_results: [],
+    });
+
+    render(
+      <AgentEvalPage
+        datasources={[{ id: "ds-1", name: "业务库" }]}
+        activeDatasourceId="ds-1"
+        onToast={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText("订单统计")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /运行评测/ }));
+
+    await waitFor(() => {
+      expect(apiMocks.runEval).toHaveBeenCalledWith({
+        datasource_id: "ds-1",
+        api_key: "sk-eval",
+        api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model_name: "qwen-plus",
+        execute: false,
+      });
     });
   });
 });

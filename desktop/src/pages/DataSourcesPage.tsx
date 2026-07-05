@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Database, Plus } from "lucide-react";
 
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
-import { getStoredApiConfig } from "../components/SettingsDialog";
 import { useToast } from "../components/Toast";
 import { Button, EmptyState } from "../components/ui";
 import {
@@ -29,6 +28,7 @@ import {
   buildDatasourceUpdatePayload,
   type DatasourceFormShape,
 } from "../lib/datasourcePayload";
+import { buildSchemaSyncOptions } from "../lib/llmConfig";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -80,18 +80,7 @@ const schemaSyncToast = (
 };
 
 const schemaSyncOptions = (aiEnrich: boolean): SchemaSyncOptions | undefined => {
-  if (!aiEnrich) return undefined;
-  const llm = getStoredApiConfig();
-  const options: SchemaSyncOptions = { ai_enrich: true };
-  const apiKey = llm.apiKey.trim();
-  const apiBase = llm.apiBase.trim();
-  const modelName = llm.modelName.trim();
-  if (apiKey) options.api_key = apiKey;
-  if (apiKey || modelName) {
-    if (apiBase) options.api_base = apiBase;
-    if (modelName) options.model_name = modelName;
-  }
-  return options;
+  return buildSchemaSyncOptions(aiEnrich);
 };
 
 export const DataSourcesPage = ({

@@ -2,7 +2,7 @@ import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
-import { getStoredApiConfig } from "../../components/SettingsDialog";
+import { getStoredApiConfig } from "../../lib/llmConfig";
 import "./ContextDrawer.css";
 
 interface ContextDrawerProps {

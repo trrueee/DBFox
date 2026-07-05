@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { getStoredApiConfig } from "../components/SettingsDialog";
 import {
   createConversation,
   deleteConversation,
@@ -9,6 +8,7 @@ import {
 } from "../features/conversation/conversationRepository";
 import { createStreamEventBatcher } from "../features/conversation/streamEventBatcher";
 import { agentApi } from "../lib/api/agent";
+import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
 import type {
   ConversationArtifact,
   ConversationDetail,
@@ -366,6 +366,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
 
   sendMessage: async (conversationId, content) => {
     const llm = getStoredApiConfig();
+    const llmPayload = buildConversationLlmPayload(llm);
     const abortController = new AbortController();
     const batchEvent = createStreamEventBatcher<ConversationStreamEvent>((events) => get().applyStreamEvents(events));
     get().abortControllers.set(conversationId, abortController);
@@ -374,9 +375,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         conversationId,
         {
           content,
-          api_key: llm.apiKey || undefined,
-          api_base: llm.apiBase || undefined,
-          model_name: llm.modelName || undefined,
+          ...llmPayload,
           execute: true,
         },
         { signal: abortController.signal, onEvent: batchEvent },
