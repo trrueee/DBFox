@@ -14,14 +14,6 @@ os.environ["DBFOX_BYPASS_CONFIRMATION"] = "1"
 os.environ["DBFOX_TESTING"] = "1"
 os.environ["DBFOX_ALLOW_GUARDRAIL_BYPASS"] = "1"
 
-# ---- LLM provider defaults for testing --------------------------------------
-# When a QWEN_API_KEY is set, auto-configure the OpenAI-compatible endpoint.
-_qwen_key = os.environ.get("QWEN_API_KEY", "").strip()
-if _qwen_key:
-    os.environ.setdefault("OPENAI_API_KEY", _qwen_key)
-    os.environ.setdefault("OPENAI_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
-    os.environ.setdefault("OPENAI_MODEL_NAME", "qwen-plus")
-
 import uuid
 from pathlib import Path
 import pytest
@@ -426,11 +418,10 @@ def mock_openai_client(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def mock_agent_progress_judge(monkeypatch):
+def mock_agent_progress_judge(monkeypatch, request):
     """Progress Judge requires LLM credentials; without real keys use the
     module's rule-based fallback (mirrors the legacy routing logic)."""
-    import os
-    if os.environ.get("DBFOX_LLM_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("OPENAI_API_KEY"):
+    if request.node.get_closest_marker("real_llm") is not None:
         return
 
     from engine.agent.nodes import progress_node

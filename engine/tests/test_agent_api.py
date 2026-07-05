@@ -135,6 +135,63 @@ def test_reusable_sql_memory_is_not_public_agent_api():
     assert "/agent/reusable-sqls" not in route_paths
 
 
+def test_llm_test_uses_product_config_and_factory(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def invoke(self, prompt: str) -> None:
+            captured["prompt"] = prompt
+
+    def fake_create_chat_model(config, options):
+        captured["config"] = config
+        captured["options"] = options
+        return FakeClient()
+
+    monkeypatch.setattr(agent_module, "create_chat_model", fake_create_chat_model)
+
+    response = agent_module.api_llm_test(
+        agent_module.LlmTestRequest(
+            api_key=" sk-test ",
+            api_base=" https://example.test/v1 ",
+            model_name=" qwen-plus ",
+        )
+    )
+
+    config = captured["config"]
+    options = captured["options"]
+    assert response.ok is True
+    assert response.model == "qwen-plus"
+    assert response.api_base == "https://example.test/v1"
+    assert captured["prompt"] == "ping"
+    assert config.api_key == "sk-test"
+    assert config.api_base == "https://example.test/v1"
+    assert config.model_name == "qwen-plus"
+    assert config.source == "product"
+    assert options.timeout == 10.0
+    assert options.max_tokens == 1
+
+
+def test_llm_test_requires_request_key_even_when_env_exists(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    monkeypatch.setattr(
+        agent_module,
+        "create_chat_model",
+        lambda *_args, **_kwargs: pytest.fail("should not build an LLM client without a request key"),
+    )
+
+    response = agent_module.api_llm_test(
+        agent_module.LlmTestRequest(
+            api_key="",
+            api_base="https://example.test/v1",
+            model_name="qwen-plus",
+        )
+    )
+
+    assert response.ok is False
+    assert response.error_code == "NO_LLM_KEY"
+    assert "LLM API Key" in str(response.error_message)
+
+
 def _console_decision(datasource_id: str, sql: str) -> ExecutionSafetyDecision:
     return ExecutionSafetyDecision(
         datasource_id=datasource_id,

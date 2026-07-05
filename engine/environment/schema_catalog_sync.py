@@ -281,12 +281,17 @@ class SchemaCatalogSync:
 
         if ai_enrich:
             from engine.ai_enrich import ai_enrich_catalog
-            enrich_result = ai_enrich_catalog(
-                db,
-                datasource_id,
+            from engine.llm.config import resolve_optional_product_llm_config
+
+            llm_config = resolve_optional_product_llm_config(
                 api_key=ai_api_key,
                 api_base=ai_api_base,
                 model_name=ai_model_name,
+            )
+            enrich_result = ai_enrich_catalog(
+                db,
+                datasource_id,
+                llm_config=llm_config,
             )
             logger.info("AI enrich: %s", enrich_result)
             result.ai_enrich_result = enrich_result

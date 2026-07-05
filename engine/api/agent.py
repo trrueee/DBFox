@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time as _time
 from typing import Any, Literal
 from uuid import uuid4
@@ -36,8 +35,9 @@ from engine.agent_core.events import EventEmitter
 from engine.app.errors import public_error, public_message
 from engine.db import get_db
 from engine.errors import DBFoxError
+from engine.llm.config import LlmConfigurationError, resolve_product_llm_config
 from engine.llm.errors import llm_error_from_exception
-from engine.llm.providers.openai import create_openai_client
+from engine.llm.factory import LlmCallOptions, create_chat_model
 from engine.models import DataSource
 from engine.policy.engine import PolicyEngine
 from engine.sql.dialect_context import DialectContext
@@ -89,21 +89,33 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
     """
     t0 = _time.monotonic()
     try:
-        client = create_openai_client(
-            model_name=req.model_name,
+        config = resolve_product_llm_config(
             api_key=req.api_key,
             api_base=req.api_base,
-            timeout=10.0,
-            max_tokens=1,
+            model_name=req.model_name,
+        )
+        client = create_chat_model(
+            config,
+            LlmCallOptions(timeout=10.0, max_tokens=1),
         )
         # Minimal invocation to verify auth + connectivity + model existence.
         client.invoke("ping")
         latency_ms = int((_time.monotonic() - t0) * 1000)
         return LlmTestResponse(
             ok=True,
+            model=config.model_name,
+            api_base=config.api_base,
+            latency_ms=latency_ms,
+        )
+    except LlmConfigurationError as exc:
+        latency_ms = int((_time.monotonic() - t0) * 1000)
+        return LlmTestResponse(
+            ok=False,
             model=req.model_name,
             api_base=req.api_base,
             latency_ms=latency_ms,
+            error_code=exc.code,
+            error_message=str(exc),
         )
     except Exception as exc:
         latency_ms = int((_time.monotonic() - t0) * 1000)
@@ -132,12 +144,14 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
 # ---------------------------------------------------------------------------
 
 def _check_llm_credentials(req: AgentRunRequest) -> None:
-    if os.environ.get("DBFOX_TESTING") == "1":
-        # Test environment runs the agent against mocked LLM nodes.
-        return
-    key = str(req.api_key or os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not key:
-        raise DBFoxError("请先在设置中配置 LLM API Key。", code="NO_LLM_KEY")
+    try:
+        resolve_product_llm_config(
+            api_key=req.api_key,
+            api_base=req.api_base,
+            model_name=req.model_name,
+        )
+    except LlmConfigurationError as exc:
+        raise DBFoxError(str(exc), code=exc.code) from exc
 
 
 def _format_sse_event(event: AgentRuntimeEvent) -> str:

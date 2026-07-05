@@ -38,17 +38,8 @@ class GraphRuntimeContext:
 
     @property
     def has_llm_credentials(self) -> bool:
-        """True when an LLM API key is available (env or config)."""
-        import os
-        if os.environ.get("DBFOX_TESTING") == "1":
-            return True
-        return bool(
-            (self.api_key
-             or os.environ.get("OPENAI_API_KEY")
-             or os.environ.get("QWEN_API_KEY")
-             or os.environ.get("DBFOX_LLM_API_KEY")
-             or "").strip()
-        )
+        """True when the request supplied an LLM API key."""
+        return bool((self.api_key or "").strip())
 
     def to_configurable(self) -> dict[str, Any]:
         """Produce the legacy configurable dict (for LangGraph compatibility)."""

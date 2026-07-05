@@ -41,12 +41,7 @@ def synthesize_agent_answer(
         )
 
     import os
-    has_credentials = bool(
-        api_key
-        or os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("QWEN_API_KEY")
-        or os.environ.get("DBFOX_LLM_API_KEY")
-    )
+    has_credentials = bool((api_key or "").strip())
 
     if not (has_credentials or os.environ.get("DBFOX_TESTING") == "1"):
         return _fallback_answer(question, analysis_units, error, mode=synthesis_mode)

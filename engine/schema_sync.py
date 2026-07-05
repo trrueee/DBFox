@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -89,7 +88,7 @@ def sync_schema(
         }
 
         if ai_enrich:
-            configured_api_key = str(ai_api_key or os.getenv("OPENAI_API_KEY") or "").strip()
+            configured_api_key = str(ai_api_key or "").strip()
             enrich_result = result.ai_enrich_result or {
                 "ai_enriched": False,
                 "enriched_count": 0,

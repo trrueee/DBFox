@@ -2,6 +2,7 @@
 import uuid
 import pytest
 import engine.schema_sync as schema_sync_module
+from engine.llm.config import LlmConfig
 from engine.schema_sync import sync_schema, build_er_diagram_data
 from engine.models import DataSource, SchemaTable, SchemaColumn
 
@@ -135,12 +136,16 @@ def test_sync_passes_llm_config_to_ai_enrichment(db_session, test_datasource, mo
     )
 
     assert result["ok"] is True
+    llm_config = captured["kwargs"].get("llm_config")
+    assert isinstance(llm_config, LlmConfig)
+    assert llm_config.api_key == "sk-test"
+    assert llm_config.api_base == "https://example.test/v1"
+    assert llm_config.model_name == "qwen-plus"
+    assert llm_config.source == "product"
     assert captured == {
         "datasource_id": test_datasource.id,
         "kwargs": {
-            "api_key": "sk-test",
-            "api_base": "https://example.test/v1",
-            "model_name": "qwen-plus",
+            "llm_config": llm_config,
         },
     }
 

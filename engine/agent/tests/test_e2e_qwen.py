@@ -38,11 +38,6 @@ QWEN_API_BASE = os.environ.get(
     "QWEN_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
-# Set in env so model_factory can pick them up
-os.environ.setdefault("OPENAI_API_KEY", QWEN_API_KEY)
-os.environ.setdefault("OPENAI_MODEL_NAME", QWEN_MODEL_NAME)
-os.environ.setdefault("OPENAI_API_BASE", QWEN_API_BASE)
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------

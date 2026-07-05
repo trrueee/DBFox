@@ -375,9 +375,7 @@ def _deterministic_turn_summary(batch: list[dict[str, Any]]) -> str:
 
 
 def _has_llm_credentials(api_key: str | None) -> bool:
-    return bool(
-        (api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("QWEN_API_KEY") or os.environ.get("DBFOX_LLM_API_KEY") or "").strip()
-    )
+    return bool((api_key or "").strip()) or os.environ.get("DBFOX_TESTING") == "1"
 
 
 def _message_text(value: Any) -> str:

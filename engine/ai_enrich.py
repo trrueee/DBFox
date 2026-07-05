@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -17,6 +16,7 @@ from engine.ai_index import (
     compute_schema_hash,
     enrich_tables_batch,
 )
+from engine.llm.config import LlmConfig, resolve_optional_product_llm_config
 from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
@@ -34,6 +34,7 @@ def ai_enrich_catalog(
     datasource_id: str,
     *,
     table_batch: int = AI_LLM_TABLE_BATCH,
+    llm_config: LlmConfig | None = None,
     api_key: str | None = None,
     api_base: str | None = None,
     model_name: str | None = None,
@@ -56,12 +57,12 @@ def ai_enrich_catalog(
     if not changed:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "no structural changes"}
 
-    # 2. Pre-check API key availability — avoid retry storm when missing
-    api_key_available = bool(
-        (api_key or "").strip()
-        or (os.environ.get("OPENAI_API_KEY") or "").strip()
+    resolved_llm_config = llm_config or resolve_optional_product_llm_config(
+        api_key=api_key,
+        api_base=api_base,
+        model_name=model_name,
     )
-    if not api_key_available:
+    if resolved_llm_config is None:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "请先在设置中配置 LLM API Key。"}
 
     # 3. Cap total tables per run to avoid overwhelming the LLM
@@ -105,9 +106,7 @@ def ai_enrich_catalog(
         try:
             ai_result = enrich_tables_batch(
                 context,
-                api_key=api_key,
-                api_base=api_base,
-                model=model_name or "qwen-plus",
+                llm_config=resolved_llm_config,
             )
             _write_ai_metadata(db, batch, ai_result)
             from engine.environment.schema_catalog_sync import rebuild_search_docs

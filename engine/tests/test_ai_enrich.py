@@ -72,3 +72,22 @@ def test_ai_enrich_catalog_batches_tables_by_default(db_session, test_datasource
     assert result["enriched_count"] == 12
     assert batch_sizes
     assert max(batch_sizes) <= 8
+
+
+def test_ai_enrich_does_not_use_environment_api_key(monkeypatch, db_session, test_datasource) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    table = SchemaTable(
+        id=str(uuid.uuid4()),
+        data_source_id=test_datasource.id,
+        table_name="orders",
+        table_schema="main",
+        table_type="BASE TABLE",
+        schema_hash="stale",
+    )
+    db_session.add(table)
+    db_session.commit()
+
+    result = ai_enrich_catalog(db_session, test_datasource.id, api_key=None)
+
+    assert result["ai_enriched"] is False
+    assert result["reason"] == "请先在设置中配置 LLM API Key。"

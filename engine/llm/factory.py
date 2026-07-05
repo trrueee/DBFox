@@ -1,17 +1,40 @@
-"""LLM client factory — single entry point for all model access."""
+"""LLM client factory - single entry point for model client construction."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI
 
+from engine.llm.config import DEFAULT_LLM_API_BASE, DEFAULT_LLM_MODEL_NAME, LlmConfig
 from engine.llm.providers.openai import create_openai_client
 
 
-@dataclass
+@dataclass(frozen=True)
+class LlmCallOptions:
+    temperature: float = 0.0
+    max_tokens: int | None = None
+    timeout: float = 120.0
+
+
+def create_chat_model(
+    config: LlmConfig,
+    options: LlmCallOptions | None = None,
+) -> "ChatOpenAI":
+    """Build a chat model from an already-resolved LLM configuration."""
+    resolved_options = options or LlmCallOptions()
+    return create_openai_client(
+        model_name=config.model_name,
+        api_key=config.api_key,
+        api_base=config.api_base,
+        temperature=resolved_options.temperature,
+        max_tokens=resolved_options.max_tokens,
+        timeout=resolved_options.timeout,
+    )
+
+
+@dataclass(frozen=True)
 class LLMClientFactory:
     """Immutable factory bound to a specific provider config."""
 
@@ -26,13 +49,18 @@ class LLMClientFactory:
         max_tokens: int | None = None,
         timeout: float = 120.0,
     ) -> "ChatOpenAI":
-        return create_openai_client(
-            model_name=self.model_name,
-            api_key=self.api_key,
-            api_base=self.api_base,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            timeout=timeout,
+        return create_chat_model(
+            LlmConfig(
+                model_name=self.model_name,
+                api_key=self.api_key,
+                api_base=self.api_base,
+                source="product",
+            ),
+            LlmCallOptions(
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+            ),
         )
 
 
@@ -45,30 +73,22 @@ def get_chat_model(
     max_tokens: int | None = None,
     timeout: float = 120.0,
 ) -> "ChatOpenAI":
-    """Build a ChatOpenAI client from explicit args, falling back to env vars.
+    """Compatibility wrapper for explicit-config product model calls.
 
-    This is the single entry point for ALL LLM access in the DBFox engine.
+    Environment-backed calls must go through
+    ``resolve_support_llm_config_from_env()`` before reaching this factory.
     """
-    raw_key = (
-        api_key
-        or os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("QWEN_API_KEY")
-        or os.environ.get("DBFOX_LLM_API_KEY")
-        or ""
+    config = LlmConfig(
+        model_name=(model_name or DEFAULT_LLM_MODEL_NAME).strip(),
+        api_key=(api_key or "").strip(),
+        api_base=(api_base or DEFAULT_LLM_API_BASE).strip(),
+        source="product",
     )
-    key = raw_key.strip()
-
-    raw_base = api_base or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
-    base = raw_base.strip()
-
-    raw_model = model_name or os.environ.get("OPENAI_MODEL_NAME") or "gpt-4o-mini"
-    model = raw_model.strip()
-
-    return create_openai_client(
-        model_name=model,
-        api_key=key,
-        api_base=base,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        timeout=timeout,
+    return create_chat_model(
+        config,
+        LlmCallOptions(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        ),
     )

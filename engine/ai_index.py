@@ -8,6 +8,8 @@ import re
 import time
 from typing import Any
 
+from engine.llm.config import LlmConfig, resolve_optional_product_llm_config
+
 logger = logging.getLogger("dbfox.ai_index")
 
 # ── Tokenization ────────────────────────────────────────────────────────────────
@@ -164,6 +166,7 @@ def enrich_tables_batch(
     *,
     provider: str = "aliyun",
     model: str = "qwen-plus",
+    llm_config: LlmConfig | None = None,
     api_key: str | None = None,
     api_base: str | None = None,
     max_retries: int = 3,
@@ -179,6 +182,14 @@ def enrich_tables_batch(
     if not tables_context:
         return {"tables": []}
 
+    resolved_llm_config = llm_config or resolve_optional_product_llm_config(
+        api_key=api_key,
+        api_base=api_base,
+        model_name=model,
+    )
+    if resolved_llm_config is None:
+        raise RuntimeError("请先在设置中配置 LLM API Key。")
+
     prompt = _build_enrich_prompt(tables_context)
     last_error = None
 
@@ -187,9 +198,7 @@ def enrich_tables_batch(
             result = _call_llm(
                 prompt,
                 provider=provider,
-                model=model,
-                api_key=api_key,
-                api_base=api_base,
+                llm_config=resolved_llm_config,
             )
             parsed = json.loads(result) if isinstance(result, str) else result
             _validate_enrich_result(parsed, [t["name"] for t in tables_context])
@@ -238,43 +247,28 @@ def _call_llm(
     prompt: str,
     *,
     provider: str,
-    model: str,
-    api_key: str | None = None,
-    api_base: str | None = None,
+    llm_config: LlmConfig,
 ) -> str:
     """Call the configured LLM provider. Extend this for additional providers."""
     if provider == "aliyun":
-        return _call_aliyun_llm(prompt, model=model, api_key=api_key, api_base=api_base)
+        return _call_aliyun_llm(prompt, llm_config=llm_config)
     raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 def _call_aliyun_llm(
     prompt: str,
     *,
-    model: str,
-    api_key: str | None = None,
-    api_base: str | None = None,
+    llm_config: LlmConfig,
 ) -> str:
-    """Call Aliyun (Qwen) via OpenAI-compatible API.
-
-    API key resolution mirrors engine.llm.factory.get_chat_model so that
-    the same .env vars work for both Agent conversations and AI enrichment.
-    """
-    import os
+    """Call Aliyun (Qwen) via OpenAI-compatible API."""
     import httpx
     from openai import OpenAI
 
-    # ── API key ──
-    resolved_api_key = str(api_key or os.getenv("OPENAI_API_KEY") or "").strip()
+    resolved_api_key = llm_config.api_key.strip()
     if not resolved_api_key:
         raise RuntimeError("请先在设置中配置 LLM API Key。")
 
-    # ── API base ──
-    resolved_api_base = (
-        api_base
-        or os.getenv("OPENAI_API_BASE")
-        or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    ).strip()
+    resolved_api_base = llm_config.api_base.strip()
 
     # ── Timing & token budget ──
     prompt_chars = len(prompt)
@@ -291,7 +285,7 @@ def _call_aliyun_llm(
         max_retries=0,  # we handle retries in enrich_tables_batch
     )
     response = client.chat.completions.create(
-        model=model,
+        model=llm_config.model_name,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         max_tokens=output_tokens,
