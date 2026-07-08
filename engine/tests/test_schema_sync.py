@@ -3,6 +3,8 @@ import uuid
 import pytest
 import engine.schema_sync as schema_sync_module
 from engine.llm.config import LlmConfig
+from engine.environment.inventory import ColumnInventory, SchemaInventory, TableInventory
+from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.schema_sync import sync_schema, build_er_diagram_data
 from engine.models import DataSource, SchemaTable, SchemaColumn
 
@@ -109,6 +111,74 @@ def test_sync_idempotent(db_session, test_datasource) -> None:
 
     assert second_count == initial_count
     assert second_col_count == initial_col_count
+
+
+def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session, test_datasource) -> None:
+    syncer = SchemaCatalogSync()
+    initial_inventory = SchemaInventory(
+        datasource_id=test_datasource.id,
+        dialect="postgresql",
+        database_name="demo",
+        tables=[
+            TableInventory(
+                table_schema="tenant_a",
+                table_name="orders",
+                columns=[
+                    ColumnInventory(column_name="id", data_type="integer", is_nullable=False, is_primary_key=True),
+                    ColumnInventory(column_name="amount", data_type="numeric"),
+                ],
+            ),
+            TableInventory(
+                table_schema="tenant_b",
+                table_name="orders",
+                columns=[
+                    ColumnInventory(column_name="id", data_type="integer", is_nullable=False, is_primary_key=True),
+                    ColumnInventory(column_name="status", data_type="text"),
+                ],
+            ),
+        ],
+    )
+    syncer.sync_inventory(db_session, test_datasource.id, initial_inventory)
+
+    updated_inventory = SchemaInventory(
+        datasource_id=test_datasource.id,
+        dialect="postgresql",
+        database_name="demo",
+        tables=[
+            TableInventory(
+                table_schema="tenant_a",
+                table_name="orders",
+                columns=[
+                    ColumnInventory(column_name="id", data_type="integer", is_nullable=False, is_primary_key=True),
+                    ColumnInventory(column_name="amount_cents", data_type="integer"),
+                ],
+            ),
+            TableInventory(
+                table_schema="tenant_b",
+                table_name="orders",
+                columns=[
+                    ColumnInventory(column_name="id", data_type="integer", is_nullable=False, is_primary_key=True),
+                    ColumnInventory(column_name="state", data_type="text"),
+                ],
+            ),
+        ],
+    )
+
+    syncer.sync_inventory(db_session, test_datasource.id, updated_inventory)
+
+    tables = db_session.query(SchemaTable).filter(
+        SchemaTable.data_source_id == test_datasource.id,
+        SchemaTable.table_name == "orders",
+    ).all()
+    columns_by_schema = {
+        table.table_schema: {column.column_name for column in table.columns}
+        for table in tables
+    }
+
+    assert columns_by_schema == {
+        "tenant_a": {"id", "amount_cents"},
+        "tenant_b": {"id", "state"},
+    }
 
 
 def test_sync_failure_status(db_session) -> None:

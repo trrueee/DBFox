@@ -2,6 +2,7 @@ import { request } from "./client";
 
 export interface EngineSchemaTable {
   id: string;
+  table_schema?: string | null;
   table_name: string;
   table_comment: string;
   table_type?: string | null;

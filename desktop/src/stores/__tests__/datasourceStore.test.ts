@@ -173,7 +173,7 @@ describe("datasourceStore — schema column loading", () => {
     expect(useDatasourceStore.getState().tableColumns).toEqual({});
   });
 
-  it("loads a single table's columns on demand and caches them by table name", async () => {
+  it("loads a single table's columns on demand and caches them by table id", async () => {
     const tables: EngineSchemaTable[] = [
       { id: "table-users", table_name: "users", table_comment: "" },
       { id: "table-orders", table_name: "orders", table_comment: "" },
@@ -198,7 +198,55 @@ describe("datasourceStore — schema column loading", () => {
 
     expect(result).toEqual(columns);
     expect(listColumns).toHaveBeenCalledWith("table-users");
-    expect(useDatasourceStore.getState().tableColumns).toEqual({ users: columns });
+    expect(useDatasourceStore.getState().tableColumns).toEqual({ "table-users": columns });
+  });
+
+  it("does not reuse cached columns for duplicate table names in different schemas", async () => {
+    const tables: EngineSchemaTable[] = [
+      { id: "table-public-users", table_schema: "public", table_name: "users", table_comment: "" },
+      { id: "table-audit-users", table_schema: "audit", table_name: "users", table_comment: "" },
+    ];
+    const publicColumns: EngineColumn[] = [
+      {
+        id: "col-public-id",
+        column_name: "id",
+        data_type: "INTEGER",
+        column_type: "INTEGER",
+        is_nullable: false,
+        column_default: "",
+        column_comment: "",
+        is_primary_key: true,
+        is_foreign_key: false,
+      },
+    ];
+    const auditColumns: EngineColumn[] = [
+      {
+        id: "col-audit-event-id",
+        column_name: "event_id",
+        data_type: "INTEGER",
+        column_type: "INTEGER",
+        is_nullable: false,
+        column_default: "",
+        column_comment: "",
+        is_primary_key: true,
+        is_foreign_key: false,
+      },
+    ];
+    vi.mocked(listColumns).mockImplementation((tableId: string) =>
+      Promise.resolve(tableId === "table-public-users" ? publicColumns : auditColumns),
+    );
+    useDatasourceStore.setState({ tables });
+
+    const firstResult = await useDatasourceStore.getState().loadTableColumns("table-public-users");
+    const secondResult = await useDatasourceStore.getState().loadTableColumns("table-audit-users");
+
+    expect(firstResult).toEqual(publicColumns);
+    expect(secondResult).toEqual(auditColumns);
+    expect(listColumns).toHaveBeenCalledTimes(2);
+    expect(useDatasourceStore.getState().tableColumns).toEqual({
+      "table-public-users": publicColumns,
+      "table-audit-users": auditColumns,
+    });
   });
 
   it("keeps concurrency limited for explicit batch column loads", async () => {

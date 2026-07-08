@@ -336,6 +336,10 @@ fn probe_engine_health(port: u16) -> Result<(), String> {
     }
 }
 
+fn python_dev_engine_args() -> [&'static str; 3] {
+    ["-m", "engine.main", "--no-reload"]
+}
+
 fn spawn_python_engine(token: &str) -> Result<Child, String> {
     if cfg!(debug_assertions) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -345,7 +349,7 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
             .unwrap()
             .to_path_buf();
         match Command::new("python")
-            .args(["-m", "engine.main"])
+            .args(python_dev_engine_args())
             .env("PYTHONPATH", &root)
             .env("DBFOX_ENGINE_PORT", "0")
             .env("DBFOX_ENGINE_TOKEN", token)
@@ -452,6 +456,14 @@ mod tests {
     #[test]
     fn ignores_non_ready_stdout_line() {
         assert_eq!(parse_engine_ready_line("INFO: started server process"), None);
+    }
+
+    #[test]
+    fn dev_engine_args_disable_python_reload() {
+        assert_eq!(
+            python_dev_engine_args(),
+            ["-m", "engine.main", "--no-reload"]
+        );
     }
 
     #[test]

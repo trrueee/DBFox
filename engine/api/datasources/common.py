@@ -40,6 +40,7 @@ def datasource_to_dict(ds: DataSource) -> dict[str, Any]:
 def schema_table_to_dict(table: SchemaTable) -> dict[str, Any]:
     return {
         "id": table.id,
+        "table_schema": table.table_schema or "",
         "table_name": table.table_name,
         "table_comment": table.table_comment or "",
         "table_type": table.table_type,

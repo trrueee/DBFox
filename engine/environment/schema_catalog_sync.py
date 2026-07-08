@@ -29,6 +29,14 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _table_identity(table_schema: str | None, table_name: str) -> tuple[str, str]:
+    return (table_schema or "", table_name)
+
+
+def _only_unique(values: list[str]) -> str | None:
+    return values[0] if len(values) == 1 else None
+
+
 def rebuild_search_docs(db: Session, datasource_id: str) -> None:
     """Rebuild all schema_search_docs rows for a datasource based on current SchemaTable/SchemaColumn metadata.
     This generates search text offline using table/column names, types, comments, and any existing AI metadata.
@@ -180,17 +188,18 @@ class SchemaCatalogSync:
         result = SyncResult(datasource_id=datasource_id)
 
         # Upsert tables
-        existing_tables: dict[str, SchemaTable] = {
-            t.table_name: t
+        existing_tables: dict[tuple[str, str], SchemaTable] = {
+            _table_identity(t.table_schema, t.table_name): t
             for t in db.query(SchemaTable)
             .filter(SchemaTable.data_source_id == datasource_id)
             .all()
         }
-        incoming_names: set[str] = set()
+        incoming_table_keys: set[tuple[str, str]] = set()
 
         for table_inv in inventory.tables:
-            incoming_names.add(table_inv.table_name)
-            schema_table = existing_tables.get(table_inv.table_name)
+            table_key = _table_identity(table_inv.table_schema, table_inv.table_name)
+            incoming_table_keys.add(table_key)
+            schema_table = existing_tables.get(table_key)
             if schema_table is None:
                 schema_table = SchemaTable(
                     id=str(uuid.uuid4()),
@@ -207,6 +216,8 @@ class SchemaCatalogSync:
                 db.add(schema_table)
                 result.tables_created += 1
             else:
+                schema_table.table_schema = table_inv.table_schema or ""
+                schema_table.table_name = table_inv.table_name
                 schema_table.table_comment = table_inv.comment
                 schema_table.table_type = table_inv.table_type
                 schema_table.row_count_estimate = table_inv.row_count_estimate or 0
@@ -215,14 +226,15 @@ class SchemaCatalogSync:
                 result.tables_updated += 1
 
             db.flush()  # populate schema_table.id for FK
+            existing_tables[table_key] = schema_table
 
             # Upsert columns
             self._sync_columns(db, schema_table.id, table_inv, result)
 
         # Remove tables that no longer exist in the live datasource
-        removed_names = set(existing_tables.keys()) - incoming_names
-        for removed_name in removed_names:
-            removed_table = existing_tables[removed_name]
+        removed_keys = set(existing_tables.keys()) - incoming_table_keys
+        for removed_key in removed_keys:
+            removed_table = existing_tables[removed_key]
             db.query(SchemaColumn).filter(
                 SchemaColumn.table_id == removed_table.id
             ).delete()
@@ -231,14 +243,20 @@ class SchemaCatalogSync:
 
         # Resolve foreign keys
         all_tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
-        table_name_to_id = {t.table_name: t.id for t in all_tables}
+        table_key_to_id = {_table_identity(t.table_schema, t.table_name): t.id for t in all_tables}
+        table_ids_by_name: dict[str, list[str]] = {}
 
-        column_name_to_id: dict[tuple[str, str], str] = {}
-        column_objects: dict[tuple[str, str], SchemaColumn] = {}
+        column_name_to_id: dict[tuple[str, str, str], str] = {}
+        column_ids_by_name: dict[tuple[str, str], list[str]] = {}
+        column_objects: dict[tuple[str, str, str], SchemaColumn] = {}
         for t in all_tables:
+            table_key = _table_identity(t.table_schema, t.table_name)
+            table_ids_by_name.setdefault(t.table_name, []).append(t.id)
             for col in t.columns:
-                column_name_to_id[(t.table_name, col.column_name)] = col.id
-                column_objects[(t.table_name, col.column_name)] = col
+                column_key = (*table_key, col.column_name)
+                column_name_to_id[column_key] = col.id
+                column_ids_by_name.setdefault((t.table_name, col.column_name), []).append(col.id)
+                column_objects[column_key] = col
 
         # Reset foreign key fields first (in case some were removed)
         for col in column_objects.values():
@@ -248,15 +266,22 @@ class SchemaCatalogSync:
 
         # Set foreign keys from inventory
         for table_inv in inventory.tables:
-            t_name = table_inv.table_name
+            table_key = _table_identity(table_inv.table_schema, table_inv.table_name)
             for fk in table_inv.foreign_keys:
                 c_name = fk.column_name
                 ref_t_name = fk.referenced_table
                 ref_c_name = fk.referenced_column
+                ref_schema = getattr(fk, "referenced_schema", None) or table_key[0]
+                ref_table_key = _table_identity(ref_schema, ref_t_name)
 
-                fk_col = column_objects.get((t_name, c_name))
-                ref_table_id = table_name_to_id.get(ref_t_name)
-                ref_col_id = column_name_to_id.get((ref_t_name, ref_c_name))
+                fk_col = column_objects.get((*table_key, c_name))
+                ref_table_id = table_key_to_id.get(ref_table_key)
+                ref_col_id = column_name_to_id.get((*ref_table_key, ref_c_name))
+
+                if ref_table_id is None:
+                    ref_table_id = _only_unique(table_ids_by_name.get(ref_t_name, []))
+                if ref_col_id is None:
+                    ref_col_id = _only_unique(column_ids_by_name.get((ref_t_name, ref_c_name), []))
 
                 if fk_col and ref_table_id and ref_col_id:
                     fk_col.is_foreign_key = True

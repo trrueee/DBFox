@@ -31,6 +31,11 @@ export function useAppCommands({
   openTableTab,
 }: UseAppCommandsProps) {
   const commandItems = useMemo<CommandItem[]>(() => {
+    const tableById = new Map(tables.map((table) => [table.id, table]));
+    const tableDisplayName = (table: EngineSchemaTable) => {
+      const schemaName = table.table_schema || table.module_tag || "";
+      return schemaName ? `${schemaName}.${table.table_name}` : table.table_name;
+    };
     const items: CommandItem[] = [
       {
         id: "new-sql",
@@ -92,21 +97,25 @@ export function useAppCommands({
     ];
 
     tables.forEach((table) => {
+      const displayName = tableDisplayName(table);
       items.push({
-        id: `table-${table.table_name}`,
-        name: `打开表: ${table.table_name}`,
-        category: `数据表 (${table.module_tag || "未分组"})`,
+        id: `table-${table.id}`,
+        name: `打开表: ${displayName}`,
+        category: `数据表 (${table.table_schema || table.module_tag || "未分组"})`,
         icon: <FileText size={13} className="text-blue-500" />,
         action: () => openTableTab(table.table_name),
       });
     });
 
-    Object.entries(tableColumns).forEach(([tableName, columns]) => {
+    Object.entries(tableColumns).forEach(([tableId, columns]) => {
+      const table = tableById.get(tableId);
+      const tableName = table?.table_name ?? tableId;
+      const displayName = table ? tableDisplayName(table) : tableName;
       columns.forEach((col) => {
         items.push({
-          id: `field-${tableName}-${col.column_name}`,
-          name: `查看字段: ${tableName}.${col.column_name} (${col.column_type})`,
-          category: `表字段 (${tableName})`,
+          id: `field-${tableId}-${col.column_name}`,
+          name: `查看字段: ${displayName}.${col.column_name} (${col.column_type})`,
+          category: `表字段 (${displayName})`,
           icon: <HelpCircle size={13} className="text-slate-400" />,
           action: () => openTableTab(tableName),
         });

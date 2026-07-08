@@ -48,7 +48,7 @@ function isTransientEngineFetchError(error: unknown) {
 }
 
 async function loadColumnsWithLimit(tables: EngineSchemaTable[]) {
-  const results: Array<{ name: string; columns: EngineColumn[] }> = new Array(tables.length);
+  const results: Array<{ id: string; columns: EngineColumn[] }> = new Array(tables.length);
   let nextIndex = 0;
 
   async function worker() {
@@ -58,9 +58,9 @@ async function loadColumnsWithLimit(tables: EngineSchemaTable[]) {
       const table = tables[index];
       try {
         const columns = await listColumns(table.id);
-        results[index] = { name: table.table_name, columns };
+        results[index] = { id: table.id, columns };
       } catch {
-        results[index] = { name: table.table_name, columns: [] };
+        results[index] = { id: table.id, columns: [] };
       }
     }
   }
@@ -144,14 +144,14 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
   loadTableColumns: async (tableId: string) => {
     const table = get().tables.find((item) => item.id === tableId);
     if (!table) return [];
-    const cached = get().tableColumns[table.table_name];
+    const cached = get().tableColumns[table.id];
     if (cached) return cached;
 
     const columns = await listColumns(table.id);
     set((state) => ({
       tableColumns: {
         ...state.tableColumns,
-        [table.table_name]: columns,
+        [table.id]: columns,
       },
     }));
     return columns;
@@ -160,11 +160,11 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
   loadColumnsForTables: async (tableIds: string[]) => {
     const requested = new Set(tableIds);
     const targetTables = get().tables.filter((table) => requested.has(table.id));
-    const missingTables = targetTables.filter((table) => !get().tableColumns[table.table_name]);
+    const missingTables = targetTables.filter((table) => !get().tableColumns[table.id]);
     const results = await loadColumnsWithLimit(missingTables);
     const nextColumns: Record<string, EngineColumn[]> = { ...get().tableColumns };
-    for (const { name, columns } of results) {
-      nextColumns[name] = columns;
+    for (const { id, columns } of results) {
+      nextColumns[id] = columns;
     }
     set({ tableColumns: nextColumns });
     return nextColumns;
