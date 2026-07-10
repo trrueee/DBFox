@@ -33,6 +33,7 @@ from engine.security.credential_vault import (
 
 logger = logging.getLogger("dbfox.api.datasources.crud")
 router = APIRouter()
+_CONNECTION_TEST_FAILED_MESSAGE = "数据库连接测试失败，请检查连接配置。"
 
 
 class DatasourceDeleteConfirmRequest(BaseModel):
@@ -125,10 +126,16 @@ def _release_credential_lease(vault: CredentialVault, lease_id: str | None) -> N
     if not lease_id:
         return
     try:
-        for credential_id in get_credential_lease_registry().release(lease_id):
+        for credential_id in get_credential_lease_registry().abort_claimed(lease_id):
             vault.delete(credential_id)
     except Exception as exc:
         logger.warning("Could not release datasource credential lease (%s)", type(exc).__name__)
+
+
+def _public_connection_test_failure(exc: Exception) -> DataSourceConnectionError:
+    """Log only safe diagnostics and return a fixed client-facing failure."""
+    logger.warning("Connection test failed (%s)", type(exc).__name__)
+    return DataSourceConnectionError(_CONNECTION_TEST_FAILED_MESSAGE)
 
 
 def _commit_credential_lease(lease_id: str | None) -> None:
@@ -149,12 +156,18 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     vault = get_credential_vault()
     lease_id = _claim_credential_lease(req, _request_credential_ids(req))
     try:
-        return test_connection(_connection_test_config(req))
-    except DBFoxError:
-        raise
-    except Exception as exc:
-        logger.exception("Connection test failed")
-        raise DataSourceConnectionError(f"数据库连接测试失败: {str(exc)}") from exc
+        try:
+            config = _connection_test_config(req)
+        except DBFoxError:
+            # Credential/vault contract errors are already typed and safe.
+            raise
+        except Exception as exc:
+            raise _public_connection_test_failure(exc) from None
+
+        try:
+            return test_connection(config)
+        except Exception as exc:
+            raise _public_connection_test_failure(exc) from None
     finally:
         _release_credential_lease(vault, lease_id)
 

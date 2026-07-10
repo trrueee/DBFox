@@ -69,10 +69,16 @@ class CredentialLeaseRegistry:
             if self._claimed.pop(lease_id, None) is None:
                 raise DBFoxError("Credential lease was not claimed.", code="CREDENTIAL_LEASE_INVALID")
 
-    def release(self, lease_id: str) -> set[str]:
-        """Return IDs owned by an active/claimed lease, or nothing if already consumed."""
+    def release_pending(self, lease_id: str) -> set[str]:
+        """Return IDs owned by a pending lease, never a claimed lease."""
         with self._lock:
-            lease = self._claimed.pop(lease_id, None) or self._leases.pop(lease_id, None)
+            lease = self._leases.pop(lease_id, None)
+        return set(lease.credential_ids) if lease is not None else set()
+
+    def abort_claimed(self, lease_id: str) -> set[str]:
+        """Return IDs held by the owning backend operation after claim."""
+        with self._lock:
+            lease = self._claimed.pop(lease_id, None)
         return set(lease.credential_ids) if lease is not None else set()
 
 
@@ -89,10 +95,10 @@ def release_credential_lease(
     vault: CredentialVault | None = None,
     leases: CredentialLeaseRegistry | None = None,
 ) -> None:
-    """Delete only references owned by an uncommitted server-issued lease."""
+    """Delete only references owned by a still-pending server-issued lease."""
     credential_vault = vault or get_credential_vault()
     registry = leases or get_credential_lease_registry()
-    for credential_id in registry.release(lease_id):
+    for credential_id in registry.release_pending(lease_id):
         credential_vault.delete(credential_id)
 
 

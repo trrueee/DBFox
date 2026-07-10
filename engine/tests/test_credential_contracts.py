@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from engine.agent_core.types import AgentRunRequest
+import engine.api.credentials as credentials_api
 import engine.api.datasources.crud as datasource_crud
 from engine.api.credentials import CredentialLeaseRegistry
 import engine.datasource as datasource_module
@@ -138,6 +139,54 @@ def test_create_datasource_persists_only_opaque_credential_references(db_session
     assert datasource.ssh_key_passphrase_credential_id == ssh_key_passphrase_credential_id
 
 
+def test_external_release_cannot_delete_a_credential_after_create_claim(
+    db_session,
+    monkeypatch,
+) -> None:
+    vault = InMemoryCredentialVault()
+    credentials = CredentialLeaseRegistry()
+    credential_id = vault.put(
+        kind=CredentialKind.DATASOURCE_PASSWORD,
+        secret="claimed-datasource-password",
+    )
+    lease_id = credentials.issue({credential_id})
+    monkeypatch.setattr(datasource_crud, "get_credential_vault", lambda: vault)
+    monkeypatch.setattr(datasource_crud, "get_credential_lease_registry", lambda: credentials)
+    monkeypatch.setattr(credentials_api, "get_credential_vault", lambda: vault)
+    monkeypatch.setattr(credentials_api, "get_credential_lease_registry", lambda: credentials)
+
+    original_commit = db_session.commit
+    release_attempts = 0
+
+    def commit_after_external_release() -> None:
+        nonlocal release_attempts
+        release_attempts += 1
+        credentials_api.api_release_credential_lease(lease_id)
+        original_commit()
+
+    monkeypatch.setattr(db_session, "commit", commit_after_external_release)
+
+    response = datasource_crud.api_create_datasource(
+        DataSourceCreateRequest(
+            name="claimed credential datasource",
+            db_type="sqlite",
+            host="",
+            port=0,
+            database_name="C:/data/warehouse.sqlite",
+            username="",
+            password_credential_id=credential_id,
+            credential_lease_id=lease_id,
+        ),
+        db_session,
+    )
+
+    datasource = db_session.get(DataSource, response["id"])
+    assert release_attempts >= 1
+    assert datasource is not None
+    assert datasource.password_credential_id == credential_id
+    assert vault.get(credential_id) == "claimed-datasource-password"
+
+
 def test_agent_run_metadata_persists_the_llm_credential_reference_only() -> None:
     columns = set(AgentRun.__table__.columns.keys())
 
@@ -210,6 +259,36 @@ def test_datasource_test_never_calls_the_driver_with_an_empty_password(
         )
 
     assert driver_calls == []
+
+
+@pytest.mark.parametrize("exception_factory", [RuntimeError, DataSourceConnectionError])
+def test_datasource_test_never_exposes_or_logs_a_driver_exception_sentinel(
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+    exception_factory,
+) -> None:
+    sentinel = "driver-tunnel-sentinel-not-a-redaction-pattern"
+
+    def fail_connection(_config):
+        raise exception_factory(sentinel)
+
+    monkeypatch.setattr(datasource_crud, "test_connection", fail_connection)
+
+    with pytest.raises(DataSourceConnectionError) as exc_info:
+        datasource_crud.api_test_connection(
+            DataSourceTestRequest(
+                db_type="sqlite",
+                host="",
+                port=0,
+                database_name="C:/data/warehouse.sqlite",
+                username="",
+            )
+        )
+
+    assert exc_info.value.code == "CONNECTION_FAILED"
+    assert str(exc_info.value) == "数据库连接测试失败，请检查连接配置。"
+    assert sentinel not in repr(exc_info.value)
+    assert sentinel not in caplog.text
 
 
 def test_datasource_test_rejects_a_client_claimed_lease_without_deleting_a_saved_credential(
