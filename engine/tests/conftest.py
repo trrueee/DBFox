@@ -367,8 +367,6 @@ def _make_datasource(db_session, db_dir: Path, ds_id: str | None = None) -> Data
         port=0,
         database_name=db_path,
         username="test",
-        password_ciphertext="test",
-        password_nonce="test",
         db_type="sqlite",
         status="active",
     )

@@ -74,6 +74,99 @@ def test_keyring_reads_fail_closed_when_backend_is_unavailable(monkeypatch: pyte
     assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
 
 
+def test_keyring_vault_rejects_an_insecure_backend_before_writing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vault = KeyringCredentialVault()
+    writes: list[tuple[object, ...]] = []
+
+    class InsecureFileBackend:
+        pass
+
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.get_keyring",
+        lambda: InsecureFileBackend(),
+    )
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.set_password",
+        lambda *args: writes.append(args),
+    )
+
+    with pytest.raises(DBFoxError) as exc_info:
+        vault.put(kind=CredentialKind.LLM_API_KEY, secret="sk-phase1-sentinel")
+
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert writes == []
+
+
+def test_keyring_vault_rejects_an_insecure_backend_before_any_get(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A kind mismatch must not become a way to probe an insecure backend."""
+    vault = KeyringCredentialVault()
+    reads: list[tuple[object, ...]] = []
+
+    class InsecureChainerBackend:
+        pass
+
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.get_keyring",
+        lambda: InsecureChainerBackend(),
+    )
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.get_password",
+        lambda *args: reads.append(args),
+    )
+
+    with pytest.raises(DBFoxError) as exc_info:
+        vault.get(
+            "cred_datasource_password_123",
+            expected_kind=CredentialKind.LLM_API_KEY,
+        )
+
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert reads == []
+
+
+def test_keyring_vault_rejects_an_insecure_backend_before_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vault = KeyringCredentialVault()
+    deleted: list[tuple[object, ...]] = []
+
+    class InsecurePlaintextBackend:
+        pass
+
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.get_keyring",
+        lambda: InsecurePlaintextBackend(),
+    )
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.delete_password",
+        lambda *args: deleted.append(args),
+    )
+
+    with pytest.raises(DBFoxError) as exc_info:
+        vault.delete("cred_llm_api_key_123")
+
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert deleted == []
+
+
+def test_keyring_vault_validates_empty_secret_before_backend_handling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vault = KeyringCredentialVault()
+
+    monkeypatch.setattr(
+        "engine.security.credential_vault.keyring.set_password",
+        lambda *_args: pytest.fail("empty secrets must not reach keyring"),
+    )
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        vault.put(kind=CredentialKind.LLM_API_KEY, secret="  ")
+
+
 def test_llm_config_resolves_a_secret_only_from_an_opaque_reference() -> None:
     from engine.llm.config import resolve_product_llm_config_from_credential
 

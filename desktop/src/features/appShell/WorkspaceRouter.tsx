@@ -13,6 +13,8 @@ import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
 import { useApiConfig } from "../../components/SettingsDialog";
 import { LlmConfigPanel } from "../../components/LlmConfigPanel";
 import { testLlmConnection } from "../../lib/api/agent";
+import { enrollCredentials, releaseCredentialLease } from "../../lib/api/credentials";
+import type { LlmConfigDraft } from "../../lib/api/types/config";
 import { buildLlmTestValues } from "../../lib/llmConfig";
 import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -291,7 +293,7 @@ function openQueryResult(queryText: string) {
 
 // ── LlmConfigTab ──
 function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: (msg: string) => void }) {
-  const { config, draft, updateDraft, handleSave } = useApiConfig();
+  const { draft, updateDraft, handleSave } = useApiConfig();
 
   return (
     <WorkspaceShell title={activeTab.title} description="配置桌面端智能问数使用的模型接口。">
@@ -311,12 +313,7 @@ function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab
         onTestConnection={async () => {
           showToast("正在测试与模型接口握手…");
           try {
-            const llm = buildLlmTestValues(config);
-            const result = await testLlmConnection(
-              llm.llmCredentialId,
-              llm.apiBase,
-              llm.modelName,
-            );
+            const result = await testDraftLlmConnection(draft);
             if (result.ok) {
               showToast(`连接测试通过 (${result.latency_ms}ms)，模型 ${result.model} 可达`);
             } else {
@@ -330,4 +327,34 @@ function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab
       />
     </WorkspaceShell>
   );
+}
+
+/**
+ * Tests an unsaved draft without persisting its raw API key. A draft key is
+ * enrolled as a server-owned lease and released after either outcome.
+ */
+export async function testDraftLlmConnection(draft: LlmConfigDraft) {
+  const llm = buildLlmTestValues(draft);
+  const apiKey = draft.apiKey.trim();
+  if (!apiKey) {
+    return testLlmConnection(llm.llmCredentialId, llm.apiBase, llm.modelName);
+  }
+
+  const enrollment = await enrollCredentials([
+    { kind: "llm_api_key", secret: apiKey },
+  ]);
+  if (!enrollment) {
+    throw new Error("无法创建临时 LLM 凭据。");
+  }
+  const credential = enrollment.credentials.find((reference) => reference.kind === "llm_api_key");
+  if (!credential) {
+    await releaseCredentialLease(enrollment.lease_id).catch(() => undefined);
+    throw new Error("临时 LLM 凭据无效。");
+  }
+
+  try {
+    return await testLlmConnection(credential.id, llm.apiBase, llm.modelName);
+  } finally {
+    await releaseCredentialLease(enrollment.lease_id).catch(() => undefined);
+  }
 }

@@ -11,12 +11,13 @@ from typing import Any
 from sqlalchemy.orm import Session as OrmSession
 
 from engine.ai_index import (
+    LLM_ENRICH_FAILED,
     build_column_search_text,
     build_table_search_text,
     compute_schema_hash,
     enrich_tables_batch,
 )
-from engine.llm.config import LlmConfig, resolve_optional_product_llm_config
+from engine.llm.config import LlmConfig
 from engine.models import DomainTagRule, SchemaColumn, SchemaSearchDoc, SchemaTable
 
 logger = logging.getLogger("dbfox.ai_enrich")
@@ -35,9 +36,6 @@ def ai_enrich_catalog(
     *,
     table_batch: int = AI_LLM_TABLE_BATCH,
     llm_config: LlmConfig | None = None,
-    api_key: str | None = None,
-    api_base: str | None = None,
-    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Run AI enrichment on all changed tables for a datasource."""
     tables = (
@@ -57,12 +55,7 @@ def ai_enrich_catalog(
     if not changed:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "no structural changes"}
 
-    resolved_llm_config = llm_config or resolve_optional_product_llm_config(
-        api_key=api_key,
-        api_base=api_base,
-        model_name=model_name,
-    )
-    if resolved_llm_config is None:
+    if llm_config is None:
         return {"ai_enriched": False, "enriched_count": 0, "reason": "请先在设置中配置 LLM API Key。"}
 
     # 3. Cap total tables per run to avoid overwhelming the LLM
@@ -106,7 +99,7 @@ def ai_enrich_catalog(
         try:
             ai_result = enrich_tables_batch(
                 context,
-                llm_config=resolved_llm_config,
+                llm_config=llm_config,
             )
             _write_ai_metadata(db, batch, ai_result)
             from engine.environment.schema_catalog_sync import rebuild_search_docs
@@ -114,8 +107,12 @@ def ai_enrich_catalog(
             _update_schema_hashes(batch)
             enriched_count += len(batch)
         except Exception as exc:
-            logger.exception("AI enrich batch %d failed: %s", i // table_batch, exc)
-            errors.append(str(exc))
+            logger.warning(
+                "AI enrich batch %d failed (%s)",
+                i // table_batch,
+                type(exc).__name__,
+            )
+            errors.append(LLM_ENRICH_FAILED)
             db.rollback()
             continue
 

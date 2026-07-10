@@ -5,7 +5,6 @@ from typing import Any
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
-from engine.llm import get_chat_model
 from engine.agent.model.system_prompt import build_system_prompt
 from engine.agent.model.context_builder import build_context_message, build_progress_guidance_message
 from engine.agent.tools.langchain_tools import build_langchain_tools
@@ -13,6 +12,7 @@ from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import message_content_text
 from engine.agent.progress.fast_path import _max_steps_reason
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
 
 import logging
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.model_node")
@@ -68,80 +68,85 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
             ],
         }
 
-    ctx = graph_context(config)
-    model_name = ctx.model_name
-    api_key = ctx.api_key
-    api_base = ctx.api_base
-    registry = ctx.registry
+    try:
+        ctx = graph_context(config)
+        registry = ctx.registry
 
-    if not ctx.has_llm_credentials:
-        from langchain_core.messages import AIMessage
-        return {
-            "messages": [AIMessage(content="Agent requires a configured LLM API key.")],
-            "status": "failed",
-            "error": "No LLM credentials.",
-            "trace_events": [{"type": "agent.model.blocked", "reason": "no_llm_credentials"}],
-        }
-
-    allowed_groups = state.get("allowed_tool_groups")
-    # None (not []) means "all tools" for backward compatibility.
-    # An empty list means "no tools" (pure chat / product_help / database_concept).
-    tools = build_langchain_tools(registry, allowed_groups=allowed_groups)
-
-    # Always bind escalate.tool_group so the model can request additional
-    # tool groups even when the current plan scope is too narrow.
-    escalate_tool = _build_escalate_tool(registry)
-    if escalate_tool:
-        tools = list(tools)
-        tools.append(escalate_tool)
-
-    model = get_chat_model(
-        model_name=model_name,
-        api_key=api_key,
-        api_base=api_base,
-    )
-    if tools:
-        model_with_tools = model.bind_tools(tools)
-    else:
-        model_with_tools = model
-
-    messages = [
-        SystemMessage(content=build_system_prompt(state)),
-        build_context_message(state),
-    ]
-
-    progress_msg = build_progress_guidance_message(state)
-    if progress_msg is not None:
-        messages.append(progress_msg)
-    history = state.get("messages", [])
-
-    # Compact message history to prevent context window overflow.
-    # Multi-turn ReAct loops accumulate tool messages rapidly —
-    # keep the most recent N tool messages, preserve all non-tool messages.
-    if len(history) > 20:
-        from engine.memory.memory_compactor import compact_messages
-        history = compact_messages(list(history))
-
-    messages.extend(history)
-
-    ai_msg = _stream_or_invoke_model_message(
-        model_with_tools,
-        messages,
-        config,
-    )
-
-    result: dict[str, Any] = {
-        "messages": [ai_msg],
-        "trace_events": [
-            {
-                "type": "agent.model.completed",
-                "content": message_content_text(ai_msg),
-                "tool_calls": getattr(ai_msg, "tool_calls", []) or [],
+        if not ctx.has_llm_credentials:
+            return {
+                "messages": [AIMessage(content="Agent requires a configured LLM API key.")],
+                "status": "failed",
+                "error": "No LLM credentials.",
+                "trace_events": [{"type": "agent.model.blocked", "reason": "no_llm_credentials"}],
             }
-        ],
-        "step_count": state.get("step_count", 0) + 1,
-    }
-    return result
+
+        allowed_groups = state.get("allowed_tool_groups")
+        # None (not []) means "all tools" for backward compatibility.
+        # An empty list means "no tools" (pure chat / product_help / database_concept).
+        tools = build_langchain_tools(registry, allowed_groups=allowed_groups)
+
+        # Always bind escalate.tool_group so the model can request additional
+        # tool groups even when the current plan scope is too narrow.
+        escalate_tool = _build_escalate_tool(registry)
+        if escalate_tool:
+            tools = list(tools)
+            tools.append(escalate_tool)
+
+        model = ctx.create_chat_model()
+        if tools:
+            model_with_tools = model.bind_tools(tools)
+        else:
+            model_with_tools = model
+
+        messages = [
+            SystemMessage(content=build_system_prompt(state)),
+            build_context_message(state),
+        ]
+
+        progress_msg = build_progress_guidance_message(state)
+        if progress_msg is not None:
+            messages.append(progress_msg)
+        history = state.get("messages", [])
+
+        # Compact message history to prevent context window overflow.
+        # Multi-turn ReAct loops accumulate tool messages rapidly —
+        # keep the most recent N tool messages, preserve all non-tool messages.
+        if len(history) > 20:
+            from engine.memory.memory_compactor import compact_messages
+            history = compact_messages(list(history))
+
+        messages.extend(history)
+
+        ai_msg = _stream_or_invoke_model_message(
+            model_with_tools,
+            messages,
+            config,
+        )
+
+        return {
+            "messages": [ai_msg],
+            "trace_events": [
+                {
+                    "type": "agent.model.completed",
+                    "content": message_content_text(ai_msg),
+                    "tool_calls": getattr(ai_msg, "tool_calls", []) or [],
+                }
+            ],
+            "step_count": state.get("step_count", 0) + 1,
+        }
+    except Exception as exc:
+        failure = public_agent_failure(exc, operation="run")
+        safe_agent_log(logger, operation="run", exc=exc)
+        return {
+            "status": "failed",
+            "error": failure.message,
+            "trace_events": [
+                {
+                    "type": "agent.model.failed",
+                    "error": failure.message,
+                }
+            ],
+        }
 
 
 def _stream_or_invoke_model_message(

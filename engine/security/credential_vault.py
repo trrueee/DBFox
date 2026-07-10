@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import sys
 from typing import Protocol
 from uuid import uuid4
 
@@ -41,6 +42,32 @@ class CredentialVaultUnavailableError(DBFoxError):
         )
 
 
+_OS_NATIVE_KEYRING_BACKENDS: dict[str, frozenset[tuple[str, str]]] = {
+    "win32": frozenset({("keyring.backends.Windows", "WinVaultKeyring")}),
+    "darwin": frozenset({("keyring.backends.macOS", "Keyring")}),
+    "linux": frozenset(
+        {
+            ("keyring.backends.SecretService", "Keyring"),
+            ("keyring.backends.kwallet", "DBusKeyring"),
+        }
+    ),
+}
+
+
+def _require_os_native_keyring_backend() -> None:
+    """Fail closed unless keyring selected a known OS-native secure backend."""
+    try:
+        backend = keyring.get_keyring()
+    except Exception as exc:
+        raise CredentialVaultUnavailableError() from exc
+
+    backend_type = type(backend)
+    allowed_backends = _OS_NATIVE_KEYRING_BACKENDS.get(sys.platform, frozenset())
+    backend_identity = (backend_type.__module__, backend_type.__name__)
+    if backend_identity not in allowed_backends:
+        raise CredentialVaultUnavailableError()
+
+
 def _normalized_secret(secret: str) -> str:
     value = secret.strip()
     if not value:
@@ -63,9 +90,11 @@ class KeyringCredentialVault:
     service_name = "com.dbfox.desktop.credentials"
 
     def put(self, *, kind: CredentialKind, secret: str) -> str:
+        value = _normalized_secret(secret)
         credential_id = _credential_id(kind)
+        _require_os_native_keyring_backend()
         try:
-            keyring.set_password(self.service_name, credential_id, _normalized_secret(secret))
+            keyring.set_password(self.service_name, credential_id, value)
         except Exception as exc:
             raise CredentialVaultUnavailableError() from exc
         return credential_id
@@ -76,6 +105,7 @@ class KeyringCredentialVault:
         *,
         expected_kind: CredentialKind | None = None,
     ) -> str | None:
+        _require_os_native_keyring_backend()
         if not _matches_expected_kind(credential_id, expected_kind):
             return None
         try:
@@ -84,6 +114,7 @@ class KeyringCredentialVault:
             raise CredentialVaultUnavailableError() from exc
 
     def delete(self, credential_id: str) -> None:
+        _require_os_native_keyring_backend()
         try:
             keyring.delete_password(self.service_name, credential_id)
         except keyring.errors.PasswordDeleteError:

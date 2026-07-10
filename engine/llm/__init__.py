@@ -8,22 +8,16 @@ Dependency rule:
 from engine.llm.config import (
     LlmConfig,
     LlmConfigurationError,
-    resolve_optional_product_llm_config,
-    resolve_product_llm_config,
-    resolve_support_llm_config_from_env,
+    resolve_product_llm_config_from_credential,
 )
-from engine.llm.factory import LLMClientFactory, LlmCallOptions, create_chat_model, get_chat_model
+from engine.llm.factory import LlmCallOptions, create_chat_model
 from engine.llm.structured import with_structured_output
 
 __all__ = [
-    "LLMClientFactory",
     "LlmCallOptions",
     "LlmConfig",
     "LlmConfigurationError",
     "create_chat_model",
-    "get_chat_model",
-    "resolve_optional_product_llm_config",
-    "resolve_product_llm_config",
-    "resolve_support_llm_config_from_env",
+    "resolve_product_llm_config_from_credential",
     "with_structured_output",
 ]

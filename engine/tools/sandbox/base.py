@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Define ExecutionContext, completely separating raw SQLAlchemy Session from tools
 class ExecutionContext(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     thread_id: str
     datasource_id: str
@@ -15,9 +15,6 @@ class ExecutionContext(BaseModel):
     user_id: str | None = None
     read_only: bool = True
     db_session: Any = Field(default=None, exclude=True)
-    api_key: str | None = None
-    api_base: str | None = None
-    model_name: str | None = None
 
     # Return a fully managed database connection, preventing tools from managing Session lifecycles
     def get_connection(self) -> Any:

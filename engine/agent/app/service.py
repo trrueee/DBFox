@@ -29,6 +29,7 @@ from engine.agent.app.context_builder import AgentContextBuilder
 from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
 from engine.agent.app.persistence_coordinator import AgentPersistenceCoordinator
 from engine.agent.app.stream_runner import AgentStreamRunner
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
 
 from engine.agent.app.persistence import (
     resolve_session_id,
@@ -44,12 +45,7 @@ from engine.agent.app.event_mapper import (
 logger = logging.getLogger("dbfox.dbfox_agent.service")
 
 def _runtime_error_message(exc: Exception) -> str:
-    from engine.llm.errors import llm_error_from_exception
-
-    llm_error = llm_error_from_exception(exc)
-    if llm_error is not None:
-        return str(llm_error)
-    return f"Internal agent error: {exc}"
+    return public_agent_failure(exc, operation="run").message
 
 
 class DBFoxAgentService:
@@ -159,7 +155,7 @@ class DBFoxAgentService:
             yield emit("agent.run.cancelled", error="Client disconnected — run cancelled.")
             return
         except Exception as exc:
-            logger.exception("Agent stream execution failed: %s", exc)
+            safe_agent_log(logger, operation="run", exc=exc, run_id=run_id)
             accumulated_state["status"] = "failed"
             accumulated_state["error"] = _runtime_error_message(exc)
 
@@ -309,7 +305,7 @@ class DBFoxAgentService:
             yield emit("agent.run.cancelled", error="Client disconnected — run cancelled.")
             return
         except Exception as exc:
-            logger.exception("Agent stream execution failed: %s", exc)
+            safe_agent_log(logger, operation="resume", exc=exc, run_id=run_id)
             accumulated_state["status"] = "failed"
             accumulated_state["error"] = _runtime_error_message(exc)
 

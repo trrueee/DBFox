@@ -35,9 +35,9 @@ PROJECTION_RETRY_CODES = frozenset({
 def should_retry_semantic(
     contract: QueryContract,
     violations: list[SemanticViolation],
-    has_api_key: str | None,
+    has_llm_credentials: bool,
 ) -> bool:
-    if not has_api_key:
+    if not has_llm_credentials:
         return False
     if contract.confidence < 0.7:
         return False

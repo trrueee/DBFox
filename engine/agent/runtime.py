@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from sqlalchemy.orm import Session
 
 from engine.agent_core import persistence as agent_persistence
+from engine.agent.app.error_boundary import safe_agent_log
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
 from engine.errors import DBFoxError
 
@@ -43,8 +44,8 @@ class DBFoxAgentRuntime:
             raise
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Agent runtime failed unexpectedly")
+        except Exception as exc:
+            safe_agent_log(logger, operation="run", exc=exc)
             raise DBFoxError(
                 "Agent 运行失败，请稍后重试或查看日志。",
                 code="AGENT_RUNTIME_ERROR",

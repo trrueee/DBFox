@@ -34,6 +34,7 @@ export interface DatasourceCredentialReferences {
 export function buildDatasourceTestPayload(
   form: DatasourceFormShape,
   credentials: DatasourceCredentialReferences = {},
+  credentialLeaseId: string | null = null,
 ) {
   return {
     db_type: form.db_type || "mysql",
@@ -54,6 +55,7 @@ export function buildDatasourceTestPayload(
     ssl_cert_path: form.ssl_cert_path || null,
     ssl_key_path: form.ssl_key_path || null,
     ssl_verify_identity: form.ssl_verify_identity !== false,
+    credential_lease_id: credentialLeaseId,
   };
 }
 
@@ -61,9 +63,10 @@ export function buildDatasourceCreatePayload(
   form: DatasourceFormShape,
   projectId?: string,
   credentials: DatasourceCredentialReferences = {},
+  credentialLeaseId: string | null = null,
 ) {
   return {
-    ...buildDatasourceTestPayload(form, credentials),
+    ...buildDatasourceTestPayload(form, credentials, credentialLeaseId),
     project_id: projectId,
     name: form.name || "",
     connection_mode: "direct",
@@ -75,9 +78,10 @@ export function buildDatasourceCreatePayload(
 export function buildDatasourceUpdatePayload(
   form: DatasourceFormShape,
   credentials: DatasourceCredentialReferences = {},
+  credentialLeaseId: string | null = null,
 ) {
   return {
-    ...buildDatasourceTestPayload(form, credentials),
+    ...buildDatasourceTestPayload(form, credentials, credentialLeaseId),
     name: form.name || "",
     connection_mode: "direct",
     is_read_only: Boolean(form.is_read_only),

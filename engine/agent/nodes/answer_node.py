@@ -8,6 +8,8 @@ from langchain_core.runnables import RunnableConfig
 from engine.agent.graph.context import graph_context
 from engine.agent.graph.message_utils import is_ai_message, message_content_text, message_tool_calls
 from engine.agent.graph.state import DBFoxAgentState
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
+from engine.llm.factory import LlmCallOptions
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.answer_node")
 
@@ -23,7 +25,7 @@ def synthesize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[st
     try:
         ctx = graph_context(config)
     except Exception as exc:
-        logger.warning("Skipping answer node; graph context unavailable: %s", exc)
+        safe_agent_log(logger, operation="run", exc=exc)
         return {}
 
     units = _analysis_units(state)
@@ -35,25 +37,29 @@ def synthesize_answer(state: DBFoxAgentState, config: RunnableConfig) -> dict[st
     try:
         from engine.agent_core import answer as answer_module
 
+        model = (
+            ctx.create_chat_model(LlmCallOptions(temperature=0.3))
+            if ctx.has_llm_credentials
+            else None
+        )
         answer = answer_module.synthesize_agent_answer(
             question=str(state.get("question") or getattr(ctx.request, "question", "") or ""),
             analysis_units=units,
             mode=mode,
             context=answer_context,
-            model_name=ctx.model_name,
-            api_key=ctx.api_key,
-            api_base=ctx.api_base,
+            model=model,
             error=state.get("error"),
             emit_answer_delta=_answer_delta_writer(),
         )
     except Exception as exc:
-        logger.warning("Failed to synthesize final answer: %s", exc)
+        failure = public_agent_failure(exc, operation="run")
+        safe_agent_log(logger, operation="run", exc=exc)
         return {
             "trace_events": [
                 {
                     "type": "agent.answer.synthesis_failed",
                     "mode": mode,
-                    "error": str(exc),
+                    "error": failure.message,
                 }
             ],
         }

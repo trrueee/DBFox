@@ -8,9 +8,10 @@ import re
 import time
 from typing import Any
 
-from engine.llm.config import LlmConfig, resolve_optional_product_llm_config
+from engine.llm.config import LlmConfig
 
 logger = logging.getLogger("dbfox.ai_index")
+LLM_ENRICH_FAILED = "LLM_ENRICH_FAILED"
 
 # ── Tokenization ────────────────────────────────────────────────────────────────
 
@@ -167,8 +168,6 @@ def enrich_tables_batch(
     provider: str = "aliyun",
     model: str = "qwen-plus",
     llm_config: LlmConfig | None = None,
-    api_key: str | None = None,
-    api_base: str | None = None,
     max_retries: int = 3,
 ) -> dict[str, Any]:
     """Call LLM to generate AI metadata for a batch of tables.
@@ -182,33 +181,30 @@ def enrich_tables_batch(
     if not tables_context:
         return {"tables": []}
 
-    resolved_llm_config = llm_config or resolve_optional_product_llm_config(
-        api_key=api_key,
-        api_base=api_base,
-        model_name=model,
-    )
-    if resolved_llm_config is None:
+    if llm_config is None:
         raise RuntimeError("请先在设置中配置 LLM API Key。")
 
     prompt = _build_enrich_prompt(tables_context)
-    last_error = None
-
     for attempt in range(max_retries):
         try:
             result = _call_llm(
                 prompt,
                 provider=provider,
-                llm_config=resolved_llm_config,
+                llm_config=llm_config,
             )
             parsed = json.loads(result) if isinstance(result, str) else result
             _validate_enrich_result(parsed, [t["name"] for t in tables_context])
             return parsed
         except Exception as exc:
-            last_error = exc
-            logger.warning("LLM enrich attempt %d/%d failed: %s", attempt + 1, max_retries, exc)
+            logger.warning(
+                "LLM enrich attempt %d/%d failed (%s)",
+                attempt + 1,
+                max_retries,
+                type(exc).__name__,
+            )
             time.sleep(0.5 * (attempt + 1))
 
-    raise RuntimeError(f"LLM enrichment failed after {max_retries} attempts: {last_error}")
+    raise RuntimeError(LLM_ENRICH_FAILED) from None
 
 
 def _build_enrich_prompt(tables: list[dict[str, Any]]) -> str:

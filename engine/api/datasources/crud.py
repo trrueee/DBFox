@@ -22,6 +22,9 @@ from engine.api.datasources.common import (
     datasource_to_dict,
     set_model_attr,
 )
+from engine.api.credentials import (
+    get_credential_lease_registry,
+)
 from engine.security.credential_vault import (
     CredentialKind,
     CredentialVault,
@@ -58,6 +61,11 @@ def _connection_test_config(req: DataSourceTestRequest) -> dict[str, Any]:
     """Resolve transient test credentials without persisting a secret field."""
     vault = get_credential_vault()
     config = req.model_dump()
+    config.pop("credential_lease_id", None)
+    if req.db_type in {"mysql", "postgresql"} and not req.password_credential_id:
+        raise DataSourceConnectionError(
+            "A password credential is required for network datasource connections."
+        )
     password_id = _require_credential_reference(
         vault,
         req.password_credential_id,
@@ -79,6 +87,55 @@ def _connection_test_config(req: DataSourceTestRequest) -> dict[str, Any]:
     return config
 
 
+def _request_credential_ids(
+    req: DataSourceTestRequest | DataSourceCreateRequest | DataSourceUpdateRequest,
+) -> set[str]:
+    return {
+        credential_id
+        for credential_id in (
+            req.password_credential_id,
+            req.ssh_password_credential_id,
+            req.ssh_key_passphrase_credential_id,
+        )
+        if credential_id
+    }
+
+
+def _claim_credential_lease(
+    req: DataSourceTestRequest | DataSourceCreateRequest | DataSourceUpdateRequest,
+    credential_ids: set[str],
+) -> str | None:
+    if not credential_ids:
+        if req.credential_lease_id:
+            raise DBFoxError(
+                "Credential lease has no matching request references.",
+                code="CREDENTIAL_LEASE_INVALID",
+            )
+        return None
+    if not req.credential_lease_id:
+        raise DBFoxError(
+            "New datasource credentials require a server-issued credential lease.",
+            code="CREDENTIAL_LEASE_REQUIRED",
+        )
+    get_credential_lease_registry().claim(req.credential_lease_id, credential_ids)
+    return req.credential_lease_id
+
+
+def _release_credential_lease(vault: CredentialVault, lease_id: str | None) -> None:
+    if not lease_id:
+        return
+    try:
+        for credential_id in get_credential_lease_registry().release(lease_id):
+            vault.delete(credential_id)
+    except Exception as exc:
+        logger.warning("Could not release datasource credential lease (%s)", type(exc).__name__)
+
+
+def _commit_credential_lease(lease_id: str | None) -> None:
+    if lease_id:
+        get_credential_lease_registry().commit(lease_id)
+
+
 def _delete_replaced_credentials(vault: CredentialVault, credential_ids: set[str]) -> None:
     for credential_id in credential_ids:
         try:
@@ -89,6 +146,8 @@ def _delete_replaced_credentials(vault: CredentialVault, credential_ids: set[str
 
 @router.post("/datasources/test")
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
+    vault = get_credential_vault()
+    lease_id = _claim_credential_lease(req, _request_credential_ids(req))
     try:
         return test_connection(_connection_test_config(req))
     except DBFoxError:
@@ -96,6 +155,8 @@ def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     except Exception as exc:
         logger.exception("Connection test failed")
         raise DataSourceConnectionError(f"数据库连接测试失败: {str(exc)}") from exc
+    finally:
+        _release_credential_lease(vault, lease_id)
 
 
 @router.post("/datasources", response_model=DataSourceResponse)
@@ -103,7 +164,11 @@ def api_create_datasource(
     req: DataSourceCreateRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    vault = get_credential_vault()
+    lease_id: str | None = None
+    metadata_committed = False
     try:
+        lease_id = _claim_credential_lease(req, _request_credential_ids(req))
         from engine.projects.service import resolve_project_id
 
         config = req.model_dump()
@@ -112,7 +177,6 @@ def api_create_datasource(
         elif req.db_type == "postgresql":
             build_postgres_ssl_params(config)
         project_id = resolve_project_id(db, req.project_id)
-        vault = get_credential_vault()
         password_credential_id = _require_credential_reference(
             vault, req.password_credential_id, CredentialKind.DATASOURCE_PASSWORD
         )
@@ -154,10 +218,14 @@ def api_create_datasource(
         )
         db.add(datasource)
         db.commit()
+        metadata_committed = True
+        _commit_credential_lease(lease_id)
         db.refresh(datasource)
         return datasource_to_dict(datasource)
     except Exception:
         db.rollback()
+        if not metadata_committed:
+            _release_credential_lease(vault, lease_id)
         raise
 
 
@@ -188,7 +256,28 @@ def api_update_datasource(
     if not datasource:
         raise NotFoundError("数据源不存在")
 
+    vault = get_credential_vault()
+    lease_id: str | None = None
+    metadata_committed = False
     try:
+        existing_credential_ids = {
+            field: getattr(datasource, field)
+            for field in (
+                "password_credential_id",
+                "ssh_password_credential_id",
+                "ssh_key_passphrase_credential_id",
+            )
+        }
+        changed_credential_ids = {
+            credential_id
+            for field, credential_id in (
+                ("password_credential_id", req.password_credential_id),
+                ("ssh_password_credential_id", req.ssh_password_credential_id),
+                ("ssh_key_passphrase_credential_id", req.ssh_key_passphrase_credential_id),
+            )
+            if credential_id and credential_id != existing_credential_ids[field]
+        }
+        lease_id = _claim_credential_lease(req, changed_credential_ids)
         old_credential_ids = {
             credential_id
             for credential_id in (
@@ -223,7 +312,6 @@ def api_update_datasource(
         set_model_attr(datasource, "ssl_cert_path", req.ssl_cert_path)
         set_model_attr(datasource, "ssl_key_path", req.ssl_key_path)
         set_model_attr(datasource, "ssl_verify_identity", req.ssl_verify_identity)
-        vault = get_credential_vault()
         if req.password_credential_id is not None:
             set_model_attr(
                 datasource,
@@ -256,6 +344,8 @@ def api_update_datasource(
             )
 
         db.commit()
+        metadata_committed = True
+        _commit_credential_lease(lease_id)
         db.refresh(datasource)
         current_credential_ids = {
             credential_id
@@ -270,6 +360,8 @@ def api_update_datasource(
         return datasource_to_dict(datasource)
     except Exception:
         db.rollback()
+        if not metadata_committed:
+            _release_credential_lease(vault, lease_id)
         raise
 
 

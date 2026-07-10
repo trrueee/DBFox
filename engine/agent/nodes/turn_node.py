@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from langchain_core.messages import RemoveMessage
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent.graph.context import graph_context
+from engine.agent.app.error_boundary import safe_agent_log
 from engine.agent_core.memory import sql_fingerprint, upsert_memory_ref
-from engine.llm import get_chat_model
+from engine.llm.factory import LlmCallOptions
 
 
 RECENT_TURN_KEEP = 4
@@ -108,7 +108,7 @@ def start_turn(state: dict[str, Any]) -> dict[str, Any]:
 def finalize_turn(state: dict[str, Any], config: RunnableConfig | None = None) -> dict[str, Any]:
     artifact_refs, sql_refs = extract_sql_backed_refs(state)
     update: dict[str, Any] = {}
-    llm_config = _llm_config_from_graph(config)
+    model_factory = _llm_model_factory_from_graph(config)
 
     next_artifact_refs = list(state.get("artifact_ref_index") or [])
     for ref in artifact_refs:
@@ -129,7 +129,7 @@ def finalize_turn(state: dict[str, Any], config: RunnableConfig | None = None) -
         conversation_summary, next_recent_turns = _compact_recent_turns(
             str(state.get("conversation_summary") or ""),
             next_recent_turns,
-            **llm_config,
+            model_factory=model_factory,
         )
         update["recent_turns"] = [{"__clear__": True}, *next_recent_turns]
         if conversation_summary:
@@ -282,9 +282,7 @@ def _compact_recent_turns(
     *,
     keep_recent: int = RECENT_TURN_KEEP,
     batch_size: int = RECENT_TURN_BATCH_SIZE,
-    model_name: str | None = None,
-    api_key: str | None = None,
-    api_base: str | None = None,
+    model_factory: Callable[[LlmCallOptions], Any] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     old_count = max(0, len(recent_turns) - keep_recent)
     if old_count < batch_size:
@@ -295,9 +293,7 @@ def _compact_recent_turns(
     compacted = _llm_summarize_turn_batch(
         conversation_summary,
         batch,
-        model_name=model_name,
-        api_key=api_key,
-        api_base=api_base,
+        model_factory=model_factory,
     ) or _deterministic_turn_summary(batch)
     if not compacted:
         return conversation_summary, kept
@@ -306,38 +302,35 @@ def _compact_recent_turns(
     return compacted, kept
 
 
-def _llm_config_from_graph(config: RunnableConfig | None) -> dict[str, str | None]:
+def _llm_model_factory_from_graph(
+    config: RunnableConfig | None,
+) -> Callable[[LlmCallOptions], Any] | None:
     if config is None:
-        return {"model_name": None, "api_key": None, "api_base": None}
+        return None
     try:
         ctx = graph_context(config)
     except Exception:
-        return {"model_name": None, "api_key": None, "api_base": None}
-    return {
-        "model_name": ctx.model_name,
-        "api_key": ctx.api_key,
-        "api_base": ctx.api_base,
-    }
+        return None
+    if not ctx.has_llm_credentials:
+        return None
+    return ctx.create_chat_model
 
 
 def _llm_summarize_turn_batch(
     conversation_summary: str,
     batch: list[dict[str, Any]],
     *,
-    model_name: str | None = None,
-    api_key: str | None = None,
-    api_base: str | None = None,
+    model_factory: Callable[[LlmCallOptions], Any] | None = None,
 ) -> str | None:
-    if not _has_llm_credentials(api_key):
+    if model_factory is None:
         return None
     try:
-        model = get_chat_model(
-            model_name=model_name,
-            api_key=api_key,
-            api_base=api_base,
-            temperature=0.0,
-            max_tokens=700,
-            timeout=60.0,
+        model = model_factory(
+            LlmCallOptions(
+                temperature=0.0,
+                max_tokens=700,
+                timeout=60.0,
+            )
         )
         response = model.invoke(
             [
@@ -363,7 +356,7 @@ def _llm_summarize_turn_batch(
             ]
         )
     except Exception as exc:
-        logger.debug("LLM turn summary failed; falling back to deterministic compaction: %s", exc)
+        safe_agent_log(logger, operation="run", exc=exc)
         return None
     text = _message_text(response)
     return text if text else None
@@ -372,10 +365,6 @@ def _llm_summarize_turn_batch(
 def _deterministic_turn_summary(batch: list[dict[str, Any]]) -> str:
     lines = [_format_turn_for_summary(turn) for turn in batch]
     return "\n".join(line for line in lines if line)
-
-
-def _has_llm_credentials(api_key: str | None) -> bool:
-    return bool((api_key or "").strip()) or os.environ.get("DBFOX_TESTING") == "1"
 
 
 def _message_text(value: Any) -> str:

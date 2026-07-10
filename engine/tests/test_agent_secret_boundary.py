@@ -61,4 +61,5 @@ def test_sentinel_secret_never_appears_in_serialized_graph_config() -> None:
     resolved = graph_context(config)
     assert resolved.request is request
     assert resolved.llm_credential_id == credential_id
-    assert resolved.api_key == sentinel
+    assert not hasattr(resolved, "api_key")
+    assert resolved.has_llm_credentials is True

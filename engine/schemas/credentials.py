@@ -27,3 +27,20 @@ class CredentialEnrollmentRequest(BaseModel):
 
     kind: CredentialKind
     secret: SecretStr = Field(min_length=1, max_length=4096)
+
+
+class CredentialEnrollmentBatchRequest(BaseModel):
+    """Transient, all-or-cleaned enrollment input for related credentials."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    credentials: list[CredentialEnrollmentRequest] = Field(min_length=1, max_length=3)
+
+
+class CredentialEnrollmentBatchResponse(BaseModel):
+    """Opaque references returned after a complete batch is enrolled."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    credentials: list[CredentialReference]
+    lease_id: str

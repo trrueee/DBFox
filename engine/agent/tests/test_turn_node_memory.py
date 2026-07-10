@@ -10,8 +10,10 @@ from engine.agent.nodes.turn_node import (
     finalize_turn,
     plan_message_compaction,
 )
+from engine.agent.app.request_context import RequestContext
 from engine.agent_core.memory import sql_fingerprint
 from engine.agent_core.types import AgentApprovalRecord, AgentRunRequest, AgentRunResponse
+from engine.security.credential_vault import InMemoryCredentialVault
 from engine.tools.runtime import ToolRegistry
 from engine.models import AgentSession, AgentSessionMemory, DataSource, ReusableSQL
 
@@ -438,12 +440,10 @@ def test_recent_turn_compaction_prefers_llm_summary(monkeypatch) -> None:
     ]
     captured: dict[str, object] = {}
 
-    def fake_summarize(conversation_summary, batch, *, model_name=None, api_key=None, api_base=None):
+    def fake_summarize(conversation_summary, batch, *, model_factory=None):
         captured["conversation_summary"] = conversation_summary
         captured["batch"] = batch
-        captured["model_name"] = model_name
-        captured["api_key"] = api_key
-        captured["api_base"] = api_base
+        captured["model_factory"] = model_factory
         return "LLM compressed summary"
 
     monkeypatch.setattr(turn_node, "_llm_summarize_turn_batch", fake_summarize)
@@ -451,17 +451,13 @@ def test_recent_turn_compaction_prefers_llm_summary(monkeypatch) -> None:
     summary, kept = turn_node._compact_recent_turns(
         "Previous summary",
         existing_turns,
-        model_name="test-model",
-        api_key="sk-test",
-        api_base="http://example.test/v1",
+        model_factory=lambda _options: object(),
     )
 
     assert summary == "Previous summary\nLLM compressed summary"
     assert [turn["run_id"] for turn in kept] == ["run_4", "run_5", "run_6", "run_7"]
     assert [turn["run_id"] for turn in captured["batch"]] == ["run_1", "run_2", "run_3"]
-    assert captured["model_name"] == "test-model"
-    assert captured["api_key"] == "sk-test"
-    assert captured["api_base"] == "http://example.test/v1"
+    assert callable(captured["model_factory"])
 
 
 def test_finalize_turn_removes_old_langgraph_messages_by_batch() -> None:
@@ -499,9 +495,6 @@ def test_agent_service_persists_graph_memory_projection(db_session, monkeypatch)
         port=0,
         database_name=":memory:",
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         status="active",
     )
     db_session.add(datasource)
@@ -657,9 +650,6 @@ def test_agent_service_initial_state_restores_persisted_session_memory(db_sessio
         port=0,
         database_name=":memory:",
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         status="active",
     )
     session = AgentSession(
@@ -743,9 +733,6 @@ def test_agent_service_initial_state_recalls_datasource_reusable_sql(db_session)
         port=0,
         database_name=":memory:",
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         status="active",
     )
     other = DataSource(
@@ -756,9 +743,6 @@ def test_agent_service_initial_state_recalls_datasource_reusable_sql(db_session)
         port=0,
         database_name=":memory:",
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         status="active",
     )
     db_session.add_all([datasource, other])
@@ -911,18 +895,18 @@ def test_progress_routes_confirmation_only_safety_to_approval(monkeypatch) -> No
         },
     }
 
-    update = judge_progress(
-        state,
-        {
-            "configurable": {
-                "thread_id": "session_confirm",
-                "registry": ToolRegistry(),
-                "db": object(),
-                "event_store": store,
-                "request": AgentRunRequest(datasource_id="ds_confirm", question="查用户"),
-            }
-        },
+    request_context = RequestContext(
+        object(),
+        AgentRunRequest(datasource_id="ds_confirm", question="查用户"),
+        registry=ToolRegistry(),
+        event_store=store,
+        credential_vault=InMemoryCredentialVault(),
     )
+    config = request_context.graph_config("session_confirm", run_id="run_confirm")
+    try:
+        update = judge_progress(state, config)
+    finally:
+        request_context.release_graph_config(config)
 
     assert update["status"] == "waiting_approval"
     assert update["pending_approval"]["id"] == "approval-progress-event-store"

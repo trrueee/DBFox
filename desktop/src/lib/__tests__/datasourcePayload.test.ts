@@ -22,8 +22,8 @@ describe("datasourcePayload", () => {
       host: "127.0.0.1",
       database_name: "analytics",
       username: "root",
-      password: "secret",
     });
+    expect(payload).not.toHaveProperty("password");
     expect(payload).not.toHaveProperty("name");
     expect(payload).not.toHaveProperty("env");
   });
@@ -67,7 +67,6 @@ describe("buildDatasourceUpdatePayload", () => {
       port: 3306,
       database_name: "analytics",
       username: "readonly",
-      password: "",
       connection_mode: "direct",
       is_read_only: true,
       env: "prod",
@@ -75,7 +74,7 @@ describe("buildDatasourceUpdatePayload", () => {
     expect(payload).not.toHaveProperty("project_id");
   });
 
-  it("keeps blank edit secrets as empty strings", () => {
+  it("does not send blank edit secrets", () => {
     const payload = buildDatasourceUpdatePayload({
       db_type: "mysql",
       name: "Updated",
@@ -88,8 +87,27 @@ describe("buildDatasourceUpdatePayload", () => {
       ssh_pkey_passphrase: "",
     });
 
-    expect(payload.password).toBe("");
-    expect(payload.ssh_password).toBeNull();
-    expect(payload.ssh_pkey_passphrase).toBeNull();
+    expect(payload).not.toHaveProperty("password");
+    expect(payload.ssh_password_credential_id).toBeNull();
+    expect(payload.ssh_key_passphrase_credential_id).toBeNull();
+  });
+
+  it("attaches the server-issued lease for backend-owned cleanup", () => {
+    const payload = buildDatasourceTestPayload(
+      {
+        db_type: "mysql",
+        database_name: "analytics",
+      },
+      {
+        password_credential_id: "cred_datasource_password_123",
+      },
+      "lease_datasource_draft",
+    );
+
+    expect(payload).toMatchObject({
+      password_credential_id: "cred_datasource_password_123",
+      credential_lease_id: "lease_datasource_draft",
+    });
+    expect(payload).not.toHaveProperty("transient_credential_ids");
   });
 });

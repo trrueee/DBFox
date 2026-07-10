@@ -1,11 +1,16 @@
 import uuid
 from typing import Any
 
+import pymysql
+import pytest
+
 from engine.environment.schema_introspector import SchemaIntrospector
+from engine.errors import DataSourceConnectionError
 from engine.models import DataSource
+from engine.security.credential_vault import CredentialVaultUnavailableError
 
 
-def test_decrypt_datasource_password_does_not_query_sqlalchemy_bind(db_session):
+def test_decrypt_datasource_password_fails_closed_without_a_credential(db_session):
     ds = DataSource(
         id=str(uuid.uuid4()),
         name="mysql probe",
@@ -14,16 +19,13 @@ def test_decrypt_datasource_password_does_not_query_sqlalchemy_bind(db_session):
         port=3306,
         database_name="creatorhub",
         username="root",
-        password_ciphertext="",
-        password_nonce="",
         status="active",
     )
     db_session.add(ds)
     db_session.commit()
 
-    password = SchemaIntrospector()._decrypt_datasource_password(db_session, ds.id)
-
-    assert password == ""
+    with pytest.raises(DataSourceConnectionError, match="password credential"):
+        SchemaIntrospector()._decrypt_datasource_password(db_session, ds.id)
 
 
 class _FakeCursor:
@@ -103,13 +105,79 @@ def _add_datasource(db_session, db_type: str) -> DataSource:
         port=5432 if db_type == "postgres" else 0,
         database_name="analytics",
         username="dbfox",
-        password_ciphertext="",
-        password_nonce="",
         status="active",
     )
     db_session.add(ds)
     db_session.commit()
     return ds
+
+
+def test_vault_unavailable_never_calls_mysql_driver(db_session, monkeypatch) -> None:
+    datasource = _add_datasource(db_session, "mysql")
+    datasource.password_credential_id = "cred_datasource_password_unavailable"
+    db_session.commit()
+    driver_calls: list[dict[str, Any]] = []
+
+    class UnavailableVault:
+        def get(self, *_args: Any, **_kwargs: Any) -> str:
+            raise CredentialVaultUnavailableError()
+
+    monkeypatch.setattr(
+        "engine.environment.schema_introspector.get_credential_vault",
+        lambda: UnavailableVault(),
+    )
+    monkeypatch.setattr(pymysql, "connect", lambda **kwargs: driver_calls.append(kwargs))
+
+    with pytest.raises(CredentialVaultUnavailableError) as exc_info:
+        SchemaIntrospector().inspect(db_session, datasource.id)
+
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert driver_calls == []
+
+
+def test_vault_unavailable_never_calls_postgres_driver(db_session, monkeypatch) -> None:
+    psycopg2 = pytest.importorskip("psycopg2")
+    datasource = _add_datasource(db_session, "postgres")
+    datasource.password_credential_id = "cred_datasource_password_unavailable"
+    db_session.commit()
+    driver_calls: list[dict[str, Any]] = []
+
+    class UnavailableVault:
+        def get(self, *_args: Any, **_kwargs: Any) -> str:
+            raise CredentialVaultUnavailableError()
+
+    monkeypatch.setattr(
+        "engine.environment.schema_introspector.get_credential_vault",
+        lambda: UnavailableVault(),
+    )
+    monkeypatch.setattr(psycopg2, "connect", lambda **kwargs: driver_calls.append(kwargs))
+
+    with pytest.raises(CredentialVaultUnavailableError) as exc_info:
+        SchemaIntrospector().inspect(db_session, datasource.id)
+
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert driver_calls == []
+
+
+def test_ssh_tunnel_failure_never_falls_back_to_direct_mysql(db_session, monkeypatch) -> None:
+    datasource = _add_datasource(db_session, "mysql")
+    datasource.ssh_enabled = True
+    datasource.ssh_host = "jump.example.test"
+    datasource.ssh_username = "dbfox"
+    db_session.commit()
+    driver_calls: list[dict[str, Any]] = []
+
+    def fail_tunnel(_config: dict[str, Any]) -> Any:
+        raise RuntimeError("tunnel-sentinel")
+
+    monkeypatch.setattr("engine.datasource.get_or_create_tunnel_for_dict", fail_tunnel)
+    monkeypatch.setattr(pymysql, "connect", lambda **kwargs: driver_calls.append(kwargs))
+
+    with pytest.raises(DataSourceConnectionError) as exc_info:
+        SchemaIntrospector().inspect(db_session, datasource.id)
+
+    assert exc_info.value.code == "CONNECTION_FAILED"
+    assert driver_calls == []
 
 
 def test_postgres_introspection_returns_tables_columns_fks_and_samples(db_session, monkeypatch):

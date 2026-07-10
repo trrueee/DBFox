@@ -10,7 +10,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.security.credential_vault import CredentialKind, get_credential_vault
+from engine.errors import DBFoxError, DataSourceConnectionError
+from engine.security.credential_vault import (
+    CredentialKind,
+    CredentialVaultUnavailableError,
+    get_credential_vault,
+)
 from engine.environment.datasource_resolver import (
     ResolvedDataSource,
     resolve_datasource,
@@ -41,8 +46,17 @@ class SchemaIntrospector:
             try:
                 from engine.datasource import get_or_create_tunnel_for_dict
                 tunnel = get_or_create_tunnel_for_dict(datasource_connection_dict(ds))
+            except DBFoxError:
+                raise
             except Exception as exc:
-                logger.warning("SSH tunnel setup failed for %s: %s", datasource_id, exc)
+                logger.warning(
+                    "SSH tunnel setup failed for datasource %s (%s)",
+                    datasource_id,
+                    type(exc).__name__,
+                )
+                raise DataSourceConnectionError(
+                    "Unable to establish the configured SSH tunnel."
+                ) from exc
 
         if resolved.dialect == "sqlite":
             return self._inspect_sqlite(resolved)
@@ -293,8 +307,14 @@ class SchemaIntrospector:
     def _inspect_postgres(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> SchemaInventory:
         try:
             conn = self._connect_postgres(db, resolved, tunnel)
+        except DBFoxError:
+            raise
         except Exception as exc:
-            logger.warning("PostgreSQL connect failed for %s: %s", resolved.datasource_id, exc)
+            logger.warning(
+                "PostgreSQL connect failed for datasource %s (%s)",
+                resolved.datasource_id,
+                type(exc).__name__,
+            )
             return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:
@@ -633,17 +653,31 @@ class SchemaIntrospector:
 
         ds = db.query(DS).filter(DS.id == datasource_id).first()
         if ds is None:
-            return ""
+            raise DataSourceConnectionError("Datasource was not found.")
         credential_id = ds.password_credential_id
         if not credential_id:
-            return ""
+            raise DataSourceConnectionError(
+                "A password credential is required for network datasource connections."
+            )
         try:
-            return get_credential_vault().get(
+            secret = get_credential_vault().get(
                 str(credential_id),
                 expected_kind=CredentialKind.DATASOURCE_PASSWORD,
-            ) or ""
-        except Exception:
-            return ""
+            )
+        except CredentialVaultUnavailableError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Datasource credential lookup failed for %s (%s)",
+                datasource_id,
+                type(exc).__name__,
+            )
+            raise CredentialVaultUnavailableError() from exc
+        if not secret:
+            raise DataSourceConnectionError(
+                "Datasource credential reference was not found or has the wrong kind."
+            )
+        return secret
 
 
 # Module-level convenience

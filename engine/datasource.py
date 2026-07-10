@@ -27,10 +27,14 @@ def _resolve_credential_secret(
 ) -> str:
     credential_id = datasource_dict.get(field)
     if not credential_id:
-        return ""
+        raise DataSourceConnectionError(
+            "A password credential is required for network datasource connections."
+        )
     secret = get_credential_vault().get(str(credential_id), expected_kind=kind)
-    if secret is None:
-        raise DataSourceConnectionError("Credential reference was not found or has the wrong kind.")
+    if not secret:
+        raise DataSourceConnectionError(
+            "Credential reference was not found or has the wrong kind."
+        )
     return secret
 
 

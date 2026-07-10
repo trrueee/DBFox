@@ -6,7 +6,13 @@ import { api } from "../../lib/api";
 import type { DataSource } from "../../lib/api";
 import { stripSensitiveDatasourceForm } from "../../lib/datasourceFormSecurity";
 
-const { toastMock } = vi.hoisted(() => ({ toastMock: vi.fn() }));
+const { toastMock, credentialApi } = vi.hoisted(() => ({
+  toastMock: vi.fn(),
+  credentialApi: {
+    enrollCredentials: vi.fn(),
+    releaseCredentialLease: vi.fn(),
+  },
+}));
 
 vi.mock("../../lib/api", () => ({
   api: {
@@ -18,6 +24,11 @@ vi.mock("../../lib/api", () => ({
     deleteDatasource: vi.fn(),
     syncSchema: vi.fn(),
   },
+}));
+
+vi.mock("../../lib/api/credentials", () => ({
+  enrollCredentials: credentialApi.enrollCredentials,
+  releaseCredentialLease: credentialApi.releaseCredentialLease,
 }));
 
 vi.mock("../../components/Toast", () => ({
@@ -90,6 +101,8 @@ describe("DataSourcesPage", () => {
     localStorage.clear();
     toastMock.mockClear();
     vi.mocked(api.listDatasources).mockResolvedValue([]);
+    credentialApi.enrollCredentials.mockResolvedValue(null);
+    credentialApi.releaseCredentialLease.mockResolvedValue(undefined);
   });
 
   it("strips datasource form secrets without changing non-secret fields", () => {
@@ -292,11 +305,11 @@ describe("DataSourcesPage", () => {
     expect(getByText("AI 语义增强 3 张表")).toBeInTheDocument();
   });
 
-  it("passes stored LLM config when syncing schema with AI enrichment", async () => {
+  it("passes only an opaque stored LLM credential when syncing schema with AI enrichment", async () => {
     localStorage.setItem(
       "dbfox-api-config",
       JSON.stringify({
-        apiKey: "sk-configured",
+        credentialId: "cred_llm_api_key_configured",
         apiBase: "https://api.deepseek.com/v1",
         modelName: "deepseek-chat",
       }),
@@ -328,7 +341,7 @@ describe("DataSourcesPage", () => {
     await waitFor(() =>
       expect(syncSchema).toHaveBeenCalledWith("ds-1", {
         ai_enrich: true,
-        api_key: "sk-configured",
+        llm_credential_id: "cred_llm_api_key_configured",
         api_base: "https://api.deepseek.com/v1",
         model_name: "deepseek-chat",
       }),
@@ -367,6 +380,70 @@ describe("DataSourcesPage", () => {
     expect(toastMock).toHaveBeenCalledWith(
       "数据源创建成功；AI 语义增强未完成：请先在设置中配置 LLM API Key。",
       "warning",
+    );
+  });
+
+  it("releases a new credential lease when datasource creation fails before the backend can claim it", async () => {
+    credentialApi.enrollCredentials.mockResolvedValue({
+      credentials: [{ id: "cred_datasource_password_draft", kind: "datasource_password" }],
+      lease_id: "lease_datasource_create_draft",
+    });
+    const createDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
+    const { container } = renderPage({
+      initialShowAddForm: true,
+      actions: {
+        createDatasource,
+        updateDatasource: vi.fn(),
+        deleteDatasource: vi.fn(),
+        syncSchema: vi.fn(),
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
+    fireEvent.change(within(form).getByLabelText("连接名称"), { target: { value: "Draft DB" } });
+    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.example.test" } });
+    fireEvent.change(within(form).getByLabelText("数据库名"), { target: { value: "analytics" } });
+    fireEvent.change(within(form).getByLabelText("用户名"), { target: { value: "reader" } });
+    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
+    fireEvent.click(within(form).getByRole("button", { name: "保存并同步 Schema" }));
+
+    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease_datasource_create_draft"),
+    );
+  });
+
+  it("releases a new credential lease when datasource update fails before the backend can claim it", async () => {
+    credentialApi.enrollCredentials.mockResolvedValue({
+      credentials: [{ id: "cred_datasource_password_draft", kind: "datasource_password" }],
+      lease_id: "lease_datasource_update_draft",
+    });
+    const updateDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
+    const { container } = renderPage({
+      datasources: mockDatasources,
+      actions: {
+        createDatasource: vi.fn(),
+        updateDatasource,
+        deleteDatasource: vi.fn(),
+        syncSchema: vi.fn(),
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
+    fireEvent.click(within(container.querySelector(".hifi-datasource-detail") as HTMLElement).getByText("编辑"));
+
+    await waitFor(() => expect(container.querySelector("form.hifi-datasource-form")).toBeInTheDocument());
+    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
+    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
+    fireEvent.click(within(form).getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() => expect(updateDatasource).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease_datasource_update_draft"),
     );
   });
 

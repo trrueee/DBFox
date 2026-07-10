@@ -13,9 +13,7 @@ def synthesize_agent_answer(
     analysis_units: list[dict[str, Any]] | None = None,
     mode: str | None = None,
     context: dict[str, Any] | None = None,
-    model_name: str | None = None,
-    api_key: str | None = None,
-    api_base: str | None = None,
+    model: Any | None = None,
     error: str | None = None,
     emit_answer_delta: Callable[[str], None] | None = None,
 ) -> AgentAnswer:
@@ -40,21 +38,10 @@ def synthesize_agent_answer(
             follow_up_questions=[],
         )
 
-    import os
-    has_credentials = bool((api_key or "").strip())
-
-    if not (has_credentials or os.environ.get("DBFOX_TESTING") == "1"):
+    if model is None:
         return _fallback_answer(question, analysis_units, error, mode=synthesis_mode)
 
-    from engine.llm import get_chat_model
     from langchain_core.messages import HumanMessage, SystemMessage
-
-    model = get_chat_model(
-        model_name=model_name,
-        api_key=api_key,
-        api_base=api_base,
-        temperature=0.3,
-    )
 
     units = _select_units_for_prompt(analysis_units)
     messages = _build_answer_messages(

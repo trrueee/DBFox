@@ -17,7 +17,9 @@ from engine.agent.app.runtime_registry import get_graph_runtime_registry
 from engine.agent_core.event_store import AgentEventStore
 from engine.agent_core.types import AgentRunRequest
 from engine.errors import DBFoxError
-from engine.security.credential_vault import CredentialKind, CredentialVault
+from engine.llm.config import resolve_product_llm_config_from_credential
+from engine.llm.factory import LlmCallOptions, create_chat_model as create_resolved_chat_model
+from engine.security.credential_vault import CredentialVault
 from engine.tools.runtime.registry import ToolRegistry
 
 
@@ -37,30 +39,21 @@ class GraphRuntimeContext:
     api_base: str | None = None
     credential_vault: CredentialVault | None = None
 
-    @property
-    def api_key(self) -> str | None:
-        """Resolve an LLM secret only inside the process-local runtime path."""
+    def create_chat_model(self, options: LlmCallOptions | None = None) -> Any:
+        """Construct a provider client without exposing a raw key to graph nodes."""
         if not self.llm_credential_id:
-            return None
-        if self.credential_vault is None:
-            raise DBFoxError(
-                "Credential vault is unavailable.",
-                code="CREDENTIAL_VAULT_UNAVAILABLE",
-            )
-        secret = self.credential_vault.get(
-            self.llm_credential_id,
-            expected_kind=CredentialKind.LLM_API_KEY,
+            raise DBFoxError("LLM credential is not configured.", code="NO_LLM_CREDENTIAL")
+        config = resolve_product_llm_config_from_credential(
+            llm_credential_id=self.llm_credential_id,
+            api_base=self.api_base,
+            model_name=self.model_name,
+            credential_vault=self.credential_vault,
         )
-        if secret is None:
-            raise DBFoxError(
-                "LLM credential was not found.",
-                code="LLM_CREDENTIAL_NOT_FOUND",
-            )
-        return secret
+        return create_resolved_chat_model(config, options)
 
     @property
     def has_llm_credentials(self) -> bool:
-        return bool((self.api_key or "").strip())
+        return self.llm_credential_id is not None
 
     def to_configurable(self) -> dict[str, Any]:
         """Return the only values allowed in a persisted RunnableConfig."""

@@ -11,9 +11,9 @@ from engine.agent.progress.prompts import PROGRESS_JUDGE_SYSTEM_PROMPT
 from engine.agent.progress.clarification_policy import should_progress_clarify
 from engine.agent.skills.registry import get_skill_registry
 from engine.agent.skills.renderer import render_recovery_for_progress
-from engine.llm import get_chat_model
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
 from engine.agent.graph.message_utils import (
     first_user_text,
     message_content_text,
@@ -25,9 +25,6 @@ logger = logging.getLogger("dbfox.dbfox_agent.progress.llm_judge")
 def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM progress judge — evaluates execution context semantically to determine progress."""
     ctx = graph_context(config)
-    model_name = ctx.model_name
-    api_key = ctx.api_key
-    api_base = ctx.api_base
 
     # ---- Build the judgment context -----------------------------------------
     context_parts = ["## Progress Judgment Request"]
@@ -133,20 +130,16 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
     judge_prompt = "\n\n".join(context_parts)
 
     # ---- Call LLM with structured output ------------------------------------
-    model = get_chat_model(
-        model_name=model_name,
-        api_key=api_key,
-        api_base=api_base,
-    )
-    structured_model = model.with_structured_output(ProgressDecision)
-
     try:
+        model = ctx.create_chat_model()
+        structured_model = model.with_structured_output(ProgressDecision)
         decision = structured_model.invoke([
             {"role": "system", "content": PROGRESS_JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": judge_prompt},
         ], config)
     except Exception as exc:
-        logger.error("Progress Judge LLM call failed: %s", exc)
+        failure = public_agent_failure(exc, operation="run")
+        safe_agent_log(logger, operation="run", exc=exc)
         # Fallback: check if we have an answer, then complete; else fail
         answer = state.get("answer") or state.get("final_answer")
         if answer and answer.get("answer"):
@@ -162,7 +155,7 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
         else:
             decision = ProgressDecision(
                 status="continue",
-                reason_summary=f"Progress Judge LLM call failed: {exc} — continuing.",
+                reason_summary=f"Progress Judge LLM call failed: {failure.message}",
             )
 
     # ---- Build result -------------------------------------------------------

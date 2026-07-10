@@ -21,6 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
+from engine.agent.app.error_boundary import (
+    AgentOperation,
+    PublicAgentFailure,
+    public_agent_failure,
+    safe_agent_log,
+)
 from engine.agent_core import persistence as agent_persistence
 from engine.agent_core.artifacts import AgentArtifactIdentity, build_agent_artifacts
 from engine.agent_core.types import (
@@ -32,11 +38,13 @@ from engine.agent_core.types import (
     AgentRuntimeEvent,
 )
 from engine.agent_core.events import EventEmitter
-from engine.app.errors import public_error, public_message
+from engine.app.errors import public_error
 from engine.db import get_db
 from engine.errors import DBFoxError
-from engine.llm.config import LlmConfigurationError, resolve_product_llm_config_from_credential
-from engine.llm.errors import llm_error_from_exception
+from engine.llm.config import (
+    normalize_product_llm_preferences,
+    resolve_product_llm_config_from_credential,
+)
 from engine.llm.factory import LlmCallOptions, create_chat_model
 from engine.models import DataSource
 from engine.policy.engine import PolicyEngine
@@ -108,35 +116,17 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
             api_base=config.api_base,
             latency_ms=latency_ms,
         )
-    except LlmConfigurationError as exc:
-        latency_ms = int((_time.monotonic() - t0) * 1000)
-        return LlmTestResponse(
-            ok=False,
-            model=req.model_name,
-            api_base=req.api_base,
-            latency_ms=latency_ms,
-            error_code=exc.code,
-            error_message=str(exc),
-        )
     except Exception as exc:
         latency_ms = int((_time.monotonic() - t0) * 1000)
-        llm_error = llm_error_from_exception(exc)
-        if llm_error is not None:
-            return LlmTestResponse(
-                ok=False,
-                model=req.model_name,
-                api_base=req.api_base,
-                latency_ms=latency_ms,
-                error_code=llm_error.code,
-                error_message=str(llm_error),
-            )
+        failure = public_agent_failure(exc, operation="llm_test")
+        safe_agent_log(logger, operation="llm_test", exc=exc)
         return LlmTestResponse(
             ok=False,
             model=req.model_name,
             api_base=req.api_base,
             latency_ms=latency_ms,
-            error_code="LLM_UNKNOWN_ERROR",
-            error_message=f"{type(exc).__name__}: {exc}",
+            error_code=failure.code,
+            error_message=failure.message,
         )
 
 
@@ -145,18 +135,15 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
 # ---------------------------------------------------------------------------
 
 def _normalize_agent_run_llm_config(req: AgentRunRequest) -> AgentRunRequest:
-    try:
-        llm_config = resolve_product_llm_config_from_credential(
-            llm_credential_id=req.llm_credential_id,
-            api_base=req.api_base,
-            model_name=req.model_name,
-        )
-    except LlmConfigurationError as exc:
-        raise DBFoxError(str(exc), code=exc.code) from exc
+    preferences = normalize_product_llm_preferences(
+        llm_credential_id=req.llm_credential_id,
+        api_base=req.api_base,
+        model_name=req.model_name,
+    )
     return req.model_copy(
         update={
-            "api_base": llm_config.api_base,
-            "model_name": llm_config.model_name,
+            "api_base": preferences.api_base,
+            "model_name": preferences.model_name,
         }
     )
 
@@ -177,7 +164,11 @@ def attach_conversation_event_ids(event: AgentRuntimeEvent, req: AgentRunRequest
     return event
 
 
-def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str:
+def sse_failed_event(
+    event_id: str,
+    run_id: str,
+    failure: PublicAgentFailure,
+) -> str:
     """Build a formatted SSE error event string."""
     payload = {
         "event_id": event_id,
@@ -185,9 +176,9 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
         "sequence": 1,
         "created_at_ms": 0,
         "type": "agent.run.failed",
-        "error": public_message(message),
+        "error": failure.message,
         "response": None,
-        "code": code,
+        "code": failure.code,
     }
     return f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
 
@@ -195,6 +186,12 @@ def sse_failed_event(event_id: str, run_id: str, message: str, code: str) -> str
 def _http_detail(exc: DBFoxError) -> dict[str, str]:
     detail = public_error(exc.code, exc)
     return {"code": str(detail["code"]), "message": str(detail["message"])}
+
+
+def _agent_http_exception(exc: Exception, *, operation: AgentOperation) -> HTTPException:
+    failure = public_agent_failure(exc, operation=operation)
+    safe_agent_log(logger, operation=operation, exc=exc)
+    return HTTPException(status_code=failure.status_code, detail=failure.detail())
 
 
 # ---------------------------------------------------------------------------
@@ -256,19 +253,9 @@ def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentR
     try:
         normalized_req = _normalize_agent_run_llm_config(req)
         return DBFoxAgentRuntime(db).run(normalized_req)
-    except DBFoxError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=_http_detail(exc))
     except Exception as exc:
         db.rollback()
-        llm_error = llm_error_from_exception(exc)
-        if llm_error is not None:
-            raise HTTPException(status_code=400, detail=_http_detail(llm_error))
-        logger.exception("Agent runtime failed")
-        raise HTTPException(
-            status_code=500,
-            detail=public_error("AGENT_RUNTIME_ERROR", f"Agent runtime failed: {str(exc)}"),
-        )
+        raise _agent_http_exception(exc, operation="run") from exc
 
 
 @router.post("/agent/runs/{run_id}/resume", response_model=AgentRunResponse)
@@ -279,19 +266,9 @@ def api_agent_run_resume(
 ) -> AgentRunResponse:
     try:
         return DBFoxAgentRuntime(db).resume(run_id, req.approval_id)
-    except DBFoxError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
     except Exception as exc:
         db.rollback()
-        llm_error = llm_error_from_exception(exc)
-        if llm_error is not None:
-            raise HTTPException(status_code=400, detail=_http_detail(llm_error))
-        logger.exception("Agent runtime resume failed")
-        raise HTTPException(
-            status_code=500,
-            detail=public_error("AGENT_RESUME_ERROR", f"Agent resume failed: {str(exc)}"),
-        )
+        raise _agent_http_exception(exc, operation="resume") from exc
 
 
 @router.post("/agent/runs/{run_id}/cancel")
@@ -307,11 +284,7 @@ def api_cancel_agent_run(
         return {"status": "cancelled", "run_id": run_id}
     except Exception as exc:
         db.rollback()
-        logger.exception("Failed to cancel agent run %s", run_id)
-        raise HTTPException(
-            status_code=500,
-            detail=public_error("AGENT_CANCEL_ERROR", f"Failed to cancel run: {str(exc)}"),
-        )
+        raise _agent_http_exception(exc, operation="cancel") from exc
 
 
 @router.post("/agent/runs/{run_id}/approvals/{approval_id}")
@@ -345,14 +318,10 @@ def api_resolve_agent_approval(
         return approval
     except DBFoxError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
+        raise _agent_http_exception(exc, operation="approval") from exc
     except Exception as exc:
         db.rollback()
-        logger.exception("Failed to resolve agent approval")
-        raise HTTPException(
-            status_code=500,
-            detail=public_error("APPROVAL_RESOLVE_ERROR", f"Failed to resolve approval: {str(exc)}"),
-        )
+        raise _agent_http_exception(exc, operation="approval") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -367,17 +336,11 @@ def api_agent_run_stream(req: AgentRunRequest, db: Session = Depends(get_db)) ->
             for event in DBFoxAgentRuntime(db).run_iter(normalized_req):
                 attach_conversation_event_ids(event, normalized_req)
                 yield _format_sse_event(event)
-        except DBFoxError as exc:
-            db.rollback()
-            yield sse_failed_event("runtime_error_dbfox", "", str(exc), exc.code)
         except Exception as exc:
             db.rollback()
-            llm_error = llm_error_from_exception(exc)
-            if llm_error is not None:
-                yield sse_failed_event("runtime_error_llm", "", str(llm_error), llm_error.code)
-                return
-            logger.exception("Agent runtime stream failed")
-            yield sse_failed_event("runtime_error_unhandled", "", f"Agent runtime failed: {str(exc)}", "AGENT_RUNTIME_ERROR")
+            failure = public_agent_failure(exc, operation="run")
+            safe_agent_log(logger, operation="run", exc=exc)
+            yield sse_failed_event("runtime_error", "", failure)
 
     return StreamingResponse(
         stream_events(),
@@ -399,17 +362,11 @@ def api_agent_run_resume_stream(
         try:
             for event in DBFoxAgentRuntime(db).resume_iter(run_id, req.approval_id):
                 yield _format_sse_event(event)
-        except DBFoxError as exc:
-            db.rollback()
-            yield sse_failed_event("runtime_resume_error_dbfox", run_id, str(exc), exc.code)
         except Exception as exc:
             db.rollback()
-            llm_error = llm_error_from_exception(exc)
-            if llm_error is not None:
-                yield sse_failed_event("runtime_resume_error_llm", run_id, str(llm_error), llm_error.code)
-                return
-            logger.exception("Agent runtime resume stream failed")
-            yield sse_failed_event("runtime_resume_error_unhandled", run_id, f"Agent resume failed: {str(exc)}", "AGENT_RESUME_ERROR")
+            failure = public_agent_failure(exc, operation="resume")
+            safe_agent_log(logger, operation="resume", exc=exc, run_id=run_id)
+            yield sse_failed_event("runtime_resume_error", run_id, failure)
 
     return StreamingResponse(
         stream_events(),

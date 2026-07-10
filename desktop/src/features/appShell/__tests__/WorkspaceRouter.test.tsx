@@ -1,6 +1,6 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WorkspaceRouter } from "../WorkspaceRouter";
+import { WorkspaceRouter, testDraftLlmConnection } from "../WorkspaceRouter";
 import { useDatasourceStore } from "../../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import type { WorkspaceTab } from "../../../types/workspace";
@@ -17,6 +17,12 @@ const workspacePageProps = vi.hoisted(() => ({
   diagnostics: null as Record<string, unknown> | null,
   datasourceSettings: null as Record<string, unknown> | null,
   llmConfig: null as Record<string, unknown> | null,
+}));
+
+const llmConnectionApi = vi.hoisted(() => ({
+  enrollCredentials: vi.fn(),
+  releaseCredentialLease: vi.fn(),
+  testLlmConnection: vi.fn(),
 }));
 
 vi.mock("../../workspace/SmartQueryHome", () => ({
@@ -81,7 +87,11 @@ vi.mock("../../../components/LlmConfigPanel", () => ({
   },
 }));
 vi.mock("../../../lib/api/agent", () => ({
-  testLlmConnection: vi.fn(),
+  testLlmConnection: llmConnectionApi.testLlmConnection,
+}));
+vi.mock("../../../lib/api/credentials", () => ({
+  enrollCredentials: llmConnectionApi.enrollCredentials,
+  releaseCredentialLease: llmConnectionApi.releaseCredentialLease,
 }));
 
 const DS1 = {
@@ -230,6 +240,9 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     workspacePageProps.diagnostics = null;
     workspacePageProps.datasourceSettings = null;
     workspacePageProps.llmConfig = null;
+    llmConnectionApi.enrollCredentials.mockReset();
+    llmConnectionApi.releaseCredentialLease.mockReset();
+    llmConnectionApi.testLlmConnection.mockReset();
     useWorkspaceStore.setState({
       tabs: [{ id: "smart-query", title: "Ask", type: "smart-query" }],
       activeTabId: "smart-query",
@@ -310,5 +323,56 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     cleanup();
     render(<WorkspaceRouter activeTab={{ id: "llm-config", title: "LLM Config", type: "llm-config" }} showToast={vi.fn()} />);
     expect(workspacePageProps.llmConfig).toMatchObject({ chrome: "workspace" });
+  });
+
+  it("tests the current unsaved LLM draft through a temporary credential lease", async () => {
+    llmConnectionApi.enrollCredentials.mockResolvedValue({
+      credentials: [{ id: "cred_llm_api_key_draft", kind: "llm_api_key" }],
+      lease_id: "lease_llm_draft",
+    });
+    llmConnectionApi.testLlmConnection.mockResolvedValue({
+      ok: true,
+      model: "draft-model",
+      api_base: "https://draft.example.test/v1",
+      latency_ms: 12,
+    });
+    llmConnectionApi.releaseCredentialLease.mockResolvedValue(undefined);
+
+    await testDraftLlmConnection({
+      credentialId: "cred_llm_api_key_saved",
+      apiKey: "sk-current-draft-only",
+      apiBase: "https://draft.example.test/v1",
+      modelName: "draft-model",
+    });
+
+    expect(llmConnectionApi.enrollCredentials).toHaveBeenCalledWith([
+      { kind: "llm_api_key", secret: "sk-current-draft-only" },
+    ]);
+    expect(llmConnectionApi.testLlmConnection).toHaveBeenCalledWith(
+      "cred_llm_api_key_draft",
+      "https://draft.example.test/v1",
+      "draft-model",
+    );
+    expect(llmConnectionApi.releaseCredentialLease).toHaveBeenCalledWith("lease_llm_draft");
+  });
+
+  it("releases the temporary LLM draft lease when the connection test fails", async () => {
+    llmConnectionApi.enrollCredentials.mockResolvedValue({
+      credentials: [{ id: "cred_llm_api_key_draft", kind: "llm_api_key" }],
+      lease_id: "lease_llm_draft",
+    });
+    llmConnectionApi.testLlmConnection.mockRejectedValue(new Error("provider-sentinel"));
+    llmConnectionApi.releaseCredentialLease.mockResolvedValue(undefined);
+
+    await expect(
+      testDraftLlmConnection({
+        credentialId: "cred_llm_api_key_saved",
+        apiKey: "sk-current-draft-only",
+        apiBase: "https://draft.example.test/v1",
+        modelName: "draft-model",
+      }),
+    ).rejects.toThrow("provider-sentinel");
+
+    expect(llmConnectionApi.releaseCredentialLease).toHaveBeenCalledWith("lease_llm_draft");
   });
 });

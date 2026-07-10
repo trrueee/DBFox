@@ -69,6 +69,7 @@ export interface DataSourceTestParams {
   ssl_cert_path?: string | null;
   ssl_key_path?: string | null;
   ssl_verify_identity?: boolean;
+  credential_lease_id?: string | null;
 }
 
 export interface DataSourceCreateParams extends DataSourceTestParams {

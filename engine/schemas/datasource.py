@@ -85,6 +85,8 @@ ConnectionMode = Literal["direct"]
 class _DatasourceRequestStringNormalizer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    credential_lease_id: str | None = Field(default=None, min_length=1, max_length=128)
+
     @field_validator(
         "project_id",
         "name",
@@ -100,13 +102,13 @@ class _DatasourceRequestStringNormalizer(BaseModel):
         "ssl_ca_path",
         "ssl_cert_path",
         "ssl_key_path",
+        "credential_lease_id",
         mode="before",
         check_fields=False,
     )
     @classmethod
     def _strip_non_secret_strings(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
-
 
 class DataSourceTestRequest(_DatasourceRequestStringNormalizer):
 

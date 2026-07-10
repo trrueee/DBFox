@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
 from engine.agent_core.persistence import get_conversation_detail, list_conversation_summaries
 from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
 from engine.api.agent import _format_sse_event, attach_conversation_event_ids, sse_failed_event
@@ -20,6 +22,7 @@ from engine.models import AgentSession
 
 
 router = APIRouter()
+logger = logging.getLogger("dbfox.api.conversations")
 
 
 class ConversationCreateRequest(BaseModel):
@@ -178,11 +181,12 @@ def stream_conversation_message(
                 yield _format_sse_event(event)
         except Exception as exc:
             db.rollback()
+            failure = public_agent_failure(exc, operation="run")
+            safe_agent_log(logger, operation="run", exc=exc)
             yield sse_failed_event(
                 "conversation_stream_error",
                 "",
-                f"Agent runtime failed: {exc}",
-                "AGENT_RUNTIME_ERROR",
+                failure,
             )
 
     return StreamingResponse(

@@ -30,7 +30,11 @@ import {
   type DatasourceFormShape,
 } from "../lib/datasourcePayload";
 import { buildSchemaSyncOptions } from "../lib/llmConfig";
-import { enrollCredential } from "../lib/api/credentials";
+import {
+  enrollCredentials,
+  releaseCredentialLease,
+  type CredentialEnrollmentInput,
+} from "../lib/api/credentials";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -85,22 +89,36 @@ const schemaSyncOptions = (aiEnrich: boolean): SchemaSyncOptions | undefined => 
   return buildSchemaSyncOptions(aiEnrich);
 };
 
-async function enrollDatasourceCredentials(form: DatasourceFormShape): Promise<DatasourceCredentialReferences> {
-  const [password, sshPassword, sshPassphrase] = await Promise.all([
-    form.password?.trim()
-      ? enrollCredential("datasource_password", form.password)
-      : Promise.resolve(null),
-    form.ssh_password?.trim()
-      ? enrollCredential("ssh_password", form.ssh_password)
-      : Promise.resolve(null),
-    form.ssh_pkey_passphrase?.trim()
-      ? enrollCredential("ssh_key_passphrase", form.ssh_pkey_passphrase)
-      : Promise.resolve(null),
-  ]);
+type DatasourceCredentialEnrollment = {
+  references: DatasourceCredentialReferences;
+  credentialLeaseId: string | null;
+};
+
+async function enrollDatasourceCredentials(
+  form: DatasourceFormShape,
+): Promise<DatasourceCredentialEnrollment> {
+  const inputs: CredentialEnrollmentInput[] = [];
+  if (form.password?.trim()) {
+    inputs.push({ kind: "datasource_password", secret: form.password });
+  }
+  if (form.ssh_password?.trim()) {
+    inputs.push({ kind: "ssh_password", secret: form.ssh_password });
+  }
+  if (form.ssh_pkey_passphrase?.trim()) {
+    inputs.push({ kind: "ssh_key_passphrase", secret: form.ssh_pkey_passphrase });
+  }
+  const enrollment = await enrollCredentials(inputs);
+  const enrolled = enrollment?.credentials ?? [];
+  const password = enrolled.find((reference) => reference.kind === "datasource_password");
+  const sshPassword = enrolled.find((reference) => reference.kind === "ssh_password");
+  const sshPassphrase = enrolled.find((reference) => reference.kind === "ssh_key_passphrase");
   return {
-    ...(password ? { password_credential_id: password.id } : {}),
-    ...(sshPassword ? { ssh_password_credential_id: sshPassword.id } : {}),
-    ...(sshPassphrase ? { ssh_key_passphrase_credential_id: sshPassphrase.id } : {}),
+    references: {
+      ...(password ? { password_credential_id: password.id } : {}),
+      ...(sshPassword ? { ssh_password_credential_id: sshPassword.id } : {}),
+      ...(sshPassphrase ? { ssh_key_passphrase_credential_id: sshPassphrase.id } : {}),
+    },
+    credentialLeaseId: enrollment?.lease_id ?? null,
   };
 }
 
@@ -218,25 +236,44 @@ export const DataSourcesPage = ({
       setTestResult({ status: "error", message: "请先填写主机、数据库名和用户名。" });
       return;
     }
-    setTestResult({ status: "testing", message: "正在测试连接..." });
+      setTestResult({ status: "testing", message: "正在测试连接..." });
     try {
-      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
-      const result = await api.testConnection(buildDatasourceTestPayload(nextForm as DatasourceFormShape, credentials));
-      setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
+      const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      try {
+        const result = await api.testConnection(
+          buildDatasourceTestPayload(
+            nextForm as DatasourceFormShape,
+            enrollment.references,
+            enrollment.credentialLeaseId,
+          ),
+        );
+        setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
+      } finally {
+        if (enrollment.credentialLeaseId) {
+          await releaseCredentialLease(enrollment.credentialLeaseId).catch(() => undefined);
+        }
+      }
     } catch (error: unknown) {
       setTestResult({ status: "error", message: (error as Error).message ?? "连接测试失败。" });
     }
   };
 
   const handleCreate = async (nextForm: DatasourceFormState = form) => {
+    let credentialLeaseId: string | null = null;
     try {
       setActionState("saving");
       setFormError("");
       const createFn = createDatasource || api.createDatasource;
       const syncFn = syncSchema || api.syncSchema;
-      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      credentialLeaseId = enrollment.credentialLeaseId;
       const created = await createFn(
-        buildDatasourceCreatePayload(nextForm as DatasourceFormShape, activeProject?.id, credentials),
+        buildDatasourceCreatePayload(
+          nextForm as DatasourceFormShape,
+          activeProject?.id,
+          enrollment.references,
+          enrollment.credentialLeaseId,
+        ),
       );
       setMode("detail");
       setForm(emptyDatasourceForm());
@@ -265,18 +302,30 @@ export const DataSourcesPage = ({
     } catch (error: unknown) {
       setFormError((error as Error).message ?? "保存失败。");
     } finally {
+      if (credentialLeaseId) {
+        await releaseCredentialLease(credentialLeaseId).catch(() => undefined);
+      }
       setActionState("idle");
     }
   };
 
   const handleUpdate = async (nextForm: DatasourceFormState = form) => {
     if (!selected) return;
+    let credentialLeaseId: string | null = null;
     try {
       setActionState("saving");
       setFormError("");
       const updateFn = updateDatasource || api.updateDatasource;
-      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
-      await updateFn(selected.id, buildDatasourceUpdatePayload(nextForm as DatasourceFormShape, credentials));
+      const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      credentialLeaseId = enrollment.credentialLeaseId;
+      await updateFn(
+        selected.id,
+        buildDatasourceUpdatePayload(
+          nextForm as DatasourceFormShape,
+          enrollment.references,
+          enrollment.credentialLeaseId,
+        ),
+      );
       setForm((current) => stripSensitiveDatasourceForm(current));
       setMode("detail");
       await loadDatasources(selected.id);
@@ -285,6 +334,9 @@ export const DataSourcesPage = ({
     } catch (error: unknown) {
       setFormError((error as Error).message ?? "更新失败。");
     } finally {
+      if (credentialLeaseId) {
+        await releaseCredentialLease(credentialLeaseId).catch(() => undefined);
+      }
       setActionState("idle");
     }
   };
