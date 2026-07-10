@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from engine.api.datasources.common import schema_column_to_dict, schema_table_to_dict
-from engine.app.errors import public_message
 from engine.db import get_db
 from engine.environment.schema_catalog_sync import ensure_catalog as _sync_catalog
 from engine.errors import DBFoxError, NotFoundError
@@ -17,6 +16,14 @@ from engine.schema_sync import build_er_diagram_data
 
 logger = logging.getLogger("dbfox.api.datasources.schema")
 router = APIRouter()
+SCHEMA_SYNC_FAILED_MESSAGE = "Schema synchronization failed."
+
+
+def _rollback_sync_failure(db: Session) -> None:
+    try:
+        db.rollback()
+    except Exception as exc:
+        logger.warning("Schema sync rollback failed (%s)", type(exc).__name__)
 
 
 class SchemaSyncRequest(BaseModel):
@@ -73,8 +80,10 @@ def api_sync_schema(
             )
 
         return response
-    except ValueError as exc:
-        raise DBFoxError(code="SYNC_FAILED", message=str(exc)) from exc
+    except Exception as exc:
+        _rollback_sync_failure(db)
+        logger.warning("Schema synchronization failed (%s)", type(exc).__name__)
+        raise DBFoxError(code="SYNC_FAILED", message=SCHEMA_SYNC_FAILED_MESSAGE) from None
 
 
 @router.get("/schema/tables")
@@ -86,13 +95,13 @@ def api_list_tables(
     if not tables:
         try:
             _sync_catalog(db, datasource_id)
-        except Exception as exc:
-            db.rollback()
+        except Exception:
+            _rollback_sync_failure(db)
             logger.warning("Auto schema sync before listing tables failed for %s", datasource_id)
             raise DBFoxError(
-                message=f"Schema sync failed: {public_message(exc)}",
+                message=SCHEMA_SYNC_FAILED_MESSAGE,
                 code="SYNC_FAILED",
-            ) from exc
+            ) from None
         else:
             tables = load_schema_tables(db, datasource_id)
     return [schema_table_to_dict(table) for table in tables]

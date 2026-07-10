@@ -44,6 +44,29 @@ def _within_post_query_analysis_grace(
 
 
 def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+    """Run the model node without allowing exceptions to escape a LangGraph task."""
+    try:
+        return _call_model_impl(state, config)
+    except Exception as exc:
+        return _model_failure_result(exc)
+
+
+def _model_failure_result(exc: Exception) -> dict[str, Any]:
+    failure = public_agent_failure(exc, operation="run")
+    safe_agent_log(logger, operation="run", exc=exc)
+    return {
+        "status": "failed",
+        "error": failure.message,
+        "trace_events": [
+            {
+                "type": "agent.model.failed",
+                "error": failure.message,
+            }
+        ],
+    }
+
+
+def _call_model_impl(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     # Hard block: do not invoke the model if we have already reached max_steps.
     # Without this check the model would emit one more set of tool_calls after
     # the step limit was hit, which wastes tokens and can produce confusing
@@ -135,18 +158,7 @@ def call_model(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]
             "step_count": state.get("step_count", 0) + 1,
         }
     except Exception as exc:
-        failure = public_agent_failure(exc, operation="run")
-        safe_agent_log(logger, operation="run", exc=exc)
-        return {
-            "status": "failed",
-            "error": failure.message,
-            "trace_events": [
-                {
-                    "type": "agent.model.failed",
-                    "error": failure.message,
-                }
-            ],
-        }
+        return _model_failure_result(exc)
 
 
 def _stream_or_invoke_model_message(

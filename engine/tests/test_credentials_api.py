@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import status
 
 from engine.api.credentials import (
     CredentialLeaseRegistry,
@@ -89,11 +90,15 @@ def test_release_endpoint_deletes_only_its_server_issued_lease_credentials(monke
     persistent_id = vault.put(kind=CredentialKind.LLM_API_KEY, secret="saved-secret")
     lease_id = leases.issue({leased_id})
 
-    api_release_credential_lease(lease_id)
+    response = api_release_credential_lease(lease_id)
 
-    assert any(
-        route.path == "/credentials/leases/{lease_id}" and "DELETE" in route.methods
+    route = next(
+        route
         for route in router.routes
+        if route.path == "/credentials/leases/{lease_id}" and "DELETE" in route.methods
     )
+    assert route.status_code == status.HTTP_204_NO_CONTENT
+    assert route.response_model is None
+    assert response is None
     assert vault.get(leased_id) is None
     assert vault.get(persistent_id) == "saved-secret"

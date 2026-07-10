@@ -155,7 +155,11 @@ def api_enroll_credentials(
     return enroll_credentials(request)
 
 
-@router.delete("/credentials/leases/{lease_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/credentials/leases/{lease_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 def api_release_credential_lease(lease_id: str) -> None:
     """Revoke only credentials held by this still-uncommitted server lease."""
     release_credential_lease(lease_id)

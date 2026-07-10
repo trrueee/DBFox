@@ -17,6 +17,7 @@ from engine.agent.progress.fast_path import (
 )
 from engine.agent.progress.llm_judge import call_llm_judge
 from engine.agent.progress.lens_formatter import enrich_progress_result
+from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
 
 logger = logging.getLogger("dbfox.dbfox_agent.nodes.progress_node")
 
@@ -113,6 +114,32 @@ def _approval_pending_payload(
 
 
 def judge_progress(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+    """Contain every progress-node failure before LangGraph can checkpoint it."""
+    try:
+        return _judge_progress_impl(state, config)
+    except Exception as exc:
+        failure = public_agent_failure(exc, operation="run")
+        safe_agent_log(logger, operation="run", exc=exc)
+        decision = progress_decision_dict(
+            status="failed",
+            reason_summary=failure.message,
+            root_cause=failure.message,
+            should_finalize=True,
+        )
+        return {
+            "status": "failed",
+            "error": failure.message,
+            "progress_decision": decision,
+            "trace_events": [
+                {
+                    "type": "agent.progress.failed",
+                    "error": failure.message,
+                }
+            ],
+        }
+
+
+def _judge_progress_impl(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM Progress Judge — decides whether the task is complete after each observe.
 
     This node coordinates fast-paths (escalation, SQL repair, ReAct routing) and

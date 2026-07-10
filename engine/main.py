@@ -29,17 +29,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from engine.api import router
-from engine.app.errors import public_error
 from engine.db import init_db
 from engine.diagnostics.logs import configure_diagnostic_logging
 from engine.errors import DBFoxError, NotFoundError
 from engine.schemas import ErrorResponse
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
 from engine.runtime_paths import private_runtime_file
+from engine.security.credential_vault import CredentialVaultUnavailableError
 
 # 创建当前模块的日志记录器
 logger = logging.getLogger("dbfox.main")
 DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
+SAFE_DBFOX_ERROR_MESSAGE = "Request could not be completed."
+_SAFE_DBFOX_ERROR_CODES: tuple[tuple[type[DBFoxError], str], ...] = (
+    (CredentialVaultUnavailableError, "CREDENTIAL_VAULT_UNAVAILABLE"),
+)
+
+
+def _safe_dbfox_error_code(exc: DBFoxError) -> str:
+    """Map only static, type-owned error codes; never trust instance values."""
+    for error_type, code in _SAFE_DBFOX_ERROR_CODES:
+        if isinstance(exc, error_type):
+            return code
+    return "DBFOX_ERROR"
 
 # 计算当前 main.py 所在的 engine 目录以及项目根目录
 ENGINE_DIR = Path(__file__).resolve().parent
@@ -279,15 +291,23 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
       - `@app.exception_handler(异常类型)` 使得每当接口运行期间抛出此类型异常时，FastAPI 就会直接跳过默认报错行为，
         调用这个装饰的函数来生成自定义 HTTP 响应给客户端。
     """
-    logger.warning("DBFoxError at %s %s: [%s] %s", request.method, request.url.path, exc.code, exc.message)
-    detail = public_error(exc.code, exc.message)
+    # DBFoxError instances may wrap arbitrary provider or driver exceptions,
+    # so neither their message nor caller-supplied code is trusted here.
+    code = _safe_dbfox_error_code(exc)
+    logger.warning(
+        "DBFoxError (%s) at %s %s code=%s",
+        type(exc).__name__,
+        request.method,
+        request.url.path,
+        code,
+    )
     return JSONResponse(
         status_code=404 if isinstance(exc, NotFoundError) else 400,
         content={
             "detail": ErrorResponse(
-                code=str(detail["code"]),
-                message=str(detail["message"]),
-                checks=getattr(exc, "checks", []),
+                code=code,
+                message=SAFE_DBFOX_ERROR_MESSAGE,
+                checks=[],
             ).model_dump()
         },
     )
@@ -301,7 +321,12 @@ async def global_unhandled_exception_handler(request: Request, exc: Exception) -
     拦截 of 异常最终都会落到这里，统一返回 500 Internal Server Error。
     API 路由层只需 ``db.rollback(); raise``，不再需要逐个构造 HTTPException(status_code=500)。
     """
-    logger.exception("Unhandled exception at %s %s", request.method, request.url.path)
+    logger.error(
+        "Unhandled exception (%s) at %s %s",
+        type(exc).__name__,
+        request.method,
+        request.url.path,
+    )
     return JSONResponse(
         status_code=500,
         content={

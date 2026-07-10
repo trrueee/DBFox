@@ -4,8 +4,12 @@ import uuid
 
 import pytest
 
+import engine.api.datasources.schema as schema_api
 from engine.ai_index import enrich_tables_batch
 from engine.ai_enrich import ai_enrich_catalog
+from engine.environment.inventory import SchemaInventory
+from engine.environment.schema_catalog_sync import SchemaCatalogSync
+from engine.errors import DBFoxError
 from engine.models import SchemaColumn, SchemaTable
 
 
@@ -148,4 +152,81 @@ def test_catalog_enrichment_never_returns_or_logs_provider_error_text(
     assert result["reason"] == "LLM_ENRICH_FAILED"
     assert result["errors"] == ["LLM_ENRICH_FAILED"]
     assert SENTINEL not in repr(result)
+    assert SENTINEL not in caplog.text
+
+
+def test_catalog_sync_records_a_fixed_enrichment_failure_for_config_errors(
+    db_session,
+    test_datasource,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail_provider_config(*_args, **_kwargs):
+        raise RuntimeError(SENTINEL)
+
+    monkeypatch.setattr(
+        "engine.llm.config.resolve_product_llm_config_from_credential",
+        fail_provider_config,
+    )
+
+    result = SchemaCatalogSync().sync_inventory(
+        db_session,
+        test_datasource.id,
+        SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite"),
+        ai_enrich=True,
+        llm_credential_id="cred_llm_api_key_schema_sync_test",
+    )
+
+    assert result.ai_enrich_result == {
+        "ai_enriched": False,
+        "enriched_count": 0,
+        "reason": "LLM_ENRICH_FAILED",
+        "errors": ["LLM_ENRICH_FAILED"],
+    }
+    assert SENTINEL not in repr(result)
+    assert SENTINEL not in caplog.text
+
+
+def test_sync_api_replaces_unexpected_sync_error_with_a_fixed_public_message(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail_sync(*_args, **_kwargs):
+        raise RuntimeError(SENTINEL)
+
+    monkeypatch.setattr(schema_api, "_sync_catalog", fail_sync)
+
+    with pytest.raises(DBFoxError) as exc_info:
+        schema_api.api_sync_schema(
+            "ds-schema-sync-test",
+            schema_api.SchemaSyncRequest(ai_enrich=True),
+            db_session,
+        )
+
+    assert exc_info.value.code == "SYNC_FAILED"
+    assert exc_info.value.message == "Schema synchronization failed."
+    assert exc_info.value.__cause__ is None
+    assert SENTINEL not in repr(exc_info.value)
+    assert SENTINEL not in caplog.text
+
+
+def test_schema_list_auto_sync_uses_the_fixed_public_failure_message(
+    db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fail_sync(*_args, **_kwargs):
+        raise RuntimeError(SENTINEL)
+
+    monkeypatch.setattr(schema_api, "load_schema_tables", lambda *_args: [])
+    monkeypatch.setattr(schema_api, "_sync_catalog", fail_sync)
+
+    with pytest.raises(DBFoxError) as exc_info:
+        schema_api.api_list_tables("ds-schema-sync-test", db_session)
+
+    assert exc_info.value.code == "SYNC_FAILED"
+    assert exc_info.value.message == "Schema synchronization failed."
+    assert exc_info.value.__cause__ is None
+    assert SENTINEL not in repr(exc_info.value)
     assert SENTINEL not in caplog.text

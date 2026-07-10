@@ -25,6 +25,17 @@ from engine.environment.schema_introspector import introspect_datasource
 logger = logging.getLogger("dbfox.environment.schema_catalog_sync")
 
 
+def _ai_enrich_failure_result() -> dict[str, Any]:
+    from engine.ai_index import LLM_ENRICH_FAILED
+
+    return {
+        "ai_enriched": False,
+        "enriched_count": 0,
+        "reason": LLM_ENRICH_FAILED,
+        "errors": [LLM_ENRICH_FAILED],
+    }
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -305,24 +316,39 @@ class SchemaCatalogSync:
         )
 
         if ai_enrich:
-            from engine.ai_enrich import ai_enrich_catalog
-            from engine.llm.config import resolve_product_llm_config_from_credential
+            try:
+                from engine.ai_enrich import ai_enrich_catalog
+                from engine.llm.config import resolve_product_llm_config_from_credential
 
-            llm_config = (
-                resolve_product_llm_config_from_credential(
-                    llm_credential_id=llm_credential_id,
-                    api_base=ai_api_base,
-                    model_name=ai_model_name,
+                llm_config = (
+                    resolve_product_llm_config_from_credential(
+                        llm_credential_id=llm_credential_id,
+                        api_base=ai_api_base,
+                        model_name=ai_model_name,
+                    )
+                    if llm_credential_id
+                    else None
                 )
-                if llm_credential_id
-                else None
+                enrich_result = ai_enrich_catalog(
+                    db,
+                    datasource_id,
+                    llm_config=llm_config,
+                )
+            except Exception as exc:
+                logger.warning("AI enrichment failed (%s)", type(exc).__name__)
+                enrich_result = _ai_enrich_failure_result()
+            if not isinstance(enrich_result, dict):
+                logger.warning(
+                    "AI enrichment returned an invalid result (%s)",
+                    type(enrich_result).__name__,
+                )
+                enrich_result = _ai_enrich_failure_result()
+            logger.info(
+                "AI enrichment finished: enabled=%s enriched_count=%d failures=%d",
+                bool(enrich_result.get("ai_enriched")),
+                int(enrich_result.get("enriched_count", 0)),
+                len(enrich_result.get("errors", [])),
             )
-            enrich_result = ai_enrich_catalog(
-                db,
-                datasource_id,
-                llm_config=llm_config,
-            )
-            logger.info("AI enrich: %s", enrich_result)
             result.ai_enrich_result = enrich_result
 
         return result

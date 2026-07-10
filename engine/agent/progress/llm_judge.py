@@ -23,6 +23,36 @@ logger = logging.getLogger("dbfox.dbfox_agent.progress.llm_judge")
 
 
 def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
+    """Run progress judgment without allowing a provider error to escape the node."""
+    try:
+        return _call_llm_judge_impl(state, config)
+    except Exception as exc:
+        return _judge_failure_result(exc)
+
+
+def _judge_failure_result(exc: Exception) -> dict[str, Any]:
+    failure = public_agent_failure(exc, operation="run")
+    safe_agent_log(logger, operation="run", exc=exc)
+    decision = ProgressDecision(
+        status="failed",
+        reason_summary=failure.message,
+        root_cause=failure.message,
+        should_finalize=True,
+    )
+    return {
+        "status": "failed",
+        "error": failure.message,
+        "progress_decision": decision.model_dump(mode="json"),
+        "trace_events": [
+            {
+                "type": "agent.progress.failed",
+                "error": failure.message,
+            }
+        ],
+    }
+
+
+def _call_llm_judge_impl(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, Any]:
     """LLM progress judge — evaluates execution context semantically to determine progress."""
     ctx = graph_context(config)
 
@@ -125,7 +155,10 @@ def call_llm_judge(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, 
             if recovery_blocks:
                 context_parts.append("\n\n".join(recovery_blocks))
         except Exception as exc:
-            logger.warning("Failed to load skill recovery context for progress judge: %s", exc)
+            logger.warning(
+                "Failed to load skill recovery context for progress judge (%s)",
+                type(exc).__name__,
+            )
 
     judge_prompt = "\n\n".join(context_parts)
 
