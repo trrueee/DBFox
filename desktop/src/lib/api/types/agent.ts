@@ -200,7 +200,7 @@ export interface AgentRunConfig {
   assistantMessageId?: string | null;
   parentRunId?: string | null;
   followUpContext?: AgentFollowUpContext | null;
-  apiKey?: string;
+  llmCredentialId?: string;
   apiBase?: string;
   model?: string;
   workspaceContext?: AgentWorkspaceContext | null;

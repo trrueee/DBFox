@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 AgentStepStatus = Literal["success", "failed", "skipped"]
@@ -127,6 +127,8 @@ class AgentWorkspaceContext(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     datasource_id: str
     question: str
     session_id: str | None = None
@@ -135,7 +137,7 @@ class AgentRunRequest(BaseModel):
     assistant_message_id: str | None = None
     parent_run_id: str | None = None
     follow_up_context: AgentFollowUpContext | None = None
-    api_key: str | None = None
+    llm_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     api_base: str | None = None
     model_name: str | None = None
     workspace_context: AgentWorkspaceContext | None = None

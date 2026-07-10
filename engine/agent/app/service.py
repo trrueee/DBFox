@@ -128,7 +128,7 @@ class DBFoxAgentService:
         # Build and run graph. The LangGraph checkpoint thread is keyed by the
         # conversation/session id so runtime memory spans turns.
         app = build_dbfox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(session_id)
+        config = ctx.graph_config(session_id, run_id=run_id)
 
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()
@@ -287,7 +287,7 @@ class DBFoxAgentService:
             yield emit("agent.run.resumed", step={"name": approval.step_name}, approval=approval)
 
         app = build_dbfox_react_graph(checkpointer=self._checkpointer)
-        config = ctx.graph_config(session_id)
+        config = ctx.graph_config(session_id, run_id=run_id)
         artifact_identity = AgentArtifactIdentity(run_id)
         agent_state = self._new_agent_state(run_id, session_id, req)
         emitted_artifact_ids: set[str] = set()

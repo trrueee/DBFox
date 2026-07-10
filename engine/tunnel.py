@@ -7,8 +7,8 @@ from typing import Any
 
 from sshtunnel import SSHTunnelForwarder
 
-from engine.crypto import decrypt_password
 from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 
 logger = logging.getLogger("dbfox.tunnel")
 
@@ -41,10 +41,23 @@ def _create_physical_tunnel_forwarder(config: dict[str, Any], is_managed: bool) 
     pkey_passphrase = None
 
     if is_managed:
-        if config.get("ssh_password_ciphertext") and config.get("ssh_password_nonce"):
-            ssh_password = decrypt_password(config["ssh_password_ciphertext"], config["ssh_password_nonce"])
-        if config.get("ssh_pkey_passphrase_ciphertext") and config.get("ssh_pkey_passphrase_nonce"):
-            pkey_passphrase = decrypt_password(config["ssh_pkey_passphrase_ciphertext"], config["ssh_pkey_passphrase_nonce"])
+        vault = get_credential_vault()
+        ssh_password_id = config.get("ssh_password_credential_id")
+        if ssh_password_id:
+            ssh_password = vault.get(
+                str(ssh_password_id),
+                expected_kind=CredentialKind.SSH_PASSWORD,
+            )
+            if ssh_password is None:
+                raise DataSourceConnectionError("SSH password credential was not found.")
+        pkey_passphrase_id = config.get("ssh_key_passphrase_credential_id")
+        if pkey_passphrase_id:
+            pkey_passphrase = vault.get(
+                str(pkey_passphrase_id),
+                expected_kind=CredentialKind.SSH_KEY_PASSPHRASE,
+            )
+            if pkey_passphrase is None:
+                raise DataSourceConnectionError("SSH key passphrase credential was not found.")
     else:
         ssh_password = config.get("ssh_password")
         pkey_passphrase = config.get("ssh_pkey_passphrase")

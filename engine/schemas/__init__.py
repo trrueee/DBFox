@@ -29,6 +29,7 @@ from engine.schemas.ai import SQLGenerateRequest, SchemaAlterationRequest, Golde
 from engine.schemas.semantic import (
     WorkspaceTableScopeUpdateRequest,
 )
+from engine.schemas.credentials import CredentialEnrollmentRequest, CredentialReference
 
 __all__ = [
     "ProjectCreateRequest",
@@ -52,4 +53,6 @@ __all__ = [
     "GoldenSQLCreateRequest",
     "BenchmarkRequest",
     "WorkspaceTableScopeUpdateRequest",
+    "CredentialEnrollmentRequest",
+    "CredentialReference",
 ]

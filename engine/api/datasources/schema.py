@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from engine.api.datasources.common import schema_column_to_dict, schema_table_to_dict
@@ -20,8 +20,10 @@ router = APIRouter()
 
 
 class SchemaSyncRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     ai_enrich: bool = False
-    api_key: str | None = None
+    llm_credential_id: str | None = None
     api_base: str | None = None
     model_name: str | None = None
 
@@ -42,7 +44,7 @@ def api_sync_schema(
             db,
             id,
             ai_enrich=payload.ai_enrich,
-            ai_api_key=payload.api_key,
+            llm_credential_id=payload.llm_credential_id,
             ai_api_base=payload.api_base,
             ai_model_name=payload.model_name,
         )

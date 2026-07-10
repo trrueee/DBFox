@@ -102,6 +102,9 @@ def start_run(
             req.follow_up_context.parent_run_id if req.follow_up_context else None
         ),
         datasource_id=req.datasource_id,
+        llm_credential_id=req.llm_credential_id,
+        api_base=req.api_base,
+        model_name=req.model_name,
         user_message_id=user_message_id,
         assistant_message_id=assistant_message_id,
         question=req.question,

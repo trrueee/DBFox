@@ -8,7 +8,7 @@ import {
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
-import type { ApiConfig } from "../lib/api/types";
+import type { LlmConfigDraft } from "../lib/api/types";
 import {
   DEFAULT_LLM_API_BASE,
   LLM_MODEL_PRESETS,
@@ -18,8 +18,8 @@ import {
 import "./LlmConfigPanel.css";
 
 interface LlmConfigPanelProps {
-  config: ApiConfig;
-  onChange: (partial: Partial<ApiConfig>) => void;
+  config: LlmConfigDraft;
+  onChange: (partial: Partial<LlmConfigDraft>) => void;
   onSave?: () => void;
   onTestConnection?: () => void | Promise<void>;
   saved?: boolean;
@@ -28,6 +28,7 @@ interface LlmConfigPanelProps {
 }
 
 const llmConfigSchema = z.object({
+  credentialId: z.string(),
   apiKey: z.string(),
   apiBase: z.string().trim().refine((value) => value === "" || isHttpUrl(value), {
     message: "API Base URL 必须是有效的 http(s) 地址",
@@ -99,26 +100,26 @@ export function LlmConfigPanel({
     register,
     setValue,
     control,
-  } = useForm<ApiConfig>({
+  } = useForm<LlmConfigDraft>({
     values: config,
     mode: "onChange",
     resolver: zodResolver(llmConfigSchema),
   });
-  const values = useWatch({ control }) as ApiConfig;
+  const values = useWatch({ control }) as LlmConfigDraft;
   const presetValues = LLM_MODEL_PRESETS.map((m) => m.value);
   const isCustomModel = Boolean(values.modelName) && !presetValues.includes(values.modelName);
   const activePreset = findModelPreset(values.modelName);
   const embeddedWorkspace = chrome === "workspace";
   const validationMessage = formState.errors.apiBase?.message || formState.errors.apiKey?.message || formState.errors.modelName?.message || "";
 
-  const applyConfigPatch = (partial: Partial<ApiConfig>) => {
-    for (const [key, value] of Object.entries(partial) as Array<[keyof ApiConfig, string]>) {
+  const applyConfigPatch = (partial: Partial<LlmConfigDraft>) => {
+    for (const [key, value] of Object.entries(partial) as Array<[keyof LlmConfigDraft, string]>) {
       setValue(key, value, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
     }
     onChange(partial);
   };
 
-  const inputProps = (key: keyof ApiConfig) => {
+  const inputProps = (key: keyof LlmConfigDraft) => {
     const field = register(key);
     return {
       ...field,

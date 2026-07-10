@@ -4,9 +4,10 @@ import json
 from datetime import datetime
 from typing import Any
 
-from engine.crypto import decrypt_password, encrypt_password
 from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTable
 from engine.schemas.datasource import DataSourceResponse
+from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 
 
 def datasource_to_dict(ds: DataSource) -> dict[str, Any]:
@@ -79,10 +80,20 @@ def datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
     host = str(ds.host or "")
     database_name = str(ds.database_name or "")
     db_type = str(ds.db_type or "mysql")
-    password = ""
+    vault = get_credential_vault()
 
-    if db_type != "sqlite":
-        password = decrypt_password(str(ds.password_ciphertext), str(ds.password_nonce))
+    def resolve(credential_id: str | None, kind: CredentialKind) -> str:
+        if not credential_id:
+            return ""
+        secret = vault.get(str(credential_id), expected_kind=kind)
+        if secret is None:
+            raise DataSourceConnectionError("Credential reference was not found or has the wrong kind.")
+        return secret
+
+    password = "" if db_type == "sqlite" else resolve(
+        ds.password_credential_id,
+        CredentialKind.DATASOURCE_PASSWORD,
+    )
 
     return {
         "id": ds.id,
@@ -97,11 +108,9 @@ def datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
         "ssh_host": ds.ssh_host,
         "ssh_port": int(ds.ssh_port or 22),
         "ssh_username": ds.ssh_username,
-        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-        "ssh_password_nonce": ds.ssh_password_nonce,
+        "ssh_password_credential_id": ds.ssh_password_credential_id,
         "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
+        "ssh_key_passphrase_credential_id": ds.ssh_key_passphrase_credential_id,
         "ssl_enabled": bool(ds.ssl_enabled),
         "ssl_ca_path": ds.ssl_ca_path,
         "ssl_cert_path": ds.ssl_cert_path,
@@ -141,19 +150,6 @@ def persist_health_failure(
     setattr(ds, "last_test_server_version", None)
     setattr(ds, "last_test_tables_count", None)
     setattr(ds, "last_test_warnings", json.dumps([], ensure_ascii=False))
-
-
-def replace_secret_if_present(
-    obj: DataSource,
-    value: str | None,
-    cipher_attr: str,
-    nonce_attr: str,
-) -> None:
-    if value is None or value == "":
-        return
-    cipher, nonce = encrypt_password(value)
-    setattr(obj, cipher_attr, cipher)
-    setattr(obj, nonce_attr, nonce)
 
 
 def set_model_attr(obj: object, attr: str, value: Any) -> None:

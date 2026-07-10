@@ -40,7 +40,7 @@ def sync_schema(
     datasource_id: str,
     *,
     ai_enrich: bool = True,
-    ai_api_key: str | None = None,
+    llm_credential_id: str | None = None,
     ai_api_base: str | None = None,
     ai_model_name: str | None = None,
 ) -> dict[str, Any]:
@@ -64,7 +64,7 @@ def sync_schema(
             db,
             datasource_id,
             ai_enrich=ai_enrich,
-            ai_api_key=ai_api_key,
+            llm_credential_id=llm_credential_id,
             ai_api_base=ai_api_base,
             ai_model_name=ai_model_name,
         )
@@ -88,11 +88,11 @@ def sync_schema(
         }
 
         if ai_enrich:
-            configured_api_key = str(ai_api_key or "").strip()
+            configured_credential_id = str(llm_credential_id or "").strip()
             enrich_result = result.ai_enrich_result or {
                 "ai_enriched": False,
                 "enriched_count": 0,
-                "reason": "请先在设置中配置 LLM API Key。" if not configured_api_key else "Unknown reason",
+                "reason": "请先在设置中配置 LLM 凭据。" if not configured_credential_id else "Unknown reason",
             }
             response["aiEnrich"] = enrich_result
             warning = _ai_enrich_warning(enrich_result)

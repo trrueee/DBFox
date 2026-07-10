@@ -73,7 +73,7 @@ export const useAgentStore = create<AgentStore>()((_set, get) => ({
 
     const llm = getStoredApiConfig();
     const normalizedLlm = normalizeProductLlmConfig(llm);
-    if (!normalizedLlm.hasApiKey) {
+    if (!normalizedLlm.hasCredential) {
       ws.appendTabMessages(tabId, [
         {
           id: ws._nextMsgId(),

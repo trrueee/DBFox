@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.crypto import decrypt_password
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 from engine.environment.datasource_resolver import (
     ResolvedDataSource,
     resolve_datasource,
@@ -634,11 +634,14 @@ class SchemaIntrospector:
         ds = db.query(DS).filter(DS.id == datasource_id).first()
         if ds is None:
             return ""
+        credential_id = ds.password_credential_id
+        if not credential_id:
+            return ""
         try:
-            return decrypt_password(
-                str(ds.password_ciphertext or ""),
-                str(ds.password_nonce or ""),
-            )
+            return get_credential_vault().get(
+                str(credential_id),
+                expected_kind=CredentialKind.DATASOURCE_PASSWORD,
+            ) or ""
         except Exception:
             return ""
 

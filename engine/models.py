@@ -97,20 +97,18 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     database_name = Column(String, nullable=False)
     username = Column(String, nullable=False)
 
-    password_ciphertext = Column(String, nullable=False)
-    password_nonce = Column(String, nullable=False)
-    password_key_version = Column(String, nullable=False, default="v1")
+    # Secrets are held exclusively in the OS credential vault.  Metadata may
+    # contain their opaque identifiers but never ciphertext/nonces.
+    password_credential_id = Column(String, nullable=True)
 
     # SSH Tunnel configurations
     ssh_enabled = Column(Boolean, nullable=False, default=False)
     ssh_host = Column(String, nullable=True)
     ssh_port = Column(Integer, nullable=False, default=22)
     ssh_username = Column(String, nullable=True)
-    ssh_password_ciphertext = Column(String, nullable=True)
-    ssh_password_nonce = Column(String, nullable=True)
+    ssh_password_credential_id = Column(String, nullable=True)
     ssh_pkey_path = Column(String, nullable=True)
-    ssh_pkey_passphrase_ciphertext = Column(String, nullable=True)
-    ssh_pkey_passphrase_nonce = Column(String, nullable=True)
+    ssh_key_passphrase_credential_id = Column(String, nullable=True)
 
     ssl_enabled = Column(Boolean, nullable=False, default=False)
     ssl_ca_path = Column(String, nullable=True)
@@ -527,6 +525,9 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     parent_run_id = Column(String, nullable=True)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    llm_credential_id = Column(String, nullable=True)
+    api_base = Column(String, nullable=True)
+    model_name = Column(String, nullable=True)
     user_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     assistant_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     question = Column(Text, nullable=False)

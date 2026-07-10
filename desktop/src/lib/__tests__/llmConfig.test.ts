@@ -1,114 +1,65 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  API_CONFIG_STORAGE_KEY,
   DEFAULT_API_CONFIG,
-  buildAgentRunLlmConfig,
-  buildConversationLlmPayload,
-  buildLlmTestValues,
-  buildSchemaSyncOptions,
+  discardLlmConfigDraft,
   getStoredApiConfig,
-  normalizeProductLlmConfig,
   saveStoredApiConfig,
 } from "../llmConfig";
 
-describe("llmConfig", () => {
+describe("llmConfig credential boundary", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("loads the default product config when storage is empty or invalid", () => {
-    expect(getStoredApiConfig()).toEqual(DEFAULT_API_CONFIG);
-
-    localStorage.setItem("dbfox-api-config", JSON.stringify({ apiKey: "sk-test" }));
-
-    expect(getStoredApiConfig()).toEqual(DEFAULT_API_CONFIG);
-  });
-
-  it("persists and reads the product LLM config from the shared storage key", () => {
+  it("serializes only the opaque credential reference and LLM preferences", () => {
     saveStoredApiConfig({
-      apiKey: " sk-test ",
+      credentialId: "cred_llm_api_key_123",
       apiBase: " https://example.test/v1 ",
       modelName: " qwen-plus ",
     });
 
-    expect(getStoredApiConfig()).toEqual({
-      apiKey: " sk-test ",
-      apiBase: " https://example.test/v1 ",
-      modelName: " qwen-plus ",
+    const raw = localStorage.getItem(API_CONFIG_STORAGE_KEY);
+    expect(raw).not.toContain("apiKey");
+    expect(JSON.parse(raw ?? "{}")).toEqual({
+      credentialId: "cred_llm_api_key_123",
+      apiBase: "https://example.test/v1",
+      modelName: "qwen-plus",
     });
   });
 
-  it("normalizes request config by trimming values and applying product defaults", () => {
-    expect(
-      normalizeProductLlmConfig({
-        apiKey: " sk-test ",
-        apiBase: " ",
-        modelName: " ",
-      }),
-    ).toEqual({
-      apiKey: "sk-test",
-      apiBase: "https://api.openai.com/v1",
-      modelName: "gpt-4o-mini",
-      hasApiKey: true,
-    });
+  it("deletes a legacy localStorage value containing a plaintext API key", () => {
+    localStorage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify({
+      apiKey: "sk-phase1-storage-sentinel",
+      apiBase: "https://example.test/v1",
+      modelName: "qwen-plus",
+    }));
+
+    expect(getStoredApiConfig()).toEqual(DEFAULT_API_CONFIG);
+    expect(localStorage.getItem(API_CONFIG_STORAGE_KEY)).toBeNull();
   });
 
-  it("maps the same normalized config into agent and conversation request payloads", () => {
-    const config = {
-      apiKey: " sk-test ",
-      apiBase: " https://dashscope.aliyuncs.com/compatible-mode/v1 ",
-      modelName: " qwen-plus ",
-    };
-
-    expect(buildAgentRunLlmConfig(config)).toEqual({
-      apiKey: "sk-test",
-      apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      model: "qwen-plus",
+  it("discarding a draft does not change the saved credential preference", () => {
+    saveStoredApiConfig({
+      credentialId: "cred_llm_api_key_saved",
+      apiBase: "https://example.test/v1",
+      modelName: "saved-model",
     });
-    expect(buildConversationLlmPayload(config)).toEqual({
-      api_key: "sk-test",
-      api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      model_name: "qwen-plus",
+
+    const saved = getStoredApiConfig();
+    const discarded = discardLlmConfigDraft({
+      apiKey: "sk-phase1-draft-sentinel",
+      apiBase: "https://other.test/v1",
+      modelName: "draft-model",
+    }, saved);
+
+    expect(discarded).toEqual({
+      apiKey: "",
+      credentialId: "cred_llm_api_key_saved",
+      apiBase: "https://example.test/v1",
+      modelName: "saved-model",
     });
-  });
-
-  it("builds schema sync options only when AI enrichment is requested", () => {
-    const config = {
-      apiKey: " sk-test ",
-      apiBase: "",
-      modelName: " qwen-plus ",
-    };
-
-    expect(buildSchemaSyncOptions(false, config)).toBeUndefined();
-    expect(buildSchemaSyncOptions(true, config)).toEqual({
-      ai_enrich: true,
-      api_key: "sk-test",
-      api_base: "https://api.openai.com/v1",
-      model_name: "qwen-plus",
-    });
-  });
-
-  it("does not send base or model to schema sync without a product API key", () => {
-    expect(
-      buildSchemaSyncOptions(true, {
-        apiKey: " ",
-        apiBase: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        modelName: "qwen-plus",
-      }),
-    ).toEqual({ ai_enrich: true });
-  });
-
-  it("builds LLM test values from the same normalized config", () => {
-    expect(
-      buildLlmTestValues({
-        apiKey: " sk-test ",
-        apiBase: "",
-        modelName: "",
-      }),
-    ).toEqual({
-      apiKey: "sk-test",
-      apiBase: "https://api.openai.com/v1",
-      modelName: "gpt-4o-mini",
-    });
+    expect(getStoredApiConfig()).toEqual(saved);
   });
 });

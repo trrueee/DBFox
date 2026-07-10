@@ -51,7 +51,7 @@ class RuntimeConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
     model_name: str | None = None
-    api_key: str | None = None
+    llm_credential_id: str | None = None
     api_base: str | None = None
     execute: bool = True
     max_steps: int = 20

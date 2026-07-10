@@ -31,6 +31,7 @@ class DataSourceResponse(BaseModel):
     port: int | None = None
     database_name: str | None = None
     username: str | None = None
+    password_credential_id: str | None = None
     connection_mode: str | None = None
     is_read_only: bool = False
     env: str | None = None
@@ -40,7 +41,9 @@ class DataSourceResponse(BaseModel):
     ssh_host: str | None = None
     ssh_port: int | None = None
     ssh_username: str | None = None
+    ssh_password_credential_id: str | None = None
     ssh_pkey_path: str | None = None
+    ssh_key_passphrase_credential_id: str | None = None
 
     ssl_enabled: bool = False
     ssl_ca_path: str | None = None
@@ -80,6 +83,8 @@ ConnectionMode = Literal["direct"]
 
 
 class _DatasourceRequestStringNormalizer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator(
         "project_id",
         "name",
@@ -110,15 +115,15 @@ class DataSourceTestRequest(_DatasourceRequestStringNormalizer):
     port: int | None = Field(default=None, ge=0, le=65_535)
     database_name: str = Field(min_length=1, max_length=1024)
     username: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, max_length=4096)
+    password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     ssh_enabled: bool = False
     ssh_host: str | None = Field(default=None, max_length=255)
     ssh_port: int = Field(default=22, ge=1, le=65_535)
     ssh_username: str | None = Field(default=None, max_length=255)
-    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     ssh_pkey_path: str | None = Field(default=None, max_length=1024)
-    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
+    ssh_key_passphrase_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     ssl_enabled: bool = False
     ssl_ca_path: str | None = Field(default=None, max_length=1024)
@@ -136,7 +141,7 @@ class DataSourceCreateRequest(_DatasourceRequestStringNormalizer):
     port: int | None = Field(default=None, ge=0, le=65_535)
     database_name: str = Field(min_length=1, max_length=1024)
     username: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, max_length=4096)
+    password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     connection_mode: ConnectionMode = "direct"
     is_read_only: bool = False
     env: DatasourceEnv = "dev"
@@ -145,9 +150,9 @@ class DataSourceCreateRequest(_DatasourceRequestStringNormalizer):
     ssh_host: str | None = Field(default=None, max_length=255)
     ssh_port: int = Field(default=22, ge=1, le=65_535)
     ssh_username: str | None = Field(default=None, max_length=255)
-    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     ssh_pkey_path: str | None = Field(default=None, max_length=1024)
-    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
+    ssh_key_passphrase_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     ssl_enabled: bool = False
     ssl_ca_path: str | None = Field(default=None, max_length=1024)
@@ -164,7 +169,7 @@ class DataSourceUpdateRequest(_DatasourceRequestStringNormalizer):
     port: int | None = Field(default=None, ge=0, le=65_535)
     database_name: str = Field(min_length=1, max_length=1024)
     username: str | None = Field(default=None, max_length=255)
-    password: str | None = Field(default=None, max_length=4096)
+    password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     connection_mode: ConnectionMode = "direct"
     is_read_only: bool = False
     env: DatasourceEnv = "dev"
@@ -173,9 +178,9 @@ class DataSourceUpdateRequest(_DatasourceRequestStringNormalizer):
     ssh_host: str | None = Field(default=None, max_length=255)
     ssh_port: int = Field(default=22, ge=1, le=65_535)
     ssh_username: str | None = Field(default=None, max_length=255)
-    ssh_password: str | None = Field(default=None, max_length=4096)
+    ssh_password_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     ssh_pkey_path: str | None = Field(default=None, max_length=1024)
-    ssh_pkey_passphrase: str | None = Field(default=None, max_length=4096)
+    ssh_key_passphrase_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
 
     ssl_enabled: bool = False
     ssl_ca_path: str | None = Field(default=None, max_length=1024)

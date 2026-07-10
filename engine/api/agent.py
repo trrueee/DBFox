@@ -35,7 +35,7 @@ from engine.agent_core.events import EventEmitter
 from engine.app.errors import public_error, public_message
 from engine.db import get_db
 from engine.errors import DBFoxError
-from engine.llm.config import LlmConfigurationError, resolve_product_llm_config
+from engine.llm.config import LlmConfigurationError, resolve_product_llm_config_from_credential
 from engine.llm.errors import llm_error_from_exception
 from engine.llm.factory import LlmCallOptions, create_chat_model
 from engine.models import DataSource
@@ -61,7 +61,9 @@ router = APIRouter()
 
 
 class LlmTestRequest(BaseModel):
-    api_key: str
+    model_config = ConfigDict(extra="forbid")
+
+    llm_credential_id: str
     api_base: str = "https://api.openai.com/v1"
     model_name: str = "gpt-4o-mini"
 
@@ -83,14 +85,13 @@ class LlmTestResponse(BaseModel):
 def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
     """Test LLM API connectivity with a minimal chat completion call.
 
-    This endpoint validates that the provided api_key, api_base, and model_name
-    can actually reach the target LLM service before the user attempts a full
-    agent run.
+    This endpoint resolves an opaque credential through the local OS vault and
+    validates that it can reach the target LLM service.
     """
     t0 = _time.monotonic()
     try:
-        config = resolve_product_llm_config(
-            api_key=req.api_key,
+        config = resolve_product_llm_config_from_credential(
+            llm_credential_id=req.llm_credential_id,
             api_base=req.api_base,
             model_name=req.model_name,
         )
@@ -145,8 +146,8 @@ def api_llm_test(req: LlmTestRequest) -> LlmTestResponse:
 
 def _normalize_agent_run_llm_config(req: AgentRunRequest) -> AgentRunRequest:
     try:
-        llm_config = resolve_product_llm_config(
-            api_key=req.api_key,
+        llm_config = resolve_product_llm_config_from_credential(
+            llm_credential_id=req.llm_credential_id,
             api_base=req.api_base,
             model_name=req.model_name,
         )
@@ -154,7 +155,6 @@ def _normalize_agent_run_llm_config(req: AgentRunRequest) -> AgentRunRequest:
         raise DBFoxError(str(exc), code=exc.code) from exc
     return req.model_copy(
         update={
-            "api_key": llm_config.api_key,
             "api_base": llm_config.api_base,
             "model_name": llm_config.model_name,
         }

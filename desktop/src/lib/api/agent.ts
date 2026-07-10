@@ -209,7 +209,7 @@ function buildAgentRunPayload(datasourceId: string, question: string, config?: A
     assistant_message_id: config?.assistantMessageId,
     parent_run_id: config?.parentRunId || config?.followUpContext?.parent_run_id,
     follow_up_context: config?.followUpContext,
-    api_key: config?.apiKey,
+    llm_credential_id: config?.llmCredentialId,
     api_base: config?.apiBase,
     model_name: config?.model,
     workspace_context: config?.workspaceContext,
@@ -462,7 +462,7 @@ export const agentApi = {
 // ---------------------------------------------------------------------------
 
 export interface LlmTestRequest {
-  api_key: string;
+  llm_credential_id: string;
   api_base: string;
   model_name: string;
 }
@@ -477,14 +477,14 @@ export interface LlmTestResponse {
 }
 
 export async function testLlmConnection(
-  apiKey: string,
+  llmCredentialId: string,
   apiBase: string,
   modelName: string,
 ): Promise<LlmTestResponse> {
   return request<LlmTestResponse>("/agent/llm/test", {
     method: "POST",
     body: JSON.stringify({
-      api_key: apiKey,
+      llm_credential_id: llmCredentialId,
       api_base: apiBase,
       model_name: modelName,
     }),

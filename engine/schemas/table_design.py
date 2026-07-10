@@ -59,10 +59,10 @@ class TableDesignDraftSaveRequest(BaseModel):
 
 
 class TableDesignAIRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     prompt: str = Field(min_length=1, max_length=20_000)
-    api_key: str | None = Field(default=None, max_length=4096)
+    llm_credential_id: str | None = Field(default=None, min_length=1, max_length=256)
     api_base: str | None = Field(default=None, max_length=2048)
     model_name: str | None = Field(default=None, max_length=128)
 

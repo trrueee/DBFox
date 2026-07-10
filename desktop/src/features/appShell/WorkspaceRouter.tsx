@@ -291,25 +291,29 @@ function openQueryResult(queryText: string) {
 
 // ── LlmConfigTab ──
 function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: (msg: string) => void }) {
-  const { config, updateConfig, handleSave } = useApiConfig();
+  const { config, draft, updateDraft, handleSave } = useApiConfig();
 
   return (
     <WorkspaceShell title={activeTab.title} description="配置桌面端智能问数使用的模型接口。">
       <LlmConfigPanel
         chrome="workspace"
         variant="page"
-        config={config}
-        onChange={updateConfig}
-        onSave={() => {
-          handleSave();
-          showToast("LLM 配置保存成功");
+        config={draft}
+        onChange={updateDraft}
+        onSave={async () => {
+          try {
+            await handleSave();
+            showToast("LLM 配置保存成功");
+          } catch (error) {
+            showToast(error instanceof Error ? error.message : "LLM 凭据保存失败");
+          }
         }}
         onTestConnection={async () => {
           showToast("正在测试与模型接口握手…");
           try {
             const llm = buildLlmTestValues(config);
             const result = await testLlmConnection(
-              llm.apiKey,
+              llm.llmCredentialId,
               llm.apiBase,
               llm.modelName,
             );

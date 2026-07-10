@@ -8,7 +8,6 @@ from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from engine.crypto import encrypt_password
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
@@ -21,8 +20,12 @@ from engine.schemas.datasource import (
 )
 from engine.api.datasources.common import (
     datasource_to_dict,
-    replace_secret_if_present,
     set_model_attr,
+)
+from engine.security.credential_vault import (
+    CredentialKind,
+    CredentialVault,
+    get_credential_vault,
 )
 
 logger = logging.getLogger("dbfox.api.datasources.crud")
@@ -36,10 +39,58 @@ class DatasourceDeleteConfirmRequest(BaseModel):
     confirm_text: str | None = Field(default=None, min_length=1, max_length=256)
 
 
+def _require_credential_reference(
+    vault: CredentialVault,
+    credential_id: str | None,
+    kind: CredentialKind,
+) -> str | None:
+    if credential_id is None:
+        return None
+    if vault.get(credential_id, expected_kind=kind) is None:
+        raise DBFoxError(
+            "Credential reference was not found or has the wrong kind.",
+            code="CREDENTIAL_REFERENCE_INVALID",
+        )
+    return credential_id
+
+
+def _connection_test_config(req: DataSourceTestRequest) -> dict[str, Any]:
+    """Resolve transient test credentials without persisting a secret field."""
+    vault = get_credential_vault()
+    config = req.model_dump()
+    password_id = _require_credential_reference(
+        vault,
+        req.password_credential_id,
+        CredentialKind.DATASOURCE_PASSWORD,
+    )
+    ssh_password_id = _require_credential_reference(
+        vault,
+        req.ssh_password_credential_id,
+        CredentialKind.SSH_PASSWORD,
+    )
+    ssh_passphrase_id = _require_credential_reference(
+        vault,
+        req.ssh_key_passphrase_credential_id,
+        CredentialKind.SSH_KEY_PASSPHRASE,
+    )
+    config["password"] = vault.get(password_id) if password_id else ""
+    config["ssh_password"] = vault.get(ssh_password_id) if ssh_password_id else ""
+    config["ssh_pkey_passphrase"] = vault.get(ssh_passphrase_id) if ssh_passphrase_id else ""
+    return config
+
+
+def _delete_replaced_credentials(vault: CredentialVault, credential_ids: set[str]) -> None:
+    for credential_id in credential_ids:
+        try:
+            vault.delete(credential_id)
+        except Exception:
+            logger.warning("Could not remove replaced credential reference %s", credential_id)
+
+
 @router.post("/datasources/test")
 def api_test_connection(req: DataSourceTestRequest) -> dict[str, Any]:
     try:
-        return test_connection(req.model_dump())
+        return test_connection(_connection_test_config(req))
     except DBFoxError:
         raise
     except Exception as exc:
@@ -61,19 +112,18 @@ def api_create_datasource(
         elif req.db_type == "postgresql":
             build_postgres_ssl_params(config)
         project_id = resolve_project_id(db, req.project_id)
-        cipher, nonce = encrypt_password(req.password or "")
-
-        ssh_password_ciphertext = ""
-        ssh_password_nonce = ""
-        if req.ssh_password:
-            ssh_password_ciphertext, ssh_password_nonce = encrypt_password(req.ssh_password)
-
-        ssh_pkey_passphrase_ciphertext = ""
-        ssh_pkey_passphrase_nonce = ""
-        if req.ssh_pkey_passphrase:
-            ssh_pkey_passphrase_ciphertext, ssh_pkey_passphrase_nonce = encrypt_password(
-                req.ssh_pkey_passphrase
-            )
+        vault = get_credential_vault()
+        password_credential_id = _require_credential_reference(
+            vault, req.password_credential_id, CredentialKind.DATASOURCE_PASSWORD
+        )
+        ssh_password_credential_id = _require_credential_reference(
+            vault, req.ssh_password_credential_id, CredentialKind.SSH_PASSWORD
+        )
+        ssh_key_passphrase_credential_id = _require_credential_reference(
+            vault,
+            req.ssh_key_passphrase_credential_id,
+            CredentialKind.SSH_KEY_PASSPHRASE,
+        )
 
         datasource = DataSource(
             id=str(uuid.uuid4()),
@@ -84,17 +134,14 @@ def api_create_datasource(
             port=req.port,
             database_name=req.database_name,
             username=req.username,
-            password_ciphertext=cipher,
-            password_nonce=nonce,
+            password_credential_id=password_credential_id,
             ssh_enabled=req.ssh_enabled,
             ssh_host=req.ssh_host,
             ssh_port=req.ssh_port,
             ssh_username=req.ssh_username,
-            ssh_password_ciphertext=ssh_password_ciphertext,
-            ssh_password_nonce=ssh_password_nonce,
+            ssh_password_credential_id=ssh_password_credential_id,
             ssh_pkey_path=req.ssh_pkey_path,
-            ssh_pkey_passphrase_ciphertext=ssh_pkey_passphrase_ciphertext,
-            ssh_pkey_passphrase_nonce=ssh_pkey_passphrase_nonce,
+            ssh_key_passphrase_credential_id=ssh_key_passphrase_credential_id,
             ssl_enabled=req.ssl_enabled,
             ssl_ca_path=req.ssl_ca_path,
             ssl_cert_path=req.ssl_cert_path,
@@ -142,6 +189,15 @@ def api_update_datasource(
         raise NotFoundError("数据源不存在")
 
     try:
+        old_credential_ids = {
+            credential_id
+            for credential_id in (
+                datasource.password_credential_id,
+                datasource.ssh_password_credential_id,
+                datasource.ssh_key_passphrase_credential_id,
+            )
+            if credential_id
+        }
         config = req.model_dump()
         if req.db_type == "mysql":
             build_mysql_ssl_params(config)
@@ -167,18 +223,50 @@ def api_update_datasource(
         set_model_attr(datasource, "ssl_cert_path", req.ssl_cert_path)
         set_model_attr(datasource, "ssl_key_path", req.ssl_key_path)
         set_model_attr(datasource, "ssl_verify_identity", req.ssl_verify_identity)
-
-        replace_secret_if_present(datasource, req.password, "password_ciphertext", "password_nonce")
-        replace_secret_if_present(datasource, req.ssh_password, "ssh_password_ciphertext", "ssh_password_nonce")
-        replace_secret_if_present(
-            datasource,
-            req.ssh_pkey_passphrase,
-            "ssh_pkey_passphrase_ciphertext",
-            "ssh_pkey_passphrase_nonce",
-        )
+        vault = get_credential_vault()
+        if req.password_credential_id is not None:
+            set_model_attr(
+                datasource,
+                "password_credential_id",
+                _require_credential_reference(
+                    vault,
+                    req.password_credential_id,
+                    CredentialKind.DATASOURCE_PASSWORD,
+                ),
+            )
+        if req.ssh_password_credential_id is not None:
+            set_model_attr(
+                datasource,
+                "ssh_password_credential_id",
+                _require_credential_reference(
+                    vault,
+                    req.ssh_password_credential_id,
+                    CredentialKind.SSH_PASSWORD,
+                ),
+            )
+        if req.ssh_key_passphrase_credential_id is not None:
+            set_model_attr(
+                datasource,
+                "ssh_key_passphrase_credential_id",
+                _require_credential_reference(
+                    vault,
+                    req.ssh_key_passphrase_credential_id,
+                    CredentialKind.SSH_KEY_PASSPHRASE,
+                ),
+            )
 
         db.commit()
         db.refresh(datasource)
+        current_credential_ids = {
+            credential_id
+            for credential_id in (
+                datasource.password_credential_id,
+                datasource.ssh_password_credential_id,
+                datasource.ssh_key_passphrase_credential_id,
+            )
+            if credential_id
+        }
+        _delete_replaced_credentials(vault, old_credential_ids - current_credential_ids)
         return datasource_to_dict(datasource)
     except Exception:
         db.rollback()
@@ -233,10 +321,20 @@ def api_delete_datasource(
         from engine.datasource import close_active_tunnel
         from engine.sql.pool_registry import get_pool_registry
 
+        credential_ids = {
+            credential_id
+            for credential_id in (
+                datasource.password_credential_id,
+                datasource.ssh_password_credential_id,
+                datasource.ssh_key_passphrase_credential_id,
+            )
+            if credential_id
+        }
         close_active_tunnel(id)
         get_pool_registry().dispose_datasource(id)
         db.delete(datasource)
         db.commit()
+        _delete_replaced_credentials(get_credential_vault(), credential_ids)
         return {"success": True, "message": "数据源已删除"}
     except Exception:
         db.rollback()

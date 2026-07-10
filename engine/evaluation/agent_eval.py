@@ -83,7 +83,7 @@ class AgentEvalRunner:
                     question=str(task.question),
                     session_id=None,
                     execute=req.execute,
-                    api_key=req.api_key,
+                    llm_credential_id=req.llm_credential_id,
                     api_base=req.api_base,
                     model_name=req.model_name,
                     workspace_context=workspace_ctx,
@@ -244,7 +244,6 @@ def _build_workspace_context(task: AgentGoldenTask) -> AgentWorkspaceContext | N
 def _safe_response_json(response: Any, *, eval_telemetry: dict[str, Any] | None = None) -> str:
     try:
         data = response.model_dump()
-        data.pop("api_key", None)
         if eval_telemetry is not None:
             data["eval_telemetry"] = eval_telemetry
         return json.dumps(data, ensure_ascii=False, default=str)

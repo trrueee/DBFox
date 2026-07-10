@@ -85,7 +85,7 @@ export interface ConversationCreateInput {
 
 export interface ConversationMessageInput {
   content: string;
-  api_key?: string;
+  llm_credential_id?: string;
   api_base?: string;
   model_name?: string;
   execute?: boolean;

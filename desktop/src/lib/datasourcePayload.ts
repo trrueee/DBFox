@@ -25,21 +25,30 @@ export interface DatasourceFormShape {
   project_id?: string;
 }
 
-export function buildDatasourceTestPayload(form: DatasourceFormShape) {
+export interface DatasourceCredentialReferences {
+  password_credential_id?: string;
+  ssh_password_credential_id?: string;
+  ssh_key_passphrase_credential_id?: string;
+}
+
+export function buildDatasourceTestPayload(
+  form: DatasourceFormShape,
+  credentials: DatasourceCredentialReferences = {},
+) {
   return {
     db_type: form.db_type || "mysql",
     host: form.host || null,
     port: form.port ?? null,
     database_name: form.database_name,
     username: form.username || null,
-    password: form.password ?? "",
+    password_credential_id: credentials.password_credential_id ?? null,
     ssh_enabled: Boolean(form.ssh_enabled),
     ssh_host: form.ssh_host || null,
     ssh_port: form.ssh_port ?? 22,
     ssh_username: form.ssh_username || null,
-    ssh_password: form.ssh_password || null,
+    ssh_password_credential_id: credentials.ssh_password_credential_id ?? null,
     ssh_pkey_path: form.ssh_pkey_path || null,
-    ssh_pkey_passphrase: form.ssh_pkey_passphrase || null,
+    ssh_key_passphrase_credential_id: credentials.ssh_key_passphrase_credential_id ?? null,
     ssl_enabled: Boolean(form.ssl_enabled),
     ssl_ca_path: form.ssl_ca_path || null,
     ssl_cert_path: form.ssl_cert_path || null,
@@ -48,9 +57,13 @@ export function buildDatasourceTestPayload(form: DatasourceFormShape) {
   };
 }
 
-export function buildDatasourceCreatePayload(form: DatasourceFormShape, projectId?: string) {
+export function buildDatasourceCreatePayload(
+  form: DatasourceFormShape,
+  projectId?: string,
+  credentials: DatasourceCredentialReferences = {},
+) {
   return {
-    ...buildDatasourceTestPayload(form),
+    ...buildDatasourceTestPayload(form, credentials),
     project_id: projectId,
     name: form.name || "",
     connection_mode: "direct",
@@ -59,9 +72,12 @@ export function buildDatasourceCreatePayload(form: DatasourceFormShape, projectI
   };
 }
 
-export function buildDatasourceUpdatePayload(form: DatasourceFormShape) {
+export function buildDatasourceUpdatePayload(
+  form: DatasourceFormShape,
+  credentials: DatasourceCredentialReferences = {},
+) {
   return {
-    ...buildDatasourceTestPayload(form),
+    ...buildDatasourceTestPayload(form, credentials),
     name: form.name || "",
     connection_mode: "direct",
     is_read_only: Boolean(form.is_read_only),

@@ -26,9 +26,11 @@ import {
   buildDatasourceCreatePayload,
   buildDatasourceTestPayload,
   buildDatasourceUpdatePayload,
+  type DatasourceCredentialReferences,
   type DatasourceFormShape,
 } from "../lib/datasourcePayload";
 import { buildSchemaSyncOptions } from "../lib/llmConfig";
+import { enrollCredential } from "../lib/api/credentials";
 
 interface DataSourcesPageProps {
   onSelectDataSource: (ds: DataSource | null) => void;
@@ -82,6 +84,25 @@ const schemaSyncToast = (
 const schemaSyncOptions = (aiEnrich: boolean): SchemaSyncOptions | undefined => {
   return buildSchemaSyncOptions(aiEnrich);
 };
+
+async function enrollDatasourceCredentials(form: DatasourceFormShape): Promise<DatasourceCredentialReferences> {
+  const [password, sshPassword, sshPassphrase] = await Promise.all([
+    form.password?.trim()
+      ? enrollCredential("datasource_password", form.password)
+      : Promise.resolve(null),
+    form.ssh_password?.trim()
+      ? enrollCredential("ssh_password", form.ssh_password)
+      : Promise.resolve(null),
+    form.ssh_pkey_passphrase?.trim()
+      ? enrollCredential("ssh_key_passphrase", form.ssh_pkey_passphrase)
+      : Promise.resolve(null),
+  ]);
+  return {
+    ...(password ? { password_credential_id: password.id } : {}),
+    ...(sshPassword ? { ssh_password_credential_id: sshPassword.id } : {}),
+    ...(sshPassphrase ? { ssh_key_passphrase_credential_id: sshPassphrase.id } : {}),
+  };
+}
 
 export const DataSourcesPage = ({
   onSelectDataSource,
@@ -199,7 +220,8 @@ export const DataSourcesPage = ({
     }
     setTestResult({ status: "testing", message: "正在测试连接..." });
     try {
-      const result = await api.testConnection(buildDatasourceTestPayload(nextForm as DatasourceFormShape));
+      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      const result = await api.testConnection(buildDatasourceTestPayload(nextForm as DatasourceFormShape, credentials));
       setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
     } catch (error: unknown) {
       setTestResult({ status: "error", message: (error as Error).message ?? "连接测试失败。" });
@@ -212,7 +234,10 @@ export const DataSourcesPage = ({
       setFormError("");
       const createFn = createDatasource || api.createDatasource;
       const syncFn = syncSchema || api.syncSchema;
-      const created = await createFn(buildDatasourceCreatePayload(nextForm as DatasourceFormShape, activeProject?.id));
+      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      const created = await createFn(
+        buildDatasourceCreatePayload(nextForm as DatasourceFormShape, activeProject?.id, credentials),
+      );
       setMode("detail");
       setForm(emptyDatasourceForm());
 
@@ -250,7 +275,8 @@ export const DataSourcesPage = ({
       setActionState("saving");
       setFormError("");
       const updateFn = updateDatasource || api.updateDatasource;
-      await updateFn(selected.id, buildDatasourceUpdatePayload(nextForm as DatasourceFormShape));
+      const credentials = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
+      await updateFn(selected.id, buildDatasourceUpdatePayload(nextForm as DatasourceFormShape, credentials));
       setForm((current) => stripSensitiveDatasourceForm(current));
       setMode("detail");
       await loadDatasources(selected.id);

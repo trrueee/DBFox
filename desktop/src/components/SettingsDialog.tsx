@@ -1,51 +1,92 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { CheckCircle2, Zap } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { LlmConfigPanel } from "./LlmConfigPanel";
-import type { ApiConfig } from "../lib/api/types";
-import { getStoredApiConfig, saveStoredApiConfig } from "../lib/llmConfig";
+import type { ApiConfig, LlmConfigDraft } from "../lib/api/types";
+import {
+  createLlmConfigDraft,
+  discardLlmConfigDraft,
+  getStoredApiConfig,
+  saveStoredApiConfig,
+} from "../lib/llmConfig";
+import { enrollCredential } from "../lib/api/credentials";
 import "./SettingsDialog.css";
 
 export function useApiConfig() {
   const [config, setConfig] = useState<ApiConfig>(getStoredApiConfig);
+  const [draft, setDraft] = useState<LlmConfigDraft>(() => createLlmConfigDraft(getStoredApiConfig()));
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const updateConfig = useCallback((partial: Partial<ApiConfig>) => {
-    setConfig((prev) => {
-      const next = { ...prev, ...partial };
-      saveStoredApiConfig(next);
-      return next;
-    });
+  const updateDraft = useCallback((partial: Partial<LlmConfigDraft>) => {
+    setDraft((previous) => ({ ...previous, ...partial }));
   }, []);
 
-  const handleSave = useCallback(() => {
-    saveStoredApiConfig(config);
+  const handleSave = useCallback(async () => {
+    let credentialId = draft.credentialId.trim();
+    const apiKey = draft.apiKey.trim();
+    if (apiKey) {
+      const reference = await enrollCredential("llm_api_key", apiKey);
+      credentialId = reference.id;
+    }
+
+    const next: ApiConfig = {
+      credentialId,
+      apiBase: draft.apiBase.trim(),
+      modelName: draft.modelName.trim(),
+    };
+    saveStoredApiConfig(next);
+    setConfig(next);
+    setDraft(createLlmConfigDraft(next));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     setOpen(false);
+  }, [draft]);
+
+  const handleCancel = useCallback(() => {
+    setDraft((currentDraft) => discardLlmConfigDraft(currentDraft, config));
+    setOpen(false);
   }, [config]);
 
-  const isConfigured = Boolean(config.apiKey || config.modelName);
+  const isConfigured = Boolean(config.credentialId);
 
-  return { config, updateConfig, open, setOpen, saved, handleSave, isConfigured } as const;
+  return {
+    config,
+    draft,
+    updateDraft,
+    open,
+    setOpen,
+    saved,
+    handleSave,
+    handleCancel,
+    isConfigured,
+  } as const;
 }
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  config: ApiConfig;
-  onChange: (partial: Partial<ApiConfig>) => void;
-  onSave: () => void;
+  config: LlmConfigDraft;
+  onChange: (partial: Partial<LlmConfigDraft>) => void;
+  onSave: () => void | Promise<void>;
+  onCancel: () => void;
   saved: boolean;
 }
 
-export function SettingsDialog({ open, onOpenChange, config, onChange, onSave, saved }: SettingsDialogProps) {
+export function SettingsDialog({ open, onOpenChange, config, onChange, onSave, onCancel, saved }: SettingsDialogProps) {
+  const closeWithoutSaving = () => {
+    onCancel();
+    onOpenChange(false);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (nextOpen) onOpenChange(true);
+      else closeWithoutSaving();
+    }}>
       <DialogContent className="settings-dialog-content">
         <DialogHeader className="settings-dialog-header">
           <DialogTitle className="settings-dialog-title">
@@ -68,13 +109,13 @@ export function SettingsDialog({ open, onOpenChange, config, onChange, onSave, s
 
         <div className="settings-dialog-footer">
           <p className="settings-dialog-caption">
-            配置保存在本地浏览器
+            凭据保存在系统安全存储中
           </p>
           <div className="settings-dialog-actions">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" onClick={closeWithoutSaving}>
               取消
             </Button>
-            <Button size="sm" onClick={onSave} className="settings-dialog-save">
+            <Button size="sm" onClick={() => void onSave()} className="settings-dialog-save">
               <CheckCircle2 size={13} />
               保存
             </Button>

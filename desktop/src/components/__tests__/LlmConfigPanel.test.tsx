@@ -12,7 +12,7 @@ describe("LlmConfigPanel", () => {
       <LlmConfigPanel
         chrome="workspace"
         variant="page"
-        config={{ apiKey: "", apiBase: DEFAULT_LLM_API_BASE, modelName: "" }}
+        config={{ credentialId: "", apiKey: "", apiBase: DEFAULT_LLM_API_BASE, modelName: "" }}
         onChange={vi.fn()}
         onSave={vi.fn()}
         onTestConnection={vi.fn()}
@@ -30,7 +30,7 @@ describe("LlmConfigPanel", () => {
     render(
       <LlmConfigPanel
         variant="page"
-        config={{ apiKey: "sk-test", apiBase: DEFAULT_LLM_API_BASE, modelName: "gpt-4o" }}
+        config={{ credentialId: "cred_llm_api_key_test", apiKey: "sk-test", apiBase: DEFAULT_LLM_API_BASE, modelName: "gpt-4o" }}
         onChange={vi.fn()}
         onSave={onSave}
       />

@@ -6,8 +6,8 @@ from typing import Any
 
 import pymysql
 
-from engine.crypto import decrypt_password
 from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
 from engine.tunnel import (
     TUNNEL_MANAGER,
@@ -18,6 +18,20 @@ from engine.tunnel import (
 )
 
 logger = logging.getLogger("dbfox.datasource")
+
+
+def _resolve_credential_secret(
+    datasource_dict: dict[str, Any],
+    field: str,
+    kind: CredentialKind,
+) -> str:
+    credential_id = datasource_dict.get(field)
+    if not credential_id:
+        return ""
+    secret = get_credential_vault().get(str(credential_id), expected_kind=kind)
+    if secret is None:
+        raise DataSourceConnectionError("Credential reference was not found or has the wrong kind.")
+    return secret
 
 
 def _normalized_optional_path(value: Any) -> str | None:
@@ -89,8 +103,12 @@ def build_postgres_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_mysql_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Decrypt password and construct parameters for PyMySQL connection."""
-    pw = decrypt_password(datasource_dict["password_ciphertext"], datasource_dict["password_nonce"])
+    """Resolve an OS-vault password and construct PyMySQL parameters."""
+    pw = _resolve_credential_secret(
+        datasource_dict,
+        "password_credential_id",
+        CredentialKind.DATASOURCE_PASSWORD,
+    )
     host = datasource_dict["host"]
     port = datasource_dict["port"]
 
@@ -116,8 +134,12 @@ def get_mysql_connection_params(datasource_dict: dict[str, Any]) -> dict[str, An
 
 
 def get_postgres_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Decrypt password and construct parameters for PostgreSQL connection."""
-    pw = decrypt_password(datasource_dict["password_ciphertext"], datasource_dict["password_nonce"])
+    """Resolve an OS-vault password and construct PostgreSQL parameters."""
+    pw = _resolve_credential_secret(
+        datasource_dict,
+        "password_credential_id",
+        CredentialKind.DATASOURCE_PASSWORD,
+    )
     host = datasource_dict["host"]
     port = int(datasource_dict.get("port", 5432) or 5432)
 
@@ -341,17 +363,14 @@ def datasource_connection_dict(ds: Any) -> dict[str, Any]:
         "port": ds.port,
         "username": ds.username,
         "database_name": ds.database_name,
-        "password_ciphertext": ds.password_ciphertext,
-        "password_nonce": ds.password_nonce,
+        "password_credential_id": ds.password_credential_id,
         "ssh_enabled": ds.ssh_enabled,
         "ssh_host": ds.ssh_host,
         "ssh_port": ds.ssh_port,
         "ssh_username": ds.ssh_username,
-        "ssh_password_ciphertext": ds.ssh_password_ciphertext,
-        "ssh_password_nonce": ds.ssh_password_nonce,
+        "ssh_password_credential_id": ds.ssh_password_credential_id,
         "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_pkey_passphrase_ciphertext": ds.ssh_pkey_passphrase_ciphertext,
-        "ssh_pkey_passphrase_nonce": ds.ssh_pkey_passphrase_nonce,
+        "ssh_key_passphrase_credential_id": ds.ssh_key_passphrase_credential_id,
         "ssl_enabled": ds.ssl_enabled,
         "ssl_ca_path": ds.ssl_ca_path,
         "ssl_cert_path": ds.ssl_cert_path,

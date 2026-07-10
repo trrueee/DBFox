@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
@@ -35,8 +35,10 @@ class ConversationPatchRequest(BaseModel):
 
 
 class ConversationMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     content: str
-    api_key: str | None = None
+    llm_credential_id: str | None = None
     api_base: str | None = None
     model_name: str | None = None
     execute: bool = True
@@ -162,7 +164,7 @@ def stream_conversation_message(
         conversation_id=conversation_id,
         user_message_id=f"msg-user-{uuid4()}",
         assistant_message_id=f"msg-assistant-{uuid4()}",
-        api_key=payload.api_key,
+        llm_credential_id=payload.llm_credential_id,
         api_base=payload.api_base,
         model_name=payload.model_name,
         workspace_context=workspace_context,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AgentGoldenTaskCreateRequest(BaseModel):
@@ -67,12 +67,14 @@ class AgentGoldenTaskResponse(BaseModel):
 
 
 class AgentEvalRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     datasource_id: str
     project_id: str | None = None
     task_ids: list[str] | None = None
     tags: list[str] | None = None
     source: str | None = None
-    api_key: str | None = None
+    llm_credential_id: str | None = None
     api_base: str | None = None
     model_name: str | None = None
     execute: bool = False

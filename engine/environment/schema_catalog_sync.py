@@ -158,7 +158,7 @@ class SchemaCatalogSync:
         datasource_id: str,
         *,
         ai_enrich: bool = False,
-        ai_api_key: str | None = None,
+        llm_credential_id: str | None = None,
         ai_api_base: str | None = None,
         ai_model_name: str | None = None,
     ) -> SyncResult:
@@ -169,7 +169,7 @@ class SchemaCatalogSync:
             datasource_id,
             inventory,
             ai_enrich=ai_enrich,
-            ai_api_key=ai_api_key,
+            llm_credential_id=llm_credential_id,
             ai_api_base=ai_api_base,
             ai_model_name=ai_model_name,
         )
@@ -181,7 +181,7 @@ class SchemaCatalogSync:
         inventory: SchemaInventory,
         *,
         ai_enrich: bool = False,
-        ai_api_key: str | None = None,
+        llm_credential_id: str | None = None,
         ai_api_base: str | None = None,
         ai_model_name: str | None = None,
     ) -> SyncResult:
@@ -306,12 +306,16 @@ class SchemaCatalogSync:
 
         if ai_enrich:
             from engine.ai_enrich import ai_enrich_catalog
-            from engine.llm.config import resolve_optional_product_llm_config
+            from engine.llm.config import resolve_product_llm_config_from_credential
 
-            llm_config = resolve_optional_product_llm_config(
-                api_key=ai_api_key,
-                api_base=ai_api_base,
-                model_name=ai_model_name,
+            llm_config = (
+                resolve_product_llm_config_from_credential(
+                    llm_credential_id=llm_credential_id,
+                    api_base=ai_api_base,
+                    model_name=ai_model_name,
+                )
+                if llm_credential_id
+                else None
             )
             enrich_result = ai_enrich_catalog(
                 db,
@@ -378,7 +382,7 @@ def ensure_catalog(
     datasource_id: str,
     *,
     ai_enrich: bool = False,
-    ai_api_key: str | None = None,
+    llm_credential_id: str | None = None,
     ai_api_base: str | None = None,
     ai_model_name: str | None = None,
 ) -> SyncResult:
@@ -391,7 +395,7 @@ def ensure_catalog(
         db,
         datasource_id,
         ai_enrich=ai_enrich,
-        ai_api_key=ai_api_key,
+        llm_credential_id=llm_credential_id,
         ai_api_base=ai_api_base,
         ai_model_name=ai_model_name,
     )

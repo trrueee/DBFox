@@ -76,6 +76,9 @@ def request_from_run(db: Session, run_id: str) -> AgentRunRequest:
         user_message_id=str(run.user_message_id) if run.user_message_id else None,
         assistant_message_id=str(run.assistant_message_id) if run.assistant_message_id else None,
         parent_run_id=str(run.parent_run_id) if run.parent_run_id else None,
+        llm_credential_id=str(run.llm_credential_id) if run.llm_credential_id else None,
+        api_base=str(run.api_base) if run.api_base else None,
+        model_name=str(run.model_name) if run.model_name else None,
         execute=True,
         max_steps=20,
     )

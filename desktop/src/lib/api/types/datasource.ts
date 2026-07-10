@@ -19,6 +19,7 @@ export interface DataSource {
   port: number;
   database_name: string;
   username: string | null;
+  password_credential_id?: string | null;
   connection_mode: string;
   is_read_only?: boolean;
   env?: string;
@@ -27,7 +28,9 @@ export interface DataSource {
   ssh_host?: string;
   ssh_port?: number;
   ssh_username?: string;
+  ssh_password_credential_id?: string | null;
   ssh_pkey_path?: string;
+  ssh_key_passphrase_credential_id?: string | null;
   ssl_enabled?: boolean;
   ssl_ca_path?: string;
   ssl_cert_path?: string;
@@ -53,14 +56,14 @@ export interface DataSourceTestParams {
   port?: number | null;
   database_name: string;
   username?: string | null;
-  password?: string | null;
+  password_credential_id?: string | null;
   ssh_enabled?: boolean;
   ssh_host?: string | null;
   ssh_port?: number;
   ssh_username?: string | null;
-  ssh_password?: string | null;
+  ssh_password_credential_id?: string | null;
   ssh_pkey_path?: string | null;
-  ssh_pkey_passphrase?: string | null;
+  ssh_key_passphrase_credential_id?: string | null;
   ssl_enabled?: boolean;
   ssl_ca_path?: string | null;
   ssl_cert_path?: string | null;
@@ -86,7 +89,7 @@ export interface DeleteConfirm {
 
 export interface SchemaSyncOptions {
   ai_enrich?: boolean;
-  api_key?: string;
+  llm_credential_id?: string;
   api_base?: string;
   model_name?: string;
 }
