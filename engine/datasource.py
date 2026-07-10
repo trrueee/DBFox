@@ -188,13 +188,8 @@ def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
     if tunnel is not None and not config.get("is_managed"):
         try:
             tunnel.stop()
-        except Exception as e:
-            logger.warning(
-                "Failed to stop test tunnel (host=%s port=%s): %s",
-                config.get("ssh_host", "unknown"),
-                config.get("ssh_port", "unknown"),
-                e,
-            )
+        except Exception as exc:
+            logger.warning("Failed to stop temporary test tunnel (%s)", type(exc).__name__)
 
 
 def test_connection(config: dict[str, Any]) -> dict[str, Any]:

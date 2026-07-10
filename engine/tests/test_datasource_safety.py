@@ -4,6 +4,7 @@ import pytest
 
 from engine.datasource import build_postgres_ssl_params, test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
 def test_sqlite_connection_test_rejects_missing_file(tmp_path: Path) -> None:
@@ -100,6 +101,11 @@ def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> N
     mock_tunnel.local_bind_port = 12345
     mock_tunnel.is_active = True
     mock_tunnel_class.return_value = mock_tunnel
+    vault = InMemoryCredentialVault()
+    ssh_password_credential_id = vault.put(
+        kind=CredentialKind.SSH_PASSWORD,
+        secret="ssh-password",
+    )
 
     with patch("pymysql.connect") as mock_connect:
         mock_conn = MagicMock()
@@ -121,11 +127,10 @@ def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> N
             "ssh_host": "jump",
             "ssh_port": 22,
             "ssh_username": "sshuser",
-            "ssh_password_ciphertext": "cipher",
-            "ssh_password_nonce": "nonce",
+            "ssh_password_credential_id": ssh_password_credential_id,
         }
 
-        with patch("engine.tunnel.decrypt_password", return_value="plain"):
+        with patch("engine.tunnel.get_credential_vault", return_value=vault):
             res = run_test_connection(config)
             assert res["ok"] is True
             mock_tunnel.start.assert_called_once()

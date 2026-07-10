@@ -291,6 +291,58 @@ def test_datasource_test_never_exposes_or_logs_a_driver_exception_sentinel(
     assert sentinel not in caplog.text
 
 
+def test_datasource_test_never_logs_a_temporary_tunnel_stop_sentinel(
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sentinel = "driver-tunnel-sentinel-not-a-redaction-pattern"
+    vault = InMemoryCredentialVault()
+    credential_id = vault.put(
+        kind=CredentialKind.DATASOURCE_PASSWORD,
+        secret="temporary-tunnel-password",
+    )
+    lease_id = _issue_datasource_credential_lease(monkeypatch, credential_id)
+    monkeypatch.setattr(datasource_crud, "get_credential_vault", lambda: vault)
+
+    class FailingStopTunnel:
+        local_bind_port = 13306
+
+        def stop(self) -> None:
+            raise RuntimeError(sentinel)
+
+    monkeypatch.setattr(
+        datasource_module,
+        "open_temporary_tunnel",
+        lambda _config: FailingStopTunnel(),
+    )
+    monkeypatch.setattr(
+        datasource_module.pymysql,
+        "connect",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("connection failure")),
+    )
+
+    with pytest.raises(DataSourceConnectionError) as exc_info:
+        datasource_crud.api_test_connection(
+            DataSourceTestRequest(
+                db_type="mysql",
+                host="db.example.test",
+                port=3306,
+                database_name="warehouse",
+                username="reader",
+                password_credential_id=credential_id,
+                ssh_enabled=True,
+                ssh_host="jump.example.test",
+                ssh_port=22,
+                ssh_username="jump-user",
+                credential_lease_id=lease_id,
+            )
+        )
+
+    assert str(exc_info.value) == "数据库连接测试失败，请检查连接配置。"
+    assert sentinel not in repr(exc_info.value)
+    assert sentinel not in caplog.text
+
+
 def test_datasource_test_rejects_a_client_claimed_lease_without_deleting_a_saved_credential(
     monkeypatch,
 ) -> None:
