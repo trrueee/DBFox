@@ -7,6 +7,7 @@ from typing import Any
 
 from sshtunnel import SSHTunnelForwarder
 
+from engine.app.errors import log_unexpected_exception
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, get_credential_vault
 
@@ -114,8 +115,12 @@ class TunnelManager:
                 instance.state = TunnelState.CLOSED
                 try:
                     instance.tunnel.stop()
-                except Exception as e:
-                    logger.error("Error stopping tunnel for %s: %s", datasource_id, e)
+                except Exception as exc:
+                    log_unexpected_exception(
+                        logger,
+                        operation="ssh_tunnel_close",
+                        exc=exc,
+                    )
 
     def close_all(self) -> None:
         with self._lock:
@@ -123,8 +128,12 @@ class TunnelManager:
                 instance.state = TunnelState.CLOSED
                 try:
                     instance.tunnel.stop()
-                except Exception as e:
-                    logger.error("Error stopping tunnel for %s: %s", ds_id, e)
+                except Exception as exc:
+                    log_unexpected_exception(
+                        logger,
+                        operation="ssh_tunnel_close_all",
+                        exc=exc,
+                    )
             self._tunnels.clear()
 
     def health_check(self, datasource_id: str) -> bool:
@@ -147,12 +156,12 @@ class TunnelManager:
                 s.settimeout(1.0)
                 s.connect(("127.0.0.1", port))
             is_ok = True
-        except Exception as e:
-            logger.warning(
-                "Tunnel health probe failed on port %s for %s: %s",
-                port,
-                datasource_id,
-                e,
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation="ssh_tunnel_health_probe",
+                exc=exc,
+                level="warning",
             )
 
         with self._lock:
@@ -186,8 +195,13 @@ class TunnelManager:
         try:
             try:
                 instance.tunnel.stop()
-            except Exception as e:
-                logger.warning("Failed to stop old tunnel for %s during reconnect: %s", ds_id, e)
+            except Exception as exc:
+                log_unexpected_exception(
+                    logger,
+                    operation="ssh_tunnel_reconnect_stop_previous",
+                    exc=exc,
+                    level="warning",
+                )
 
             new_tunnel = self._start_physical_tunnel(ds_dict)
             with self._lock:
@@ -196,12 +210,16 @@ class TunnelManager:
                 instance.error_message = None
             logger.info("SSH Tunnel auto-reconnect successful for %s.", ds_id)
             return new_tunnel
-        except Exception as e:
-            logger.error("SSH Tunnel self-healing auto-reconnect failed for %s: %s", ds_id, e)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation="ssh_tunnel_reconnect",
+                exc=exc,
+            )
             with self._lock:
                 instance.state = TunnelState.FAILED
-                instance.error_message = str(e)
-            raise DataSourceConnectionError(f"SSH 隧道连接已断开，自动尝试自愈重连失败: {str(e)}")
+                instance.error_message = "SSH tunnel reconnection failed."
+            raise DataSourceConnectionError("SSH 隧道连接已断开，自动重连失败，请检查隧道配置。") from None
 
     def _create_tunnel(self, ds_id: str, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
         logger.info("Creating new SSH tunnel for %s", ds_id)
@@ -226,8 +244,13 @@ class TunnelManager:
         for ds_id, instance in to_dispose:
             try:
                 instance.tunnel.stop()
-            except Exception as e:
-                logger.warning("Failed to stop stale tunnel for %s: %s", ds_id, e)
+            except Exception as exc:
+                log_unexpected_exception(
+                    logger,
+                    operation="ssh_tunnel_cleanup_stale",
+                    exc=exc,
+                    level="warning",
+                )
 
 
 TUNNEL_MANAGER = TunnelManager()

@@ -4,10 +4,11 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from engine.app.errors import log_unexpected_exception, safe_error_detail
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
@@ -129,12 +130,22 @@ def _release_credential_lease(vault: CredentialVault, lease_id: str | None) -> N
         for credential_id in get_credential_lease_registry().abort_claimed(lease_id):
             vault.delete(credential_id)
     except Exception as exc:
-        logger.warning("Could not release datasource credential lease (%s)", type(exc).__name__)
+        log_unexpected_exception(
+            logger,
+            operation="datasource_credential_lease_release",
+            exc=exc,
+            level="warning",
+        )
 
 
 def _public_connection_test_failure(exc: Exception) -> DataSourceConnectionError:
     """Log only safe diagnostics and return a fixed client-facing failure."""
-    logger.warning("Connection test failed (%s)", type(exc).__name__)
+    log_unexpected_exception(
+        logger,
+        operation="datasource_connection_test",
+        exc=exc,
+        level="warning",
+    )
     return DataSourceConnectionError(_CONNECTION_TEST_FAILED_MESSAGE)
 
 
@@ -453,6 +464,16 @@ def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, 
 
         get_pool_registry().dispose_datasource(id)
         return {"success": True, "message": "数据源连接池已成功释放"}
-    except Exception:
-        logger.exception("Failed to release datasource connection pool")
-        raise
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_pool_release",
+            exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=safe_error_detail(
+                "DATASOURCE_POOL_RELEASE_FAILED",
+                "Datasource connection pool could not be released.",
+            ),
+        ) from None

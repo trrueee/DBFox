@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Any
 
@@ -178,6 +179,60 @@ def test_ssh_tunnel_failure_never_falls_back_to_direct_mysql(db_session, monkeyp
 
     assert exc_info.value.code == "CONNECTION_FAILED"
     assert driver_calls == []
+
+
+def test_mysql_connection_error_never_logs_vault_or_driver_secret(
+    db_session,
+    monkeypatch,
+    caplog,
+) -> None:
+    datasource = _add_datasource(db_session, "mysql")
+    introspector = SchemaIntrospector()
+    sentinel = "mysql-introspection-secret-sentinel"
+
+    monkeypatch.setattr(
+        introspector,
+        "_decrypt_datasource_password",
+        lambda _db, _datasource_id: sentinel,
+    )
+
+    def fail_connect(**_kwargs: Any) -> None:
+        raise RuntimeError(f"MySQL rejected password={sentinel}")
+
+    monkeypatch.setattr(pymysql, "connect", fail_connect)
+
+    with caplog.at_level(logging.WARNING, logger="dbfox.environment.schema_introspector"):
+        inventory = introspector.inspect(db_session, datasource.id)
+
+    assert inventory.table_count == 0
+    assert inventory.tables == []
+    assert sentinel not in str(inventory)
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+def test_duckdb_connection_error_never_logs_driver_secret(
+    db_session,
+    monkeypatch,
+    caplog,
+) -> None:
+    datasource = _add_datasource(db_session, "duckdb")
+    introspector = SchemaIntrospector()
+    sentinel = "duckdb-introspection-secret-sentinel"
+
+    def fail_connect(_resolved: Any) -> None:
+        raise RuntimeError(f"DuckDB driver failed with token={sentinel}")
+
+    monkeypatch.setattr(introspector, "_connect_duckdb", fail_connect)
+
+    with caplog.at_level(logging.WARNING, logger="dbfox.environment.schema_introspector"):
+        inventory = introspector.inspect(db_session, datasource.id)
+
+    assert inventory.table_count == 0
+    assert inventory.tables == []
+    assert sentinel not in str(inventory)
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 def test_postgres_introspection_returns_tables_columns_fks_and_samples(db_session, monkeypatch):

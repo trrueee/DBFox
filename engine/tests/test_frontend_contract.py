@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import re
 from pathlib import Path
@@ -193,6 +195,41 @@ def test_datasource_health_sanitizes_dbfox_error_message(client, db_session, mon
     assert ds.last_test_error is not None
     assert "secret" not in ds.last_test_error
     assert "mysql://root" not in ds.last_test_error
+
+
+def test_datasource_health_unexpected_error_never_leaks_exception_text(
+    client,
+    db_session,
+    test_datasource,
+    monkeypatch,
+    caplog,
+):
+    from engine.api.datasources import health as datasource_health_module
+
+    sentinel = "health-connection-secret-sentinel"
+
+    def fail_connection(_config):
+        raise RuntimeError(f"driver failed with password={sentinel}")
+
+    monkeypatch.setattr(datasource_health_module, "test_connection", fail_connection)
+
+    with caplog.at_level(logging.ERROR, logger="dbfox.api.datasources.health"):
+        resp = client.post(
+            f"/api/v1/datasources/{test_datasource.id}/health",
+            headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+        )
+
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["message"] == "数据库连接健康检查失败，请检查连接配置。"
+    assert sentinel not in resp.text
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+    db_session.refresh(test_datasource)
+    assert test_datasource.last_test_error == "数据库连接健康检查失败，请检查连接配置。"
+    assert sentinel not in str(test_datasource.last_test_error)
 
 
 def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):

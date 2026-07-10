@@ -10,6 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.app.errors import log_unexpected_exception
 from engine.errors import DBFoxError, DataSourceConnectionError
 from engine.security.credential_vault import (
     CredentialKind,
@@ -204,7 +205,12 @@ class SchemaIntrospector:
                 connect_timeout=10,
             )
         except Exception as exc:
-            logger.warning("MySQL connect failed for %s: %s", resolved.datasource_id, exc)
+            log_unexpected_exception(
+                logger,
+                operation="schema_introspection_mysql_connect",
+                exc=exc,
+                level="warning",
+            )
             return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:
@@ -475,7 +481,12 @@ class SchemaIntrospector:
         try:
             conn = self._connect_duckdb(resolved)
         except Exception as exc:
-            logger.warning("DuckDB connect failed for %s: %s", resolved.datasource_id, exc)
+            log_unexpected_exception(
+                logger,
+                operation="schema_introspection_duckdb_connect",
+                exc=exc,
+                level="warning",
+            )
             return self._empty_inventory(resolved, resolved.safe_display_name)
 
         try:

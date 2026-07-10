@@ -14,7 +14,7 @@ from engine.api.datasources.common import (
     persist_health_failure,
     persist_health_success,
 )
-from engine.app.errors import public_message
+from engine.app.errors import log_unexpected_exception, public_message
 from engine.datasource import test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
@@ -66,8 +66,12 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "message": safe_message,
             "datasource": datasource_to_dict(datasource),
         }
-    except Exception:
-        logger.exception("Datasource health check failed")
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_health_check",
+            exc=exc,
+        )
         latency_ms = int((time.perf_counter() - started) * 1000)
         message = "数据库连接健康检查失败，请检查连接配置。"
         persist_health_failure(datasource, message, latency_ms, checked_at)

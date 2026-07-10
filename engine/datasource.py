@@ -6,6 +6,7 @@ from typing import Any
 
 import pymysql
 
+from engine.app.errors import log_unexpected_exception
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, get_credential_vault
 from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
@@ -179,8 +180,14 @@ def _setup_test_tunnel(config: dict[str, Any]) -> tuple[str, int, Any | None]:
         else:
             tunnel = open_temporary_tunnel(config)
         return "127.0.0.1", tunnel.local_bind_port, tunnel
-    except Exception as e:
-        raise DataSourceConnectionError(f"无法建立 SSH 隧道，请检查跳板机配置。错误: {str(e)}")
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_test_ssh_tunnel",
+            exc=exc,
+            level="warning",
+        )
+        raise DataSourceConnectionError("无法建立 SSH 隧道，请检查跳板机配置。") from None
 
 
 def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
@@ -240,8 +247,14 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
             conn.close()
     except DataSourceConnectionError:
         raise
-    except Exception as e:
-        raise DataSourceConnectionError(f"无法建立 SQLite 数据库连接，请检查路径配置。错误: {str(e)}")
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_test_sqlite_connection",
+            exc=exc,
+            level="warning",
+        )
+        raise DataSourceConnectionError("无法建立 SQLite 数据库连接，请检查路径配置。") from None
 
 
 def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
@@ -292,8 +305,14 @@ def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
             conn.close()
     except DataSourceConnectionError:
         raise
-    except Exception as e:
-        raise DataSourceConnectionError(f"无法建立 PostgreSQL 数据库连接，请检查配置信息。错误详情: {str(e)}")
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_test_postgres_connection",
+            exc=exc,
+            level="warning",
+        )
+        raise DataSourceConnectionError("无法建立 PostgreSQL 数据库连接，请检查配置信息。") from None
     finally:
         _cleanup_test_tunnel(temp_tunnel, config)
 
@@ -344,8 +363,14 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
             conn.close()
     except DataSourceConnectionError:
         raise
-    except Exception as e:
-        raise DataSourceConnectionError(f"无法建立 MySQL 数据库连接，请检查主机/端口/用户名/SSL 配置。错误详情: {str(e)}")
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation="datasource_test_mysql_connection",
+            exc=exc,
+            level="warning",
+        )
+        raise DataSourceConnectionError("无法建立 MySQL 数据库连接，请检查主机、端口、用户名和 SSL 配置。") from None
     finally:
         _cleanup_test_tunnel(temp_tunnel, config)
 
