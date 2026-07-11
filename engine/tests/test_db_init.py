@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, text
 
 from engine.db import Base
 
-ALEMBIC_HEAD = "2b4c6d8e0f12"
+ALEMBIC_HEAD = "3c5d7e9f1a2b"
 
 
 def test_init_db_raises_when_alembic_upgrade_fails(monkeypatch, tmp_path) -> None:

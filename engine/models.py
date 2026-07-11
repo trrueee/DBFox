@@ -2,7 +2,20 @@ import os
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, LargeBinary
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship, validates
 
 from engine.db import Base
@@ -64,8 +77,7 @@ class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
     port = Column(Integer, nullable=False)
     database_name = Column(String, nullable=False)
     username = Column(String, nullable=False)
-    password_ciphertext = Column(String, nullable=False)
-    password_nonce = Column(String, nullable=False)
+    password_credential_id = Column(String, nullable=True)
 
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     status = Column(String, nullable=False, default="created")
@@ -78,6 +90,19 @@ class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
 
     project = relationship("Project", back_populates="environments")
     datasource = relationship("DataSource", foreign_keys=[datasource_id])
+
+
+class FoundationRuntimeState(Base):  # type: ignore[misc,valid-type]
+    """Singleton marker written by the one-time foundation runtime reset."""
+
+    __tablename__ = "foundation_runtime_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_foundation_runtime_state_singleton"),
+    )
+
+    id = Column(Integer, primary_key=True, default=1)
+    runtime_version = Column(String, nullable=False)
+    reset_completed_at = Column(DateTime, nullable=True)
 
 
 class DataSource(Base):  # type: ignore[misc,valid-type]

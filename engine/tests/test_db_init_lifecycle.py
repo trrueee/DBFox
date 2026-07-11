@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from engine.db import configure_sqlite_pragmas, DATABASE_URL
+from engine.db import build_metadata_engine, configure_sqlite_pragmas, DATABASE_URL
 
 
 class TestConfigureSqlitePragmas:
@@ -52,3 +52,14 @@ class TestConfigureSqlitePragmas:
                 sys.modules[mod_name] = saved
             else:
                 sys.modules.pop(mod_name, None)
+
+
+def test_build_metadata_engine_enables_foreign_keys_for_each_sqlite_connection(tmp_path: Path) -> None:
+    engine = build_metadata_engine(f"sqlite:///{(tmp_path / 'metadata.db').as_posix()}")
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+    finally:
+        engine.dispose()

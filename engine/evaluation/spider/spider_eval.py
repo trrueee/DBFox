@@ -343,8 +343,6 @@ def _ensure_spider_sqlite_datasource(db_session: Any, example: SpiderExample) ->
         port=0,
         database_name=db_path,
         username="",
-        password_ciphertext="",
-        password_nonce="",
         status="active",
     )
     db_session.add(ds)

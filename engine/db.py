@@ -74,32 +74,45 @@ def configure_sqlite_pragmas(database_url: str | None = None) -> None:
         conn.close()
 
 
-engine: Engine = create_engine(
-    DATABASE_URL,
-    connect_args={
-        "check_same_thread": False,
-        "timeout": DB_SQLITE_TIMEOUT_SECONDS,
-    },
-    pool_size=DB_POOL_SIZE,
-    max_overflow=DB_MAX_OVERFLOW,
-    pool_pre_ping=True,
-    pool_recycle=DB_POOL_RECYCLE_SECONDS,
-    pool_timeout=DB_POOL_TIMEOUT_SECONDS,
-)
+def build_metadata_engine(database_url: str) -> Engine:
+    """Build an engine for DBFox metadata, including SQLite safety PRAGMAs.
 
-# Apply WAL + busy_timeout PRAGMAs to every new connection in the pool.
-from sqlalchemy import event as _sa_event
+    Alembic and runtime code must use the same connection contract.  SQLite
+    enforces foreign keys per connection, so the listener belongs on each
+    engine instance rather than only on the module-global runtime engine.
+    """
+    engine_kwargs: dict[str, object] = {
+        "pool_size": DB_POOL_SIZE,
+        "max_overflow": DB_MAX_OVERFLOW,
+        "pool_pre_ping": True,
+        "pool_recycle": DB_POOL_RECYCLE_SECONDS,
+        "pool_timeout": DB_POOL_TIMEOUT_SECONDS,
+    }
+    if database_url.startswith("sqlite:"):
+        engine_kwargs["connect_args"] = {
+            "check_same_thread": False,
+            "timeout": DB_SQLITE_TIMEOUT_SECONDS,
+        }
 
-@_sa_event.listens_for(engine, "connect")
-def _apply_sqlite_pragmas(dbapi_connection, _connection_record):
-    if DATABASE_URL.startswith("sqlite:///"):
-        cursor = dbapi_connection.cursor()
-        try:
-            cursor.execute("PRAGMA journal_mode=WAL")
-            cursor.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
-            cursor.execute("PRAGMA synchronous=NORMAL")
-        finally:
-            cursor.close()
+    metadata_engine = create_engine(database_url, **engine_kwargs)
+    if metadata_engine.dialect.name == "sqlite":
+        from sqlalchemy import event as _sa_event
+
+        @_sa_event.listens_for(metadata_engine, "connect")
+        def _apply_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+            finally:
+                cursor.close()
+
+    return metadata_engine
+
+
+engine: Engine = build_metadata_engine(DATABASE_URL)
 
 # ---------------------------------------------------------------------------
 # DB write tracing (for diagnosing concurrent eval SQLite lock issues)
