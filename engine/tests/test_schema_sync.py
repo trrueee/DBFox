@@ -2,7 +2,7 @@
 import uuid
 import pytest
 import engine.schema_sync as schema_sync_module
-from engine.llm.config import LlmConfig
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.environment.inventory import ColumnInventory, SchemaInventory, TableInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.schema_sync import sync_schema, build_er_diagram_data
@@ -187,8 +187,10 @@ def test_sync_failure_status(db_session) -> None:
         sync_schema(db_session, str(uuid.uuid4()))
 
 
-def test_sync_passes_llm_config_to_ai_enrichment(db_session, test_datasource, monkeypatch) -> None:
+def test_sync_passes_resolved_config_to_ai_enrichment(db_session, test_datasource, monkeypatch) -> None:
     captured: dict[str, object] = {}
+    credential_id = "cred_llm_api_key_schema_sync"
+    resolved_config = object()
 
     def _fake_enrich(db, datasource_id, **kwargs):
         captured["datasource_id"] = datasource_id
@@ -197,40 +199,59 @@ def test_sync_passes_llm_config_to_ai_enrichment(db_session, test_datasource, mo
 
     monkeypatch.setattr("engine.ai_enrich.ai_enrich_catalog", _fake_enrich)
 
+    def _fake_resolve(**kwargs):
+        captured["resolver_kwargs"] = kwargs
+        return resolved_config
+
+    monkeypatch.setattr(
+        "engine.llm.config.resolve_product_llm_config_from_credential",
+        _fake_resolve,
+    )
+
     result = sync_schema(
         db_session,
         test_datasource.id,
-        ai_api_key="sk-test",
+        llm_credential_id=credential_id,
         ai_api_base="https://example.test/v1",
         ai_model_name="qwen-plus",
     )
 
     assert result["ok"] is True
     llm_config = captured["kwargs"].get("llm_config")
-    assert isinstance(llm_config, LlmConfig)
-    assert llm_config.api_key == "sk-test"
-    assert llm_config.api_base == "https://example.test/v1"
-    assert llm_config.model_name == "qwen-plus"
-    assert llm_config.source == "product"
-    assert captured == {
-        "datasource_id": test_datasource.id,
-        "kwargs": {
-            "llm_config": llm_config,
-        },
+    assert llm_config is resolved_config
+    assert captured["resolver_kwargs"] == {
+        "llm_credential_id": credential_id,
+        "api_base": "https://example.test/v1",
+        "model_name": "qwen-plus",
     }
+    assert captured["datasource_id"] == test_datasource.id
+    assert captured["kwargs"] == {"llm_config": llm_config}
 
 
 def test_sync_reports_ai_enrichment_warning(db_session, test_datasource, monkeypatch) -> None:
+    from engine.ai_index import LLM_ENRICH_FAILED
+
+    resolved_config = object()
+
     def _fake_enrich(db, datasource_id, **kwargs):
-        return {"ai_enriched": False, "enriched_count": 0, "reason": "missing api key"}
+        return {"ai_enriched": False, "enriched_count": 0, "reason": LLM_ENRICH_FAILED}
 
     monkeypatch.setattr("engine.ai_enrich.ai_enrich_catalog", _fake_enrich)
 
-    result = sync_schema(db_session, test_datasource.id, ai_api_key="sk-test")
+    monkeypatch.setattr(
+        "engine.llm.config.resolve_product_llm_config_from_credential",
+        lambda **_kwargs: resolved_config,
+    )
+
+    result = sync_schema(
+        db_session,
+        test_datasource.id,
+        llm_credential_id="cred_llm_api_key_schema_sync_warning",
+    )
 
     assert result["ok"] is True
     assert result["aiEnrich"]["ai_enriched"] is False
-    assert result["warnings"] == ["AI 语义打分未完成：missing api key"]
+    assert result["warnings"] == [f"AI 语义打分未完成：{LLM_ENRICH_FAILED}"]
 
 
 def test_sync_failure_preserves_existing_schema(db_session, test_datasource, monkeypatch) -> None:
@@ -247,7 +268,7 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
 
     monkeypatch.setattr("engine.environment.schema_catalog_sync.introspect_datasource", _failing_snapshot)
 
-    with pytest.raises(ValueError, match="Schema sync failed"):
+    with pytest.raises(ValueError, match=fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED)):
         sync_schema(db_session, test_datasource.id)
 
     assert db_session.query(SchemaTable).filter(
@@ -259,6 +280,7 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
 
     db_session.refresh(test_datasource)
     assert test_datasource.last_sync_status == "failed"
+    assert test_datasource.last_sync_error == fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED)
 
 
 def test_cascade_delete_datasource(db_session, test_datasource) -> None:

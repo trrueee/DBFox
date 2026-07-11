@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.evaluation.schemas import AgentEvalCase, AgentEvalCaseResult
 
 logger = logging.getLogger("dbfox.eval.langsmith_adapter")
@@ -80,7 +81,12 @@ class LangSmithAdapter:
 
             logger.info("Synced %d cases to LangSmith dataset '%s'.", len(cases), dataset_name)
         except Exception as exc:
-            logger.warning("LangSmith sync failed: %s", exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+                level="warning",
+            )
 
     def run_experiment(
         self,
@@ -130,7 +136,12 @@ class LangSmithAdapter:
             logger.info("Experiment completed: %d examples evaluated.", len(results))
             return results
         except Exception as exc:
-            logger.warning("LangSmith experiment failed: %s", exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+                level="warning",
+            )
             return []
 
     def upload_feedback(
@@ -154,7 +165,12 @@ class LangSmithAdapter:
                     comment=comment,
                 )
         except Exception as exc:
-            logger.warning("LangSmith feedback upload failed: %s", exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+                level="warning",
+            )
 
     def import_annotated_failures(
         self,

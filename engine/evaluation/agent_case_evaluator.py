@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from engine.agent_core.types import AgentRunResponse
+from engine.app.safe_errors import FixedErrorCode
 from engine.models import AgentGoldenTask
 
 
@@ -193,7 +194,7 @@ class AgentCaseEvaluator:
                             actual_rows = actual_res.get("rows", [])
                         else:
                             actual_rows = None
-                            failures.append(f"actual SQL execution failed: {actual_res.get('error')}")
+                            failures.append(FixedErrorCode.SQL_EXECUTION_FAILED.value)
                     else:
                         actual_rows = None
                         failures.append("actual SQL is missing")
@@ -207,9 +208,9 @@ class AgentCaseEvaluator:
                             failures.append("actual query results are not isomorphic to expected query results")
                     else:
                         scores.append(0.0)
-                except Exception as e:
+                except Exception:
                     scores.append(0.0)
-                    failures.append(f"failed to compare query result isomorphism: {e}")
+                    failures.append(FixedErrorCode.EVAL_RUN_ERROR.value)
         else:
             # Fallback to legacy expected_final_contains
             if expected_final_contains:

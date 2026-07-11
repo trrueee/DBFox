@@ -3,16 +3,29 @@ from __future__ import annotations
 import logging
 import re
 import time
-from typing import Any
+from typing import Any, Final, Literal
 
 from sqlalchemy.orm import Session
 
 from engine.agent_core.types import ToolObservation
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import DBFoxError, GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError, ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 
 logger = logging.getLogger("dbfox.tools.db")
+
+ToolObservationFailureCode = Literal[
+    "TOOL_GUARDRAIL_BLOCKED",
+    "TOOL_EXECUTION_TIMEOUT",
+    "TOOL_EXECUTION_FAILED",
+]
+
+_TOOL_OBSERVATION_FAILURE_MESSAGES: Final[dict[ToolObservationFailureCode, str]] = {
+    "TOOL_GUARDRAIL_BLOCKED": "Tool execution was blocked by safety policy.",
+    "TOOL_EXECUTION_TIMEOUT": "Tool execution timed out.",
+    "TOOL_EXECUTION_FAILED": "Tool execution failed.",
+}
 
 MAX_PREVIEW_ROWS = 20
 DEFAULT_PREVIEW_ROWS = 10
@@ -138,29 +151,46 @@ def _failed(name: str, args: dict[str, Any], error: str, start: float) -> ToolOb
 def _execution_failed(name: str, args: dict[str, Any], exc: Exception, start: float) -> ToolObservation:
     elapsed = int((time.perf_counter() - start) * 1000)
     if isinstance(exc, GuardrailValidationError):
-        checks = getattr(exc, "checks", []) or []
+        code: ToolObservationFailureCode = "TOOL_GUARDRAIL_BLOCKED"
+        status = "blocked"
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_TOOL_GUARDRAIL_BLOCKED,
+            exc=exc,
+            level="warning",
+        )
         return ToolObservation(
             name=name, status="failed", input=args,
             output={
-                "status": "blocked",
-                "checks": checks,
-                "blocked_reasons": [
-                    str(item.get("rule", "guardrail"))
-                    for item in checks
-                    if isinstance(item, dict)
-                ],
+                "status": status,
+                "error_code": code,
+                "error_type": type(exc).__name__,
+                "blocked_reasons": [code],
                 "audit": {"readonly_checked": True, "trust_gate": True},
             },
-            error=str(exc), latency_ms=elapsed,
+            error=_TOOL_OBSERVATION_FAILURE_MESSAGES[code], latency_ms=elapsed,
         )
     if isinstance(exc, SQLQueryTimeoutError):
         status = "timeout"
+        code = "TOOL_EXECUTION_TIMEOUT"
     elif isinstance(exc, SQLExecutionError):
         status = "execution_failed"
+        code = "TOOL_EXECUTION_FAILED"
     else:
         status = "failed"
+        code = "TOOL_EXECUTION_FAILED"
+    log_unexpected_exception(
+        logger,
+        operation=SafeLogOperation.DB_TOOL_EXECUTION,
+        exc=exc,
+        level="warning",
+    )
     return ToolObservation(
         name=name, status="failed", input=args,
-        output={"status": status, "error_type": exc.__class__.__name__},
-        error=str(exc), latency_ms=elapsed,
+        output={
+            "status": status,
+            "error_code": code,
+            "error_type": type(exc).__name__,
+        },
+        error=_TOOL_OBSERVATION_FAILURE_MESSAGES[code], latency_ms=elapsed,
     )

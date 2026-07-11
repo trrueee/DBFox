@@ -36,8 +36,6 @@ def _add_result_source(
         port=3306,
         database_name="dbfox",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce",
     )
     session = AgentSession(
         id=f"conv-{artifact_id}",
@@ -101,8 +99,6 @@ def _add_table_source(
         port=3306,
         database_name="dbfox",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce",
     )
     table = SchemaTable(
         id=table_id,

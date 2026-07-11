@@ -14,7 +14,12 @@ from engine.api.datasources.common import (
     persist_health_failure,
     persist_health_success,
 )
-from engine.app.errors import log_unexpected_exception, public_message
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_detail,
+    log_unexpected_exception,
+)
 from engine.datasource import test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
@@ -51,10 +56,15 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "message": result.get("message", "连接健康检查通过。"),
             "datasource": datasource_to_dict(datasource),
         }
-    except DBFoxError as exc:
+    except DBFoxError:
         latency_ms = int((time.perf_counter() - started) * 1000)
-        safe_message = public_message(exc)
-        persist_health_failure(datasource, safe_message, latency_ms, checked_at)
+        detail = fixed_error_detail(FixedErrorCode.DATASOURCE_CONNECTION_FAILED)
+        persist_health_failure(
+            datasource,
+            FixedErrorCode.DATASOURCE_CONNECTION_FAILED,
+            latency_ms,
+            checked_at,
+        )
         db.commit()
         db.refresh(datasource)
         return {
@@ -63,18 +73,24 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
             "latencyMs": latency_ms,
             "warnings": [],
-            "message": safe_message,
+            "code": detail["code"],
+            "message": detail["message"],
             "datasource": datasource_to_dict(datasource),
         }
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_health_check",
+            operation=SafeLogOperation.DATASOURCE_HEALTH_CHECK,
             exc=exc,
         )
         latency_ms = int((time.perf_counter() - started) * 1000)
-        message = "数据库连接健康检查失败，请检查连接配置。"
-        persist_health_failure(datasource, message, latency_ms, checked_at)
+        detail = fixed_error_detail(FixedErrorCode.DATASOURCE_CONNECTION_FAILED)
+        persist_health_failure(
+            datasource,
+            FixedErrorCode.DATASOURCE_CONNECTION_FAILED,
+            latency_ms,
+            checked_at,
+        )
         db.commit()
         db.refresh(datasource)
         return {
@@ -83,6 +99,7 @@ def api_check_datasource_health(id: str, db: Session = Depends(get_db)) -> dict[
             "checkedAt": datasource.last_test_at.isoformat() if datasource.last_test_at else None,
             "latencyMs": latency_ms,
             "warnings": [],
-            "message": message,
+            "code": detail["code"],
+            "message": detail["message"],
             "datasource": datasource_to_dict(datasource),
         }

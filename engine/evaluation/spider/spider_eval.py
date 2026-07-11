@@ -7,6 +7,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_examples
 from engine.evaluation.spider.sql_prediction_extractor import extract_final_sql
 from engine.evaluation.spider.sql_result_comparator import compare_sqlite_execution
@@ -157,7 +163,12 @@ class SpiderEvalRunner:
                     error="No run_fn configured.",
                 )
         except Exception as exc:
-            error = str(exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+            )
+            error = fixed_error_message(FixedErrorCode.EVAL_RUN_ERROR)
 
         if error:
             return SpiderCaseResult(
@@ -237,7 +248,7 @@ class SpiderEvalRunner:
 def create_dbfox_sqlite_run_fn(
     *,
     db_session: Any,
-    api_key: str | None = None,
+    llm_credential_id: str | None = None,
     api_base: str | None = None,
     model_name: str | None = None,
     execute: bool = True,
@@ -268,7 +279,7 @@ def create_dbfox_sqlite_run_fn(
             datasource_id=datasource_id,
             question=example.question,
             execute=execute,
-            api_key=api_key,
+            llm_credential_id=llm_credential_id,
             api_base=api_base,
             model_name=model_name,
             max_steps=max_steps,
@@ -281,7 +292,19 @@ def create_dbfox_sqlite_run_fn(
                 if event.response is not None:
                     response = event.response
         except Exception as exc:
-            events_payload.append({"step": {"error": str(exc)}})
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+            )
+            events_payload.append(
+                {
+                    "step": {
+                        "error": fixed_error_message(FixedErrorCode.EVAL_RUN_ERROR),
+                        "error_code": FixedErrorCode.EVAL_RUN_ERROR.value,
+                    }
+                }
+            )
 
         latency = int((_time.monotonic() - start) * 1000)
         return response, events_payload, latency, datasource_id, synced_tables
@@ -415,7 +438,12 @@ def create_qwen_text_to_sql_baseline_run_fn(
                 raw = raw[:-3].strip()
             sql = raw if raw else None
         except Exception as exc:
-            error = str(exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+            )
+            error = fixed_error_message(FixedErrorCode.EVAL_RUN_ERROR)
 
         latency = int((_time.monotonic() - start) * 1000)
 
@@ -428,7 +456,16 @@ def create_qwen_text_to_sql_baseline_run_fn(
             {"step": {"name": "model.sql_draft", "tool_name": "model.sql_draft", "sql": sql or "", "output": {"sql": sql or ""}}},
         ]
         if error:
-            events.append({"step": {"name": "model.sql_draft", "tool_name": "model.sql_draft", "error": error}})
+            events.append(
+                {
+                    "step": {
+                        "name": "model.sql_draft",
+                        "tool_name": "model.sql_draft",
+                        "error": error,
+                        "error_code": FixedErrorCode.EVAL_RUN_ERROR.value,
+                    }
+                }
+            )
 
         return response, events, latency
 
@@ -440,7 +477,6 @@ def create_qwen_text_to_sql_baseline_run_fn(
 
 def _cli() -> None:
     import argparse
-    import os
 
     parser = argparse.ArgumentParser(description="DBFox Spider Eval Runner")
     parser.add_argument("--spider-root", required=True, help="Path to Spider dataset root")
@@ -449,6 +485,7 @@ def _cli() -> None:
     parser.add_argument("--db-id", default=None)
     parser.add_argument("--execute", action="store_true", default=False)
     parser.add_argument("--api-key", default=None)
+    parser.add_argument("--llm-credential-id", default=None)
     parser.add_argument("--api-base", default=None)
     parser.add_argument("--model-name", default=None)
     parser.add_argument("--output", default=None, help="Write JSON results to file")
@@ -492,16 +529,14 @@ def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
 
 
 def _run_dbfox_cli(args: Any, db_ids: set[str] | None) -> None:
-    import os as _os
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy.pool import StaticPool
     from engine.db import Base
     from engine import models  # noqa: F401  # register models
 
-    api_key = args.api_key or _os.environ.get("DBFOX_LLM_API_KEY")
-    if not api_key:
-        raise RuntimeError("--api-key or DBFOX_LLM_API_KEY required for dbfox mode")
+    if not args.llm_credential_id:
+        raise RuntimeError("--llm-credential-id required for dbfox mode")
 
     # In-memory metadata DB (isolated from production dbfox_local.db)
     engine = create_engine(
@@ -516,7 +551,7 @@ def _run_dbfox_cli(args: Any, db_ids: set[str] | None) -> None:
     try:
         run_fn = create_dbfox_sqlite_run_fn(
             db_session=db_session,
-            api_key=api_key,
+            llm_credential_id=args.llm_credential_id,
             api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
             model_name=args.model_name or "qwen-plus",
             execute=args.execute,

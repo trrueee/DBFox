@@ -23,7 +23,10 @@ config.set_main_option("sqlalchemy.url", DATABASE_URL)
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Preserve application audit loggers created before Alembic runs during
+    # FastAPI startup.  The logging.config default would disable every
+    # unnamed ``dbfox.*`` logger and silently remove our error-boundary logs.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Set target metadata for autogenerate support
 target_metadata = Base.metadata

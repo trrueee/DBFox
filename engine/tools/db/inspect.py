@@ -14,6 +14,7 @@ from collections import OrderedDict
 from sqlalchemy.orm import Session
 from sqlglot import exp
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params, get_postgres_connection_params
 from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
@@ -319,8 +320,13 @@ class MySQLInspector(BaseInspector):
                     }
                 index_groups[iname]["columns"].append(str(_row_value(row, 4, "Column_name")))
             indexes = list(index_groups.values())
-        except Exception as e:
-            logger.debug("Failed to fetch indexes for MySQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_INDEXES,
+                exc=exc,
+                level="warning",
+            )
 
         # row estimate
         row_est = None
@@ -333,8 +339,13 @@ class MySQLInspector(BaseInspector):
             est = cur.fetchone()
             if est:
                 row_est = int(_row_value(est, 0, "TABLE_ROWS") or 0)
-        except Exception as e:
-            logger.debug("Failed to fetch row estimate for MySQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_ROW_ESTIMATE,
+                exc=exc,
+                level="warning",
+            )
 
         # table comment
         table_comment = ""
@@ -347,8 +358,13 @@ class MySQLInspector(BaseInspector):
             tc = cur.fetchone()
             if tc:
                 table_comment = str(_row_value(tc, 0, "TABLE_COMMENT") or "")
-        except Exception as e:
-            logger.debug("Failed to fetch table comment for MySQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_TABLE_COMMENT,
+                exc=exc,
+                level="warning",
+            )
 
         return {
             "object_type": "table",
@@ -490,8 +506,13 @@ class PostgreSQLInspector(BaseInspector):
                     "definition": str(row["indexdef"]),
                     "unique": "UNIQUE" in str(row["indexdef"]).upper(),
                 })
-        except Exception as e:
-            logger.debug("Failed to fetch indexes for PostgreSQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_INDEXES,
+                exc=exc,
+                level="warning",
+            )
 
         # row estimate
         row_est = None
@@ -504,8 +525,13 @@ class PostgreSQLInspector(BaseInspector):
             est = cur.fetchone()
             if est:
                 row_est = int(est["n_live_tup"])
-        except Exception as e:
-            logger.debug("Failed to fetch row estimate for PostgreSQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_ROW_ESTIMATE,
+                exc=exc,
+                level="warning",
+            )
 
         # table comment
         table_comment = ""
@@ -516,8 +542,13 @@ class PostgreSQLInspector(BaseInspector):
             tc = cur.fetchone()
             if tc:
                 table_comment = str(tc[0] or "")
-        except Exception as e:
-            logger.debug("Failed to fetch table comment for PostgreSQL table %s: %s", self.table_name, e, exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.DB_INSPECT_TABLE_COMMENT,
+                exc=exc,
+                level="warning",
+            )
 
         return {
             "object_type": "table",
@@ -635,8 +666,13 @@ def _mysql_table_payload(db: Session, conn: Any, datasource_id: str, database: s
                 }
             index_groups[iname]["columns"].append(str(_row_value(row, 4, "Column_name")))
         indexes = list(index_groups.values())
-    except Exception as e:
-        logger.debug("Failed to fetch indexes for MySQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_INDEXES,
+            exc=exc,
+            level="warning",
+        )
 
     # row estimate
     row_est = None
@@ -649,8 +685,13 @@ def _mysql_table_payload(db: Session, conn: Any, datasource_id: str, database: s
         est = cur.fetchone()
         if est:
             row_est = int(_row_value(est, 0, "TABLE_ROWS") or 0)
-    except Exception as e:
-        logger.debug("Failed to fetch row estimate for MySQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_ROW_ESTIMATE,
+            exc=exc,
+            level="warning",
+        )
 
     # table comment
     table_comment = ""
@@ -663,8 +704,13 @@ def _mysql_table_payload(db: Session, conn: Any, datasource_id: str, database: s
         tc = cur.fetchone()
         if tc:
             table_comment = str(_row_value(tc, 0, "TABLE_COMMENT") or "")
-    except Exception as e:
-        logger.debug("Failed to fetch table comment for MySQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_TABLE_COMMENT,
+            exc=exc,
+            level="warning",
+        )
 
     return {
         "object_type": "table",
@@ -786,8 +832,13 @@ def _pg_table_payload(db: Session, conn: Any, datasource_id: str, schema: str, t
                 "definition": str(row["indexdef"]),
                 "unique": "UNIQUE" in str(row["indexdef"]).upper(),
             })
-    except Exception as e:
-        logger.debug("Failed to fetch indexes for PostgreSQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_INDEXES,
+            exc=exc,
+            level="warning",
+        )
 
     # row estimate
     row_est = None
@@ -800,8 +851,13 @@ def _pg_table_payload(db: Session, conn: Any, datasource_id: str, schema: str, t
         est = cur.fetchone()
         if est:
             row_est = int(est["n_live_tup"])
-    except Exception as e:
-        logger.debug("Failed to fetch row estimate for PostgreSQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_ROW_ESTIMATE,
+            exc=exc,
+            level="warning",
+        )
 
     # table comment
     table_comment = ""
@@ -812,8 +868,13 @@ def _pg_table_payload(db: Session, conn: Any, datasource_id: str, schema: str, t
         tc = cur.fetchone()
         if tc:
             table_comment = str(tc[0] or "")
-    except Exception as e:
-        logger.debug("Failed to fetch table comment for PostgreSQL table %s: %s", table_name, e, exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_TABLE_COMMENT,
+            exc=exc,
+            level="warning",
+        )
 
     return {
         "object_type": "table",
@@ -900,8 +961,13 @@ def _sqlite_row_count(conn: sqlite3.Connection, table_name: str) -> int | None:
     try:
         row = conn.execute(f"SELECT COUNT(*) FROM {escape_identifier(table_name, 'sqlite')}").fetchone()
         return int(row[0]) if row else None
-    except sqlite3.Error as e:
-        logger.debug("Failed to fetch row count for SQLite table %s: %s", table_name, e, exc_info=True)
+    except sqlite3.Error as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_INSPECT_SQLITE_ROW_COUNT,
+            exc=exc,
+            level="warning",
+        )
         return None
 
 

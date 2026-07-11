@@ -13,7 +13,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from engine.app.errors import public_message
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.backup import create_backup, execute_restore, precheck_restore
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
@@ -34,7 +39,7 @@ router = APIRouter()
 def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
     payload = BackupResponse.model_validate(record).model_dump(mode="json")
     if payload.get("error_message"):
-        payload["error_message"] = public_message(str(payload["error_message"]))
+        payload["error_message"] = fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
     return payload
 
 
@@ -211,9 +216,14 @@ def api_restore_backup(
         try:
             ensure_catalog(db, res["datasource_id"])
             db.commit()
-        except Exception:
+        except Exception as exc:
             db.rollback()
-            logger.exception("还原数据库后尝试刷新同步元数据时失败")
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.BACKUP_REFRESH_CATALOG,
+                exc=exc,
+                level="warning",
+            )
             
         return res
     except Exception:

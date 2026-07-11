@@ -1,14 +1,31 @@
 import logging
 import uuid
+from contextlib import contextmanager
 from typing import Any
 
 import pymysql
 import pytest
 
+import engine.environment.schema_introspector as schema_introspector_module
 from engine.environment.schema_introspector import SchemaIntrospector
 from engine.errors import DataSourceConnectionError
 from engine.models import DataSource
 from engine.security.credential_vault import CredentialVaultUnavailableError
+
+
+@contextmanager
+def _capture_module_logger(monkeypatch, caplog, module, level: int):
+    """Inject an unregistered logger so this test does not alter app logging."""
+    capture_logger = logging.Logger(f"test.{module.__name__}.boundary")
+    capture_logger.setLevel(level)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(module, "logger", capture_logger)
+            yield
+    finally:
+        capture_logger.removeHandler(caplog.handler)
 
 
 def test_decrypt_datasource_password_fails_closed_without_a_credential(db_session):
@@ -201,7 +218,9 @@ def test_mysql_connection_error_never_logs_vault_or_driver_secret(
 
     monkeypatch.setattr(pymysql, "connect", fail_connect)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.environment.schema_introspector"):
+    with _capture_module_logger(
+        monkeypatch, caplog, schema_introspector_module, logging.WARNING
+    ):
         inventory = introspector.inspect(db_session, datasource.id)
 
     assert inventory.table_count == 0
@@ -225,7 +244,9 @@ def test_duckdb_connection_error_never_logs_driver_secret(
 
     monkeypatch.setattr(introspector, "_connect_duckdb", fail_connect)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.environment.schema_introspector"):
+    with _capture_module_logger(
+        monkeypatch, caplog, schema_introspector_module, logging.WARNING
+    ):
         inventory = introspector.inspect(db_session, datasource.id)
 
     assert inventory.table_count == 0

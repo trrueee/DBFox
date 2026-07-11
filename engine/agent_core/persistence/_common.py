@@ -17,6 +17,7 @@ from engine.agent_core.types import (
     AgentRunResponse,
     AgentRuntimeEvent,
 )
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.models import AgentApproval, AgentCheckpoint
 from engine.policy.redactor import DataRedactor
 
@@ -44,6 +45,41 @@ _SENSITIVE_KEY_PARTS = (
 _SQL_KEY_PARTS = ("sql", "query")
 _SQL_LITERAL_PATTERN = re.compile(r"'(?:''|[^'])*'")
 _ARTIFACT_EXECUTABLE_SQL_KEYS = frozenset({"sql", "safeSql", "safe_sql", "sourceSql", "source_sql"})
+_UNTRUSTED_ERROR_VALUE_KEYS = frozenset({
+    "error",
+    "error_message",
+    "last_error",
+    "last_error_telemetry",
+    "exception",
+    "exception_message",
+    "root_cause",
+    "root_causes",
+})
+
+
+def _fixed_agent_failure_value(key: str) -> str:
+    """Replace error-bearing persisted fields without examining their input."""
+    del key
+    return fixed_error_message(FixedErrorCode.AGENT_RUNTIME_ERROR)
+
+
+def _safe_error_value(value: Any, key: str) -> Any:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return value
+    if key.lower() == "last_error_telemetry":
+        return {
+            "code": FixedErrorCode.AGENT_RUNTIME_ERROR.value,
+            "message": _fixed_agent_failure_value(key),
+        }
+    if key.lower() == "root_causes":
+        if isinstance(value, list):
+            return [
+                _fixed_agent_failure_value(key)
+                for item in value
+                if item is not None and (not isinstance(item, str) or item.strip())
+            ]
+        return [_fixed_agent_failure_value(key)]
+    return _fixed_agent_failure_value(key)
 
 
 def _safe_json(payload: Any | None) -> str:
@@ -68,6 +104,8 @@ def _parse_json(raw: Any) -> dict[str, Any] | None:
 
 def _redact_runtime_event_value(value: Any, key: str = "") -> Any:
     key_lower = key.lower()
+    if key_lower in _UNTRUSTED_ERROR_VALUE_KEYS:
+        return _safe_error_value(value, key_lower)
     if key_lower in _SENSITIVE_KEYS or any(part in key_lower for part in _SENSITIVE_KEY_PARTS):
         return "[REDACTED]"
     if isinstance(value, dict):
@@ -95,6 +133,8 @@ def _safe_checkpoint_payload(payload: Any) -> Any:
 
 def _redact_artifact_value(value: Any, key: str = "") -> Any:
     key_lower = key.lower()
+    if key_lower in _UNTRUSTED_ERROR_VALUE_KEYS:
+        return _safe_error_value(value, key_lower)
     if key in _ARTIFACT_EXECUTABLE_SQL_KEYS:
         return value
     if key_lower in _SENSITIVE_KEYS or any(part in key_lower for part in _SENSITIVE_KEY_PARTS):
@@ -159,6 +199,9 @@ def _safe_event_payload(event: AgentRuntimeEvent) -> dict[str, Any]:
 def _redact_trace_for_storage(data: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for k, v in data.items():
+        if k.lower() in _UNTRUSTED_ERROR_VALUE_KEYS:
+            result[k] = _safe_error_value(v, k)
+            continue
         if k in _SENSITIVE_KEYS:
             continue
         if isinstance(v, dict):
@@ -263,7 +306,9 @@ def _restore_response(run: Any) -> AgentRunResponse | None:
 
 
 def _redact_response(response: AgentRunResponse) -> dict[str, Any]:
-    data = response.model_dump()
+    data = _redact_runtime_event_value(response.model_dump())
+    if not isinstance(data, dict):
+        return {}
     data.pop("api_key", None)
     if "follow_up_context" in data:
         data.pop("follow_up_context", None)

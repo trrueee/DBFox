@@ -30,6 +30,7 @@ from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
 from engine.agent.app.persistence_coordinator import AgentPersistenceCoordinator
 from engine.agent.app.stream_runner import AgentStreamRunner
 from engine.agent.app.error_boundary import public_agent_failure, safe_agent_log
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 
 from engine.agent.app.persistence import (
     resolve_session_id,
@@ -147,8 +148,13 @@ class DBFoxAgentService:
                     try:
                         from engine.query_registry import QUERY_REGISTRY
                         QUERY_REGISTRY.cancel(execution_id)
-                    except Exception:
-                        logger.debug("Failed to cancel active SQL query on SSE disconnect", exc_info=True)
+                    except Exception as exc:
+                        log_unexpected_exception(
+                            logger,
+                            operation=SafeLogOperation.AGENT_SSE_CANCEL_QUERY,
+                            exc=exc,
+                            level="warning",
+                        )
                 self.persistence_coordinator.cancel_run(run_id)
             except Exception:
                 self.persistence_coordinator.rollback_quietly()

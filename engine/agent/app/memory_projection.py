@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from engine.agent_core.types import AgentRunResponse
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 
 logger = logging.getLogger("dbfox.dbfox_agent.memory_projection")
 
@@ -17,15 +18,25 @@ class AgentMemoryProjectionCoordinator:
     def load_session_memory(self, session_id: str) -> dict[str, Any] | None:
         try:
             return self.store.load_session_memory(session_id)
-        except Exception:
-            logger.warning("Failed to load agent session memory", exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_MEMORY_LOAD_SESSION,
+                exc=exc,
+                level="warning",
+            )
             return None
 
     def list_reusable_sqls(self, datasource_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         try:
             return self.store.list_reusable_sqls(datasource_id=datasource_id, limit=limit)
-        except Exception:
-            logger.warning("Failed to list datasource reusable SQL candidates", exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_MEMORY_LIST_REUSABLE_SQL,
+                exc=exc,
+                level="warning",
+            )
             return []
 
     def save_run_projection(
@@ -41,8 +52,13 @@ class AgentMemoryProjectionCoordinator:
                 final_state=final_state,
                 datasource_id=datasource_id,
             )
-        except Exception:
-            logger.warning("Failed to save agent memory projection", exc_info=True)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_MEMORY_SAVE_PROJECTION,
+                exc=exc,
+                level="warning",
+            )
 
 
 def restore_session_memory(

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.evaluation.benchmarks.base import BenchmarkCase
 
 logger = logging.getLogger("dbfox.benchmarks.bird")
@@ -62,7 +63,12 @@ class BIRDAdapter:
                         tags=["bird"],
                     ))
             except (json.JSONDecodeError, OSError) as exc:
-                logger.warning("Failed to parse BIRD benchmark file: %s", exc)
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.AGENT_EVAL_BENCHMARK_IMPORT,
+                    exc=exc,
+                    level="warning",
+                )
 
         if limit is not None:
             cases = cases[:limit]

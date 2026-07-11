@@ -7,7 +7,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from engine.app.errors import public_error
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_detail,
+    log_unexpected_exception,
+)
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.evaluation.agent_eval import AgentEvalRunner
@@ -186,8 +191,15 @@ def api_import_benchmark(req: AgentBenchmarkImportRequest, db: Session = Depends
     except DBFoxError:
         raise
     except Exception as exc:
-        logger.exception("Benchmark import failed")
-        raise HTTPException(status_code=500, detail=public_error("IMPORT_ERROR", exc))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_EVAL_BENCHMARK_IMPORT,
+            exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.IMPORT_ERROR),
+        ) from None
 
 
 @router.post("/agent-eval/run", response_model=AgentEvalRunResponse)
@@ -195,11 +207,21 @@ def api_run_eval(req: AgentEvalRunRequest, db: Session = Depends(get_db)) -> Any
     try:
         runner = AgentEvalRunner(db)
         return runner.run(req)
-    except DBFoxError as exc:
-        raise HTTPException(status_code=400, detail=public_error(exc.code, exc))
+    except DBFoxError:
+        raise HTTPException(
+            status_code=400,
+            detail=fixed_error_detail(FixedErrorCode.EVAL_RUN_ERROR),
+        ) from None
     except Exception as exc:
-        logger.exception("Agent eval run failed")
-        raise HTTPException(status_code=500, detail=public_error("EVAL_RUN_ERROR", exc))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_EVAL_RUN,
+            exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.EVAL_RUN_ERROR),
+        ) from None
 
 
 @router.get("/agent-eval/runs", response_model=list[AgentEvalRunResponse])

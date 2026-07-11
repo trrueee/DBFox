@@ -6,6 +6,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import FixedErrorCode
+
 
 class AgentEventStore:
     def start_run(self, *args: Any, **kwargs: Any) -> None:
@@ -51,7 +53,13 @@ class AgentEventStore:
     def complete_run(self, response: Any) -> None:
         pass
 
-    def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
+    def fail_run(
+        self,
+        run_id: str,
+        session_id: str,
+        error_code: FixedErrorCode,
+        response: Any,
+    ) -> None:
         pass
 
     def cancel_run(self, run_id: str) -> None:
@@ -198,10 +206,16 @@ class SQLiteAgentEventStore(AgentEventStore):
 
         ap.complete_run(self.db, response)
 
-    def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
+    def fail_run(
+        self,
+        run_id: str,
+        session_id: str,
+        error_code: FixedErrorCode,
+        response: Any,
+    ) -> None:
         from engine.agent_core import persistence as ap
 
-        ap.fail_run(self.db, run_id, session_id, error, response)
+        ap.fail_run(self.db, run_id, session_id, error_code, response)
 
     def cancel_run(self, run_id: str) -> None:
         from engine.agent_core import persistence as ap
@@ -325,8 +339,16 @@ class BufferedAgentEventStore(AgentEventStore):
         self._operations.append(lambda: self.target.complete_run(response))
         self.flush()
 
-    def fail_run(self, run_id: str, session_id: str, error: str, response: Any) -> None:
-        self._operations.append(lambda: self.target.fail_run(run_id, session_id, error, response))
+    def fail_run(
+        self,
+        run_id: str,
+        session_id: str,
+        error_code: FixedErrorCode,
+        response: Any,
+    ) -> None:
+        self._operations.append(
+            lambda: self.target.fail_run(run_id, session_id, error_code, response)
+        )
         self.flush()
 
     def cancel_run(self, run_id: str) -> None:

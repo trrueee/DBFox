@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.app.errors import public_message
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.datasource import datasource_connection_dict, get_mysql_connection_params
 
 logger = logging.getLogger("dbfox.backup")
@@ -77,13 +77,21 @@ def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
 
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300, env=env)
-    except FileNotFoundError as exc:
-        raise BackupError("mysqldump was not found. Please install MySQL client tools and ensure mysqldump is in PATH.") from exc
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or str(exc)).strip()
-        raise BackupError(f"mysqldump failed: {detail}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise BackupError("mysqldump timed out after 300 seconds.", code="BACKUP_TIMEOUT") from exc
+    except FileNotFoundError:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_CLIENT_NOT_FOUND),
+            code=FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value,
+        ) from None
+    except subprocess.CalledProcessError:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
+            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
+            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
+        ) from None
 
 
 def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
@@ -232,7 +240,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
         try:
             _run_mysqldump(ds, output_path)
         except BackupError as exc:
-            if "not found" in str(exc).lower():
+            if exc.code == FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value:
                 if not allow_fallback:
                     raise BackupError(
                         "mysqldump was not found. System is in Strict Mode (allow_fallback=False). "
@@ -267,7 +275,7 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
         setattr(record, "status", "failed")
         setattr(record, "completed_at", completed)
         setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
-        setattr(record, "error_message", public_message(exc)[:2000])
+        setattr(record, "error_message", fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED))
         db.commit()  # independent commit so API rollback does not erase the audit trail
         raise
 
@@ -298,8 +306,8 @@ def precheck_restore(record: BackupRecord) -> dict[str, Any]:
             current_checksum = _sha256_file(path)
             if current_checksum != record.checksum_sha256:
                 errors.append(f"Backup file has been modified or tampered with! Original checksum: {record.checksum_sha256}, current checksum: {current_checksum}")
-        except Exception as e:
-            errors.append(f"Failed to calculate backup file checksum: {e}")
+        except Exception:
+            errors.append(fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED))
 
         try:
             sample = path.read_text(encoding="utf-8", errors="ignore")[:4096].lower()
@@ -345,13 +353,21 @@ def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
     try:
         with open(sql_file_path, "r", encoding="utf-8", errors="ignore") as f:
             subprocess.run(cmd, stdin=f, capture_output=True, text=True, check=True, timeout=300, env=env)
-    except FileNotFoundError as exc:
-        raise BackupError("mysql client command was not found. Please install MySQL client tools and ensure mysql is in PATH.") from exc
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or exc.stdout or str(exc)).strip()
-        raise BackupError(f"mysql restore failed: {detail}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise BackupError("mysql restore timed out after 300 seconds.", code="RESTORE_TIMEOUT") from exc
+    except FileNotFoundError:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_CLIENT_NOT_FOUND),
+            code=FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value,
+        ) from None
+    except subprocess.CalledProcessError:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
+            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise BackupError(
+            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
+            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
+        ) from None
 
 
 def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) -> dict[str, Any]:
@@ -383,7 +399,7 @@ def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) ->
     try:
         _run_mysql_restore(ds, sql_path)
     except BackupError as exc:
-        if "not found" in str(exc).lower():
+        if exc.code == FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value:
             if not allow_fallback:
                 raise BackupError(
                     "mysql client command was not found. System is in Strict Mode (allow_fallback=False). "

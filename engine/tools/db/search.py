@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.ai_index import tokenize_query
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 
 logger = logging.getLogger("dbfox.tools.db.search")
 
@@ -54,8 +55,13 @@ def db_search(db: Session, datasource_id: str, query: str, limit: int = 20) -> d
         fts_results = _fts_search(db, datasource_id, tokens, limit)
         if fts_results:
             return _search_response("fts5", query, tokens, limit, fts_results)
-    except Exception:
-        logger.debug("FTS5 search unavailable, falling back to keyword search", exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DB_SEARCH_FTS_FALLBACK,
+            exc=exc,
+            level="warning",
+        )
     fallback = _fallback_keyword_search(db, datasource_id, tokens, limit)
     return _search_response("keyword_fallback", query, tokens, limit, fallback)
 

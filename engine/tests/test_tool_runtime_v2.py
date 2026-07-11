@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -212,3 +214,180 @@ def test_agent_runtime_does_not_expose_semantic_memory_write_tool():
     assert "db.remember" not in names
     tools = build_langchain_tools(registry, allowed_groups=["db"])
     assert "db_remember" not in {tool.name for tool in tools}
+
+
+def test_runtime_failure_observation_never_contains_exception_text(monkeypatch, caplog):
+    from engine.tools.runtime.registry import ToolRegistry
+    from engine.tools.runtime.runtime import ToolRuntime
+
+    sentinel = "tool-runtime-secret-sentinel"
+
+    class FailingTool(BaseTool[EchoInput, EchoOutput]):
+        name = "test.failing"
+        group = "test"
+        description = "Always fails."
+        input_model = EchoInput
+        output_model = EchoOutput
+        policy = ToolPolicy()
+        execution = ToolExecutionSpec()
+        state = ToolStateSpec()
+        artifacts = ArtifactSpec()
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> EchoOutput:
+            raise RuntimeError(f"provider authorization={sentinel}")
+
+    registry = ToolRegistry()
+    registry.register(FailingTool())
+
+    capture_logger = logging.Logger("test.tool_runtime_boundary")
+    capture_logger.setLevel(logging.ERROR)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr("engine.tools.runtime.runtime.logger", capture_logger)
+            observation = ToolRuntime(registry).invoke(
+                tool_name="test.failing",
+                raw_input={"value": "normal-input"},
+                state={},
+                request=None,
+                db=None,
+            )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    assert observation.status == "failed"
+    assert observation.error == "Tool execution failed."
+    assert observation.output == {
+        "status": "failed",
+        "error_code": "TOOL_EXECUTION_FAILED",
+        "error_type": "RuntimeError",
+    }
+    assert sentinel not in observation.model_dump_json()
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "tool_runtime_tool_execution_failed" in caplog.text
+
+
+def test_runtime_failure_observation_is_safe_in_real_checkpoint_and_event_storage(
+    db_session,
+    test_datasource,
+):
+    from engine.agent_core.event_store import SQLiteAgentEventStore
+    from engine.agent_core.types import AgentRunRequest, AgentRuntimeEvent
+    from engine.models import AgentCheckpoint, AgentRuntimeEventRecord
+    from engine.tools.runtime.registry import ToolRegistry
+    from engine.tools.runtime.runtime import ToolRuntime
+
+    sentinel = "tool-checkpoint-secret-sentinel"
+
+    class FailingTool(BaseTool[EchoInput, EchoOutput]):
+        name = "test.checkpoint_failing"
+        group = "test"
+        description = "Always fails for persistence coverage."
+        input_model = EchoInput
+        output_model = EchoOutput
+        policy = ToolPolicy()
+        execution = ToolExecutionSpec()
+        state = ToolStateSpec()
+        artifacts = ArtifactSpec()
+
+        def run(self, _tool_input: EchoInput, _context: ToolRunContext) -> EchoOutput:
+            raise RuntimeError(f"provider authorization={sentinel}")
+
+    registry = ToolRegistry()
+    registry.register(FailingTool())
+    observation = ToolRuntime(registry).invoke(
+        tool_name="test.checkpoint_failing",
+        raw_input={"value": "normal-input"},
+        state={},
+        request=None,
+        db=None,
+    )
+
+    store = SQLiteAgentEventStore(db_session)
+    request = AgentRunRequest(
+        datasource_id=test_datasource.id,
+        question="exercise tool failure persistence",
+    )
+    store.start_run(request, run_id="run-tool-boundary", session_id="session-tool-boundary")
+    checkpoint = store.save_checkpoint(
+        run_id="run-tool-boundary",
+        session_id="session-tool-boundary",
+        status="running",
+        current_step_name="tools",
+        next_step_name="observe",
+        plan=None,
+        state={"last_tool_results": [observation.model_dump(mode="json")]},
+        completed_steps=[],
+        pending_steps=[],
+        artifacts=[],
+    )
+    store.append_event(
+        "session-tool-boundary",
+        AgentRuntimeEvent(
+            event_id="event-tool-boundary",
+            run_id="run-tool-boundary",
+            session_id="session-tool-boundary",
+            sequence=1,
+            created_at_ms=1,
+            type="agent.step.completed",
+            step={
+                "name": "tools",
+                "tool_name": observation.name,
+                "error": observation.error,
+                "observation": observation.model_dump(mode="json"),
+            },
+        ),
+    )
+    db_session.commit()
+
+    saved_checkpoint = db_session.get(AgentCheckpoint, checkpoint.id)
+    saved_event = db_session.get(AgentRuntimeEventRecord, "event-tool-boundary")
+    assert saved_checkpoint is not None
+    assert saved_event is not None
+    persisted = "\n".join(
+        [
+            saved_checkpoint.state_json,
+            saved_checkpoint.completed_steps_json,
+            saved_checkpoint.pending_steps_json,
+            saved_event.event_json,
+        ]
+    )
+    assert sentinel not in observation.model_dump_json()
+    assert sentinel not in persisted
+    assert "TOOL_EXECUTION_FAILED" in persisted
+
+
+def test_db_tool_execution_failure_never_contains_exception_text(monkeypatch, caplog):
+    from engine.tools.db._common import _execution_failed
+
+    sentinel = "db-tool-observation-secret-sentinel"
+
+    capture_logger = logging.Logger("test.db_tool_boundary")
+    capture_logger.setLevel(logging.WARNING)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr("engine.tools.db._common.logger", capture_logger)
+            observation = _execution_failed(
+                "db.inspect",
+                {"target": "orders"},
+                RuntimeError(f"database password={sentinel}"),
+                time.perf_counter(),
+            )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    assert observation.status == "failed"
+    assert observation.error == "Tool execution failed."
+    assert observation.output == {
+        "status": "failed",
+        "error_code": "TOOL_EXECUTION_FAILED",
+        "error_type": "RuntimeError",
+    }
+    assert sentinel not in observation.model_dump_json()
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "db_tool_execution" in caplog.text

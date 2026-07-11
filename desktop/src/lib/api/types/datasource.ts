@@ -116,6 +116,7 @@ export interface DataSourceActions {
 export interface DataSourceHealthResult {
   ok: boolean;
   status: "success" | "failed";
+  code?: string;
   checkedAt?: string;
   latencyMs?: number;
   serverVersion?: string;

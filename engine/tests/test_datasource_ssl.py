@@ -1,8 +1,9 @@
 import pytest
 
-from engine.crypto import encrypt_password
-from engine.datasource import build_mysql_ssl_params, get_mysql_connection_params
+import engine.datasource as datasource_module
+from engine.datasource import build_mysql_ssl_params
 from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
 def test_build_mysql_ssl_params_disabled() -> None:
@@ -53,17 +54,21 @@ def test_build_mysql_ssl_params_can_disable_hostname_verification_explicitly() -
     assert "ssl_ca" not in params
 
 
-def test_get_mysql_connection_params_passes_ssl_options() -> None:
-    cipher, nonce = encrypt_password("secret")
+def test_get_mysql_connection_params_passes_ssl_options(monkeypatch) -> None:
+    vault = InMemoryCredentialVault()
+    password_credential_id = vault.put(
+        kind=CredentialKind.DATASOURCE_PASSWORD,
+        secret="secret",
+    )
+    monkeypatch.setattr(datasource_module, "get_credential_vault", lambda: vault)
 
-    params = get_mysql_connection_params(
+    params = datasource_module.get_mysql_connection_params(
         {
             "host": "db.example.com",
             "port": 3306,
             "username": "readonly",
             "database_name": "analytics",
-            "password_ciphertext": cipher,
-            "password_nonce": nonce,
+            "password_credential_id": password_credential_id,
             "ssl_enabled": True,
             "ssl_ca_path": "C:/certs/mysql-ca.pem",
             "ssl_cert_path": "C:/certs/client-cert.pem",

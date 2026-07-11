@@ -8,7 +8,12 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from engine.app.errors import log_unexpected_exception, safe_error_detail
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_detail,
+    log_unexpected_exception,
+)
 from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
 from engine.db import get_db
 from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
@@ -132,7 +137,7 @@ def _release_credential_lease(vault: CredentialVault, lease_id: str | None) -> N
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_credential_lease_release",
+            operation=SafeLogOperation.DATASOURCE_CREDENTIAL_LEASE_RELEASE,
             exc=exc,
             level="warning",
         )
@@ -142,7 +147,7 @@ def _public_connection_test_failure(exc: Exception) -> DataSourceConnectionError
     """Log only safe diagnostics and return a fixed client-facing failure."""
     log_unexpected_exception(
         logger,
-        operation="datasource_connection_test",
+        operation=SafeLogOperation.DATASOURCE_CONNECTION_TEST,
         exc=exc,
         level="warning",
     )
@@ -467,13 +472,10 @@ def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, 
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_pool_release",
+            operation=SafeLogOperation.DATASOURCE_POOL_RELEASE,
             exc=exc,
         )
         raise HTTPException(
             status_code=500,
-            detail=safe_error_detail(
-                "DATASOURCE_POOL_RELEASE_FAILED",
-                "Datasource connection pool could not be released.",
-            ),
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_POOL_RELEASE_FAILED),
         ) from None

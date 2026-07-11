@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import time as _time
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,7 +38,12 @@ from engine.agent_core.types import (
     AgentRuntimeEvent,
 )
 from engine.agent_core.events import EventEmitter
-from engine.app.errors import public_error
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_detail,
+    log_unexpected_exception,
+)
 from engine.db import get_db
 from engine.errors import DBFoxError
 from engine.llm.config import (
@@ -183,9 +188,9 @@ def sse_failed_event(
     return f"event: agent.run.failed\ndata: {json.dumps(payload)}\n\n"
 
 
-def _http_detail(exc: DBFoxError) -> dict[str, str]:
-    detail = public_error(exc.code, exc)
-    return {"code": str(detail["code"]), "message": str(detail["message"])}
+def _http_detail(_exc: DBFoxError) -> dict[str, str]:
+    """Return a fixed detail for untrusted typed runtime errors."""
+    return fixed_error_detail(FixedErrorCode.AGENT_REQUEST_ERROR)
 
 
 def _agent_http_exception(exc: Exception, *, operation: AgentOperation) -> HTTPException:
@@ -255,7 +260,7 @@ def api_agent_run(req: AgentRunRequest, db: Session = Depends(get_db)) -> AgentR
         return DBFoxAgentRuntime(db).run(normalized_req)
     except Exception as exc:
         db.rollback()
-        raise _agent_http_exception(exc, operation="run") from exc
+        raise _agent_http_exception(exc, operation="run") from None
 
 
 @router.post("/agent/runs/{run_id}/resume", response_model=AgentRunResponse)
@@ -268,7 +273,7 @@ def api_agent_run_resume(
         return DBFoxAgentRuntime(db).resume(run_id, req.approval_id)
     except Exception as exc:
         db.rollback()
-        raise _agent_http_exception(exc, operation="resume") from exc
+        raise _agent_http_exception(exc, operation="resume") from None
 
 
 @router.post("/agent/runs/{run_id}/cancel")
@@ -284,7 +289,7 @@ def api_cancel_agent_run(
         return {"status": "cancelled", "run_id": run_id}
     except Exception as exc:
         db.rollback()
-        raise _agent_http_exception(exc, operation="cancel") from exc
+        raise _agent_http_exception(exc, operation="cancel") from None
 
 
 @router.post("/agent/runs/{run_id}/approvals/{approval_id}")
@@ -318,10 +323,10 @@ def api_resolve_agent_approval(
         return approval
     except DBFoxError as exc:
         db.rollback()
-        raise _agent_http_exception(exc, operation="approval") from exc
+        raise _agent_http_exception(exc, operation="approval") from None
     except Exception as exc:
         db.rollback()
-        raise _agent_http_exception(exc, operation="approval") from exc
+        raise _agent_http_exception(exc, operation="approval") from None
 
 
 # ---------------------------------------------------------------------------
@@ -443,11 +448,17 @@ def _artifact_id_by_type(artifacts: list[AgentArtifact], artifact_type: str) -> 
 def api_agent_console_execute(req: ConsoleExecuteRequest, db: Session = Depends(get_db)) -> ConsoleExecuteResponse:
     datasource = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not datasource:
-        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+        raise HTTPException(
+            status_code=404,
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
+        )
 
     sql = req.sql.strip()
     if not sql:
-        raise HTTPException(status_code=400, detail=public_error("SQL_EMPTY", "SQL cannot be empty."))
+        raise HTTPException(
+            status_code=400,
+            detail=fixed_error_detail(FixedErrorCode.SQL_EMPTY),
+        )
 
     run_id = f"console-run-{uuid4()}"
     session_id = (req.sessionId or f"console-session-{req.datasourceId}").strip()
@@ -536,8 +547,15 @@ def api_agent_console_execute(req: ConsoleExecuteRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail=_http_detail(exc))
     except Exception as exc:
         db.rollback()
-        logger.exception("SQL Console artifact execution failed")
-        raise HTTPException(status_code=500, detail=public_error("CONSOLE_EXECUTION_ERROR", exc))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_SQL_CONSOLE_EXECUTION,
+            exc=exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.CONSOLE_EXECUTION_ERROR),
+        ) from None
 
 # ---------------------------------------------------------------------------
 # Agent Result Pagination API
@@ -627,10 +645,33 @@ def _result_sorts(sorts: list[ResultSort] | None) -> list[ServiceResultSort]:
     return [ServiceResultSort.model_validate(item.model_dump()) for item in (sorts or [])]
 
 
-def _result_view_http_error(exc: ResultViewError) -> HTTPException:
+_RESULT_VIEW_ERROR_CODES: Final[dict[str, FixedErrorCode]] = {
+    FixedErrorCode.SOURCE_ARTIFACT_NOT_FOUND.value: FixedErrorCode.SOURCE_ARTIFACT_NOT_FOUND,
+    FixedErrorCode.SOURCE_ARTIFACT_UNSUPPORTED.value: FixedErrorCode.SOURCE_ARTIFACT_UNSUPPORTED,
+    FixedErrorCode.SOURCE_SQL_MISSING.value: FixedErrorCode.SOURCE_SQL_MISSING,
+    FixedErrorCode.SOURCE_SQL_MISMATCH.value: FixedErrorCode.SOURCE_SQL_MISMATCH,
+    FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED.value: FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED,
+    FixedErrorCode.TABLE_SOURCE_NOT_FOUND.value: FixedErrorCode.TABLE_SOURCE_NOT_FOUND,
+    FixedErrorCode.TABLE_COLUMNS_NOT_FOUND.value: FixedErrorCode.TABLE_COLUMNS_NOT_FOUND,
+    FixedErrorCode.DERIVED_SQL_VALIDATION_FAILED.value: FixedErrorCode.DERIVED_SQL_VALIDATION_FAILED,
+    FixedErrorCode.DERIVED_SQL_BUILD_FAILED.value: FixedErrorCode.DERIVED_SQL_BUILD_FAILED,
+    FixedErrorCode.COUNT_SQL_BUILD_FAILED.value: FixedErrorCode.COUNT_SQL_BUILD_FAILED,
+    FixedErrorCode.FILTER_COLUMN_NOT_ALLOWED.value: FixedErrorCode.FILTER_COLUMN_NOT_ALLOWED,
+    FixedErrorCode.SORT_COLUMN_NOT_ALLOWED.value: FixedErrorCode.SORT_COLUMN_NOT_ALLOWED,
+    FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED.value: FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED,
+}
+
+
+def _result_view_http_error(
+    exc: ResultViewError,
+    *,
+    code: FixedErrorCode,
+) -> HTTPException:
+    """Map result-view failures to the endpoint's static error catalog entry."""
+    safe_code = _RESULT_VIEW_ERROR_CODES.get(exc.code, code)
     return HTTPException(
         status_code=exc.status_code,
-        detail=public_error(exc.code, exc.message),
+        detail=fixed_error_detail(safe_code),
     )
 
 @router.post("/agent/results/page", response_model=ResultPageResponse)
@@ -639,7 +680,10 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+        raise HTTPException(
+            status_code=404,
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
+        )
 
     try:
         result = ResultViewService(db).page(
@@ -654,12 +698,19 @@ def api_agent_result_page(req: ResultPageRequest, db: Session = Depends(get_db))
             )
         )
     except ResultViewError as e:
-        raise _result_view_http_error(e)
+        raise _result_view_http_error(e, code=FixedErrorCode.RESULT_PAGE_ERROR) from None
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
-        logger.exception("Failed to execute derived query")
-        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_RESULT_PAGE,
+            exc=e,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.RESULT_PAGE_ERROR),
+        ) from None
 
     return ResultPageResponse(
         columns=result.columns,
@@ -681,7 +732,10 @@ def api_agent_table_result_page(req: TableResultPageRequest, db: Session = Depen
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+        raise HTTPException(
+            status_code=404,
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
+        )
 
     try:
         result = ResultViewService(db).page_table(
@@ -696,12 +750,19 @@ def api_agent_table_result_page(req: TableResultPageRequest, db: Session = Depen
             )
         )
     except ResultViewError as e:
-        raise _result_view_http_error(e)
+        raise _result_view_http_error(e, code=FixedErrorCode.TABLE_RESULT_PAGE_ERROR) from None
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
-        logger.exception("Failed to execute table data view query")
-        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_TABLE_RESULT_PAGE,
+            exc=e,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.TABLE_RESULT_PAGE_ERROR),
+        ) from None
 
     return ResultPageResponse(
         columns=result.columns,
@@ -723,7 +784,10 @@ def api_agent_table_result_export(req: TableResultExportRequest, db: Session = D
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+        raise HTTPException(
+            status_code=404,
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
+        )
 
     try:
         stream, _columns = ResultViewService(db).export_table_csv_stream(
@@ -735,12 +799,19 @@ def api_agent_table_result_export(req: TableResultExportRequest, db: Session = D
             )
         )
     except ResultViewError as e:
-        raise _result_view_http_error(e)
+        raise _result_view_http_error(e, code=FixedErrorCode.TABLE_RESULT_EXPORT_ERROR) from None
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
-        logger.exception("Failed to export table data view query")
-        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_TABLE_RESULT_EXPORT,
+            exc=e,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.TABLE_RESULT_EXPORT_ERROR),
+        ) from None
 
     return StreamingResponse(
         stream,
@@ -758,7 +829,10 @@ def api_agent_result_export(req: ResultExportRequest, db: Session = Depends(get_
 
     ds = db.query(DataSource).filter(DataSource.id == req.datasourceId).first()
     if not ds:
-        raise HTTPException(status_code=404, detail=public_error("DATASOURCE_NOT_FOUND", "Datasource not found."))
+        raise HTTPException(
+            status_code=404,
+            detail=fixed_error_detail(FixedErrorCode.DATASOURCE_NOT_FOUND),
+        )
 
     try:
         stream, _columns = ResultViewService(db).export_csv_stream(
@@ -770,12 +844,19 @@ def api_agent_result_export(req: ResultExportRequest, db: Session = Depends(get_
             )
         )
     except ResultViewError as e:
-        raise _result_view_http_error(e)
+        raise _result_view_http_error(e, code=FixedErrorCode.RESULT_EXPORT_ERROR) from None
     except DBFoxError as e:
         raise HTTPException(status_code=400, detail=_http_detail(e))
     except Exception as e:
-        logger.exception("Failed to export derived query")
-        raise HTTPException(status_code=500, detail=public_error("EXECUTION_ERROR", e))
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_RESULT_EXPORT,
+            exc=e,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=fixed_error_detail(FixedErrorCode.RESULT_EXPORT_ERROR),
+        ) from None
 
     return StreamingResponse(
         stream,

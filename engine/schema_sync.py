@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 from pathlib import Path
 
-from engine.app.errors import public_message
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 
 from sqlalchemy.orm import Session
 
@@ -101,18 +101,18 @@ def sync_schema(
 
         return response
 
-    except Exception as e:
+    except Exception:
         db.rollback()
         now = datetime.now(UTC)
         db.query(DataSource).filter(DataSource.id == datasource_id).update(
             {
                 "last_sync_at": now,
                 "last_sync_status": "failed",
-                "last_sync_error": public_message(str(e)),
+                "last_sync_error": fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED),
             }
         )
         db.commit()
-        raise ValueError(f"Schema sync failed: {public_message(str(e))}")
+        raise ValueError(fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED)) from None
 
 
 def _guess_module_tag(table_name: str) -> str | None:

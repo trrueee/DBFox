@@ -9,6 +9,7 @@ from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator,
 from engine.agent.app.persistence import pending_approval_from_workspace
 from engine.agent.graph.state import DBFoxAgentState, sync_state_namespaces
 from engine.agent_core.types import AgentRunRequest
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 
 logger = logging.getLogger("dbfox.dbfox_agent.context_builder")
 
@@ -123,8 +124,13 @@ def _build_context_bundle(db: Session, req: AgentRunRequest) -> dict[str, Any]:
         from engine.agent_core.workspace_context import build_agent_context_bundle
 
         bundle = build_agent_context_bundle(db, req)
-    except Exception:
-        logger.warning("Failed to build agent workspace context bundle", exc_info=True)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_CONTEXT_BUILD_WORKSPACE,
+            exc=exc,
+            level="warning",
+        )
         return {}
     return bundle if isinstance(bundle, dict) else {}
 
@@ -171,11 +177,12 @@ def _environment_context_payload(
         from engine.environment.tools import environment_get_profile
 
         profile = environment_get_profile(db, datasource_id)
-    except Exception:
-        logger.warning(
-            "Failed to build agent environment context for datasource %s",
-            datasource_id,
-            exc_info=True,
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_CONTEXT_BUILD_ENVIRONMENT,
+            exc=exc,
+            level="warning",
         )
         return None, None
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from engine.agent.app.memory_projection import AgentMemoryProjectionCoordinator
 from engine.agent_core.events import EventEmitter
 from engine.agent_core.types import AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
+from engine.app.safe_errors import FixedErrorCode, SafeLogOperation, log_unexpected_exception
 
 logger = logging.getLogger("dbfox.dbfox_agent.persistence_coordinator")
 
@@ -34,7 +35,12 @@ class AgentPersistenceCoordinator:
         try:
             self.event_store.start_run(req, run_id=run_id, session_id=session_id)
         except Exception as exc:
-            logger.warning("Failed to start persistence for run %s: %s", run_id, exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_PERSISTENCE_START,
+                exc=exc,
+                level="warning",
+            )
             self.rollback_quietly()
 
     def build_emitter(self, run_id: str, session_id: str, start_sequence: int) -> EventEmitter:
@@ -43,7 +49,12 @@ class AgentPersistenceCoordinator:
                 try:
                     self.event_store.append_event(session_id, event)
                 except Exception as exc:
-                    logger.warning("Failed to persist runtime event for run %s: %s", run_id, exc)
+                    log_unexpected_exception(
+                        logger,
+                        operation=SafeLogOperation.AGENT_PERSISTENCE_EVENT,
+                        exc=exc,
+                        level="warning",
+                    )
                     self.rollback_quietly()
 
         return EventEmitter(run_id, save, start_sequence=start_sequence)
@@ -64,11 +75,11 @@ class AgentPersistenceCoordinator:
         try:
             self.event_store.append_artifact(session_id, event.run_id, event.artifact, index)
         except Exception as exc:
-            logger.warning(
-                "Failed to persist artifact %s for run %s: %s",
-                event.artifact.id,
-                event.run_id,
-                exc,
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_PERSISTENCE_ARTIFACT,
+                exc=exc,
+                level="warning",
             )
 
     def flush(self, run_id: str, purpose: str) -> None:
@@ -77,7 +88,12 @@ class AgentPersistenceCoordinator:
         try:
             self.event_store.flush()
         except Exception as exc:
-            logger.warning("Failed to flush event store for %s on run %s: %s", purpose, run_id, exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_PERSISTENCE_FLUSH,
+                exc=exc,
+                level="warning",
+            )
             self.rollback_quietly()
 
     def save_approval_checkpoint(
@@ -106,7 +122,12 @@ class AgentPersistenceCoordinator:
             self.db.commit()
             return checkpoint
         except Exception as exc:
-            logger.warning("Failed to persist approval checkpoint for run %s: %s", run_id, exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_PERSISTENCE_APPROVAL_CHECKPOINT,
+                exc=exc,
+                level="warning",
+            )
             self.rollback_quietly()
             return None
 
@@ -146,11 +167,17 @@ class AgentPersistenceCoordinator:
                 else:
                     self.event_store.fail_run(
                         response.run_id, response.session_id,
-                        response.error or response.status or "Agent stopped.", response,
+                        FixedErrorCode.AGENT_RUNTIME_ERROR,
+                        response,
                     )
                 self.db.commit()
             except Exception as exc:
-                logger.warning("Failed to persist final response for run %s: %s", response.run_id, exc)
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.AGENT_PERSISTENCE_FINAL_RESPONSE,
+                    exc=exc,
+                    level="warning",
+                )
                 self.rollback_quietly()
 
         return event

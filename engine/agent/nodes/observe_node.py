@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 
 from engine.agent_core.types import ToolObservation
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.agent_core.databinding import apply_tool_result_to_state
 from engine.agent.graph.state import DBFoxAgentState
 from engine.agent.graph.context import graph_context
@@ -449,7 +450,12 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
                     art_dict = art.model_dump(mode="json")
                     new_artifacts_dicts.append(art_dict)
         except Exception as exc:
-            logger.warning("Failed to process tool observation: %s (payload: %s)", exc, result_dict, exc_info=True)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_OBSERVE_TOOL_OBSERVATION,
+                exc=exc,
+                level="warning",
+            )
             continue
 
     if tool_history_entries:
@@ -464,6 +470,11 @@ def observe_tools(state: DBFoxAgentState, config: RunnableConfig) -> dict[str, A
     try:
         state_updates.update(rebuild_context_pack(state, state_updates))
     except Exception as exc:
-        logger.warning("Failed to build ContextPack: %s", exc)
+        log_unexpected_exception(
+            logger,
+                operation=SafeLogOperation.AGENT_OBSERVE_CONTEXT_PACK,
+            exc=exc,
+            level="warning",
+        )
 
     return state_updates

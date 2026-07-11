@@ -5,13 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.db import get_db
 from engine.errors import DBFoxError, NotFoundError
 from engine.sql.dialect_context import DialectContext
 from engine.sql.safety.service import SqlSafetyService
 from engine.models import DataSource, QueryHistory
 from engine.persistence.search_index import SearchIndexService
-from engine.app.errors import public_message
 from engine.policy.redactor import DataRedactor
 from engine.query_registry import QUERY_REGISTRY
 from engine.schemas import SQLCancelRequest, SQLExplainRequest, SQLValidateRequest
@@ -46,7 +51,7 @@ _QUERY_HISTORY_PUBLIC_TEXT_FIELDS = (
 def _public_query_history_text(value: Any) -> Any:
     if not isinstance(value, str):
         return value
-    return public_message(DataRedactor.redact_sql(value))
+    return DataRedactor.redact_sql(value)
 
 
 def _query_history_to_dict(item: QueryHistory) -> dict[str, Any]:
@@ -86,8 +91,15 @@ def api_explain_sql(req: SQLExplainRequest, db: Session = Depends(get_db)) -> di
     except DBFoxError:
         raise
     except Exception as exc:
-        logger.exception("SQL explain failed")
-        raise DBFoxError(f"SQL EXPLAIN failed: {str(exc)}", "EXPLAIN_ERROR")
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.QUERY_EXPLAIN,
+            exc=exc,
+        )
+        raise DBFoxError(
+            fixed_error_message(FixedErrorCode.QUERY_EXECUTION_FAILED),
+            FixedErrorCode.QUERY_EXECUTION_FAILED.value,
+        ) from None
 
 
 @router.post("/query/cancel")
@@ -154,9 +166,14 @@ def api_delete_query_history(history_id: str, db: Session = Depends(get_db)) -> 
     try:
         try:
             SearchIndexService(db).delete_query_history(history_id)
-        except Exception:
+        except Exception as exc:
             db.rollback()
-            logger.debug("Query history search index delete skipped", exc_info=True)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.QUERY_HISTORY_INDEX_DELETE,
+                exc=exc,
+                level="warning",
+            )
         db.delete(item)
         db.commit()
     except Exception:
@@ -174,9 +191,14 @@ def api_clear_query_history(datasource_id: str = Query(...), db: Session = Depen
     try:
         try:
             SearchIndexService(db).clear_query_history(datasource_id)
-        except Exception:
+        except Exception as exc:
             db.rollback()
-            logger.debug("Query history search index clear skipped", exc_info=True)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.QUERY_HISTORY_INDEX_CLEAR,
+                exc=exc,
+                level="warning",
+            )
         deleted = (
             db.query(QueryHistory)
             .filter(QueryHistory.data_source_id == datasource_id)

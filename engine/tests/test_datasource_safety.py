@@ -1,13 +1,31 @@
 import logging
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
+import engine.datasource as datasource_module
+import engine.tunnel as tunnel_module
 from engine.datasource import build_postgres_ssl_params, test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
+
+
+@contextmanager
+def _capture_module_logger(monkeypatch, caplog, module, level: int):
+    """Inject an unregistered logger so this test does not alter app logging."""
+    capture_logger = logging.Logger(f"test.{module.__name__}.boundary")
+    capture_logger.setLevel(level)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(module, "logger", capture_logger)
+            yield
+    finally:
+        capture_logger.removeHandler(caplog.handler)
 
 
 def test_sqlite_connection_test_rejects_missing_file(tmp_path: Path) -> None:
@@ -29,7 +47,7 @@ def test_sqlite_connection_error_never_leaks_driver_exception(tmp_path: Path, mo
 
     monkeypatch.setattr(sqlite3, "connect", fail_connect)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.datasource"):
+    with _capture_module_logger(monkeypatch, caplog, datasource_module, logging.WARNING):
         with pytest.raises(DataSourceConnectionError) as exc_info:
             run_test_connection({"db_type": "sqlite", "database_name": str(database_path)})
 
@@ -46,7 +64,7 @@ def test_mysql_connection_error_never_leaks_driver_exception(monkeypatch, caplog
 
     monkeypatch.setattr("engine.datasource.pymysql.connect", fail_connect)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.datasource"):
+    with _capture_module_logger(monkeypatch, caplog, datasource_module, logging.WARNING):
         with pytest.raises(DataSourceConnectionError) as exc_info:
             run_test_connection({
                 "db_type": "mysql",
@@ -71,7 +89,7 @@ def test_postgres_connection_error_never_leaks_driver_exception(monkeypatch, cap
 
     monkeypatch.setattr(psycopg2, "connect", fail_connect)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.datasource"):
+    with _capture_module_logger(monkeypatch, caplog, datasource_module, logging.WARNING):
         with pytest.raises(DataSourceConnectionError) as exc_info:
             run_test_connection({
                 "db_type": "postgresql",
@@ -95,7 +113,7 @@ def test_temporary_tunnel_error_never_leaks_tunnel_exception(monkeypatch, caplog
 
     monkeypatch.setattr("engine.datasource.open_temporary_tunnel", fail_open_tunnel)
 
-    with caplog.at_level(logging.WARNING, logger="dbfox.datasource"):
+    with _capture_module_logger(monkeypatch, caplog, datasource_module, logging.WARNING):
         with pytest.raises(DataSourceConnectionError) as exc_info:
             run_test_connection({
                 "db_type": "mysql",
@@ -113,13 +131,13 @@ def test_temporary_tunnel_error_never_leaks_tunnel_exception(monkeypatch, caplog
 
 
 def test_managed_tunnel_reconnect_error_never_persists_exception_text(monkeypatch, caplog) -> None:
-    from engine.tunnel import TunnelInstance, TunnelManager, TunnelState
-
     sentinel = "managed-tunnel-secret-sentinel"
-    manager = TunnelManager()
+    manager = tunnel_module.TunnelManager()
     old_tunnel = MagicMock()
     old_tunnel.is_active = False
-    instance = TunnelInstance("ds-managed-tunnel", {"id": "ds-managed-tunnel"}, old_tunnel)
+    instance = tunnel_module.TunnelInstance(
+        "ds-managed-tunnel", {"id": "ds-managed-tunnel"}, old_tunnel
+    )
     manager._tunnels["ds-managed-tunnel"] = instance
 
     def fail_start(_config):
@@ -128,11 +146,11 @@ def test_managed_tunnel_reconnect_error_never_persists_exception_text(monkeypatc
     monkeypatch.setattr(manager, "health_check", lambda _datasource_id: False)
     monkeypatch.setattr(manager, "_start_physical_tunnel", fail_start)
 
-    with caplog.at_level(logging.ERROR, logger="dbfox.tunnel"):
+    with _capture_module_logger(monkeypatch, caplog, tunnel_module, logging.ERROR):
         with pytest.raises(DataSourceConnectionError) as exc_info:
             manager.get_or_reconnect({"id": "ds-managed-tunnel"})
 
-    assert instance.state == TunnelState.FAILED
+    assert instance.state == tunnel_module.TunnelState.FAILED
     assert instance.error_message == "SSH tunnel reconnection failed."
     assert sentinel not in str(exc_info.value)
     assert sentinel not in caplog.text
@@ -153,7 +171,7 @@ def test_release_datasource_pool_error_never_leaks_exception_text(monkeypatch, c
         lambda: FailingPoolRegistry(),
     )
 
-    with caplog.at_level(logging.ERROR, logger="dbfox.api.datasources.crud"):
+    with _capture_module_logger(monkeypatch, caplog, datasource_crud, logging.ERROR):
         with pytest.raises(HTTPException) as exc_info:
             datasource_crud.api_release_datasource("ds-pool", object())
 

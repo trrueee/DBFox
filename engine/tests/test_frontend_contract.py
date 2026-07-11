@@ -6,8 +6,6 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.models import DataSource, QueryHistory
-from engine.crypto import encrypt_password
-from engine.errors import DBFoxError
 from engine.sql.trust_gate import TrustGate
 from engine.sql.safety_gate import validate_sql_schema
 
@@ -45,7 +43,6 @@ def client(db_session):
         test_client.close()
 
 def test_datasource_response_shape_matches_types_ts(client, db_session):
-    cipher, nonce = encrypt_password("test")
     ds = DataSource(
         id="ds-test-contract",
         project_id="default",
@@ -54,8 +51,6 @@ def test_datasource_response_shape_matches_types_ts(client, db_session):
         port=3306,
         database_name="test",
         username="test",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
         status="active"
     )
     db_session.add(ds)
@@ -83,7 +78,6 @@ def test_datasource_response_shape_matches_types_ts(client, db_session):
 def test_sqlite_datasource_response_serializes_nullable_connection_fields():
     from engine.api.datasources import _datasource_to_dict
 
-    cipher, nonce = encrypt_password("")
     ds = DataSource(
         id="ds-sqlite-null-host",
         project_id="default",
@@ -93,8 +87,6 @@ def test_sqlite_datasource_response_serializes_nullable_connection_fields():
         port=0,
         database_name="/tmp/local.db",
         username=None,
-        password_ciphertext=cipher,
-        password_nonce=nonce,
         is_read_only=False,
         ssh_enabled=False,
         ssl_enabled=False,
@@ -110,7 +102,6 @@ def test_sqlite_datasource_response_serializes_nullable_connection_fields():
 
 def test_delete_datasource_accepts_confirmation_in_request_body(client, db_session, monkeypatch):
     monkeypatch.setenv("DBFOX_BYPASS_CONFIRMATION", "0")
-    cipher, nonce = encrypt_password("")
     ds = DataSource(
         id="ds-delete-body",
         project_id="default",
@@ -120,8 +111,6 @@ def test_delete_datasource_accepts_confirmation_in_request_body(client, db_sessi
         port=0,
         database_name="/tmp/local.db",
         username="",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
         status="active",
     )
     db_session.add(ds)
@@ -151,50 +140,37 @@ def test_delete_datasource_accepts_confirmation_in_request_body(client, db_sessi
     assert db_session.query(DataSource).filter(DataSource.id == "ds-delete-body").first() is None
 
 
-def test_datasource_health_sanitizes_dbfox_error_message(client, db_session, monkeypatch):
-    from engine.api.datasources import health as datasource_health_module
-
-    cipher, nonce = encrypt_password("")
+def test_datasource_health_failure_uses_fixed_code_and_persists_only_code(client, db_session, tmp_path):
+    sentinel = "user-sqlite-path-secret-sentinel"
     ds = DataSource(
-        id="ds-health-sanitize",
+        id="ds-health-fixed-code",
         project_id="default",
-        name="health_sanitize_contract",
-        db_type="mysql",
-        host="127.0.0.1",
-        port=3306,
-        database_name="prod",
-        username="root",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
+        name="health_fixed_code_contract",
+        db_type="sqlite",
+        host="localhost",
+        port=0,
+        database_name=str(tmp_path / f"{sentinel}.sqlite"),
+        username="",
         status="active",
     )
     db_session.add(ds)
     db_session.commit()
 
-    def fail_connection(_config):
-        raise DBFoxError(
-            message="connection failed for mysql://root:secret@127.0.0.1/prod password=secret",
-            code="CONNECTION_FAILED",
-        )
-
-    monkeypatch.setattr(datasource_health_module, "test_connection", fail_connection)
-
     resp = client.post(
-        "/api/v1/datasources/ds-health-sanitize/health",
+        "/api/v1/datasources/ds-health-fixed-code/health",
         headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
     )
 
     assert resp.status_code == 200, resp.json()
     body = resp.json()
     assert body["ok"] is False
-    assert "secret" not in body["message"]
-    assert "mysql://root" not in body["message"]
-    assert "[REDACTED]" in body["message"]
+    assert body["code"] == "DATASOURCE_CONNECTION_FAILED"
+    assert body["message"] == "数据库连接健康检查失败，请检查连接配置。"
+    assert sentinel not in body["message"]
 
     db_session.refresh(ds)
-    assert ds.last_test_error is not None
-    assert "secret" not in ds.last_test_error
-    assert "mysql://root" not in ds.last_test_error
+    assert ds.last_test_error == "DATASOURCE_CONNECTION_FAILED"
+    assert sentinel not in str(ds.last_test_error)
 
 
 def test_datasource_health_unexpected_error_never_leaks_exception_text(
@@ -213,29 +189,37 @@ def test_datasource_health_unexpected_error_never_leaks_exception_text(
 
     monkeypatch.setattr(datasource_health_module, "test_connection", fail_connection)
 
-    with caplog.at_level(logging.ERROR, logger="dbfox.api.datasources.health"):
-        resp = client.post(
-            f"/api/v1/datasources/{test_datasource.id}/health",
-            headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
-        )
+    capture_logger = logging.Logger("test.datasource_health_boundary")
+    capture_logger.setLevel(logging.ERROR)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(datasource_health_module, "logger", capture_logger)
+            resp = client.post(
+                f"/api/v1/datasources/{test_datasource.id}/health",
+                headers={"X-Local-Token": LOCAL_SECURE_TOKEN},
+            )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
 
     assert resp.status_code == 200, resp.json()
     body = resp.json()
     assert body["ok"] is False
+    assert body["code"] == "DATASOURCE_CONNECTION_FAILED"
     assert body["message"] == "数据库连接健康检查失败，请检查连接配置。"
     assert sentinel not in resp.text
     assert sentinel not in caplog.text
     assert "RuntimeError" in caplog.text
 
     db_session.refresh(test_datasource)
-    assert test_datasource.last_test_error == "数据库连接健康检查失败，请检查连接配置。"
+    assert test_datasource.last_test_error == "DATASOURCE_CONNECTION_FAILED"
     assert sentinel not in str(test_datasource.last_test_error)
 
 
 def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
     from engine.api.datasources import schema as datasource_schema_module
 
-    cipher, nonce = encrypt_password("")
     ds = DataSource(
         id="ds-auto-sync-failure",
         project_id="default",
@@ -245,8 +229,6 @@ def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
         port=3306,
         database_name="prod",
         username="root",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
         status="active",
     )
     db_session.add(ds)
@@ -264,10 +246,9 @@ def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
 
     assert resp.status_code == 400, resp.json()
     detail = resp.json()["detail"]
-    assert detail["code"] == "SYNC_FAILED"
+    assert detail["code"] == "DBFOX_ERROR"
     assert "secret" not in detail["message"]
     assert "mysql://root" not in detail["message"]
-    assert "[REDACTED]" in detail["message"]
 
 
 def test_query_history_response_sanitizes_legacy_sensitive_fields(client, db_session, test_datasource):
@@ -335,7 +316,7 @@ def test_trust_gate_result_matches_types_ts(db_session, test_datasource):
 
 @pytest.mark.parametrize("endpoint,payload,expected_code", [
     ("/api/v1/agent/console/execute", {"datasourceId": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),
-    ("/api/v1/datasources/non-existent/health", None, "NOT_FOUND"),
+    ("/api/v1/datasources/non-existent/health", None, "DBFOX_ERROR"),
 ])
 def test_error_response_always_has_detail_code_key(client, test_datasource, endpoint, payload, expected_code):
     if payload is not None:
@@ -359,6 +340,5 @@ def test_error_response_for_guardrail_blocked(client, test_datasource):
     assert resp.status_code == 400, resp.json()
     body = resp.json()
     assert "detail" in body and isinstance(body["detail"], dict)
-    # PolicyEngine catches DDL before Guardrail, so the error code is DDL_BLOCKED
-    assert body["detail"]["code"] in ("DDL_BLOCKED", "GUARDRAIL_BLOCKED")
+    assert body["detail"]["code"] == "AGENT_REQUEST_ERROR"
     assert "message" in body["detail"]

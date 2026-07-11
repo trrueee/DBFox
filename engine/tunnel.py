@@ -7,7 +7,12 @@ from typing import Any
 
 from sshtunnel import SSHTunnelForwarder
 
-from engine.app.errors import log_unexpected_exception
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, get_credential_vault
 
@@ -118,7 +123,7 @@ class TunnelManager:
                 except Exception as exc:
                     log_unexpected_exception(
                         logger,
-                        operation="ssh_tunnel_close",
+                        operation=SafeLogOperation.SSH_TUNNEL_CLOSE,
                         exc=exc,
                     )
 
@@ -131,7 +136,7 @@ class TunnelManager:
                 except Exception as exc:
                     log_unexpected_exception(
                         logger,
-                        operation="ssh_tunnel_close_all",
+                        operation=SafeLogOperation.SSH_TUNNEL_CLOSE_ALL,
                         exc=exc,
                     )
             self._tunnels.clear()
@@ -159,7 +164,7 @@ class TunnelManager:
         except Exception as exc:
             log_unexpected_exception(
                 logger,
-                operation="ssh_tunnel_health_probe",
+                operation=SafeLogOperation.SSH_TUNNEL_HEALTH_PROBE,
                 exc=exc,
                 level="warning",
             )
@@ -198,7 +203,7 @@ class TunnelManager:
             except Exception as exc:
                 log_unexpected_exception(
                     logger,
-                    operation="ssh_tunnel_reconnect_stop_previous",
+                    operation=SafeLogOperation.SSH_TUNNEL_RECONNECT_STOP_PREVIOUS,
                     exc=exc,
                     level="warning",
                 )
@@ -213,13 +218,15 @@ class TunnelManager:
         except Exception as exc:
             log_unexpected_exception(
                 logger,
-                operation="ssh_tunnel_reconnect",
+                operation=SafeLogOperation.SSH_TUNNEL_RECONNECT,
                 exc=exc,
             )
             with self._lock:
                 instance.state = TunnelState.FAILED
                 instance.error_message = "SSH tunnel reconnection failed."
-            raise DataSourceConnectionError("SSH 隧道连接已断开，自动重连失败，请检查隧道配置。") from None
+            raise DataSourceConnectionError(
+                fixed_error_message(FixedErrorCode.DATASOURCE_CONNECTION_FAILED)
+            ) from None
 
     def _create_tunnel(self, ds_id: str, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
         logger.info("Creating new SSH tunnel for %s", ds_id)
@@ -247,7 +254,7 @@ class TunnelManager:
             except Exception as exc:
                 log_unexpected_exception(
                     logger,
-                    operation="ssh_tunnel_cleanup_stale",
+                    operation=SafeLogOperation.SSH_TUNNEL_CLEANUP_STALE,
                     exc=exc,
                     level="warning",
                 )

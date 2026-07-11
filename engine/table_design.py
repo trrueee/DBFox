@@ -255,7 +255,7 @@ def generate_create_table_ddl(design: Mapping[str, Any]) -> dict[str, Any]:
 def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str, Any]:
     from engine.models import DataSource, QueryHistory
     from engine.datasource import get_mysql_connection_params
-    from engine.app.errors import public_message
+    from engine.app.safe_errors import FixedErrorCode, fixed_error_message
     from engine.policy.redactor import DataRedactor
     from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
     from engine.environment.schema_catalog_sync import ensure_catalog
@@ -318,10 +318,10 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
                 conn_proxy.commit()
             finally:
                 conn_proxy.close()
-    except Exception as exc:
+    except Exception:
         execution_status = "failed"
-        error_message = str(exc)
-        raise TableDesignError(f"执行 DDL 语句失败: {error_message}")
+        error_message = fixed_error_message(FixedErrorCode.TABLE_DESIGN_ERROR)
+        raise TableDesignError(error_message) from None
     finally:
         latency_ms = int((time.time() - start_time) * 1000)
         redacted_ddl = DataRedactor.redact_sql(ddl)
@@ -339,7 +339,11 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
             guardrail_checks="[{\"rule\": \"table_design_ddl\", \"level\": \"pass\", \"message\": \"DDL executed via safe table design path\"}]",
             execution_status=execution_status,
             execution_time_ms=latency_ms,
-            error_message=public_message(error_message) if error_message else None,
+            error_message=(
+                fixed_error_message(FixedErrorCode.TABLE_DESIGN_ERROR)
+                if error_message
+                else None
+            ),
         )
         db.add(history)
         db.commit()

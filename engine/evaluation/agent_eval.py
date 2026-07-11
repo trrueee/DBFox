@@ -9,7 +9,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from engine.agent import DBFoxAgentRuntime
+from engine.agent_core.persistence._common import _redact_runtime_event_value
 from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.evaluation.agent_case_evaluator import AgentCaseEvaluator
 from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
 from engine.schemas.agent_eval import AgentEvalRunRequest, AgentEvalRunResponse, AgentEvalCaseResultResponse
@@ -148,7 +150,11 @@ class AgentEvalRunner:
                 ))
 
             except Exception as exc:
-                logger.exception("Eval case failed for task %s: %s", task.id, exc)
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.AGENT_EVALUATION_CASE,
+                    exc=exc,
+                )
                 failed += 1
                 case_result = AgentEvalCaseResult(
                     eval_run_id=str(eval_run.id),
@@ -162,7 +168,7 @@ class AgentEvalRunner:
                     actual_artifact_types_json="[]",
                     actual_approval_state=None,
                     actual_sql_json="[]",
-                    failure_reasons_json=json.dumps([str(exc)]),
+                    failure_reasons_json=json.dumps(["AGENT_EVALUATION_CASE_ERROR"]),
                     response_json="{}",
                     created_at=datetime.now(UTC),
                 )
@@ -243,9 +249,11 @@ def _build_workspace_context(task: AgentGoldenTask) -> AgentWorkspaceContext | N
 
 def _safe_response_json(response: Any, *, eval_telemetry: dict[str, Any] | None = None) -> str:
     try:
-        data = response.model_dump()
+        data = _redact_runtime_event_value(response.model_dump(mode="json"))
+        if not isinstance(data, dict):
+            return "{}"
         if eval_telemetry is not None:
-            data["eval_telemetry"] = eval_telemetry
+            data["eval_telemetry"] = _redact_runtime_event_value(eval_telemetry)
         return json.dumps(data, ensure_ascii=False, default=str)
     except Exception:
         return "{}"
@@ -261,7 +269,10 @@ def _runtime_product_telemetry(events: list[dict[str, Any]], response: Any) -> d
     repair_attempts: set[str] = set()
     repair_events_without_attempt = 0
 
-    for event in events:
+    for raw_event in events:
+        event = _redact_runtime_event_value(raw_event)
+        if not isinstance(event, dict):
+            continue
         step = event.get("step")
         if not isinstance(step, dict):
             continue

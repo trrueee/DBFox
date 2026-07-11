@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.query_registry import QueryRegistry
 
 
@@ -38,7 +39,7 @@ def test_mysql_cancel_uses_parameterized_kill_query(monkeypatch) -> None:
     assert closed is True
 
 
-def test_mysql_cancel_failure_message_is_sanitized(monkeypatch) -> None:
+def test_mysql_cancel_failure_uses_fixed_error_catalog(monkeypatch) -> None:
     registry = QueryRegistry()
 
     def fail_kill(*_args: Any, **_kwargs: Any) -> None:
@@ -48,7 +49,7 @@ def test_mysql_cancel_failure_message_is_sanitized(monkeypatch) -> None:
     registry.register_mysql(
         execution_id="mysql-sensitive-cancel",
         datasource_id="ds-mysql",
-        params={"host": "localhost", "password": "connection-secret"},
+        params={"host": "localhost"},
         thread_id=321,
     )
 
@@ -58,11 +59,10 @@ def test_mysql_cancel_failure_message_is_sanitized(monkeypatch) -> None:
     assert result["cancelled"] is False
     assert "user@example.com" not in result["message"]
     assert "driver-secret" not in result["message"]
-    assert "connection-secret" not in result["message"]
-    assert "[REDACTED" in result["message"]
+    assert result["message"] == fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED)
 
 
-def test_postgres_cancel_failure_message_is_sanitized() -> None:
+def test_postgres_cancel_failure_uses_fixed_error_catalog() -> None:
     registry = QueryRegistry()
 
     class FakePostgresConnection:
@@ -81,4 +81,4 @@ def test_postgres_cancel_failure_message_is_sanitized() -> None:
     assert result["cancelled"] is False
     assert "admin@example.com" not in result["message"]
     assert "pg-secret" not in result["message"]
-    assert "[REDACTED" in result["message"]
+    assert result["message"] == fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED)

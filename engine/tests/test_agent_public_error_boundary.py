@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,6 +11,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 
 import engine.api.agent as agent_api
+from engine.agent.app.response_builder import build_response
 from engine.agent.app.service import _runtime_error_message
 from engine.agent.graph.context import GraphRuntimeContext
 import engine.agent.nodes.model_node as model_node
@@ -39,6 +41,19 @@ def _consume_stream(response: Any) -> str:
         return "".join(chunks)
 
     return asyncio.run(consume())
+
+
+def _isolated_caplog_logger(
+    caplog: pytest.LogCaptureFixture,
+    *,
+    name: str,
+    level: int = logging.ERROR,
+) -> logging.Logger:
+    logger = logging.Logger(name)
+    logger.setLevel(level)
+    logger.propagate = False
+    logger.addHandler(caplog.handler)
+    return logger
 
 
 def test_unknown_llm_exception_is_absent_from_all_public_agent_boundaries(
@@ -311,38 +326,119 @@ def test_service_graph_never_persists_a_judge_provider_failure(
 
     monkeypatch.setattr(model_node, "call_model", empty_model_response)
     monkeypatch.setattr(progress_node, "call_llm_judge", fail_provider)
+    capture_logger = _isolated_caplog_logger(
+        caplog,
+        name="test.agent_public_error_boundary.progress_node",
+    )
+    monkeypatch.setattr(progress_node, "logger", capture_logger)
 
-    with SqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
-        checkpointer.setup()
-        monkeypatch.setattr(service_module, "build_agent_core_checkpointer", lambda: checkpointer)
-        service = service_module.DBFoxAgentService(db_session)
-        events = list(
-            service.run_iter(
-                AgentRunRequest(
-                    datasource_id=test_datasource.id,
-                    question="show orders",
-                    session_id="checkpoint-sentinel-session",
-                    conversation_id="checkpoint-sentinel-session",
-                    llm_credential_id="cred_llm_api_key_checkpoint_test",
-                    max_steps=2,
+    try:
+        with SqliteSaver.from_conn_string(str(checkpoint_path)) as checkpointer:
+            checkpointer.setup()
+            monkeypatch.setattr(service_module, "build_agent_core_checkpointer", lambda: checkpointer)
+            service = service_module.DBFoxAgentService(db_session)
+            events = list(
+                service.run_iter(
+                    AgentRunRequest(
+                        datasource_id=test_datasource.id,
+                        question="show orders",
+                        session_id="checkpoint-sentinel-session",
+                        conversation_id="checkpoint-sentinel-session",
+                        llm_credential_id="cred_llm_api_key_checkpoint_test",
+                        max_steps=2,
+                    )
                 )
             )
+        public_events = "\n".join(event.model_dump_json() for event in events)
+        persisted_events = "\n".join(
+            row.event_json for row in db_session.query(AgentRuntimeEventRecord).all()
         )
+        final_event = next(event for event in reversed(events) if event.response is not None)
 
-    public_events = "\n".join(event.model_dump_json() for event in events)
-    persisted_events = "\n".join(
-        row.event_json for row in db_session.query(AgentRuntimeEventRecord).all()
+        assert checkpoint_path.exists()
+        assert final_event.response is not None
+        assert final_event.response.error == "The agent run could not be completed."
+        assert SENTINEL.encode() not in checkpoint_path.read_bytes()
+        assert SENTINEL not in public_events
+        assert SENTINEL not in persisted_events
+        assert SENTINEL not in caplog.text
+        assert "RuntimeError" in caplog.text
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+
+def test_workspace_context_failure_uses_a_fixed_catalog_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.agent_core.workspace_context as workspace_context
+    from engine.agent_core.types import AgentWorkspaceContext
+
+    class FailingSchemaLinker:
+        def __init__(self, _db: object) -> None:
+            pass
+
+        def link(self, **_kwargs: object) -> object:
+            raise RuntimeError(SENTINEL)
+
+    monkeypatch.setattr(workspace_context, "SchemaLinker", FailingSchemaLinker)
+
+    payload = workspace_context._schema_linking_payload(
+        object(),
+        _request(),
+        AgentWorkspaceContext(datasource_id="ds-1"),
+        [],
     )
-    final_event = next(event for event in reversed(events) if event.response is not None)
 
-    assert checkpoint_path.exists()
-    assert final_event.response is not None
-    assert final_event.response.error == "The agent run could not be completed."
-    assert SENTINEL.encode() not in checkpoint_path.read_bytes()
-    assert SENTINEL not in public_events
-    assert SENTINEL not in persisted_events
-    assert SENTINEL not in caplog.text
-    assert "RuntimeError" in caplog.text
+    assert payload["error_code"] == "AGENT_CONTEXT_UNAVAILABLE"
+    assert payload["error"] == "Agent context is temporarily unavailable."
+    assert SENTINEL not in repr(payload)
+
+
+def test_semantic_parse_failure_uses_a_fixed_catalog_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.agent_core.sql_semantic_verifier as verifier
+
+    def fail_parse(*_args: object, **_kwargs: object) -> object:
+        raise RuntimeError(SENTINEL)
+
+    monkeypatch.setattr(verifier.sqlglot, "parse_one", fail_parse)
+
+    violations = verifier.verify_sql_against_contract("SELECT 1", object(), {})
+
+    assert violations[0].code == "sql_parse_failed"
+    assert violations[0].message == "SQL could not be parsed."
+    assert SENTINEL not in repr(violations[0].to_dict())
+
+
+def test_response_builder_discards_nested_graph_error_text() -> None:
+    response = build_response(
+        req=_request(),
+        run_id="run-response-boundary",
+        session_id="session-response-boundary",
+        state={
+            "status": "failed",
+            "error": SENTINEL,
+            "progress_decision": {
+                "status": "failed",
+                "root_cause": SENTINEL,
+            },
+            "trace_events": [
+                {
+                    "type": "agent.tool.completed",
+                    "tool_name": "db.preview",
+                    "status": "failed",
+                    "error": SENTINEL,
+                }
+            ],
+        },
+        success=False,
+        error=SENTINEL,
+        status="failed",
+    )
+
+    assert response.error == "The agent run could not be completed."
+    assert SENTINEL not in response.model_dump_json()
 
 
 def test_agent_request_normalization_does_not_resolve_a_vault_secret(

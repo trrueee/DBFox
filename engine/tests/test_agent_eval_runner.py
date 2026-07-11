@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -218,7 +219,7 @@ def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, 
     assert telemetry["repair_count"] == 1
     assert telemetry["failure_layer"] == "execution"
     assert telemetry["error_classes"] == ["missing_column"]
-    assert telemetry["root_causes"] == ["orders.total missing"]
+    assert telemetry["root_causes"] == ["The agent run could not be completed."]
     assert telemetry["final_status"] == "success"
     assert telemetry["final_success"] is True
 
@@ -307,3 +308,54 @@ def test_eval_runner_merges_task_ids(db_session, test_datasource):
     runner = AgentEvalRunner(db_session)
     result = runner.run(req)
     assert result.total_cases == 2
+
+
+def test_eval_runner_failure_never_persists_or_returns_exception_text(
+    db_session,
+    test_datasource,
+    monkeypatch,
+    caplog,
+):
+    task = _make_task(db_session, test_datasource.id)
+    sentinel = "agent-eval-case-secret-sentinel"
+
+    class FailingRuntime:
+        def __init__(self, _db):
+            pass
+
+        def run_iter(self, _request):
+            raise RuntimeError(f"provider authorization={sentinel}")
+
+    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FailingRuntime)
+
+    capture_logger = logging.Logger("test.agent_eval_runner_boundary")
+    capture_logger.setLevel(logging.ERROR)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr("engine.evaluation.agent_eval.logger", capture_logger)
+            result = AgentEvalRunner(db_session).run(
+                AgentEvalRunRequest(
+                    datasource_id=test_datasource.id,
+                    task_ids=[task.id],
+                    execute=False,
+                )
+            )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    response_case = result.case_results[0]
+    persisted_case = (
+        db_session.query(AgentEvalCaseResult)
+        .filter(AgentEvalCaseResult.eval_run_id == result.id)
+        .one()
+    )
+    assert response_case.status == "error"
+    assert json.loads(response_case.failure_reasons_json) == ["AGENT_EVALUATION_CASE_ERROR"]
+    assert json.loads(persisted_case.failure_reasons_json) == ["AGENT_EVALUATION_CASE_ERROR"]
+    assert sentinel not in response_case.model_dump_json()
+    assert sentinel not in persisted_case.failure_reasons_json
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "agent_evaluation_case" in caplog.text

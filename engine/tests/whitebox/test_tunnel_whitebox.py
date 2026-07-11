@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.errors import DataSourceConnectionError
 from engine.tunnel import TunnelManager, TunnelState
 
@@ -63,7 +64,8 @@ def test_tunnel4_reconnect_failure():
     mock_tunnel1.is_active = True
     mock_tunnel1.local_bind_port = 12345
     
-    mgr._start_physical_tunnel = MagicMock(side_effect=[mock_tunnel1, Exception("SSH error")])
+    sentinel = "ssh-reconnect-secret-sentinel"
+    mgr._start_physical_tunnel = MagicMock(side_effect=[mock_tunnel1, Exception(sentinel)])
     mgr.health_check = MagicMock(return_value=True)
     ds_dict = {"id": "ds-1"}
     t1 = mgr.get_or_reconnect(ds_dict)
@@ -72,7 +74,9 @@ def test_tunnel4_reconnect_failure():
     mgr.health_check = MagicMock(return_value=False)
     with pytest.raises(DataSourceConnectionError) as exc:
         mgr.get_or_reconnect(ds_dict)
-    assert "自愈重连失败" in str(exc.value)
+    assert exc.value.code == "CONNECTION_FAILED"
+    assert str(exc.value) == fixed_error_message(FixedErrorCode.DATASOURCE_CONNECTION_FAILED)
+    assert sentinel not in str(exc.value)
     assert mgr.get_tunnel_state("ds-1") == TunnelState.FAILED
 
 # covers: TUNNEL-5 Concurrent request lock protection

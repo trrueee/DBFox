@@ -8,6 +8,7 @@ import sqlglot
 from sqlglot import exp
 
 from engine.agent_core.semantic_contract import QueryContract
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 
 
 @dataclass
@@ -41,12 +42,12 @@ def verify_sql_against_contract(
 
     try:
         parsed = sqlglot.parse_one(sql, read="mysql")
-    except Exception as exc:
+    except Exception:
         return [
             SemanticViolation(
                 code="sql_parse_failed",
                 severity="retryable",
-                message=f"SQL could not be parsed: {exc}",
+                message=fixed_error_message(FixedErrorCode.SQL_SEMANTIC_PARSE_FAILED),
                 actual=sql,
             )
         ]

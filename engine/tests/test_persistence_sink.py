@@ -57,9 +57,6 @@ def test_default_agent_event_store_shares_caller_session_when_sqlite_is_locked(
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         session = AgentSession(
@@ -125,9 +122,6 @@ def test_sqlite_agent_event_store_initializes_the_resolved_session_id(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -210,9 +204,6 @@ def test_sqlite_agent_event_store_records_artifacts_for_conversation_detail(tmp_
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -280,9 +271,6 @@ def test_sqlite_agent_event_store_redacts_result_sample_rows_but_preserves_safe_
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -362,9 +350,6 @@ def test_sqlite_agent_event_store_saves_checkpoint_and_marks_run_waiting_approva
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -438,9 +423,6 @@ def test_sqlite_agent_event_store_redacts_checkpoint_payloads_but_preserves_safe
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -562,9 +544,6 @@ def test_buffered_agent_event_store_flushes_runtime_events(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -635,9 +614,6 @@ def test_buffered_agent_event_store_flushes_checkpoint_and_returns_record(tmp_pa
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -691,9 +667,6 @@ def test_sqlite_agent_event_store_cancels_run(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -739,9 +712,6 @@ def test_buffered_agent_event_store_flushes_start_before_cancel(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -784,9 +754,6 @@ def test_sqlite_agent_event_store_resolves_approval_and_marks_run_resumed(tmp_pa
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -866,9 +833,6 @@ def test_sqlite_agent_event_store_creates_approval(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -924,9 +888,6 @@ def test_approval_checkpoint_draft_does_not_write_metadata(tmp_path):
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -998,9 +959,6 @@ def test_buffered_agent_event_store_factory_delays_until_flush(monkeypatch, tmp_
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)
@@ -1054,9 +1012,6 @@ def test_conversation_detail_recovers_response_json_artifacts_without_migration(
             port=0,
             database_name=str(db_path),
             username="",
-            password_ciphertext="",
-            password_nonce="",
-            password_key_version="v1",
             status="active",
         )
         db.add(datasource)

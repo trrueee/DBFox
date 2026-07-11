@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.app.errors import log_unexpected_exception
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import DBFoxError, DataSourceConnectionError
 from engine.security.credential_vault import (
     CredentialKind,
@@ -57,7 +57,7 @@ class SchemaIntrospector:
                 )
                 raise DataSourceConnectionError(
                     "Unable to establish the configured SSH tunnel."
-                ) from exc
+                ) from None
 
         if resolved.dialect == "sqlite":
             return self._inspect_sqlite(resolved)
@@ -207,7 +207,7 @@ class SchemaIntrospector:
         except Exception as exc:
             log_unexpected_exception(
                 logger,
-                operation="schema_introspection_mysql_connect",
+                operation=SafeLogOperation.SCHEMA_INTROSPECTION_MYSQL_CONNECT,
                 exc=exc,
                 level="warning",
             )
@@ -483,7 +483,7 @@ class SchemaIntrospector:
         except Exception as exc:
             log_unexpected_exception(
                 logger,
-                operation="schema_introspection_duckdb_connect",
+                operation=SafeLogOperation.SCHEMA_INTROSPECTION_DUCKDB_CONNECT,
                 exc=exc,
                 level="warning",
             )
@@ -683,7 +683,7 @@ class SchemaIntrospector:
                 datasource_id,
                 type(exc).__name__,
             )
-            raise CredentialVaultUnavailableError() from exc
+            raise CredentialVaultUnavailableError() from None
         if not secret:
             raise DataSourceConnectionError(
                 "Datasource credential reference was not found or has the wrong kind."

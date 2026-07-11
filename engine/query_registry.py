@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import pymysql
 
-from engine.app.errors import public_message
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 
 BackendKind = Literal["sqlite", "mysql", "postgresql"]
 
@@ -130,12 +130,12 @@ class QueryRegistry:
                     "executionId": execution_id,
                     "message": "PostgreSQL query cancellation requested.",
                 }
-            except Exception as exc:
+            except Exception:
                 return {
                     "success": False,
                     "cancelled": False,
                     "executionId": execution_id,
-                    "message": f"Failed to issue PostgreSQL cancellation: {public_message(exc)}",
+                    "message": fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED),
                 }
 
         if backend == "mysql" and mysql_thread_id is not None and mysql_params:
@@ -147,12 +147,12 @@ class QueryRegistry:
                     "executionId": execution_id,
                     "message": "MySQL KILL QUERY requested.",
                 }
-            except Exception as exc:
+            except Exception:
                 return {
                     "success": False,
                     "cancelled": False,
                     "executionId": execution_id,
-                    "message": f"Failed to issue MySQL KILL QUERY: {public_message(exc)}",
+                    "message": fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED),
                 }
 
         return {

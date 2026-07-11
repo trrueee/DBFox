@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.agent_core.types import AgentArtifact, AgentRuntimeEvent
 from engine.models import (
     AgentArtifactRecord,
@@ -46,8 +47,12 @@ def record_runtime_event(
         db.add(record)
         db.flush()
     except Exception as exc:
-        logger.exception("Failed to record runtime event %s", event.event_id)
-        raise exc
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_PERSISTENCE_RUNTIME_EVENT,
+            exc=exc,
+        )
+        raise
 
 
 def record_artifact(
@@ -79,8 +84,12 @@ def record_artifact(
         db.add(record)
         db.flush()
     except Exception as exc:
-        logger.exception("Failed to record artifact %s", artifact.id)
-        raise exc
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_PERSISTENCE_ARTIFACT_RECORD,
+            exc=exc,
+        )
+        raise
 
 
 def get_latest_runtime_event_sequence(db: Session, run_id: str) -> int:

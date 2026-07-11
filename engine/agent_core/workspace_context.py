@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from engine.agent_core.context import schema_linking_question
 from engine.agent_core.types import AgentContextArtifact, AgentRunRequest, AgentWorkspaceContext
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.models import (
     AgentArtifactRecord,
     AgentRun,
@@ -143,14 +144,15 @@ def _schema_linking_payload(
             "original_schema_table_count": metadata.get("originalSchemaTableCount", 0),
             "selected_schema_table_count": metadata.get("selectedSchemaTableCount", 0),
         }
-    except Exception as exc:
+    except Exception:
         return {
             "mode": "unavailable",
             "schema_context": "",
             "selected_tables": [str(table.table_name) for table in selected_tables],
             "selected_columns": [],
             "schema_linking_reasons": [],
-            "error": f"{type(exc).__name__}: {exc}",
+            "error_code": FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE.value,
+            "error": fixed_error_message(FixedErrorCode.AGENT_CONTEXT_UNAVAILABLE),
         }
 
 

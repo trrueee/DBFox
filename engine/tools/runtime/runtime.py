@@ -3,15 +3,34 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Final, Literal
 
 from pydantic import ValidationError
 
 from engine.agent_core.types import ToolObservation
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
 
 logger = logging.getLogger("dbfox.tools.runtime")
+
+ToolFailureCode = Literal[
+    "TOOL_INPUT_CONTRACT_FAILED",
+    "TOOL_OUTPUT_CONTRACT_FAILED",
+    "TOOL_EXECUTION_FAILED",
+]
+
+_TOOL_FAILURE_MESSAGES: Final[dict[ToolFailureCode, str]] = {
+    "TOOL_INPUT_CONTRACT_FAILED": "Input contract failed.",
+    "TOOL_OUTPUT_CONTRACT_FAILED": "Output contract failed.",
+    "TOOL_EXECUTION_FAILED": "Tool execution failed.",
+}
+
+_TOOL_FAILURE_OPERATIONS: Final[dict[ToolFailureCode, SafeLogOperation]] = {
+    "TOOL_INPUT_CONTRACT_FAILED": SafeLogOperation.TOOL_RUNTIME_INPUT_CONTRACT_FAILED,
+    "TOOL_OUTPUT_CONTRACT_FAILED": SafeLogOperation.TOOL_RUNTIME_OUTPUT_CONTRACT_FAILED,
+    "TOOL_EXECUTION_FAILED": SafeLogOperation.TOOL_RUNTIME_EXECUTION_FAILED,
+}
 
 
 class ToolRuntime:
@@ -47,7 +66,13 @@ class ToolRuntime:
         try:
             parsed_input = tool.input_model.model_validate(coerced_input)
         except ValidationError as exc:
-            return self._failed(tool_name, raw_input, "Input contract failed", exc, start)
+            return self._failed(
+                tool_name,
+                raw_input,
+                code="TOOL_INPUT_CONTRACT_FAILED",
+                exc=exc,
+                start=start,
+            )
 
         projection = {
             key: state.get(key)
@@ -67,9 +92,21 @@ class ToolRuntime:
             )
             parsed_output = tool.output_model.model_validate(output)
         except ValidationError as exc:
-            return self._failed(tool_name, raw_input, "Output contract failed", exc, start)
+            return self._failed(
+                tool_name,
+                raw_input,
+                code="TOOL_OUTPUT_CONTRACT_FAILED",
+                exc=exc,
+                start=start,
+            )
         except Exception as exc:
-            return self._failed(tool_name, raw_input, "Tool execution failed", exc, start)
+            return self._failed(
+                tool_name,
+                raw_input,
+                code="TOOL_EXECUTION_FAILED",
+                exc=exc,
+                start=start,
+            )
 
         elapsed = int((time.perf_counter() - start) * 1000)
         logger.info("%s OK (%dms)", tool_name, elapsed)
@@ -86,16 +123,25 @@ class ToolRuntime:
     def _failed(
         tool_name: str,
         raw_input: dict[str, Any],
-        message: str,
+        *,
+        code: ToolFailureCode,
         exc: Exception,
         start: float,
     ) -> ToolObservation:
-        logger.error("%s FAILED (%dms): %s — %s", tool_name, int((time.perf_counter() - start) * 1000), message, exc)
+        log_unexpected_exception(
+            logger,
+            operation=_TOOL_FAILURE_OPERATIONS[code],
+            exc=exc,
+        )
         return ToolObservation(
             name=tool_name,
             status="failed",
             input=dict(raw_input),
-            output=None,
-            error=f"{message} for tool `{tool_name}`: {exc}",
+            output={
+                "status": "failed",
+                "error_code": code,
+                "error_type": type(exc).__name__,
+            },
+            error=_TOOL_FAILURE_MESSAGES[code],
             latency_ms=int((time.perf_counter() - start) * 1000),
         )

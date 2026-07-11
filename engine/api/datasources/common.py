@@ -8,6 +8,7 @@ from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTa
 from engine.schemas.datasource import DataSourceResponse
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, get_credential_vault
+from engine.app.safe_errors import FixedErrorCode
 
 
 def datasource_to_dict(ds: DataSource) -> dict[str, Any]:
@@ -138,13 +139,13 @@ def persist_health_success(
 
 def persist_health_failure(
     ds: DataSource,
-    message: str,
+    error_code: FixedErrorCode,
     latency_ms: int,
     checked_at: datetime,
 ) -> None:
     setattr(ds, "last_test_at", checked_at)
     setattr(ds, "last_test_status", "failed")
-    setattr(ds, "last_test_error", message)
+    setattr(ds, "last_test_error", error_code.value)
     setattr(ds, "last_test_latency_ms", latency_ms)
     setattr(ds, "last_test_readonly", None)
     setattr(ds, "last_test_server_version", None)

@@ -1,6 +1,8 @@
 import json
 import asyncio
+import logging
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
 from unittest.mock import MagicMock
@@ -34,8 +36,6 @@ def _add_pagination_source(
         port=3306,
         database_name="dbfox",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce",
     )
     session = AgentSession(
         id="conv-page",
@@ -93,8 +93,6 @@ def _add_table_result_source(
         port=3306,
         database_name="dbfox",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce",
     )
     table = SchemaTable(
         id=table_id,
@@ -122,8 +120,6 @@ def _add_console_datasource(db_session, *, datasource_id: str = "ds-console") ->
             port=3306,
             database_name="dbfox",
             username="root",
-            password_ciphertext="cipher",
-            password_nonce="nonce",
         )
     )
     db_session.commit()
@@ -147,49 +143,56 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
         captured["options"] = options
         return FakeClient()
 
+    def fake_resolve_product_config(**kwargs):
+        captured["resolve_kwargs"] = kwargs
+        return SimpleNamespace(
+            model_name="qwen-plus",
+            api_base="https://example.test/v1",
+            source="product",
+        )
+
+    monkeypatch.setattr(
+        agent_module,
+        "resolve_product_llm_config_from_credential",
+        fake_resolve_product_config,
+    )
     monkeypatch.setattr(agent_module, "create_chat_model", fake_create_chat_model)
 
     response = agent_module.api_llm_test(
         agent_module.LlmTestRequest(
-            api_key=" sk-test ",
-            api_base=" https://example.test/v1 ",
-            model_name=" qwen-plus ",
-        )
-    )
-
-    config = captured["config"]
-    options = captured["options"]
-    assert response.ok is True
-    assert response.model == "qwen-plus"
-    assert response.api_base == "https://example.test/v1"
-    assert captured["prompt"] == "ping"
-    assert config.api_key == "sk-test"
-    assert config.api_base == "https://example.test/v1"
-    assert config.model_name == "qwen-plus"
-    assert config.source == "product"
-    assert options.timeout == 10.0
-    assert options.max_tokens == 1
-
-
-def test_llm_test_requires_request_key_even_when_env_exists(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
-    monkeypatch.setattr(
-        agent_module,
-        "create_chat_model",
-        lambda *_args, **_kwargs: pytest.fail("should not build an LLM client without a request key"),
-    )
-
-    response = agent_module.api_llm_test(
-        agent_module.LlmTestRequest(
-            api_key="",
+            llm_credential_id="cred_llm_api_key_test",
             api_base="https://example.test/v1",
             model_name="qwen-plus",
         )
     )
 
-    assert response.ok is False
-    assert response.error_code == "NO_LLM_KEY"
-    assert "LLM API Key" in str(response.error_message)
+    config = captured["config"]
+    options = captured["options"]
+    resolve_kwargs = captured["resolve_kwargs"]
+    assert response.ok is True
+    assert response.model == "qwen-plus"
+    assert response.api_base == "https://example.test/v1"
+    assert captured["prompt"] == "ping"
+    assert config.api_base == "https://example.test/v1"
+    assert config.model_name == "qwen-plus"
+    assert config.source == "product"
+    assert resolve_kwargs == {
+        "llm_credential_id": "cred_llm_api_key_test",
+        "api_base": "https://example.test/v1",
+        "model_name": "qwen-plus",
+    }
+    assert options.timeout == 10.0
+    assert options.max_tokens == 1
+
+
+def test_llm_test_requires_opaque_credential_reference_even_when_env_exists(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+
+    with pytest.raises(ValidationError):
+        agent_module.LlmTestRequest(
+            api_base="https://example.test/v1",
+            model_name="qwen-plus",
+        )
 
 
 def _console_decision(datasource_id: str, sql: str) -> ExecutionSafetyDecision:
@@ -732,7 +735,12 @@ def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatc
 
 
 def test_sse_failed_event() -> None:
-    event_str = sse_failed_event("evt_123", "run_456", "Test error message", "ERR_CODE")
+    failure = agent_module.PublicAgentFailure(
+        code="ERR_CODE",
+        message="Fixed failure message.",
+        status_code=500,
+    )
+    event_str = sse_failed_event("evt_123", "run_456", failure)
     assert event_str.startswith("event: agent.run.failed\n")
     
     lines = event_str.strip().split("\n")
@@ -744,22 +752,26 @@ def test_sse_failed_event() -> None:
     payload = json.loads(data_json)
     assert payload["event_id"] == "evt_123"
     assert payload["run_id"] == "run_456"
-    assert payload["error"] == "Test error message"
+    assert payload["error"] == "Fixed failure message."
     assert payload["code"] == "ERR_CODE"
     assert payload["type"] == "agent.run.failed"
 
 
-def test_sse_failed_event_sanitizes_error_message() -> None:
+def test_sse_failed_event_uses_mapped_failure_message() -> None:
+    failure = agent_module.public_agent_failure(
+        RuntimeError("mysql://root:secret@1.2.3.4/prod password=secret"),
+        operation="run",
+    )
     event_str = sse_failed_event(
         "evt_123",
         "run_456",
-        "mysql://root:secret@1.2.3.4/prod password=secret",
-        "ERR_CODE",
+        failure,
     )
 
     data_json = event_str.strip().split("\n")[1][6:]
     payload = json.loads(data_json)
-    assert "[REDACTED]" in payload["error"]
+    assert payload["code"] == "AGENT_RUNTIME_ERROR"
+    assert payload["error"] == "The agent run could not be completed."
     assert "secret" not in payload["error"]
     assert "mysql://root" not in payload["error"]
 
@@ -799,7 +811,7 @@ def test_api_agent_run_normalizes_product_llm_config_before_runtime(monkeypatch)
         AgentRunRequest(
             datasource_id="ds-1",
             question="orders",
-            api_key=" sk-product ",
+            llm_credential_id="cred_llm_api_key_test",
             api_base=" https://dashscope.example/v1 ",
             model_name=" qwen-plus ",
         ),
@@ -808,7 +820,7 @@ def test_api_agent_run_normalizes_product_llm_config_before_runtime(monkeypatch)
 
     runtime_req = captured["req"]
     assert response.success is True
-    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
     assert runtime_req.api_base == "https://dashscope.example/v1"
     assert runtime_req.model_name == "qwen-plus"
 
@@ -834,7 +846,7 @@ def test_api_agent_run_applies_default_product_llm_base_and_model(monkeypatch) -
         AgentRunRequest(
             datasource_id="ds-1",
             question="orders",
-            api_key="sk-product",
+            llm_credential_id="cred_llm_api_key_test",
             api_base=" ",
             model_name=" ",
         ),
@@ -842,7 +854,7 @@ def test_api_agent_run_applies_default_product_llm_base_and_model(monkeypatch) -
     )
 
     runtime_req = captured["req"]
-    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
     assert runtime_req.api_base == "https://api.openai.com/v1"
     assert runtime_req.model_name == "gpt-4o-mini"
 
@@ -875,7 +887,7 @@ def test_api_agent_run_stream_normalizes_product_llm_config_before_runtime(monke
         AgentRunRequest(
             datasource_id="ds-1",
             question="orders",
-            api_key=" sk-product ",
+            llm_credential_id="cred_llm_api_key_test",
             api_base=" https://dashscope.example/v1 ",
             model_name=" qwen-plus ",
         ),
@@ -885,7 +897,7 @@ def test_api_agent_run_stream_normalizes_product_llm_config_before_runtime(monke
 
     runtime_req = captured["req"]
     assert "agent.run.completed" in body
-    assert runtime_req.api_key == "sk-product"
+    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
     assert runtime_req.api_base == "https://dashscope.example/v1"
     assert runtime_req.model_name == "qwen-plus"
 
@@ -910,13 +922,18 @@ def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch)
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_run(
-            AgentRunRequest(datasource_id="ds-1", question="hello", api_key="test-key"),
+            AgentRunRequest(
+                datasource_id="ds-1",
+                question="hello",
+                llm_credential_id="cred_llm_api_key_test",
+            ),
             fake_db,  # type: ignore[arg-type]
         )
 
     assert fake_db.rollback_calls == 1
     assert exc_info.value.status_code == 500
-    assert "[REDACTED]" in exc_info.value.detail["message"]
+    assert exc_info.value.detail["code"] == "AGENT_RUNTIME_ERROR"
+    assert exc_info.value.detail["message"] == "The agent run could not be completed."
     assert "secret" not in exc_info.value.detail["message"]
     assert "mysql://root" not in exc_info.value.detail["message"]
 
@@ -948,7 +965,11 @@ def test_api_agent_run_stream_rolls_back_db_session_on_unhandled_exception(monke
     monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
 
     response = agent_module.api_agent_run_stream(
-        AgentRunRequest(datasource_id="ds-1", question="hello", api_key="test-key"),
+        AgentRunRequest(
+            datasource_id="ds-1",
+            question="hello",
+            llm_credential_id="cred_llm_api_key_test",
+        ),
         fake_db,  # type: ignore[arg-type]
     )
     body = asyncio.run(_streaming_response_text(response))
@@ -984,7 +1005,7 @@ def test_api_agent_run_stream_includes_conversation_message_ids(monkeypatch) -> 
             conversation_id="conv-1",
             user_message_id="msg-user-1",
             assistant_message_id="msg-assistant-1",
-            api_key="test-key",
+            llm_credential_id="cred_llm_api_key_test",
         ),
         FakeDb(),  # type: ignore[arg-type]
     )
@@ -1035,17 +1056,14 @@ def test_datasource_connection_dict() -> None:
     mock_ds.port = 3306
     mock_ds.username = "root"
     mock_ds.database_name = "testdb"
-    mock_ds.password_ciphertext = "pass_cipher"
-    mock_ds.password_nonce = "pass_nonce"
+    mock_ds.password_credential_id = "cred_datasource_password"
     mock_ds.ssh_enabled = True
     mock_ds.ssh_host = "jump"
     mock_ds.ssh_port = 22
     mock_ds.ssh_username = "sshuser"
-    mock_ds.ssh_password_ciphertext = "ssh_pass_cipher"
-    mock_ds.ssh_password_nonce = "ssh_pass_nonce"
+    mock_ds.ssh_password_credential_id = "cred_ssh_password"
     mock_ds.ssh_pkey_path = "/path/to/key"
-    mock_ds.ssh_pkey_passphrase_ciphertext = "pkey_cipher"
-    mock_ds.ssh_pkey_passphrase_nonce = "pkey_nonce"
+    mock_ds.ssh_key_passphrase_credential_id = "cred_ssh_key_passphrase"
     mock_ds.ssl_enabled = True
     mock_ds.ssl_ca_path = "/path/to/ca"
     mock_ds.ssl_cert_path = "/path/to/cert"
@@ -1058,17 +1076,14 @@ def test_datasource_connection_dict() -> None:
     assert config["port"] == 3306
     assert config["username"] == "root"
     assert config["database_name"] == "testdb"
-    assert config["password_ciphertext"] == "pass_cipher"
-    assert config["password_nonce"] == "pass_nonce"
+    assert config["password_credential_id"] == "cred_datasource_password"
     assert config["ssh_enabled"] is True
     assert config["ssh_host"] == "jump"
     assert config["ssh_port"] == 22
     assert config["ssh_username"] == "sshuser"
-    assert config["ssh_password_ciphertext"] == "ssh_pass_cipher"
-    assert config["ssh_password_nonce"] == "ssh_pass_nonce"
+    assert config["ssh_password_credential_id"] == "cred_ssh_password"
     assert config["ssh_pkey_path"] == "/path/to/key"
-    assert config["ssh_pkey_passphrase_ciphertext"] == "pkey_cipher"
-    assert config["ssh_pkey_passphrase_nonce"] == "pkey_nonce"
+    assert config["ssh_key_passphrase_credential_id"] == "cred_ssh_key_passphrase"
     assert config["ssl_enabled"] is True
     assert config["ssl_ca_path"] == "/path/to/ca"
     assert config["ssl_cert_path"] == "/path/to/cert"
@@ -1090,3 +1105,121 @@ def test_project_id_resolution_fallback(db_session) -> None:
     proj = db_session.query(Project).filter(Project.id == DEFAULT_PROJECT_ID).first()
     assert proj is not None
     assert proj.status == "active"
+
+
+def test_console_unexpected_error_never_leaks_exception_text(monkeypatch, db_session, caplog) -> None:
+    _add_console_datasource(db_session, datasource_id="ds-console-boundary")
+    sentinel = "console-execution-secret-sentinel"
+
+    def fail_policy(*_args, **_kwargs):
+        raise RuntimeError(f"database password={sentinel}")
+
+    monkeypatch.setattr(
+        agent_module.PolicyEngine,
+        "enforce_query_policy",
+        staticmethod(fail_policy),
+    )
+
+    capture_logger = logging.Logger("test.agent_console_boundary")
+    capture_logger.setLevel(logging.ERROR)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(agent_module, "logger", capture_logger)
+            with pytest.raises(HTTPException) as exc_info:
+                agent_module.api_agent_console_execute(
+                    agent_module.ConsoleExecuteRequest(
+                        datasourceId="ds-console-boundary",
+                        sql="SELECT 1",
+                    ),
+                    db_session,
+                )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {
+        "code": "CONSOLE_EXECUTION_ERROR",
+        "message": "The SQL Console request could not be completed.",
+    }
+    assert sentinel not in repr(exc_info.value.detail)
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "agent_sql_console_execution" in caplog.text
+
+
+def test_result_page_unexpected_error_never_leaks_exception_text(monkeypatch, db_session, caplog) -> None:
+    _add_pagination_source(db_session, artifact_id="artifact-boundary-page")
+    sentinel = "result-page-secret-sentinel"
+
+    def fail_page(_self, _query):
+        raise RuntimeError(f"driver authorization={sentinel}")
+
+    monkeypatch.setattr(agent_module.ResultViewService, "page", fail_page)
+
+    capture_logger = logging.Logger("test.agent_result_page_boundary")
+    capture_logger.setLevel(logging.ERROR)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(agent_module, "logger", capture_logger)
+            with pytest.raises(HTTPException) as exc_info:
+                agent_module.api_agent_result_page(
+                    ResultPageRequest(
+                        datasourceId="ds-page",
+                        sourceSqlArtifactId="artifact-boundary-page",
+                        safeSql="SELECT id, amount FROM orders",
+                        page=1,
+                        pageSize=20,
+                    ),
+                    db_session,
+                )
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {
+        "code": "RESULT_PAGE_ERROR",
+        "message": "The result page could not be retrieved.",
+    }
+    assert sentinel not in repr(exc_info.value.detail)
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "agent_result_page" in caplog.text
+
+
+def test_result_view_error_never_leaks_its_code_or_message(monkeypatch, db_session) -> None:
+    from engine.sql.result_view.models import ResultViewError
+
+    _add_pagination_source(db_session, artifact_id="artifact-boundary-result-view")
+    sentinel = "result-view-error-secret-sentinel"
+
+    def fail_page(_self, _query):
+        raise ResultViewError(
+            f"caller-code-{sentinel}",
+            f"driver authorization={sentinel}",
+            status_code=400,
+        )
+
+    monkeypatch.setattr(agent_module.ResultViewService, "page", fail_page)
+
+    with pytest.raises(HTTPException) as exc_info:
+        agent_module.api_agent_result_page(
+            ResultPageRequest(
+                datasourceId="ds-page",
+                sourceSqlArtifactId="artifact-boundary-result-view",
+                safeSql="SELECT id, amount FROM orders",
+                page=1,
+                pageSize=20,
+            ),
+            db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == {
+        "code": "RESULT_PAGE_ERROR",
+        "message": "The result page could not be retrieved.",
+    }
+    assert sentinel not in repr(exc_info.value.detail)

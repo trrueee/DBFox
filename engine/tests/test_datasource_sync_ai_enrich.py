@@ -52,7 +52,7 @@ def test_datasource_sync_ai_enrich_returns_catalog_result_without_second_enrich(
                 f"/api/v1/datasources/{test_datasource.id}/sync",
                 json={
                     "ai_enrich": True,
-                    "api_key": "sk-from-ui",
+                    "llm_credential_id": "cred_llm_api_key_datasource_sync",
                     "api_base": "https://llm.example/v1",
                     "model_name": "qwen-plus",
                 },
@@ -66,7 +66,7 @@ def test_datasource_sync_ai_enrich_returns_catalog_result_without_second_enrich(
         {
             "datasource_id": test_datasource.id,
             "ai_enrich": True,
-            "ai_api_key": "sk-from-ui",
+            "llm_credential_id": "cred_llm_api_key_datasource_sync",
             "ai_api_base": "https://llm.example/v1",
             "ai_model_name": "qwen-plus",
         }

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+
 
 @dataclass
 class SqlExecutionResult:
@@ -34,8 +36,12 @@ def execute_sqlite_query(db_path: str | Path, sql: str, *, timeout_seconds: int 
             return SqlExecutionResult(success=True, rows=[tuple(row) for row in rows])
         finally:
             conn.close()
-    except Exception as exc:
-        return SqlExecutionResult(success=False, rows=[], error=str(exc))
+    except Exception:
+        return SqlExecutionResult(
+            success=False,
+            rows=[],
+            error=fixed_error_message(FixedErrorCode.SQL_EXECUTION_FAILED),
+        )
 
 
 def normalize_value(value: Any) -> Any:

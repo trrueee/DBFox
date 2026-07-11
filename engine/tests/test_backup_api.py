@@ -5,9 +5,9 @@ from fastapi.testclient import TestClient
 
 import pytest
 
-from engine.crypto import encrypt_password
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.db import get_db
-from engine.main import LOCAL_SECURE_TOKEN, app
+from engine.main import LOCAL_SECURE_TOKEN, SAFE_DBFOX_ERROR_MESSAGE, app
 from datetime import UTC, datetime
 
 from engine.models import DEFAULT_PROJECT_ID, BackupRecord, DataSource
@@ -18,6 +18,13 @@ TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[2] / ".dbfox_runtime" / "te
 
 def _headers():
     return {"X-Local-Token": LOCAL_SECURE_TOKEN}
+
+
+def _assert_fixed_dbfox_error(response) -> None:
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "DBFOX_ERROR"
+    assert detail["message"] == SAFE_DBFOX_ERROR_MESSAGE
 
 
 def _runtime_dir(name: str) -> Path:
@@ -38,7 +45,6 @@ def client(db_session):
 
 
 def _create_mysql_datasource(db_session) -> DataSource:
-    cipher, nonce = encrypt_password("secret")
     ds = DataSource(
         id="backup-ds",
         project_id=DEFAULT_PROJECT_ID,
@@ -47,8 +53,7 @@ def _create_mysql_datasource(db_session) -> DataSource:
         port=3306,
         database_name="analytics",
         username="readonly",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
+        password_credential_id="cred_datasource_password_backup",
         status="active",
     )
     db_session.add(ds)
@@ -137,8 +142,7 @@ def test_execute_restore_endpoints(client, db_session, monkeypatch) -> None:
     db_session.commit()
 
     resp = client.post(f"/api/v1/backups/{backup['id']}/restore", headers=_headers())
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "RESTORE_READONLY_ERROR"
+    _assert_fixed_dbfox_error(resp)
 
 
 def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -> None:
@@ -169,9 +173,7 @@ def test_restore_anti_tamper_checksum_failure(client, db_session, monkeypatch) -
 
     # Verify that restore fails due to checksum verification mismatch!
     resp = client.post(f"/api/v1/backups/{backup['id']}/restore", headers=_headers())
-    assert resp.status_code == 400
-    assert "tampered" in resp.json()["detail"]["message"]
-    assert resp.json()["detail"]["code"] == "RESTORE_PRECHECK_FAILED"
+    _assert_fixed_dbfox_error(resp)
 
 
 def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
@@ -192,11 +194,10 @@ def test_backup_strict_mode_missing_tool(client, db_session, monkeypatch) -> Non
         json={"datasource_id": datasource.id, "allow_fallback": False},
         headers=_headers(),
     )
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "MYSQLDUMP_NOT_FOUND"
+    _assert_fixed_dbfox_error(resp)
 
 
-def test_failed_backup_error_message_is_sanitized(client, db_session, monkeypatch) -> None:
+def test_failed_backup_uses_fixed_error_catalog(client, db_session, monkeypatch) -> None:
     runtime_dir = _runtime_dir("test_backup_error_redaction")
     monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_dir))
     datasource = _create_mysql_datasource(db_session)
@@ -215,9 +216,11 @@ def test_failed_backup_error_message_is_sanitized(client, db_session, monkeypatc
     )
 
     assert resp.status_code == 400
-    message = resp.json()["detail"]["message"]
-    assert "user@example.com" not in message
-    assert "dump-secret" not in message
+    detail = resp.json()["detail"]
+    assert detail["code"] == "DBFOX_ERROR"
+    assert detail["message"] == SAFE_DBFOX_ERROR_MESSAGE
+    assert "user@example.com" not in str(detail)
+    assert "dump-secret" not in str(detail)
 
     record = (
         db_session.query(BackupRecord)
@@ -227,13 +230,10 @@ def test_failed_backup_error_message_is_sanitized(client, db_session, monkeypatc
     )
     assert record is not None
     assert record.status == "failed"
-    assert record.error_message is not None
-    assert "user@example.com" not in record.error_message
-    assert "dump-secret" not in record.error_message
-    assert "[REDACTED" in record.error_message
+    assert record.error_message == fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
 
 
-def test_backup_response_sanitizes_legacy_error_message(client, db_session) -> None:
+def test_backup_response_replaces_legacy_error_message_with_catalog_message(client, db_session) -> None:
     datasource = _create_mysql_datasource(db_session)
     now = datetime.now(UTC)
     record = BackupRecord(
@@ -255,16 +255,13 @@ def test_backup_response_sanitizes_legacy_error_message(client, db_session) -> N
     detail_resp = client.get(f"/api/v1/backups/{record.id}", headers=_headers())
     assert detail_resp.status_code == 200
     detail_message = detail_resp.json()["error_message"]
-    assert "admin@example.com" not in detail_message
-    assert "legacy-secret" not in detail_message
+    assert detail_message == fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
 
     list_resp = client.get(f"/api/v1/projects/{DEFAULT_PROJECT_ID}/backups", headers=_headers())
     assert list_resp.status_code == 200
     [listed] = [item for item in list_resp.json() if item["id"] == record.id]
     list_message = listed["error_message"]
-    assert "admin@example.com" not in list_message
-    assert "legacy-secret" not in list_message
-    assert "[REDACTED" in list_message
+    assert list_message == fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
 
 
 def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> None:
@@ -296,8 +293,7 @@ def test_restore_strict_mode_missing_tool(client, db_session, monkeypatch) -> No
 
     # Under strict mode, restore must fail directly without fallback!
     resp = client.post(f"/api/v1/backups/{backup['id']}/restore?allow_fallback=false", headers=_headers())
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "MYSQL_CLIENT_NOT_FOUND"
+    _assert_fixed_dbfox_error(resp)
 
 
 def test_restore_body_allow_fallback_false_uses_strict_mode(client, db_session, monkeypatch) -> None:
@@ -330,8 +326,7 @@ def test_restore_body_allow_fallback_false_uses_strict_mode(client, db_session, 
         json={"allow_fallback": False},
         headers=_headers(),
     )
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "MYSQL_CLIENT_NOT_FOUND"
+    _assert_fixed_dbfox_error(resp)
 
 
 def test_restore_confirmation_binds_allow_fallback(client, db_session, monkeypatch) -> None:
@@ -401,8 +396,7 @@ def test_restore_confirmation_binds_allow_fallback(client, db_session, monkeypat
         },
         headers=_headers(),
     )
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "CONFIRMATION_FAILED"
+    _assert_fixed_dbfox_error(resp)
 
 
 def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> None:
@@ -438,6 +432,5 @@ def test_restore_env_mismatch_protection(client, db_session, monkeypatch) -> Non
 
     # Restore must fail due to environment tier mismatch safety guardrail!
     resp = client.post(f"/api/v1/backups/{backup['id']}/restore", headers=_headers())
-    assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "RESTORE_ENV_MISMATCH"
+    _assert_fixed_dbfox_error(resp)
 

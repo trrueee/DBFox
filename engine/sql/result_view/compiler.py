@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Final, cast
 
 import sqlglot
 from sqlglot import exp
 
 from engine.sql.dialect_context import DialectContext
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.sql.sql_backed_view import (
     SqlBackedFilter,
     SqlBackedSort,
@@ -44,12 +45,19 @@ class ResultViewCompiler:
             )
             return derived.sql
         except SqlBackedViewError as exc:
-            raise ResultViewError(exc.code, exc.message) from exc
-        except Exception as exc:
+            safe_code = _SQL_BACKED_ERROR_CODES.get(
+                exc.code,
+                FixedErrorCode.DERIVED_SQL_BUILD_FAILED,
+            )
             raise ResultViewError(
-                "DERIVED_SQL_BUILD_FAILED",
-                f"Failed to build derived SQL: {exc}",
-            ) from exc
+                safe_code.value,
+                fixed_error_message(safe_code),
+            ) from None
+        except Exception:
+            raise ResultViewError(
+                FixedErrorCode.DERIVED_SQL_BUILD_FAILED.value,
+                fixed_error_message(FixedErrorCode.DERIVED_SQL_BUILD_FAILED),
+            ) from None
 
     def build_page_sql(
         self,
@@ -75,18 +83,23 @@ class ResultViewCompiler:
         try:
             parsed_base = sqlglot.parse_one(source_sql, read=ctx.sqlglot_dialect)
             if not isinstance(parsed_base, exp.Select):
-                raise ResultViewError("COUNT_SQL_BUILD_FAILED", "Count source SQL must be a SELECT statement.")
+                raise ResultViewError(
+                    FixedErrorCode.COUNT_SQL_BUILD_FAILED.value,
+                    fixed_error_message(FixedErrorCode.COUNT_SQL_BUILD_FAILED),
+                )
             base_expr = cast(exp.Select, parsed_base)
             return (
                 sqlglot.select("COUNT(*)")
                 .from_(base_expr.subquery("dbfox_count"))
                 .sql(dialect=ctx.sqlglot_dialect)
             )
-        except Exception as exc:
+        except ResultViewError:
+            raise
+        except Exception:
             raise ResultViewError(
-                "COUNT_SQL_BUILD_FAILED",
-                f"Failed to build count SQL: {exc}",
-            ) from exc
+                FixedErrorCode.COUNT_SQL_BUILD_FAILED.value,
+                fixed_error_message(FixedErrorCode.COUNT_SQL_BUILD_FAILED),
+            ) from None
 
     def build_export_sql(
         self,
@@ -95,3 +108,11 @@ class ResultViewCompiler:
         ctx: DialectContext,
     ) -> str:
         return self.build_view_sql(query, source, ctx, limit=None, offset=None)
+
+
+_SQL_BACKED_ERROR_CODES: Final[dict[str, FixedErrorCode]] = {
+    FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED.value: FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED,
+    FixedErrorCode.FILTER_COLUMN_NOT_ALLOWED.value: FixedErrorCode.FILTER_COLUMN_NOT_ALLOWED,
+    FixedErrorCode.SORT_COLUMN_NOT_ALLOWED.value: FixedErrorCode.SORT_COLUMN_NOT_ALLOWED,
+    FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED.value: FixedErrorCode.FILTER_OPERATOR_NOT_ALLOWED,
+}

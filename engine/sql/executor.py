@@ -10,7 +10,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.app.errors import public_message
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.datasource import (
     datasource_connection_dict,
     get_mysql_connection_params,
@@ -29,10 +34,8 @@ from engine.persistence.search_index import SearchIndexService
 from engine.query_registry import QUERY_REGISTRY
 
 
-def _redact_error_message(message: str | None) -> str | None:
-    if not message:
-        return None
-    return public_message(DataRedactor.redact_sql(message))
+def _sql_execution_failure_message() -> str:
+    return fixed_error_message(FixedErrorCode.SQL_EXECUTION_FAILED)
 
 
 def _write_query_history(db: Session, history: QueryHistory) -> str | None:
@@ -55,14 +58,24 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
         try:
             SearchIndexService(audit_db).index_query_history(history)
             audit_db.commit()
-        except Exception:
+        except Exception as exc:
             audit_db.rollback()
-            logger.debug("Query history search index population skipped", exc_info=True)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.QUERY_HISTORY_INDEX_POPULATE,
+                exc=exc,
+                level="warning",
+            )
         history_id = getattr(history, "id", None)
         return str(history_id) if history_id else None
-    except Exception:
+    except Exception as exc:
         audit_db.rollback()
-        logger.exception("Failed to write query history to database")
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.QUERY_HISTORY_WRITE,
+            exc=exc,
+            level="warning",
+        )
         return None
     finally:
         audit_db.close()
@@ -73,7 +86,7 @@ from engine.sql.dialect.mysql import _execute_on_mysql, _execute_on_mysql_profil
 from engine.sql.row_serializer import (
     _fetch_and_serialize, _serialize_value, _process_rows,
     JSON_OVERHEAD_BYTES, MAX_ROWS, MAX_COLUMNS, MAX_CELL_CHARS, MAX_RESPONSE_BYTES,
-    QUERY_TIMEOUT_MS, TRUNCATION_LEN, TRUNCATION_SUFFIX, ProcessedRows,
+    TRUNCATION_LEN, TRUNCATION_SUFFIX, ProcessedRows,
 )
 from engine.sql.safety_gate import (
     guardrail_bypass_allowed,
@@ -152,19 +165,18 @@ def _run_approved_query(
                 safe_sql,
                 execution_id=execution_id,
             )
-    except SQLQueryCancelledError as e:
+    except SQLQueryCancelledError:
         execution_status = "cancelled"
-        error_message = _redact_error_message(e.message)
+        error_message = _sql_execution_failure_message()
         raise
-    except TimeoutError as e:
+    except TimeoutError:
         execution_status = "timeout"
-        error_message = f"SQL query timed out after {QUERY_TIMEOUT_MS} ms"
-        raise SQLQueryTimeoutError(error_message) from e
-    except Exception as e:
+        error_message = _sql_execution_failure_message()
+        raise SQLQueryTimeoutError(error_message) from None
+    except Exception:
         execution_status = "failed"
-        redacted_error_message = _redact_error_message(f"执行 SQL 遇到错误: {str(e)}") or "执行 SQL 遇到错误"
-        error_message = redacted_error_message
-        raise SQLExecutionError(redacted_error_message) from e
+        error_message = _sql_execution_failure_message()
+        raise SQLExecutionError(error_message) from None
 
     finally:
         latency_ms = int((time.time() - start_time) * 1000)
@@ -198,8 +210,13 @@ def _run_approved_query(
         try:
             sensitivity = load_sensitivity(db, datasource_id)
             rows = [redact_row(row, sensitivity) for row in rows]
-        except Exception:
-            logger.exception("Failed to load sensitivity configurations; falling back to default redaction")
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.SQL_SENSITIVITY_LOAD,
+                exc=exc,
+                level="warning",
+            )
             rows = [redact_row(row, _SENSITIVE_FALLBACK) for row in rows]
 
     # Detect cell truncation precisely: _process_rows cuts long strings to exactly

@@ -25,6 +25,34 @@ from engine.agent_core.types import (
 )
 from engine.agent_core.artifacts import AgentArtifactIdentity
 from engine.agent_core.context import build_response_context_summary, referenced_artifact_ids
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+
+
+_UNTRUSTED_ERROR_VALUE_KEYS = frozenset({
+    "error",
+    "error_message",
+    "last_error",
+    "last_error_telemetry",
+    "exception",
+    "exception_message",
+    "root_cause",
+})
+
+
+def _sanitize_response_error_values(value: Any, key: str = "") -> Any:
+    """Discard error-bearing graph values before they become public response data."""
+    if key.lower() in _UNTRUSTED_ERROR_VALUE_KEYS:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return value
+        return fixed_error_message(FixedErrorCode.AGENT_RUNTIME_ERROR)
+    if isinstance(value, dict):
+        return {
+            str(item_key): _sanitize_response_error_values(item_value, str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_response_error_values(item, key) for item in value]
+    return value
 
 
 # ── build_response (orchestrator) ────────────────────────────────────────────────
@@ -49,6 +77,15 @@ def build_response(
     Each sub-result is built by a dedicated helper — this function is pure
     orchestration.
     """
+    # A graph state's ``error`` field may originate from a provider exception.
+    # Never copy it into an API/SSE response or downstream persistence record.
+    # Waiting-for-approval is not a failure and intentionally has no error.
+    safe_error = (
+        fixed_error_message(FixedErrorCode.AGENT_RUNTIME_ERROR)
+        if status == "failed" or (not success and error)
+        else error
+    )
+
     answer_raw = state.get("answer") or state.get("final_answer") or {}
     answer = _build_answer(answer_raw, artifacts)
     suggestions = _build_suggestions(state)
@@ -72,7 +109,7 @@ def build_response(
     canvas = build_canvas(state, final_steps, answer, run_id, session_id,
                           status or "completed", req.question)
 
-    return AgentRunResponse(
+    response = AgentRunResponse(
         run_id=run_id,
         session_id=session_id,
         conversation_id=req.conversation_id or session_id,
@@ -98,11 +135,14 @@ def build_response(
         events=events,
         trace_events=trace_events,
         steps=final_steps,
-        error=error,
+        error=safe_error,
         approval=approval,
         checkpoint=checkpoint,
         approval_context=None,
         canvas=canvas,
+    )
+    return AgentRunResponse.model_validate(
+        _sanitize_response_error_values(response.model_dump(mode="json"))
     )
 
 

@@ -6,7 +6,7 @@ from typing import Any
 
 import pymysql
 
-from engine.app.errors import log_unexpected_exception
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, get_credential_vault
 from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
@@ -52,7 +52,7 @@ def _require_existing_sqlite_file(db_path: Any) -> Path:
         raise DataSourceConnectionError("未提供 SQLite 数据库文件路径。")
     path = Path(path_text).expanduser()
     if not path.is_file():
-        raise DataSourceConnectionError(f"SQLite 数据库文件不存在: {path}")
+        raise DataSourceConnectionError("SQLite database file is unavailable.")
     return path
 
 
@@ -183,7 +183,7 @@ def _setup_test_tunnel(config: dict[str, Any]) -> tuple[str, int, Any | None]:
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_test_ssh_tunnel",
+            operation=SafeLogOperation.DATASOURCE_TEST_SSH_TUNNEL,
             exc=exc,
             level="warning",
         )
@@ -250,7 +250,7 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_test_sqlite_connection",
+            operation=SafeLogOperation.DATASOURCE_TEST_SQLITE_CONNECTION,
             exc=exc,
             level="warning",
         )
@@ -308,7 +308,7 @@ def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_test_postgres_connection",
+            operation=SafeLogOperation.DATASOURCE_TEST_POSTGRES_CONNECTION,
             exc=exc,
             level="warning",
         )
@@ -366,7 +366,7 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         log_unexpected_exception(
             logger,
-            operation="datasource_test_mysql_connection",
+            operation=SafeLogOperation.DATASOURCE_TEST_MYSQL_CONNECTION,
             exc=exc,
             level="warning",
         )

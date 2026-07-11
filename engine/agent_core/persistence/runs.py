@@ -8,6 +8,12 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import (
+    FixedErrorCode,
+    SafeLogOperation,
+    fixed_error_message,
+    log_unexpected_exception,
+)
 from engine.errors import DBFoxError
 from engine.agent_core.types import AgentArtifactType, AgentRunRequest, AgentRunResponse
 from engine.models import AgentMessage, AgentRun, AgentArtifactRecord
@@ -41,8 +47,8 @@ def _answer_text(response: AgentRunResponse) -> str:
         return response.answer.answer.strip()
     if response.explanation and response.explanation.strip():
         return response.explanation.strip()
-    if response.error and response.error.strip():
-        return f"执行未完成：{response.error}"
+    if response.status == "failed" or not response.success:
+        return f"执行未完成：{fixed_error_message(FixedErrorCode.AGENT_RUNTIME_ERROR)}"
     return "已完成。"
 
 
@@ -128,8 +134,13 @@ def complete_run(db: Session, response: AgentRunResponse) -> None:
         run.waiting_approval_id = None  # type: ignore[assignment]
         run.response_json = _safe_json(_redact_response(response))  # type: ignore[assignment]
         run.context_summary = response.context_summary  # type: ignore[assignment]
-        run.error = response.error  # type: ignore[assignment]
-        run.error_message = response.error  # type: ignore[assignment]
+        failure_error = (
+            fixed_error_message(FixedErrorCode.AGENT_RUNTIME_ERROR)
+            if response.status == "failed" or not response.success
+            else None
+        )
+        run.error = failure_error  # type: ignore[assignment]
+        run.error_message = failure_error  # type: ignore[assignment]
         run.completed_at = datetime.now(UTC)  # type: ignore[assignment]
         run.updated_at = datetime.now(UTC)  # type: ignore[assignment]
         _update_assistant_message(
@@ -141,8 +152,12 @@ def complete_run(db: Session, response: AgentRunResponse) -> None:
         db.flush()
         _save_trace_events(db, response)
     except Exception as exc:
-        logger.exception("Failed to complete run %s", response.run_id)
-        raise exc
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_PERSISTENCE_COMPLETE_RUN,
+            exc=exc,
+        )
+        raise
 
 
 def _save_trace_events(db: Session, response: AgentRunResponse) -> None:
@@ -173,7 +188,7 @@ def fail_run(
     db: Session,
     run_id: str,
     session_id: str,
-    error: str,
+    error_code: FixedErrorCode,
     response: AgentRunResponse | None = None,
 ) -> None:
     try:
@@ -184,8 +199,9 @@ def fail_run(
         run.status = "failed"  # type: ignore[assignment]
         run.current_step_name = None  # type: ignore[assignment]
         run.waiting_approval_id = None  # type: ignore[assignment]
-        run.error = error  # type: ignore[assignment]
-        run.error_message = error  # type: ignore[assignment]
+        failure_error = fixed_error_message(error_code)
+        run.error = failure_error  # type: ignore[assignment]
+        run.error_message = failure_error  # type: ignore[assignment]
         if response is not None:
             run.response_json = _safe_json(_redact_response(response))  # type: ignore[assignment]
             run.context_summary = response.context_summary  # type: ignore[assignment]
@@ -194,12 +210,21 @@ def fail_run(
         _update_assistant_message(
             db,
             run,
-            content=_answer_text(response) if response is not None else f"执行未完成：{error}",
+            content=(
+                _answer_text(response)
+                if response is not None
+                else f"执行未完成：{failure_error}"
+            ),
             status="failed",
         )
         db.flush()
-    except Exception:
-        logger.exception("Failed to record failure for run %s", run_id)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_PERSISTENCE_FAIL_RUN,
+            exc=exc,
+            level="warning",
+        )
 
 
 def cancel_run(db: Session, *, run_id: str) -> None:
@@ -223,8 +248,13 @@ def cancel_run(db: Session, *, run_id: str) -> None:
             status="cancelled",
         )
         db.flush()
-    except Exception:
-        logger.exception("Failed to cancel run %s", run_id)
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.AGENT_PERSISTENCE_CANCEL_RUN,
+            exc=exc,
+            level="warning",
+        )
 
 
 def mark_run_waiting_approval(

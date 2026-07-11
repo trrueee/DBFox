@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from engine.agent.nodes.observe_node import (
@@ -40,6 +41,57 @@ def test_make_observe_working_state_shallow_copies_mutable_top_level_values():
     assert working["items"] is not source["items"]
     assert working["payload"] is not source["payload"]
     assert working["scalar"] == source["scalar"]
+
+
+def test_observe_node_never_logs_raw_invalid_observation_payload(monkeypatch, caplog):
+    sentinel = "observe-node-payload-secret-sentinel"
+    state = {
+        "run_id": "run-observe-boundary",
+        "last_tool_results": [
+            {
+                "name": "sql.validate",
+                "status": "failed",
+                "error": "Tool execution failed.",
+                "latency_ms": 1,
+            }
+        ],
+    }
+    runtime = SimpleNamespace(
+        registry=register_dbfox_tools(),
+        db=object(),
+        request=SimpleNamespace(datasource_id="ds-observe", question="q"),
+    )
+    monkeypatch.setattr(
+        "engine.agent.nodes.observe_node.graph_context",
+        lambda _config: runtime,
+    )
+
+    def fail_binding(**_kwargs):
+        raise RuntimeError(f"database password={sentinel}")
+
+    monkeypatch.setattr(
+        "engine.agent.nodes.observe_node.bind_observation_to_state",
+        fail_binding,
+    )
+
+    capture_logger = logging.Logger("test.observe_node_boundary")
+    capture_logger.setLevel(logging.WARNING)
+    capture_logger.propagate = False
+    capture_logger.addHandler(caplog.handler)
+    try:
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(
+                "engine.agent.nodes.observe_node.logger",
+                capture_logger,
+            )
+            update = observe_tools(state, {})
+    finally:
+        capture_logger.removeHandler(caplog.handler)
+
+    assert update.get("tool_call_history", []) == []
+    assert sentinel not in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "agent_observe_tool_observation" in caplog.text
 
 
 def test_bind_observation_to_state_strips_legacy_databinding_artifacts():
@@ -379,15 +431,17 @@ def test_observe_tools_does_not_write_artifacts_with_graph_db(db_session, monkey
         "thread_id": "session-observe-no-db-write",
         "last_tool_results": [observation.model_dump(mode="json")],
     }
-    config = {
-        "configurable": {
-            "registry": register_dbfox_tools(),
-            "db": db_session,
-            "request": SimpleNamespace(datasource_id="ds-test", question="q"),
-        }
-    }
+    runtime = SimpleNamespace(
+        registry=register_dbfox_tools(),
+        db=db_session,
+        request=SimpleNamespace(datasource_id="ds-test", question="q"),
+    )
+    monkeypatch.setattr(
+        "engine.agent.nodes.observe_node.graph_context",
+        lambda _config: runtime,
+    )
 
-    update = observe_tools(state, config)
+    update = observe_tools(state, {})
 
     assert update["artifacts"]
     assert calls == []
