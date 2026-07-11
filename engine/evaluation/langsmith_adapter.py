@@ -12,36 +12,72 @@ from typing import Any, Callable
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.evaluation.schemas import AgentEvalCase, AgentEvalCaseResult
+from engine.security.credential_vault import (
+    CredentialKind,
+    CredentialVault,
+    get_credential_vault,
+)
 
 logger = logging.getLogger("dbfox.eval.langsmith_adapter")
+DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
 
 
 class LangSmithAdapter:
     """Bridges DBFox eval cases to LangSmith datasets and experiments.
 
     Usage:
-        adapter = LangSmithAdapter()
+        adapter = LangSmithAdapter(
+            credential_id="cred_langsmith_api_key_...",
+        )
         adapter.sync_dataset("dbfox-regression", cases)
         adapter.run_experiment("dbfox-regression", my_agent_runner)
     """
 
-    def __init__(self) -> None:
-        self._ls_client = None
+    def __init__(
+        self,
+        *,
+        credential_id: str | None = None,
+        credential_vault: CredentialVault | None = None,
+        endpoint: str | None = None,
+    ) -> None:
+        """Create an optional LangSmith integration with an opaque credential.
+
+        LangSmith credentials are never inferred from process environment or
+        dotenv files.  The credential is resolved only while an operation is
+        being performed, from the OS-backed credential vault.
+        """
+        self._credential_id = str(credential_id or "").strip()
+        self._credential_vault = credential_vault
+        self._endpoint = str(endpoint or DEFAULT_LANGSMITH_ENDPOINT).strip()
 
     @property
     def available(self) -> bool:
-        """Check if LangSmith is installed and configured."""
-        if self._ls_client is not None:
-            return True
+        """Check whether a vault credential can configure a LangSmith client."""
+        return self._create_client() is not None
+
+    def _create_client(self) -> Any | None:
+        """Resolve a transient LangSmith client without any environment fallback."""
+        if not self._credential_id:
+            return None
+
         try:
-            import langsmith  # noqa: F401
-            import os
-            if os.environ.get("LANGCHAIN_API_KEY"):
-                self._ls_client = True
-                return True
+            from langsmith import Client  # type: ignore[import-untyped]
         except ImportError:
-            pass
-        return False
+            return None
+
+        try:
+            vault = self._credential_vault or get_credential_vault()
+            secret = vault.get(
+                self._credential_id,
+                expected_kind=CredentialKind.LANGSMITH_API_KEY,
+            )
+            if not secret:
+                return None
+            return Client(api_key=secret, api_url=self._endpoint)
+        except Exception:
+            # LangSmith is optional.  Do not expose vault/provider details or
+            # keep a plaintext fallback alive when its secure dependency fails.
+            return None
 
     def sync_dataset(
         self,
@@ -52,14 +88,12 @@ class LangSmithAdapter:
 
         Creates the dataset if it doesn't exist; upserts examples.
         """
-        if not self.available:
+        client = self._create_client()
+        if client is None:
             logger.warning("LangSmith not available — skipping dataset sync.")
             return
 
         try:
-            from langsmith import Client  # type: ignore[import-untyped]
-            client = Client()
-
             # Create or get dataset
             try:
                 dataset = client.create_dataset(dataset_name)
@@ -105,14 +139,12 @@ class LangSmithAdapter:
         Returns:
             List of experiment result dicts.
         """
-        if not self.available:
+        client = self._create_client()
+        if client is None:
             logger.warning("LangSmith not available — skipping experiment.")
             return []
 
         try:
-            from langsmith import Client  # type: ignore[import-untyped]
-            client = Client()
-
             datasets = list(client.list_datasets(dataset_name=dataset_name))
             if not datasets:
                 logger.warning("Dataset '%s' not found in LangSmith.", dataset_name)
@@ -152,11 +184,10 @@ class LangSmithAdapter:
         comment: str | None = None,
     ) -> None:
         """Upload feedback scores to a LangSmith run."""
-        if not self.available:
+        client = self._create_client()
+        if client is None:
             return
         try:
-            from langsmith import Client  # type: ignore[import-untyped]
-            client = Client()
             for key, score in scores.items():
                 client.create_feedback(
                     run_id=run_id,

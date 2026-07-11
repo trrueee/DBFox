@@ -25,6 +25,7 @@ from engine.evaluation.benchmarks.spider import SpiderAdapter
 from engine.evaluation.spider.spider_eval import SpiderEvalRunner
 from engine.evaluation.spider.spider_loader import SpiderExample
 from engine.models import AgentGoldenTask, GoldenSQL
+from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
 
 SENTINEL = "evaluation-provider-secret-sentinel"
@@ -267,6 +268,9 @@ def test_langsmith_sync_log_never_includes_exception_text(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingClient:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
         def create_dataset(self, _dataset_name: str) -> None:
             raise RuntimeError(f"provider token={SENTINEL}")
 
@@ -276,8 +280,15 @@ def test_langsmith_sync_log_never_includes_exception_text(
     fake_langsmith = ModuleType("langsmith")
     fake_langsmith.Client = FailingClient  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "langsmith", fake_langsmith)
-    adapter = langsmith_adapter.LangSmithAdapter()
-    adapter._ls_client = True
+    vault = InMemoryCredentialVault()
+    credential_id = vault.put(
+        kind=CredentialKind.LANGSMITH_API_KEY,
+        secret="langsmith-test-secret",
+    )
+    adapter = langsmith_adapter.LangSmithAdapter(
+        credential_id=credential_id,
+        credential_vault=vault,
+    )
     logger = _isolated_capture_logger(caplog, "test.langsmith_error_boundary", logging.WARNING)
     try:
         monkeypatch.setattr(langsmith_adapter, "logger", logger)

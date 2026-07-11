@@ -23,9 +23,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dotenv import dotenv_values
-from engine.runtime_paths import private_runtime_file, write_private_text
-
 ROOT = Path(__file__).resolve().parent
 ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
@@ -91,17 +88,6 @@ HIDDEN_IMPORTS = [
     "langchain_core",
 ]
 
-LANGSMITH_ENV_KEYS = (
-    "LANGCHAIN_TRACING_V2",
-    "LANGCHAIN_API_KEY",
-    "LANGCHAIN_PROJECT",
-    "LANGCHAIN_ENDPOINT",
-    "LANGSMITH_TRACING",
-    "LANGSMITH_API_KEY",
-    "LANGSMITH_PROJECT",
-    "LANGSMITH_ENDPOINT",
-)
-
 SIDECAR_RUNTIME_EXCLUDED_DIRS = {
     "__pycache__",
     ".mypy_cache",
@@ -158,26 +144,6 @@ def write_env_local(token: str) -> Path:
     )
     print(f"  [OK] {path}")
     return path
-
-
-def export_langsmith_runtime_env(env_file: Path = ROOT / ".env") -> Path | None:
-    if not env_file.exists():
-        return None
-
-    values = dotenv_values(env_file)
-    lines: list[str] = []
-    for key in LANGSMITH_ENV_KEYS:
-        value = values.get(key)
-        if value:
-            lines.append(f"{key}={value}")
-
-    if not lines:
-        return None
-
-    target = private_runtime_file("config", "langsmith.env")
-    write_private_text(target, "\n".join(lines) + "\n")
-    print(f"  [OK] LangSmith runtime env -> {target}")
-    return target
 
 
 def _ignore_sidecar_runtime(src: str, names: list[str]) -> set[str]:
@@ -272,7 +238,6 @@ def main() -> None:
     token = generate_token()
     print(f"\n[1/3] Dev token ({len(token)} hex chars)")
     write_env_local(token)
-    export_langsmith_runtime_env()
 
     if args.token_only:
         print("\n  Done (token-only mode).")

@@ -21,11 +21,11 @@ Run the DBFox agent evaluation framework.
 cd "D:/Project/DBFox" && python .agent_eval/run_agent_eval.py --config .agent_eval/eval_config.yaml 2>&1
 ```
 
-## With LangSmith Tracing
+## Optional LangSmith Integration
 
-```bash
-export LANGCHAIN_TRACING_V2=true; export LANGCHAIN_API_KEY="<key>"; export LANGCHAIN_PROJECT="dbfox-agent-e2e"; python -m pytest engine/ -q 2>&1
-```
+LangSmith credentials are never supplied through shell or dotenv variables.
+Any caller that enables the optional adapter must pass an opaque
+`CredentialVault` reference to `LangSmithAdapter` at runtime.
 
 ## With Backend Restart
 

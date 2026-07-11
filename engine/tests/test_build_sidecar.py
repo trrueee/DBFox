@@ -28,26 +28,13 @@ def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
     assert before_build.index("build_sidecar.py") < before_build.index("npm run build")
 
 
-def test_export_langsmith_runtime_env_copies_only_tracing_keys(tmp_path, monkeypatch) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        "LANGCHAIN_TRACING_V2=true\n"
-        "LANGCHAIN_API_KEY=lsv2-test\n"
-        "LANGCHAIN_PROJECT=DBFox\n"
-        "OPENAI_API_KEY=sk-should-not-copy\n",
-        encoding="utf-8",
-    )
-    target = tmp_path / "runtime" / "config" / "langsmith.env"
-    monkeypatch.setattr(build_sidecar, "private_runtime_file", lambda name, filename: target)
+def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
+    source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
 
-    result = build_sidecar.export_langsmith_runtime_env(env_file)
-
-    assert result == target
-    text = target.read_text(encoding="utf-8")
-    assert "LANGCHAIN_TRACING_V2=true\n" in text
-    assert "LANGCHAIN_API_KEY=lsv2-test\n" in text
-    assert "LANGCHAIN_PROJECT=DBFox\n" in text
-    assert "OPENAI_API_KEY" not in text
+    assert not hasattr(build_sidecar, "export_langsmith_runtime_env")
+    assert "langsmith.env" not in source
+    assert "LANGCHAIN_" not in source
+    assert "LANGSMITH_" not in source
 
 
 def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path) -> None:
@@ -56,7 +43,6 @@ def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path
 
     monkeypatch.setattr(build_sidecar, "write_token_preset", fail_static_token_write, raising=False)
     monkeypatch.setattr(build_sidecar, "write_env_local", lambda _token: tmp_path / ".env.local")
-    monkeypatch.setattr(build_sidecar, "export_langsmith_runtime_env", lambda: None)
     monkeypatch.setattr(sys, "argv", ["build_sidecar.py", "--token-only"])
 
     build_sidecar.main()
