@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from alembic import context
+from alembic.util import CommandError
 
 # Import our custom database engine builder and Base model.
 from engine.db import Base, DATABASE_URL, build_metadata_engine
@@ -30,6 +31,10 @@ target_metadata = Base.metadata
 _FTS_VIRTUAL_TABLES = {"schema_search_fts", "query_history_fts"}
 _FTS_SHADOW_SUFFIXES = {"data", "idx", "content", "docsize", "config"}
 _DEFAULT_ALEMBIC_URL = "driver://user:pass@localhost/dbname"
+_OFFLINE_MIGRATION_ERROR = (
+    "DBFOX_ALEMBIC_OFFLINE_UNSUPPORTED: metadata migrations require a live database connection; "
+    "run 'alembic upgrade head' without --sql."
+)
 
 
 def _migration_url() -> str:
@@ -56,30 +61,10 @@ def include_object(object_, name, type_, reflected, compare_to) -> bool:
         return False
     return True
 
+
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-    url = _migration_url()
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-        render_as_batch=True,  # SQLite requires batch mode for clean schema modifications
-        include_object=include_object,
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
+    """Fail closed: v2 migration decisions require reflected live schema."""
+    raise CommandError(_OFFLINE_MIGRATION_ERROR)
 
 
 def run_migrations_online() -> None:

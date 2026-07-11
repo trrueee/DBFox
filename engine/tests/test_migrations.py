@@ -1,6 +1,10 @@
 """Contract tests for the foundation v2 Alembic schema migration."""
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import tarfile
 from pathlib import Path
 
 from alembic import command
@@ -8,10 +12,17 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from engine.db import Base
-from engine.models import FTS5_DDL, QUERY_HISTORY_FTS_DDL, FoundationRuntimeState
+from engine.models import FoundationRuntimeState
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
+HISTORICAL_MODELS_REVISION = "918ea80d"
+_QUERY_HISTORY_FTS_TRIGGERS = {
+    "query_history_search_docs_ai",
+    "query_history_search_docs_ad",
+    "query_history_search_docs_au",
+}
+_OFFLINE_FAILURE = "DBFOX_ALEMBIC_OFFLINE_UNSUPPORTED"
 
 
 def _sqlite_url(path: Path) -> str:
@@ -24,6 +35,86 @@ def _alembic_config(database_url: str) -> Config:
     config.set_main_option("script_location", str(root / "engine" / "migrations"))
     config.set_main_option("sqlalchemy.url", database_url)
     return config
+
+
+def _create_real_historical_create_all_schema(database_url: str, tmp_path: Path) -> None:
+    """Build the exact pre-v2 ORM shape from the committed baseline archive."""
+    root = Path(__file__).resolve().parents[2]
+    archive_path = tmp_path / f"models-{HISTORICAL_MODELS_REVISION}.tar"
+    archive_root = tmp_path / "historical-models"
+    with archive_path.open("wb") as archive_file:
+        subprocess.run(
+            ["git", "archive", "--format=tar", HISTORICAL_MODELS_REVISION, "engine/models.py"],
+            cwd=root,
+            check=True,
+            stdout=archive_file,
+        )
+    with tarfile.open(archive_path) as archive:
+        archive.extract(archive.getmember("engine/models.py"), archive_root, filter="data")
+
+    historical_models = archive_root / "engine" / "models.py"
+    script = '''
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import declarative_base
+
+models_path = Path(sys.argv[1])
+database_url = sys.argv[2]
+
+engine_package = types.ModuleType("engine")
+engine_package.__path__ = [str(models_path.parent)]
+sys.modules["engine"] = engine_package
+
+db_module = types.ModuleType("engine.db")
+db_module.Base = declarative_base()
+sys.modules["engine.db"] = db_module
+
+spec = importlib.util.spec_from_file_location("historical_engine_models", models_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+engine = create_engine(database_url)
+try:
+    module.Base.metadata.create_all(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("""
+            INSERT INTO data_sources (
+                id, name, db_type, host, port, database_name, username,
+                ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
+                connection_mode, is_read_only, env, status, created_at, updated_at
+            ) VALUES (
+                'historical-source', 'Historical source', 'sqlite', 'localhost', 0, ':memory:', '',
+                0, 22, 0, 1, 'direct', 1, 'dev', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("""
+            INSERT INTO query_history (id, data_source_id, guardrail_result, created_at)
+            VALUES ('historical-history', 'historical-source', 'allowed', CURRENT_TIMESTAMP)
+        """))
+        connection.execute(text("""
+            INSERT INTO query_history_search_docs (
+                history_id, datasource_id, search_text, updated_at
+            ) VALUES (
+                'historical-history', 'historical-source', 'historicalftsrebuildtoken', CURRENT_TIMESTAMP
+            )
+        """))
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('2b4c6d8e0f12')"))
+finally:
+    engine.dispose()
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(historical_models), database_url],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _upgrade(monkeypatch, database_url: str, revision: str = "head") -> None:
@@ -179,6 +270,23 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
                 text(
                     """
                     INSERT INTO data_sources (
+                        id, project_id, name, db_type, host, port, database_name, username,
+                        password_ciphertext, password_nonce, password_key_version,
+                        ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
+                        connection_mode, is_read_only, env, status, created_at, updated_at
+                    ) VALUES (
+                        'orphan-source', 'missing-project', 'Orphan endpoint', 'mysql', 'orphan.internal', 3306,
+                        'warehouse', 'reader', 'legacy-ciphertext', 'legacy-nonce', 'v1',
+                        0, 22, 0, 1, 'direct', 1, 'prod', 'active', CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO data_sources (
                         id, project_id, environment_id, name, db_type, host, port, database_name, username,
                         password_ciphertext, password_nonce, password_key_version,
                         ssh_enabled, ssh_port, ssl_enabled, ssl_verify_identity,
@@ -188,6 +296,17 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
                         'analytics', 'readonly', 'legacy-ciphertext', 'legacy-nonce', 'v1',
                         0, 22, 1, 1, 'direct', 1, 'prod', 'active', CURRENT_TIMESTAMP,
                         CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO schema_tables (
+                        id, data_source_id, table_schema, table_name, created_at, updated_at
+                    ) VALUES (
+                        'orphan-table', 'missing-source', 'public', 'orphan_table', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
                     """
                 )
@@ -270,6 +389,26 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             "password_credential_id": None,
         }
         with engine.connect() as connection:
+            orphan_endpoint = connection.execute(
+                text(
+                    """
+                    SELECT id, project_id, host, port, database_name, username, password_credential_id
+                    FROM data_sources WHERE id = 'orphan-source'
+                    """
+                )
+            ).mappings().one()
+            assert dict(orphan_endpoint) == {
+                "id": "orphan-source",
+                "project_id": None,
+                "host": "orphan.internal",
+                "port": 3306,
+                "database_name": "warehouse",
+                "username": "reader",
+                "password_credential_id": None,
+            }
+            assert connection.execute(
+                text("SELECT COUNT(*) FROM schema_tables WHERE id = 'orphan-table'")
+            ).scalar_one() == 0
             environment = connection.execute(
                 text(
                     """
@@ -304,21 +443,25 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
         engine.dispose()
 
 
-def test_historical_create_all_then_stamp_2b_upgrades_without_duplicate_columns(
+def test_real_historical_create_all_then_stamp_2b_restores_fts_contract(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
     database_url = _sqlite_url(tmp_path / "historical-create-all.db")
+    _create_real_historical_create_all_schema(database_url, tmp_path)
+
     engine = create_engine(database_url)
     try:
-        Base.metadata.create_all(bind=engine)
-        with engine.begin() as connection:
-            connection.execute(text(FTS5_DDL))
-            connection.execute(text(QUERY_HISTORY_FTS_DDL))
-            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-            connection.execute(
-                text("INSERT INTO alembic_version (version_num) VALUES ('2b4c6d8e0f12')")
-            )
+        historical_tables = set(inspect(engine).get_table_names())
+        assert not {"schema_search_fts", "query_history_fts"} & historical_tables
+        with engine.connect() as connection:
+            historical_triggers = {
+                row[0]
+                for row in connection.execute(
+                    text("SELECT name FROM sqlite_master WHERE type = 'trigger'")
+                )
+            }
+        assert not _QUERY_HISTORY_FTS_TRIGGERS & historical_triggers
     finally:
         engine.dispose()
 
@@ -326,6 +469,24 @@ def test_historical_create_all_then_stamp_2b_upgrades_without_duplicate_columns(
     engine = create_engine(database_url)
     try:
         _assert_final_contract(engine)
+        with engine.connect() as connection:
+            trigger_names = {
+                row[0]
+                for row in connection.execute(
+                    text("SELECT name FROM sqlite_master WHERE type = 'trigger'")
+                )
+            }
+            assert _QUERY_HISTORY_FTS_TRIGGERS <= trigger_names
+            connection.execute(text("SELECT search_text FROM schema_search_fts LIMIT 0"))
+            connection.execute(text("SELECT search_text FROM query_history_fts LIMIT 0"))
+            assert connection.execute(
+                text(
+                    """
+                    SELECT COUNT(*) FROM query_history_fts
+                        WHERE query_history_fts MATCH 'historicalftsrebuildtoken'
+                    """
+                )
+            ).scalar_one() == 1
     finally:
         engine.dispose()
 
@@ -356,6 +517,97 @@ def test_online_migrations_honor_the_configured_temporary_url(monkeypatch, tmp_p
     finally:
         configured_engine.dispose()
         decoy_engine.dispose()
+
+
+def test_cli_offline_upgrade_fails_closed_before_any_migration(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[2]
+    database_path = tmp_path / "offline.db"
+    env = os.environ.copy()
+    env["DBFOX_DATABASE_URL"] = _sqlite_url(database_path)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head", "--sql"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    output = f"{result.stdout}\n{result.stderr}"
+    assert result.returncode != 0
+    assert _OFFLINE_FAILURE in output
+    assert "Running upgrade" not in output
+    assert not database_path.exists()
+
+
+def test_v2_orphan_repair_converges_for_long_chains_and_mixed_composite_keys(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "orphan-repair.db")
+    _upgrade(monkeypatch, database_url, "2b4c6d8e0f12")
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE legacy_self_chain (
+                        id INTEGER PRIMARY KEY,
+                        parent_id INTEGER NOT NULL,
+                        FOREIGN KEY (parent_id) REFERENCES legacy_self_chain(id)
+                    )
+                    """
+                )
+            )
+            chain_rows = [{"id": 1, "parent_id": 9_999}]
+            chain_rows.extend({"id": value, "parent_id": value - 1} for value in range(2, 97))
+            connection.execute(
+                text("INSERT INTO legacy_self_chain (id, parent_id) VALUES (:id, :parent_id)"),
+                chain_rows,
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE legacy_composite_parent (
+                        key_a INTEGER NOT NULL,
+                        key_b INTEGER NOT NULL,
+                        PRIMARY KEY (key_a, key_b)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE legacy_composite_child (
+                        id INTEGER PRIMARY KEY,
+                        key_a INTEGER NOT NULL,
+                        key_b INTEGER,
+                        FOREIGN KEY (key_a, key_b)
+                            REFERENCES legacy_composite_parent(key_a, key_b)
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text("INSERT INTO legacy_composite_child (id, key_a, key_b) VALUES (1, 7, 9)")
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT COUNT(*) FROM legacy_self_chain")).scalar_one() == 0
+            assert connection.execute(
+                text("SELECT key_a, key_b FROM legacy_composite_child WHERE id = 1")
+            ).one() == (7, None)
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+    finally:
+        engine.dispose()
 
 
 def test_foundation_runtime_state_model_is_a_singleton_marker() -> None:
