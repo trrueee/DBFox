@@ -1,0 +1,88 @@
+/* This file intentionally remains independent of the React bundle. It is the
+ * only UI shown while the local engine starts. Keeping it external lets the
+ * packaged WebView enforce a CSP without unsafe inline styles. */
+#boot-indicator {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+  color: #f4f7fb;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(167, 155, 255, 0.13), transparent 30%),
+    #0b1020;
+  text-align: center;
+}
+
+#boot-indicator.is-hidden {
+  display: none;
+}
+
+#boot-indicator h1 {
+  margin: 16px 0 8px;
+  font-size: var(--agent-font-display, 20px);
+  font-weight: 600;
+}
+
+#boot-indicator p {
+  max-width: 400px;
+  margin: 0;
+  color: #a1a1aa;
+  font-size: var(--ui-font-control, 13px);
+  line-height: 1.5;
+}
+
+.boot-indicator-mark {
+  position: relative;
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border: 1px solid rgba(167, 155, 255, 0.28);
+  border-radius: 50%;
+  background: #151d30;
+  box-shadow: 0 16px 36px rgba(3, 7, 18, 0.36);
+}
+
+.boot-indicator-mark::after {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid transparent;
+  border-top-color: #a79bff;
+  border-right-color: #55d4cf;
+  border-radius: 50%;
+  content: "";
+  animation: boot-indicator-spin 1.1s linear infinite;
+}
+
+.boot-indicator-icon {
+  display: block;
+}
+
+#boot-indicator[data-state="error"] h1,
+#boot-indicator[data-state="error"] p {
+  color: #ffb4b8;
+}
+
+#boot-indicator[data-state="error"] .boot-indicator-mark::after {
+  border-top-color: #ff7b82;
+  border-right-color: transparent;
+  animation: none;
+}
+
+@keyframes boot-indicator-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-indicator-mark::after {
+    animation-duration: 2.4s;
+  }
+}

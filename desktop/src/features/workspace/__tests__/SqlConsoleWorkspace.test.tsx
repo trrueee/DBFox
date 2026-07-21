@@ -8,8 +8,8 @@ import { SqlConsoleWorkspace, type ConsoleEntry, type SqlConsoleTabState } from 
 vi.mock("../../../lib/api/agent", () => ({
   agentApi: {
     executeSqlConsole: vi.fn(),
-    fetchResultPage: vi.fn(),
-    exportResultCsv: vi.fn(),
+    fetchArtifactPage: vi.fn(),
+    exportArtifactCsv: vi.fn(),
   },
 }));
 
@@ -46,8 +46,8 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
       title: "Validated SQL",
       payload: {
         sql: "SELECT 1 AS id, 'Ada' AS name",
-        validation_status: "passed",
-        execution_status: "completed",
+        validationStatus: "passed",
+        executionStatus: "completed",
         rowCount: 1,
         latencyMs: 7,
       },
@@ -61,9 +61,9 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
       title: "Safety report",
       payload: {
         passed: true,
-        can_execute: true,
-        requires_confirmation: false,
-        safe_sql: "SELECT 1 AS id, 'Ada' AS name",
+        canExecute: true,
+        requiresApproval: false,
+        safeSql: "SELECT 1 AS id, 'Ada' AS name",
       },
       presentation: { mode: "dock", priority: 75, collapsed: true },
       depends_on: ["agent/run/console-run-1/artifact/001/sql_query_a1"],
@@ -74,20 +74,14 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
       type: "result_view",
       title: "Result view",
       payload: {
-        storageMode: "sql_backed",
-        datasourceId: "ds-1",
-        sourceSqlArtifactKey: "agent/run/console-run-1/artifact/001/sql_query_a1",
-        sourceSqlSemanticKey: "sql_query_a1",
-        safetyArtifactKey: "agent/run/console-run-1/artifact/002/safety_report_a1",
-        safetySemanticKey: "safety_report_a1",
-        sourceSql: "SELECT 1 AS id, 'Ada' AS name",
-        safeSql: "SELECT 1 AS id, 'Ada' AS name",
+        sourceSqlArtifactId: "agent/run/console-run-1/artifact/001/sql_query_a1",
+        safetyArtifactId: "agent/run/console-run-1/artifact/002/safety_report_a1",
+        queryFingerprint: "query-console-1",
+        datasourceGeneration: 1,
         columns: [
           { name: "id", type: "integer" },
           { name: "name", type: "text" },
         ],
-        previewRows: [],
-        previewRowCount: 0,
         rowCount: 1,
         returnedRows: 1,
         latencyMs: 7,
@@ -135,21 +129,26 @@ describe("SqlConsoleWorkspace", () => {
     cleanup();
     vi.mocked(agentApi.executeSqlConsole).mockReset();
     vi.mocked(agentApi.executeSqlConsole).mockResolvedValue(consoleArtifactResponse);
-    vi.mocked(agentApi.fetchResultPage).mockReset();
-    vi.mocked(agentApi.fetchResultPage).mockResolvedValue({
+    vi.mocked(agentApi.fetchArtifactPage).mockReset();
+    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
       columns: ["id", "name"],
       rows: [{ id: 1, name: "Ada" }],
       page: 1,
       pageSize: 50,
       rowCount: null,
       hasNextPage: false,
-      executedSql: "SELECT * FROM (SELECT 1 AS id, 'Ada' AS name) AS dbfox_result_source LIMIT 51 OFFSET 0",
       latencyMs: 7,
+      consistency: "live_reexecution",
+      originalExecutedAt: "2026-07-20T00:00:00Z",
+      viewExecutedAt: "2026-07-20T00:00:01Z",
+      viewExecutionId: "view-console",
+      datasourceGeneration: 1,
+      queryFingerprint: "query-console",
       warnings: [],
       notices: [],
     });
-    vi.mocked(agentApi.exportResultCsv).mockReset();
-    vi.mocked(agentApi.exportResultCsv).mockResolvedValue(new Blob(["id,name\n1,Ada\n"]));
+    vi.mocked(agentApi.exportArtifactCsv).mockReset();
+    vi.mocked(agentApi.exportArtifactCsv).mockResolvedValue(new Blob(["id,name\n1,Ada\n"]));
   });
 
   it("renders a terminal textarea without the boxed Monaco editor and disables execute for empty SQL", () => {
@@ -179,14 +178,11 @@ describe("SqlConsoleWorkspace", () => {
       });
     });
     await waitFor(() => {
-      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(expect.objectContaining({
-        datasourceId: "ds-1",
-        sourceSqlArtifactId: "agent/run/console-run-1/artifact/001/sql_query_a1",
-        safeSql: "SELECT 1 AS id, 'Ada' AS name",
-        page: 1,
-        pageSize: 50,
-        countMode: "estimate",
-      }));
+      expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+        "agent/run/console-run-1/artifact/003/result_view_a1",
+        expect.objectContaining({ page: 1, pageSize: 50, countMode: "estimate" }),
+        expect.any(AbortSignal),
+      );
     });
     expect(await screen.findByText("Ada")).toBeTruthy();
   });
@@ -219,7 +215,7 @@ describe("SqlConsoleWorkspace", () => {
     renderConsole({ draftSql: "SELECT 1", entries: [], running: true });
 
     expect((screen.getByRole("textbox", { name: "SQL 编辑器" }) as HTMLTextAreaElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: /运行中/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /正在运行/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows datasource readiness, statement guidance, and live SQL highlighting", () => {
@@ -232,7 +228,7 @@ describe("SqlConsoleWorkspace", () => {
     const status = screen.getByLabelText("SQL 输入状态");
     expect(status.textContent).toContain("Local SQLite");
     expect(status.textContent).toContain("app.db");
-    expect(status.textContent).toContain("sqlite");
+    expect(status.textContent).toContain("SQLite");
     expect(status.textContent).toContain("2 条语句");
     expect(status.textContent).toContain("SELECT");
     expect(status.textContent).toContain("UPDATE");

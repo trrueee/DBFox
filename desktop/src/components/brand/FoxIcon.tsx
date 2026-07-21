@@ -2,7 +2,7 @@ import type { ImgHTMLAttributes } from "react";
 
 export type FoxIconVariant = "tight" | "plain" | "ai" | "ai-tight" | "app";
 
-type FoxIconProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "width" | "height"> & {
+type FoxIconProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "width" | "height" | "style"> & {
   size?: number | string;
   variant?: FoxIconVariant;
   assetBasePath?: string;
@@ -26,7 +26,7 @@ export function FoxIcon({
   variant = "tight",
   assetBasePath,
   alt = "DBFox fox icon",
-  style,
+  className,
   ...props
 }: FoxIconProps) {
   const asset = assetByVariant[variant];
@@ -38,9 +38,9 @@ export function FoxIcon({
       width={size}
       height={size}
       alt={alt}
+      className={["fox-icon", className].filter(Boolean).join(" ")}
       loading="eager"
       decoding="async"
-      style={{ display: "inline-block", verticalAlign: "middle", ...style }}
       {...props}
     />
   );

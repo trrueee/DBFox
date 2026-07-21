@@ -1,4 +1,4 @@
-import type { AgentRunConfig, ApiConfig, LlmConfigDraft, SchemaSyncOptions } from "./api/types";
+import type { ApiConfig, LlmConfigDraft, SchemaSyncOptions } from "./api/types";
 import { validateApiConfig } from "./api/types";
 import { DEFAULT_LLM_API_BASE } from "./llmPresets";
 
@@ -89,18 +89,6 @@ export function normalizeProductLlmConfig(
     apiBase: clean(config?.apiBase) || DEFAULT_LLM_API_BASE,
     modelName: clean(config?.modelName) || DEFAULT_LLM_MODEL_NAME,
     hasCredential: Boolean(credentialId),
-  };
-}
-
-export function buildAgentRunLlmConfig(
-  config: Partial<ApiConfig> | null | undefined,
-): Pick<AgentRunConfig, "llmCredentialId" | "apiBase" | "model"> {
-  const llm = normalizeProductLlmConfig(config);
-  if (!llm.hasCredential) return {};
-  return {
-    llmCredentialId: llm.credentialId,
-    apiBase: llm.apiBase,
-    model: llm.modelName,
   };
 }
 

@@ -214,6 +214,13 @@
   color: var(--trust-warning);
 }
 
+.artifact-table-alert-live {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--color-secondary) 8%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--color-secondary) 24%, var(--border-subtle));
+}
+
+
 .artifact-table-alert-icon {
   flex: 0 0 auto;
   margin-top: 2px;

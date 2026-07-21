@@ -82,9 +82,9 @@ export function useAppCommands({
       },
       {
         id: "agent-eval",
-        name: "Agent 评测 (Golden 任务)",
+        name: "智能评测（标准任务）",
         category: "AI 能力",
-        icon: <FlaskConical size={13} className="text-amber-500" />,
+        icon: <FlaskConical size={13} />,
         action: () => openAgentEvalTab(),
       },
       {

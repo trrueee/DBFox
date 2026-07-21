@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import ReactECharts from "echarts-for-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReactEChartsCore from "echarts-for-react/lib/core";
 import { BarChart3, Download, LineChart, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "../../../components/ui";
-import type { ChartArtifact, ChartArtifactType } from "../../../types/agentArtifact";
+import { agentApi } from "../../../lib/api/agent";
+import type { ChartArtifact, ChartArtifactType, ChartPoint } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
 import { useChartExport } from "./useChartExport";
 import { useChartOption } from "./useChartOption";
+import { echarts } from "./echartsCore";
 import "./ArtifactViews.css";
 
 interface ChartArtifactViewProps {
@@ -17,32 +19,49 @@ interface ChartArtifactViewProps {
 export function ChartArtifactView({ artifact, onToast, compact = false }: ChartArtifactViewProps) {
   const [chartType, setChartType] = useState<ChartArtifactType>(artifact.chartType);
   const [expanded, setExpanded] = useState(false);
-  const chartRef = useRef<ReactECharts | null>(null);
+  const [loaded, setLoaded] = useState<{
+    artifactId: string;
+    series: ChartPoint[];
+    error: string | null;
+    viewExecutedAt?: string;
+  } | null>(null);
+  const series = useMemo(
+    () => loaded?.artifactId === artifact.id ? loaded.series : [],
+    [artifact.id, loaded],
+  );
+  const loadError = loaded?.artifactId === artifact.id ? loaded.error : null;
+  const chartRef = useRef<ReactEChartsCore | null>(null);
 
   const switchable = !compact && (artifact.chartType === "line" || artifact.chartType === "bar");
-  const { option, theme } = useChartOption(artifact, chartType, compact);
+  const renderedArtifact = useMemo(() => ({ ...artifact, series }), [artifact, series]);
+  const { option, theme } = useChartOption(renderedArtifact, chartType, compact);
   const handleExportPng = useChartExport(chartRef, artifact.id, chartType, theme.panelBg, onToast);
-  const metaItems = [
-    ...(typeof artifact.sampleSize === "number"
-      ? [
-          <div key="sample-size" className="chart-artifact__meta-row">
-            <span className="artifact-pill">样本 {artifact.sampleSize} 行</span>
-          </div>,
-        ]
-      : []),
-    ...((artifact.sourceRefs || []).map((sourceRef) => (
-      <div key={`${sourceRef.label}-${sourceRef.field}`} className="chart-artifact__meta-row">
-        <span className="artifact-pill">{sourceRef.label}</span>
-        <span className="chart-artifact__formula">{sourceRef.formula}</span>
-        <span className="chart-artifact__muted">-&gt;</span>
-        <span className="chart-artifact__formula">{sourceRef.field}</span>
-      </div>
-    ))),
-  ];
 
   useEffect(() => {
     chartRef.current?.getEchartsInstance()?.resize();
   }, [expanded, compact]);
+
+  useEffect(() => {
+    let active = true;
+    void agentApi.fetchArtifactChartData(artifact.id).then((data) => {
+      if (!active) return;
+      setLoaded({
+        artifactId: artifact.id,
+        series: data.series,
+        error: null,
+        viewExecutedAt: data.viewExecutedAt,
+      });
+    }).catch((error: unknown) => {
+      if (active) setLoaded({
+        artifactId: artifact.id,
+        series: [],
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [artifact.id]);
 
   return (
     <ArtifactCard
@@ -51,8 +70,12 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
       badge="图表"
       tone="chart"
       description={artifact.description}
+      meta={loaded?.viewExecutedAt ? (
+        <span className="artifact-pill artifact-pill--live">
+          实时重查 {formatExecutionTime(loaded.viewExecutedAt)}
+        </span>
+      ) : undefined}
       compact={compact}
-      meta={metaItems.length > 0 ? metaItems : undefined}
       actions={
         !compact ? (
           <>
@@ -106,6 +129,10 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
         ) : undefined
       }
     >
+      {loadError && <div className="chart-artifact__loading" role="alert">{loadError}</div>}
+      {!loadError && series.length === 0 && (
+        <div className="chart-artifact__loading" role="status">正在读取图表数据…</div>
+      )}
       <div
         className={[
           "chart-artifact__body",
@@ -114,8 +141,18 @@ export function ChartArtifactView({ artifact, onToast, compact = false }: ChartA
         ].filter(Boolean).join(" ")}
         data-chart-id={artifact.id}
       >
-        <ReactECharts ref={chartRef} option={option} className="chart-artifact__echarts" />
+        <ReactEChartsCore ref={chartRef} echarts={echarts} option={option} className="chart-artifact__echarts" />
       </div>
     </ArtifactCard>
   );
+}
+
+function formatExecutionTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }

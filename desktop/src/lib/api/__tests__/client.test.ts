@@ -16,12 +16,12 @@ describe("API client request error normalization", () => {
     expect(error.detail).toEqual({ detail: "info" });
   });
 
-  it("getUserErrorMessage resolves the error string correctly", () => {
-    const apiError = new ApiError("Api Error Msg");
+  it("getUserErrorMessage keeps technical details out of user-facing copy", () => {
+    const apiError = new ApiError("Api Error Msg", 500, "DBFOX_ERROR");
     const regularError = new Error("Regular Error Msg");
-    expect(getUserErrorMessage(apiError)).toBe("Api Error Msg");
-    expect(getUserErrorMessage(regularError)).toBe("Regular Error Msg");
-    expect(getUserErrorMessage("String error")).toBe("String error");
+    expect(getUserErrorMessage(apiError)).toBe("操作未完成，请重试。");
+    expect(getUserErrorMessage(regularError)).toBe("操作失败，请重试");
+    expect(getUserErrorMessage("连接名称不能为空")).toBe("连接名称不能为空");
     expect(getUserErrorMessage(null)).toBe("操作失败，请重试");
   });
 

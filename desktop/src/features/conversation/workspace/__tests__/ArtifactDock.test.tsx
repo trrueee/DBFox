@@ -2,13 +2,22 @@ import type { CSSProperties } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationArtifact } from "../../../../types/conversation";
+import { agentApi } from "../../../../lib/api/agent";
 import { ArtifactDock } from "../ArtifactDock";
+
+vi.mock("../../../../lib/api/agent", () => ({
+  agentApi: {
+    fetchArtifactPage: vi.fn(),
+    fetchArtifactChartData: vi.fn(),
+    exportArtifactCsv: vi.fn(),
+  },
+}));
 
 const echartsMock = vi.hoisted(() => ({
   options: [] as unknown[],
 }));
 
-vi.mock("echarts-for-react", () => ({
+vi.mock("echarts-for-react/lib/core", () => ({
   default: ({ option, style }: { option: unknown; style?: CSSProperties }) => {
     echartsMock.options.push(option);
     return <div data-testid="echarts-mock" style={style} />;
@@ -42,10 +51,10 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       sequence: 2,
       payload: {
         passed: true,
-        can_execute: true,
-        requires_confirmation: false,
-        guardrail_result: "passed",
-        schema_warnings_count: 0,
+        canExecute: true,
+        requiresApproval: false,
+        guardrailResult: "passed",
+        schemaWarningsCount: 0,
         safeSql: "SELECT id, amount FROM orders WHERE amount > 10",
       },
       depends_on: ["sql_candidate"],
@@ -61,13 +70,9 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       status: "completed",
       sequence: 3,
       payload: {
-        storageMode: "sql_backed",
-        datasourceId: "ds-1",
-        sourceSqlArtifactKey: "artifact-sql",
-        sourceSqlSemanticKey: "sql_candidate",
-        safeSql: "SELECT id, amount FROM orders",
+        sourceSqlArtifactId: "artifact-sql",
+        queryFingerprint: "query-1",
         columns: ["id", "amount"],
-        previewRows: [{ id: 1, amount: 20 }],
         rowCount: 1,
       },
       depends_on: ["sql_candidate"],
@@ -82,7 +87,7 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
       title: "Amount chart",
       status: "completed",
       sequence: 4,
-      payload: { type: "bar", series: [{ label: "1", value: 20 }] },
+      payload: { chartType: "bar", sourceResultArtifactId: "artifact-result", x: "id", y: "amount", aggregation: "none" },
       depends_on: ["result_view_1"],
     },
   ];
@@ -92,13 +97,29 @@ describe("ArtifactDock", () => {
   beforeEach(() => {
     cleanup();
     echartsMock.options = [];
+    vi.mocked(agentApi.fetchArtifactPage).mockReset();
+    vi.mocked(agentApi.fetchArtifactChartData).mockReset();
+    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
+      columns: ["id", "amount"], rows: [{ id: 1, amount: 20 }],
+      page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
+      latencyMs: 1, consistency: "live_reexecution",
+      originalExecutedAt: "2026-07-20T00:00:00Z", viewExecutedAt: "2026-07-20T00:00:01Z",
+      viewExecutionId: "view-dock", datasourceGeneration: 1, queryFingerprint: "query-dock",
+    });
+    vi.mocked(agentApi.fetchArtifactChartData).mockResolvedValue({
+      series: [{ label: "1", value: 20 }], sampleSize: 1, truncated: false,
+      consistency: "live_reexecution", originalExecutedAt: "2026-07-20T00:00:00Z",
+      viewExecutedAt: "2026-07-20T00:00:01Z", viewExecutionId: "view-chart-dock",
+      datasourceGeneration: 1, queryFingerprint: "query-chart-dock",
+    });
   });
 
-  it("opens on the query result by default and keeps SQL, safety, result, and chart selectable", () => {
+  it("renders the backend-selected result and keeps every related artifact selectable", async () => {
     const onSelectArtifact = vi.fn();
-    const { container } = render(
+    render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
+        selectedArtifactId="artifact-result"
         onOpenSqlConsole={vi.fn()}
         onOpenResultTab={vi.fn()}
         onSelectArtifact={onSelectArtifact}
@@ -110,12 +131,68 @@ describe("ArtifactDock", () => {
     expect(screen.getByRole("button", { name: "Safety Safety" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Order result Result" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Amount chart Chart" })).toBeTruthy();
-    expect(screen.getByText("预览 1 / 共 1 行")).toBeTruthy();
+    expect(await screen.findByText("本页 1 / 共 1 行")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "SQL SQL" }));
 
     expect(onSelectArtifact).toHaveBeenCalledWith("artifact-sql");
-    expect(container.querySelector(".sql-code-block")?.textContent).toContain("SELECT id, amount FROM orders");
+  });
+
+  it("changes only when the backend selection changes", () => {
+    const artifacts = trustedQueryArtifacts();
+    const latestSql: ConversationArtifact = {
+      ...artifacts[0],
+      id: "artifact-sql-latest",
+      semantic_id: "sql_candidate_latest",
+      run_id: "run-latest",
+      title: "Latest SQL",
+      sequence: 5,
+      payload: { sql: "SELECT COUNT(*) AS count FROM orders" },
+    };
+    const latestResult: ConversationArtifact = {
+      ...artifacts[2],
+      id: "artifact-result-latest",
+      semantic_id: "result_view_latest",
+      run_id: "run-latest",
+      title: "Latest result",
+      sequence: 6,
+      payload: {
+        sourceSqlArtifactId: "artifact-sql-latest",
+        queryFingerprint: "query-latest",
+        columns: ["count"],
+        rowCount: 1,
+      },
+    };
+    artifacts.push(latestSql);
+
+    const { rerender } = render(
+      <ArtifactDock
+        artifacts={artifacts}
+        selectedArtifactId="artifact-sql-latest"
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Latest SQL SQL" }).getAttribute("aria-pressed"))
+      .toBe("true");
+
+    rerender(
+      <ArtifactDock
+        artifacts={[...artifacts, latestResult]}
+        selectedArtifactId="artifact-result-latest"
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Latest result Result" }).getAttribute("aria-pressed"))
+      .toBe("true");
+    expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+      "artifact-result-latest",
+      expect.objectContaining({ page: 1 }),
+      expect.any(AbortSignal),
+    );
   });
 
   it("honors a selected artifact id from the conversation evidence chip", () => {
@@ -130,7 +207,8 @@ describe("ArtifactDock", () => {
 
     expect(screen.getByRole("button", { name: "Safety Safety" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("安全检查")).toBeTruthy();
-    expect(screen.getByText("Guardrail: passed")).toBeTruthy();
+    expect(screen.getByText("安全策略：已通过")).toBeTruthy();
+    expect(screen.getByText("表结构提醒：0")).toBeTruthy();
     expect(container.querySelector(".conv-dock-safety-card .sql-code-block")).toBeTruthy();
     expect(container.querySelector(".conv-dock-safety-card .sql-token-keyword")?.textContent).toBe("SELECT");
   });

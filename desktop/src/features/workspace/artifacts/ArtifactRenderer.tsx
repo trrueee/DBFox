@@ -6,7 +6,7 @@ import type {
   ResultViewArtifact,
   SqlArtifact,
 } from "../../../types/agentArtifact";
-import { ChartArtifactView } from "./ChartArtifactView";
+import { DeferredChartArtifactView } from "./DeferredChartArtifactView";
 import { EmptyArtifactsState } from "./EmptyArtifactsState";
 import { MarkdownArtifactView } from "./MarkdownArtifactView";
 import { SqlArtifactView } from "./SqlArtifactView";
@@ -27,7 +27,7 @@ type ArtifactRendererMap = {
 };
 
 const ARTIFACT_RENDERERS: ArtifactRendererMap = {
-  chart: (artifact, props) => <ChartArtifactView key={artifact.id} artifact={artifact} onToast={props.onToast} />,
+  chart: (artifact, props) => <DeferredChartArtifactView key={artifact.id} artifact={artifact} onToast={props.onToast} />,
   sql: (artifact, props) => (
     <SqlArtifactView
       key={artifact.id}

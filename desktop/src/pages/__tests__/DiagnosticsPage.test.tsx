@@ -7,6 +7,8 @@ import { diagnosticsApi } from "../../lib/api/diagnostics";
 vi.mock("../../lib/api/diagnostics", () => ({
   diagnosticsApi: {
     getLogs: vi.fn(),
+    clearLogs: vi.fn(),
+    clearSecurityAudit: vi.fn(),
   },
 }));
 
@@ -58,6 +60,12 @@ describe("DiagnosticsPage", () => {
           content: "frontend stdout",
         },
       ],
+      security_audit: {
+        retention_days: 90,
+        export_window_days: 7,
+        max_records: 500,
+        records: [],
+      },
     });
   });
 
@@ -73,7 +81,8 @@ describe("DiagnosticsPage", () => {
     expect(queryByRole("heading", { name: "诊断日志" })).not.toBeInTheDocument();
     expect(getByRole("button", { name: "刷新" })).toBeInTheDocument();
     expect(getByRole("button", { name: "复制诊断包" })).toBeInTheDocument();
-    expect(getByRole("checkbox", { name: "显示空日志" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "清空审计" })).toBeInTheDocument();
+    expect(getByRole("switch", { name: "显示空日志" })).toBeInTheDocument();
   });
 
   it("renders sanitized diagnostic logs and copies a diagnostic bundle", async () => {

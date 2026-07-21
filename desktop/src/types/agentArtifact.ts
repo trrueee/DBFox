@@ -6,26 +6,23 @@ export type AgentArtifactBase = {
   title: string;
   description?: string;
   depends_on?: string[];
-  payload?: Record<string, unknown>;
   references?: DataReference[];
 };
 
 export type ChartArtifactType = "line" | "bar" | "pie" | "scatter" | "area";
 
+export type ChartPoint = { label: string; value: number; x?: string | number; y?: number };
+
 export type ChartArtifact = AgentArtifactBase & {
   type: "chart";
   chartType: ChartArtifactType;
-  unit?: string;
-  xLabel?: string;
-  yLabel?: string;
-  seriesLabel?: string;
-  dataLabel?: boolean;
-  sampleSize?: number;
-  dimensions?: Array<{ name?: string; column?: string; role?: string; kind?: string }>;
-  metrics?: Array<{ name?: string; source_column?: string; expression?: string; aggregation?: string; role?: string }>;
-  series: Array<{ label: string; value: number; x?: string | number; y?: number }>;
-  sourceRefs?: Array<{ label: string; formula: string; field: string }>;
+  sourceResultArtifactId: string;
+  x: string;
+  y: string[];
+  aggregation: "sum" | "none" | null;
 };
+
+export type RenderedChartArtifact = ChartArtifact & { series: ChartPoint[] };
 
 export type SqlArtifact = AgentArtifactBase & {
   type: "sql";
@@ -42,27 +39,14 @@ export type ResultArtifactColumn = string | { name: string; type?: string };
 
 export type ResultViewArtifact = AgentArtifactBase & {
   type: "result_view";
-  storageMode: "payload" | "sql_backed";
-  datasourceId: string;
   sourceSqlArtifactId: string;
-  sourceSqlSemanticId: string;
-  safetyArtifactId?: string;
-  safetySemanticId?: string;
-  sourceSql: string;
-  safeSql: string;
-  dialect?: string;
   columns: ResultArtifactColumn[];
-  fingerprint?: string;
-  sqlFingerprint?: string;
-  previewRows: string[][];
-  previewRowCount: number;
-  rows?: string[][]; // Historical payload-mode result views only; new interactive views use SQL.
+  queryFingerprint: string;
+  datasourceGeneration?: number;
   rowCount?: number;
   returnedRows?: number;
   latencyMs?: number;
   truncated?: boolean;
-  warnings?: string[];
-  notices?: string[];
 };
 
 export type MarkdownArtifact = AgentArtifactBase & {

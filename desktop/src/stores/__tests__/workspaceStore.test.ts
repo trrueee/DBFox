@@ -109,22 +109,8 @@ describe("workspaceStore — tabs", () => {
   });
 });
 
-describe("workspaceStore — messages", () => {
+describe("workspaceStore — ids", () => {
   beforeEach(reset);
-
-  it("appendTabMessages adds messages to a tab's chat", () => {
-    useWorkspaceStore.getState().appendTabMessages("smart-query", [
-      { id: 1, sender: "user", text: "hi" },
-    ]);
-    const tab = useWorkspaceStore.getState().tabs[0];
-    expect(tab.chatMessages?.map((m) => m.text)).toEqual(["hi"]);
-  });
-
-  it("updateTabMessage rewrites an existing message's text", () => {
-    useWorkspaceStore.getState().appendTabMessages("smart-query", [{ id: 1, sender: "ai", text: "old" }]);
-    useWorkspaceStore.getState().updateTabMessage("smart-query", 1, "new");
-    expect(useWorkspaceStore.getState().tabs[0].chatMessages?.[0].text).toBe("new");
-  });
 
   it("_nextMsgId returns increasing ids and advances the sequence", () => {
     const a = useWorkspaceStore.getState()._nextMsgId();
@@ -181,15 +167,10 @@ describe("workspaceStore - artifact results", () => {
       id: "result-view-1",
       type: "result_view",
       title: "Query result",
-      storageMode: "sql_backed",
-      datasourceId: "ds-1",
       sourceSqlArtifactId: "sql-artifact-1",
-      sourceSqlSemanticId: "sql_candidate_1",
-      sourceSql: "SELECT day, count FROM daily_orders",
-      safeSql: "SELECT day, count FROM daily_orders",
+      queryFingerprint: "query-daily-orders",
+      datasourceGeneration: 1,
       columns: ["day", "count"],
-      previewRows: [["2026-06-01", "12"]],
-      previewRowCount: 1,
       rowCount: 1,
       returnedRows: 1,
     };

@@ -32,10 +32,9 @@ function approvalRun(): ConversationRun {
       risk_level: "warning",
       reason: "生产环境需要确认",
       policy_decision: {},
-      requested_action: { args: { safe_sql: "SELECT * FROM orders" } },
+      requested_action: { arguments: { sql: "SELECT * FROM orders" } },
       created_at: "2026-06-22T00:00:00Z",
     },
-    events: [],
   };
 }
 
@@ -48,8 +47,7 @@ describe("MessageBubble", () => {
     vi.useRealTimers();
   });
 
-  it("renders an approval card for pending approvals", () => {
-    const onResolveApproval = vi.fn();
+  it("does not duplicate the composer-pinned approval inside a message", () => {
     render(
       <MessageBubble
         message={assistantMessage}
@@ -57,20 +55,10 @@ describe("MessageBubble", () => {
         artifacts={[]}
         onOpenSqlConsole={vi.fn()}
         onOpenResultTab={vi.fn()}
-        onResolveApproval={onResolveApproval}
       />,
     );
 
-    expect(screen.getByText("需要审批")).toBeTruthy();
-    expect(screen.getByText("风险级别：warning")).toBeTruthy();
-    expect(screen.getByText("生产环境需要确认")).toBeTruthy();
-    expect(screen.getByText("SELECT * FROM orders")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
-    expect(onResolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", true);
-
-    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
-    expect(onResolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", false);
+    expect(screen.queryByText("需要你的批准")).toBeNull();
   });
 
   it("renders a read-only approval audit card for resolved approvals", () => {
@@ -94,19 +82,19 @@ describe("MessageBubble", () => {
       />,
     );
 
-    expect(screen.getByText("审批已批准")).toBeTruthy();
-    expect(screen.getByText("决定人：local-user")).toBeTruthy();
-    expect(screen.getByText("审批时间：2026-06-22 02:30:00 UTC")).toBeTruthy();
+    expect(screen.getByText("已确认")).toBeTruthy();
+    expect(screen.getByText("处理人：local-user")).toBeTruthy();
+    expect(screen.getByText((content) => content.startsWith("批准时间："))).toBeTruthy();
     expect(screen.getByText("确认只读执行")).toBeTruthy();
     expect(screen.getByText("SELECT * FROM orders")).toBeTruthy();
   });
 
-  it("renders clickable evidence chips for grounded answers", () => {
+  it("renders inline evidence references for grounded claims", () => {
     const onOpenSqlConsole = vi.fn();
     const onSelectArtifact = vi.fn();
     render(
       <MessageBubble
-        message={{ ...assistantMessage, content: "订单查询完成。", status: "completed" }}
+        message={{ ...assistantMessage, content: "订单共有 42 条。{{cite:artifact_result}}", status: "completed" }}
         run={{
           id: "run-evidence",
           conversation_id: "conv-approval",
@@ -115,26 +103,30 @@ describe("MessageBubble", () => {
           assistant_message_id: "assistant-approval",
           status: "completed",
           answer: {
-            answer: "订单查询完成。",
+            answer: "订单共有 42 条。{{cite:artifact_result}}",
             key_findings: [],
-            evidence: [{ artifact_id: "sql_candidate", label: "SQL #1" }],
+            evidence: [{
+              artifact_id: "artifact_result",
+              label: "订单统计结果",
+              query_fingerprint: "query-orders",
+              observed_at: "2026-07-19T00:00:00Z",
+            }],
             caveats: [],
             recommendations: [],
             follow_up_questions: [],
           },
-          events: [],
         }}
         artifacts={[
           {
-            id: "artifact-sql",
-            semantic_id: "sql_candidate",
+            id: "artifact_result",
+            semantic_id: "result_view",
             conversation_id: "conv-approval",
             run_id: "run-evidence",
             message_id: "assistant-approval",
-            type: "sql",
-            title: "SQL",
+            type: "result_view",
+            title: "订单统计结果",
             status: "completed",
-            payload: { sql: "SELECT id FROM orders" },
+            payload: { rowCount: 1, columns: ["count"] },
             depends_on: [],
           },
         ]}
@@ -144,13 +136,13 @@ describe("MessageBubble", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "SQL #1" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看证据：订单统计结果" }));
 
-    expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT id FROM orders");
-    expect(onSelectArtifact).toHaveBeenCalledWith("artifact-sql");
+    expect(onOpenSqlConsole).not.toHaveBeenCalled();
+    expect(onSelectArtifact).toHaveBeenCalledWith("artifact_result");
   });
 
-  it("marks answers without result evidence as schema-only", () => {
+  it("does not append a misleading schema-only note to direct answers", () => {
     render(
       <MessageBubble
         message={{ ...assistantMessage, content: "可能和 orders 表有关。", status: "completed" }}
@@ -169,7 +161,6 @@ describe("MessageBubble", () => {
             recommendations: [],
             follow_up_questions: [],
           },
-          events: [],
         }}
         artifacts={[]}
         onOpenSqlConsole={vi.fn()}
@@ -177,7 +168,52 @@ describe("MessageBubble", () => {
       />,
     );
 
-    expect(screen.getByText("未执行查询，仅基于 schema 推断")).toBeTruthy();
+    expect(screen.queryByText("未执行查询，仅根据表结构推断")).toBeNull();
+  });
+
+  it("renders bounded completion from the public completion contract", () => {
+    render(
+      <MessageBubble
+        message={{ ...assistantMessage, content: "这是当前可验证的结果。", status: "completed" }}
+        run={{
+          id: "run-partial",
+          conversation_id: "conv-approval",
+          datasource_id: "ds-1",
+          question: "分析订单",
+          assistant_message_id: "assistant-approval",
+          status: "completed",
+          completion_disposition: "bounded_partial",
+          limitation_codes: ["TURN_BUDGET_REACHED"],
+          answer: { answer: "这是当前可验证的结果。", evidence: [] },
+        }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("已完成当前可验证的分析")).toBeTruthy();
+    expect(screen.getByText("已达到分析轮次上限")).toBeTruthy();
+  });
+
+  it("shows cancellation as a retained product state", () => {
+    render(
+      <MessageBubble
+        message={{ ...assistantMessage, content: "", status: "cancelled" }}
+        run={{
+          id: "run-cancelled",
+          conversation_id: "conv-approval",
+          datasource_id: "ds-1",
+          question: "停止分析",
+          assistant_message_id: "assistant-approval",
+          status: "cancelled",
+        }}
+        artifacts={[]}
+        onOpenSqlConsole={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("任务已停止")).toBeTruthy();
+    expect(screen.getByText(/已产生的分析步骤和工件仍然保留/)).toBeTruthy();
   });
 
   it("reveals streaming assistant text progressively when a large delta lands", async () => {
@@ -192,7 +228,7 @@ describe("MessageBubble", () => {
       />,
     );
 
-    expect(screen.getByText("Thinking...")).toBeTruthy();
+    expect(screen.getByText("正在分析问题…")).toBeTruthy();
 
     rerender(
       <MessageBubble
@@ -256,7 +292,9 @@ describe("MessageBubble", () => {
 
     expect(screen.getByText("SQL 能力")).toBeTruthy();
     expect(screen.getByText("sql.validate")).toBeTruthy();
-    expect(screen.getByText("执行只读查询")).toBeTruthy();
+    const sqlCapabilityCell = screen.getByText("sql.validate").closest("td");
+    if (!sqlCapabilityCell) throw new Error("Expected SQL capability table cell");
+    expect(sqlCapabilityCell.querySelector("br")).toBeTruthy();
     expect(screen.queryByText(/\*\*SQL 能力\*\*/)).toBeNull();
     expect(screen.queryByText(/<br>/)).toBeNull();
   });

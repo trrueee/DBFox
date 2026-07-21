@@ -13,7 +13,7 @@ function makeCommands(onRun = vi.fn()): CommandItem[] {
     },
     {
       id: "sync-schema",
-      name: "同步 Schema",
+      name: "同步表结构",
       category: "数据源",
       action: vi.fn(),
     },
@@ -36,10 +36,10 @@ describe("CommandPalette", () => {
   it("renders commands with categories when open", () => {
     render(<CommandPalette open commands={makeCommands()} onClose={vi.fn()} />);
 
-    expect(screen.getByPlaceholderText("输入指令或搜索表、字段、功能...")).toBeTruthy();
+    expect(screen.getByPlaceholderText("输入指令或搜索表、字段、功能…")).toBeTruthy();
     expect(screen.getByText("工作区")).toBeTruthy();
     expect(screen.getByText("打开 SQL 工作台")).toBeTruthy();
-    expect(screen.getByText("同步 Schema")).toBeTruthy();
+    expect(screen.getByText("同步表结构")).toBeTruthy();
   });
 
   it("runs a command and closes from cmdk selection", () => {
@@ -57,7 +57,7 @@ describe("CommandPalette", () => {
     const onClose = vi.fn();
     render(<CommandPalette open commands={makeCommands()} onClose={onClose} />);
 
-    fireEvent.keyDown(screen.getByPlaceholderText("输入指令或搜索表、字段、功能..."), { key: "Escape" });
+    fireEvent.keyDown(screen.getByPlaceholderText("输入指令或搜索表、字段、功能…"), { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

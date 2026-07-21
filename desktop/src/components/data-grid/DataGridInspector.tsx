@@ -1,6 +1,7 @@
 import { Check, Copy, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { JsonTree, tryParseJson } from "./json";
+import { JsonTree } from "./json";
+import { tryParseJson } from "./jsonValue";
 import type { DataGridInspectState } from "./types";
 
 interface DataGridInspectorProps {

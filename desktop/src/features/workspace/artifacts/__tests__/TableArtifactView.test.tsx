@@ -6,10 +6,19 @@ import { TableArtifactView } from "../TableArtifactView";
 
 vi.mock("../../../../lib/api/agent", () => ({
   agentApi: {
-    fetchResultPage: vi.fn(),
-    exportResultCsv: vi.fn(),
+    fetchArtifactPage: vi.fn(),
+    exportArtifactCsv: vi.fn(),
   },
 }));
+
+const liveMetadata = {
+  consistency: "live_reexecution" as const,
+  originalExecutedAt: "2026-07-20T00:00:00Z",
+  viewExecutedAt: "2026-07-20T00:00:01Z",
+  viewExecutionId: "view-test",
+  datasourceGeneration: 1,
+  queryFingerprint: "query-test",
+};
 
 function makeArtifact(): ResultViewArtifact {
   return {
@@ -17,51 +26,13 @@ function makeArtifact(): ResultViewArtifact {
     type: "result_view",
     title: "查询结果",
     description: "订单按日聚合结果",
-    storageMode: "payload",
-    datasourceId: "ds-1",
     sourceSqlArtifactId: "sql-artifact-payload-1",
-    sourceSqlSemanticId: "sql_candidate_payload_1",
-    sourceSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
-    safeSql: "SELECT day, COUNT(*) AS order_count FROM orders GROUP BY day",
+    queryFingerprint: "query-payload-1",
     columns: ["day", "order_count", "note"],
-    previewRows: Array.from({ length: 10 }, (_, index) => [
-      `2026-06-${String(index + 1).padStart(2, "0")}`,
-      String((index + 1) * 10),
-      index === 1 ? "NULL" : `row-${index + 1}`,
-    ]),
-    previewRowCount: 10,
-    rows: Array.from({ length: 12 }, (_, index) => [
-      `2026-06-${String(index + 1).padStart(2, "0")}`,
-      String((index + 1) * 10),
-      index === 1 ? "NULL" : `row-${index + 1}`,
-    ]),
     rowCount: 128,
     returnedRows: 12,
     latencyMs: 42,
     truncated: true,
-    warnings: ["仅展示前 10 行"],
-    notices: ["可继续筛选"],
-  };
-}
-
-function makeLargeArtifact(): ResultViewArtifact {
-  return {
-    ...makeArtifact(),
-    previewRows: Array.from({ length: 10 }, (_, index) => [
-      `2026-07-${String(index + 1).padStart(3, "0")}`,
-      String(index + 1),
-      `large-row-${index + 1}`,
-    ]),
-    previewRowCount: 10,
-    rows: Array.from({ length: 620 }, (_, index) => [
-      `2026-07-${String(index + 1).padStart(3, "0")}`,
-      String(index + 1),
-      `large-row-${index + 1}`,
-    ]),
-    rowCount: 620,
-    returnedRows: 620,
-    truncated: false,
-    warnings: [],
   };
 }
 
@@ -71,15 +42,9 @@ function makeSqlBackedArtifact(): ResultViewArtifact {
     type: "result_view",
     title: "SQL-backed result",
     description: "Agent result view",
-    storageMode: "sql_backed",
-    datasourceId: "ds-1",
     sourceSqlArtifactId: "sql-artifact-1",
-    sourceSqlSemanticId: "sql_candidate_1",
-    sourceSql: "SELECT day, order_count FROM daily_orders",
-    safeSql: "SELECT day, order_count FROM daily_orders",
+    queryFingerprint: "query-artifact-1",
     columns: ["day", "order_count"],
-    previewRows: [["2026-06-01", "10"]],
-    previewRowCount: 1,
     rowCount: 128,
     returnedRows: 1,
     latencyMs: 42,
@@ -94,30 +59,32 @@ function makeTypedSqlBackedArtifact(): ResultViewArtifact {
       { name: "day", type: "date" },
       { name: "order_count", type: "integer" },
     ],
-    dialect: "sqlite",
-    fingerprint: "sql_test:typed",
-    sqlFingerprint: "sql_test:typed",
+    queryFingerprint: "sql_test:typed",
   };
 }
 
 describe("TableArtifactView", () => {
   beforeEach(() => {
     cleanup();
-    vi.mocked(agentApi.fetchResultPage).mockReset();
-    vi.mocked(agentApi.exportResultCsv).mockReset();
-    vi.mocked(agentApi.fetchResultPage).mockResolvedValue({
-      columns: ["day", "order_count"],
-      rows: [{ day: "2026-06-01", order_count: 10 }],
+    vi.mocked(agentApi.fetchArtifactPage).mockReset();
+    vi.mocked(agentApi.exportArtifactCsv).mockReset();
+    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValue({
+      columns: ["day", "order_count", "note"],
+      rows: Array.from({ length: 10 }, (_, index) => ({
+        day: `2026-06-${String(index + 1).padStart(2, "0")}`,
+        order_count: (index + 1) * 10,
+        note: index === 2 ? "row-3" : index === 4 ? null : `row-${index + 1}`,
+      })),
       page: 1,
-      pageSize: 50,
+      pageSize: 10,
       rowCount: 128,
       hasNextPage: true,
-      executedSql: "SELECT day, order_count FROM daily_orders LIMIT 50 OFFSET 0",
       latencyMs: 38,
-      warnings: [],
-      notices: [],
+      ...liveMetadata,
+      warnings: ["仅展示前 10 行"],
+      notices: ["可继续筛选"],
     });
-    vi.mocked(agentApi.exportResultCsv).mockResolvedValue(new Blob(["day,order_count\n2026-06-01,10\n"]));
+    vi.mocked(agentApi.exportArtifactCsv).mockResolvedValue(new Blob(["day,order_count\n2026-06-01,10\n"]));
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -129,25 +96,33 @@ describe("TableArtifactView", () => {
     });
   });
 
-  it("renders result metadata, warnings, and a 10-row preview", () => {
+  it("loads a 10-row preview by artifact id and renders result metadata", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
-    expect(screen.getByText("预览 10 / 共 128 行")).toBeTruthy();
+    await screen.findByText("2026-06-10");
+    expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+      "result-view-payload-1",
+      expect.objectContaining({ page: 1, pageSize: 10 }),
+      expect.any(AbortSignal),
+    );
+    expect(screen.getByText("本页 10 / 共 128 行")).toBeTruthy();
     expect(screen.getByText("3 列")).toBeTruthy();
-    expect(screen.getByText("42ms")).toBeTruthy();
+    expect(screen.getByText("38ms")).toBeTruthy();
     expect(screen.getByText("结果已截断")).toBeTruthy();
     expect(screen.getByText("仅展示前 10 行")).toBeTruthy();
     expect(screen.getByText("可继续筛选")).toBeTruthy();
-    expect(screen.getByText("NULL")).toBeTruthy();
+    expect(screen.getByText(/分析取数/)).toBeTruthy();
+    expect(screen.getByText(/当前重查/)).toBeTruthy();
     expect(screen.getByText("2026-06-10")).toBeTruthy();
     expect(screen.queryByText("2026-06-11")).toBeNull();
   });
 
-  it("marks numeric and null cells with data-grid classes", () => {
+  it("marks numeric cells and preserves empty null values", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
+    await screen.findByText("2026-06-10");
     expect(screen.getByText("10").closest("td")?.className).toContain("is-numeric");
-    expect(screen.getByText("NULL").closest("td")?.className).toContain("is-null");
+    expect(screen.getAllByTitle("点击复制单元格").some((cell) => cell.textContent === "")).toBe(true);
   });
 
   it("shows column type indicators for typed result columns", async () => {
@@ -161,9 +136,10 @@ describe("TableArtifactView", () => {
     expect(orderCountHeader.querySelector(".artifact-table-type-badge")?.textContent).toBe("integer");
   });
 
-  it("keeps warnings and notices in the meta area", () => {
+  it("keeps warnings and notices in the meta area", async () => {
     const { container } = render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
+    await screen.findByText("2026-06-10");
     const meta = container.querySelector(".artifact-table-meta");
     expect(meta?.textContent).toContain("仅展示前 10 行");
     expect(meta?.textContent).toContain("可继续筛选");
@@ -173,20 +149,22 @@ describe("TableArtifactView", () => {
     const onToast = vi.fn();
     render(<TableArtifactView artifact={makeArtifact()} onToast={onToast} />);
 
-    fireEvent.click(screen.getByText("NULL"));
+    await screen.findByText("2026-06-10");
+    fireEvent.click(screen.getByText("row-3"));
 
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("NULL");
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("row-3");
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已复制单元格"));
   });
 
   it("uses the shared long-cell preview without breaking cell copy", async () => {
     const longValue = "payload=" + "segment-".repeat(14);
+    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValueOnce({
+      columns: ["note"], rows: [{ note: longValue }], page: 1, pageSize: 10,
+      rowCount: 1, hasNextPage: false, latencyMs: 1, ...liveMetadata,
+    });
     const artifact = {
       ...makeArtifact(),
       columns: ["note"],
-      previewRows: [[longValue]],
-      previewRowCount: 1,
-      rows: [[longValue]],
       rowCount: 1,
       returnedRows: 1,
       warnings: [],
@@ -196,7 +174,7 @@ describe("TableArtifactView", () => {
 
     render(<TableArtifactView artifact={artifact} onToast={vi.fn()} />);
 
-    const trigger = screen.getByText(/payload=segment/).closest(".dbfox-cell-preview-trigger");
+    const trigger = (await screen.findByText(/payload=segment/)).closest(".dbfox-cell-preview-trigger");
     if (!trigger) throw new Error("Expected long-cell preview trigger");
     expect(trigger.className).toContain("dbfox-cell-preview-trigger");
     expect(screen.getByText("键值").className).toContain("dbfox-cell-preview-kind");
@@ -209,7 +187,7 @@ describe("TableArtifactView", () => {
   it("marks the clicked artifact table cell as selected", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
-    const firstCell = screen.getByText("2026-06-01").closest("td");
+    const firstCell = (await screen.findByText("2026-06-01")).closest("td");
     const secondCell = screen.getByText("row-3").closest("td");
     if (!firstCell || !secondCell) throw new Error("Expected table cells to be rendered");
 
@@ -222,31 +200,37 @@ describe("TableArtifactView", () => {
     expect(firstCell.className).not.toContain("is-selected");
   });
 
-  it("searches across all loaded rows, not only the preview", () => {
+  it("sends inline search to the artifact result endpoint", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
+    await screen.findByText("2026-06-01");
+    vi.mocked(agentApi.fetchArtifactPage).mockResolvedValueOnce({
+      columns: ["day", "order_count", "note"],
+      rows: [{ day: "2026-06-12", order_count: 120, note: "row-12" }],
+      page: 1, pageSize: 10, rowCount: 1, hasNextPage: false,
+      latencyMs: 1, ...liveMetadata,
+    });
     fireEvent.change(screen.getByPlaceholderText("搜索结果"), { target: { value: "row-12" } });
 
-    expect(screen.getByText("2026-06-12")).toBeTruthy();
-    expect(screen.queryByText("2026-06-01")).toBeNull();
+    await waitFor(() => expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      "result-view-payload-1",
+      expect.objectContaining({ search: "row-12" }),
+      expect.any(AbortSignal),
+    ));
+    expect(await screen.findByText("2026-06-12")).toBeTruthy();
   });
 
-  it("sorts by a clicked column header", () => {
+  it("sends inline sorting to the artifact result endpoint", async () => {
     render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
 
+    await screen.findByText("2026-06-01");
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
-    expect(screen.getByText("2026-06-12")).toBeTruthy();
-    expect(screen.queryByText("2026-06-01")).toBeNull();
-  });
-
-  it("can reveal all loaded rows", () => {
-    render(<TableArtifactView artifact={makeArtifact()} onToast={vi.fn()} />);
-
-    fireEvent.click(screen.getByText("查看全部已载入 12 行"));
-
-    expect(screen.getByText("2026-06-11")).toBeTruthy();
-    expect(screen.getByText("收起预览")).toBeTruthy();
+    await waitFor(() => expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+      "result-view-payload-1",
+      expect.objectContaining({ sort: [{ column: "order_count", direction: "desc" }] }),
+      expect.any(AbortSignal),
+    ));
   });
 
   it("opens the loaded result as a workspace tab", () => {
@@ -257,16 +241,6 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开为 Tab" }));
 
     expect(onOpenResultTab).toHaveBeenCalledWith(artifact);
-  });
-
-  it("uses a bounded render window for large loaded results", () => {
-    render(<TableArtifactView artifact={makeLargeArtifact()} onToast={vi.fn()} />);
-
-    fireEvent.click(screen.getByText("查看全部已载入 620 行"));
-
-    expect(screen.getByText("窗口 1-200 / 620")).toBeTruthy();
-    expect(screen.getByText("2026-07-200")).toBeTruthy();
-    expect(screen.queryByText("2026-07-201")).toBeNull();
   });
 
   it("exports sql-backed workspace results through the result export API", async () => {
@@ -280,21 +254,20 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+        "result-view-1",
         expect.objectContaining({
           search: "daily",
           sort: [{ column: "order_count", direction: "desc" }],
         }),
+        expect.any(AbortSignal),
       ),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "导出" }));
 
     await waitFor(() =>
-      expect(agentApi.exportResultCsv).toHaveBeenCalledWith({
-        datasourceId: "ds-1",
-        sourceSqlArtifactId: "sql-artifact-1",
-        safeSql: "SELECT day, order_count FROM daily_orders",
+      expect(agentApi.exportArtifactCsv).toHaveBeenCalledWith("result-view-1", {
         search: "daily",
         sort: [{ column: "order_count", direction: "desc" }],
       }),
@@ -302,15 +275,17 @@ describe("TableArtifactView", () => {
     await waitFor(() => expect(onToast).toHaveBeenCalledWith("已导出 CSV"));
   });
 
-  it("uses the source SQL artifact as source for sql-backed pagination", async () => {
+  it("uses only the result artifact id for sql-backed pagination", async () => {
     render(<TableArtifactView artifact={makeSqlBackedArtifact()} onToast={vi.fn()} mode="workspace" />);
 
     await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenCalledWith(
+      expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
+        "result-view-1",
         expect.objectContaining({
-          sourceSqlArtifactId: "sql-artifact-1",
-          safeSql: "SELECT day, order_count FROM daily_orders",
+          page: 1,
+          pageSize: 50,
         }),
+        expect.any(AbortSignal),
       ),
     );
   });
@@ -337,10 +312,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用筛选" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+        "result-view-1",
         expect.objectContaining({
           filters: [{ column: "day", operator: "contains", value: "2026-06" }],
         }),
+        expect.any(AbortSignal),
       ),
     );
   });
@@ -355,10 +332,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "应用排序" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+        "result-view-1",
         expect.objectContaining({
           sort: [{ column: "order_count", direction: "asc" }],
         }),
+        expect.any(AbortSignal),
       ),
     );
   });
@@ -370,10 +349,12 @@ describe("TableArtifactView", () => {
     fireEvent.click(screen.getByRole("button", { name: "order_count" }));
 
     await waitFor(() =>
-      expect(agentApi.fetchResultPage).toHaveBeenLastCalledWith(
+      expect(agentApi.fetchArtifactPage).toHaveBeenLastCalledWith(
+        "result-view-1",
         expect.objectContaining({
           sort: [{ column: "order_count", direction: "desc" }],
         }),
+        expect.any(AbortSignal),
       ),
     );
   });

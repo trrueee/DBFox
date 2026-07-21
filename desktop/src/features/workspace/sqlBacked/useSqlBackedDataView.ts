@@ -28,8 +28,11 @@ export interface SqlBackedDataViewState {
   columns: string[];
   rowCount: number | null | undefined;
   hasNextPage: boolean;
-  executedSql: string;
   latencyMs: number | undefined;
+  consistency: "live_reexecution" | "live_query" | undefined;
+  originalExecutedAt: string | null | undefined;
+  viewExecutedAt: string | undefined;
+  viewExecutionId: string | undefined;
   warnings: string[];
   notices: string[];
   error: string | null;
@@ -56,6 +59,7 @@ export function useSqlBackedDataView({
   const [error, setError] = useState<string | null>(null);
   const [loadingMode, setLoadingMode] = useState<SqlBackedLoadingMode>("idle");
   const requestSeqRef = useRef(0);
+  const requestControllerRef = useRef<AbortController | null>(null);
   const nextLoadingModeRef = useRef<SqlBackedLoadingMode>("initial");
   const dataRef = useRef<SqlBackedPageResponse | null>(null);
 
@@ -73,31 +77,43 @@ export function useSqlBackedDataView({
 
   const load = useCallback(async (mode: SqlBackedLoadingMode) => {
     const seq = ++requestSeqRef.current;
+    requestControllerRef.current?.abort();
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
     setLoadingMode(dataRef.current ? mode : "initial");
     try {
-      const response = await fetchPage(buildPageRequest());
+      const response = await fetchPage(buildPageRequest(), controller.signal);
       if (seq !== requestSeqRef.current) return;
       dataRef.current = response;
       setData(response);
       setError(null);
     } catch (err) {
       if (seq !== requestSeqRef.current) return;
+      if (isAbortError(err)) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
       if (seq === requestSeqRef.current) setLoadingMode("idle");
     }
   }, [buildPageRequest, fetchPage]);
 
   useEffect(() => {
     if (!enabled) {
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = null;
       requestSeqRef.current += 1;
       dataRef.current = null;
       nextLoadingModeRef.current = "initial";
-      return;
+      return undefined;
     }
     const mode = nextLoadingModeRef.current;
     nextLoadingModeRef.current = dataRef.current ? "refresh" : "initial";
     void load(mode);
+    return () => {
+      requestSeqRef.current += 1;
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = null;
+    };
   }, [enabled, load]);
 
   const setPage = useCallback((value: SetPageValue) => {
@@ -174,8 +190,11 @@ export function useSqlBackedDataView({
     columns,
     rowCount: data?.rowCount,
     hasNextPage: Boolean(data?.hasNextPage),
-    executedSql: data?.executedSql ?? "",
     latencyMs: data?.latencyMs,
+    consistency: data?.consistency,
+    originalExecutedAt: data?.originalExecutedAt,
+    viewExecutedAt: data?.viewExecutedAt,
+    viewExecutionId: data?.viewExecutionId,
     warnings: data?.warnings ?? [],
     notices: data?.notices ?? [],
     error,
@@ -190,4 +209,8 @@ function stringifyCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }

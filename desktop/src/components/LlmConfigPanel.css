@@ -273,3 +273,110 @@
 .hifi-settings-submit-btn {
   gap: 6px;
 }
+
+/* Shared settings scaffold */
+.llm-settings-form {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.llm-settings-form--dialog {
+  height: auto;
+  background: transparent;
+}
+
+.llm-settings-scroll.hifi-settings-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0;
+}
+
+.llm-settings-form--dialog .llm-settings-scroll {
+  max-height: 58vh;
+}
+
+.llm-settings-content {
+  width: min(100%, 760px);
+}
+
+.llm-settings-form--dialog .llm-settings-content {
+  gap: 12px;
+  padding: 14px 20px 20px;
+}
+
+.llm-settings-form--dialog .settings-section__header,
+.llm-settings-form--dialog .settings-section__body {
+  padding: 14px;
+}
+
+.llm-settings-intro {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-elevated);
+  padding-bottom: 18px;
+}
+
+.llm-settings-intro__icon {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.hifi-settings-input {
+  height: 40px;
+  border-color: var(--control-border);
+  background: var(--control-bg);
+  font-size: var(--ui-font-control);
+}
+
+.hifi-settings-input-compact {
+  height: 36px;
+  font-size: var(--ui-font-control);
+}
+
+.hifi-settings-eye-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.hifi-settings-eye-btn:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.hifi-model-chips {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.hifi-model-chip {
+  min-height: 32px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: var(--ui-font-control);
+}
+
+.hifi-settings-status-row {
+  min-height: 34px;
+  border-bottom: 1px solid var(--hairline);
+  padding: 7px 0;
+  font-size: var(--ui-font-control);
+}
+
+.hifi-settings-status-row:last-child {
+  border-bottom: 0;
+}
+
+.hifi-settings-footer.settings-action-bar {
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  padding: 12px 20px;
+}
+
+.llm-settings-action-hint {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+}

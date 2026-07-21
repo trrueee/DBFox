@@ -1,3 +1,4 @@
+import { SettingsStatus, SettingsToggle } from "../../components/settings";
 import "./DataSourceManagement.css";
 
 interface SchemaSyncPanelProps {
@@ -16,20 +17,14 @@ export const SchemaSyncPanel = ({
   compact,
 }: SchemaSyncPanelProps) => (
   <div className={`ds-sync-panel${compact ? " is-compact" : ""}`}>
-    <label className={`field-label ds-sync-panel__label${disabled ? " is-disabled" : ""}`}>
-      <input
-        type="checkbox"
-        className="ds-sync-panel__checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        disabled={disabled}
-      />
-      AI 语义增强
-    </label>
-    {feedback && !compact && (
-      <div role="status" className="ds-sync-panel__feedback">
-        {feedback}
-      </div>
-    )}
+    <SettingsToggle
+      checked={checked}
+      onCheckedChange={onChange}
+      disabled={disabled}
+      compact={compact}
+      label="AI 语义增强"
+      description={compact ? undefined : "同步结构时补充业务语义，帮助 Agent 更准确地理解表和字段。"}
+    />
+    {feedback && !compact ? <SettingsStatus tone="info" label={feedback} /> : null}
   </div>
 );

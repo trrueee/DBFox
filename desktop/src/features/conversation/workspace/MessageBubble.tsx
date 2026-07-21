@@ -1,365 +1,117 @@
-import { useEffect, useMemo, useState } from "react";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
-import type { AgentAnswer, AgentApproval } from "../../../lib/api/types";
+import { AlertTriangle, CircleStop } from "lucide-react";
 import type {
   ConversationArtifact,
+  ConversationActivity,
   ConversationMessage,
+  ConversationQuestion,
   ConversationRun,
 } from "../../../types/conversation";
 import { MarkdownContent } from "../../workspace/queryResult/MarkdownContent";
 import { DataReferencePanel } from "./DataReferencePanel";
-import { RunTracePanel } from "./RunTracePanel";
+import { ActivityFeed } from "./ActivityFeed";
+import { ApprovalAuditCard } from "./ApprovalCard";
+import { QuestionCard } from "./QuestionCard";
+import { useSmoothedStreamingText } from "./useSmoothedStreamingText";
+import { getUserErrorMessage } from "../../../lib/api/client";
+import { completionLimitationLabel } from "../../../lib/presentation";
+import { buildAssistantMessageParts } from "./messageParts";
 
 interface MessageBubbleProps {
   message: ConversationMessage;
   run?: ConversationRun;
   artifacts: ConversationArtifact[];
+  activities?: ConversationActivity[];
+  question?: ConversationQuestion;
   onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
-  onResolveApproval?: (runId: string, approvalId: string, approved: boolean) => void;
   onSelectArtifact?: (artifactId: string) => void;
+  onResolveQuestion?: (
+    runId: string,
+    questionId: string,
+    response: { selected_value?: string; text?: string },
+  ) => void;
 }
 
 export function MessageBubble({
   message,
   run,
   artifacts,
+  activities = [],
+  question,
   onOpenSqlConsole,
-  onResolveApproval,
   onSelectArtifact,
+  onResolveQuestion,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const messageClass = isUser ? `conv-message conv-message-${message.role}` : "conv-message conv-message-answer";
   const smoothedAnswer = useSmoothedStreamingText(message.content, !isUser && message.status === "streaming", message.id);
-  const answerContent = smoothedAnswer.text || (message.status === "streaming" ? "Thinking..." : "");
+  const answerContent = smoothedAnswer.text || (!run && message.status === "streaming" ? "正在分析问题…" : "");
+  const parts = isUser ? [] : buildAssistantMessageParts({
+    message,
+    run,
+    activities,
+    artifacts,
+    question,
+    displayedAnswer: answerContent,
+  });
   return (
     <article className={messageClass}>
       <div className="conv-message-body">
         {isUser ? (
           <p>{message.content}</p>
         ) : (
-          <>
-            {run && <RunTracePanel run={run} />}
-            {run?.status === "failed" && (
-              <div className="conv-error-card">{run.error_message || "Agent stopped."}</div>
-            )}
-            {run?.status === "waiting_approval" && run.approval?.status === "pending" && (
-              <ApprovalCard
-                runId={run.id}
-                approval={run.approval}
-                onOpenSqlConsole={onOpenSqlConsole}
-                onResolveApproval={onResolveApproval}
-              />
-            )}
-            {run?.approval && run.approval.status !== "pending" && (
-              <ApprovalAuditCard approval={run.approval} onOpenSqlConsole={onOpenSqlConsole} />
-            )}
-            <div className="conv-answer-document" data-streaming-reveal={smoothedAnswer.isRevealing || undefined}>
-              <MarkdownContent content={answerContent} />
-            </div>
-            <AnswerEvidenceChips
-              answer={run?.answer || null}
-              artifacts={artifacts}
-              onOpenSqlConsole={onOpenSqlConsole}
-              onSelectArtifact={onSelectArtifact}
-            />
-          </>
-        )}
-        {!isUser && (
-          <DataReferencePanel
-            artifacts={artifacts}
-            onOpenSqlConsole={onOpenSqlConsole}
-            onSelectArtifact={onSelectArtifact}
-          />
+          parts.map((part) => {
+            if (part.type === "activity") {
+              return <ActivityFeed key={part.id} activities={part.activities} onSelectArtifact={onSelectArtifact} />;
+            }
+            if (part.type === "error") {
+              return <div key={part.id} className="conv-error-card" role="alert">
+                {getUserErrorMessage(part.message, "本次分析未完成，请重试。")}
+              </div>;
+            }
+            if (part.type === "cancelled") {
+              return <div key={part.id} className="conv-run-cancelled" role="status">
+                <CircleStop size={15} aria-hidden="true" />
+                <span><strong>任务已停止</strong> 已产生的分析步骤和工件仍然保留。</span>
+              </div>;
+            }
+            if (part.type === "approval" && run) {
+              return part.approval.status === "pending" ? null : (
+                <ApprovalAuditCard key={part.id} approval={part.approval} onOpenSqlConsole={onOpenSqlConsole} />
+              );
+            }
+            if (part.type === "question" && run) {
+              return <QuestionCard key={part.id} question={part.question}
+                onRespond={(response) => onResolveQuestion?.(run.id, part.question.id, response)} />;
+            }
+            if (part.type === "answer") {
+              return <div key={part.id} className="conv-answer-document"
+                data-streaming-reveal={smoothedAnswer.isRevealing || undefined}>
+                {run?.completion_disposition === "bounded_partial" && (
+                  <div className="conv-completion-limitation" role="status">
+                    <AlertTriangle size={15} aria-hidden="true" />
+                    <div>
+                      <strong>已完成当前可验证的分析</strong>
+                      <span>{(run.limitation_codes || []).map(completionLimitationLabel).join("；")}</span>
+                    </div>
+                  </div>
+                )}
+                <MarkdownContent
+                  content={part.content}
+                  citations={run?.answer?.evidence}
+                  onCitation={onSelectArtifact}
+                />
+              </div>;
+            }
+            if (part.type === "artifacts") {
+              return <DataReferencePanel key={part.id} artifacts={part.artifacts}
+                onOpenSqlConsole={onOpenSqlConsole} onSelectArtifact={onSelectArtifact} />;
+            }
+            return null;
+          })
         )}
       </div>
     </article>
   );
-}
-
-interface SmoothedStreamingText {
-  text: string;
-  isRevealing: boolean;
-}
-
-interface SmoothedStreamingState {
-  identity: string;
-  displayed: string;
-  streamWasActive: boolean;
-}
-
-export function useSmoothedStreamingText(
-  targetText: string,
-  active: boolean,
-  identity: string,
-): SmoothedStreamingText {
-  const reducedMotion = usePrefersReducedMotion();
-  const [state, setState] = useState<SmoothedStreamingState>(() => ({
-    identity,
-    displayed: active && targetText && !reducedMotion ? "" : targetText,
-    streamWasActive: active,
-  }));
-
-  let renderState = state;
-  const applyRenderState = (nextState: SmoothedStreamingState) => {
-    renderState = nextState;
-    setState(nextState);
-  };
-
-  if (renderState.identity !== identity) {
-    applyRenderState({
-      identity,
-      displayed: active && targetText && !reducedMotion ? "" : targetText,
-      streamWasActive: active,
-    });
-  } else if (active && !renderState.streamWasActive) {
-    applyRenderState({ ...renderState, streamWasActive: true });
-  } else if ((reducedMotion || !renderState.streamWasActive) && renderState.displayed !== targetText) {
-    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });
-  } else if (
-    renderState.streamWasActive
-    && renderState.displayed
-    && (!targetText.startsWith(renderState.displayed) || renderState.displayed.length > targetText.length)
-  ) {
-    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });
-  } else if (!active && renderState.streamWasActive && renderState.displayed === targetText) {
-    applyRenderState({ ...renderState, streamWasActive: false });
-  }
-
-  useEffect(() => {
-    if (reducedMotion || !renderState.streamWasActive) return;
-    if (renderState.displayed === targetText) return;
-    if (!targetText.startsWith(renderState.displayed) || renderState.displayed.length > targetText.length) return;
-
-    const delay = revealDelay(renderState.displayed);
-    const timer = window.setTimeout(() => {
-      setState((current) => {
-        if (current.identity !== identity || reducedMotion || !current.streamWasActive) return current;
-        if (!targetText.startsWith(current.displayed) || current.displayed.length > targetText.length) {
-          return { ...current, displayed: targetText, streamWasActive: active };
-        }
-        const nextRemaining = targetText.slice(current.displayed.length);
-        const nextText = targetText.slice(0, current.displayed.length + revealCount(nextRemaining));
-        return {
-          ...current,
-          displayed: nextText,
-          streamWasActive: active || nextText.length < targetText.length,
-        };
-      });
-    }, delay);
-
-    return () => window.clearTimeout(timer);
-  }, [active, identity, reducedMotion, renderState.displayed, renderState.streamWasActive, targetText]);
-
-  return useMemo(
-    () => ({
-      text: renderState.displayed,
-      isRevealing: renderState.streamWasActive && renderState.displayed.length < targetText.length,
-    }),
-    [renderState.displayed, renderState.streamWasActive, targetText],
-  );
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReduced(media.matches);
-    onChange();
-    media.addEventListener?.("change", onChange);
-    return () => media.removeEventListener?.("change", onChange);
-  }, []);
-
-  return reduced;
-}
-
-function revealCount(remaining: string): number {
-  if (!remaining) return 0;
-  const leadingWhitespace = remaining.match(/^\s+/)?.[0].length || 0;
-  const backlog = remaining.length;
-  const base = backlog > 240 ? 42 : backlog > 120 ? 26 : backlog > 60 ? 14 : backlog > 24 ? 8 : 4;
-  const budget = Math.min(Math.max(base, leadingWhitespace + 2), remaining.length);
-  const punctuation = remaining.slice(0, budget).search(/[。！？!?；;，,、\n]/);
-  if (punctuation >= 1) return punctuation + 1;
-  return budget;
-}
-
-function revealDelay(displayed: string): number {
-  const last = displayed.at(-1);
-  if (!last) return 12;
-  if (last === "\n") return 70;
-  if (/[。！？!?；;]/.test(last)) return 90;
-  if (/[，,、]/.test(last)) return 54;
-  return 24;
-}
-
-function AnswerEvidenceChips({
-  answer,
-  artifacts,
-  onOpenSqlConsole,
-  onSelectArtifact,
-}: {
-  answer: AgentAnswer | null;
-  artifacts: ConversationArtifact[];
-  onOpenSqlConsole: (sql?: string) => void;
-  onSelectArtifact?: (artifactId: string) => void;
-}) {
-  if (!answer) return null;
-  const chips = answer.evidence.map((item) => {
-    const artifact = findEvidenceArtifact(artifacts, item.artifact_id);
-    return { evidence: item, artifact };
-  });
-  const grounded = chips.some(({ artifact }) => artifact && isGroundedArtifact(artifact));
-  if (!grounded) {
-    return <div className="conv-answer-evidence-note">未执行查询，仅基于 schema 推断</div>;
-  }
-  return (
-    <div className="conv-answer-evidence" aria-label="Answer evidence">
-      {chips.map(({ evidence, artifact }) => {
-        const label = evidence.label || evidence.artifact_id;
-        const sql = artifact ? sqlText(artifact) : "";
-        return (
-          <button
-            key={`${evidence.artifact_id}-${label}`}
-            type="button"
-            className={`conv-answer-evidence-chip ${artifact?.type ? `conv-answer-evidence-${artifact.type}` : ""}`}
-            onClick={() => {
-              if (artifact) onSelectArtifact?.(artifact.id);
-              if (sql) onOpenSqlConsole(sql);
-            }}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ApprovalCard({
-  runId,
-  approval,
-  onOpenSqlConsole,
-  onResolveApproval,
-}: {
-  runId: string;
-  approval: AgentApproval;
-  onOpenSqlConsole: (sql?: string) => void;
-  onResolveApproval?: (runId: string, approvalId: string, approved: boolean) => void;
-}) {
-  const sql = approvalSql(approval);
-  return (
-    <section className={`conv-approval-card conv-approval-${approval.risk_level}`} aria-label="Approval required">
-      <div className="conv-approval-heading">
-        <strong>需要审批</strong>
-        <span>风险级别：{approval.risk_level}</span>
-      </div>
-      {approval.reason && <p>{approval.reason}</p>}
-      {sql && <pre>{sql}</pre>}
-      <div className="conv-approval-actions">
-        <button type="button" onClick={() => onResolveApproval?.(runId, approval.id, true)}>
-          批准执行
-        </button>
-        <button type="button" onClick={() => onResolveApproval?.(runId, approval.id, false)}>
-          拒绝
-        </button>
-        {sql && (
-          <>
-            <button type="button" onClick={() => void navigator.clipboard?.writeText(sql)}>
-              复制 SQL
-            </button>
-            <button type="button" onClick={() => onOpenSqlConsole(sql)}>
-              在 SQL Console 查看
-            </button>
-          </>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function ApprovalAuditCard({
-  approval,
-  onOpenSqlConsole,
-}: {
-  approval: AgentApproval;
-  onOpenSqlConsole: (sql?: string) => void;
-}) {
-  const sql = approvalSql(approval);
-  return (
-    <section
-      className={`conv-approval-card conv-approval-audit conv-approval-${approval.status}`}
-      aria-label="Approval audit"
-    >
-      <div className="conv-approval-heading">
-        <strong>{approvalStatusLabel(approval.status)}</strong>
-        <span>风险级别：{approval.risk_level}</span>
-      </div>
-      <div className="conv-approval-meta">
-        {approval.decided_by && <span>决定人：{approval.decided_by}</span>}
-        <span>审批时间：{formatApprovalTime(approval.decided_at)}</span>
-      </div>
-      {approval.decision_note && <p>{approval.decision_note}</p>}
-      {approval.reason && <p>原始原因：{approval.reason}</p>}
-      {sql && <pre>{sql}</pre>}
-      {sql && (
-        <div className="conv-approval-actions">
-          <button type="button" onClick={() => void navigator.clipboard?.writeText(sql)}>
-            复制 SQL
-          </button>
-          <button type="button" onClick={() => onOpenSqlConsole(sql)}>
-            在 SQL Console 查看
-          </button>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function approvalSql(approval: AgentApproval): string {
-  const action = approval.requested_action;
-  if (!action || typeof action !== "object") return "";
-  const record = action as Record<string, unknown>;
-  if (typeof record.sql === "string") return record.sql;
-  if (typeof record.safe_sql === "string") return record.safe_sql;
-  const args = record.args;
-  if (args && typeof args === "object" && typeof (args as Record<string, unknown>).sql === "string") {
-    return (args as Record<string, string>).sql;
-  }
-  if (args && typeof args === "object" && typeof (args as Record<string, unknown>).safe_sql === "string") {
-    return (args as Record<string, string>).safe_sql;
-  }
-  return "";
-}
-
-function approvalStatusLabel(status: AgentApproval["status"]): string {
-  if (status === "approved") return "审批已批准";
-  if (status === "rejected") return "审批已拒绝";
-  if (status === "expired") return "审批已过期";
-  return "审批已处理";
-}
-
-function formatApprovalTime(value?: string | null): string {
-  if (!value) return "未知时间";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "未知时间";
-  return `${date.toISOString().slice(0, 19).replace("T", " ")} UTC`;
-}
-
-function findEvidenceArtifact(artifacts: ConversationArtifact[], artifactId: string): ConversationArtifact | undefined {
-  return artifacts.find((artifact) => artifact.id === artifactId || artifact.semantic_id === artifactId);
-}
-
-function isGroundedArtifact(artifact: ConversationArtifact): boolean {
-  return artifact.type === "sql" || artifact.type === "sql_suggestion" || artifact.type === "result_view";
-}
-
-function sqlText(artifact: ConversationArtifact): string {
-  const value = artifact.payload.sql || artifact.payload.proposed_sql || artifact.payload.safeSql || artifact.payload.safe_sql;
-  return typeof value === "string" ? value : "";
 }

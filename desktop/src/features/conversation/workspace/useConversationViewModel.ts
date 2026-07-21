@@ -11,6 +11,8 @@ export function useConversationViewModel(conversationId: string) {
   const sendMessage = useConversationStore((state) => state.sendMessage);
   const cancelRun = useConversationStore((state) => state.cancelRun);
   const resolveApproval = useConversationStore((state) => state.resolveApproval);
+  const resolveQuestion = useConversationStore((state) => state.resolveQuestion);
+  const selectArtifact = useConversationStore((state) => state.selectArtifact);
 
   const messages = useMemo<ConversationMessage[]>(
     () => detail?.messages.map((item) => messagesById[item.id] || item) || [],
@@ -30,7 +32,7 @@ export function useConversationViewModel(conversationId: string) {
   );
 
   const runningRun = useMemo(
-    () => runs.find((run) => run.status === "running" || run.status === "waiting_approval") || null,
+    () => runs.find((run) => ["running", "waiting_approval", "waiting_input", "cancelling"].includes(run.status)) || null,
     [runs],
   );
 
@@ -44,5 +46,7 @@ export function useConversationViewModel(conversationId: string) {
     sendMessage,
     cancelRun,
     resolveApproval,
+    resolveQuestion,
+    selectArtifact,
   };
 }

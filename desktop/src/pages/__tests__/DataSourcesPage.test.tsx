@@ -31,7 +31,7 @@ vi.mock("../../lib/api/credentials", () => ({
   releaseCredentialLease: credentialApi.releaseCredentialLease,
 }));
 
-vi.mock("../../components/Toast", () => ({
+vi.mock("../../components/toastState", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
 
@@ -164,7 +164,7 @@ describe("DataSourcesPage", () => {
     const { container } = renderPage({ datasources });
 
     await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const searchInput = container.querySelector('input[placeholder="搜索..."]') as HTMLInputElement;
+    const searchInput = container.querySelector('input[placeholder="搜索连接…"]') as HTMLInputElement;
     expect(() => {
       fireEvent.change(searchInput, { target: { value: "local" } });
     }).not.toThrow();
@@ -373,7 +373,7 @@ describe("DataSourcesPage", () => {
     fireEvent.click(within(form).getByText("SQLite"));
     fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), { target: { value: "New SQLite" } });
     fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), { target: { value: "D:\\data\\local.db" } });
-    fireEvent.click(within(form).getByText("保存并同步 Schema"));
+    fireEvent.click(within(form).getByText("保存并同步表结构"));
 
     await waitFor(() => expect(createDatasource).toHaveBeenCalled());
     expect(syncSchema).toHaveBeenCalledWith("new-ds", { ai_enrich: true });
@@ -407,12 +407,84 @@ describe("DataSourcesPage", () => {
     fireEvent.change(within(form).getByLabelText("数据库名"), { target: { value: "analytics" } });
     fireEvent.change(within(form).getByLabelText("用户名"), { target: { value: "reader" } });
     fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
-    fireEvent.click(within(form).getByRole("button", { name: "保存并同步 Schema" }));
+    fireEvent.click(within(form).getByRole("button", { name: "保存并同步表结构" }));
 
     await waitFor(() => expect(createDatasource).toHaveBeenCalled());
     await waitFor(() =>
       expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease_datasource_create_draft"),
     );
+  });
+
+  it("clears a stale save error when a later connection test succeeds", async () => {
+    const createDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
+    vi.mocked(api.testConnection).mockResolvedValue({
+      success: true,
+      message: "数据库连接测试成功！",
+    });
+    const { container } = renderPage({
+      initialShowAddForm: true,
+      actions: {
+        createDatasource,
+        updateDatasource: vi.fn(),
+        deleteDatasource: vi.fn(),
+        syncSchema: vi.fn(),
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
+    fireEvent.change(within(form).getByLabelText("连接名称"), { target: { value: "Draft DB" } });
+    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.example.test" } });
+    fireEvent.change(within(form).getByLabelText("数据库名"), { target: { value: "analytics" } });
+    fireEvent.change(within(form).getByLabelText("用户名"), { target: { value: "reader" } });
+    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
+    fireEvent.click(within(form).getByRole("button", { name: "保存并同步表结构" }));
+
+    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
+    expect(within(form).getByText("保存失败，请重试。")).toBeInTheDocument();
+
+    fireEvent.click(within(form).getByRole("button", { name: "测试连接" }));
+
+    await waitFor(() => expect(api.testConnection).toHaveBeenCalled());
+    await waitFor(() => expect(within(form).getByText("数据库连接测试成功！")).toBeInTheDocument());
+    expect(within(form).queryByText("保存失败，请重试。")).not.toBeInTheDocument();
+  });
+
+  it("clears a successful connection test when a later save fails", async () => {
+    const updateDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
+    vi.mocked(api.testConnection).mockResolvedValue({
+      success: true,
+      message: "数据库连接测试成功！",
+    });
+    const { container } = renderPage({
+      datasources: mockDatasources,
+      actions: {
+        createDatasource: vi.fn(),
+        updateDatasource,
+        deleteDatasource: vi.fn(),
+        syncSchema: vi.fn(),
+        checkHealth: vi.fn(),
+      },
+    });
+
+    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
+    fireEvent.click(within(container.querySelector(".hifi-datasource-detail") as HTMLElement).getByText("编辑"));
+
+    const form = await waitFor(() =>
+      container.querySelector("form.hifi-datasource-form") as HTMLElement,
+    );
+    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
+    fireEvent.click(within(form).getByRole("button", { name: "测试连接" }));
+
+    await waitFor(() => expect(within(form).getByText("数据库连接测试成功！")).toBeInTheDocument());
+
+    fireEvent.click(within(form).getByRole("button", { name: "保存修改" }));
+
+    await waitFor(() => expect(updateDatasource).toHaveBeenCalled());
+    await waitFor(() => expect(within(form).getByText("更新失败，请重试。")).toBeInTheDocument());
+    expect(within(form).queryByText("数据库连接测试成功！")).not.toBeInTheDocument();
   });
 
   it("releases a new credential lease when datasource update fails before the backend can claim it", async () => {
@@ -470,12 +542,12 @@ describe("DataSourcesPage", () => {
     fireEvent.click(within(form).getByText("SQLite"));
     fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), { target: { value: "New SQLite" } });
     fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), { target: { value: "D:\\data\\local.db" } });
-    fireEvent.click(within(form).getByText("保存并同步 Schema"));
+    fireEvent.click(within(form).getByText("保存并同步表结构"));
 
     await waitFor(() => expect(createDatasource).toHaveBeenCalled());
     expect(syncSchema).toHaveBeenCalledWith("new-ds-sync-fail", undefined);
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith(created));
-    expect(toastMock).toHaveBeenCalledWith("数据源已保存，但 Schema 同步失败：sync unavailable", "warning");
+    expect(toastMock).toHaveBeenCalledWith("数据源已保存，但表结构同步失败：表结构同步失败，请重试。", "warning");
     expect(container.querySelector("form.hifi-datasource-form")).not.toBeInTheDocument();
   });
 

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import gsap from "gsap";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   observeElementOffset,
   useVirtualizer,
@@ -39,7 +38,6 @@ interface DataTableProps {
   columns: string[];
   rows: Record<string, unknown>[];
   numericColumns?: string[];
-  maxHeight?: string;
   tableName?: string;
   databaseName?: string;
   columnTypes?: Record<string, { dataType: string; isPrimaryKey: boolean; isForeignKey: boolean }>;
@@ -131,7 +129,6 @@ export function DataTable({
   columns,
   rows,
   numericColumns,
-  maxHeight,
   tableName,
   databaseName,
   columnTypes,
@@ -235,12 +232,6 @@ export function DataTable({
   const virtualPaddingBottom = lastVirtualRow ? rowVirtualizer.getTotalSize() - lastVirtualRow.end : 0;
   const tableColumnSpan = visibleColumns.length + 1;
 
-  useEffect(() => {
-    if (!tbodyRef.current) return;
-    const rowNodes = tbodyRef.current.querySelectorAll("tr:not(.data-grid-virtual-spacer)");
-    gsap.fromTo(rowNodes, { opacity: 0, y: 4 }, { opacity: 1, y: 0, duration: 0.16, stagger: 0.018, ease: "power1.out" });
-  }, [virtualRows]);
-
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 1500);
@@ -300,7 +291,7 @@ export function DataTable({
   }
 
   return (
-    <div ref={handleScrollRootRef} className="data-grid-root" style={{ maxHeight: maxHeight ?? "100%" }}>
+    <div ref={handleScrollRootRef} className="data-grid-root">
       {toast && <div className="data-grid-toast">{toast}</div>}
 
       <DataGridToolbar
@@ -353,7 +344,7 @@ export function DataTable({
                 <td
                   className="data-grid-virtual-spacer-cell"
                   colSpan={tableColumnSpan}
-                  style={{ "--data-grid-virtual-spacer-height": `${virtualPaddingTop}px` } as CSSProperties}
+                  height={Math.ceil(virtualPaddingTop)}
                 />
               </tr>
             )}
@@ -445,7 +436,7 @@ export function DataTable({
                 <td
                   className="data-grid-virtual-spacer-cell"
                   colSpan={tableColumnSpan}
-                  style={{ "--data-grid-virtual-spacer-height": `${virtualPaddingBottom}px` } as CSSProperties}
+                  height={Math.ceil(virtualPaddingBottom)}
                 />
               </tr>
             )}

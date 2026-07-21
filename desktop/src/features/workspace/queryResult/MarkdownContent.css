@@ -84,6 +84,73 @@
   text-decoration: underline;
 }
 
+.hifi-md-citation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin: 0 2px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 32%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  color: var(--color-primary);
+  font-size: var(--ui-font-caption);
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 0.08em;
+  cursor: pointer;
+}
+
+.hifi-md-citation::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
+.hifi-md-citation:hover {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+.hifi-md-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--ui-font-caption);
+}
+
+.hifi-md-sources > span {
+  font-weight: 600;
+}
+
+.hifi-md-sources button {
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.hifi-md-sources button:hover,
+.hifi-md-sources button:focus-visible {
+  border-color: var(--color-primary);
+  background: var(--bg-active);
+}
+
+.hifi-md-citation:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .hifi-md-quote {
   margin: 8px 0;
   padding-left: 10px;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Database, Plus } from "lucide-react";
 
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
-import { useToast } from "../components/Toast";
+import { useToast } from "../components/toastState";
 import { Button, EmptyState } from "../components/ui";
 import {
   DataSourceDetail,
@@ -20,6 +20,7 @@ import {
   type ToastType,
 } from "../features/datasource-management/formState";
 import { api } from "../lib/api";
+import { getUserErrorMessage } from "../lib/api/client";
 import type { DataSource, DataSourceActions, Project, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
 import { stripSensitiveDatasourceForm } from "../lib/datasourceFormSecurity";
 import {
@@ -207,6 +208,10 @@ export const DataSourcesPage = ({
 
   const updateForm = (key: keyof DatasourceFormState, value: string | number | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
+    setFormError("");
+    setTestResult((current) =>
+      current.status === "idle" ? current : { status: "idle", message: "" },
+    );
   };
 
   const handleSyncSchema = async () => {
@@ -221,13 +226,14 @@ export const DataSourcesPage = ({
       setLastSyncFeedback(feedback.inline);
       toast.toast(feedback.message, feedback.type);
     } catch (err: unknown) {
-      toast.toast((err as Error).message || "表结构同步失败", "error");
+      toast.toast(getUserErrorMessage(err, "表结构同步失败，请重试。"), "error");
     } finally {
       setActionState("idle");
     }
   };
 
   const handleTestConnection = async (nextForm: DatasourceFormState = form) => {
+    setFormError("");
     if (nextForm.db_type === "sqlite" && !nextForm.database_name) {
       setTestResult({ status: "error", message: "请先填写 SQLite 数据库文件路径。" });
       return;
@@ -236,7 +242,7 @@ export const DataSourcesPage = ({
       setTestResult({ status: "error", message: "请先填写主机、数据库名和用户名。" });
       return;
     }
-      setTestResult({ status: "testing", message: "正在测试连接..." });
+    setTestResult({ status: "testing", message: "正在测试连接…" });
     try {
       const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
       try {
@@ -254,7 +260,7 @@ export const DataSourcesPage = ({
         }
       }
     } catch (error: unknown) {
-      setTestResult({ status: "error", message: (error as Error).message ?? "连接测试失败。" });
+      setTestResult({ status: "error", message: getUserErrorMessage(error, "连接测试失败，请检查连接信息。") });
     }
   };
 
@@ -263,6 +269,7 @@ export const DataSourcesPage = ({
     try {
       setActionState("saving");
       setFormError("");
+      setTestResult({ status: "idle", message: "" });
       const createFn = createDatasource || api.createDatasource;
       const syncFn = syncSchema || api.syncSchema;
       const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
@@ -290,9 +297,9 @@ export const DataSourcesPage = ({
       await onRefreshDatasources();
       onSelectDataSource(created);
       if (syncError) {
-        const message = (syncError as Error).message || "Schema 同步失败";
-        setLastSyncFeedback(`Schema 同步失败：${message}`);
-        toast.toast(`数据源已保存，但 Schema 同步失败：${message}`, "warning");
+        const message = getUserErrorMessage(syncError, "表结构同步失败，请重试。");
+        setLastSyncFeedback(`表结构同步失败：${message}`);
+        toast.toast(`数据源已保存，但表结构同步失败：${message}`, "warning");
         return;
       }
 
@@ -300,7 +307,7 @@ export const DataSourcesPage = ({
       setLastSyncFeedback(feedback.inline);
       toast.toast(feedback.message, feedback.type);
     } catch (error: unknown) {
-      setFormError((error as Error).message ?? "保存失败。");
+      setFormError(getUserErrorMessage(error, "保存失败，请重试。"));
     } finally {
       if (credentialLeaseId) {
         await releaseCredentialLease(credentialLeaseId).catch(() => undefined);
@@ -315,6 +322,7 @@ export const DataSourcesPage = ({
     try {
       setActionState("saving");
       setFormError("");
+      setTestResult({ status: "idle", message: "" });
       const updateFn = updateDatasource || api.updateDatasource;
       const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
       credentialLeaseId = enrollment.credentialLeaseId;
@@ -332,7 +340,7 @@ export const DataSourcesPage = ({
       await onRefreshDatasources();
       toast.toast("数据源已更新", "success");
     } catch (error: unknown) {
-      setFormError((error as Error).message ?? "更新失败。");
+      setFormError(getUserErrorMessage(error, "更新失败，请重试。"));
     } finally {
       if (credentialLeaseId) {
         await releaseCredentialLease(credentialLeaseId).catch(() => undefined);
@@ -370,7 +378,7 @@ export const DataSourcesPage = ({
       if (activeDataSource?.id === selected.id) onSelectDataSource(null);
       toast.toast("数据源已删除", "success");
     } catch (err: unknown) {
-      toast.toast((err as Error).message || "删除数据源失败", "error");
+      toast.toast(getUserErrorMessage(err, "删除数据源失败，请重试。"), "error");
     } finally {
       setActionState("idle");
     }
@@ -381,22 +389,26 @@ export const DataSourcesPage = ({
       {chrome === "workspace" ? (
         <div className="ds-page-toolbar">
           <span className="ds-page-toolbar__meta">
-            {datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
+            {mode === "create" ? "正在创建连接" : datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
           </span>
-          <Button type="button" onClick={startCreate}>
-            <Plus size={13} />
-            新建连接
-          </Button>
+          {mode !== "create" ? (
+            <Button type="button" onClick={startCreate}>
+              <Plus size={13} />
+              新建连接
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="ds-page-header">
           <div>
             <h2 className="ds-page-title">数据源管理</h2>
           </div>
-          <Button type="button" onClick={startCreate}>
-            <Plus size={13} />
-            新建连接
-          </Button>
+          {mode !== "create" ? (
+            <Button type="button" onClick={startCreate}>
+              <Plus size={13} />
+              新建连接
+            </Button>
+          ) : null}
         </div>
       )}
 
@@ -414,17 +426,19 @@ export const DataSourcesPage = ({
           }
         />
       ) : (
-        <div className="ds-page-console">
-          <DataSourceList
-            datasources={datasources}
-            selectedId={selectedId}
-            search={search}
-            onSearchChange={setSearch}
-            onSelect={(id) => {
-              setMode("detail");
-              setSelectedId(id);
-            }}
-          />
+        <div className={`ds-page-console${mode === "create" ? " ds-page-console--focused" : ""}`}>
+          {mode !== "create" ? (
+            <DataSourceList
+              datasources={datasources}
+              selectedId={selectedId}
+              search={search}
+              onSearchChange={setSearch}
+              onSelect={(id) => {
+                setMode("detail");
+                setSelectedId(id);
+              }}
+            />
+          ) : null}
           <div className="ds-page-detail-shell">
             {mode === "detail" && (
               <DataSourceDetail

@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { ExternalLink, ImageOff } from "lucide-react";
 import {
+  canOpenExternalHttpsUrl,
+  openUserConfirmedExternalHttpsUrl,
+} from "../lib/externalNavigation";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,28 +15,10 @@ import {
 } from "./ui";
 import "./ImageCell.css";
 
-const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif"];
-
-/** Detects http(s) URLs that point to an image (by extension or OSS image-process params). */
-export function isImageUrl(value: string | null | undefined): value is string {
-  if (!value) return false;
-  const text = value.trim();
-  if (!/^https?:\/\//i.test(text) || /\s/.test(text)) return false;
-  try {
-    const url = new URL(text);
-    const pathname = url.pathname.toLowerCase();
-    if (IMAGE_EXTENSIONS.some((ext) => pathname.endsWith(ext))) return true;
-    // Aliyun OSS / cloud CDN style processed images without extension
-    const query = url.search.toLowerCase();
-    return query.includes("x-oss-process=image") || query.includes("imageview2") || query.includes("imagemogr2");
-  } catch {
-    return false;
-  }
-}
-
 export function ImageCell({ url }: { url: string }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [broken, setBroken] = useState(false);
+  const canOpenOriginalExternally = canOpenExternalHttpsUrl(url);
 
   if (broken) {
     return (
@@ -73,7 +59,12 @@ export function ImageCell({ url }: { url: string }) {
         <img className="hifi-img-lightbox-image" src={url} alt="" />
         <div className="hifi-img-lightbox-bar">
           <span className="hifi-img-lightbox-url" title={url}>{url}</span>
-          <button type="button" onClick={() => window.open(url, "_blank", "noopener")} title="在浏览器打开">
+          <button
+            type="button"
+            disabled={!canOpenOriginalExternally}
+            onClick={() => openUserConfirmedExternalHttpsUrl(url)}
+            title={canOpenOriginalExternally ? "在浏览器打开" : "仅允许打开 HTTPS 图片链接"}
+          >
             <ExternalLink size={12} /> 打开原图
           </button>
         </div>

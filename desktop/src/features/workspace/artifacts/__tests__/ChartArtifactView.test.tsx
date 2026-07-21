@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChartArtifact } from "../../../../types/agentArtifact";
 import { ChartArtifactView } from "../ChartArtifactView";
@@ -10,7 +10,22 @@ const echartsMock = vi.hoisted(() => ({
   getDataURL: vi.fn(() => "data:image/png;base64,test"),
 }));
 
-vi.mock("echarts-for-react", async () => {
+const chartDataMock = vi.hoisted(() => ({ fetch: vi.fn() }));
+
+const liveChartMetadata = {
+  consistency: "live_reexecution" as const,
+  originalExecutedAt: "2026-07-20T00:00:00Z",
+  viewExecutedAt: "2026-07-20T00:00:01Z",
+  viewExecutionId: "view-chart",
+  datasourceGeneration: 1,
+  queryFingerprint: "query-chart",
+};
+
+vi.mock("../../../../lib/api/agent", () => ({
+  agentApi: { fetchArtifactChartData: chartDataMock.fetch },
+}));
+
+vi.mock("echarts-for-react/lib/core", async () => {
   const React = await import("react");
 
   return {
@@ -36,10 +51,10 @@ function makeChartArtifact(chartType: ChartArtifact["chartType"]): ChartArtifact
     type: "chart",
     title: "GMV 趋势",
     chartType,
-    series: [
-      { label: "2026-06-01", value: 120 },
-      { label: "2026-06-02", value: 260 },
-    ],
+    sourceResultArtifactId: "result-1",
+    x: "day",
+    y: ["gmv"],
+    aggregation: "sum",
   };
 }
 
@@ -50,6 +65,16 @@ describe("ChartArtifactView", () => {
     echartsMock.options = [];
     echartsMock.resize.mockClear();
     echartsMock.getDataURL.mockClear();
+    chartDataMock.fetch.mockReset();
+    chartDataMock.fetch.mockResolvedValue({
+      series: [
+        { label: "2026-06-01", value: 120 },
+        { label: "2026-06-02", value: 260 },
+      ],
+      sampleSize: 2,
+      truncated: false,
+      ...liveChartMetadata,
+    });
     const style = document.documentElement.style;
     style.setProperty("--color-text-primary", "rgb(15, 23, 42)");
     style.setProperty("--color-text-muted", "rgb(100, 116, 139)");
@@ -74,43 +99,29 @@ describe("ChartArtifactView", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders chart source field formulas", () => {
-    const artifact: ChartArtifact = {
-      id: "chart-1",
-      type: "chart",
-      title: "GMV 趋势图",
-      chartType: "bar",
-      series: [{ label: "2026-06-01", value: 120 }],
-      sourceRefs: [
-        { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
-        { label: "日期", formula: "DATE(orders.created_at)", field: "orders.created_at" },
-      ],
-    };
-
-    render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
-
-    expect(screen.getByText("GMV")).toBeTruthy();
-    expect(screen.getByText("SUM(orders.amount)")).toBeTruthy();
-    expect(screen.getByText("orders.amount")).toBeTruthy();
-    expect(screen.getByText("日期")).toBeTruthy();
-    expect(screen.getByText("DATE(orders.created_at)")).toBeTruthy();
-  });
-
-  it("passes pie chart data to ECharts without downgrading to bar", () => {
+  it("passes pie chart data to ECharts without downgrading to bar", async () => {
     const artifact: ChartArtifact = {
       id: "chart-pie",
       type: "chart",
       title: "GMV 构成",
       chartType: "pie",
-      series: [
-        { label: "personal", value: 120 },
-        { label: "enterprise", value: 80 },
-      ],
+      sourceResultArtifactId: "result-pie",
+      x: "user_type",
+      y: ["gmv"],
+      aggregation: "sum",
     };
+
+    chartDataMock.fetch.mockResolvedValueOnce({
+      series: [{ label: "personal", value: 120 }, { label: "enterprise", value: 80 }],
+      sampleSize: 2,
+      truncated: false,
+      ...liveChartMetadata,
+    });
 
     render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
 
-    const option = echartsMock.options[0] as { series: Array<{ type: string; data: unknown[] }> };
+    await waitFor(() => expect(echartsMock.options.length).toBeGreaterThan(1));
+    const option = echartsMock.options.at(-1) as { series: Array<{ type: string; data: unknown[] }> };
     expect(option.series[0].type).toBe("pie");
     expect(option.series[0].data).toEqual([
       { name: "personal", value: 120 },
@@ -120,21 +131,29 @@ describe("ChartArtifactView", () => {
     expect(screen.queryByText("柱状")).toBeNull();
   });
 
-  it("passes scatter chart pairs to ECharts", () => {
+  it("passes scatter chart pairs to ECharts", async () => {
     const artifact: ChartArtifact = {
       id: "chart-scatter",
       type: "chart",
       title: "订单数与 GMV",
       chartType: "scatter",
-      series: [
-        { label: "10", value: 120 },
-        { label: "20", value: 260 },
-      ],
+      sourceResultArtifactId: "result-scatter",
+      x: "order_count",
+      y: ["gmv"],
+      aggregation: "none",
     };
+
+    chartDataMock.fetch.mockResolvedValueOnce({
+      series: [{ label: "10", value: 120 }, { label: "20", value: 260 }],
+      sampleSize: 2,
+      truncated: false,
+      ...liveChartMetadata,
+    });
 
     render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
 
-    const option = echartsMock.options[0] as {
+    await waitFor(() => expect(echartsMock.options.length).toBeGreaterThan(1));
+    const option = echartsMock.options.at(-1) as {
       xAxis: { type: string };
       series: Array<{ type: string; data: unknown[] }>;
     };
@@ -143,21 +162,22 @@ describe("ChartArtifactView", () => {
     expect(option.series[0].data).toEqual([[10, 120], [20, 260]]);
   });
 
-  it("uses agent chart tokens for palette, area styling, and chart text", () => {
+  it("uses agent chart tokens for palette, area styling, and chart text", async () => {
     const artifact: ChartArtifact = {
       id: "chart-area",
       type: "chart",
       title: "GMV 趋势",
       chartType: "area",
-      series: [
-        { label: "2026-06-01", value: 120 },
-        { label: "2026-06-02", value: 260 },
-      ],
+      sourceResultArtifactId: "result-area",
+      x: "day",
+      y: ["gmv"],
+      aggregation: "sum",
     };
 
     render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
 
-    const option = echartsMock.options[0] as {
+    await waitFor(() => expect(echartsMock.options.length).toBeGreaterThan(1));
+    const option = echartsMock.options.at(-1) as {
       color: string[];
       tooltip: { boxShadow: string; textStyle: { fontSize: number } };
       xAxis: { axisLabel: { fontSize: number } };
@@ -193,40 +213,30 @@ describe("ChartArtifactView", () => {
     expect(option.yAxis.splitLine.lineStyle.color).toBe("rgb(241, 245, 249)");
   });
 
-  it("uses enriched chart metadata for axis names, labels, and source details", () => {
+  it("derives axis names and labels from the reference-only chart definition", async () => {
     const artifact: ChartArtifact = {
       id: "chart-enriched",
       type: "chart",
       title: "GMV 趋势",
       chartType: "bar",
-      unit: "CNY",
-      xLabel: "日期",
-      yLabel: "GMV",
-      seriesLabel: "GMV",
-      dataLabel: true,
-      sampleSize: 2,
-      series: [
-        { label: "2026-06-01", value: 120 },
-        { label: "2026-06-02", value: 260 },
-      ],
-      sourceRefs: [
-        { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
-      ],
+      sourceResultArtifactId: "result-enriched",
+      x: "日期",
+      y: ["GMV"],
+      aggregation: "sum",
     };
 
     render(<ChartArtifactView artifact={artifact} onToast={vi.fn()} />);
 
-    const option = echartsMock.options[0] as {
+    await waitFor(() => expect(echartsMock.options.length).toBeGreaterThan(1));
+    const option = echartsMock.options.at(-1) as {
       xAxis: { name: string };
       yAxis: { name: string };
       series: Array<{ name: string; label: { show: boolean; position: string } }>;
     };
     expect(option.xAxis.name).toBe("日期");
-    expect(option.yAxis.name).toBe("GMV (CNY)");
+    expect(option.yAxis.name).toBe("GMV");
     expect(option.series[0].name).toBe("GMV");
     expect(option.series[0].label).toEqual(expect.objectContaining({ show: true, position: "top" }));
-    expect(screen.getByText("样本 2 行")).toBeTruthy();
-    expect(screen.getByText("orders.amount")).toBeTruthy();
   });
 
   it("can expand chart analysis height", () => {

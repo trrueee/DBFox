@@ -45,6 +45,16 @@
   -webkit-app-region: no-drag;
 }
 
+.titlebar-controls--spacious {
+  gap: 8px;
+}
+
+.titlebar-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .titlebar-btn {
   display: inline-flex;
   align-items: center;

@@ -6,13 +6,26 @@ import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import type { DataSource } from "../../../lib/api/types";
 import { DataSourceTree } from "../DataSourceTree";
 
+vi.mock("../../../lib/api/schema", () => ({
+  listTables: vi.fn().mockResolvedValue([
+    { id: "table-1", table_name: "orders", table_comment: "Orders", module_tag: "billing" },
+  ]),
+  listColumns: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("../../../lib/api/datasources", () => ({
+  datasourcesApi: {
+    releaseDatasource: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 const datasources = [
-  { id: "ds-1", name: "primary", db_type: "mysql", status: "active", database_name: "creatorhub" },
-  { id: "ds-2", name: "analytics", db_type: "postgres", status: "active", database_name: "analytics" },
+  { id: "ds-1", name: "primary", db_type: "mysql", status: "active", database_name: "creatorhub", connection_generation: 1 },
+  { id: "ds-2", name: "analytics", db_type: "postgres", status: "active", database_name: "analytics", connection_generation: 1 },
 ] as DataSource[];
 
 describe("DataSourceTree", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     cleanup();
     vi.clearAllMocks();
     useDatasourceStore.setState({
@@ -31,6 +44,7 @@ describe("DataSourceTree", () => {
       tabs: [{ id: "smart-query", title: "智能问数", type: "smart-query" }],
       activeTabId: "smart-query",
     });
+    await vi.waitFor(() => expect(useDatasourceStore.getState().loadingSchema).toBe(false));
   });
 
   it("selects a datasource through the DBFox dropdown menu", () => {

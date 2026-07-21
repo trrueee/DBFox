@@ -14,7 +14,7 @@ function artifacts(): ConversationArtifact[] {
       status: "completed",
       payload: {
         sql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
-        used_tables: ["orders"],
+        usedTables: ["orders"],
       },
       depends_on: [],
     },
@@ -26,8 +26,9 @@ function artifacts(): ConversationArtifact[] {
       title: "趋势图",
       status: "completed",
       payload: {
-        type: "bar",
-        source_refs: [
+        chartType: "bar",
+        sourceResultArtifactId: "result-view-1",
+        sourceRefs: [
           { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
         ],
       },
@@ -41,14 +42,15 @@ function artifacts(): ConversationArtifact[] {
       title: "分页结果",
       status: "completed",
       payload: {
-        storageMode: "sql_backed",
-        datasourceId: "ds-1",
-        sourceSqlArtifactKey: "sql-1",
-        sourceSqlSemanticKey: "sql_candidate",
-        safeSql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
+        sourceSqlArtifactId: "sql-1",
+        queryFingerprint: "query-gmv",
+        datasourceGeneration: 1,
         columns: ["day", "gmv"],
-        previewRows: [{ day: "2026-06-01", gmv: 120 }],
         rowCount: 128,
+        returnedRows: 50,
+        latencyMs: 4,
+        executedAt: "2026-07-19T00:00:00Z",
+        truncated: true,
       },
       depends_on: ["sql_candidate"],
     },

@@ -1,12 +1,12 @@
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
+import { remarkDbfoxCitations } from "./remarkDbfoxCitations";
+import { remarkSafeBreaks } from "./remarkSafeBreaks";
 import "./MarkdownContent.css";
 
-type MarkdownSegment =
-  | { type: "markdown"; content: string }
-  | { type: "table"; headers: string[]; rows: string[][] };
-
-const MARKDOWN_COMPONENTS: Components = {
+const BASE_MARKDOWN_COMPONENTS: Components = {
   h1: ({ children }) => <h1 className="hifi-md-h1">{children}</h1>,
   h2: ({ children }) => <h2 className="hifi-md-h2">{children}</h2>,
   h3: ({ children }) => <h3 className="hifi-md-h3">{children}</h3>,
@@ -18,139 +18,81 @@ const MARKDOWN_COMPONENTS: Components = {
   em: ({ children }) => <em className="hifi-md-em">{children}</em>,
   code: ({ children }) => <code className="hifi-md-code">{children}</code>,
   pre: ({ children }) => <pre className="hifi-md-pre">{children}</pre>,
-  a: ({ children, href }) => (
-    <a href={href} className="hifi-md-link" target="_blank" rel="noopener">
-      {children}
-    </a>
-  ),
   blockquote: ({ children }) => <blockquote className="hifi-md-quote">{children}</blockquote>,
+  table: ({ children }) => <div className="hifi-md-table-wrap"><table className="hifi-md-table">{children}</table></div>,
+  img: () => null,
 };
 
-const TABLE_CELL_MARKDOWN_COMPONENTS: Components = {
-  ...MARKDOWN_COMPONENTS,
-  p: ({ children }) => <>{children}</>,
-};
+interface MarkdownCitation {
+  artifact_id: string;
+  label?: string;
+}
 
-export function MarkdownContent({ content, className = "" }: { content: string; className?: string }) {
-  const segments = splitMarkdownTables(content);
-
+export function MarkdownContent({
+  content,
+  className = "",
+  citations = [],
+  onCitation,
+}: {
+  content: string;
+  className?: string;
+  citations?: MarkdownCitation[];
+  onCitation?: (artifactId: string) => void;
+}) {
+  const citationIndex = new Map<string, number>();
+  for (const citation of citations) {
+    if (!citationIndex.has(citation.artifact_id)) citationIndex.set(citation.artifact_id, citationIndex.size + 1);
+  }
+  const artifactOrder = Array.from(citationIndex.keys());
+  const unreferencedCitations = citations.filter(
+    (citation) => !content.includes(`{{cite:${citation.artifact_id}}}`),
+  );
+  const components: Components = {
+    ...BASE_MARKDOWN_COMPONENTS,
+    a: ({ children, href }) => {
+      const prefix = "#dbfox-artifact:";
+      if (href?.startsWith(prefix)) {
+        const artifactId = decodeURIComponent(href.slice(prefix.length));
+        const citation = citations.find((item) => item.artifact_id === artifactId);
+        return (
+          <button
+            type="button"
+            className="hifi-md-citation"
+            aria-label={`查看证据：${citation?.label || artifactId}`}
+            title={citation?.label || "查看关联数据工件"}
+            onClick={() => onCitation?.(artifactId)}
+          >
+            {children}
+          </button>
+        );
+      }
+      return <a href={href} className="hifi-md-link" target="_blank" rel="noopener noreferrer">{children}</a>;
+    },
+  };
   return (
     <div className={`hifi-markdown-content ${className}`.trim()}>
-      {segments.map((segment, index) => {
-        if (segment.type === "table") {
-          return <MarkdownTable key={index} headers={segment.headers} rows={segment.rows} />;
-        }
-        return (
-          <ReactMarkdown key={index} components={MARKDOWN_COMPONENTS}>
-            {segment.content}
-          </ReactMarkdown>
-        );
-      })}
-    </div>
-  );
-}
-
-export function splitMarkdownTables(markdown: string): MarkdownSegment[] {
-  const lines = markdown.split(/\r?\n/);
-  const segments: MarkdownSegment[] = [];
-  let markdownBuffer: string[] = [];
-  let index = 0;
-
-  const flushMarkdown = () => {
-    const content = markdownBuffer.join("\n").trim();
-    if (content) segments.push({ type: "markdown", content });
-    markdownBuffer = [];
-  };
-
-  while (index < lines.length) {
-    const current = lines[index];
-    const next = lines[index + 1];
-
-    if (isTableHeader(current, next)) {
-      flushMarkdown();
-      const headers = parseTableCells(current);
-      index += 2;
-      const rows: string[][] = [];
-
-      while (index < lines.length && isTableRow(lines[index])) {
-        const row = parseTableCells(lines[index]);
-        rows.push(headers.map((_, cellIndex) => row[cellIndex] ?? ""));
-        index += 1;
-      }
-
-      segments.push({ type: "table", headers, rows });
-      continue;
-    }
-
-    markdownBuffer.push(current);
-    index += 1;
-  }
-
-  flushMarkdown();
-  return segments;
-}
-
-function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
-  return (
-    <div className="hifi-md-table-wrap">
-      <table className="hifi-md-table">
-        <thead>
-          <tr>
-            {headers.map((header, index) => (
-              <th key={index}>
-                <MarkdownTableCell content={header} />
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {headers.map((_, cellIndex) => (
-                <td key={cellIndex}>
-                  <MarkdownTableCell content={row[cellIndex] || ""} />
-                </td>
-              ))}
-            </tr>
+      <ReactMarkdown
+        components={components}
+        remarkPlugins={[remarkGfm, remarkSafeBreaks, [remarkDbfoxCitations, { artifactOrder }]]}
+        rehypePlugins={[rehypeSanitize]}
+      >
+        {content}
+      </ReactMarkdown>
+      {unreferencedCitations.length > 0 && (
+        <nav className="hifi-md-sources" aria-label="回答证据">
+          <span>证据</span>
+          {unreferencedCitations.map((citation) => (
+            <button
+              key={citation.artifact_id}
+              type="button"
+              onClick={() => onCitation?.(citation.artifact_id)}
+              aria-label={`查看证据：${citation.label || citation.artifact_id}`}
+            >
+              [{citationIndex.get(citation.artifact_id)}] {citation.label || "数据工件"}
+            </button>
           ))}
-        </tbody>
-      </table>
+        </nav>
+      )}
     </div>
   );
-}
-
-function MarkdownTableCell({ content }: { content: string }) {
-  const parts = content.split(/<br\s*\/?>/gi);
-  return (
-    <>
-      {parts.map((part, index) => (
-        <span key={index} className="hifi-md-table-cell-line">
-          {index > 0 && <br />}
-          <ReactMarkdown components={TABLE_CELL_MARKDOWN_COMPONENTS}>{part}</ReactMarkdown>
-        </span>
-      ))}
-    </>
-  );
-}
-
-function isTableHeader(current: string | undefined, next: string | undefined): current is string {
-  return Boolean(current && next && isTableRow(current) && isTableSeparator(next));
-}
-
-function isTableRow(line: string | undefined): line is string {
-  if (!line) return false;
-  const trimmed = line.trim();
-  return trimmed.includes("|") && trimmed.replace(/\|/g, "").trim().length > 0;
-}
-
-function isTableSeparator(line: string): boolean {
-  const cells = parseTableCells(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")));
-}
-
-function parseTableCells(line: string): string[] {
-  let trimmed = line.trim();
-  if (trimmed.startsWith("|")) trimmed = trimmed.slice(1);
-  if (trimmed.endsWith("|")) trimmed = trimmed.slice(0, -1);
-  return trimmed.split("|").map((cell) => cell.trim());
 }

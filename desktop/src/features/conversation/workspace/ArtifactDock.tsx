@@ -1,8 +1,9 @@
-import { BarChart3, CheckCircle2, Code2, FileText, ShieldCheck, Table2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { BarChart3, CheckCircle2, Code2, FileText, PanelRightClose, ShieldCheck, Table2 } from "lucide-react";
+import { useMemo } from "react";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
-import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
+import { safetyCheckLabel } from "../../../lib/presentation";
+import { DeferredChartArtifactView } from "../../workspace/artifacts/DeferredChartArtifactView";
 import { MarkdownArtifactView } from "../../workspace/artifacts/MarkdownArtifactView";
 import { SqlCodeBlock } from "../../workspace/artifacts/SqlCodeBlock";
 import { SqlArtifactView } from "../../workspace/artifacts/SqlArtifactView";
@@ -26,6 +27,7 @@ interface ArtifactDockProps {
   onSelectArtifact?: (artifactId: string) => void;
   onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
+  onCollapse?: () => void;
 }
 
 type DockKind = "sql" | "safety" | "result" | "chart" | "note";
@@ -36,30 +38,30 @@ export function ArtifactDock({
   onSelectArtifact,
   onOpenSqlConsole,
   onOpenResultTab,
+  onCollapse,
 }: ArtifactDockProps) {
   const orderedArtifacts = useMemo(
     () => sortConversationArtifacts(artifacts).filter(isDockArtifact),
     [artifacts],
   );
-  const preferredArtifactId = useMemo(() => {
-    const selected = orderedArtifacts.find((artifact) => artifact.id === selectedArtifactId);
-    if (selected) return selected.id;
-    const result = orderedArtifacts.find(isSqlBackedResultViewArtifact);
-    return result?.id || orderedArtifacts[0]?.id || null;
-  }, [orderedArtifacts, selectedArtifactId]);
-  const [localSelectedId, setLocalSelectedId] = useState<string | null>(preferredArtifactId);
-  const activeId = selectedArtifactId || localSelectedId || preferredArtifactId;
-  const activeArtifact = orderedArtifacts.find((artifact) => artifact.id === activeId) || orderedArtifacts[0];
+  const activeArtifact = orderedArtifacts.find((artifact) => artifact.id === selectedArtifactId);
 
   if (orderedArtifacts.length === 0) return null;
 
   const handleSelect = (artifact: ConversationArtifact) => {
-    setLocalSelectedId(artifact.id);
     onSelectArtifact?.(artifact.id);
   };
 
   return (
     <aside className="conv-artifact-dock" aria-label="Artifact dock">
+      <header className="conv-artifact-dock-header">
+        <strong>工件</strong>
+        {onCollapse && (
+          <button type="button" onClick={onCollapse} aria-label="收起工件区" title="收起工件区">
+            <PanelRightClose size={15} aria-hidden="true" />
+          </button>
+        )}
+      </header>
       <div className="conv-artifact-dock-body">
         <nav className="conv-artifact-dock-list" aria-label="Artifact list">
           {orderedArtifacts.map((artifact) => {
@@ -89,7 +91,7 @@ export function ArtifactDock({
               onOpenResultTab={onOpenResultTab}
             />
           ) : (
-            <div className="conv-artifact-dock-empty">暂无可查看产物</div>
+            <div className="conv-artifact-dock-empty">选择一个工件查看详情</div>
           )}
         </section>
       </div>
@@ -165,7 +167,7 @@ function DockArtifactPreview({
   }
 
   if (artifact.type === "chart") {
-    return <ChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} />;
+    return <DeferredChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} />;
   }
 
   if (artifact.type === "safety") {
@@ -176,8 +178,8 @@ function DockArtifactPreview({
 }
 
 function SafetyDockCard({ artifact }: { artifact: ConversationArtifact }) {
-  const canExecute = payloadBoolean(artifact.payload, ["can_execute", "canExecute"]);
-  const requiresConfirmation = payloadBoolean(artifact.payload, ["requires_confirmation", "requiresConfirmation"]);
+  const canExecute = payloadBoolean(artifact.payload, ["canExecute"]);
+  const requiresApproval = payloadBoolean(artifact.payload, ["requiresApproval"]);
   const passed = payloadBoolean(artifact.payload, ["passed"]) || canExecute;
   const guardrail = safetyGuardrailResult(artifact.payload);
   const schemaWarnings = safetySchemaWarningsCount(artifact.payload);
@@ -194,9 +196,9 @@ function SafetyDockCard({ artifact }: { artifact: ConversationArtifact }) {
       </header>
       <div className="conv-dock-safety-grid">
         <span>{canExecute ? "可执行" : "不可执行"}</span>
-        <span>{requiresConfirmation ? "需要确认" : "无需确认"}</span>
-        <span>Guardrail: {guardrail}</span>
-        <span>Schema warnings: {schemaWarnings}</span>
+        <span>{requiresApproval ? "需要批准" : "无需批准"}</span>
+        <span>安全策略：{safetyCheckLabel(guardrail)}</span>
+        <span>表结构提醒：{schemaWarnings}</span>
       </div>
       {sql && <SqlCodeBlock sql={sql} className="conv-dock-safety-sql" ariaLabel="安全检查 SQL" />}
     </section>

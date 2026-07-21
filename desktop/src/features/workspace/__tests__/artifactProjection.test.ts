@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AgentArtifact } from "../../../lib/api";
-import { toViewArtifacts } from "../agentBridge";
+import { toViewArtifacts } from "../artifactProjection";
 
-describe("agentBridge", () => {
+describe("artifactProjection", () => {
   it("maps SQL, result view, and chart metadata for artifact views", () => {
     const artifacts: AgentArtifact[] = [
       {
@@ -15,9 +15,9 @@ describe("agentBridge", () => {
         payload: {
           sql: "SELECT SUM(amount) AS gmv FROM orders",
           purpose: "分析查询",
-          used_tables: ["orders"],
-          validation_status: "passed",
-          execution_status: "completed",
+          usedTables: ["orders"],
+          validationStatus: "passed",
+          executionStatus: "completed",
           rowCount: 12,
           latencyMs: 42,
         },
@@ -32,19 +32,15 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "both", priority: 1, collapsed: false },
         payload: {
-          storageMode: "sql_backed",
-          datasourceId: "ds-1",
-          sourceSqlArtifactKey: "sql-1",
-          sourceSqlSemanticKey: "sql_candidate",
-          sourceSql: "SELECT SUM(amount) AS gmv FROM orders",
-          safeSql: "SELECT SUM(amount) AS gmv FROM orders",
+          sourceSqlArtifactId: "sql-1",
+          queryFingerprint: "query-gmv",
+          datasourceGeneration: 1,
           columns: ["gmv"],
-          previewRows: [[120]],
-          previewRowCount: 1,
           rowCount: 12,
           returnedRows: 1,
           latencyMs: 42,
-          notices: ["preview"],
+          executedAt: "2026-07-19T00:00:00Z",
+          truncated: false,
         },
         depends_on: ["sql-1"],
         refs: [],
@@ -57,11 +53,12 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "inline", priority: 1, collapsed: false },
         payload: {
-          type: "bar",
+          chartType: "bar",
+          sourceResultArtifactId: "result-view-1",
           x: "day",
-          y: "gmv",
-          series: [{ label: "2026-06-01", value: 120 }],
-          source_refs: [{ label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" }],
+          y: ["gmv"],
+          aggregation: "sum",
+          title: "GMV chart",
         },
         depends_on: ["result-view-1"],
         refs: [],
@@ -82,15 +79,16 @@ describe("agentBridge", () => {
 
     expect(resultView?.type).toBe("result_view");
     if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
-    expect(resultView.notices).toEqual(["preview"]);
-    expect(resultView.safeSql).toBe("SELECT SUM(amount) AS gmv FROM orders");
+    expect(resultView.queryFingerprint).toBe("query-gmv");
+    expect(resultView).not.toHaveProperty("safeSql");
 
     expect(chart?.type).toBe("chart");
     if (chart?.type !== "chart") throw new Error("Expected chart artifact");
-    expect(chart.sourceRefs).toEqual([{ label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" }]);
+    expect(chart.x).toBe("day");
+    expect(chart.y).toEqual(["gmv"]);
   });
 
-  it("does not render chart artifacts without backend series", () => {
+  it("does not render chart artifacts without a source result reference", () => {
     const artifacts: AgentArtifact[] = [
       {
         id: "chart-1",
@@ -100,9 +98,9 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "inline", priority: 1, collapsed: false },
         payload: {
-          type: "bar",
+          chartType: "bar",
           x: "day",
-          y: "gmv",
+          y: ["gmv"],
         },
         depends_on: ["result-view-1"],
         refs: [],
@@ -122,20 +120,15 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "both", priority: 1, collapsed: false },
         payload: {
-          storageMode: "sql_backed",
-          datasourceId: "ds-1",
-          sourceSqlArtifactKey: "artifact-sql-1",
-          sourceSqlSemanticKey: "sql_candidate",
-          safetyArtifactKey: "artifact-safety-1",
-          safetySemanticKey: "safety_report_1",
-          sourceSql: "SELECT id, amount FROM orders",
-          safeSql: "SELECT id, amount FROM orders",
+          sourceSqlArtifactId: "artifact-sql-1",
+          queryFingerprint: "query-orders",
+          datasourceGeneration: 1,
           columns: ["id", "amount"],
-          previewRows: [{ id: 1, amount: 20 }],
-          previewRowCount: 1,
           rowCount: 128,
           returnedRows: 1,
           latencyMs: 42,
+          executedAt: "2026-07-19T00:00:00Z",
+          truncated: true,
         },
         depends_on: ["sql_candidate"],
         refs: [],
@@ -146,52 +139,12 @@ describe("agentBridge", () => {
 
     expect(resultView?.type).toBe("result_view");
     if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
-    expect(resultView.storageMode).toBe("sql_backed");
-    expect(resultView.datasourceId).toBe("ds-1");
     expect(resultView.sourceSqlArtifactId).toBe("artifact-sql-1");
-    expect(resultView.sourceSqlSemanticId).toBe("sql_candidate");
-    expect(resultView.safetyArtifactId).toBe("artifact-safety-1");
-    expect(resultView.safetySemanticId).toBe("safety_report_1");
-    expect(resultView.safeSql).toBe("SELECT id, amount FROM orders");
+    expect(resultView.queryFingerprint).toBe("query-orders");
     expect(resultView.columns).toEqual(["id", "amount"]);
-    expect(resultView.previewRows).toEqual([["1", "20"]]);
+    expect(resultView).not.toHaveProperty("previewRows");
     expect(resultView.rowCount).toBe(128);
     expect(resultView.depends_on).toEqual(["sql_candidate"]);
-  });
-
-  it("maps legacy result_view source artifact ids for existing conversations", () => {
-    const artifacts: AgentArtifact[] = [
-      {
-        id: "result-view-legacy",
-        semantic_id: "result_view_legacy",
-        type: "result_view",
-        title: "Legacy result view",
-        status: "completed",
-        presentation: { mode: "both", priority: 1, collapsed: false },
-        payload: {
-          storageMode: "sql_backed",
-          datasourceId: "ds-1",
-          sourceSqlArtifactId: "legacy-sql-artifact",
-          sourceSqlSemanticId: "legacy_sql_candidate",
-          safetyArtifactId: "legacy-safety-artifact",
-          safetySemanticId: "legacy_safety_report",
-          safeSql: "SELECT id FROM orders",
-          columns: ["id"],
-          previewRows: [{ id: 1 }],
-        },
-        depends_on: ["legacy_sql_candidate"],
-        refs: [],
-      },
-    ];
-
-    const [resultView] = toViewArtifacts(artifacts);
-
-    expect(resultView?.type).toBe("result_view");
-    if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");
-    expect(resultView.sourceSqlArtifactId).toBe("legacy-sql-artifact");
-    expect(resultView.sourceSqlSemanticId).toBe("legacy_sql_candidate");
-    expect(resultView.safetyArtifactId).toBe("legacy-safety-artifact");
-    expect(resultView.safetySemanticId).toBe("legacy_safety_report");
   });
 
   it("preserves backend pie and scatter chart types with metadata", () => {
@@ -204,12 +157,12 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "inline", priority: 1, collapsed: false },
         payload: {
-          chart_type: "pie",
+          chartType: "pie",
+          sourceResultArtifactId: "result-pie",
           x: "user_type",
-          y: "gmv",
+          y: ["gmv"],
           aggregation: "sum",
-          reason: "展示 GMV 构成",
-          series: [{ label: "personal", value: 120 }],
+          title: "GMV share",
         },
         depends_on: ["result_view"],
         refs: [],
@@ -222,12 +175,12 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "inline", priority: 2, collapsed: false },
         payload: {
-          type: "scatter",
+          chartType: "scatter",
+          sourceResultArtifactId: "result-scatter",
           x: "order_count",
-          y: "gmv",
+          y: ["gmv"],
           aggregation: "none",
-          reason: "展示订单数与 GMV 关系",
-          series: [{ label: "10", value: 120 }],
+          title: "Order scatter",
         },
         depends_on: ["result_view"],
         refs: [],
@@ -238,9 +191,7 @@ describe("agentBridge", () => {
 
     expect(charts).toHaveLength(2);
     expect(charts.map((chart) => chart.chartType)).toEqual(["pie", "scatter"]);
-    expect(charts[0].description).toBe("展示 GMV 构成");
-    expect(charts[0].payload?.aggregation).toBe("sum");
-    expect(charts[1].description).toBe("展示订单数与 GMV 关系");
+    expect(charts[0].type === "chart" ? charts[0].aggregation : undefined).toBe("sum");
   });
 
   it("maps safety artifacts into visible markdown trust summaries", () => {
@@ -254,10 +205,10 @@ describe("agentBridge", () => {
         presentation: { mode: "both", priority: 1, collapsed: true },
         payload: {
           passed: true,
-          can_execute: true,
-          requires_confirmation: false,
-          guardrail_result: "passed",
-          schema_warnings_count: 0,
+          canExecute: true,
+          requiresApproval: false,
+          guardrailResult: "passed",
+          schemaWarningsCount: 0,
         },
         depends_on: ["sql_candidate"],
         refs: [],
@@ -283,12 +234,12 @@ describe("agentBridge", () => {
         status: "completed",
         presentation: { mode: "both", priority: 1, collapsed: true },
         payload: {
-          can_execute: true,
-          requires_confirmation: false,
+          canExecute: true,
+          requiresApproval: false,
           guardrail: { result: "passed" },
-          schema_warnings: ["ambiguous column"],
+          schemaWarnings: ["ambiguous column"],
           redaction: {
-            redacted_count: 2,
+            redactedCount: 2,
             fields: ["users.phone", "users.email"],
           },
         },

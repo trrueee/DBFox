@@ -16,7 +16,9 @@ describe("MarkdownContent rendering", () => {
 
     expect(screen.getByText("SQL 能力")).toBeTruthy();
     expect(screen.getByText("sql.validate")).toBeTruthy();
-    expect(screen.getByText("执行只读查询")).toBeTruthy();
+    const sqlCapabilityCell = screen.getByText("sql.validate").closest("td");
+    if (!sqlCapabilityCell) throw new Error("Expected SQL capability table cell");
+    expect(sqlCapabilityCell.querySelector("br")).toBeTruthy();
     expect(screen.queryByText(/\*\*SQL 能力\*\*/)).toBeNull();
     expect(screen.queryByText(/<br>/)).toBeNull();
   });

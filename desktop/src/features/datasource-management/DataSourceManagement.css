@@ -47,7 +47,7 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: 8px;
-  background: var(--color-panel);
+  background: var(--surface-elevated);
 }
 
 .ds-page-detail-shell {
@@ -55,11 +55,12 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--color-panel);
+  background: var(--surface-elevated);
 }
 
 .hifi-datasource-form {
   padding: 20px 22px 28px;
+  background: var(--surface-elevated);
 }
 
 .hifi-datasource-list {
@@ -84,7 +85,7 @@
 
 .hifi-datasource-list-item.active {
   border-color: var(--color-primary-soft);
-  background: var(--color-panel);
+  background: var(--surface-elevated);
   box-shadow: var(--shadow-panel);
 }
 
@@ -725,4 +726,168 @@
   color: var(--color-text-secondary);
   font-size: var(--ui-font-control);
   font-weight: 600;
+}
+
+/* Settings scaffold integration */
+.ds-form.settings-form {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-bg);
+  box-shadow: none;
+  padding: 0;
+}
+
+.ds-form-intro {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-elevated);
+  padding: 18px 22px;
+}
+
+.ds-form-intro h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-title);
+  font-weight: 700;
+}
+
+.ds-form-intro p {
+  margin: 5px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
+  line-height: 1.45;
+}
+
+.ds-form-intro__badge {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  padding: 5px 9px;
+  font-size: var(--ui-font-caption);
+  font-weight: 700;
+}
+
+.ds-form-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.ds-form-content {
+  width: min(100%, 960px);
+}
+
+.ds-form-content .settings-section__body {
+  gap: 18px;
+}
+
+.ds-form-grid--access {
+  align-items: end;
+}
+
+.ds-form-db-grid {
+  margin-top: 0;
+}
+
+.ds-form-secret-field {
+  position: relative;
+}
+
+.ds-form-secret-field .dbfox-input {
+  padding-right: 42px;
+}
+
+.ds-form-secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+.ds-form-secret-toggle:hover {
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.ds-form-secret-toggle:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.ds-form-nested-panel {
+  margin-top: 0;
+  border-style: solid;
+  background: var(--surface-panel-muted);
+  animation: ds-settings-reveal var(--motion-fast) ease-out;
+}
+
+.ds-form-action-hint {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.ds-page-console--focused {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@keyframes ds-settings-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
+  .ds-page-console {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  }
+
+  .ds-page-console.ds-page-console--focused {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ds-form-grid--two,
+  .ds-form-grid--connection,
+  .ds-form-grid--ssh {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .ds-page-console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hifi-datasource-list {
+    display: none;
+  }
+
+  .ds-form-intro {
+    padding: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-form-nested-panel {
+    animation: none;
+  }
 }

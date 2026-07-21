@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { agentApi } from "../../../../lib/api/agent";
 import type { ResultFilter } from "../../../../lib/api/types";
 import type { ResultViewArtifact } from "../../../../types/agentArtifact";
@@ -9,10 +9,6 @@ import type {
 } from "../../sqlBacked/sqlBackedTypes";
 import { useSqlBackedDataView } from "../../sqlBacked/useSqlBackedDataView";
 import { toCsv } from "../artifactActions";
-
-const PREVIEW_ROW_LIMIT = 10;
-const LARGE_RESULT_THRESHOLD = 500;
-const WINDOW_ROW_LIMIT = 200;
 
 export type SortDirection = "asc" | "desc";
 
@@ -37,24 +33,19 @@ export interface ArtifactTableData {
   pageSize: number;
   setPageSize: (value: number) => void;
   visibleRows: string[][];
-  filteredAndSortedRows: string[][];
   totalRows: number | undefined;
   returnedRows: number;
-  previewCount: number;
   warnings: string[];
   notices: string[];
   latencyMs: number | undefined;
+  consistency: "live_reexecution" | "live_query" | undefined;
+  originalExecutedAt: string | null | undefined;
+  viewExecutedAt: string | undefined;
   isLoading: boolean;
   fetchError: string | null;
-  isSqlBackedWorkspace: boolean;
-  shouldUseWindow: boolean;
-  expanded: boolean;
-  setExpanded: (value: boolean | ((current: boolean) => boolean)) => void;
   csv: string;
-  exportAll?: () => Promise<Blob>;
+  exportAll: () => Promise<Blob>;
   refresh: () => void;
-  rowsToUseLength: number;
-  isSearching: boolean;
   hasNextPage: boolean;
 }
 
@@ -62,208 +53,106 @@ export function useArtifactTableData(
   artifact: ResultViewArtifact,
   mode: "inline" | "workspace",
 ): ArtifactTableData {
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<SortState | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
-  const [expanded, setExpanded] = useState(false);
-
-  const isSqlBackedWorkspace =
-    mode === "workspace" &&
-    artifact.type === "result_view" &&
-    artifact.storageMode === "sql_backed" &&
-    artifact.sourceSqlArtifactId.trim().length > 0;
   const columnMetadata = useMemo(
-    () =>
-      artifact.columns
-        .map((column) => ({
-          name: columnName(column),
-          type: columnType(column),
-        }))
-        .filter((column) => Boolean(column.name)),
+    () => artifact.columns
+      .map((column) => ({ name: columnName(column), type: columnType(column) }))
+      .filter((column) => Boolean(column.name)),
     [artifact.columns],
   );
-  const columns = useMemo(() => columnMetadata.map((column) => column.name), [columnMetadata]);
+  const descriptorColumns = useMemo(() => columnMetadata.map((column) => column.name), [columnMetadata]);
   const columnTypes = useMemo(() => columnMetadata.map((column) => column.type), [columnMetadata]);
+  const source = useMemo<SqlBackedDataViewSource>(() => ({
+    kind: "artifact-result",
+    artifactId: artifact.id,
+    columns: descriptorColumns,
+  }), [artifact.id, descriptorColumns]);
 
-  const sqlBackedSource = useMemo<SqlBackedDataViewSource>(() => {
-    return {
-      kind: "artifact-result",
-      datasourceId: artifact.datasourceId,
-      sourceSqlArtifactId: artifact.sourceSqlArtifactId,
-      safeSql: artifact.safeSql,
-      columns,
-    };
-  }, [artifact.datasourceId, artifact.safeSql, artifact.sourceSqlArtifactId, columns]);
-
-  const fetchSqlBackedPage = useCallback(async (request: SqlBackedPageRequest) => {
-    if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");
-    return agentApi.fetchResultPage({
-      datasourceId: request.source.datasourceId,
-      sourceSqlArtifactId: request.source.sourceSqlArtifactId,
-      safeSql: request.source.safeSql,
+  const fetchPage = useCallback(async (request: SqlBackedPageRequest, signal: AbortSignal) => {
+    if (request.source.kind !== "artifact-result") throw new Error("Unsupported Result Gateway source");
+    return agentApi.fetchArtifactPage(request.source.artifactId, {
       page: request.page,
       pageSize: request.pageSize,
       sort: request.sort,
       filters: request.filters,
       search: request.search,
       countMode: request.countMode ?? "estimate",
-    });
+    }, signal);
   }, []);
 
-  const exportSqlBackedRows = useCallback(async (request: SqlBackedExportRequest) => {
-    if (request.source.kind !== "artifact-result") throw new Error("Unsupported SQL-backed artifact source");
-    return agentApi.exportResultCsv({
-      datasourceId: request.source.datasourceId,
-      sourceSqlArtifactId: request.source.sourceSqlArtifactId,
-      safeSql: request.source.safeSql,
+  const exportAll = useCallback(async (request: SqlBackedExportRequest) => {
+    if (request.source.kind !== "artifact-result") throw new Error("Unsupported Result Gateway source");
+    return agentApi.exportArtifactCsv(request.source.artifactId, {
       sort: request.sort,
       filters: request.filters,
       search: request.search,
     });
   }, []);
 
-  const sqlBacked = useSqlBackedDataView({
-    source: sqlBackedSource,
-    fetchPage: fetchSqlBackedPage,
-    exportAll: exportSqlBackedRows,
-    enabled: isSqlBackedWorkspace,
-    initialPageSize: 50,
+  const gateway = useSqlBackedDataView({
+    source,
+    fetchPage,
+    exportAll,
+    initialPageSize: mode === "inline" ? 10 : 50,
     countMode: "estimate",
   });
-
-  const rowsToUse = artifact.rows ?? artifact.previewRows;
-
-  const backendRows = sqlBacked.rows;
-
-  const csv = useMemo(
-    () => toCsv(columns, isSqlBackedWorkspace ? backendRows : rowsToUse),
-    [columns, backendRows, isSqlBackedWorkspace, rowsToUse],
-  );
-  const normalizedSearch = search.trim().toLowerCase();
-
-  const filteredAndSortedRows = useMemo(() => {
-    if (isSqlBackedWorkspace) return backendRows;
-    const filteredRows =
-      normalizedSearch.length > 0
-        ? rowsToUse.filter((row) => row.some((cell) => cell.toLowerCase().includes(normalizedSearch)))
-        : rowsToUse;
-
-    if (!sort) return filteredRows;
-    return [...filteredRows].sort((left, right) =>
-      compareCells(left[sort.columnIndex] ?? "", right[sort.columnIndex] ?? "", sort.direction),
-    );
-  }, [backendRows, isSqlBackedWorkspace, normalizedSearch, rowsToUse, sort]);
-
-  const isSearching = normalizedSearch.length > 0;
-  const shouldUseWindow =
-    !isSqlBackedWorkspace && (expanded || isSearching) && filteredAndSortedRows.length > LARGE_RESULT_THRESHOLD;
-  const visibleRows = isSqlBackedWorkspace
-    ? filteredAndSortedRows
-    : expanded || isSearching
-      ? filteredAndSortedRows.slice(0, shouldUseWindow ? WINDOW_ROW_LIMIT : filteredAndSortedRows.length)
-      : filteredAndSortedRows.slice(0, PREVIEW_ROW_LIMIT);
-
+  const columns = gateway.columns;
+  const csv = useMemo(() => toCsv(columns, gateway.rows), [columns, gateway.rows]);
   const activeSort = useMemo<SortState | null>(() => {
-    if (!isSqlBackedWorkspace) return sort;
-    const current = sqlBacked.sort[0];
+    const current = gateway.sort[0];
     if (!current) return null;
     const columnIndex = columns.indexOf(current.column);
-    if (columnIndex < 0) return null;
-    return { columnIndex, direction: current.direction };
-  }, [columns, isSqlBackedWorkspace, sort, sqlBacked.sort]);
+    return columnIndex < 0 ? null : { columnIndex, direction: current.direction };
+  }, [columns, gateway.sort]);
 
   const setSortColumn = (columnIndex: number) => {
-    if (isSqlBackedWorkspace) {
-      const column = columns[columnIndex];
-      if (!column) return;
-      const current = sqlBacked.sort[0];
-      const direction = current?.column === column && current.direction === "desc" ? "asc" : "desc";
-      sqlBacked.setSort([{ column, direction }]);
-      return;
-    }
-    setSort((current) => {
-      if (current?.columnIndex !== columnIndex) return { columnIndex, direction: "desc" };
-      return { columnIndex, direction: current.direction === "desc" ? "asc" : "desc" };
-    });
-    setPage(1);
-  };
-
-  const setSortState = (columnIndex: number, direction: SortDirection) => {
     const column = columns[columnIndex];
     if (!column) return;
-    if (isSqlBackedWorkspace) {
-      sqlBacked.setSort([{ column, direction }]);
-      return;
-    }
-    setSort({ columnIndex, direction });
-    setPage(1);
+    const current = gateway.sort[0];
+    const direction = current?.column === column && current.direction === "desc" ? "asc" : "desc";
+    gateway.setSort([{ column, direction }]);
   };
-
-  const clearSort = () => {
-    if (isSqlBackedWorkspace) {
-      sqlBacked.setSort([]);
-      return;
-    }
-    setSort(null);
-    setPage(1);
+  const setSortState = (columnIndex: number, direction: SortDirection) => {
+    const column = columns[columnIndex];
+    if (column) gateway.setSort([{ column, direction }]);
   };
 
   return {
     columns,
     columnTypes,
-    search: isSqlBackedWorkspace ? sqlBacked.search : search,
-    setSearch: isSqlBackedWorkspace ? sqlBacked.setSearch : setSearch,
+    search: gateway.search,
+    setSearch: gateway.setSearch,
     sort: activeSort,
     setSortColumn,
     setSortState,
-    clearSort,
-    filters: isSqlBackedWorkspace ? sqlBacked.filters : [],
-    setFilters: isSqlBackedWorkspace ? sqlBacked.setFilters : () => undefined,
-    page: isSqlBackedWorkspace ? sqlBacked.page : page,
-    setPage: isSqlBackedWorkspace ? sqlBacked.setPage : setPage,
-    pageSize: isSqlBackedWorkspace ? sqlBacked.pageSize : pageSize,
-    setPageSize: isSqlBackedWorkspace ? sqlBacked.setPageSize : setPageSize,
-    visibleRows,
-    filteredAndSortedRows,
-    totalRows: isSqlBackedWorkspace ? (sqlBacked.rowCount ?? undefined) : (artifact.rowCount ?? rowsToUse.length),
-    returnedRows: isSqlBackedWorkspace ? backendRows.length : (artifact.returnedRows ?? rowsToUse.length),
-    previewCount: visibleRows.length,
-    warnings: isSqlBackedWorkspace ? sqlBacked.warnings : (artifact.warnings ?? []),
-    notices: isSqlBackedWorkspace ? sqlBacked.notices : (artifact.notices ?? []),
-    latencyMs: isSqlBackedWorkspace ? sqlBacked.latencyMs : artifact.latencyMs,
-    isLoading: isSqlBackedWorkspace ? sqlBacked.isLoading : false,
-    fetchError: isSqlBackedWorkspace ? sqlBacked.error : null,
-    isSqlBackedWorkspace,
-    shouldUseWindow,
-    expanded,
-    setExpanded,
+    clearSort: () => gateway.setSort([]),
+    filters: gateway.filters,
+    setFilters: gateway.setFilters,
+    page: gateway.page,
+    setPage: gateway.setPage,
+    pageSize: gateway.pageSize,
+    setPageSize: gateway.setPageSize,
+    visibleRows: gateway.rows,
+    totalRows: gateway.rowCount ?? artifact.rowCount,
+    returnedRows: gateway.rows.length,
+    warnings: gateway.warnings,
+    notices: gateway.notices,
+    latencyMs: gateway.latencyMs,
+    consistency: gateway.consistency,
+    originalExecutedAt: gateway.originalExecutedAt,
+    viewExecutedAt: gateway.viewExecutedAt,
+    isLoading: gateway.isLoading,
+    fetchError: gateway.error,
     csv,
-    exportAll: isSqlBackedWorkspace ? sqlBacked.exportAll : undefined,
-    refresh: isSqlBackedWorkspace ? sqlBacked.refresh : () => undefined,
-    rowsToUseLength: rowsToUse.length,
-    isSearching,
-    hasNextPage: isSqlBackedWorkspace ? sqlBacked.hasNextPage : false,
+    exportAll: gateway.exportAll,
+    refresh: gateway.refresh,
+    hasNextPage: gateway.hasNextPage,
   };
 }
 
 function columnName(column: ResultViewArtifact["columns"][number]): string {
-  if (typeof column === "string") return column;
-  return column.name;
+  return typeof column === "string" ? column : column.name;
 }
 
 function columnType(column: ResultViewArtifact["columns"][number]): string | undefined {
-  if (typeof column === "string") return undefined;
-  return column.type;
-}
-
-function compareCells(left: string, right: string, direction: SortDirection): number {
-  const leftNumber = Number(left);
-  const rightNumber = Number(right);
-  const bothNumeric =
-    left.trim() !== "" && right.trim() !== "" && Number.isFinite(leftNumber) && Number.isFinite(rightNumber);
-  const result = bothNumeric
-    ? leftNumber - rightNumber
-    : left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
-  return direction === "asc" ? result : -result;
+  return typeof column === "string" ? undefined : column.type;
 }

@@ -145,9 +145,6 @@ export interface ResultFilter {
 }
 
 export interface ResultPageRequest {
-  datasourceId: string;
-  sourceSqlArtifactId: string;
-  safeSql: string;
   page: number;
   pageSize: number;
   sort?: ResultSort[] | null;
@@ -157,9 +154,6 @@ export interface ResultPageRequest {
 }
 
 export interface ResultExportRequest {
-  datasourceId: string;
-  sourceSqlArtifactId: string;
-  safeSql: string;
   sort?: ResultSort[] | null;
   filters?: ResultFilter[] | null;
   search?: string | null;
@@ -212,9 +206,26 @@ export interface ResultPageResponse {
   pageSize: number;
   rowCount?: number | null;
   hasNextPage: boolean;
-  executedSql: string;
   latencyMs: number;
+  consistency: "live_reexecution" | "live_query";
+  originalExecutedAt?: string | null;
+  viewExecutedAt: string;
+  viewExecutionId: string;
+  datasourceGeneration: number;
+  queryFingerprint: string;
   warnings?: string[] | null;
   notices?: string[] | null;
+}
+
+export interface ChartDataResponse {
+  series: Array<{ label: string; value: number; x?: string | number }>;
+  sampleSize: number;
+  truncated: boolean;
+  consistency: "live_reexecution";
+  originalExecutedAt?: string | null;
+  viewExecutedAt: string;
+  viewExecutionId: string;
+  datasourceGeneration: number;
+  queryFingerprint: string;
 }
 

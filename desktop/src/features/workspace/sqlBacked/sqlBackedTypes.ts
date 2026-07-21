@@ -5,9 +5,7 @@ export type SqlBackedLoadingMode = "idle" | "initial" | "refresh" | "page" | "fi
 export type SqlBackedDataViewSource =
   | {
       kind: "artifact-result";
-      datasourceId: string;
-      sourceSqlArtifactId: string;
-      safeSql: string;
+      artifactId: string;
       columns: string[];
     }
   | {
@@ -42,15 +40,20 @@ export interface SqlBackedPageResponse {
   pageSize: number;
   rowCount?: number | null;
   hasNextPage: boolean;
-  executedSql: string;
   latencyMs: number;
+  consistency: "live_reexecution" | "live_query";
+  originalExecutedAt?: string | null;
+  viewExecutedAt: string;
+  viewExecutionId: string;
+  datasourceGeneration: number;
+  queryFingerprint: string;
   warnings?: string[] | null;
   notices?: string[] | null;
 }
 
 export interface UseSqlBackedDataViewOptions {
   source: SqlBackedDataViewSource;
-  fetchPage: (request: SqlBackedPageRequest) => Promise<SqlBackedPageResponse>;
+  fetchPage: (request: SqlBackedPageRequest, signal: AbortSignal) => Promise<SqlBackedPageResponse>;
   exportAll: (request: SqlBackedExportRequest) => Promise<Blob>;
   enabled?: boolean;
   initialPageSize?: number;

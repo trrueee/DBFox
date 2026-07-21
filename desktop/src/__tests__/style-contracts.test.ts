@@ -311,7 +311,7 @@ describe("LlmConfigPanel form foundation", () => {
     expect(source).toContain('from "react-hook-form"');
     expect(source).toContain('from "@hookform/resolvers/zod"');
     expect(source).toContain('from "zod"');
-    expect(source).toContain("useForm<ApiConfig>");
+    expect(source).toContain("useForm<LlmConfigDraft>");
     expect(source).toContain("useWatch");
     expect(source).not.toContain("watch,");
     expect(source).not.toContain("watch();");
@@ -1284,6 +1284,7 @@ describe("DataSourceTree mature interaction foundation", () => {
 const dataSourceListSource = join(process.cwd(), "src/features/datasource-management/DataSourceList.tsx");
 const dataSourceDetailSource = join(process.cwd(), "src/features/datasource-management/DataSourceDetail.tsx");
 const dataSourceFormSource = join(process.cwd(), "src/features/datasource-management/DataSourceForm.tsx");
+const dataSourceFormSchemaSource = join(process.cwd(), "src/features/datasource-management/datasourceFormSchema.ts");
 const schemaSyncPanelSource = join(process.cwd(), "src/features/datasource-management/SchemaSyncPanel.tsx");
 const dataSourcesPageSource = join(process.cwd(), "src/pages/DataSourcesPage.tsx");
 const localCss = join(process.cwd(), "src/features/datasource-management/DataSourceManagement.css");
@@ -1427,15 +1428,17 @@ describe("datasource management styles", () => {
 
   it("uses react-hook-form and zod for datasource form validation", () => {
     const formSource = readFileSync(dataSourceFormSource, "utf8");
+    const schemaSource = readFileSync(dataSourceFormSchemaSource, "utf8");
     const pageSource = readFileSync(dataSourcesPageSource, "utf8");
 
     expect(formSource).toContain('from "react-hook-form"');
     expect(formSource).toContain('from "@hookform/resolvers/zod"');
-    expect(formSource).toContain('from "zod"');
+    expect(schemaSource).toContain('from "zod"');
     expect(formSource).toContain("useWatch");
     expect(formSource).not.toContain("watch,");
     expect(formSource).not.toContain("watch();");
     expect(formSource).toContain("datasourceFormSchema");
+    expect(schemaSource).toContain("datasourceFormSchema");
     expect(formSource).toContain("zodResolver");
     expect(pageSource).not.toContain("const validateForm");
   });
@@ -2521,9 +2524,9 @@ describe("agent visual tokens", () => {
   it("sets desktop typography scale for readable Chinese UI", () => {
     const tokens = read("styles/tokens.css");
     const expected = {
-      "--ui-font-nano": "9px",
-      "--ui-font-micro": "10px",
-      "--ui-font-caption": "11px",
+      "--ui-font-nano": "12px",
+      "--ui-font-micro": "12px",
+      "--ui-font-caption": "12px",
       "--ui-font-label": "12px",
       "--ui-font-control": "13px",
       "--ui-font-body": "14px",
@@ -2533,8 +2536,8 @@ describe("agent visual tokens", () => {
       "--ui-font-display": "24px",
       "--ui-font-code": "13px",
       "--ui-font-data": "12px",
-      "--agent-font-micro": "10px",
-      "--agent-font-caption": "11px",
+      "--agent-font-micro": "12px",
+      "--agent-font-caption": "12px",
       "--agent-font-label": "12px",
       "--agent-font-ui": "13px",
       "--agent-font-code": "13px",
@@ -2555,12 +2558,12 @@ describe("agent visual tokens", () => {
   it("keeps system text tokens high contrast instead of washed out gray", () => {
     const tokens = read("styles/tokens.css");
 
-    expect(tokenValue(tokens, ":root", "--color-text-primary")).toBe("#0F172A");
-    expect(tokenValue(tokens, ":root", "--color-text-secondary")).toBe("#334155");
-    expect(tokenValue(tokens, ":root", "--color-text-muted")).toBe("#475569");
-    expect(tokenValue(tokens, ".dark", "--color-text-primary")).toBe("#F8FAFC");
-    expect(tokenValue(tokens, ".dark", "--color-text-secondary")).toBe("#CBD5E1");
-    expect(tokenValue(tokens, ".dark", "--color-text-muted")).toBe("#94A3B8");
+    expect(tokenValue(tokens, ":root", "--color-text-primary")).toBe("#172033");
+    expect(tokenValue(tokens, ":root", "--color-text-secondary")).toBe("#526071");
+    expect(tokenValue(tokens, ":root", "--color-text-muted")).toBe("#64748B");
+    expect(tokenValue(tokens, ".dark", "--color-text-primary")).toBe("#F4F7FB");
+    expect(tokenValue(tokens, ".dark", "--color-text-secondary")).toBe("#B5C0D0");
+    expect(tokenValue(tokens, ".dark", "--color-text-muted")).toBe("#8F9DB2");
   });
 
   it("keeps chat bubbles neutral and answer text aligned with user body size", () => {

@@ -22,7 +22,6 @@ interface SqlEditorProps {
   onChange: (value: string) => void;
   schemaTables?: SchemaTableMeta[];
   disabled?: boolean;
-  height?: string | number;
   className?: string;
   appearance?: "light" | "dark";
   ariaLabel?: string;
@@ -61,7 +60,6 @@ export function SqlEditor({
   onChange,
   schemaTables = [],
   disabled = false,
-  height = "100%",
   className,
   appearance = "light",
   ariaLabel = "SQL 编辑器",
@@ -319,7 +317,6 @@ export function SqlEditor({
       className={wrapperClassName}
       data-testid={testId}
       aria-label={ariaLabel}
-      style={{ height, userSelect: "text" }}
     >
       <Editor
         height="100%"

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, ArrowUpDown, Code, Database, Download, Filter, RefreshCw, Search, Sparkles } from "lucide-react";
-import { ImageCell, isImageUrl } from "../../../components/ImageCell";
+import { ImageCell } from "../../../components/ImageCell";
+import { isImageUrl } from "../../../components/imageUrl";
 import { CellValuePreview } from "../../../components/data-grid/CellValuePreview";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
 import { agentApi } from "../../../lib/api/agent";
@@ -141,7 +142,7 @@ export function TablePreviewPane({
       const table = await findTableByName(datasourceId, tableId);
       if (seq !== requestSeqRef.current) return;
       if (!table) {
-        setError("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
+        setError("未找到该表的数据源或字段信息，请先同步表结构。");
         return;
       }
       const cols = await listColumns(table.id);
@@ -275,7 +276,7 @@ export function TablePreviewPane({
       }
       const table = await findTableByName(datasourceId, tableId);
       if (!table) {
-        onToast("未找到该表的数据源或 Schema 元数据，请先同步 Schema。");
+        onToast("未找到该表的数据源或字段信息，请先同步表结构。");
         return;
       }
       const blob = await agentApi.exportTableResultCsv({

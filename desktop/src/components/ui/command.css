@@ -111,7 +111,7 @@
 
 .dbfox-command-item[data-selected="true"] .dbfox-command-item-icon {
   color: var(--color-primary);
-  background: rgba(79, 70, 229, 0.12);
+  background: var(--color-primary-soft);
 }
 
 .dbfox-command-item-label {

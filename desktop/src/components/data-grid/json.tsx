@@ -1,25 +1,5 @@
 import { useState } from "react";
-
-export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
-
-export function tryParseJson(value: unknown): JsonValue | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!(trimmed.startsWith("{") && trimmed.endsWith("}")) && !(trimmed.startsWith("[") && trimmed.endsWith("]"))) {
-    return null;
-  }
-  try {
-    return JSON.parse(trimmed) as JsonValue;
-  } catch {
-    return null;
-  }
-}
-
-export function compactJsonPreview(value: JsonValue) {
-  if (Array.isArray(value)) return `Array(${value.length})`;
-  if (value && typeof value === "object") return `Object(${Object.keys(value).length})`;
-  return String(value);
-}
+import { compactJsonPreview, type JsonValue } from "./jsonValue";
 
 export function JsonTree({ data, depth = 0 }: { data: JsonValue; depth?: number }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -33,7 +13,7 @@ export function JsonTree({ data, depth = 0 }: { data: JsonValue; depth?: number 
   const keys = isArray ? data.map((_, index) => String(index)) : Object.keys(data);
 
   return (
-    <div style={{ paddingLeft: depth > 0 ? 12 : 0 }}>
+    <div className={depth > 0 ? "json-tree json-tree--nested" : "json-tree"}>
       <span className="text-[var(--text-muted)]">{isArray ? "[" : "{"}</span>
       <div className="ml-1.5 border-l border-dashed border-[var(--border-light)] pl-2">
         {keys.map((key) => {

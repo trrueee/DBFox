@@ -2,6 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { getDialogContainer } from "./dialogContainer";
 import "./dialog.css";
 
 const Dialog = DialogPrimitive.Root;
@@ -21,15 +22,11 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
-/** Container element inside the canvas where dialogs render (avoids portal-overflow in scaled canvas). */
-let dialogContainer: HTMLElement | null = null;
-export function setDialogContainer(el: HTMLElement | null) { dialogContainer = el; }
-
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
-  <DialogPortal container={dialogContainer || undefined}>
+  <DialogPortal container={getDialogContainer() || undefined}>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}

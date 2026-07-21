@@ -67,8 +67,8 @@ export function ConversationHistoryPanel({
                     <Clock size={12} aria-hidden="true" />
                     <span>{formatTime(conversation.updated_at)}</span>
                     <span>·</span>
-                    <span>{conversation.message_count} 条消息</span>
-                    {conversation.artifact_count > 0 ? (
+                    <span>{conversation.message_count || 0} 条消息</span>
+                    {(conversation.artifact_count || 0) > 0 ? (
                       <>
                         <span>·</span>
                         <span>{conversation.artifact_count} 个产物</span>

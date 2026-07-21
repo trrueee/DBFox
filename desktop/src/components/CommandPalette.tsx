@@ -64,7 +64,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
           <Search size={15} className="dbfox-command-search-icon" />
           <CommandInput
             autoFocus
-            placeholder="输入指令或搜索表、字段、功能..."
+            placeholder="输入指令或搜索表、字段、功能…"
           />
           <CommandKbd>Esc</CommandKbd>
         </CommandSearch>

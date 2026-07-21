@@ -52,7 +52,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
   if (loading) {
     return (
       <div className="table-er-pane table-er-pane__state">
-        <LoadingState label="正在加载 ER 关系图..." />
+        <LoadingState label="正在加载关系图…" />
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
   if (!data || data.nodes.length === 0) {
     return (
       <div className="table-er-pane table-er-pane__state">
-        <EmptyState title="暂无 ER 关系图数据" description="请先同步 Schema 后再查看表关系。" />
+        <EmptyState title="暂无 ER 关系图数据" description="请先同步表结构后再查看表关系。" />
       </div>
     );
   }
@@ -164,7 +164,7 @@ function TableErPaneContent({
         </Toolbar>
       </div>
       <div className="table-er-pane__canvas">
-        <Suspense fallback={<LoadingState className="table-er-pane__diagram-loading" label="正在载入关系图..." />}>
+        <Suspense fallback={<LoadingState className="table-er-pane__diagram-loading" label="正在载入关系图…" />}>
           <ErDiagram
             data={data}
             focusTable={resolvedFocusTable}

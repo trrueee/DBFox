@@ -115,11 +115,11 @@ describe("AgentEvalPage", () => {
     });
   });
 
-  it("passes stored product LLM config when running evals", async () => {
+  it("passes an opaque stored LLM credential reference when running evals", async () => {
     localStorage.setItem(
       "dbfox-api-config",
       JSON.stringify({
-        apiKey: " sk-eval ",
+        credentialId: " credential-eval ",
         apiBase: " https://dashscope.aliyuncs.com/compatible-mode/v1 ",
         modelName: " qwen-plus ",
       }),
@@ -156,7 +156,7 @@ describe("AgentEvalPage", () => {
     await waitFor(() => {
       expect(apiMocks.runEval).toHaveBeenCalledWith({
         datasource_id: "ds-1",
-        api_key: "sk-eval",
+        llm_credential_id: "credential-eval",
         api_base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         model_name: "qwen-plus",
         execute: false,

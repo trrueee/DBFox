@@ -1,9 +1,22 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WorkspaceRouter, testDraftLlmConnection } from "../WorkspaceRouter";
+import { WorkspaceRouter } from "../WorkspaceRouter";
+import { testDraftLlmConnection } from "../llmDraftConnection";
 import { useDatasourceStore } from "../../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import type { WorkspaceTab } from "../../../types/workspace";
+
+const LAZY_ROUTE_TIMEOUT_MS = 10_000;
+
+async function findLazyRouteByTestId(testId: string) {
+  await vi.dynamicImportSettled();
+  return screen.findByTestId(testId, {}, { timeout: LAZY_ROUTE_TIMEOUT_MS });
+}
+
+async function findLazyRouteRegion(name: string) {
+  await vi.dynamicImportSettled();
+  return screen.findByRole("region", { name }, { timeout: LAZY_ROUTE_TIMEOUT_MS });
+}
 
 const tableWorkspaceProps = vi.hoisted(() => ({
   latest: null as Record<string, unknown> | null,
@@ -73,7 +86,7 @@ vi.mock("../../../pages/DiagnosticsPage", () => ({
     return <div data-testid="diagnostics-page" />;
   },
 }));
-vi.mock("../../../components/SettingsDialog", () => ({
+vi.mock("../../../hooks/useApiConfig", () => ({
   useApiConfig: () => ({
     config: {},
     updateConfig: vi.fn(),
@@ -143,7 +156,7 @@ describe("WorkspaceRouter table tabs", () => {
     });
   });
 
-  it("uses the datasource captured on the table tab instead of the current active datasource", () => {
+  it("uses the datasource captured on the table tab instead of the current active datasource", async () => {
     const activeTab: WorkspaceTab = {
       id: "table-ds-1-users",
       title: "users",
@@ -155,7 +168,7 @@ describe("WorkspaceRouter table tabs", () => {
 
     render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
 
-    expect(screen.getByTestId("table-workspace").getAttribute("data-datasource-id")).toBe("ds-1");
+    expect((await findLazyRouteByTestId("table-workspace")).getAttribute("data-datasource-id")).toBe("ds-1");
     expect(screen.getByTestId("table-workspace").getAttribute("data-db-type")).toBe("postgresql");
     expect(tableWorkspaceProps.latest).toMatchObject({
       tableId: "users",
@@ -164,7 +177,7 @@ describe("WorkspaceRouter table tabs", () => {
     });
   });
 
-  it("opens SQL console from a table tab bound to the table datasource", () => {
+  it("opens SQL console from a table tab bound to the table datasource", async () => {
     const activeTab: WorkspaceTab = {
       id: "table-ds-1-users",
       title: "users",
@@ -175,6 +188,7 @@ describe("WorkspaceRouter table tabs", () => {
     };
 
     render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
+    await findLazyRouteByTestId("table-workspace");
     (tableWorkspaceProps.latest?.onOpenSqlConsole as (sql?: string) => void)("SELECT * FROM users;");
 
     const state = useWorkspaceStore.getState();
@@ -213,7 +227,7 @@ describe("WorkspaceRouter SQL console tabs", () => {
     });
   });
 
-  it("passes the datasource captured on the SQL tab instead of the global active datasource", () => {
+  it("passes the datasource captured on the SQL tab instead of the global active datasource", async () => {
     render(
       <WorkspaceRouter
         activeTab={{
@@ -227,7 +241,7 @@ describe("WorkspaceRouter SQL console tabs", () => {
       />,
     );
 
-    expect(screen.getByTestId("sql-console")).toBeTruthy();
+    expect(await findLazyRouteByTestId("sql-console")).toBeTruthy();
     expect(sqlConsoleProps.latest).toMatchObject({
       activeDatasourceId: "ds-1",
     });
@@ -289,15 +303,15 @@ describe("WorkspaceRouter desktop shell tabs", () => {
       } as unknown as WorkspaceTab,
       "table-artifact",
     ],
-  ])("wraps %s in WorkspaceShell chrome", (_label, activeTab, testId) => {
+  ])("wraps %s in WorkspaceShell chrome", async (_label, activeTab, testId) => {
     render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
 
-    const shell = screen.getByRole("region", { name: activeTab.title });
+    const shell = await findLazyRouteRegion(activeTab.title);
     expect(within(shell).getByRole("heading", { name: activeTab.title })).toBeTruthy();
     expect(within(shell).getByTestId(testId)).toBeTruthy();
   });
 
-  it("gives artifact result tabs a non-scrolling shell body so the table owns scrolling", () => {
+  it("gives artifact result tabs a non-scrolling shell body so the table owns scrolling", async () => {
     const activeTab = {
       id: "artifact-result",
       title: "Query Artifact",
@@ -307,21 +321,24 @@ describe("WorkspaceRouter desktop shell tabs", () => {
 
     render(<WorkspaceRouter activeTab={activeTab} showToast={vi.fn()} />);
 
-    const shell = screen.getByRole("region", { name: "Query Artifact" });
+    const shell = await findLazyRouteRegion("Query Artifact");
     const shellBody = shell.querySelector(".workspace-shell__body");
     expect(shellBody?.classList.contains("workspace-shell__body--artifact-result")).toBe(true);
   });
 
-  it("passes workspace chrome to pages that already sit inside WorkspaceShell", () => {
+  it("passes workspace chrome to pages that already sit inside WorkspaceShell", async () => {
     render(<WorkspaceRouter activeTab={{ id: "diagnostics", title: "Diagnostics", type: "diagnostics" }} showToast={vi.fn()} />);
+    await findLazyRouteByTestId("diagnostics-page");
     expect(workspacePageProps.diagnostics).toMatchObject({ chrome: "workspace" });
 
     cleanup();
     render(<WorkspaceRouter activeTab={{ id: "datasource-settings", title: "Data Sources", type: "datasource-settings" }} showToast={vi.fn()} />);
+    await findLazyRouteByTestId("datasources-page");
     expect(workspacePageProps.datasourceSettings).toMatchObject({ chrome: "workspace" });
 
     cleanup();
     render(<WorkspaceRouter activeTab={{ id: "llm-config", title: "LLM Config", type: "llm-config" }} showToast={vi.fn()} />);
+    await findLazyRouteByTestId("llm-config");
     expect(workspacePageProps.llmConfig).toMatchObject({ chrome: "workspace" });
   });
 
@@ -340,13 +357,13 @@ describe("WorkspaceRouter desktop shell tabs", () => {
 
     await testDraftLlmConnection({
       credentialId: "cred_llm_api_key_saved",
-      apiKey: "sk-current-draft-only",
+      apiKey: "TEST_LLM_SECRET",
       apiBase: "https://draft.example.test/v1",
       modelName: "draft-model",
     });
 
     expect(llmConnectionApi.enrollCredentials).toHaveBeenCalledWith([
-      { kind: "llm_api_key", secret: "sk-current-draft-only" },
+      { kind: "llm_api_key", secret: "TEST_LLM_SECRET" },
     ]);
     expect(llmConnectionApi.testLlmConnection).toHaveBeenCalledWith(
       "cred_llm_api_key_draft",
@@ -367,7 +384,7 @@ describe("WorkspaceRouter desktop shell tabs", () => {
     await expect(
       testDraftLlmConnection({
         credentialId: "cred_llm_api_key_saved",
-        apiKey: "sk-current-draft-only",
+        apiKey: "TEST_LLM_SECRET",
         apiBase: "https://draft.example.test/v1",
         modelName: "draft-model",
       }),

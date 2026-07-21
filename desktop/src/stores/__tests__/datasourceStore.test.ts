@@ -22,8 +22,8 @@ vi.mock("../../lib/api/datasources", () => ({
 const { datasourcesApi } = await import("../../lib/api/datasources");
 const { listTables, listColumns } = await import("../../lib/api/schema");
 
-const DS1 = { id: "ds-1", name: "Test DB", db_type: "mysql" as const, host: "localhost", port: 3306, database_name: "test", username: "root", is_read_only: false, env: "dev" };
-const DS2 = { id: "ds-2", name: "Prod DB", db_type: "postgresql" as const, host: "prod.db", port: 5432, database_name: "prod", username: "admin", is_read_only: true, env: "prod" };
+const DS1 = { id: "ds-1", name: "Test DB", db_type: "mysql" as const, host: "localhost", port: 3306, database_name: "test", username: "root", connection_generation: 1, is_read_only: false, env: "dev" };
+const DS2 = { id: "ds-2", name: "Prod DB", db_type: "postgresql" as const, host: "prod.db", port: 5432, database_name: "prod", username: "admin", connection_generation: 1, is_read_only: true, env: "prod" };
 
 function resetAll() {
   vi.clearAllMocks();
@@ -71,6 +71,31 @@ describe("datasourceStore — loadDatasources", () => {
 
     expect(useDatasourceStore.getState().schemaError).toBe("auth failed");
     expect(useDatasourceStore.getState().datasources).toEqual([]);
+  });
+
+  it("clears and reloads schema when the active datasource generation changes", async () => {
+    const nextTables = [{ id: "table-new", table_name: "new_orders", table_comment: "" }];
+    let resolveTables!: (tables: typeof nextTables) => void;
+    useDatasourceStore.setState({
+      datasources: [DS1] as never,
+      activeDatasourceId: DS1.id,
+      tables: [{ id: "table-old", table_name: "old_orders", table_comment: "" }],
+      tableColumns: { "table-old": [] },
+    });
+    vi.mocked(listTables).mockImplementation(
+      () => new Promise((resolve) => { resolveTables = resolve as typeof resolveTables; }),
+    );
+    vi.mocked(datasourcesApi.listDatasources).mockResolvedValue([
+      { ...DS1, host: "new-host", connection_generation: 2 },
+    ] as never);
+
+    await useDatasourceStore.getState().loadDatasources();
+
+    expect(useDatasourceStore.getState().tables).toEqual([]);
+    expect(useDatasourceStore.getState().tableColumns).toEqual({});
+    resolveTables(nextTables);
+    await vi.waitFor(() => expect(useDatasourceStore.getState().tables).toEqual(nextTables));
+    expect(listTables).toHaveBeenCalledWith(DS1.id);
   });
 });
 
@@ -299,5 +324,40 @@ describe("datasourceStore — schema column loading", () => {
     expect(Object.keys(useDatasourceStore.getState().tableColumns)).toHaveLength(10);
     expect(listColumns).toHaveBeenCalledTimes(10);
     expect(maxActiveRequests).toBeLessThanOrEqual(4);
+  });
+
+  it("does not cache a failed batch column load as an empty schema", async () => {
+    const tables: EngineSchemaTable[] = [
+      { id: "table-retry", table_name: "retry_me", table_comment: "" },
+    ];
+    const columns: EngineColumn[] = [
+      {
+        id: "column-retry",
+        column_name: "id",
+        data_type: "INTEGER",
+        column_type: "INTEGER",
+        is_nullable: false,
+        column_default: "",
+        column_comment: "",
+        is_primary_key: true,
+        is_foreign_key: false,
+      },
+    ];
+    useDatasourceStore.setState({
+      datasources: [DS1] as never,
+      activeDatasourceId: DS1.id,
+    });
+    await vi.waitFor(() => expect(useDatasourceStore.getState().loadingSchema).toBe(false));
+    useDatasourceStore.setState({ tables });
+    vi.mocked(listColumns)
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce(columns);
+
+    await useDatasourceStore.getState().loadColumnsForTables(["table-retry"]);
+    expect(useDatasourceStore.getState().tableColumns).toEqual({});
+
+    await useDatasourceStore.getState().loadColumnsForTables(["table-retry"]);
+    expect(listColumns).toHaveBeenCalledTimes(2);
+    expect(useDatasourceStore.getState().tableColumns).toEqual({ "table-retry": columns });
   });
 });

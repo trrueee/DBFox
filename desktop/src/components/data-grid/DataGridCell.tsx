@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
-import { CellValuePreview, cellValueToText, getCellPreviewJson, isCellValuePreviewable } from "./CellValuePreview";
+import { CellValuePreview } from "./CellValuePreview";
+import { cellValueToText, getCellPreviewJson, isCellValuePreviewable } from "./cellValue";
 
 interface DataGridCellProps {
   value: unknown;

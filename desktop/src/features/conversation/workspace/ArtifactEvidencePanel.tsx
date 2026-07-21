@@ -1,13 +1,12 @@
 import { Copy, Database, ExternalLink, Play, Table2, Terminal } from "lucide-react";
 import type { ResultViewArtifact as ResultViewArtifactModel } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
-import { ChartArtifactView } from "../../workspace/artifacts/ChartArtifactView";
+import { safetyCheckLabel } from "../../../lib/presentation";
+import { DeferredChartArtifactView } from "../../workspace/artifacts/DeferredChartArtifactView";
 import {
   conversationArtifactKeys,
-  conversationCellText,
   conversationSqlText,
   conversationTableColumns,
-  conversationTableRows,
   dependsOnAnyConversationArtifact,
   isSqlBackedResultViewArtifact,
   isSqlConversationArtifact,
@@ -121,8 +120,8 @@ export function ArtifactEvidencePanel({ artifacts, onOpenSqlConsole, onOpenResul
 }
 
 function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
-  const canExecute = payloadBoolean(artifact.payload, ["can_execute", "canExecute"]);
-  const requiresConfirmation = payloadBoolean(artifact.payload, ["requires_confirmation", "requiresConfirmation"]);
+  const canExecute = payloadBoolean(artifact.payload, ["canExecute"]);
+  const requiresApproval = payloadBoolean(artifact.payload, ["requiresApproval"]);
   const passed = payloadBoolean(artifact.payload, ["passed"]) || canExecute;
   const guardrail = safetyGuardrailResult(artifact.payload);
   const schemaWarnings = safetySchemaWarningsCount(artifact.payload);
@@ -132,11 +131,11 @@ function SafetyArtifact({ artifact }: { artifact: ConversationArtifact }) {
       <div className="conv-artifact-heading">
         <strong>安全检查</strong>
         <span>{canExecute ? "可执行" : "不可执行"}</span>
-        <span>{requiresConfirmation ? "需要确认" : "无需确认"}</span>
+        <span>{requiresApproval ? "需要批准" : "无需批准"}</span>
       </div>
       <div className="conv-table-meta">
-        <span>Guardrail: {guardrail}</span>
-        <span>Schema warnings: {schemaWarnings}</span>
+        <span>安全策略：{safetyCheckLabel(guardrail)}</span>
+        <span>表结构提醒：{schemaWarnings}</span>
       </div>
       {redaction.count > 0 && (
         <div className="conv-safety-redaction">
@@ -156,11 +155,9 @@ function ResultViewArtifactCard({
   onOpenResultTab?: (artifact: ResultViewArtifactModel) => void;
 }) {
   const columns = conversationTableColumns(artifact);
-  const allRows = conversationTableRows(artifact);
-  const rows = allRows.slice(0, 10);
-  const rowCount = payloadNumber(artifact.payload, ["rowCount", "row_count"]) ?? allRows.length;
-  const returnedRows = payloadNumber(artifact.payload, ["returnedRows", "returned_rows"]) ?? allRows.length;
-  const latencyMs = payloadNumber(artifact.payload, ["latencyMs", "latency_ms"]);
+  const rowCount = payloadNumber(artifact.payload, ["rowCount"]);
+  const returnedRows = payloadNumber(artifact.payload, ["returnedRows"]);
+  const latencyMs = payloadNumber(artifact.payload, ["latencyMs"]);
   const truncated = Boolean(artifact.payload.truncated);
   return (
     <div className="conv-table-artifact">
@@ -178,39 +175,18 @@ function ResultViewArtifactCard({
           </button>
         )}
       </div>
-      {columns.length > 0 && rows.length > 0 && (
-        <>
-          <div className="conv-table-meta">
-            <span>预览 {rows.length} / 共 {rowCount} 行</span>
-            <span>{columns.length} 列</span>
-            {latencyMs !== undefined && <span>{latencyMs}ms</span>}
-            {returnedRows > rows.length && <span>已载入 {returnedRows} 行</span>}
-            {truncated && <span className="conv-table-warning">结果已截断</span>}
-          </div>
-          <div className="conv-table-preview">
-            <table>
-              <thead>
-                <tr>
-                  {columns.map((column) => <th key={column}>{column}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {columns.map((column, columnIndex) => (
-                      <td key={column}>{conversationCellText(row, column, columnIndex)}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+      <div className="conv-table-meta">
+        {rowCount !== undefined && <span>共 {rowCount} 行</span>}
+        <span>{columns.length} 列</span>
+        {latencyMs !== undefined && <span>{latencyMs}ms</span>}
+        {returnedRows !== undefined && <span>执行返回 {returnedRows} 行</span>}
+        {truncated && <span className="conv-table-warning">执行结果已截断</span>}
+        <span>打开工件后按需读取数据</span>
+      </div>
     </div>
   );
 }
 
 function ChartArtifact({ artifact }: { artifact: ConversationArtifact }) {
-  return <ChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} compact />;
+  return <DeferredChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} compact />;
 }

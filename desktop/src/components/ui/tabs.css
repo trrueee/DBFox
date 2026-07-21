@@ -1,6 +1,10 @@
 .dbfox-tabs-list {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  background: var(--surface-panel-muted);
 }
 
 .dbfox-tabs-trigger {
@@ -8,7 +12,11 @@
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  border-radius: var(--radius);
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: calc(var(--radius-control) - 2px);
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
   outline: none;
   transition:
     color 120ms ease,
@@ -17,13 +25,24 @@
 }
 
 .dbfox-tabs-trigger:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 1px;
+  box-shadow: var(--focus-ring);
+}
+
+.dbfox-tabs-trigger:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--control-bg-hover);
+}
+
+.dbfox-tabs-trigger[data-state="active"] {
+  color: var(--color-primary);
+  background: var(--control-bg);
+  box-shadow: var(--shadow-card);
+  font-weight: 600;
 }
 
 .dbfox-tabs-trigger:disabled {
   pointer-events: none;
-  opacity: 0.5;
+  opacity: var(--control-disabled-opacity);
 }
 
 .dbfox-tabs-content {
@@ -31,6 +50,5 @@
 }
 
 .dbfox-tabs-content:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }

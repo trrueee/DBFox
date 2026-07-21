@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, ChevronDown, Copy, FileWarning, RefreshCw, Trash2 } from "lucide-react";
+import { Activity, Check, CheckCircle2, ChevronDown, Copy, FileText, FileWarning, RefreshCw, Trash2 } from "lucide-react";
 import { Button, EmptyState, ErrorState } from "../components/ui";
+import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
+import { SettingsSection, SettingsToggle } from "../components/settings";
 import { diagnosticsApi, type DiagnosticLogSource, type DiagnosticLogsResponse } from "../lib/api/diagnostics";
 import { getClientLogSource } from "../lib/diagnostics/clientLog";
 import { getUserErrorMessage } from "../lib/api/client";
@@ -31,6 +33,7 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
   const [showEmptyLogs, setShowEmptyLogs] = useState(false);
   const [selectedGroupKey, setSelectedGroupKey] = useState<DiagnosticGroupKey>("backend");
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [auditConfirmation, setAuditConfirmation] = useState<ConfirmationDetails | null>(null);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -100,6 +103,21 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
     }
   };
 
+  const requestAuditClear = () => {
+    setAuditConfirmation({
+      confirm_token: "security-audit-clear",
+      impact_summary: "这会删除本机现有的安全审计记录。系统会保留一条本次清理操作的审计记录。此操作不会删除诊断日志、对话或工件。",
+      expected_confirm_text: "清空安全审计",
+      onCancel: () => setAuditConfirmation(null),
+      onConfirm: async (confirmText) => {
+        const result = await diagnosticsApi.clearSecurityAudit(confirmText);
+        setAuditConfirmation(null);
+        onToast(`已清理 ${result.records_deleted} 条安全审计记录`, "success");
+        await loadLogs();
+      },
+    });
+  };
+
   const visibleGroups = useMemo(() => {
     if (!logs) return [];
     return buildDiagnosticGroups(logs.sources, showEmptyLogs);
@@ -108,26 +126,18 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
   const resolvedSelectedGroupKey = visibleGroups.some((group) => group.key === selectedGroupKey)
     ? selectedGroupKey
     : visibleGroups[0]?.key ?? selectedGroupKey;
-  if (resolvedSelectedGroupKey !== selectedGroupKey) {
-    setSelectedGroupKey(resolvedSelectedGroupKey);
-  }
-
   const selectedGroup = visibleGroups.find((group) => group.key === resolvedSelectedGroupKey) || visibleGroups[0] || null;
   const totalSourcesCount = logs?.sources.length ?? 0;
   const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
-  const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取...";
+  const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取…";
   const actions = (
     <div className="diagnostics-actions">
-      <label className="diagnostics-toggle-label">
-        <input
-          type="checkbox"
-          className="diagnostics-toggle-checkbox"
-          checked={showEmptyLogs}
-          aria-label="显示空日志"
-          onChange={(e) => setShowEmptyLogs(e.target.checked)}
-        />
-        <span>显示空日志</span>
-      </label>
+      <SettingsToggle
+        checked={showEmptyLogs}
+        onCheckedChange={setShowEmptyLogs}
+        label="显示空日志"
+        compact
+      />
       <span className="diagnostics-badge">
         <CheckCircle2 size={14} />
         已脱敏
@@ -138,7 +148,11 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={handleClearLogs} disabled={loading}>
         <Trash2 size={14} />
-        清空
+        清空日志
+      </Button>
+      <Button type="button" variant="outline" size="sm" onClick={requestAuditClear} disabled={loading}>
+        <Trash2 size={14} />
+        清空审计
       </Button>
       <Button type="button" size="sm" onClick={handleCopy} disabled={!logs}>
         <Copy size={14} />
@@ -168,94 +182,109 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
         <ErrorState className="diagnostics-error" title="诊断日志加载失败" description={error} />
       ) : null}
 
-      <div className="diagnostics-summary">
-        <Metric label="日志源" value={`${nonEmptySourcesCount}/${totalSourcesCount} 有内容`} />
-        <Metric label="日志分组" value={`${visibleGroups.length}/2 可查看`} />
-        <Metric label="进程" value={String(logs?.environment.pid ?? "-")} />
-        <Metric label="Python" value={String(logs?.environment.python ?? "-")} />
-        <Metric label="模式" value={logs?.environment.frozen ? "分发版" : "开发版"} />
-      </div>
+      <div className="diagnostics-content">
+        <SettingsSection
+          icon={Activity}
+          title="运行环境"
+          description="用于判断问题发生在引擎、桌面端还是当前运行环境。"
+        >
+          <div className="diagnostics-summary">
+            <Metric label="日志源" value={`${nonEmptySourcesCount}/${totalSourcesCount} 有内容`} />
+            <Metric label="日志分组" value={`${visibleGroups.length}/2 可查看`} />
+            <Metric label="进程" value={String(logs?.environment.pid ?? "-")} />
+            <Metric label="Python" value={String(logs?.environment.python ?? "-")} />
+            <Metric label="模式" value={logs?.environment.frozen ? "分发版" : "开发版"} />
+            <Metric label="安全审计" value={`${logs?.security_audit.records.length ?? 0} 条（近 ${logs?.security_audit.export_window_days ?? 7} 天）`} />
+          </div>
+        </SettingsSection>
 
-      {visibleGroups.length > 0 ? (
-        <div className="diagnostics-source-toolbar">
-          <div className="diagnostics-source-picker">
-            <span>日志分组</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="diagnostics-source-trigger"
-              aria-label="日志分组"
-              aria-haspopup="listbox"
-              aria-expanded={groupMenuOpen}
-              onClick={() => setGroupMenuOpen((value) => !value)}
-            >
-              <span>{selectedGroup?.label || "选择日志"}</span>
-              <ChevronDown size={14} />
-            </Button>
-            {groupMenuOpen ? (
-              <div className="diagnostics-source-menu" role="listbox" aria-label="日志分组">
-                {visibleGroups.map((group) => (
-                  <Button
-                    key={group.key}
-                    type="button"
-                    variant="ghost"
-                    role="option"
-                    aria-selected={group.key === resolvedSelectedGroupKey}
-                    className={`diagnostics-source-option${group.key === resolvedSelectedGroupKey ? " is-active" : ""}`}
-                    onClick={() => {
-                      setSelectedGroupKey(group.key);
-                      setGroupMenuOpen(false);
-                    }}
-                  >
-                    <span>
-                      <strong>{group.label}</strong>
-                      <small>{group.sourceNames.join(", ") || "无原始源"}</small>
-                    </span>
-                    <em>{formatBytes(group.sizeBytes)}</em>
-                    {group.key === resolvedSelectedGroupKey ? <Check size={14} /> : null}
-                  </Button>
-                ))}
+        <SettingsSection
+          icon={FileText}
+          title="日志内容"
+          description="日志已按前端和后端分组，并在生成诊断包前完成脱敏。"
+          className="diagnostics-log-section"
+          trailing={<span className="diagnostics-source-count">{selectedGroup ? `${selectedGroup.sourceNames.length} 个原始源` : "无日志源"}</span>}
+        >
+          {visibleGroups.length > 0 ? (
+            <div className="diagnostics-source-toolbar">
+              <div className="diagnostics-source-picker">
+                <span>日志分组</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="diagnostics-source-trigger"
+                  aria-label="日志分组"
+                  aria-haspopup="listbox"
+                  aria-expanded={groupMenuOpen}
+                  onClick={() => setGroupMenuOpen((value) => !value)}
+                >
+                  <span>{selectedGroup?.label || "选择日志"}</span>
+                  <ChevronDown size={14} />
+                </Button>
+                {groupMenuOpen ? (
+                  <div className="diagnostics-source-menu" role="listbox" aria-label="日志分组">
+                    {visibleGroups.map((group) => (
+                      <Button
+                        key={group.key}
+                        type="button"
+                        variant="ghost"
+                        role="option"
+                        aria-selected={group.key === resolvedSelectedGroupKey}
+                        className={`diagnostics-source-option${group.key === resolvedSelectedGroupKey ? " is-active" : ""}`}
+                        onClick={() => {
+                          setSelectedGroupKey(group.key);
+                          setGroupMenuOpen(false);
+                        }}
+                      >
+                        <span>
+                          <strong>{group.label}</strong>
+                          <small>{group.sourceNames.join(", ") || "无原始源"}</small>
+                        </span>
+                        <em>{formatBytes(group.sizeBytes)}</em>
+                        {group.key === resolvedSelectedGroupKey ? <Check size={14} /> : null}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
+            </div>
+          ) : null}
+
+          <div className="diagnostics-sources">
+            {selectedGroup ? (
+              <section className="diagnostics-source" key={selectedGroup.key}>
+                <div className="diagnostics-source-header">
+                  <div>
+                    <h4>{selectedGroup.label}</h4>
+                    <p>{selectedGroup.sourceNames.join(", ")}</p>
+                  </div>
+                  <span
+                    className={
+                      selectedGroup.exists
+                        ? "diagnostics-log-status diagnostics-log-status--ok"
+                        : "diagnostics-log-status diagnostics-log-status--missing"
+                    }
+                  >
+                    {selectedGroup.exists ? `${formatBytes(selectedGroup.sizeBytes)}` : "未生成"}
+                  </span>
+                </div>
+                <pre className="diagnostics-source-content">
+                  {selectedGroup.content || (selectedGroup.exists ? "无日志内容" : "日志文件不存在")}
+                </pre>
+              </section>
+            ) : null}
+            {!loading && visibleGroups.length === 0 ? (
+              <EmptyState
+                className="diagnostics-empty"
+                icon={<FileWarning size={18} />}
+                title="暂无有效日志（包含内容的日志源）"
+              />
             ) : null}
           </div>
-          <span className="diagnostics-source-count">
-            {selectedGroup ? `${selectedGroup.sourceNames.length} 个原始源` : "无日志源"}
-          </span>
-        </div>
-      ) : null}
-
-      <div className="diagnostics-sources">
-        {selectedGroup ? (
-          <section className="diagnostics-source" key={selectedGroup.key}>
-            <div className="diagnostics-source-header">
-              <div>
-                <h3>{selectedGroup.label}</h3>
-                <p>{selectedGroup.sourceNames.join(", ")}</p>
-              </div>
-              <span
-                className={
-                  selectedGroup.exists
-                    ? "diagnostics-log-status diagnostics-log-status--ok"
-                    : "diagnostics-log-status diagnostics-log-status--missing"
-                }
-              >
-                {selectedGroup.exists ? `${formatBytes(selectedGroup.sizeBytes)}` : "未生成"}
-              </span>
-            </div>
-            <pre className="diagnostics-source-content">
-              {selectedGroup.content || (selectedGroup.exists ? "无日志内容" : "日志文件不存在")}
-            </pre>
-          </section>
-        ) : null}
-        {!loading && visibleGroups.length === 0 ? (
-          <EmptyState
-            className="diagnostics-empty"
-            icon={<FileWarning size={18} />}
-            title="暂无有效日志（包含内容的日志源）"
-          />
-        ) : null}
+        </SettingsSection>
       </div>
+      <DangerConfirmDialog details={auditConfirmation} />
     </div>
   );
 }
@@ -296,6 +325,12 @@ function frontendOnlyLogs(): DiagnosticLogsResponse {
       frontend_only: true,
     },
     sources: [getClientLogSource()],
+    security_audit: {
+      retention_days: 90,
+      export_window_days: 7,
+      max_records: 500,
+      records: [],
+    },
   };
 }
 

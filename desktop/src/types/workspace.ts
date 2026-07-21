@@ -1,8 +1,6 @@
 /** Core workspace types. */
 
 import type { AgentArtifact, ResultViewArtifact } from "./agentArtifact";
-import type { AgentTimelineItem } from "../features/workspace/agentTimeline";
-import type { AgentAnswer, FollowUpSuggestion } from "../lib/api/types";
 
 export type WorkspaceTabType =
   | "smart-query"
@@ -17,17 +15,6 @@ export type WorkspaceTabType =
   | "agent-eval"
   | "diagnostics";
 
-export type AgentApprovalInfo = {
-  runId: string;
-  approvalId: string;
-  stepName: string;
-  riskLevel: string;
-  reason?: string;
-  sql?: string;
-};
-
-export type AgentTabStatus = "running" | "waiting_approval" | "completed" | "failed";
-
 export interface WorkspaceTab {
   id: string;
   title: string;
@@ -38,17 +25,8 @@ export interface WorkspaceTab {
   selectedTables?: string[];
   queryText?: string;
   conversationId?: string;
-  // Conversation content is stored in conversationStore. These fields are temporary compatibility state for older agent store tests.
-  chatMessages?: { id: number; sender: "user" | "ai"; text: string }[];
-  agentTimeline?: AgentTimelineItem[];
   artifacts?: AgentArtifact[];
   artifactResult?: ResultViewArtifact;
-  agentRunId?: string;
-  agentSessionId?: string;
-  agentStatus?: AgentTabStatus;
-  agentApproval?: AgentApprovalInfo | null;
-  agentAnswer?: AgentAnswer | null;
-  agentSuggestions?: FollowUpSuggestion[] | null;
 }
 
 export interface ContextMenuState {

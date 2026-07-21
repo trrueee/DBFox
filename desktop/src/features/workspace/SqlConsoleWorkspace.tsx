@@ -6,8 +6,9 @@ import { LoadingState } from "../../components/ui/state";
 import { Toolbar, ToolbarGroup, ToolbarTitle } from "../../components/ui/toolbar";
 import { agentApi } from "../../lib/api/agent";
 import type { DataSource } from "../../lib/api/types";
+import { databaseTypeLabel } from "../../lib/presentation";
 import type { ResultViewArtifact } from "../../types/agentArtifact";
-import { toViewArtifacts } from "./agentBridge";
+import { toViewArtifacts } from "./artifactProjection";
 import { TableArtifactView } from "./artifacts/TableArtifactView";
 import { firstSqlKeyword, splitSqlStatements, tokenizeSql, type SqlStatementKind, type SqlTokenKind } from "./artifacts/sqlTokenizer";
 import "./SqlConsoleWorkspace.css";
@@ -43,7 +44,7 @@ type ConsoleEntryDraft = ConsoleEntry extends infer T
   : never;
 
 let entrySeq = 0;
-export const nextEntryId = () => ++entrySeq;
+const nextEntryId = () => ++entrySeq;
 
 export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntries, onToast, datasources, activeDatasourceId }: SqlConsoleWorkspaceProps) {
   const { draftSql, entries, running } = state;
@@ -65,7 +66,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
       ? `绑定的数据源不可用: ${requestedDatasourceId}`
       : "没有可用数据源";
   const dbLabel = resolvedDatasource
-    ? `${resolvedDatasource.name} · ${resolvedDatasource.database_name} · ${resolvedDatasource.db_type ?? "unknown"}`
+    ? `${resolvedDatasource.name} · ${resolvedDatasource.database_name} · ${databaseTypeLabel(resolvedDatasource.db_type)}`
     : "数据源不可用";
   const statementSummary = useMemo(() => summarizeSqlInput(draftSql, selectedSql), [draftSql, selectedSql]);
 
@@ -167,7 +168,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
 
   const executableSql = selectedSql.trim() || draftSql.trim();
   const executeDisabled = running || !executableSql || !resolvedDatasource;
-  const runLabel = running ? "运行中..." : selectedSql.trim() ? "运行选中 (F9)" : "运行 (F9)";
+  const runLabel = running ? "正在运行…" : selectedSql.trim() ? "运行选中内容 (F9)" : "运行 (F9)";
   const statusClassName = ["sql-console-status", datasourceWarning ? "is-warning" : ""].filter(Boolean).join(" ");
 
   return (
@@ -194,7 +195,7 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
         <div className="sql-console-scroll" ref={scrollRef}>
           {entries.map((entry) => renderEntry(entry, onToast))}
 
-          {running && <LoadingState className="sql-console-running" label="执行中..." />}
+          {running && <LoadingState className="sql-console-running" label="正在执行…" />}
 
           <div className={statusClassName} aria-label="SQL 输入状态">
             <span>{datasourceWarning || `数据源 ${dbLabel}`}</span>
@@ -315,7 +316,7 @@ function ResultBlock({
   time: string;
   onToast: (message: string) => void;
 }) {
-  const rowCount = artifact.rowCount ?? artifact.returnedRows ?? artifact.previewRowCount;
+  const rowCount = artifact.rowCount ?? artifact.returnedRows ?? 0;
   const latencyText = artifact.latencyMs !== undefined ? ` · ${artifact.latencyMs}ms` : "";
   return (
     <div className="sql-console-result">

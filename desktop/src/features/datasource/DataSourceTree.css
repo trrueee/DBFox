@@ -12,12 +12,16 @@
 }
 
 .ds-tree-expand-btn {
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ds-tree-chevron-left { transform: rotate(-90deg); }
@@ -27,6 +31,7 @@
   width: 100%;
   min-width: 0;
   background: var(--sidebar-bg);
+  border-right: 1px solid var(--hairline);
 }
 
 .ds-tree-header-row {
@@ -48,6 +53,8 @@
 }
 
 .ds-tree-icon-btn {
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   color: var(--color-text-secondary);
@@ -55,16 +62,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  padding: 0;
 }
 
 .ds-tree-icon-btn:hover {
-  color: var(--color-primary, #7667f2);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
+.ds-tree-expand-btn:focus-visible,
 .ds-tree-icon-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-primary, #7667f2) 26%, transparent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .ds-tree-refresh-icon {
@@ -93,8 +102,8 @@
 }
 
 .ds-db-select-trigger:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-primary, #7667f2) 22%, transparent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .ds-db-select-empty {
@@ -102,15 +111,15 @@
 }
 
 .ds-db-icon {
-  color: var(--color-primary, #4f7cff);
+  color: var(--color-primary);
 }
 
 .ds-db-empty-icon {
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-muted);
 }
 
 .ds-db-chevron {
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-muted);
   transition: transform 0.15s;
 }
 .ds-db-chevron-open {
@@ -126,8 +135,8 @@
   width: var(--radix-dropdown-menu-trigger-width);
   min-width: 180px;
   max-height: min(320px, var(--radix-dropdown-menu-content-available-height));
-  background: var(--bg-surface, #fff);
-  border: 1px solid var(--border-medium, #e5e7eb);
+  background: var(--surface-elevated);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   margin-top: 0;
@@ -147,29 +156,35 @@
 }
 
 .ds-db-dropdown-item.active {
-  background: var(--color-accent, #f0f4ff);
-  color: var(--color-primary, #1e3a5f);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .ds-db-dropdown-item:not(.active) {
   background: transparent;
-  color: var(--color-text-primary, #111827);
+  color: var(--color-text-primary);
 }
 
 .ds-db-dropdown-item:focus,
 .ds-db-dropdown-item:hover {
-  background: var(--color-primary-soft, rgba(118, 103, 242, 0.08));
-  color: var(--color-text-primary, #111827);
+  background: var(--color-primary-soft);
+  color: var(--color-text-primary);
 }
 
 .ds-db-item-icon {
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-muted);
 }
 
 .ds-db-item-info { flex: 1; }
 .ds-db-item-name { font-weight: 500; }
-.ds-db-item-type { font-size: var(--ui-font-caption); color: var(--color-text-secondary, #6b7280); }
-.ds-db-item-check { color: var(--color-primary, #1e3a5f); }
+.ds-db-item-type { font-size: var(--ui-font-caption); color: var(--color-text-secondary); }
+.ds-db-item-check { color: var(--color-primary); }
+
+.ds-db-status--success { color: var(--color-success); }
+.ds-db-status--warning { color: var(--color-warning); }
+.ds-db-status--error { color: var(--color-danger); }
+.ds-db-status--info { color: var(--color-info); }
+.ds-db-status--idle { color: var(--color-text-muted); }
 
 .ds-tree-group {
   margin-left: 12px;
@@ -179,9 +194,26 @@
   cursor: pointer;
 }
 
+.ds-tree-group-header,
+.ds-schema-node,
+.ds-tree-table-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.ds-tree-group-header:focus-visible,
+.ds-schema-node:focus-visible,
+.ds-tree-table-row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .ds-tree-group-label {
   font-weight: 500;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary);
 }
 
 .ds-tree-table-row {
@@ -210,23 +242,23 @@
 
 .ds-group-chevron-muted {
   margin-right: 4px;
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-muted);
 }
 
 .ds-schema-node {
   cursor: pointer;
   font-weight: 650;
-  color: var(--color-text-primary, #111827);
+  color: var(--color-text-primary);
 }
 
 .ds-schema-chevron {
   margin-right: 4px;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary);
 }
 
 .ds-schema-icon {
   margin-right: 4px;
-  color: var(--color-primary, #4f7cff);
+  color: var(--color-primary);
 }
 
 .ds-tree-scroll-area {
@@ -244,13 +276,14 @@
   margin-bottom: 8px;
   padding: 8px;
   border-radius: 8px;
-  color: var(--color-text-tertiary, #94a3b8);
+  color: var(--color-text-muted);
   font-size: var(--ui-font-caption);
 }
 
 .ds-tree-status--error {
-  color: var(--danger-fg, #dc2626);
-  background: var(--danger-soft, #fef2f2);
+  border: 1px solid var(--trust-danger-border);
+  color: var(--trust-danger);
+  background: var(--trust-danger-bg);
 }
 
 .ds-sidebar-quick-nav {
@@ -282,17 +315,24 @@
 
 .ds-quick-nav-item:hover,
 .ds-quick-nav-item.active {
-  background: var(--color-primary-soft, rgba(118, 103, 242, 0.08));
-  color: var(--color-primary, #7667F2);
+  background: var(--nav-active-bg);
+  color: var(--color-primary);
 }
 
 .ds-quick-nav-item.active {
   font-weight: 650;
+  box-shadow: inset 2px 0 0 var(--nav-active-indicator);
 }
 
 .ds-quick-nav-item:focus-visible {
-  outline: 2px solid var(--color-primary-soft, rgba(118, 103, 242, 0.2));
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-tree-refresh-icon.is-loading {
+    animation: none;
+  }
 }
 
 .ds-quick-nav-icon {
@@ -300,9 +340,9 @@
 }
 
 .ds-quick-nav-icon--smart {
-  color: #a855f7;
+  color: var(--color-primary);
 }
 
 .ds-quick-nav-icon--history {
-  color: #6366f1;
+  color: var(--color-primary);
 }

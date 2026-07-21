@@ -48,7 +48,7 @@ function isTransientEngineFetchError(error: unknown) {
 }
 
 async function loadColumnsWithLimit(tables: EngineSchemaTable[]) {
-  const results: Array<{ id: string; columns: EngineColumn[] }> = new Array(tables.length);
+  const results: Array<{ id: string; columns: EngineColumn[] } | undefined> = new Array(tables.length);
   let nextIndex = 0;
 
   async function worker() {
@@ -60,14 +60,23 @@ async function loadColumnsWithLimit(tables: EngineSchemaTable[]) {
         const columns = await listColumns(table.id);
         results[index] = { id: table.id, columns };
       } catch {
-        results[index] = { id: table.id, columns: [] };
+        // A failed request is not an empty schema and must remain retryable.
+        results[index] = undefined;
       }
     }
   }
 
   const workerCount = Math.min(COLUMN_LOAD_CONCURRENCY, tables.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
-  return results;
+  return results.filter(
+    (result): result is { id: string; columns: EngineColumn[] } => result !== undefined,
+  );
+}
+
+function datasourceCacheKey(state: Pick<DatasourceState, "activeDatasourceId" | "datasources">) {
+  if (!state.activeDatasourceId) return "";
+  const datasource = state.datasources.find((item) => item.id === state.activeDatasourceId);
+  return `${state.activeDatasourceId}:${datasource?.connection_generation ?? 0}`;
 }
 
 export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
@@ -119,7 +128,14 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
         }
       }
     } catch (err) {
-      set({ schemaError: err instanceof Error ? err.message : "读取数据源失败", datasources: [] });
+      set({
+        schemaError: err instanceof Error ? err.message : "读取数据源失败",
+        datasources: [],
+        activeDatasourceId: "",
+        activeDatasourceForSettings: null,
+        tables: [],
+        tableColumns: {},
+      });
     } finally {
       set({ loadingSchema: false });
     }
@@ -131,13 +147,21 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
       await loadDatasources();
       return;
     }
-    set({ loadingSchema: true });
+    const cacheKey = datasourceCacheKey(get());
+    set({ loadingSchema: true, tables: [], tableColumns: {}, schemaError: "" });
     try {
-      set({ tables: await listTables(activeDatasourceId), tableColumns: {} });
-    } catch {
-      // Schema refresh is best-effort
+      const tables = await listTables(activeDatasourceId);
+      if (datasourceCacheKey(get()) === cacheKey) {
+        set({ tables, tableColumns: {} });
+      }
+    } catch (err) {
+      if (datasourceCacheKey(get()) === cacheKey) {
+        set({ schemaError: err instanceof Error ? err.message : "读取数据库结构失败" });
+      }
     } finally {
-      set({ loadingSchema: false });
+      if (datasourceCacheKey(get()) === cacheKey) {
+        set({ loadingSchema: false });
+      }
     }
   },
 
@@ -147,7 +171,11 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
     const cached = get().tableColumns[table.id];
     if (cached) return cached;
 
+    const cacheKey = datasourceCacheKey(get());
     const columns = await listColumns(table.id);
+    if (datasourceCacheKey(get()) !== cacheKey || !get().tables.some((item) => item.id === table.id)) {
+      return [];
+    }
     set((state) => ({
       tableColumns: {
         ...state.tableColumns,
@@ -158,10 +186,14 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
   },
 
   loadColumnsForTables: async (tableIds: string[]) => {
+    const cacheKey = datasourceCacheKey(get());
     const requested = new Set(tableIds);
     const targetTables = get().tables.filter((table) => requested.has(table.id));
     const missingTables = targetTables.filter((table) => !get().tableColumns[table.id]);
     const results = await loadColumnsWithLimit(missingTables);
+    if (datasourceCacheKey(get()) !== cacheKey) {
+      return get().tableColumns;
+    }
     const nextColumns: Record<string, EngineColumn[]> = { ...get().tableColumns };
     for (const { id, columns } of results) {
       nextColumns[id] = columns;
@@ -217,35 +249,40 @@ export const useDatasourceStore = create<DatasourceStore>()((set, get) => ({
   },
 }));
 
-let activeTablesFetchId: string | null = null;
+let activeTablesFetchKey: string | null = null;
 
 // Side-effect: fetch tables when active datasource changes
 useDatasourceStore.subscribe((state, prev) => {
-  if (state.activeDatasourceId === prev.activeDatasourceId) return;
+  const nextKey = datasourceCacheKey(state);
+  const previousKey = datasourceCacheKey(prev);
+  if (nextKey === previousKey) return;
   if (!state.activeDatasourceId) {
+    activeTablesFetchKey = null;
     useDatasourceStore.setState({ tables: [], tableColumns: {} });
     return;
   }
   const targetId = state.activeDatasourceId;
-  activeTablesFetchId = targetId;
+  activeTablesFetchKey = nextKey;
 
-  useDatasourceStore.setState({ loadingSchema: true, schemaError: "", tableColumns: {} });
+  useDatasourceStore.setState({ loadingSchema: true, schemaError: "", tables: [], tableColumns: {} });
 
   listTables(targetId)
     .then((result) => {
-      if (activeTablesFetchId === targetId) {
+      if (activeTablesFetchKey === nextKey && datasourceCacheKey(useDatasourceStore.getState()) === nextKey) {
         useDatasourceStore.setState({ tables: result, tableColumns: {}, schemaError: "" });
       }
     })
     .catch((err) => {
-      if (activeTablesFetchId === targetId) {
+      if (activeTablesFetchKey === nextKey && datasourceCacheKey(useDatasourceStore.getState()) === nextKey) {
         useDatasourceStore.setState({
+          tables: [],
+          tableColumns: {},
           schemaError: err instanceof Error ? err.message : "读取数据库结构失败",
         });
       }
     })
     .finally(() => {
-      if (activeTablesFetchId === targetId) {
+      if (activeTablesFetchKey === nextKey && datasourceCacheKey(useDatasourceStore.getState()) === nextKey) {
         useDatasourceStore.setState({ loadingSchema: false });
       }
     });

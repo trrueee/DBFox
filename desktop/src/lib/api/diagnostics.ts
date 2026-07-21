@@ -18,6 +18,24 @@ export interface DiagnosticLogsResponse {
   };
   environment: Record<string, unknown>;
   sources: DiagnosticLogSource[];
+  security_audit: {
+    retention_days: number;
+    export_window_days: number;
+    max_records: number;
+    records: Array<{
+      id: string;
+      action: string;
+      outcome: string;
+      actorType: string;
+      resourceType: string;
+      resourceId: string | null;
+      sessionId: string | null;
+      runId: string | null;
+      correlationId: string;
+      details: Record<string, unknown>;
+      createdAt: string;
+    }>;
+  };
 }
 
 export const diagnosticsApi = {
@@ -29,5 +47,11 @@ export const diagnosticsApi = {
   clearLogs: () =>
     request<{ cleared: boolean; sources_cleared: string[] }>("/diagnostics/logs/clear", {
       method: "POST",
+    }),
+
+  clearSecurityAudit: (confirmText: string) =>
+    request<{ cleared: boolean; records_deleted: number }>("/diagnostics/security-audit/clear", {
+      method: "POST",
+      body: JSON.stringify({ confirm_text: confirmText }),
     }),
 };

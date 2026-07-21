@@ -1,32 +1,15 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import { allocateToastId, getToastRoot, ToastContext, type ToastType } from "./toastState";
 import "./Toast.css";
-
-type ToastType = "success" | "error" | "warning" | "info";
 
 interface ToastItem {
   id: number;
   type: ToastType;
   message: string;
 }
-
-interface ToastCtx {
-  toast: (message: string, type?: ToastType) => void;
-}
-
-const ToastContext = createContext<ToastCtx>({ toast: () => {} });
-
-export function useToast() {
-  return useContext(ToastContext);
-}
-
-let nextId = 0;
-
-/** Container element inside the scaled canvas where toasts render (avoids viewport overflow). */
-let toastRoot: HTMLElement | null = null;
-export function setToastRoot(el: HTMLElement | null) { toastRoot = el; }
 
 function ToastIcon({ type }: { type: ToastType }) {
   switch (type) {
@@ -49,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toast = useCallback((message: string, type: ToastType = "info") => {
-    const id = nextId++;
+    const id = allocateToastId();
     setItems((prev) => [...prev.slice(-4), { id, type, message }]);
   }, []);
 
@@ -86,7 +69,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       <ToastPrimitive.Provider swipeDirection="right" duration={3500}>
         {children}
-        {toastRoot ? createPortal(toastStack, toastRoot) : toastStack}
+        {getToastRoot() ? createPortal(toastStack, getToastRoot()!) : toastStack}
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );

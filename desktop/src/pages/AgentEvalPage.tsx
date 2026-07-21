@@ -17,6 +17,7 @@ import {
   type AgentGoldenTask,
 } from "../lib/api/agentEval";
 import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
+import { getUserErrorMessage } from "../lib/api/client";
 import "./AgentEvalPage.css";
 
 interface AgentEvalPageProps {
@@ -113,10 +114,10 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       setFormQuestion("");
       setFormKeywords("");
       setShowForm(false);
-      onToast("已创建 Golden 任务");
+      onToast("已创建标准任务");
       await refresh();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : "创建任务失败");
+      onToast(getUserErrorMessage(err, "创建任务失败，请重试。"));
     }
   };
 
@@ -126,7 +127,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       setTasks((prev) => prev.filter((task) => task.id !== taskId));
       onToast("已删除任务");
     } catch (err) {
-      onToast(err instanceof Error ? err.message : "删除任务失败");
+      onToast(getUserErrorMessage(err, "删除任务失败，请重试。"));
     }
   };
 
@@ -136,7 +137,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       return;
     }
     if (tasks.length === 0) {
-      onToast("当前数据源下没有 Golden 任务，请先创建");
+      onToast("当前数据源还没有标准任务，请先创建");
       return;
     }
     const llm = getStoredApiConfig();
@@ -158,7 +159,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
         }
       }
     } catch (err) {
-      onToast(err instanceof Error ? err.message : "评测运行失败");
+      onToast(getUserErrorMessage(err, "评测未完成，请重试。"));
     } finally {
       setRunning(false);
     }
@@ -175,7 +176,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
         const cases = await agentEvalApi.getRunCases(runId);
         setRunCases((prev) => ({ ...prev, [runId]: cases }));
       } catch (err) {
-        onToast(err instanceof Error ? err.message : "读取评测明细失败");
+        onToast(getUserErrorMessage(err, "评测明细读取失败，请重试。"));
       }
     }
   };
@@ -185,7 +186,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       <div className="agent-eval-header">
         <div className="agent-eval-header__title">
           <FlaskConical size={15} aria-hidden="true" />
-          <span>Agent 评测</span>
+          <span>智能评测</span>
           <span className="agent-eval-header__datasource">{datasourceName}</span>
         </div>
         <div className="agent-eval-header__actions">
@@ -217,7 +218,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
               id="agent-eval-question"
               value={formQuestion}
               onChange={(e) => setFormQuestion(e.target.value)}
-              placeholder="输入要让 Agent 回答的自然语言问题"
+              placeholder="输入要让智能助手回答的问题"
             />
           </div>
           <div className="agent-eval-form__row">
@@ -236,7 +237,7 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
                 checked={formSqlRequired}
                 onChange={(e) => setFormSqlRequired(e.target.checked)}
               />
-              要求 Agent 生成 SQL
+              要求生成 SQL
             </label>
             <Button size="sm" onClick={() => void createTask()}>
               保存任务
@@ -246,9 +247,9 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
       )}
 
       <div className="agent-eval-body">
-        <Panel className="agent-eval-panel" aria-label="Golden 任务">
+        <Panel className="agent-eval-panel" aria-label="标准任务">
           <PanelHeader className="agent-eval-panel__header">
-            <PanelTitle className="agent-eval-panel__title">Golden 任务（{tasks.length}）</PanelTitle>
+            <PanelTitle className="agent-eval-panel__title">标准任务（{tasks.length}）</PanelTitle>
           </PanelHeader>
           <PanelBody className="agent-eval-panel__body">
             {loading && tasks.length === 0 ? (
@@ -256,8 +257,8 @@ export function AgentEvalPage({ datasources, activeDatasourceId, onToast }: Agen
             ) : tasks.length === 0 ? (
               <EmptyState
                 className="agent-eval-state"
-                title="暂无 Golden 任务"
-                description="Golden 任务是带有期望结果的标准问题，用于回归验证 Agent 的问答质量。"
+                title="暂无标准任务"
+                description="标准任务包含问题和期望结果，用于持续验证智能问答质量。"
               />
             ) : (
               <ul className="agent-eval-list">

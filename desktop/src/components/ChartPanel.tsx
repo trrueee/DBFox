@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
-import ReactECharts from "echarts-for-react";
+import ReactEChartsCore from "echarts-for-react/lib/core";
 import { BarChart3, LineChart, PieChart } from "lucide-react";
 import { isNumericLike, toChartNumber } from "../lib/chart-utils";
+import { echarts } from "../features/workspace/artifacts/echartsCore";
 
 type ChartType = "bar" | "line" | "pie";
 
@@ -14,7 +15,7 @@ interface ChartPanelProps {
 }
 
 // Light lab palette for charts
-const CHART_COLORS = ["#2D3B8C", "#0D7377", "#B45309", "#2E7D32", "#4A5BC0", "#14A3A8", "#D97706", "#5C5D60"];
+const CHART_COLORS = ["#6554D9", "#168A88", "#5E86F7", "#168A68", "#8B5CF6", "#55D4CF", "#3B82F6", "#64748B"];
 
 function normalizeChartType(value?: string): ChartType {
   return value === "line" || value === "pie" || value === "bar" ? value : "bar";
@@ -135,16 +136,16 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
 
   if (rows.length === 0) {
     return (
-      <div className="bg-card border border-border rounded-lg" style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+      <div className="chart-panel-empty bg-card border border-border rounded-lg">
         没有可用于图表展示的数据
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="chart-panel">
       {/* Controls */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div className="chart-panel-controls">
         <div className="inline-flex bg-secondary rounded-sm p-0.5 gap-px">
           {([["bar", BarChart3], ["line", LineChart], ["pie", PieChart]] as const).map(([type, Icon]) => (
             <button
@@ -158,25 +159,23 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>标签:</label>
+        <div className="chart-panel-field">
+          <label className="chart-panel-label">标签:</label>
           <select
-            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="chart-panel-select h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveLabel}
             onChange={(e) => setLabelCol(e.target.value)}
-            style={{ width: "auto" }}
           >
             {columns.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
 
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <label style={{ color: "var(--text-secondary)", fontSize: "0.78rem" }}>数值:</label>
+        <div className="chart-panel-field">
+          <label className="chart-panel-label">数值:</label>
           <select
-            className="h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="chart-panel-select h-7 rounded-sm border border-input bg-transparent px-2 py-1 text-[var(--ui-font-control)] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             value={effectiveValue}
             onChange={(e) => setValueCol(e.target.value)}
-            style={{ width: "auto" }}
           >
             {(numericCols.length > 0 ? numericCols : columns).map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -186,11 +185,12 @@ export function ChartPanel({ columns, rows, initialType, initialX, initialY }: C
       </div>
 
       {option && (
-        <div className="bg-card border border-border rounded-lg" style={{ padding: 8, background: "var(--bg-surface)" }}>
-          <ReactECharts
+        <div className="chart-panel-surface bg-card border border-border rounded-lg">
+          <ReactEChartsCore
+            echarts={echarts}
             option={option}
-            style={{ height: 300, width: "100%" }}
-            opts={{ renderer: "svg" }}
+            className="chart-panel-canvas"
+            opts={{ renderer: "canvas" }}
           />
         </div>
       )}

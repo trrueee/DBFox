@@ -1,13 +1,17 @@
 import { create } from "zustand";
 import {
+  admitConversationInput,
+  cancelConversationRun,
   createConversation,
   deleteConversation,
   getConversation,
   listConversations,
-  startConversationMessageStream,
+  resolveConversationApproval,
+  resolveConversationQuestion,
+  selectConversationArtifact,
+  streamConversation,
 } from "../features/conversation/conversationRepository";
 import { createStreamEventBatcher } from "../features/conversation/streamEventBatcher";
-import { agentApi } from "../lib/api/agent";
 import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
 import type {
   ConversationArtifact,
@@ -16,297 +20,45 @@ import type {
   ConversationRun,
   ConversationStreamEvent,
   ConversationSummary,
+  ConversationDeliveryMode,
 } from "../types/conversation";
 import { useDatasourceStore } from "./datasourceStore";
+import {
+  reduceStreamEvent,
+  upsertRun,
+} from "./conversationStoreReducer";
 
-interface ConversationState {
+export interface ConversationState {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
   detailById: Record<string, ConversationDetail>;
   messagesById: Record<string, ConversationMessage>;
   runsById: Record<string, ConversationRun>;
   artifactsById: Record<string, ConversationArtifact>;
+  liveRevisionById: Record<string, number>;
   abortControllers: Map<string, AbortController>;
 }
 
-interface ConversationActions {
+export interface ConversationActions {
   initConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<ConversationDetail>;
   createAndOpenConversation: (question: string, contextTables: string[]) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
-  sendMessage: (conversationId: string, content: string) => Promise<void>;
-  cancelRun: (runId: string) => void;
+  sendMessage: (conversationId: string, content: string, mode?: ConversationDeliveryMode) => Promise<void>;
+  cancelRun: (runId: string) => Promise<void>;
   resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
+  resolveQuestion: (
+    runId: string,
+    questionId: string,
+    response: { selected_value?: string; text?: string },
+  ) => Promise<void>;
+  selectArtifact: (conversationId: string, artifactId: string) => Promise<void>;
   applyStreamEvent: (event: ConversationStreamEvent) => void;
   applyStreamEvents: (events: ConversationStreamEvent[]) => void;
 }
 
 export type ConversationStore = ConversationState & ConversationActions;
-
-function answerText(event: ConversationStreamEvent): string | null {
-  if (event.answer?.answer) return event.answer.answer;
-  if (event.response?.answer?.answer) return event.response.answer.answer;
-  if (event.response?.explanation) return event.response.explanation;
-  if (event.error) return `Run failed: ${event.error}`;
-  return null;
-}
-
-function answerDeltaText(event: ConversationStreamEvent): string | null {
-  return event.type === "agent.answer.delta" && typeof event.content === "string" ? event.content : null;
-}
-
-function messageStatusForEvent(event: ConversationStreamEvent): ConversationMessage["status"] {
-  if (event.type === "agent.run.failed") return "failed";
-  if (event.type === "agent.run.cancelled") return "cancelled";
-  if (event.type === "agent.answer.completed" || event.type === "agent.run.completed") return "completed";
-  return "streaming";
-}
-
-function sequenceAfter(detail: ConversationDetail | undefined): number {
-  return (detail?.messages.reduce((max, message) => Math.max(max, message.sequence), 0) || 0) + 1;
-}
-
-function ensureStreamMessages(state: ConversationStore, event: ConversationStreamEvent): ConversationStore {
-  const conversationId = event.conversation_id || event.response?.conversation_id || "";
-  if (!conversationId || !event.user_message_id || !event.assistant_message_id) return state;
-
-  const detail = state.detailById[conversationId];
-  if (!detail) return state;
-
-  let nextMessagesById = state.messagesById;
-  let nextDetail = detail;
-  const addMessage = (message: ConversationMessage) => {
-    nextMessagesById = { ...nextMessagesById, [message.id]: message };
-    nextDetail = { ...nextDetail, messages: [...nextDetail.messages, message] };
-  };
-
-  if (!nextMessagesById[event.user_message_id]) {
-    addMessage({
-      id: event.user_message_id,
-      conversation_id: conversationId,
-      role: "user",
-      content: typeof event.step?.question === "string" ? event.step.question : "",
-      status: "completed",
-      sequence: sequenceAfter(nextDetail),
-      created_at: null,
-      updated_at: null,
-    });
-  }
-  if (!nextMessagesById[event.assistant_message_id]) {
-    addMessage({
-      id: event.assistant_message_id,
-      conversation_id: conversationId,
-      role: "assistant",
-      content: "",
-      status: "streaming",
-      sequence: sequenceAfter(nextDetail),
-      created_at: null,
-      updated_at: null,
-    });
-  }
-
-  if (nextMessagesById === state.messagesById && nextDetail === detail) return state;
-
-  return {
-    ...state,
-    detailById: { ...state.detailById, [conversationId]: nextDetail },
-    messagesById: nextMessagesById,
-  };
-}
-
-function sameMessagePatch(current: ConversationMessage, patch: Partial<ConversationMessage>): boolean {
-  return Object.entries(patch).every(([key, value]) => current[key as keyof ConversationMessage] === value);
-}
-
-function upsertMessage(
-  state: ConversationStore,
-  messageId: string,
-  patch: Partial<ConversationMessage>,
-): ConversationStore {
-  const current = state.messagesById[messageId];
-  if (!current) return state;
-  if (sameMessagePatch(current, patch)) return state;
-  const nextMessage = { ...current, ...patch };
-  const detail = state.detailById[nextMessage.conversation_id];
-  return {
-    ...state,
-    messagesById: { ...state.messagesById, [messageId]: nextMessage },
-    detailById: detail
-      ? {
-          ...state.detailById,
-          [detail.id]: {
-            ...detail,
-            messages: detail.messages.map((message) => (message.id === messageId ? nextMessage : message)),
-          },
-        }
-      : state.detailById,
-  };
-}
-
-function runEventKey(event: ConversationStreamEvent): string {
-  return event.event_id || `${event.type}:${event.sequence ?? 0}`;
-}
-
-function withRunEvent(run: ConversationRun, event: ConversationStreamEvent): ConversationRun {
-  const events = run.events || [];
-  const key = runEventKey(event);
-  if (events.some((item) => runEventKey(item as ConversationStreamEvent) === key)) return run;
-  return {
-    ...run,
-    events: [...events, event].sort((a, b) => (a.sequence || 0) - (b.sequence || 0)),
-  };
-}
-
-function runStatusForApprovalEvent(event: ConversationStreamEvent): ConversationRun["status"] | null {
-  if (event.type === "agent.approval.required" || event.type === "agent.run.waiting_approval") return "waiting_approval";
-  if (event.type === "agent.run.resumed") return "running";
-  if (event.type === "agent.approval.resolved" && event.approval?.status === "rejected") return "failed";
-  return null;
-}
-
-function withConversationRunContext(event: ConversationStreamEvent, run: ConversationRun): ConversationStreamEvent {
-  return {
-    ...event,
-    conversation_id: event.conversation_id || run.conversation_id,
-    user_message_id: event.user_message_id || run.user_message_id,
-    assistant_message_id: event.assistant_message_id || run.assistant_message_id,
-    message_id: event.message_id || run.assistant_message_id || undefined,
-  };
-}
-
-function upsertRun(state: ConversationStore, conversationId: string, run: ConversationRun): ConversationStore {
-  const current = state.runsById[run.id];
-  if (current === run) return state;
-  const detail = conversationId ? state.detailById[conversationId] : undefined;
-  return {
-    ...state,
-    runsById: { ...state.runsById, [run.id]: run },
-    detailById: detail
-      ? {
-          ...state.detailById,
-          [conversationId]: {
-            ...detail,
-            runs: detail.runs.some((item) => item.id === run.id)
-              ? detail.runs.map((item) => (item.id === run.id ? run : item))
-              : [...detail.runs, run],
-          },
-        }
-      : state.detailById,
-  };
-}
-
-function sameRunPatch(current: ConversationRun, patch: Partial<ConversationRun>): boolean {
-  return Object.entries(patch).every(([key, value]) => current[key as keyof ConversationRun] === value);
-}
-
-function reduceStreamEvent(state: ConversationStore, event: ConversationStreamEvent): ConversationStore {
-  let next = ensureStreamMessages(state, event);
-  const conversationId = event.conversation_id || event.response?.conversation_id || "";
-  const messageId = event.message_id || event.assistant_message_id || event.response?.assistant_message_id || null;
-  const text = answerText(event);
-  const deltaText = answerDeltaText(event);
-
-  if (event.run_id) {
-    const current = next.runsById[event.run_id];
-    const approval = event.approval || event.response?.approval || current?.approval || null;
-    const approvalStatus = runStatusForApprovalEvent(event);
-    const answer = event.answer || event.response?.answer || current?.answer || null;
-    const run: ConversationRun = current || {
-      id: event.run_id,
-      conversation_id: conversationId,
-      datasource_id: "",
-      question: typeof event.step?.question === "string" ? event.step.question : "",
-      status: "running",
-      user_message_id: event.user_message_id,
-      assistant_message_id: event.assistant_message_id,
-      events: [],
-    };
-    const runPatch: Partial<ConversationRun> = {
-      status: approvalStatus || run.status,
-      approval,
-      answer,
-    };
-    const candidateBase = { ...run, ...runPatch };
-    const candidate = withRunEvent(candidateBase, event);
-    if (!current || candidate !== candidateBase || !sameRunPatch(current, runPatch)) {
-      next = upsertRun(next, conversationId, candidate);
-    }
-  }
-
-  if (
-    event.type === "agent.run.completed" ||
-    event.type === "agent.run.failed" ||
-    event.type === "agent.run.cancelled"
-  ) {
-    const status =
-      event.type === "agent.run.completed"
-        ? "completed"
-        : event.type === "agent.run.cancelled"
-          ? "cancelled"
-          : "failed";
-    const currentRun = next.runsById[event.run_id];
-    if (
-      currentRun &&
-      !sameRunPatch(currentRun, {
-        status,
-        error_message: event.error || currentRun.error_message,
-        error_code: event.code || currentRun.error_code,
-      })
-    ) {
-      next = upsertRun(next, conversationId, {
-        ...currentRun,
-        status,
-        error_message: event.error || currentRun.error_message,
-        error_code: event.code || currentRun.error_code,
-      });
-    }
-  }
-
-  if (messageId && deltaText) {
-    const currentContent = next.messagesById[messageId]?.content || "";
-    next = upsertMessage(next, messageId, { content: `${currentContent}${deltaText}`, status: "streaming" });
-  } else if (messageId && text) {
-    next = upsertMessage(next, messageId, { content: text, status: messageStatusForEvent(event) });
-  }
-
-  if (event.artifact) {
-    const artifact: ConversationArtifact = {
-      id: event.artifact.id,
-      conversation_id: conversationId,
-      run_id: event.run_id,
-      message_id: messageId,
-      semantic_id: event.artifact.semantic_id || null,
-      type: event.artifact.type as ConversationArtifact["type"],
-      title: event.artifact.title,
-      status: "completed",
-      sequence: event.sequence,
-      payload: event.artifact.payload || {},
-      presentation: event.artifact.presentation as unknown as Record<string, unknown>,
-      depends_on: Array.isArray(event.artifact.depends_on) ? event.artifact.depends_on : [],
-      refs: event.artifact.refs || {},
-      created_at: null,
-    };
-    const detail = conversationId ? next.detailById[conversationId] : undefined;
-    next = {
-      ...next,
-      artifactsById: { ...next.artifactsById, [artifact.id]: artifact },
-      detailById: detail
-        ? {
-            ...next.detailById,
-            [conversationId]: {
-              ...detail,
-              artifacts: detail.artifacts.some((item) => item.id === artifact.id)
-                ? detail.artifacts.map((item) => (item.id === artifact.id ? artifact : item))
-                : [...detail.artifacts, artifact],
-            },
-          }
-        : next.detailById,
-    };
-  }
-
-  return next;
-}
 
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   summaries: [],
@@ -315,6 +67,7 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   messagesById: {},
   runsById: {},
   artifactsById: {},
+  liveRevisionById: {},
   abortControllers: new Map(),
 
   initConversations: async () => {
@@ -325,6 +78,10 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   openConversation: async (conversationId) => {
     const detail = await getConversation(conversationId);
     get().loadConversation(detail);
+    const activeRun = detail.runs.findLast((run) => isFollowableRun(run.status));
+    if (activeRun) {
+      void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
+    }
     return detail;
   },
 
@@ -349,106 +106,192 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   loadConversation: (detail) => {
-    const messagesById = { ...get().messagesById };
-    const runsById = { ...get().runsById };
-    const artifactsById = { ...get().artifactsById };
-    for (const message of detail.messages) messagesById[message.id] = message;
-    for (const run of detail.runs) runsById[run.id] = run;
-    for (const artifact of detail.artifacts) artifactsById[artifact.id] = artifact;
+    const current = get();
+    const messagesById = { ...current.messagesById };
+    const runsById = { ...current.runsById };
+    const artifactsById = { ...current.artifactsById };
+    const runs = detail.runs;
+    const loadedDetail = { ...detail, runs };
+    for (const message of loadedDetail.messages) messagesById[message.id] = message;
+    for (const run of loadedDetail.runs) runsById[run.id] = run;
+    for (const artifact of loadedDetail.artifacts) artifactsById[artifact.id] = artifact;
+    const livePrefix = `live:${loadedDetail.id}:`;
+    const liveRevisionById = Object.fromEntries(
+      Object.entries(current.liveRevisionById).filter(([id]) => !id.startsWith(livePrefix)),
+    );
     set((state) => ({
-      activeConversationId: detail.id,
-      detailById: { ...state.detailById, [detail.id]: detail },
+      activeConversationId: loadedDetail.id,
+      detailById: { ...state.detailById, [loadedDetail.id]: loadedDetail },
       messagesById,
       runsById,
       artifactsById,
+      liveRevisionById,
     }));
   },
 
-  sendMessage: async (conversationId, content) => {
-    const llm = getStoredApiConfig();
-    const llmPayload = buildConversationLlmPayload(llm);
-    const abortController = new AbortController();
-    const batchEvent = createStreamEventBatcher<ConversationStreamEvent>((events) => get().applyStreamEvents(events));
-    get().abortControllers.set(conversationId, abortController);
+  sendMessage: async (conversationId, content, mode = "queue") => {
+    const llmPayload = buildConversationLlmPayload(getStoredApiConfig());
+    if (!llmPayload.llm_credential_id) throw new Error("请先配置模型后再开始智能分析。");
+    const detail = get().detailById[conversationId] || await get().openConversation(conversationId);
+    const created = await admitConversationInput(conversationId, {
+      content,
+      idempotency_key: globalThis.crypto?.randomUUID?.() || `input-${Date.now()}-${Math.random()}`,
+      delivery_mode: mode,
+      selected_artifact_ids: detail.selected_artifact_id ? [detail.selected_artifact_id] : [],
+      llm_credential_id: llmPayload.llm_credential_id,
+      api_base: llmPayload.api_base,
+      model_name: llmPayload.model_name,
+      workspace_context: {
+        datasource_id: detail.datasource_id,
+        selected_table_names: detail.context_tables,
+        recent_agent_run_id: detail.runs.at(-1)?.id || null,
+      },
+    });
+    const admittedSnapshot = await getConversation(conversationId);
+    get().loadConversation(admittedSnapshot);
+    await followRun(get, conversationId, created.run_id, admittedSnapshot.cursor || 0);
+  },
+
+  cancelRun: async (runId) => {
+    const run = get().runsById[runId];
     try {
-      await startConversationMessageStream(
-        conversationId,
-        {
-          content,
-          ...llmPayload,
-          execute: true,
-        },
-        { signal: abortController.signal, onEvent: batchEvent },
-      );
-      await get().openConversation(conversationId);
-      await get().initConversations();
-    } finally {
-      get().abortControllers.delete(conversationId);
+      const cancelled = await cancelConversationRun(runId);
+      if (run) {
+        set((state) => upsertRun(state, run.conversation_id, {
+          ...run,
+          status: cancelled.status as ConversationRun["status"],
+          version: cancelled.version,
+          cancel_requested: true,
+        }));
+      }
+    } catch {
+      return;
     }
-  },
-
-  cancelRun: (runId) => {
-    for (const controller of get().abortControllers.values()) controller.abort();
-    set((state) => ({
-      runsById: state.runsById[runId]
-        ? { ...state.runsById, [runId]: { ...state.runsById[runId], status: "cancelled" } }
-        : state.runsById,
-    }));
+    if (run) {
+      get().abortControllers.get(run.conversation_id)?.abort();
+      const snapshot = await getConversation(run.conversation_id);
+      get().loadConversation(snapshot);
+      const current = snapshot.runs.find((item) => item.id === runId);
+      if (current && isFollowableRun(current.status)) {
+        await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
+      }
+    }
   },
 
   resolveApproval: async (runId, approvalId, approved) => {
     const run = get().runsById[runId];
-    if (!run) return;
-    const note = approved ? "Approved in DBFox UI" : "Rejected in DBFox UI";
-    const resolvedApproval = await agentApi.resolveAgentApproval(
-      runId,
+    if (!run?.approval) return;
+    await resolveConversationApproval(
       approvalId,
-      approved ? "approved" : "rejected",
-      note,
+      run.approval.version || 0,
+      approved,
+      approved ? "用户允许本次操作" : "用户拒绝本次操作",
     );
-    if (approved) {
-      await agentApi.streamResumeAgentRun(runId, approvalId, {
-        note,
-        onEvent: (event) => get().applyStreamEvent(withConversationRunContext(event, run)),
-      });
-      await get().openConversation(run.conversation_id);
-      await get().initConversations();
-      return;
-    }
+    const snapshot = await getConversation(run.conversation_id);
+    get().loadConversation(snapshot);
+    await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
+  },
 
-    const rejectedApproval =
-      resolvedApproval || run.approval
-        ? {
-            ...(run.approval || resolvedApproval),
-            ...(resolvedApproval || {}),
-            status: "rejected" as const,
-          }
-        : null;
+  resolveQuestion: async (runId, questionId, response) => {
+    const run = get().runsById[runId];
+    if (!run) return;
+    const detail = get().detailById[run.conversation_id];
+    const question = detail?.questions?.find((item) => item.id === questionId);
+    if (!question) return;
+    await resolveConversationQuestion(questionId, question.version, response);
+    const snapshot = await getConversation(run.conversation_id);
+    get().loadConversation(snapshot);
+    await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
+  },
+
+  selectArtifact: async (conversationId, artifactId) => {
+    await selectConversationArtifact(conversationId, artifactId);
     set((state) => {
-      const current = state.runsById[runId];
-      if (!current) return state;
-      let next = upsertRun(state, current.conversation_id, {
-        ...current,
-        status: "failed",
-        approval: rejectedApproval,
-        error_message: "用户拒绝执行此操作。",
-      });
-      if (current.assistant_message_id) {
-        next = upsertMessage(next, current.assistant_message_id, {
-          content: "已拒绝执行操作。",
-          status: "failed",
-        });
-      }
-      return next;
+      const detail = state.detailById[conversationId];
+      if (!detail) return state;
+      return {
+        ...state,
+        detailById: {
+          ...state.detailById,
+          [conversationId]: { ...detail, selected_artifact_id: artifactId },
+        },
+      };
     });
   },
 
-  applyStreamEvent: (event) => {
-    set((state) => reduceStreamEvent(state, event));
-  },
-
+  applyStreamEvent: (event) => set((state) => reduceStreamEvent(state, event)),
   applyStreamEvents: (events) => {
     if (events.length === 0) return;
     set((state) => events.reduce(reduceStreamEvent, state));
   },
 }));
+
+async function followRun(
+  get: () => ConversationStore,
+  conversationId: string,
+  runId: string,
+  afterSequence: number,
+): Promise<void> {
+  get().abortControllers.get(conversationId)?.abort();
+  const abortController = new AbortController();
+  const batchEvent = createStreamEventBatcher<ConversationStreamEvent>(
+    (events) => get().applyStreamEvents(events),
+  );
+  get().abortControllers.set(conversationId, abortController);
+  let cursor = afterSequence;
+  let attempt = 0;
+  try {
+    while (!abortController.signal.aborted) {
+      try {
+        cursor = await streamConversation(conversationId, {
+          afterSequence: cursor,
+          targetRunId: runId,
+          signal: abortController.signal,
+          onEvent: batchEvent,
+        });
+        attempt = 0;
+      } catch (error) {
+        if (abortController.signal.aborted || isAbortError(error)) return;
+        attempt += 1;
+      }
+
+      let snapshot: ConversationDetail | null = null;
+      try {
+        snapshot = await getConversation(conversationId);
+        get().loadConversation(snapshot);
+        cursor = Math.max(cursor, snapshot.cursor || 0);
+      } catch {
+        if (abortController.signal.aborted) return;
+      }
+      const run = snapshot?.runs.find((item) => item.id === runId);
+      if (!run || !isFollowableRun(run.status)) return;
+      await waitForRetry(Math.min(4_000, 250 * (2 ** Math.min(attempt, 4))), abortController.signal);
+    }
+  } finally {
+    if (get().abortControllers.get(conversationId) === abortController) {
+      get().abortControllers.delete(conversationId);
+    }
+  }
+}
+
+function isFollowableRun(status: ConversationRun["status"]): boolean {
+  return ["created", "queued", "running", "cancelling"].includes(status);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function waitForRetry(duration: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = globalThis.setTimeout(resolve, duration);
+    signal.addEventListener("abort", () => {
+      globalThis.clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}

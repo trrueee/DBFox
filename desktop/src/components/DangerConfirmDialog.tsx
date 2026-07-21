@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { userFacingErrorMessage } from "@/lib/presentation";
 import "./DangerConfirmDialog.css";
 
 export interface ConfirmationDetails {
@@ -40,7 +41,7 @@ function DangerConfirmDialogContent({ details }: { details: ConfirmationDetails 
     }
     setLoading(true); setError("");
     try { await details.onConfirm(inputText); }
-    catch (err: unknown) { setError(err instanceof Error ? err.message : "确认操作失败"); }
+    catch (err: unknown) { setError(userFacingErrorMessage(err, "确认操作失败，请重试。")); }
     finally { setLoading(false); }
   };
 

@@ -38,12 +38,6 @@ interface WorkspaceActions {
   openMultiTableWorkspace: (tables: string[]) => void;
   openQueryResultTab: (queryText: string) => string | undefined;
   patchTab: (tabId: string, patch: Partial<WorkspaceTab>) => void;
-  appendTabMessages: (tabId: string, messages: NonNullable<WorkspaceTab["chatMessages"]>) => void;
-  updateTabMessage: (tabId: string, messageId: number, text: string) => void;
-  patchTabTimeline: (
-    tabId: string,
-    updater: (items: NonNullable<WorkspaceTab["agentTimeline"]>) => NonNullable<WorkspaceTab["agentTimeline"]>,
-  ) => void;
   setSelectedTables: (tables: string[] | ((prev: string[]) => string[])) => void;
   addContextTable: (name: string) => void;
   removeContextTable: (name: string) => void;
@@ -170,7 +164,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === tabId)
         ? state.tabs
-        : [...state.tabs, { id: tabId, title: "Agent 评估", type: "agent-eval" }],
+        : [...state.tabs, { id: tabId, title: "智能评测", type: "agent-eval" }],
       activeTabId: tabId,
     }));
   },
@@ -248,7 +242,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     if (!text) return undefined;
     const seq = get()._tabSeq;
     const nextId = seq.queryResult++;
-    const msgId = seq.message++;
     set({ _tabSeq: { ...seq } });
     const tabId = `query-result-${nextId}`;
     set((state) => ({
@@ -260,7 +253,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           type: "query-result",
           queryText: text,
           conversationId: `conversation-${nextId}`,
-          chatMessages: [{ id: msgId, sender: "user", text }],
           artifacts: [],
         },
       ],
@@ -272,34 +264,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   patchTab: (tabId, patch) =>
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)),
-    })),
-
-  appendTabMessages: (tabId, messages) =>
-    set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === tabId ? { ...tab, chatMessages: [...(tab.chatMessages || []), ...messages] } : tab,
-      ),
-    })),
-
-  updateTabMessage: (tabId, messageId, text) =>
-    set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === tabId
-          ? {
-              ...tab,
-              chatMessages: (tab.chatMessages || []).map((message) =>
-                message.id === messageId ? { ...message, text } : message,
-              ),
-            }
-          : tab,
-      ),
-    })),
-
-  patchTabTimeline: (tabId, updater) =>
-    set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === tabId ? { ...tab, agentTimeline: updater(tab.agentTimeline || []) } : tab,
-      ),
     })),
 
   setSelectedTables: (tables) =>

@@ -66,10 +66,10 @@ export default function TitleBar() {
         </span>
         <span className="titlebar-title">DBFox</span>
       </span>
-      <div className="titlebar-controls" style={{ gap: "8px" }}>
+      <div className="titlebar-controls titlebar-controls--spacious">
         <ThemeToggle />
         {isTauriRuntime() && (
-          <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+          <div className="titlebar-window-controls">
             <button
               className="titlebar-btn"
               onClick={handleMinimize}

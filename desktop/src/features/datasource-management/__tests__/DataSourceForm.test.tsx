@@ -64,7 +64,7 @@ describe("DataSourceForm", () => {
 
     renderForm({ onSubmit });
 
-    fireEvent.click(screen.getByRole("button", { name: "保存并同步 Schema" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并同步表结构" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
     expect(await screen.findByText("请完整填写连接名称、主机、数据库名和用户名。")).toBeInTheDocument();
@@ -83,7 +83,7 @@ describe("DataSourceForm", () => {
 
     renderForm({ form, onSubmit });
 
-    fireEvent.click(screen.getByRole("button", { name: "保存并同步 Schema" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存并同步表结构" }));
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({

@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: hsl(var(--foreground));
+  color: var(--color-text-primary);
   font-size: var(--ui-font-body);
   font-weight: 500;
   line-height: 1;
@@ -11,32 +11,27 @@
   cursor: pointer;
   user-select: none;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   transition:
     color 150ms ease-out,
     background-color 150ms ease-out,
     border-color 150ms ease-out,
     box-shadow 150ms ease-out,
-    opacity 150ms ease-out,
-    transform 150ms ease-out;
+    opacity var(--motion-fast) ease-out;
 }
 
 .dbfox-button:focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 1px hsl(var(--background)),
-    0 0 0 3px hsl(var(--ring));
+  box-shadow: var(--focus-ring);
 }
 
 .dbfox-button:disabled {
   pointer-events: none;
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: var(--control-disabled-opacity);
 }
 
-.dbfox-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
+.dbfox-button[aria-busy="true"] { cursor: wait; }
 
 .dbfox-button svg {
   flex-shrink: 0;
@@ -46,17 +41,17 @@
 }
 
 .dbfox-button--default {
-  color: hsl(var(--primary-foreground));
-  background: hsl(var(--primary));
+  color: var(--color-on-primary);
+  background: var(--color-primary);
 }
 
 .dbfox-button--default:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--color-primary-strong);
 }
 
 .dbfox-button--destructive {
-  color: hsl(var(--destructive-foreground));
-  background: hsl(var(--destructive));
+  color: #FFFFFF;
+  background: var(--color-danger);
 }
 
 .dbfox-button--destructive:hover:not(:disabled) {
@@ -64,41 +59,41 @@
 }
 
 .dbfox-button--outline {
-  color: hsl(var(--foreground));
-  background: transparent;
-  border-color: hsl(var(--border));
+  color: var(--color-text-primary);
+  background: var(--control-bg);
+  border-color: var(--control-border);
 }
 
 .dbfox-button--outline:hover:not(:disabled) {
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 0.06);
-  border-color: hsl(var(--primary) / 0.3);
+  color: var(--color-primary);
+  background: var(--control-bg-hover);
+  border-color: var(--color-primary);
 }
 
 .dbfox-button--secondary {
-  color: hsl(var(--secondary-foreground));
-  background: hsl(var(--secondary));
+  color: var(--color-text-primary);
+  background: var(--control-bg-pressed);
 }
 
 .dbfox-button--secondary:hover:not(:disabled) {
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 0.08);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
 .dbfox-button--ghost {
-  color: hsl(var(--muted-foreground));
+  color: var(--color-text-secondary);
   background: transparent;
 }
 
 .dbfox-button--ghost:hover:not(:disabled) {
-  color: hsl(var(--primary));
-  background: hsl(var(--primary) / 0.06);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
 .dbfox-button--link {
   height: auto;
   padding: 0;
-  color: hsl(var(--primary));
+  color: var(--color-primary);
   background: transparent;
   border-color: transparent;
   text-underline-offset: 4px;
@@ -131,7 +126,7 @@
 }
 
 .dbfox-button--icon-sm {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
 }

@@ -8,7 +8,6 @@ interface ArtifactTableFooterProps {
   latencyMs: number | undefined;
   totalRows: number | undefined;
   truncated?: boolean;
-  isSqlBackedWorkspace: boolean;
   hasNextPage: boolean;
   onPageChange: (updater: number | ((page: number) => number)) => void;
   onPageSizeChange: (value: number) => void;
@@ -22,7 +21,6 @@ export function ArtifactTableFooter({
   latencyMs,
   totalRows,
   truncated,
-  isSqlBackedWorkspace,
   hasNextPage,
   onPageChange,
   onPageSizeChange,
@@ -30,14 +28,13 @@ export function ArtifactTableFooter({
   return (
     <div className="artifact-table-footer">
       <span className="artifact-table-footer-text">
-        {isLoading ? "加载中..." : `第 ${page} 页 · 本页 ${visibleRowCount} 行${latencyMs !== undefined ? ` · ${latencyMs}ms` : ""}`}
+        {isLoading ? "正在加载…" : `第 ${page} 页 · 本页 ${visibleRowCount} 行${latencyMs !== undefined ? ` · ${latencyMs}ms` : ""}`}
         {totalRows !== undefined && ` · 总计约 ${totalRows} 行`}
         {truncated && <span className="artifact-table-truncated"> · 结果已截断</span>}
       </span>
 
       <div className="artifact-table-footer-controls">
-        {isSqlBackedWorkspace && (
-          <div className="artifact-table-pagination">
+        <div className="artifact-table-pagination">
             <Button
               type="button"
               variant="ghost"
@@ -61,12 +58,10 @@ export function ArtifactTableFooter({
             >
               &gt;
             </Button>
-          </div>
-        )}
+        </div>
         <Select
           className="artifact-table-page-size"
           value={pageSize}
-          disabled={!isSqlBackedWorkspace}
           onChange={(event) => onPageSizeChange(Number(event.target.value))}
         >
           <option value="10">10条/页</option>

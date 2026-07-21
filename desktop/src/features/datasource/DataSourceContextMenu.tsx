@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { useId, useLayoutEffect, type ReactNode } from "react";
 import { Copy, FileText, GitMerge, Info, Layers, RefreshCw, Sparkles, Terminal, Trash2, X } from "lucide-react";
 import type { ContextMenuState } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { clearCspOverlayPosition, setCspOverlayPosition } from "../../lib/cspDynamicPosition";
 
 interface DataSourceContextMenuProps {
   contextMenu: ContextMenuState;
@@ -22,10 +23,17 @@ export function DataSourceContextMenu({
   onToast,
   onOpenProps,
 }: DataSourceContextMenuProps) {
+  const positionToken = useId().replaceAll(":", "");
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
   const setSelectedTables = useWorkspaceStore((s) => s.setSelectedTables);
   const addContextTable = useWorkspaceStore((s) => s.addContextTable);
   const clearContextTables = useWorkspaceStore((s) => s.clearContextTables);
+
+  useLayoutEffect(() => {
+    if (!contextMenu.visible) return undefined;
+    setCspOverlayPosition(positionToken, contextMenu.x, contextMenu.y);
+    return () => clearCspOverlayPosition(positionToken);
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y, positionToken]);
 
   if (!contextMenu.visible) return null;
 
@@ -35,11 +43,15 @@ export function DataSourceContextMenu({
   };
 
   return (
-    <div className="hifi-context-menu" style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }} onClick={(event) => event.stopPropagation()}>
+    <div
+      className="hifi-context-menu csp-positioned-overlay"
+      data-csp-position={positionToken}
+      onClick={(event) => event.stopPropagation()}
+    >
       {contextMenu.type === "database" && (
         <>
           <Item icon={<Terminal size={11} className="text-slate-500" />} label="打开 SQL 控制台" onClick={() => run(onOpenSqlConsole)} />
-          <Item icon={<RefreshCw size={11} className="text-slate-500" />} label="刷新数据源" onClick={() => run(() => onToast("连接刷新中..."))} />
+          <Item icon={<RefreshCw size={11} className="text-slate-500" />} label="刷新数据源" onClick={() => run(() => onToast("正在刷新连接…"))} />
           <div className="hifi-context-menu-divider" />
           <Item icon={<Info size={11} className="text-slate-500" />} label="查看数据源属性" onClick={() => run(onOpenProps)} />
         </>
@@ -51,7 +63,7 @@ export function DataSourceContextMenu({
           <Item icon={<FileText size={11} className="text-slate-500" />} label="查看所有表结构" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "schema"))} />
           <Item icon={<GitMerge size={11} className="text-slate-500" />} label="生成库级 ER 图" onClick={() => run(() => onOpenTable(contextMenu.targetNode, "er"))} />
           <div className="hifi-context-menu-divider" />
-          <Item icon={<RefreshCw size={11} className="text-slate-500" />} label="刷新 Schema" onClick={() => run(() => onToast("架构缓存已刷新"))} />
+          <Item icon={<RefreshCw size={11} className="text-slate-500" />} label="刷新表结构" onClick={() => run(() => onToast("表结构已刷新"))} />
         </>
       )}
 

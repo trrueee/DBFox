@@ -14,7 +14,7 @@ describe("Composer", () => {
 
     expect(container.querySelector(".conv-composer-rail")).toBeTruthy();
     expect(container.querySelector(".conv-composer-card")).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: "继续提问" }).getAttribute("placeholder")).toBe("Continue asking...");
+    expect(screen.getByRole("textbox", { name: "继续提问" }).getAttribute("placeholder")).toBe("继续追问…");
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
   });
@@ -27,7 +27,7 @@ describe("Composer", () => {
     fireEvent.change(input, { target: { value: "  分析订单趋势  " } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
-    expect(onSend).toHaveBeenCalledWith("分析订单趋势");
+    expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue");
     expect(input.value).toBe("");
   });
 
@@ -35,8 +35,8 @@ describe("Composer", () => {
     const onCancel = vi.fn();
     render(<Composer running={true} onSend={vi.fn()} onCancel={onCancel} />);
 
-    expect(screen.queryByRole("button", { name: "发送" })).toBeNull();
-    const pause = screen.getByRole("button", { name: "暂停生成" });
+    expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
+    const pause = screen.getByRole("button", { name: "停止当前任务" });
 
     fireEvent.click(pause);
 

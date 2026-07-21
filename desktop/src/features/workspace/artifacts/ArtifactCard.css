@@ -119,3 +119,9 @@
   background: var(--trust-warning-bg);
   color: var(--trust-warning);
 }
+
+.artifact-pill--live {
+  color: var(--color-text-secondary);
+  border-color: color-mix(in srgb, var(--color-secondary) 28%, var(--border-subtle));
+  background: color-mix(in srgb, var(--color-secondary) 8%, transparent);
+}

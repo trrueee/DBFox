@@ -13,16 +13,16 @@ export function ConversationHeader({
   return (
     <header className="conv-header">
       <div className="conv-header-title-group">
-        <h2>{detail.title || "Conversation"}</h2>
+        <h2>{detail.title || "新对话"}</h2>
         <span className="conv-header-meta" title={detail.id}>
           会话 {shortIdentifier(detail.id)}
         </span>
       </div>
       <div className="conv-header-actions">
-        <button type="button" onClick={onOpenHistory} title="Open history">
+        <button type="button" onClick={onOpenHistory} title="打开对话历史" aria-label="打开对话历史">
           <History size={16} />
         </button>
-        <button type="button" onClick={onDelete} title="Delete conversation">
+        <button type="button" onClick={onDelete} title="删除当前对话" aria-label="删除当前对话">
           <Trash2 size={16} />
         </button>
       </div>
@@ -32,5 +32,5 @@ export function ConversationHeader({
 
 function shortIdentifier(value: string): string {
   if (value.length <= 16) return value;
-  return `${value.slice(0, 8)}...${value.slice(-4)}`;
+  return `${value.slice(0, 8)}…${value.slice(-4)}`;
 }

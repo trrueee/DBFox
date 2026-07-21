@@ -5,9 +5,7 @@ import { useSqlBackedDataView } from "../useSqlBackedDataView";
 
 const source = {
   kind: "artifact-result" as const,
-  datasourceId: "ds-1",
-  sourceSqlArtifactId: "sql-artifact-1",
-  safeSql: "SELECT id FROM users",
+  artifactId: "result-artifact-1",
   columns: ["id"],
 };
 
@@ -18,8 +16,13 @@ function pageResponse(rows: Array<Record<string, unknown>>, page: number): SqlBa
     page,
     pageSize: 20,
     hasNextPage: page < 3,
-    executedSql: `SELECT id FROM users LIMIT 20 OFFSET ${(page - 1) * 20}`,
     latencyMs: 5,
+    consistency: "live_reexecution",
+    originalExecutedAt: "2026-07-20T00:00:00Z",
+    viewExecutedAt: "2026-07-20T00:00:01Z",
+    viewExecutionId: `view-${page}`,
+    datasourceGeneration: 1,
+    queryFingerprint: "query-1",
     warnings: [],
     notices: [],
   };

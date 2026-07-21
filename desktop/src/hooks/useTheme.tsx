@@ -1,18 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-
-type Theme = "light" | "dark";
-
-interface ThemeContextValue {
-  theme: Theme;
-  toggle: () => void;
-  setTheme: (t: Theme) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
-  toggle: () => {},
-  setTheme: () => {},
-});
+import { useEffect, useState, useCallback } from "react";
+import { ThemeContext, type Theme } from "./themeContext";
 
 const STORAGE_KEY = "dbfox-theme";
 
@@ -27,7 +14,6 @@ function getInitialTheme(): Theme {
   if (window.matchMedia?.("(prefers-color-scheme: light)").matches) return "light";
   return "dark";
 }
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
 
@@ -56,8 +42,4 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme() {
-  return useContext(ThemeContext);
 }

@@ -31,13 +31,12 @@ const defaultLabel: Record<StatusType, string> = {
 };
 
 export function StatusIndicator({ type, label, size = "md" }: StatusIndicatorProps) {
-  const dotSize = size === "sm" ? 6 : 8;
+  const sizeClass = `status-dot--${size}`;
 
   if (!label) {
     return (
       <span
-        className={`status-dot ${dotClass[type]}`}
-        style={{ width: dotSize, height: dotSize }}
+        className={`status-dot ${sizeClass} ${dotClass[type]}`}
         title={defaultLabel[type]}
       />
     );
@@ -45,7 +44,7 @@ export function StatusIndicator({ type, label, size = "md" }: StatusIndicatorPro
 
   return (
     <span className={`status-badge ${badgeClass[type]}`}>
-      <span className={`status-dot ${dotClass[type]}`} style={{ width: dotSize, height: dotSize }} />
+      <span className={`status-dot ${sizeClass} ${dotClass[type]}`} />
       {label || defaultLabel[type]}
     </span>
   );

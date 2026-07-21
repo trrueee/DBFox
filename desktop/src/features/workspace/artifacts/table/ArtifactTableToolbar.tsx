@@ -16,14 +16,9 @@ interface ArtifactTableToolbarProps {
   filters: ResultFilter[];
   onFiltersChange: (value: ResultFilter[]) => void;
   isLoading: boolean;
-  isSqlBackedWorkspace: boolean;
   onRefresh: () => void;
   onExport: () => void;
   onCopy: () => void;
-  canToggleLoadedRows: boolean;
-  expanded: boolean;
-  loadedRowCount: number;
-  onToggleExpanded: () => void;
 }
 
 export function ArtifactTableToolbar({
@@ -38,14 +33,9 @@ export function ArtifactTableToolbar({
   filters,
   onFiltersChange,
   isLoading,
-  isSqlBackedWorkspace,
   onRefresh,
   onExport,
   onCopy,
-  canToggleLoadedRows,
-  expanded,
-  loadedRowCount,
-  onToggleExpanded,
 }: ArtifactTableToolbarProps) {
   const [filterColumn, setFilterColumn] = useState(columns[0] ?? "");
   const [filterOperator, setFilterOperator] = useState<ResultFilterOperator>("contains");
@@ -89,7 +79,7 @@ export function ArtifactTableToolbar({
               size="sm"
               className="artifact-table-toolbar-button"
               onClick={onRefresh}
-              disabled={isLoading || !isSqlBackedWorkspace}
+              disabled={isLoading}
             >
               <RefreshCw size={10} className={isLoading ? "artifact-table-refresh-icon is-spinning" : "artifact-table-refresh-icon"} /> 刷新
             </Button>
@@ -100,7 +90,6 @@ export function ArtifactTableToolbar({
                   variant="ghost"
                   size="sm"
                   className="artifact-table-toolbar-button"
-                  disabled={!isSqlBackedWorkspace}
                 >
                   <Filter size={10} /> 筛选{filters.length > 0 ? ` ${filters.length}` : ""}
                 </Button>
@@ -155,7 +144,6 @@ export function ArtifactTableToolbar({
                   variant="ghost"
                   size="sm"
                   className="artifact-table-toolbar-button"
-                  disabled={!isSqlBackedWorkspace}
                 >
                   <ArrowUpDown size={10} /> 排序{sort ? ` ${sort.direction === "asc" ? "↑" : "↓"}` : ""}
                 </Button>
@@ -200,7 +188,7 @@ export function ArtifactTableToolbar({
                 className="artifact-table-search"
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
-                placeholder={isSqlBackedWorkspace ? "搜索 SQL 结果..." : "本地搜索..."}
+                placeholder="搜索 SQL 结果..."
               />
             </div>
           </ToolbarGroup>
@@ -221,11 +209,6 @@ export function ArtifactTableToolbar({
         onChange={(event) => onSearchChange(event.target.value)}
         placeholder="搜索结果"
       />
-      {canToggleLoadedRows && (
-        <Button type="button" variant="outline" size="sm" className="artifact-table-inline-action" onClick={onToggleExpanded}>
-          {expanded ? "收起预览" : `查看全部已载入 ${loadedRowCount} 行`}
-        </Button>
-      )}
     </div>
   );
 }

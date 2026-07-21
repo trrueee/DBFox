@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { describe, expect, it } from "vitest";
-import { ToastProvider, useToast } from "../Toast";
+import { ToastProvider } from "../Toast";
+import { useToast } from "../toastState";
 
 function TestComponent({ msg, type = "info" }: { msg: string; type?: "success" | "error" | "warning" | "info" }) {
   const { toast } = useToast();

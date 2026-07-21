@@ -50,6 +50,10 @@
   flex-wrap: wrap;
 }
 
+.diagnostics-actions .settings-toggle {
+  margin-right: 4px;
+}
+
 .diagnostics-toggle-label {
   display: inline-flex;
   align-items: center;
@@ -83,15 +87,15 @@
 
 .diagnostics-badge,
 .diagnostics-log-status--ok {
-  border: 1px solid rgba(16, 185, 129, 0.24);
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
+  border: 1px solid color-mix(in srgb, var(--color-success) 24%, transparent);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .diagnostics-log-status--missing {
-  border: 1px solid rgba(249, 115, 22, 0.24);
-  background: rgba(249, 115, 22, 0.1);
-  color: #9a3412;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .diagnostics-error {
@@ -104,12 +108,30 @@
   gap: 10px;
 }
 
+.diagnostics-content {
+  display: flex;
+  width: min(100%, 1120px);
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 auto;
+  overflow: auto;
+  padding: 2px 2px 4px;
+}
+
 .diagnostics-metric {
   min-width: 0;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  background: var(--color-panel);
-  padding: 10px 12px;
+  border-right: 1px solid var(--hairline);
+  padding: 2px 14px;
+}
+
+.diagnostics-metric:first-child {
+  padding-left: 0;
+}
+
+.diagnostics-metric:last-child {
+  border-right: 0;
 }
 
 .diagnostics-metric span {
@@ -134,10 +156,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid var(--hairline);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
   border-radius: 8px;
-  background: var(--color-panel);
-  padding: 10px 12px;
+  background: transparent;
+  padding: 0 0 12px;
 }
 
 .diagnostics-source-picker {
@@ -232,8 +255,20 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
-  padding-right: 4px;
+  overflow: auto;
+}
+
+.diagnostics-log-section {
+  display: flex;
+  min-height: 320px;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.diagnostics-log-section > .settings-section__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .diagnostics-source {
@@ -253,7 +288,7 @@
   padding: 12px 14px;
 }
 
-.diagnostics-source-header h3 {
+.diagnostics-source-header h4 {
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--ui-font-input);
@@ -288,4 +323,25 @@
 
 .diagnostics-empty {
   min-height: 180px;
+}
+
+@media (max-width: 760px) {
+  .diagnostics-page-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .diagnostics-actions {
+    justify-content: flex-start;
+  }
+
+  .diagnostics-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diagnostics-metric {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+    padding: 8px 0;
+  }
 }

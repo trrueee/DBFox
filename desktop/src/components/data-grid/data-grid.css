@@ -162,7 +162,6 @@
 }
 
 .data-grid-virtual-spacer-cell {
-  height: var(--data-grid-virtual-spacer-height, 0px);
   padding: 0 !important;
   border: 0 !important;
   background: transparent !important;

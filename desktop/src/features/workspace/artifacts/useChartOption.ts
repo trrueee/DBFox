@@ -1,27 +1,24 @@
 import { useMemo } from "react";
-import type { ChartArtifact, ChartArtifactType } from "../../../types/agentArtifact";
+import type { ChartArtifactType, RenderedChartArtifact } from "../../../types/agentArtifact";
 import { type ChartTheme, useChartTheme } from "./useChartTheme";
 
-function scatterXValue(point: ChartArtifact["series"][number], index: number): number {
+function scatterXValue(point: RenderedChartArtifact["series"][number], index: number): number {
   const raw = point.x ?? point.label;
   const value = typeof raw === "number" ? raw : Number(raw);
   return Number.isFinite(value) ? value : index + 1;
 }
 
-function yAxisName(artifact: ChartArtifact): string {
-  const label = artifact.yLabel || "";
-  if (label && artifact.unit) return `${label} (${artifact.unit})`;
-  return label || artifact.unit || "";
+function yAxisName(artifact: RenderedChartArtifact): string {
+  return artifact.y[0] || "";
 }
 
-function shouldShowDataLabels(artifact: ChartArtifact, chartType: ChartArtifactType, compact: boolean): boolean {
-  if (artifact.dataLabel !== undefined) return artifact.dataLabel;
+function shouldShowDataLabels(artifact: RenderedChartArtifact, chartType: ChartArtifactType, compact: boolean): boolean {
   if (compact || chartType === "scatter") return false;
   return artifact.series.length > 0 && artifact.series.length <= 8;
 }
 
 export function buildChartOption(
-  artifact: ChartArtifact,
+  artifact: RenderedChartArtifact,
   chartType: ChartArtifactType,
   compact: boolean,
   theme: ChartTheme,
@@ -29,7 +26,7 @@ export function buildChartOption(
   const labels = artifact.series.map((point) => point.label);
   const values = artifact.series.map((point) => point.value);
   const showDataLabels = shouldShowDataLabels(artifact, chartType, compact);
-  const seriesName = artifact.seriesLabel || artifact.yLabel || artifact.title;
+  const seriesName = artifact.y[0] || artifact.title;
 
   if (chartType === "pie") {
     return {
@@ -77,7 +74,7 @@ export function buildChartOption(
       axisLabel: { color: theme.textSecondary, fontSize: theme.axisFontSize, rotate: labels.length > 6 && !compact ? 30 : 0 },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: theme.borderColor } },
-      name: artifact.xLabel || "",
+      name: artifact.x,
       nameGap: 24,
       nameTextStyle: { color: theme.textMuted, fontSize: theme.axisFontSize },
     },
@@ -138,7 +135,7 @@ export function buildChartOption(
 }
 
 export function useChartOption(
-  artifact: ChartArtifact,
+  artifact: RenderedChartArtifact,
   chartType: ChartArtifactType,
   compact: boolean,
 ) {

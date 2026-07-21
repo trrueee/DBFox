@@ -27,7 +27,7 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
       try {
         const table = await findTableByName(datasourceId, tableId);
         if (!table) {
-          if (!cancelled) setError("未找到该表的 Schema 元数据，请先同步 Schema。");
+          if (!cancelled) setError("未找到该表的字段信息，请先同步表结构。");
           return;
         }
         const nextColumns = await listColumns(table.id);
@@ -47,8 +47,8 @@ export function TableSchemaPane({ tableId, datasourceId }: TableSchemaPaneProps)
 
   return (
     <div className="table-schema-pane">
-      <span className="table-schema-pane__caption">字段列表 (Schema Structure) &gt; {tableId}</span>
-      {loading && <div className="table-schema-pane__loading">正在读取字段结构...</div>}
+      <span className="table-schema-pane__caption">字段列表 &gt; {tableId}</span>
+      {loading && <div className="table-schema-pane__loading">正在读取字段结构…</div>}
       {error && <div className="table-schema-pane__error">{error}</div>}
       {!loading && !error && (
         <table className="table-schema-table">

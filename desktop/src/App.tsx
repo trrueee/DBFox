@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, type MouseEvent } from "react";
 import "./App.css";
-import { setDialogContainer } from "./components/ui/dialog";
-import { setToastRoot, useToast } from "./components/Toast";
+import { setDialogContainer } from "./components/ui/dialogContainer";
+import { setToastRoot, useToast } from "./components/toastState";
 import { ContextDrawer } from "./features/assistant/ContextDrawer";
 import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
 import { DataSourceTree } from "./features/datasource/DataSourceTree";

@@ -13,6 +13,8 @@ import {
 import { useDatasourceStore } from "../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { EngineSchemaTable } from "../../lib/api/schema";
+import { getUserErrorMessage } from "../../lib/api/client";
+import { databaseTypeLabel, datasourceStatusPresentation } from "../../lib/presentation";
 import "./DataSourceTree.css";
 
 interface DataSourceTreeProps {
@@ -50,6 +52,7 @@ export function DataSourceTree({
   const openConversationHistoryTab = useWorkspaceStore((s) => s.openConversationHistoryTab);
 
   const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
+  const activeDatasourceStatus = datasourceStatusPresentation(activeDatasource?.status);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [schemaCollapsed, setSchemaCollapsed] = useState(false);
 
@@ -134,7 +137,9 @@ export function DataSourceTree({
                   <Database size={16} className="ds-db-icon" />
                   <div className="hifi-db-info">
                     <span className="hifi-db-name">{activeDatasource.name}</span>
-                    <span className="hifi-db-version">{activeDatasource.db_type} · {activeDatasource.status || "unknown"}</span>
+                    <span className={`hifi-db-version ds-db-status ds-db-status--${activeDatasourceStatus.tone}`}>
+                      {databaseTypeLabel(activeDatasource.db_type)} · {activeDatasourceStatus.label}
+                    </span>
                   </div>
                   <ChevronDown size={14} className="ds-db-chevron" />
                 </button>
@@ -149,7 +154,9 @@ export function DataSourceTree({
                     <Database size={12} className="ds-db-item-icon" />
                     <div className="ds-db-item-info">
                       <div className="ds-db-item-name">{ds.name}</div>
-                      <div className="ds-db-item-type">{ds.db_type}</div>
+                      <div className="ds-db-item-type">
+                        {databaseTypeLabel(ds.db_type)} · {datasourceStatusPresentation(ds.status).label}
+                      </div>
                     </div>
                     {ds.id === activeDatasourceId && <Check size={14} className="ds-db-item-check" />}
                   </DropdownMenuItem>
@@ -200,15 +207,17 @@ export function DataSourceTree({
         </div>
 
         <ScrollArea className="hifi-tree-container ds-tree-scroll-area">
-          {error && <div className="ds-tree-status ds-tree-status--error">{error}</div>}
-          {loading && <div className="ds-tree-status">正在加载...</div>}
+          {error && <div className="ds-tree-status ds-tree-status--error" role="alert">{getUserErrorMessage(error, "表结构加载失败，请重试。")}</div>}
+          {loading && <div className="ds-tree-status" role="status">正在加载表结构…</div>}
           {!loading && !error && !activeDatasource && <div className="ds-tree-status">暂无数据源，请先创建连接。</div>}
 
           {activeDatasource && (
-            <div
+            <button
+              type="button"
               className="hifi-tree-node ds-schema-node"
               onClick={() => setSchemaCollapsed((v) => !v)}
               onContextMenu={(event) => onNodeContextMenu(event, "schema", activeDatasource.database_name || activeDatasource.name)}
+              aria-expanded={!schemaCollapsed}
             >
               <ChevronDown
                 size={14}
@@ -216,25 +225,26 @@ export function DataSourceTree({
               />
               <Database size={14} className="ds-schema-icon" />
               <span>{activeDatasource.database_name || activeDatasource.name}</span>
-            </div>
+            </button>
           )}
 
           {!schemaCollapsed && Object.entries(groupedTables).map(([moduleName, moduleTables]) => {
             const groupCollapsed = collapsedGroups.has(moduleName);
             return (
               <div key={moduleName} className="ds-tree-group">
-                <div className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)}>
+                <button type="button" className="hifi-tree-node ds-tree-group-header" onClick={() => toggleGroup(moduleName)} aria-expanded={!groupCollapsed}>
                   <ChevronDown
                     size={12}
                     className={`ds-group-chevron ds-group-chevron-muted ${groupCollapsed ? "ds-group-chevron-collapsed" : ""}`}
                   />
                   <span className="ds-tree-group-label">{moduleName}</span>
-                </div>
+                </button>
 
                 {!groupCollapsed && moduleTables.map((table) => {
                   const isSelected = selectedTables.includes(table.table_name);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={table.id}
                       className={`hifi-tree-node ds-tree-table-row ${isSelected ? "active" : ""}`}
                       draggable
@@ -245,11 +255,12 @@ export function DataSourceTree({
                       onClick={(event) => onTableClick(table.table_name, event)}
                       onDoubleClick={() => onTableDoubleClick(table.table_name)}
                       onContextMenu={(event) => onNodeContextMenu(event, "table", table.table_name)}
+                      aria-pressed={isSelected}
                     >
                       <span className="hifi-tree-indent" />
                       <FileText size={13} className="ds-tree-table-icon" />
                       <span className="ds-tree-table-name" title={table.table_comment}>{table.table_name}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -257,7 +268,7 @@ export function DataSourceTree({
           })}
 
           {activeDatasource && !loading && Object.keys(groupedTables).length === 0 && (
-            <div className="ds-tree-status">没有匹配的表。请先同步 Schema 或调整搜索词。</div>
+            <div className="ds-tree-status">没有匹配的表。请先同步表结构或调整搜索词。</div>
           )}
         </ScrollArea>
       </div>

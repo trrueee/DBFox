@@ -20,6 +20,7 @@ export interface DataSource {
   database_name: string;
   username: string | null;
   password_credential_id?: string | null;
+  connection_generation?: number;
   connection_mode: string;
   is_read_only?: boolean;
   env?: string;
@@ -148,6 +149,9 @@ export interface BackupRecord {
   file_path?: string;
   file_size_bytes?: number;
   checksum_sha256?: string;
+  source_connection_generation?: number;
+  source_profile_fingerprint?: string;
+  source_database_name?: string;
   started_at?: string;
   completed_at?: string;
   duration_ms?: number;

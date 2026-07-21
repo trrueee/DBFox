@@ -1,0 +1,314 @@
+.settings-content {
+  display: flex;
+  width: min(100%, 920px);
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 auto;
+  padding: 20px 24px 28px;
+}
+
+.settings-section {
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-card);
+  box-shadow: var(--shadow-panel);
+}
+
+.settings-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-panel-muted);
+  padding: 16px 18px;
+}
+
+.settings-section__identity {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.settings-section__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-radius: 9px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.settings-section__title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-input);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.settings-section__description {
+  margin: 3px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-control);
+  line-height: 1.45;
+}
+
+.settings-section__trailing {
+  flex: 0 0 auto;
+}
+
+.settings-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+}
+
+.settings-field {
+  min-width: 0;
+}
+
+.settings-field__label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-control);
+  font-weight: 650;
+}
+
+.settings-field__message {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
+.settings-field__message.is-error {
+  color: var(--color-danger);
+}
+
+.settings-toggle {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-toggle + .settings-toggle {
+  border-top: 1px solid var(--hairline);
+  padding-top: 14px;
+}
+
+.settings-toggle--compact {
+  min-height: 36px;
+}
+
+.settings-toggle.is-disabled {
+  opacity: 0.55;
+}
+
+.settings-toggle__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-toggle__label {
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-control);
+  font-weight: 650;
+}
+
+.settings-toggle__description {
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+  line-height: 1.45;
+}
+
+.settings-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 1px solid var(--color-border-hover);
+  border-radius: 999px;
+  outline: none;
+  background: var(--control-bg-hover);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
+}
+
+.settings-switch[aria-checked="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.settings-switch:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+.settings-switch:disabled {
+  cursor: not-allowed;
+}
+
+.settings-switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--motion-fast) ease;
+}
+
+.settings-switch[aria-checked="true"] .settings-switch__thumb {
+  transform: translateX(16px);
+}
+
+.settings-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--surface-panel-muted);
+  color: var(--color-text-secondary);
+  padding: 10px 12px;
+}
+
+.settings-status--info {
+  border-color: color-mix(in srgb, var(--color-info) 24%, transparent);
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.settings-status--success {
+  border-color: color-mix(in srgb, var(--color-success) 24%, transparent);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.settings-status--warning,
+.settings-status--loading {
+  border-color: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.settings-status--danger {
+  border-color: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.settings-status__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-status__copy strong {
+  color: currentColor;
+  font-size: var(--ui-font-control);
+  font-weight: 700;
+}
+
+.settings-status__copy span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+}
+
+.settings-status__meta {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--ui-font-caption);
+}
+
+.settings-action-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+  padding: 12px 20px;
+}
+
+.settings-action-bar__status {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.settings-action-bar__status .settings-status {
+  width: fit-content;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.settings-action-bar__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.settings-status .is-spinning {
+  animation: settings-spin 0.8s linear infinite;
+}
+
+@keyframes settings-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .settings-content {
+    padding: 14px;
+  }
+
+  .settings-section__header,
+  .settings-section__body {
+    padding: 14px;
+  }
+
+  .settings-action-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-action-bar__actions {
+    width: 100%;
+  }
+
+  .settings-action-bar__actions > button {
+    flex: 1 1 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-switch,
+  .settings-switch__thumb {
+    transition: none;
+  }
+}

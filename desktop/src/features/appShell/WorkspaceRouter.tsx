@@ -1,21 +1,6 @@
-import { useState } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import type { WorkspaceTab } from "../../types/workspace";
-import { SmartQueryHome } from "../workspace/SmartQueryHome";
-import { ConversationHistoryPanel } from "../conversation/ConversationHistoryPanel";
-import { ConversationWorkspace } from "../conversation/workspace/ConversationWorkspace";
-import { TableWorkspace } from "../workspace/TableWorkspace";
-import { SqlConsoleWorkspace, type ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
-import { MultiTableWorkspace } from "../workspace/MultiTableWorkspace";
-import { TableArtifactView } from "../workspace/artifacts/TableArtifactView";
-import { AgentEvalPage } from "../../pages/AgentEvalPage";
-import { DataSourcesPage } from "../../pages/DataSourcesPage";
-import { DiagnosticsPage } from "../../pages/DiagnosticsPage";
-import { useApiConfig } from "../../components/SettingsDialog";
-import { LlmConfigPanel } from "../../components/LlmConfigPanel";
-import { testLlmConnection } from "../../lib/api/agent";
-import { enrollCredentials, releaseCredentialLease } from "../../lib/api/credentials";
-import type { LlmConfigDraft } from "../../lib/api/types/config";
-import { buildLlmTestValues } from "../../lib/llmConfig";
+import type { ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useDatasourceStore } from "../../stores/datasourceStore";
@@ -28,38 +13,95 @@ interface WorkspaceRouterProps {
   showToast: (msg: string, type?: "success" | "error" | "warning" | "info") => void;
 }
 
+const SmartQueryHome = lazy(async () => {
+  const module = await import("../workspace/SmartQueryHome");
+  return { default: module.SmartQueryHome };
+});
+const ConversationHistoryPanel = lazy(async () => {
+  const module = await import("../conversation/ConversationHistoryPanel");
+  return { default: module.ConversationHistoryPanel };
+});
+const ConversationWorkspace = lazy(async () => {
+  const module = await import("../conversation/workspace/ConversationWorkspace");
+  return { default: module.ConversationWorkspace };
+});
+const TableWorkspace = lazy(async () => {
+  const module = await import("../workspace/TableWorkspace");
+  return { default: module.TableWorkspace };
+});
+const SqlConsoleWorkspace = lazy(async () => {
+  const module = await import("../workspace/SqlConsoleWorkspace");
+  return { default: module.SqlConsoleWorkspace };
+});
+const MultiTableWorkspace = lazy(async () => {
+  const module = await import("../workspace/MultiTableWorkspace");
+  return { default: module.MultiTableWorkspace };
+});
+const TableArtifactView = lazy(async () => {
+  const module = await import("../workspace/artifacts/TableArtifactView");
+  return { default: module.TableArtifactView };
+});
+const AgentEvalPage = lazy(async () => {
+  const module = await import("../../pages/AgentEvalPage");
+  return { default: module.AgentEvalPage };
+});
+const DataSourcesPage = lazy(async () => {
+  const module = await import("../../pages/DataSourcesPage");
+  return { default: module.DataSourcesPage };
+});
+const DiagnosticsPage = lazy(async () => {
+  const module = await import("../../pages/DiagnosticsPage");
+  return { default: module.DiagnosticsPage };
+});
+const LlmConfigWorkspaceTab = lazy(async () => {
+  const module = await import("./LlmConfigWorkspaceTab");
+  return { default: module.LlmConfigWorkspaceTab };
+});
+
+function WorkspaceRouteBoundary({ children }: { children: ReactNode }) {
+  return (
+    <Suspense fallback={<div className="workspace-route-loading" role="status">正在载入工作区…</div>}>
+      {children}
+    </Suspense>
+  );
+}
+
 export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) {
   if (activeTab.type === "smart-query") {
-    return <SmartQueryHomeTab showToast={showToast} />;
+    return <WorkspaceRouteBoundary><SmartQueryHomeTab showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "conversation-history") {
-    return <ConversationHistoryTab activeTab={activeTab} />;
+    return <WorkspaceRouteBoundary><ConversationHistoryTab activeTab={activeTab} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "table") {
-    return <TableWorkspaceTab activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><TableWorkspaceTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "sql") {
-    return <SqlConsoleTab activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><SqlConsoleTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "multi-table") {
-    return <MultiTableWorkspace tables={activeTab.selectedTables || []} onOpenQueryResult={openQueryResult} onToast={showToast} />;
+    return (
+      <WorkspaceRouteBoundary>
+        <MultiTableWorkspace tables={activeTab.selectedTables || []} onOpenQueryResult={openQueryResult} onToast={showToast} />
+      </WorkspaceRouteBoundary>
+    );
   }
   if (activeTab.type === "llm-config") {
-    return <LlmConfigTabContent activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><LlmConfigWorkspaceTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "agent-eval") {
-    return <AgentEvalTab showToast={showToast} />;
+    return <WorkspaceRouteBoundary><AgentEvalTab showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "diagnostics") {
-    return <DiagnosticsTab activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><DiagnosticsTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "datasource-settings") {
-    return <DatasourceSettingsTab activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><DatasourceSettingsTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
   if (activeTab.type === "artifact-result") {
-    return <ArtifactResultTab activeTab={activeTab} showToast={showToast} />;
+    return <WorkspaceRouteBoundary><ArtifactResultTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
-  return <QueryResultTab activeTab={activeTab} />;
+  return <WorkspaceRouteBoundary><QueryResultTab activeTab={activeTab} /></WorkspaceRouteBoundary>;
 }
 
 // ── SmartQueryHome tab ──
@@ -213,7 +255,7 @@ function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceT
   const checkHealth = useDatasourceStore((s) => s.checkHealth);
 
   return (
-    <WorkspaceShell title={activeTab.title} description="管理桌面端可用的数据源连接、健康状态和 schema 同步。">
+    <WorkspaceShell title={activeTab.title} description="管理数据源连接、连接状态和表结构同步。">
       <DataSourcesPage
         chrome="workspace"
         onSelectDataSource={(ds) => {
@@ -289,72 +331,4 @@ function openQueryResult(queryText: string) {
   const text = queryText.trim();
   if (!text) return;
   useWorkspaceStore.getState().openQueryResultTab(text);
-}
-
-// ── LlmConfigTab ──
-function LlmConfigTabContent({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: (msg: string) => void }) {
-  const { draft, updateDraft, handleSave } = useApiConfig();
-
-  return (
-    <WorkspaceShell title={activeTab.title} description="配置桌面端智能问数使用的模型接口。">
-      <LlmConfigPanel
-        chrome="workspace"
-        variant="page"
-        config={draft}
-        onChange={updateDraft}
-        onSave={async () => {
-          try {
-            await handleSave();
-            showToast("LLM 配置保存成功");
-          } catch (error) {
-            showToast(error instanceof Error ? error.message : "LLM 凭据保存失败");
-          }
-        }}
-        onTestConnection={async () => {
-          showToast("正在测试与模型接口握手…");
-          try {
-            const result = await testDraftLlmConnection(draft);
-            if (result.ok) {
-              showToast(`连接测试通过 (${result.latency_ms}ms)，模型 ${result.model} 可达`);
-            } else {
-              showToast(`连接失败 [${result.error_code || "UNKNOWN"}]: ${result.error_message || "未知错误"}`);
-            }
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : "无法连接到引擎服务，请确认引擎正在运行。";
-            showToast(`连接测试失败: ${msg}`);
-          }
-        }}
-      />
-    </WorkspaceShell>
-  );
-}
-
-/**
- * Tests an unsaved draft without persisting its raw API key. A draft key is
- * enrolled as a server-owned lease and released after either outcome.
- */
-export async function testDraftLlmConnection(draft: LlmConfigDraft) {
-  const llm = buildLlmTestValues(draft);
-  const apiKey = draft.apiKey.trim();
-  if (!apiKey) {
-    return testLlmConnection(llm.llmCredentialId, llm.apiBase, llm.modelName);
-  }
-
-  const enrollment = await enrollCredentials([
-    { kind: "llm_api_key", secret: apiKey },
-  ]);
-  if (!enrollment) {
-    throw new Error("无法创建临时 LLM 凭据。");
-  }
-  const credential = enrollment.credentials.find((reference) => reference.kind === "llm_api_key");
-  if (!credential) {
-    await releaseCredentialLease(enrollment.lease_id).catch(() => undefined);
-    throw new Error("临时 LLM 凭据无效。");
-  }
-
-  try {
-    return await testLlmConnection(credential.id, llm.apiBase, llm.modelName);
-  } finally {
-    await releaseCredentialLease(enrollment.lease_id).catch(() => undefined);
-  }
 }

@@ -1,19 +1,20 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationArtifact, ConversationDetail, ConversationMessage } from "../../../../types/conversation";
+import type { ConversationArtifact, ConversationDetail, ConversationMessage, ConversationRun } from "../../../../types/conversation";
 import { ConversationWorkspace } from "../ConversationWorkspace";
 
 const viewModel = vi.hoisted(() => ({
   current: {
     detail: null as ConversationDetail | null,
     messages: [] as ConversationMessage[],
-    runs: [],
+    runs: [] as ConversationRun[],
     artifacts: [] as ConversationArtifact[],
-    runningRun: null,
+    runningRun: null as ConversationRun | null,
     openConversation: vi.fn(),
     sendMessage: vi.fn(),
     cancelRun: vi.fn(),
     resolveApproval: vi.fn(),
+    selectArtifact: vi.fn(),
   },
 }));
 
@@ -32,6 +33,7 @@ describe("ConversationWorkspace", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
     Object.defineProperty(window, "ResizeObserver", { configurable: true, value: ResizeObserverMock });
     HTMLElement.prototype.scrollTo = vi.fn();
+    window.localStorage.clear();
     cleanup();
     viewModel.current = {
       detail: conversationDetail(),
@@ -43,6 +45,7 @@ describe("ConversationWorkspace", () => {
       sendMessage: vi.fn(),
       cancelRun: vi.fn(),
       resolveApproval: vi.fn(),
+      selectArtifact: vi.fn(),
     };
   });
 
@@ -71,17 +74,41 @@ describe("ConversationWorkspace", () => {
       true,
     );
     expect(screen.getByText("会话 conv-1").closest(".conv-conversation-pane")).toBe(conversationPane);
-    expect(artifactDock.querySelector(".conv-artifact-dock-header")).toBeNull();
+    expect(artifactDock.querySelector(".conv-artifact-dock-header")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "收起工件区" })).toBeTruthy();
     expect(screen.queryByText("产物")).toBeNull();
     expect(screen.queryByText("2 items")).toBeNull();
     expect(artifactDock.querySelector(".conv-artifact-dock-list")).toBeTruthy();
     expect(artifactDock.querySelector(".conv-artifact-dock-preview")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Revenue Result Result" }).getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.click(screen.getByText("SQL: Revenue SQL"));
+    fireEvent.click(screen.getByRole("button", { name: "Revenue SQL SQL" }));
 
-    expect(screen.getByRole("button", { name: "Revenue SQL SQL" }).getAttribute("aria-pressed")).toBe("true");
+    expect(viewModel.current.selectArtifact).toHaveBeenCalledWith("conv-1", "sql-1");
     expect(onOpenSqlConsole).not.toHaveBeenCalled();
+  });
+
+  it("pins a pending approval directly above the composer", () => {
+    viewModel.current.runningRun = {
+      id: "run-approval", conversation_id: "conv-1", datasource_id: "warehouse",
+      question: "执行查询", assistant_message_id: "message-1", status: "waiting_approval",
+      approval: {
+        id: "approval-1", run_id: "run-approval", session_id: "conv-1",
+        tool_name: "sql.execute_readonly", status: "pending", risk_level: "warning",
+        reason: "需要确认本次只读查询", requested_action: { sql: "SELECT 1" },
+      },
+    };
+    render(
+      <ConversationWorkspace
+        conversationId="conv-1" onOpenHistory={vi.fn()} onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()} onDelete={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByRole("region", { name: "需要批准" });
+    expect(card.closest(".conv-pinned-action")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
+    expect(viewModel.current.resolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", true);
   });
 });
 
@@ -99,6 +126,7 @@ function conversationDetail(): ConversationDetail {
     runs: [],
     artifacts,
     approvals: [],
+    selected_artifact_id: "result-1",
   };
 }
 
@@ -143,14 +171,15 @@ function conversationArtifacts(): ConversationArtifact[] {
       status: "completed",
       sequence: 2,
       payload: {
-        storageMode: "sql_backed",
-        datasourceId: "ds-1",
-        sourceSqlArtifactKey: "sql-1",
-        sourceSqlSemanticKey: "sql_candidate",
-        safeSql: "SELECT revenue FROM orders",
+        sourceSqlArtifactId: "sql-1",
+        queryFingerprint: "query-revenue",
+        datasourceGeneration: 1,
         columns: ["revenue"],
-        previewRows: [["42"]],
         rowCount: 1,
+        returnedRows: 1,
+        latencyMs: 1,
+        executedAt: "2026-07-19T00:00:00Z",
+        truncated: false,
       },
       depends_on: ["sql_candidate"],
     },

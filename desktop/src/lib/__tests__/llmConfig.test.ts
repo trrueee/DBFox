@@ -31,7 +31,7 @@ describe("llmConfig credential boundary", () => {
 
   it("deletes a legacy localStorage value containing a plaintext API key", () => {
     localStorage.setItem(API_CONFIG_STORAGE_KEY, JSON.stringify({
-      apiKey: "sk-phase1-storage-sentinel",
+      apiKey: "TEST_LLM_SECRET",
       apiBase: "https://example.test/v1",
       modelName: "qwen-plus",
     }));
@@ -49,7 +49,7 @@ describe("llmConfig credential boundary", () => {
 
     const saved = getStoredApiConfig();
     const discarded = discardLlmConfigDraft({
-      apiKey: "sk-phase1-draft-sentinel",
+      apiKey: "TEST_LLM_SECRET",
       apiBase: "https://other.test/v1",
       modelName: "draft-model",
     }, saved);

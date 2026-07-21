@@ -6,10 +6,10 @@ export function EmptyArtifactsState() {
     <div className="hifi-ai-card hifi-artifact-empty">
       <div className="hifi-ai-card-header hifi-artifact-empty-header">
         <FoxIcon variant="ai-tight" size={16} alt="" aria-hidden="true" className="hifi-artifact-empty-icon" />
-        <span>等待 Agent 产物</span>
+        <span>分析结果将在这里显示</span>
       </div>
       <div className="hifi-ai-card-body hifi-artifact-empty-body">
-        当前会话还没有返回 artifacts。后端返回 chart、sql、table 或 markdown 类型产物后，会在这里自动渲染。
+        当智能分析生成图表、查询语句或数据表时，会自动显示在这里。
       </div>
     </div>
   );

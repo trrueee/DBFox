@@ -41,7 +41,7 @@ export const DataSourceList = ({
           <Search size={12} className="ds-management-search-icon" />
           <Input
             className="ds-management-search-input"
-            placeholder="搜索..."
+            placeholder="搜索连接…"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
           />

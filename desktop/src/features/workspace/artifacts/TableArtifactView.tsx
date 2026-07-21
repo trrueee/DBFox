@@ -1,8 +1,8 @@
-import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink } from "lucide-react";
+import { AlertCircle, AlertTriangle, Copy, Download, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "../../../components/ui";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import { ArtifactCard } from "./ArtifactCard";
-import { copyText, downloadBlobFile, downloadTextFile } from "./artifactActions";
+import { copyText, downloadBlobFile } from "./artifactActions";
 import { ArtifactTableFooter } from "./table/ArtifactTableFooter";
 import { ArtifactTableGrid } from "./table/ArtifactTableGrid";
 import { ArtifactTableToolbar } from "./table/ArtifactTableToolbar";
@@ -25,18 +25,13 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
   };
 
   const handleExport = async () => {
-    if (table.exportAll) {
-      try {
-        const blob = await table.exportAll();
-        const ok = downloadBlobFile(`${artifact.id}.csv`, blob);
-        onToast(ok ? "已导出 CSV" : "CSV 导出失败");
-      } catch {
-        onToast("CSV 导出失败");
-      }
-      return;
+    try {
+      const blob = await table.exportAll();
+      const ok = downloadBlobFile(`${artifact.id}.csv`, blob);
+      onToast(ok ? "已导出 CSV" : "CSV 导出失败");
+    } catch {
+      onToast("CSV 导出失败");
     }
-    const ok = downloadTextFile(`${artifact.id}.csv`, table.csv, "text/csv;charset=utf-8");
-    onToast(ok ? "已导出 CSV" : "CSV 导出失败");
   };
 
   const handleCellCopy = async (value: string) => {
@@ -57,14 +52,9 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
       filters={table.filters}
       onFiltersChange={table.setFilters}
       isLoading={table.isLoading}
-      isSqlBackedWorkspace={table.isSqlBackedWorkspace}
       onRefresh={table.refresh}
       onExport={() => void handleExport()}
       onCopy={() => void handleCopy()}
-      canToggleLoadedRows={!table.isSqlBackedWorkspace && table.rowsToUseLength > 10 && !table.isSearching}
-      expanded={table.expanded}
-      loadedRowCount={table.rowsToUseLength}
-      onToggleExpanded={() => table.setExpanded((value) => !value)}
     />
   );
 
@@ -72,6 +62,17 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
     return (
       <div className="artifact-table-workspace">
         {toolbar}
+        {table.consistency === "live_reexecution" && table.viewExecutedAt && (
+          <div className="artifact-table-alert artifact-table-alert-live">
+            <RefreshCw size={12} className="artifact-table-alert-icon" />
+            <span>
+              {table.originalExecutedAt
+                ? `分析取数 ${formatExecutionTime(table.originalExecutedAt)} · 当前重查 ${formatExecutionTime(table.viewExecutedAt)}`
+                : `当前重查 ${formatExecutionTime(table.viewExecutedAt)}`}
+              ；当前表格不是历史结果快照
+            </span>
+          </div>
+        )}
         {table.fetchError && (
           <div className="artifact-table-alert artifact-table-alert-error">
             <AlertCircle size={13} className="artifact-table-alert-icon" />
@@ -106,7 +107,6 @@ export function TableArtifactView({ artifact, onToast, onOpenResultTab, mode = "
           latencyMs={table.latencyMs}
           totalRows={table.totalRows}
           truncated={artifact.truncated}
-          isSqlBackedWorkspace={table.isSqlBackedWorkspace}
           hasNextPage={table.hasNextPage}
           onPageChange={table.setPage}
           onPageSizeChange={(value) => {
@@ -182,19 +182,21 @@ function InlineTableMeta({
   return (
     <div className="artifact-table-meta">
       <span className="artifact-pill">
-        预览 {table.previewCount} / 共 {table.totalRows} 行
+        本页 {table.visibleRows.length} / 共 {table.totalRows ?? "未知"} 行
       </span>
-      {table.shouldUseWindow && (
-        <span className="artifact-pill">
-          窗口 1-{table.visibleRows.length} / {table.filteredAndSortedRows.length}
-        </span>
-      )}
       <span className="artifact-pill">{table.columns.length} 列</span>
       {table.latencyMs !== undefined && <span className="artifact-pill">{table.latencyMs}ms</span>}
-      {!table.isSqlBackedWorkspace && table.returnedRows > table.previewCount && (
-        <span className="artifact-pill">已载入 {table.returnedRows} 行</span>
-      )}
       {artifact.truncated && <span className="artifact-pill artifact-pill--warning">结果已截断</span>}
+      {table.consistency === "live_reexecution" && table.viewExecutedAt && (
+        <>
+          {table.originalExecutedAt && (
+            <span className="artifact-pill">分析取数 {formatExecutionTime(table.originalExecutedAt)}</span>
+          )}
+          <span className="artifact-pill artifact-pill--live">
+            当前重查 {formatExecutionTime(table.viewExecutedAt)}
+          </span>
+        </>
+      )}
       {table.warnings.map((warning) => (
         <span key={`warning-${warning}`} className="artifact-pill artifact-pill--warning">
           {warning}
@@ -207,4 +209,17 @@ function InlineTableMeta({
       ))}
     </div>
   );
+}
+
+function formatExecutionTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }
