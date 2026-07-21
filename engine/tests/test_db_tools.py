@@ -233,7 +233,7 @@ def test_db_preview_limits_columns_rows_and_masks_sensitive_values(db_session, t
     assert result["columns"] == ["id", "email", "phone"]
     assert result["limit_applied"] == 20
     assert result["returned_rows"] <= 20
-    assert result["rows"][0]["email"] == "[REDACTED_EMAIL]"
+    assert result["rows"][0]["email"] == "[REDACTED]"
     assert "column_summaries" in result
     assert db_session.query(QueryHistory).filter(QueryHistory.data_source_id == test_datasource.id).count() == 1
 

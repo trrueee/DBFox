@@ -13,7 +13,6 @@ def sqlite_datasource_create_payload(
     *,
     name: str = "test_sqlite",
     username: str = "test",
-    password: str = "test",
     project_id: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
@@ -24,7 +23,6 @@ def sqlite_datasource_create_payload(
         "port": 0,
         "database_name": database_path,
         "username": username,
-        "password": password,
         **extra,
     }
     if project_id is not None:

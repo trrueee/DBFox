@@ -5,6 +5,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from engine.app.safe_errors import (
@@ -16,6 +17,8 @@ from engine.app.safe_errors import (
 from engine.evaluation.spider.spider_loader import SpiderExample, load_spider_examples
 from engine.evaluation.spider.sql_prediction_extractor import extract_final_sql
 from engine.evaluation.spider.sql_result_comparator import compare_sqlite_execution
+from engine.agent.service import AgentExecutionRequest, execute_agent_sync
+from engine.security.credential_vault import CredentialKind, get_credential_vault
 
 logger = logging.getLogger("dbfox.spider_eval")
 
@@ -254,7 +257,7 @@ def create_dbfox_sqlite_run_fn(
     execute: bool = True,
     max_steps: int = 20,
 ) -> Any:
-    """Return a run_fn backed by DBFoxAgentRuntime for Spider SQLite DBs.
+    """Return a run_fn backed by the durable v2 runtime for Spider SQLite DBs.
 
     *db_session* must be an active SQLAlchemy Session pointing to DBFox's
     own metadata database (the one holding data_sources, schema_tables, etc.).
@@ -268,29 +271,19 @@ def create_dbfox_sqlite_run_fn(
 
         datasource_id, synced_tables = _ensure_spider_sqlite_datasource(db_session, example)
 
-        from engine.agent import DBFoxAgentRuntime
-        from engine.agent_core.types import AgentRunRequest
-
-        runtime = DBFoxAgentRuntime(db_session)
         events_payload: list[dict[str, Any]] = []
         response = None
 
-        req = AgentRunRequest(
+        req = AgentExecutionRequest(
             datasource_id=datasource_id,
             question=example.question,
-            execute=execute,
             llm_credential_id=llm_credential_id,
             api_base=api_base,
             model_name=model_name,
-            max_steps=max_steps,
         )
 
         try:
-            for event in runtime.run_iter(req):
-                payload = event.model_dump(mode="json")
-                events_payload.append(payload)
-                if event.response is not None:
-                    response = event.response
+            response, events_payload = execute_agent_sync(req)
         except Exception as exc:
             log_unexpected_exception(
                 logger,
@@ -482,7 +475,6 @@ def _cli() -> None:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--db-id", default=None)
     parser.add_argument("--execute", action="store_true", default=False)
-    parser.add_argument("--api-key", default=None)
     parser.add_argument("--llm-credential-id", default=None)
     parser.add_argument("--api-base", default=None)
     parser.add_argument("--model-name", default=None)
@@ -511,11 +503,21 @@ def _run_fake_cli(args: Any, db_ids: set[str] | None) -> None:
     _write_output(results, summary, args.output)
 
 
-def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
-    import os as _os
-    api_key = args.api_key or _os.environ.get("DBFOX_LLM_API_KEY")
+def _resolve_qwen_baseline_api_key(credential_id: str | None) -> str:
+    """Resolve the evaluation provider key through the OS credential vault."""
+    if not credential_id:
+        raise RuntimeError("--llm-credential-id required for qwen-baseline mode")
+    api_key = get_credential_vault().get(
+        credential_id,
+        expected_kind=CredentialKind.LLM_API_KEY,
+    )
     if not api_key:
-        raise RuntimeError("--api-key required for qwen-baseline mode")
+        raise RuntimeError("The requested LLM credential reference is unavailable.")
+    return api_key
+
+
+def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
+    api_key = _resolve_qwen_baseline_api_key(args.llm_credential_id)
     run_fn = create_qwen_text_to_sql_baseline_run_fn(
         api_key=api_key,
         api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -527,38 +529,36 @@ def _run_qwen_baseline_cli(args: Any, db_ids: set[str] | None) -> None:
 
 
 def _run_dbfox_cli(args: Any, db_ids: set[str] | None) -> None:
-    from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from sqlalchemy.pool import StaticPool
-    from engine.db import Base
-    from engine import models  # noqa: F401  # register models
+    from engine.db import build_metadata_engine, run_alembic_upgrade
 
     if not args.llm_credential_id:
         raise RuntimeError("--llm-credential-id required for dbfox mode")
 
-    # In-memory metadata DB (isolated from production dbfox_local.db)
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(bind=engine)
-    db_session = SessionLocal()
-
-    try:
-        run_fn = create_dbfox_sqlite_run_fn(
-            db_session=db_session,
-            llm_credential_id=args.llm_credential_id,
-            api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            model_name=args.model_name or "qwen-plus",
-            execute=args.execute,
-        )
-        runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="dbfox")
-        results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
-        _write_output(results, summary, args.output)
-    finally:
-        db_session.close()
+    # Use a real temporary SQLite file so the exact Alembic contract (including
+    # FTS) is exercised.  In-memory SQLite is per connection and cannot model
+    # the production pooled metadata lifecycle safely.
+    with TemporaryDirectory(prefix="dbfox-spider-") as temporary_root:
+        metadata_path = Path(temporary_root) / "metadata.db"
+        metadata_url = f"sqlite:///{metadata_path.as_posix()}"
+        run_alembic_upgrade(metadata_url)
+        engine = build_metadata_engine(metadata_url)
+        SessionLocal = sessionmaker(bind=engine)
+        db_session = SessionLocal()
+        try:
+            run_fn = create_dbfox_sqlite_run_fn(
+                db_session=db_session,
+                llm_credential_id=args.llm_credential_id,
+                api_base=args.api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                model_name=args.model_name or "qwen-plus",
+                execute=args.execute,
+            )
+            runner = SpiderEvalRunner(run_fn=run_fn, execute=args.execute, runner_mode="dbfox")
+            results, summary = runner.run(args.spider_root, split=args.split, limit=args.limit, db_ids=db_ids)
+            _write_output(results, summary, args.output)
+        finally:
+            db_session.close()
+            engine.dispose()
 
 
 def _write_output(

@@ -1,4 +1,4 @@
-"""DBFox Agent v2 Skill layer.
+"""DBFox Agent skill layer.
 
 Skills are curated execution patterns that give the ReAct model structured
 guidance (tool boundaries, step sequences, success criteria, recovery playbooks)

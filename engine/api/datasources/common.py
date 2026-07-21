@@ -4,10 +4,9 @@ import json
 from datetime import datetime
 from typing import Any
 
+from engine.datasource import datasource_connection_dict
 from engine.models import DEFAULT_PROJECT_ID, DataSource, SchemaColumn, SchemaTable
 from engine.schemas.datasource import DataSourceResponse
-from engine.errors import DataSourceConnectionError
-from engine.security.credential_vault import CredentialKind, get_credential_vault
 from engine.app.safe_errors import FixedErrorCode
 
 
@@ -78,46 +77,8 @@ def schema_column_to_dict(column: SchemaColumn) -> dict[str, Any]:
 
 
 def datasource_to_health_config(ds: DataSource) -> dict[str, Any]:
-    host = str(ds.host or "")
-    database_name = str(ds.database_name or "")
-    db_type = str(ds.db_type or "mysql")
-    vault = get_credential_vault()
-
-    def resolve(credential_id: str | None, kind: CredentialKind) -> str:
-        if not credential_id:
-            return ""
-        secret = vault.get(str(credential_id), expected_kind=kind)
-        if secret is None:
-            raise DataSourceConnectionError("Credential reference was not found or has the wrong kind.")
-        return secret
-
-    password = "" if db_type == "sqlite" else resolve(
-        ds.password_credential_id,
-        CredentialKind.DATASOURCE_PASSWORD,
-    )
-
-    return {
-        "id": ds.id,
-        "is_managed": True,
-        "db_type": db_type,
-        "host": host,
-        "port": int(ds.port or 0),
-        "database_name": database_name,
-        "username": str(ds.username or ""),
-        "password": password,
-        "ssh_enabled": bool(ds.ssh_enabled),
-        "ssh_host": ds.ssh_host,
-        "ssh_port": int(ds.ssh_port or 22),
-        "ssh_username": ds.ssh_username,
-        "ssh_password_credential_id": ds.ssh_password_credential_id,
-        "ssh_pkey_path": ds.ssh_pkey_path,
-        "ssh_key_passphrase_credential_id": ds.ssh_key_passphrase_credential_id,
-        "ssl_enabled": bool(ds.ssl_enabled),
-        "ssl_ca_path": ds.ssl_ca_path,
-        "ssl_cert_path": ds.ssl_cert_path,
-        "ssl_key_path": ds.ssl_key_path,
-        "ssl_verify_identity": bool(ds.ssl_verify_identity),
-    }
+    """Return opaque metadata; the factory resolves secrets only at driver use."""
+    return datasource_connection_dict(ds)
 
 
 def persist_health_success(

@@ -3,6 +3,11 @@ import uuid
 import pytest
 import engine.schema_sync as schema_sync_module
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.environment.authoritative_inventory import (
+    AuthoritativeInventory,
+    SchemaInspectionError,
+    SchemaInspectionErrorCode,
+)
 from engine.environment.inventory import ColumnInventory, SchemaInventory, TableInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.schema_sync import sync_schema, build_er_diagram_data
@@ -138,7 +143,10 @@ def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session,
             ),
         ],
     )
-    syncer.sync_inventory(db_session, test_datasource.id, initial_inventory)
+    syncer.sync_authoritative(
+        db_session,
+        AuthoritativeInventory.from_completed_inventory(initial_inventory),
+    )
 
     updated_inventory = SchemaInventory(
         datasource_id=test_datasource.id,
@@ -164,7 +172,10 @@ def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session,
         ],
     )
 
-    syncer.sync_inventory(db_session, test_datasource.id, updated_inventory)
+    syncer.sync_authoritative(
+        db_session,
+        AuthoritativeInventory.from_completed_inventory(updated_inventory),
+    )
 
     tables = db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id,
@@ -183,8 +194,9 @@ def test_catalog_sync_preserves_same_table_name_in_different_schemas(db_session,
 
 def test_sync_failure_status(db_session) -> None:
     # Use a non-existent datasource id
-    with pytest.raises(ValueError, match="Data source not found"):
+    with pytest.raises(SchemaInspectionError) as exc_info:
         sync_schema(db_session, str(uuid.uuid4()))
+    assert exc_info.value.code == SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND
 
 
 def test_sync_passes_resolved_config_to_ai_enrichment(db_session, test_datasource, monkeypatch) -> None:
@@ -268,8 +280,9 @@ def test_sync_failure_preserves_existing_schema(db_session, test_datasource, mon
 
     monkeypatch.setattr("engine.environment.schema_catalog_sync.introspect_datasource", _failing_snapshot)
 
-    with pytest.raises(ValueError, match=fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED)):
+    with pytest.raises(SchemaInspectionError) as exc_info:
         sync_schema(db_session, test_datasource.id)
+    assert exc_info.value.code == SchemaInspectionErrorCode.INSPECTION_FAILED
 
     assert db_session.query(SchemaTable).filter(
         SchemaTable.data_source_id == test_datasource.id

@@ -1,274 +1,207 @@
-import uuid
-import time
+"""Persistent confirmation tokens for destructive operations.
+
+Confirmation state is metadata, not process-local cache.  The owning API
+request supplies the SQLAlchemy session so creation and one-time consumption
+use the same Alembic-managed database contract as the operation it protects.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
 import logging
 import os
+import secrets
 import sys
-import json
-import hashlib
-import sqlite3
-import threading
-from pathlib import Path
+import time
 from typing import Any
+
+from sqlalchemy import delete
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from engine.errors import DBFoxError
+from engine.models import ConfirmationToken
+
 
 logger = logging.getLogger("dbfox.security.confirmation")
 
+_INVALID_TOKEN_MESSAGE = "确认令牌无效或已过期，请重新发起操作。"
+_EXPIRED_TOKEN_MESSAGE = "确认令牌已过期，请重新发起操作。"
+_ACTION_MISMATCH_MESSAGE = "二次确认操作类型不匹配，安全拒绝执行。"
+_DATASOURCE_MISMATCH_MESSAGE = "二次确认数据源不匹配，安全拒绝执行。"
+_DETAILS_MISMATCH_MESSAGE = "二次确认参数不匹配，操作可能已被篡改，安全拒绝执行。"
+
+
 def confirmation_bypass_enabled() -> bool:
-    """
-    Checks if confirmation bypass is allowed.
-    Only permitted in a local testing environment, never in production/frozen desktop applications.
-    """
+    """Allow confirmation bypass only in an explicit non-frozen test process."""
     return (
         os.environ.get("DBFOX_BYPASS_CONFIRMATION") == "1"
         and os.environ.get("DBFOX_TESTING") == "1"
         and not getattr(sys, "frozen", False)
     )
 
+
 def sha256_hash(text: str) -> str:
-    """Compute sha256 of text to safely bind it to a confirmation without leaking raw values in metastore/logs."""
+    """Return a SHA-256 digest for callers that need a non-plaintext binding."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-class ConfirmationManager:
-    """Dangerous-operation confirmation token manager.
 
-    Tokens are persisted to the local SQLite database so that pending
-    confirmations survive engine restarts (the desktop app may restart
-    between the "create confirmation" and "validate" steps).
+class ConfirmationPersistenceError(DBFoxError):
+    """Fail closed when durable confirmation state cannot be changed."""
+
+    def __init__(self) -> None:
+        super().__init__("确认令牌服务暂不可用，请稍后重试。", "CONFIRMATION_UNAVAILABLE")
+
+
+def _canonical_details_json(details: dict[str, Any]) -> str:
+    """Serialize the complete confirmation context into a stable comparison key."""
+    if not isinstance(details, dict) or any(not isinstance(key, str) for key in details):
+        raise ValueError("Confirmation details must be a mapping with string keys.")
+    try:
+        return json.dumps(
+            details,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Confirmation details must be JSON serializable.") from exc
+
+
+def _required_text(value: str, field_name: str) -> str:
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"Confirmation {field_name} must not be empty.")
+    return normalized
+
+
+class ConfirmationManager:
+    """Create and atomically consume durable confirmation tokens.
+
+    This class deliberately owns no cache, connection, or runtime-path state.
+    A matching ``DELETE`` is the consume operation: only one concurrent request
+    can delete the token with its complete expected context.
     """
 
     def __init__(self, ttl_seconds: int = 300):
         self._ttl = ttl_seconds
-        self._lock = threading.Lock()
-        self._db_path: Path | None = None
-        self._db_loaded = False
-        # In-memory cache mirrors the DB for fast lookups under the lock.
-        # Keyed by token → (expires_at, data_dict).
-        self._cache: dict[str, tuple[float, dict[str, Any]]] = {}
-
-    # ------------------------------------------------------------------
-    # Database helpers
-    # ------------------------------------------------------------------
-
-    def _get_db_path(self) -> Path:
-        """Return the engine DB path, creating the tokens table on first call.
-
-        Does NOT acquire ``self._lock`` — safe to call from any context.
-        """
-        if self._db_path is not None:
-            return self._db_path
-        from engine.db import DB_PATH
-        self._db_path = Path(DB_PATH)
-        self._init_table()
-        return self._db_path
-
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self._get_db_path()))
-        conn.row_factory = sqlite3.Row
-        return conn
-
-    def _ensure_db_loaded(self) -> None:
-        """Restore unexpired tokens from DB into the cache (one-shot).
-
-        Must be called OUTSIDE ``self._lock`` to avoid deadlock (the
-        lock is not reentrant, and DB operations acquire the lock).
-        """
-        if self._db_loaded:
-            return
-        self._load_existing()
-        self._db_loaded = True
-
-    def _init_table(self) -> None:
-        try:
-            with self._connect() as conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS confirmation_tokens (
-                        token TEXT PRIMARY KEY,
-                        expires_at REAL NOT NULL,
-                        datasource_id TEXT NOT NULL,
-                        action TEXT NOT NULL,
-                        details_json TEXT NOT NULL DEFAULT '{}',
-                        expected_confirm_text TEXT NOT NULL DEFAULT ''
-                    )
-                """)
-                conn.commit()
-        except Exception:
-            logger.exception("Failed to initialize confirmation_tokens table")
-
-    def _load_existing(self) -> None:
-        """Restore unexpired tokens from DB into the in-memory cache on startup."""
-        now = time.time()
-        try:
-            with self._connect() as conn:
-                rows = conn.execute(
-                    "SELECT token, expires_at, datasource_id, action, details_json, expected_confirm_text "
-                    "FROM confirmation_tokens WHERE expires_at > ?",
-                    (now,),
-                ).fetchall()
-        except Exception:
-            logger.exception("Failed to load existing confirmation tokens — operating memory-only")
-            return
-
-        with self._lock:
-            restored = 0
-            for row in rows:
-                token = row["token"]
-                if token in self._cache:
-                    continue
-                try:
-                    details = json.loads(row["details_json"])
-                except (json.JSONDecodeError, TypeError):
-                    details = {}
-                self._cache[token] = (
-                    row["expires_at"],
-                    {
-                        "datasource_id": row["datasource_id"],
-                        "action": row["action"],
-                        "details": details,
-                        "expected_confirm_text": row["expected_confirm_text"],
-                    },
-                )
-                restored += 1
-        if restored:
-            logger.info("Restored %d unexpired confirmation token(s) from database", restored)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     def create_confirmation(
-        self, datasource_id: str, action: str,
-        details: dict[str, Any], expected_confirm_text: str,
+        self,
+        *,
+        db: Session,
+        datasource_id: str,
+        action: str,
+        details: dict[str, Any],
+        expected_confirm_text: str,
     ) -> str:
-        self._ensure_db_loaded()
+        """Persist a confirmation token before returning it to the client.
+
+        There is intentionally no memory-only fallback.  If the metadata write
+        fails, the protected operation cannot advance to its confirmation step.
+        """
         now = time.time()
-
-        # Cleanup expired in-memory cache first (under lock)
-        with self._lock:
-            expired = [t for t, (exp, _) in self._cache.items() if now > exp]
-            for token in expired:
-                del self._cache[token]
-
-        # Best-effort DB clean (outside lock)
-        try:
-            with self._connect() as conn:
-                conn.execute(
-                    "DELETE FROM confirmation_tokens WHERE expires_at <= ?", (now,)
-                )
-                conn.commit()
-        except Exception:
-            pass
-
-        token = str(uuid.uuid4())
-        expires_at = now + self._ttl
-        data = {
-            "datasource_id": str(datasource_id),
-            "action": action,
-            "details": details,
-            "expected_confirm_text": expected_confirm_text,
-        }
-
-        # Persist to DB (outside lock)
-        try:
-            with self._connect() as conn:
-                conn.execute(
-                    "INSERT INTO confirmation_tokens"
-                    " (token, expires_at, datasource_id, action, details_json, expected_confirm_text)"
-                    " VALUES (?, ?, ?, ?, ?, ?)",
-                    (
-                        token, expires_at, str(datasource_id),
-                        action, json.dumps(details, ensure_ascii=False),
-                        expected_confirm_text,
-                    ),
-                )
-                conn.commit()
-        except Exception:
-            logger.exception("Failed to persist confirmation token — operating memory-only")
-
-        # Cache in memory (under lock)
-        with self._lock:
-            self._cache[token] = (expires_at, data)
-
-        logger.info(
-            "Created confirmation token %s... for action %s on datasource %s",
-            token[:8], action, datasource_id,
+        token = secrets.token_urlsafe(32)
+        record = ConfirmationToken(
+            token=token,
+            expires_at=now + self._ttl,
+            datasource_id=_required_text(datasource_id, "datasource id"),
+            action=_required_text(action, "action"),
+            details_json=_canonical_details_json(details),
+            expected_confirm_text=_required_text(expected_confirm_text, "text"),
         )
+
+        try:
+            db.execute(
+                delete(ConfirmationToken).where(ConfirmationToken.expires_at <= now)
+            )
+            db.add(record)
+            db.commit()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.warning("Confirmation token persistence failed (%s)", type(exc).__name__)
+            raise ConfirmationPersistenceError() from exc
+
         return token
 
     def validate_and_consume(
         self,
+        *,
+        db: Session,
         token: str,
         confirm_text: str,
-        *,
         expected_action: str,
         expected_datasource_id: str,
         expected_details: dict[str, Any],
     ) -> tuple[bool, str]:
-        """Validates and consumes a confirmation token with strict
-        context-matching to prevent tampering or token reuse.
+        """Validate and consume a token with a single context-bound delete.
 
-        Returns (is_valid, error_message).
+        The successful path is atomic even when multiple API workers race on
+        the same token.  Failed attempts retain the token so an operator can
+        correct a typo; all operation identity fields remain bound in the SQL
+        predicate and cannot be changed by a retry.
         """
-        self._ensure_db_loaded()
+        if not token:
+            return False, _INVALID_TOKEN_MESSAGE
+
         now = time.time()
+        expected_action = _required_text(expected_action, "action")
+        expected_datasource_id = _required_text(expected_datasource_id, "datasource id")
+        expected_details_json = _canonical_details_json(expected_details)
+        # An empty operator response is a normal validation failure, not a
+        # programming error.  Keep it in the predicate so it cannot consume a
+        # token issued for a non-empty datasource name.
+        normalized_confirm_text = str(confirm_text).strip()
 
-        # Cleanup memory first (under lock)
-        with self._lock:
-            expired = [t for t, (exp, _) in self._cache.items() if now > exp]
-            for t_id in expired:
-                del self._cache[t_id]
-
-        # Best-effort DB clean (outside lock)
         try:
-            with self._connect() as conn:
-                conn.execute(
-                    "DELETE FROM confirmation_tokens WHERE expires_at <= ?", (now,)
+            result = db.execute(
+                delete(ConfirmationToken).where(
+                    ConfirmationToken.token == token,
+                    ConfirmationToken.expires_at > now,
+                    ConfirmationToken.action == expected_action,
+                    ConfirmationToken.datasource_id == expected_datasource_id,
+                    ConfirmationToken.details_json == expected_details_json,
+                    ConfirmationToken.expected_confirm_text == normalized_confirm_text,
                 )
-                conn.commit()
-        except Exception:
-            pass
+            )
+            if getattr(result, "rowcount", None) == 1:
+                db.commit()
+                return True, ""
+            db.rollback()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.warning("Confirmation token consumption failed (%s)", type(exc).__name__)
+            raise ConfirmationPersistenceError() from exc
 
-        # Check and retrieve token (under lock)
-        with self._lock:
-            if not token or token not in self._cache:
-                return False, "确认令牌无效或已过期，请重新发起操作。"
-            expire_at, data = self._cache[token]
-            # Consume token immediately (one-time use) — from cache
-            del self._cache[token]
-
-        # Delete consumed token from DB (outside lock)
+        # A failed delete has not consumed anything.  The diagnostic below is
+        # derived from the durable row only; it never permits an operation.
         try:
-            with self._connect() as conn:
-                conn.execute("DELETE FROM confirmation_tokens WHERE token = ?", (token,))
-                conn.commit()
-        except Exception:
-            logger.exception("Failed to delete consumed confirmation token from DB")
+            record = db.get(ConfirmationToken, token)
+            if record is None:
+                return False, _INVALID_TOKEN_MESSAGE
+            if record.expires_at <= now:
+                db.delete(record)
+                db.commit()
+                return False, _EXPIRED_TOKEN_MESSAGE
+            if record.action != expected_action:
+                return False, _ACTION_MISMATCH_MESSAGE
+            if record.datasource_id != expected_datasource_id:
+                return False, _DATASOURCE_MISMATCH_MESSAGE
+            if record.details_json != expected_details_json:
+                return False, _DETAILS_MISMATCH_MESSAGE
+            if record.expected_confirm_text != normalized_confirm_text:
+                return (
+                    False,
+                    f"二次确认文本不匹配！请输入数据源名称 '{record.expected_confirm_text}' 进行确认。",
+                )
+            # A concurrent successful delete can make the row disappear before
+            # the context lookup.  Any other unexpected mismatch is denied.
+            return False, _INVALID_TOKEN_MESSAGE
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.warning("Confirmation token lookup failed (%s)", type(exc).__name__)
+            raise ConfirmationPersistenceError() from exc
 
-        if now > expire_at:
-            return False, "确认令牌已过期，请重新发起操作。"
 
-        # 1. Action Check
-        if data["action"] != expected_action:
-            return False, "二次确认操作类型不匹配，安全拒绝执行。"
-
-        # 2. Datasource Check
-        if str(data["datasource_id"]) != str(expected_datasource_id):
-            return False, "二次确认数据源不匹配，安全拒绝执行。"
-
-        # 3. Parameter / Details Check
-        for k, expected_val in expected_details.items():
-            actual_val = data["details"].get(k)
-            if str(actual_val) != str(expected_val):
-                return False, f"二次确认参数 '{k}' 不匹配，操作可能已被篡改，安全拒绝执行。"
-
-        # 4. Confirmation Text Check
-        expected_text = data["expected_confirm_text"].strip()
-        if confirm_text.strip() != expected_text:
-            return False, f"二次确认文本不匹配！请输入数据源名称 '{expected_text}' 进行确认。"
-
-        logger.info(
-            "Successfully consumed confirmation token %s... for action %s",
-            token[:8], data["action"],
-        )
-        return True, ""
-
-# Global confirmation manager instance
 confirmation_manager = ConfirmationManager()

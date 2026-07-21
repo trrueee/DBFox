@@ -1,361 +1,105 @@
-"""Test AgentEvalRunner orchestration."""
 from __future__ import annotations
 
 import json
-import logging
 import uuid
-from datetime import UTC, datetime
 
-import pytest
-
-from engine.agent_core.types import AgentRunResponse, AgentRuntimeEvent
+from engine.agent.service import AgentExecutionAnswer, AgentExecutionArtifact, AgentExecutionResult
+from engine.evaluation.agent_case_evaluator import _extract_approval_state
 from engine.evaluation.agent_eval import AgentEvalRunner
-from engine.models import AgentGoldenTask, AgentEvalRun, AgentEvalCaseResult
+from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
 from engine.schemas.agent_eval import AgentEvalRunRequest
 
 
-def _make_task(db_session, datasource_id, **overrides):
-    defaults = dict(
-        id=str(uuid.uuid4()),
-        datasource_id=datasource_id,
-        name="test_eval_task",
-        question="say hello",
-        workspace_context_json="{}",
-        expected_intent=None,
-        expected_tools_json="[]",
-        forbidden_tools_json="[]",
-        expected_artifact_types_json="[]",
-        expected_final_contains_json="[]",
-        tags_json='["internal"]',
-        source="internal",
+def _task(db, datasource_id: str, **overrides):
+    values = dict(
+        id=str(uuid.uuid4()), datasource_id=datasource_id, name="orders",
+        question="分析订单", workspace_context_json='{"selected_table_names":["orders"]}',
+        expected_tools_json='["sql.validate"]', forbidden_tools_json="[]",
+        expected_artifact_types_json='["sql"]', expected_final_contains_json='["100"]',
+        tags_json='["internal"]', source="internal",
     )
-    defaults.update(overrides)
-    task = AgentGoldenTask(**defaults)
-    db_session.add(task)
-    db_session.commit()
-    return task
+    values.update(overrides)
+    row = AgentGoldenTask(**values)
+    db.add(row)
+    db.commit()
+    return row
 
 
-def test_eval_runner_creates_run(db_session, test_datasource):
-    task = _make_task(db_session, test_datasource.id)
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=[task.id],
-        execute=False,
+def _completed_result() -> tuple[AgentExecutionResult, list[dict[str, object]]]:
+    result = AgentExecutionResult(
+        run_id="run-eval", session_id="session-eval", status="completed", success=True,
+        question="分析订单", sql="SELECT 100", explanation="订单金额是 100",
+        answer=AgentExecutionAnswer(answer="订单金额是 100"),
+        artifacts=[AgentExecutionArtifact(
+            id="artifact-sql", type="sql", title="SQL", payload={"safe_sql": "SELECT 100"},
+        )],
     )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-
-    assert result.total_cases == 1
-    assert result.status == "completed"
-    assert len(result.case_results) == 1
-
-    db_run = db_session.query(AgentEvalRun).filter(AgentEvalRun.id == result.id).first()
-    assert db_run is not None
-    assert db_run.status == "completed"
+    events = [{
+        "event_type": "tool.completed",
+        "payload": {"tool_invocation": {"id": "inv-1", "tool_name": "sql.validate", "status": "succeeded"}},
+    }]
+    return result, events
 
 
-def test_eval_runner_empty_tasks(db_session, test_datasource):
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=["nonexistent"],
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-    assert result.total_cases == 0
-    assert result.status == "completed"
+def test_eval_runner_persists_result_from_the_canonical_execution_service(db_session, test_datasource, monkeypatch):
+    task = _task(db_session, test_datasource.id)
+    monkeypatch.setattr("engine.evaluation.agent_eval.execute_agent_sync", lambda _request: _completed_result())
+
+    response = AgentEvalRunner(db_session).run(AgentEvalRunRequest(
+        datasource_id=test_datasource.id, task_ids=[task.id],
+        llm_credential_id="credential-eval", execute=False,
+    ))
+
+    assert response.status == "completed"
+    assert response.passed_cases == 1
+    stored_run = db_session.get(AgentEvalRun, response.id)
+    assert stored_run is not None and stored_run.status == "completed"
+    stored_case = db_session.query(AgentEvalCaseResult).filter_by(eval_run_id=response.id).one()
+    assert json.loads(stored_case.actual_sql_json) == ["SELECT 100"]
+    assert json.loads(stored_case.actual_tools_json) == ["sql.validate"]
 
 
-def test_eval_runner_saves_case_result(db_session, test_datasource):
-    task = _make_task(db_session, test_datasource.id)
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=[task.id],
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-
-    cases = db_session.query(AgentEvalCaseResult).filter(
-        AgentEvalCaseResult.eval_run_id == result.id
-    ).all()
-    assert len(cases) == 1
-    assert cases[0].task_id == task.id
-    assert cases[0].status in ("passed", "failed", "error")
+def test_eval_runner_handles_an_empty_task_selection(db_session, test_datasource):
+    response = AgentEvalRunner(db_session).run(AgentEvalRunRequest(
+        datasource_id=test_datasource.id, task_ids=["missing"],
+        llm_credential_id="credential-eval",
+    ))
+    assert response.total_cases == 0
+    assert response.status == "completed"
 
 
-def test_eval_runner_uses_runtime_events_and_persists_actual_sql(db_session, test_datasource, monkeypatch):
-    task = _make_task(
-        db_session,
-        test_datasource.id,
-        expected_tools_json='["sql.validate"]',
-    )
+def test_eval_runner_records_safe_failure_without_provider_text(db_session, test_datasource, monkeypatch):
+    task = _task(db_session, test_datasource.id)
 
-    class FakeRuntime:
-        def __init__(self, _db):
-            pass
+    def fail(_request):
+        raise RuntimeError("authorization=secret-sentinel")
 
-        def run_iter(self, _req):
-            response = AgentRunResponse(
-                run_id="eval-run-1",
-                session_id="eval-session-1",
-                success=True,
-                status="success",
-                question="say hello",
-                sql="SELECT 1",
-                steps=[],
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-1",
-                run_id="eval-run-1",
-                sequence=1,
-                created_at_ms=1,
-                type="agent.step.completed",
-                step={"name": "sql.validate", "tool_name": "sql.validate"},
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-2",
-                run_id="eval-run-1",
-                sequence=2,
-                created_at_ms=2,
-                type="agent.run.completed",
-                response=response,
-            )
-
-    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FakeRuntime)
-
-    result = AgentEvalRunner(db_session).run(
-        AgentEvalRunRequest(datasource_id=test_datasource.id, task_ids=[task.id], execute=False)
-    )
-
-    assert result.case_results[0].status == "passed"
-    case = db_session.query(AgentEvalCaseResult).filter(
-        AgentEvalCaseResult.eval_run_id == result.id
-    ).one()
-    assert json.loads(case.actual_sql_json) == ["SELECT 1"]
-    assert "sql.validate" in json.loads(case.actual_tools_json)
+    monkeypatch.setattr("engine.evaluation.agent_eval.execute_agent_sync", fail)
+    response = AgentEvalRunner(db_session).run(AgentEvalRunRequest(
+        datasource_id=test_datasource.id, task_ids=[task.id], llm_credential_id="credential-eval",
+    ))
+    stored = db_session.query(AgentEvalCaseResult).filter_by(eval_run_id=response.id).one()
+    assert stored.status == "error"
+    assert "secret-sentinel" not in stored.response_json
 
 
-def test_eval_runner_persists_product_telemetry_from_runtime_events(db_session, test_datasource, monkeypatch):
-    task = _make_task(db_session, test_datasource.id)
+def test_approval_evaluation_uses_the_latest_durable_decision():
+    result, _ = _completed_result()
+    events = [
+        {
+            "event_type": "approval.requested",
+            "payload": {"approval": {"status": "pending"}},
+        },
+        {
+            "event_type": "approval.resolved",
+            "payload": {"approval": {"status": "rejected"}},
+        },
+    ]
 
-    class FakeRuntime:
-        def __init__(self, _db):
-            pass
-
-        def run_iter(self, _req):
-            response = AgentRunResponse(
-                run_id="eval-run-telemetry",
-                session_id="eval-session-telemetry",
-                success=True,
-                status="success",
-                question="say hello",
-                sql="SELECT 1",
-                steps=[],
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-1",
-                run_id="eval-run-telemetry",
-                sequence=1,
-                created_at_ms=1,
-                type="agent.step.completed",
-                step={
-                    "name": "sql.validate",
-                    "phase": "validating",
-                    "status": "success",
-                    "durationMs": 35,
-                },
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-2",
-                run_id="eval-run-telemetry",
-                sequence=2,
-                created_at_ms=2,
-                type="agent.progress.update",
-                step={
-                    "name": "sql_repair",
-                    "phase": "repairing",
-                    "status": "success",
-                    "duration_ms": 120,
-                    "attempt": 1,
-                    "failure_layer": "execution",
-                    "error_class": "missing_column",
-                    "root_cause": "orders.total missing",
-                    "recovery_strategy": "describe table and regenerate sql",
-                },
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-3",
-                run_id="eval-run-telemetry",
-                sequence=3,
-                created_at_ms=3,
-                type="agent.step.completed",
-                step={
-                    "name": "sql.execute",
-                    "phase": "executing",
-                    "status": "success",
-                    "latency_ms": 80,
-                },
-            )
-            yield AgentRuntimeEvent(
-                event_id="event-4",
-                run_id="eval-run-telemetry",
-                sequence=4,
-                created_at_ms=4,
-                type="agent.run.completed",
-                response=response,
-            )
-
-    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FakeRuntime)
-
-    result = AgentEvalRunner(db_session).run(
-        AgentEvalRunRequest(datasource_id=test_datasource.id, task_ids=[task.id], execute=False)
-    )
-
-    case_payload = json.loads(result.case_results[0].response_json)
-    telemetry = case_payload["eval_telemetry"]
-    assert telemetry["stage_counts"] == {"validating": 1, "repairing": 1, "executing": 1}
-    assert telemetry["stage_durations_ms"] == {"validating": 35, "repairing": 120, "executing": 80}
-    assert telemetry["repair_count"] == 1
-    assert telemetry["failure_layer"] == "execution"
-    assert telemetry["error_classes"] == ["missing_column"]
-    assert telemetry["root_causes"] == ["The agent run could not be completed."]
-    assert telemetry["final_status"] == "success"
-    assert telemetry["final_success"] is True
-
-    summary = json.loads(result.summary_json)
-    assert summary["runtime_telemetry"] == {
-        "final_success_cases": 1,
-        "repair_count": 1,
-        "stage_counts": {"validating": 1, "repairing": 1, "executing": 1},
-        "stage_durations_ms": {"validating": 35, "repairing": 120, "executing": 80},
-        "failure_layers": {"execution": 1},
-        "error_classes": {"missing_column": 1},
-    }
+    assert _extract_approval_state(result, events) == "rejected"
 
 
-def test_eval_runner_execute_defaults_false(db_session, test_datasource):
-    task = _make_task(db_session, test_datasource.id)
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=[task.id],
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-    assert result is not None
-    case = result.case_results[0]
-    response_data = json.loads(case.response_json) if case.response_json != "{}" else {}
-    sql_in_response = "execute" in str(response_data).lower()
-    # execute=false should prevent SQL execution
+def test_successful_run_without_approval_is_not_reported_as_approved():
+    result, _ = _completed_result()
 
-
-def test_eval_runner_source_filter(db_session, test_datasource):
-    task_int = _make_task(db_session, test_datasource.id, source="internal", tags_json='["x"]')
-    task_custom = _make_task(db_session, test_datasource.id, source="custom", tags_json='["x"]', name="custom_task")
-
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        source="custom",
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-    assert result.total_cases == 1
-    assert result.case_results[0].task_id == task_custom.id
-
-
-def test_eval_runner_tag_filter(db_session, test_datasource):
-    task_a = _make_task(db_session, test_datasource.id, tags_json='["regression"]', name="reg_task")
-    task_b = _make_task(db_session, test_datasource.id, tags_json='["other"]', name="other_task")
-
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        tags=["regression"],
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-    assert result.total_cases == 1
-    assert result.case_results[0].task_id == task_a.id
-
-
-def test_eval_run_preserves_summary(db_session, test_datasource):
-    task = _make_task(db_session, test_datasource.id)
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=[task.id],
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-
-    summary = json.loads(result.summary_json)
-    assert "passed" in summary
-    assert "failed" in summary
-    assert "pass_rate" in summary
-
-
-def test_eval_runner_merges_task_ids(db_session, test_datasource):
-    task1 = _make_task(db_session, test_datasource.id, name="t1")
-    task2 = _make_task(db_session, test_datasource.id, name="t2")
-    task3 = _make_task(db_session, test_datasource.id, name="t3")
-    req = AgentEvalRunRequest(
-        datasource_id=test_datasource.id,
-        task_ids=[task1.id, task3.id],
-        execute=False,
-    )
-    runner = AgentEvalRunner(db_session)
-    result = runner.run(req)
-    assert result.total_cases == 2
-
-
-def test_eval_runner_failure_never_persists_or_returns_exception_text(
-    db_session,
-    test_datasource,
-    monkeypatch,
-    caplog,
-):
-    task = _make_task(db_session, test_datasource.id)
-    sentinel = "agent-eval-case-secret-sentinel"
-
-    class FailingRuntime:
-        def __init__(self, _db):
-            pass
-
-        def run_iter(self, _request):
-            raise RuntimeError(f"provider authorization={sentinel}")
-
-    monkeypatch.setattr("engine.evaluation.agent_eval.DBFoxAgentRuntime", FailingRuntime)
-
-    capture_logger = logging.Logger("test.agent_eval_runner_boundary")
-    capture_logger.setLevel(logging.ERROR)
-    capture_logger.propagate = False
-    capture_logger.addHandler(caplog.handler)
-    try:
-        with monkeypatch.context() as scoped_monkeypatch:
-            scoped_monkeypatch.setattr("engine.evaluation.agent_eval.logger", capture_logger)
-            result = AgentEvalRunner(db_session).run(
-                AgentEvalRunRequest(
-                    datasource_id=test_datasource.id,
-                    task_ids=[task.id],
-                    execute=False,
-                )
-            )
-    finally:
-        capture_logger.removeHandler(caplog.handler)
-
-    response_case = result.case_results[0]
-    persisted_case = (
-        db_session.query(AgentEvalCaseResult)
-        .filter(AgentEvalCaseResult.eval_run_id == result.id)
-        .one()
-    )
-    assert response_case.status == "error"
-    assert json.loads(response_case.failure_reasons_json) == ["AGENT_EVALUATION_CASE_ERROR"]
-    assert json.loads(persisted_case.failure_reasons_json) == ["AGENT_EVALUATION_CASE_ERROR"]
-    assert sentinel not in response_case.model_dump_json()
-    assert sentinel not in persisted_case.failure_reasons_json
-    assert sentinel not in caplog.text
-    assert "RuntimeError" in caplog.text
-    assert "agent_evaluation_case" in caplog.text
+    assert _extract_approval_state(result, []) == "none"

@@ -20,7 +20,10 @@ from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from sqlalchemy.orm import Session
 
 from engine.models import DataSource, SchemaColumn, SchemaTable
-from engine.errors import DataSourceConnectionError
+from engine.environment.authoritative_inventory import (
+    SchemaInspectionError,
+    SchemaInspectionErrorCode,
+)
 from engine.environment.schema_catalog_sync import ensure_catalog
 
 logger = logging.getLogger("dbfox.schema_sync")
@@ -50,16 +53,20 @@ def sync_schema(
     """
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
-        raise ValueError("Data source not found")
-
-    if ds.db_type == "sqlite":
-        path = Path(str(ds.database_name or "")).expanduser()
-        if not path.is_file():
-            raise DataSourceConnectionError(
-                f"SQLite database file does not exist: {path}"
-            )
+        raise SchemaInspectionError(
+            datasource_id,
+            SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND,
+        )
 
     try:
+        if ds.db_type == "sqlite":
+            path = Path(str(ds.database_name or "")).expanduser()
+            if not path.is_file():
+                raise SchemaInspectionError(
+                    datasource_id,
+                    SchemaInspectionErrorCode.SQLITE_PATH_UNAVAILABLE,
+                )
+
         result = ensure_catalog(
             db,
             datasource_id,
@@ -101,6 +108,18 @@ def sync_schema(
 
         return response
 
+    except SchemaInspectionError:
+        db.rollback()
+        now = datetime.now(UTC)
+        db.query(DataSource).filter(DataSource.id == datasource_id).update(
+            {
+                "last_sync_at": now,
+                "last_sync_status": "failed",
+                "last_sync_error": fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED),
+            }
+        )
+        db.commit()
+        raise
     except Exception:
         db.rollback()
         now = datetime.now(UTC)

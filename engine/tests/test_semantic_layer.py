@@ -42,12 +42,12 @@ def _make_datasource(db: Session, name: str = "test_ds") -> DataSource:
     ds = DataSource(
         id=str(uuid.uuid4()),
         name=name,
-        host="localhost",
-        port=3306,
-        database_name=f"{name}_db",
-        username="test",
-        password_ciphertext="x",
-        password_nonce="x",
+        db_type="sqlite",
+        host="",
+        port=0,
+        database_name=":memory:",
+        username="",
+        connection_generation=1,
         status="active",
     )
     db.add(ds)

@@ -1,35 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-DBFox 备份与恢复 API 路由模块 (Backup & Restore Router)
-------------------------------------------------------
-这个模块定义了所有与数据库备份、覆盖恢复相关的 RESTful Web API 接口。
-它演示了如何与 SQLAlchemy 数据库会话 (Session) 交互，利用 Pydantic 模型进行请求体校验，
-以及通过双重因子确认保护（Two-Phase Confirmation）机制执行高风险操作（数据库覆盖恢复）。
+DBFox 备份 API 路由模块 (Backup Router)
+-----------------------------------------
+这个模块定义受控的备份创建、查询和恢复预检 API。逻辑备份不能原子覆盖现有
+数据库，因此恢复端点在具备隔离目标与可审计切换流程前一律拒绝执行。
 """
 
-import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from engine.app.safe_errors import (
     FixedErrorCode,
-    SafeLogOperation,
     fixed_error_message,
-    log_unexpected_exception,
 )
-from engine.backup import create_backup, execute_restore, precheck_restore
+from engine.backup import create_backup, execute_restore, precheck_restore, safe_backup_record_path
 from engine.db import get_db
-from engine.errors import DBFoxError, NotFoundError
-from engine.models import BackupRecord, DataSource
+from engine.errors import NotFoundError
+from engine.models import BackupRecord
 from engine.schemas import BackupCreateRequest
-from engine.schemas.backup import BackupResponse, RestoreConfirmRequest
-from engine.environment.schema_catalog_sync import ensure_catalog
-from engine.policy.engine import PolicyEngine
-
-# 获取当前模块的日志记录器
-logger = logging.getLogger("dbfox.api.backup")
+from engine.schemas.backup import (
+    BackupResponse,
+    BackupRestoreRequest,
+    RestoreOperationResponse,
+)
 
 # 创建一个 API 路由组 (APIRouter)
 # 在 FastAPI 中，我们将不同业务模块的接口拆分到各个路由文件中，然后使用 APIRouter 独立配置，最后统一挂载到主应用上。
@@ -38,15 +33,10 @@ router = APIRouter()
 
 def _backup_to_dict(record: BackupRecord) -> dict[str, Any]:
     payload = BackupResponse.model_validate(record).model_dump(mode="json")
+    payload["file_path"] = safe_backup_record_path(record.file_path)
     if payload.get("error_message"):
         payload["error_message"] = fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED)
     return payload
-
-
-def _restore_allow_fallback(req: RestoreConfirmRequest | None, query_allow_fallback: bool) -> bool:
-    if req is not None and "allow_fallback" in req.model_fields_set:
-        return bool(req.allow_fallback)
-    return query_allow_fallback
 
 
 # =========================================================================
@@ -107,7 +97,7 @@ def api_create_backup(req: BackupCreateRequest, db: Session = Depends(get_db)) -
       - `raise HTTPException(...)`：抛出 FastAPI 的 HTTP 错误异常，以返回指定的 HTTP 状态码（如 400 或 500）和错误详情。
     """
     try:
-        record = create_backup(db, req.datasource_id, req.label, allow_fallback=req.allow_fallback)
+        record = create_backup(db, req.datasource_id, req.label)
         db.commit()
         db.refresh(record)
         return _backup_to_dict(record)
@@ -150,83 +140,20 @@ def api_restore_precheck(backup_id: str, db: Session = Depends(get_db)) -> dict[
 
 
 # =========================================================================
-# 接口 5: 执行备份恢复（覆盖目标数据库的高风险操作） (POST)
+# 接口 5: 隔离恢复与原子切换 (POST)
 # =========================================================================
-@router.post("/backups/{backup_id}/restore")
+@router.post("/backups/{backup_id}/restore", response_model=RestoreOperationResponse)
 def api_restore_backup(
     backup_id: str,
-    req: RestoreConfirmRequest | None = None,
-    allow_fallback: bool = Query(default=True),
-    db: Session = Depends(get_db)
-) -> dict[str, Any]:
-    """Execute backup restore (high-risk overwrite)."""
-    confirm_token = req.confirm_token if req else None
-    confirm_text = req.confirm_text if req else None
-    effective_allow_fallback = _restore_allow_fallback(req, allow_fallback)
+    req: BackupRestoreRequest,
+    db: Session = Depends(get_db),
+) -> RestoreOperationResponse:
+    """Restore to a new database and switch only after validation and generation CAS."""
 
-    # 1. 查找备份记录
-    record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
-    if not record:
-        raise NotFoundError("备份记录不存在", "BACKUP_NOT_FOUND")
-
-    # 2. 查找关联的数据源信息
-    datasource = db.query(DataSource).filter(DataSource.id == record.datasource_id).first()
-    if not datasource:
-        raise NotFoundError("关联的数据源不存在", "DATASOURCE_NOT_FOUND")
-
-    # 3. 🔒 强制安全合规校验
-    PolicyEngine.enforce_restore_policy(datasource)
-
-    # 4. 🔒 双因子令牌验证
-    from engine.policy import confirmation_bypass_enabled, confirmation_manager
-    if not confirmation_bypass_enabled():
-        expected_details = {"backup_id": backup_id, "allow_fallback": effective_allow_fallback}
-
-        if not confirm_token:
-            token = confirmation_manager.create_confirmation(
-                datasource_id=str(record.datasource_id),
-                action="restore_backup",
-                details=expected_details,
-                expected_confirm_text=str(datasource.name)
-            )
-            return {
-                "success": False,
-                "requires_confirmation": True,
-                "confirm_token": token,
-                "impact_summary": f"⚠️ 警告：您即将对数据源 '{datasource.name}' 执行备份恢复（覆盖还原）！\n\n该操作会覆盖目标数据库的所有当前数据，并可能导致现有修改被覆盖丢失！请输入数据源名称以确认执行。",
-                "expected_confirm_text": datasource.name
-            }
-        else:
-            is_valid, err_msg = confirmation_manager.validate_and_consume(
-                confirm_token,
-                confirm_text or "",
-                expected_action="restore_backup",
-                expected_datasource_id=str(record.datasource_id),
-                expected_details=expected_details
-            )
-            if not is_valid:
-                raise DBFoxError(err_msg, "CONFIRMATION_FAILED")
-
-    # 5. 二次确认通过，执行底层真实的恢复逻辑
-    try:
-        res = execute_restore(db, backup_id, allow_fallback=effective_allow_fallback)
-        db.commit()  # 物理恢复完成，更新本地备份记录的状态为已成功，并提交本地事务
-        
-        # 恢复完成后，在后台异步触发一次表结构元数据同步，使 DBFox 里的元数据与实际数据库保持一致
-        try:
-            ensure_catalog(db, res["datasource_id"])
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            log_unexpected_exception(
-                logger,
-                operation=SafeLogOperation.BACKUP_REFRESH_CATALOG,
-                exc=exc,
-                level="warning",
-            )
-            
-        return res
-    except Exception:
-        db.rollback()
-        raise
+    operation = execute_restore(
+        db,
+        backup_id,
+        expected_datasource_generation=req.expected_datasource_generation,
+    )
+    return RestoreOperationResponse.model_validate(operation)
 

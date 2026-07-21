@@ -1,26 +1,11 @@
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from engine.models import Base, DataSource
+from engine.models import DataSource
 from engine.sql.trust_gate import TrustGate
-
-@pytest.fixture
-def db_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    try:
-        yield session
-    finally:
-        session.close()
 
 # covers: TG-1 guardrail reject
 def test_tg1_reject(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="dev",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -35,7 +20,6 @@ def test_tg2_schema_warnings(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="dev",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -50,7 +34,6 @@ def test_tg3_guardrail_warning(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="dev",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -64,7 +47,6 @@ def test_tg4_all_pass(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="dev",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -78,7 +60,6 @@ def test_tg5_prod_agent_readonly(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="prod",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -92,7 +73,6 @@ def test_tg6_dev_agent_readonly_warning(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="dev",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -106,7 +86,6 @@ def test_tg7_user_readonly_any_env(db_session):
     ds = DataSource(
         id="ds-1", name="test", db_type="sqlite", env="prod",
         host="localhost", database_name="test.db", username="test",
-        password_ciphertext="cipher", password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()

@@ -125,6 +125,16 @@ class NotFoundError(DBFoxError):
         super().__init__(message, code=code)
 
 
+class BackupSourceMismatchError(DBFoxError):
+    """A backup may only be restored to the connection profile that created it."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Backup source no longer matches this datasource.",
+            code="BACKUP_SOURCE_MISMATCH",
+        )
+
+
 class ValidationException(DBFoxError):
     """
     请求参数/数据校验异常

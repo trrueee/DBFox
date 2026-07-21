@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 from engine.policy.redactor import DataRedactor
-from engine.runtime_paths import PROJECT_DIR, private_runtime_file
+from engine.runtime_paths import private_runtime_dir, private_runtime_file
 
 LOG_FILE_NAME = "dbfox-engine.log"
 DEFAULT_MAX_LINES = 300
@@ -33,7 +33,10 @@ def diagnostic_log_file() -> Path:
 
 
 def diagnostic_log_paths() -> list[tuple[str, Path]]:
-    runtime_logs = PROJECT_DIR / "artifacts" / "runtime-logs"
+    # Diagnostics are runtime data.  Never read from the source checkout:
+    # aside from leaking stale developer output, a shared repository makes the
+    # diagnostic export boundary impossible to reason about.
+    runtime_logs = private_runtime_dir("logs")
     return [
         ("engine", diagnostic_log_file()),
         ("engine-stdout", runtime_logs / "engine.out.log"),

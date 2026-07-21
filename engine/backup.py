@@ -1,224 +1,349 @@
 from __future__ import annotations
 
-import hashlib
-import logging
 import os
 import re
+import stat
 import subprocess
 import time
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
-from engine.datasource import datasource_connection_dict, get_mysql_connection_params
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.lifecycle import get_datasource_resource_lifecycle
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+from engine.datasource import datasource_connection_dict
+from engine.errors import BackupSourceMismatchError
+from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID, RestoreOperation
+from engine.backup_paths import (
+    BackupError,
+    absolute_lexical_path as _absolute_lexical_path,
+    backup_operation_error as _backup_operation_error,
+    backup_path as _backup_path,
+    backup_relative_path as _backup_relative_path,
+    backup_root as _backup_root,
+    existing_owned_backup_path as _existing_owned_backup_path,
+    _is_link_or_reparse,
+    new_owned_backup_path as _new_owned_backup_path,
+    open_existing_regular_file as _open_existing_regular_file,
+    parse_backup_relative_path as _parse_backup_relative_path,
+    regular_file_size as _regular_file_size,
+    remove_regular_file_if_owned as _remove_regular_file_if_owned,
+    require_private_directory as _require_private_directory,
+    safe_backup_record_path,
+    sha256_file as _sha256_file,
+)
 
-logger = logging.getLogger("dbfox.backup")
-from engine.errors import DBFoxError
-from engine.models import BackupRecord, DataSource, DEFAULT_PROJECT_ID
-from engine.runtime_paths import private_runtime_dir
+
+_MYSQL_CLIENT_DIR_ENV: Final = "DBFOX_MYSQL_CLIENT_DIR"
+_NATIVE_CLIENT_TIMEOUT_SECONDS: Final = 300
+_LOCALE: Final = "C"
 
 
-class BackupError(DBFoxError):
-    def __init__(self, message: str, code: str = "BACKUP_FAILED") -> None:
-        super().__init__(message, code=code)
+def _restore_operation_error() -> BackupError:
+    return BackupError(
+        fixed_error_message(FixedErrorCode.RESTORE_OPERATION_FAILED),
+        code=FixedErrorCode.RESTORE_OPERATION_FAILED.value,
+    )
 
 
-def _safe_filename(value: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
-    return cleaned.strip("._") or "backup"
+def _restore_version_conflict() -> BackupError:
+    return BackupError(
+        fixed_error_message(FixedErrorCode.RESTORE_VERSION_CONFLICT),
+        code=FixedErrorCode.RESTORE_VERSION_CONFLICT.value,
+    )
 
 
-def _backup_path(ds: DataSource, backup_id: str) -> Path:
-    project_id = str(ds.project_id or DEFAULT_PROJECT_ID)
-    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    filename = f"{timestamp}_{_safe_filename(str(ds.database_name))}_{backup_id[:8]}.sql"
-    return private_runtime_dir("backups") / _safe_filename(project_id) / _safe_filename(str(ds.id)) / filename
+def _native_client_error() -> BackupError:
+    return BackupError(
+        fixed_error_message(FixedErrorCode.BACKUP_CLIENT_NOT_FOUND),
+        code=FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value,
+    )
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _native_client_path(client_name: str) -> Path:
+    configured_dir = os.environ.get(_MYSQL_CLIENT_DIR_ENV, "").strip()
+    if not configured_dir:
+        raise _native_client_error()
+    try:
+        raw_directory = Path(configured_dir).expanduser()
+    except (TypeError, ValueError) as exc:
+        raise _native_client_error() from exc
+    if not raw_directory.is_absolute():
+        raise _native_client_error()
+    try:
+        client_directory = _require_private_directory(raw_directory)
+    except BackupError as exc:
+        raise _native_client_error() from exc
+
+    filename = f"{client_name}.exe" if os.name == "nt" else client_name
+    executable = client_directory / filename
+    try:
+        executable_stat = executable.lstat()
+    except OSError as exc:
+        raise _native_client_error() from exc
+    if _is_link_or_reparse(executable_stat) or not stat.S_ISREG(executable_stat.st_mode):
+        raise _native_client_error()
+    if os.name != "nt" and not os.access(executable, os.X_OK):
+        raise _native_client_error()
+    return executable
+
+
+def _native_client_environment(executable: Path, mysql_password: str) -> dict[str, str]:
+    return {
+        "MYSQL_PWD": mysql_password,
+        "PATH": str(executable.parent),
+        "LC_ALL": _LOCALE,
+        "LANG": _LOCALE,
+    }
+
+
+def _validated_output_path(output_path: Path) -> Path:
+    root = _backup_root()
+    absolute = _absolute_lexical_path(output_path)
+    try:
+        raw_relative = absolute.relative_to(root)
+    except ValueError as exc:
+        raise _backup_operation_error() from exc
+    relative = _parse_backup_relative_path(raw_relative.as_posix())
+    if relative is None:
+        raise _backup_operation_error()
+    return _new_owned_backup_path(relative)
+
+
+def _open_staging_file(output_path: Path) -> tuple[Path, Any]:
+    staging_path = output_path.with_name(f".{output_path.name}.{uuid.uuid4().hex}.partial")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(staging_path, flags, 0o600)
+    except OSError as exc:
+        raise _backup_operation_error() from exc
+    return staging_path, os.fdopen(descriptor, "wb")
 
 
 def _run_mysqldump(ds: DataSource, output_path: Path) -> None:
-    params = get_mysql_connection_params(datasource_connection_dict(ds))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    cmd = [
-        "mysqldump",
-        "--single-transaction",
-        "--routines",
-        "--triggers",
-        "--events",
-        "--default-character-set=utf8mb4",
-        f"--host={params['host']}",
-        f"--port={int(params['port'])}",
-        f"--user={params['user']}",
-        f"--result-file={str(output_path)}",
-        str(params["database"]),
-    ]
-
-    if params.get("ssl_ca"):
-        cmd.append(f"--ssl-ca={params['ssl_ca']}")
-    if params.get("ssl_cert"):
-        cmd.append(f"--ssl-cert={params['ssl_cert']}")
-    if params.get("ssl_key"):
-        cmd.append(f"--ssl-key={params['ssl_key']}")
-
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = str(params["password"])
-
+    """Create a native dump through a configured absolute client executable."""
+    output_path = _validated_output_path(output_path)
+    profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+    factory = ConnectionFactory()
+    staging_path: Path | None = None
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300, env=env)
+        executable = _native_client_path("mysqldump")
+        with factory.mysql_client_scope(profile, purpose=ConnectionPurpose.BACKUP) as client:
+            command = [
+                str(executable),
+                "--single-transaction",
+                "--routines",
+                "--triggers",
+                "--events",
+                "--protocol=TCP",
+                "--default-character-set=utf8mb4",
+                f"--host={client.host}",
+                f"--port={client.port}",
+                f"--user={client.username}",
+            ]
+            for option, value in client.ssl_options.items():
+                command.append(f"--{option.replace('_', '-')}={value}")
+            command.extend(("--", client.database))
+
+            staging_path, handle = _open_staging_file(output_path)
+            with handle:
+                subprocess.run(
+                    command,
+                    stdin=subprocess.DEVNULL,
+                    stdout=handle,
+                    stderr=subprocess.DEVNULL,
+                    text=False,
+                    check=True,
+                    timeout=_NATIVE_CLIENT_TIMEOUT_SECONDS,
+                    env=_native_client_environment(executable, client.environment()["MYSQL_PWD"]),
+                    cwd=str(output_path.parent),
+                    close_fds=True,
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+
+        if _regular_file_size(staging_path) <= 0:
+            raise _backup_operation_error()
+        os.replace(staging_path, output_path)
+        staging_path = None
+    except BackupError:
+        raise
     except FileNotFoundError:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_CLIENT_NOT_FOUND),
-            code=FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value,
-        ) from None
-    except subprocess.CalledProcessError:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
-            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
-        ) from None
-    except subprocess.TimeoutExpired:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
-            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
-        ) from None
-
-
-def _pymysql_simple_sql_export(ds: DataSource, output_path: Path) -> None:
-    import pymysql
-    params = get_mysql_connection_params(datasource_connection_dict(ds))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    conn = pymysql.connect(
-        host=params["host"],
-        port=int(params["port"]),
-        user=params["user"],
-        password=str(params["password"]),
-        database=str(params["database"]),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.Cursor
-    )
-    
-    try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write("-- DBFox Simple SQL Export (Pure-Python)\n")
-            f.write("-- Warning: This simple export is only suited for simple table structures and data backups.\n")
-            f.write("-- Stored procedures, triggers, views, or complex physical properties are not supported.\n")
-            f.write(f"-- Dump Date: {datetime.now(UTC).isoformat()}\n")
-            f.write(f"-- Database: {params['database']}\n\n")
-            f.write("SET FOREIGN_KEY_CHECKS=0;\n\n")
-            
-            with conn.cursor() as cursor:
-                # 1. Fetch tables
-                cursor.execute("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")
-                tables = [row[0] for row in cursor.fetchall()]
-                
-                for table in tables:
-                    f.write(f"-- Table structure for table `{table}`\n")
-                    f.write(f"DROP TABLE IF EXISTS `{table}`;\n")
-                    cursor.execute(f"SHOW CREATE TABLE `{table}`")
-                    create_table_sql = cursor.fetchone()[1]  # type: ignore[index]
-                    f.write(f"{create_table_sql};\n\n")
-                    
-                    # 2. Fetch rows
-                    f.write(f"-- Dumping data for table `{table}`\n")
-                    cursor.execute(f"SELECT * FROM `{table}`")
-                    columns = [desc[0] for desc in cursor.description]
-                    
-                    rows = cursor.fetchall()
-                    if rows:
-                        for row in rows:
-                            values = []
-                            for val in row:
-                                if val is None:
-                                     values.append("NULL")
-                                elif isinstance(val, (int, float)):
-                                     values.append(str(val))
-                                else:
-                                     escaped_val = str(val).replace("\\", "\\\\").replace("'", "\\'")
-                                     values.append(f"'{escaped_val}'")
-                            
-                            col_str = ", ".join([f"`{c}`" for c in columns])
-                            val_str = ", ".join(values)
-                            f.write(f"INSERT INTO `{table}` ({col_str}) VALUES ({val_str});\n")
-                        f.write("\n")
-                
-                # 3. Fetch views
-                cursor.execute("SHOW FULL TABLES WHERE Table_type = 'VIEW'")
-                views = [row[0] for row in cursor.fetchall()]
-                for view in views:
-                    f.write(f"-- View structure for view `{view}`\n")
-                    f.write(f"DROP VIEW IF EXISTS `{view}`;\n")
-                    cursor.execute(f"SHOW CREATE VIEW `{view}`")
-                    create_view_sql = cursor.fetchone()[1]  # type: ignore[index]
-                    f.write(f"{create_view_sql};\n\n")
-            
-            f.write("SET FOREIGN_KEY_CHECKS=1;\n")
+        raise _native_client_error() from None
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        raise _backup_operation_error() from None
     finally:
-        conn.close()
+        if staging_path is not None:
+            _remove_regular_file_if_owned(staging_path)
 
 
-def _pymysql_simple_sql_import(ds: DataSource, sql_file_path: Path) -> None:
-    import pymysql
-    params = get_mysql_connection_params(datasource_connection_dict(ds))
-    
-    conn = pymysql.connect(
-        host=params["host"],
-        port=int(params["port"]),
-        user=params["user"],
-        password=str(params["password"]),
-        database=str(params["database"]),
-        charset="utf8mb4",
-        autocommit=True
+def _isolated_database_name(backup_id: str) -> str:
+    compact_id = re.sub(r"[^a-fA-F0-9]", "", backup_id)[:16].lower()
+    return f"dbfox_restore_{compact_id}_{uuid.uuid4().hex[:12]}"
+
+
+def _quote_mysql_identifier(value: str) -> str:
+    if not re.fullmatch(r"[a-z0-9_]{1,64}", value):
+        raise _restore_operation_error()
+    return f"`{value}`"
+
+
+def _isolated_profile(profile: ConnectionProfile, database_name: str) -> ConnectionProfile:
+    """Use the same vault references without registering staging resources as managed."""
+
+    return replace(
+        profile,
+        datasource_id=None,
+        database_name=database_name,
+        is_managed=False,
+        connection_generation=None,
     )
-    
+
+
+def _create_isolated_database(
+    factory: ConnectionFactory,
+    profile: ConnectionProfile,
+    database_name: str,
+) -> None:
+    statement = (
+        f"CREATE DATABASE {_quote_mysql_identifier(database_name)} "
+        "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    )
+    with factory.connection_scope(
+        profile,
+        purpose=ConnectionPurpose.RESTORE,
+        read_only=False,
+        pooled=False,
+    ) as connection:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(statement)
+            connection.commit()
+        finally:
+            cursor.close()
+
+
+def _drop_isolated_database(
+    factory: ConnectionFactory,
+    profile: ConnectionProfile,
+    database_name: str,
+) -> None:
+    statement = f"DROP DATABASE IF EXISTS {_quote_mysql_identifier(database_name)}"
+    with factory.connection_scope(
+        profile,
+        purpose=ConnectionPurpose.RESTORE,
+        read_only=False,
+        pooled=False,
+    ) as connection:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(statement)
+            connection.commit()
+        finally:
+            cursor.close()
+
+
+def _run_mysql_restore(
+    factory: ConnectionFactory,
+    profile: ConnectionProfile,
+    backup_path: Path,
+) -> None:
+    executable = _native_client_path("mysql")
+    descriptor = _open_existing_regular_file(backup_path, os.O_RDONLY)
     try:
-        with conn.cursor() as cursor:
-            sql_content = sql_file_path.read_text(encoding="utf-8", errors="ignore")
-            statements = []
-            current_statement = []
-            
-            for line in sql_content.splitlines():
-                stripped = line.strip()
-                if not stripped or stripped.startswith("--") or stripped.startswith("/*"):
-                    continue
-                current_statement.append(line)
-                if stripped.endswith(";"):
-                    statements.append("\n".join(current_statement))
-                    current_statement = []
-                    
-            if current_statement:
-                stmt = "\n".join(current_statement).strip()
-                if stmt:
-                    statements.append(stmt)
-                    
-            for stmt in statements:
-                stmt_stripped = stmt.strip()
-                if stmt_stripped:
-                    cursor.execute(stmt_stripped)
+        with factory.mysql_client_scope(profile, purpose=ConnectionPurpose.RESTORE) as client:
+            command = [
+                str(executable),
+                "--binary-mode",
+                "--protocol=TCP",
+                "--default-character-set=utf8mb4",
+                f"--host={client.host}",
+                f"--port={client.port}",
+                f"--user={client.username}",
+                f"--database={client.database}",
+            ]
+            for option, value in client.ssl_options.items():
+                command.append(f"--{option.replace('_', '-')}={value}")
+            with os.fdopen(descriptor, "rb") as handle:
+                descriptor = -1
+                subprocess.run(
+                    command,
+                    stdin=handle,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=False,
+                    check=True,
+                    timeout=_NATIVE_CLIENT_TIMEOUT_SECONDS,
+                    env=_native_client_environment(executable, client.environment()["MYSQL_PWD"]),
+                    cwd=str(backup_path.parent),
+                    close_fds=True,
+                )
+    except BackupError:
+        raise
+    except FileNotFoundError:
+        raise _native_client_error() from None
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        raise _restore_operation_error() from None
     finally:
-        conn.close()
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
-def create_backup(db: Session, datasource_id: str, label: str | None = None, allow_fallback: bool = True) -> BackupRecord:
+def _validate_isolated_database(
+    factory: ConnectionFactory,
+    profile: ConnectionProfile,
+) -> int:
+    with factory.connection_scope(
+        profile,
+        purpose=ConnectionPurpose.RESTORE,
+        read_only=True,
+        pooled=False,
+    ) as connection:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "SELECT COUNT(*) AS table_count FROM information_schema.tables "
+                "WHERE table_schema = %s",
+                (profile.database_name,),
+            )
+            row = cursor.fetchone()
+        finally:
+            cursor.close()
+    if isinstance(row, dict):
+        value = row.get("table_count")
+    elif isinstance(row, (tuple, list)) and row:
+        value = row[0]
+    else:
+        raise _restore_operation_error()
+    try:
+        table_count = int(str(value))
+    except (TypeError, ValueError) as exc:
+        raise _restore_operation_error() from exc
+    if table_count < 0:
+        raise _restore_operation_error()
+    return table_count
+
+
+def create_backup(db: Session, datasource_id: str, label: str | None = None) -> BackupRecord:
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
 
+    source_profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+    if source_profile.connection_generation is None:
+        raise _backup_operation_error()
 
     backup_id = str(uuid.uuid4())
-    started = datetime.now(UTC)
+    relative_path = _backup_relative_path(ds, backup_id)
     output_path = _backup_path(ds, backup_id)
+    started = datetime.now(UTC)
     record = BackupRecord(
         id=backup_id,
         project_id=str(ds.project_id or DEFAULT_PROJECT_ID),
@@ -227,7 +352,10 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
         label=(label or "").strip() or None,
         backup_type="mysqldump",
         status="running",
-        file_path=str(output_path),
+        file_path=relative_path.as_posix(),
+        source_connection_generation=source_profile.connection_generation,
+        source_profile_fingerprint=source_profile.profile_fingerprint,
+        source_database_name=source_profile.database_name,
         started_at=started,
         created_at=started,
     )
@@ -235,188 +363,189 @@ def create_backup(db: Session, datasource_id: str, label: str | None = None, all
     db.flush()
 
     start_time = time.monotonic()
-    backup_mode = "mysqldump"
     try:
-        try:
-            _run_mysqldump(ds, output_path)
-        except BackupError as exc:
-            if exc.code == FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value:
-                if not allow_fallback:
-                    raise BackupError(
-                        "mysqldump was not found. System is in Strict Mode (allow_fallback=False). "
-                        "Please install MySQL client tools and ensure mysqldump is in your system PATH "
-                        "to perform a production-grade full logical backup.",
-                        code="MYSQLDUMP_NOT_FOUND"
-                    ) from exc
-                logger.warning(
-                    "Warning: pure-Python simple SQL export is being used as fallback. "
-                    "This export only supports simple table structures and row data, and DOES NOT support "
-                    "triggers, stored procedures, views, or large binary objects. Please install official "
-                    "mysql-client tools for production-grade physical backups."
-                )
-                _pymysql_simple_sql_export(ds, output_path)
-                backup_mode = "simple_sql_export"
-            else:
-                raise
-
-        if not output_path.exists() or output_path.stat().st_size <= 0:
-            raise BackupError("Backup file was not created or is empty.")
+        _run_mysqldump(ds, output_path)
+        _existing_owned_backup_path(relative_path)
+        file_size = _regular_file_size(output_path)
+        if file_size <= 0:
+            raise _backup_operation_error()
 
         completed = datetime.now(UTC)
         setattr(record, "status", "success")
-        setattr(record, "backup_type", backup_mode)
         setattr(record, "completed_at", completed)
         setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
-        setattr(record, "file_size_bytes", output_path.stat().st_size)
+        setattr(record, "file_size_bytes", file_size)
         setattr(record, "checksum_sha256", _sha256_file(output_path))
         setattr(record, "error_message", None)
-    except Exception as exc:
+    except Exception:
+        _remove_regular_file_if_owned(output_path)
         completed = datetime.now(UTC)
         setattr(record, "status", "failed")
+        setattr(record, "file_path", None)
         setattr(record, "completed_at", completed)
         setattr(record, "duration_ms", int((time.monotonic() - start_time) * 1000))
         setattr(record, "error_message", fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED))
-        db.commit()  # independent commit so API rollback does not erase the audit trail
+        db.commit()  # Preserve the failed audit record independently of API rollback.
         raise
 
     return record
 
 
 def precheck_restore(record: BackupRecord) -> dict[str, Any]:
+    """Validate a stored native backup artifact before isolated restore."""
     warnings: list[str] = []
-    path_value = str(record.file_path or "")
-    if not path_value:
-        return {"ok": False, "warnings": warnings, "errors": ["Backup record has no file path."]}
-
-    path = Path(path_value)
     errors: list[str] = []
-    if not path.exists():
-        errors.append("Backup file does not exist.")
-    elif not path.is_file():
-        errors.append("Backup path is not a file.")
-    else:
-        size = path.stat().st_size
-        if size <= 0:
-            errors.append("Backup file is empty.")
-        if path.suffix.lower() != ".sql":
-            warnings.append("Backup file does not use .sql extension.")
-        
-        # Calculate current checksum and compare for anti-tamper security validation
-        try:
-            current_checksum = _sha256_file(path)
-            if current_checksum != record.checksum_sha256:
-                errors.append(f"Backup file has been modified or tampered with! Original checksum: {record.checksum_sha256}, current checksum: {current_checksum}")
-        except Exception:
-            errors.append(fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED))
+    safe_path = safe_backup_record_path(record.file_path)
+    file_size = 0
 
+    if str(record.backup_type) != "mysqldump":
+        errors.append("Backup record is not a native mysqldump backup.")
+    if safe_path is None:
+        errors.append("Backup record does not reference a managed backup artifact.")
+    else:
+        relative = _parse_backup_relative_path(safe_path)
+        assert relative is not None
         try:
-            sample = path.read_text(encoding="utf-8", errors="ignore")[:4096].lower()
-            if "create table" not in sample and "insert into" not in sample and "mysql dump" not in sample and "simple sql export" not in sample and "fallback database dump" not in sample:
-                warnings.append("Backup file does not look like a standard SQL dump.")
-        except Exception:
-            pass
+            path = _existing_owned_backup_path(relative)
+            file_size = _regular_file_size(path)
+            if file_size <= 0:
+                errors.append("Backup file is empty.")
+            if not record.checksum_sha256 or _sha256_file(path) != record.checksum_sha256:
+                errors.append("Backup integrity verification failed.")
+        except BackupError:
+            errors.append("Managed backup artifact is unavailable.")
 
     if str(record.status) != "success":
         warnings.append("Backup record status is not success.")
-
+    restore_available = not errors and str(record.status) == "success"
     return {
         "ok": not errors,
         "warnings": warnings,
         "errors": errors,
-        "filePath": path_value,
-        "fileSizeBytes": path.stat().st_size if path.exists() and path.is_file() else 0,
+        "filePath": safe_path,
+        "fileSizeBytes": file_size,
         "checksumSha256": record.checksum_sha256,
+        "restoreAvailable": restore_available,
     }
 
 
-def _run_mysql_restore(ds: DataSource, sql_file_path: Path) -> None:
-    params = get_mysql_connection_params(datasource_connection_dict(ds))
-    cmd = [
-        "mysql",
-        f"--host={params['host']}",
-        f"--port={int(params['port'])}",
-        f"--user={params['user']}",
-        "--default-character-set=utf8mb4",
-        str(params["database"]),
-    ]
+def execute_restore(
+    db: Session,
+    backup_id: str,
+    *,
+    expected_datasource_generation: int,
+    connection_factory: ConnectionFactory | None = None,
+) -> RestoreOperation:
+    """Restore into an isolated database, validate it, then CAS-cut over metadata."""
 
-    if params.get("ssl_ca"):
-        cmd.append(f"--ssl-ca={params['ssl_ca']}")
-    if params.get("ssl_cert"):
-        cmd.append(f"--ssl-cert={params['ssl_cert']}")
-    if params.get("ssl_key"):
-        cmd.append(f"--ssl-key={params['ssl_key']}")
+    record = db.get(BackupRecord, backup_id)
+    if record is None:
+        raise BackupError("Backup not found.", code="BACKUP_NOT_FOUND")
+    if not precheck_restore(record)["restoreAvailable"]:
+        raise _restore_operation_error()
+    datasource = db.get(DataSource, record.datasource_id)
+    if datasource is None:
+        raise BackupError("Data source not found.", code="DATASOURCE_NOT_FOUND")
+    if str(datasource.db_type).lower() != "mysql":
+        raise _restore_operation_error()
+    if int(datasource.connection_generation) != expected_datasource_generation:
+        raise _restore_version_conflict()
 
-    env = os.environ.copy()
-    env["MYSQL_PWD"] = str(params["password"])
+    current_profile = ConnectionProfile.from_mapping(datasource_connection_dict(datasource))
+    if (
+        record.source_connection_generation is None
+        or int(record.source_connection_generation) != expected_datasource_generation
+        or not record.source_profile_fingerprint
+        or record.source_profile_fingerprint != current_profile.profile_fingerprint
+        or not record.source_database_name
+        or record.source_database_name != current_profile.database_name
+    ):
+        raise BackupSourceMismatchError()
 
+    relative = _parse_backup_relative_path(record.file_path)
+    if relative is None:
+        raise _restore_operation_error()
+    backup_path = _existing_owned_backup_path(relative)
+    if not record.checksum_sha256 or _sha256_file(backup_path) != record.checksum_sha256:
+        raise _restore_operation_error()
+
+    factory = connection_factory or ConnectionFactory()
+    previous_profile = current_profile
+    target_database = _isolated_database_name(str(record.id))
+    target_profile = _isolated_profile(previous_profile, target_database)
+    operation = RestoreOperation(
+        id=str(uuid.uuid4()),
+        backup_id=str(record.id),
+        datasource_id=str(datasource.id),
+        status="running",
+        source_database_name=str(record.source_database_name),
+        target_database_name=target_database,
+        expected_generation=expected_datasource_generation,
+        started_at=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+    )
+    db.add(operation)
+    db.commit()
+
+    isolated_created = False
+    cutover_committed = False
     try:
-        with open(sql_file_path, "r", encoding="utf-8", errors="ignore") as f:
-            subprocess.run(cmd, stdin=f, capture_output=True, text=True, check=True, timeout=300, env=env)
-    except FileNotFoundError:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_CLIENT_NOT_FOUND),
-            code=FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value,
-        ) from None
-    except subprocess.CalledProcessError:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
-            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
-        ) from None
-    except subprocess.TimeoutExpired:
-        raise BackupError(
-            fixed_error_message(FixedErrorCode.BACKUP_OPERATION_FAILED),
-            code=FixedErrorCode.BACKUP_OPERATION_FAILED.value,
-        ) from None
+        _create_isolated_database(factory, previous_profile, target_database)
+        isolated_created = True
+        _run_mysql_restore(factory, target_profile, backup_path)
+        table_count = _validate_isolated_database(factory, target_profile)
 
-
-def execute_restore(db: Session, backup_id: str, allow_fallback: bool = True) -> dict[str, Any]:
-    record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
-    if not record:
-        raise BackupError("Backup record not found.", code="BACKUP_NOT_FOUND")
-
-    ds = db.query(DataSource).filter(DataSource.id == record.datasource_id).first()
-    if not ds:
-        raise BackupError("Data source for this backup record not found.", code="DATASOURCE_NOT_FOUND")
-
-    if ds.is_read_only:
-        raise BackupError("Cannot restore to a read-only data source.", code="RESTORE_READONLY_ERROR")
-
-    # Perform Dry-Run precheck (which includes SHA-256 anti-tamper confirmation)
-    precheck = precheck_restore(record)
-    if not precheck["ok"]:
-        raise BackupError(f"Restore pre-check failed: {', '.join(precheck['errors'])}", code="RESTORE_PRECHECK_FAILED")
-
-    sql_path = Path(precheck["filePath"])
-
-    # Safety confirmation: Prevent environment tier mismatch
-    if record.environment_id and record.environment_id != ds.environment_id:
-        raise BackupError(
-            f"Environment mismatch: Cannot restore a backup from environment '{record.environment_id}' to different target environment '{ds.environment_id or 'unknown'}'.",
-            code="RESTORE_ENV_MISMATCH"
+        db.expire_all()
+        updated = db.execute(
+            update(DataSource)
+            .where(
+                DataSource.id == datasource.id,
+                DataSource.connection_generation == expected_datasource_generation,
+            )
+            .values(
+                database_name=target_database,
+                connection_generation=expected_datasource_generation + 1,
+            )
         )
+        if int(getattr(updated, "rowcount", 0) or 0) != 1:
+            raise _restore_version_conflict()
+        persisted_operation = db.get(RestoreOperation, operation.id)
+        if persisted_operation is None:
+            raise _restore_operation_error()
+        persisted_operation_row: Any = persisted_operation
+        persisted_operation_row.status = "success"
+        persisted_operation_row.committed_generation = expected_datasource_generation + 1
+        persisted_operation_row.validated_table_count = table_count
+        persisted_operation_row.completed_at = datetime.now(UTC)
+        persisted_operation_row.error_code = None
+        db.commit()
+        cutover_committed = True
 
-    try:
-        _run_mysql_restore(ds, sql_path)
-    except BackupError as exc:
-        if exc.code == FixedErrorCode.BACKUP_CLIENT_NOT_FOUND.value:
-            if not allow_fallback:
-                raise BackupError(
-                    "mysql client command was not found. System is in Strict Mode (allow_fallback=False). "
-                    "Please install MySQL client tools and ensure mysql is in PATH.",
-                    code="MYSQL_CLIENT_NOT_FOUND"
-                ) from exc
-            logger.warning("mysql command not found, falling back to pure-Python simple SQL execution.")
-            _pymysql_simple_sql_import(ds, sql_path)
-        else:
+        current_datasource = db.get(DataSource, datasource.id, populate_existing=True)
+        if current_datasource is None:
+            raise _restore_operation_error()
+        current_profile = ConnectionProfile.from_mapping(
+            datasource_connection_dict(current_datasource)
+        )
+        get_datasource_resource_lifecycle().replace(previous_profile, current_profile)
+        db.refresh(persisted_operation)
+        return persisted_operation
+    except Exception as exc:
+        db.rollback()
+        if isolated_created and not cutover_committed:
+            try:
+                _drop_isolated_database(factory, previous_profile, target_database)
+            except Exception:
+                pass
+        persisted_operation = db.get(RestoreOperation, operation.id)
+        if persisted_operation is not None and not cutover_committed:
+            persisted_operation_row = persisted_operation
+            persisted_operation_row.status = "failed"
+            persisted_operation_row.error_code = (
+                exc.code if isinstance(exc, BackupError) else FixedErrorCode.RESTORE_OPERATION_FAILED.value
+            )
+            persisted_operation_row.completed_at = datetime.now(UTC)
+            db.commit()
+        if isinstance(exc, BackupError):
             raise
-
-    return {
-        "success": True,
-        "backup_id": backup_id,
-        "datasource_id": ds.id,
-        "database_name": ds.database_name,
-        "message": f"Successfully restored database '{ds.database_name}' from backup file."
-    }
-
-
+        raise _restore_operation_error() from exc

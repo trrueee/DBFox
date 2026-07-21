@@ -2,27 +2,21 @@
 
 Fixture lifecycle (fastest → slowest, ordered by scope):
 
-* ``db_session``          function  in-memory SQLite :memory: + StaticPool   ~0.01 s
+* ``db_session``          function  file-backed SQLite upgraded by Alembic
 * ``test_datasource``     function  copy-on-write from session-shared file   ~0.05 s
 * ``_shared_test_db_file`` session  one-time tables + seed data (~20 tables) ~0.15 s
 
 The session-shared ``_shared_test_db_file`` eliminates ~3 s of repeated
 ``_init_test_db()`` work for every ``test_datasource`` consumer.
 """
-import os
-os.environ["DBFOX_BYPASS_CONFIRMATION"] = "1"
-os.environ["DBFOX_TESTING"] = "1"
-os.environ["DBFOX_ALLOW_GUARDRAIL_BYPASS"] = "1"
+from pathlib import Path
 
 import uuid
-from pathlib import Path
 import pytest
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from engine.db import Base
-from engine import models  # ensure all models are registered with Base
 from engine.models import DataSource
+from engine.tests.support.metadata import create_migrated_metadata_engine
+
 
 # ---------------------------------------------------------------------------
 # Spider SQLite database paths (from .agent_eval/spider/database/)
@@ -37,55 +31,39 @@ SPIDER_SQLITE_DBS = {
 }
 
 
-def _ensure_test_fts5(engine) -> None:
-    """Create FTS5 virtual table in test database if it doesn't exist."""
-    from sqlalchemy import text as sa_text
-    from engine.models import FTS5_DDL
-    try:
-        with engine.connect() as conn:
-            conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
-    except Exception:
-        with engine.connect() as conn:
-            conn.execute(sa_text(FTS5_DDL))
-            conn.commit()
-
-
-def _make_db_session():
-    """Create an isolated in-memory SQLite session.
-
-    StaticPool ensures a single connection is reused so that tables created
-    via Base.metadata.create_all are visible to the yielded session.
-    """
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(bind=engine)
-    _ensure_test_fts5(engine)
+def _make_db_session(database_path: Path):
+    """Create an isolated Alembic-upgraded SQLite metadata session."""
+    engine = create_migrated_metadata_engine(database_path)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
     return session, engine
 
 
 @pytest.fixture
-def db_session():
-    """Function-scoped in-memory SQLite session (default — full isolation)."""
-    session, _engine = _make_db_session()
-    yield session
-    session.close()
+def db_session(tmp_path: Path):
+    """Function-scoped Alembic-upgraded SQLite session (full isolation)."""
+    session, engine = _make_db_session(tmp_path / "metadata.db")
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
 
 
 @pytest.fixture(scope="module")
-def db_session_module():
-    """Module-scoped in-memory SQLite session.
+def db_session_module(tmp_path_factory: pytest.TempPathFactory):
+    """Module-scoped file-backed Alembic-upgraded SQLite session.
 
     Use in test classes that only perform read-only catalog operations
     and do not modify tables within the same module.
     """
-    session, _engine = _make_db_session()
-    yield session
-    session.close()
+    database_path = tmp_path_factory.mktemp("metadata_module") / "metadata.db"
+    session, engine = _make_db_session(database_path)
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def _make_spider_ds(db_session, db_key: str):
@@ -109,9 +87,6 @@ def _make_spider_ds(db_session, db_key: str):
         port=0,
         database_name=sqlite_path,
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         db_type="sqlite",
         status="active",
     )
@@ -391,46 +366,6 @@ def test_datasource_module(db_session_module, tmp_path_factory):
     """
     db_dir = tmp_path_factory.mktemp("ds_module")
     return _make_datasource(db_session_module, db_dir, ds_id="ds-test-module")
-
-
-@pytest.fixture(autouse=True)
-def reset_checkpointer():
-    """Reset the global _SHARED_MEMORY_SAVER before and after every test."""
-    from engine.agent_core import checkpointer
-    checkpointer._SHARED_MEMORY_SAVER = None
-    yield
-    checkpointer._SHARED_MEMORY_SAVER = None
-
-
-@pytest.fixture(autouse=True)
-def mock_openai_client(monkeypatch):
-    import engine.llm.factory
-    orig_create = engine.llm.factory.create_openai_client
-
-    def fake_create(*args, **kwargs):
-        if not kwargs.get("api_key"):
-            kwargs["api_key"] = "mock-key-for-testing"
-        return orig_create(*args, **kwargs)
-
-    monkeypatch.setattr(engine.llm.factory, "create_openai_client", fake_create)
-
-
-@pytest.fixture(autouse=True)
-def mock_agent_progress_judge(monkeypatch, request):
-    """Progress Judge requires LLM credentials; without real keys use the
-    module's rule-based fallback (mirrors the legacy routing logic)."""
-    if request.node.get_closest_marker("real_llm") is not None:
-        return
-
-    from engine.agent.nodes import progress_node
-
-    def fake_judge_progress(state, config):
-        escalate_result = progress_node._check_escalate(state)
-        if escalate_result:
-            return escalate_result
-        return progress_node._rule_fallback(state)
-
-    monkeypatch.setattr(progress_node, "judge_progress", fake_judge_progress)
 
 
 

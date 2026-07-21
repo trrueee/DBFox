@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from engine.agent_core.semantic_contract import QueryContract
+from engine.sql.semantics.contract import QueryContract
 
 
 class SQLProjectionConstraintVerifier:

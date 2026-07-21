@@ -3,6 +3,7 @@ import sqlglot
 from sqlglot import exp
 from engine.sql.parser import parse_sql
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.models import DataSource
 from engine.errors import DBFoxError
 
@@ -27,7 +28,13 @@ class PolicyEngine:
         try:
             expressions = parse_sql(sql_str, str(ds.db_type or "mysql"))
         except Exception as exc:
-            logger.warning("SQL parsing failed in PolicyEngine; blocking query: %s", exc)
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.POLICY_SQL_PARSE,
+                exc=exc,
+                fingerprint_subject=f"{sql_str}\x00{type(exc).__name__}\x00{exc}",
+                level="warning",
+            )
             raise DBFoxError(
                 code="POLICY_PARSE_ERROR",
                 message=f"SQL 无法被安全策略引擎解析，已按潜在注入风险阻断。数据源: '{ds.name}'。"

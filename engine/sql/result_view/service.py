@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 from collections.abc import Callable, Iterator
 from typing import Any
+from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.models import AgentArtifactRecord, AgentRun, DataSource, SchemaColumn, SchemaTable
 from engine.sql.builder import catalog_identifier
 from engine.sql.dialect_context import DialectContext
@@ -16,6 +20,7 @@ from engine.sql.guardrail import GuardrailResult
 from engine.sql.result_view.compiler import ResultViewCompiler
 from engine.sql.result_view.fingerprint import result_source_fingerprint
 from engine.sql.result_view.models import (
+    ChartData,
     ResultColumn,
     ResultExportQuery,
     ResultPage,
@@ -28,6 +33,7 @@ from engine.sql.result_view.models import (
     ResultViewQuery,
     VerifiedResultSource,
 )
+from engine.tools.chart_suggestion import build_chart_series
 from engine.sql.safety.service import SqlSafetyService
 from engine.sql.trust_gate import ExecutionSafetyDecision
 
@@ -51,14 +57,9 @@ class ResultViewService:
         self.compiler = compiler or ResultViewCompiler()
 
     def load_verified_source(self, source_ref: ResultSourceRef, ctx: DialectContext | None = None) -> VerifiedResultSource:
-        ctx = ctx or DialectContext.from_datasource_id(self.db, source_ref.datasource_id)
-        source = self._load_source_artifact(source_ref.datasource_id, source_ref.source_sql_artifact_id)
-        if source is None:
-            raise ResultViewError(
-                "SOURCE_ARTIFACT_NOT_FOUND",
-                "Source SQL artifact was not found.",
-                status_code=404,
-            )
+        result, source, source_run = self._load_artifact_source(source_ref.artifact_id)
+        datasource_id = str(source_run.datasource_id)
+        ctx = ctx or DialectContext.from_datasource_id(self.db, datasource_id)
         if source.type != "sql":
             raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Source artifact must be a SQL artifact.")
 
@@ -69,12 +70,13 @@ class ResultViewService:
 
         artifact_dialect = str(payload.get("dialect") or ctx.dialect)
         persisted_fp = _artifact_fingerprint(payload, persisted_safe_sql, artifact_dialect)
-        requested_fp = _result_source_fingerprint(source_ref.safe_sql, artifact_dialect)
-        if persisted_fp != requested_fp:
-            raise ResultViewError("SOURCE_SQL_MISMATCH", "Requested SQL does not match the source artifact.")
+        descriptor = _artifact_payload(result)
+        descriptor_fp = str(descriptor.get("queryFingerprint") or "").strip()
+        if descriptor_fp and persisted_fp != descriptor_fp:
+            raise ResultViewError("SOURCE_SQL_MISMATCH", "Result artifact does not match its source SQL artifact.")
 
         source_ctx = DialectContext(
-            datasource_id=source_ref.datasource_id,
+            datasource_id=datasource_id,
             dialect=ctx.dialect,
             schema_cache=ctx.schema_cache,
         )
@@ -82,31 +84,33 @@ class ResultViewService:
         if warnings:
             raise ResultViewError("SOURCE_SQL_VALIDATION_FAILED", warnings[0])
 
-        columns = _result_columns_from_payload(payload)
+        columns = _result_columns_from_payload(descriptor)
         return VerifiedResultSource(
-            datasource_id=source_ref.datasource_id,
-            source_sql_artifact_id=source_ref.source_sql_artifact_id,
+            datasource_id=datasource_id,
+            source_sql_artifact_id=str(source.id),
             safe_sql=persisted_safe_sql,
             dialect=artifact_dialect,
             columns=columns,
             fingerprint=persisted_fp,
+            datasource_generation=int(source_run.datasource_generation),
+            original_executed_at=str(descriptor.get("executedAt") or "") or None,
         )
 
     def build_page_sql(self, query: ResultPageQuery) -> str:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
-        source = self.load_verified_source(query.source, ctx)
+        source = self.load_verified_source(query.source)
+        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         return self.compiler.build_page_sql(query, source, ctx)
 
     def build_count_sql(self, query: ResultPageQuery) -> str:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
-        source = self.load_verified_source(query.source, ctx)
+        source = self.load_verified_source(query.source)
+        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         count_sql = self.compiler.build_count_sql(query, source, ctx)
         self._validate_derived_sql(count_sql, ctx)
         return count_sql
 
     def build_export_sql(self, query: ResultExportQuery) -> str:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
-        source = self.load_verified_source(query.source, ctx)
+        source = self.load_verified_source(query.source)
+        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
         return export_sql
@@ -129,6 +133,11 @@ class ResultViewService:
         table_identifier = _qualified_table_identifier(table_schema, table_name, ctx.sqlglot_dialect)
         safe_sql = f"SELECT * FROM {table_identifier}"
         fingerprint = result_source_fingerprint(safe_sql, ctx.sqlglot_dialect)
+        generation = self.db.execute(
+            select(DataSource.connection_generation).where(DataSource.id == source_ref.datasource_id)
+        ).scalar_one_or_none()
+        if generation is None:
+            raise ResultViewError("TABLE_SOURCE_NOT_FOUND", "Table datasource was not found.", status_code=404)
         return VerifiedResultSource(
             datasource_id=source_ref.datasource_id,
             source_sql_artifact_id=f"table:{table.id}",
@@ -143,6 +152,7 @@ class ResultViewService:
                 if str(column.column_name or "").strip()
             ],
             fingerprint=fingerprint,
+            datasource_generation=int(generation),
         )
 
     def page_table(self, query: TablePageQuery) -> ResultPage:
@@ -184,7 +194,13 @@ class ResultViewService:
                 if count_rows and count_rows[0]:
                     row_count = int(list(count_rows[0].values())[0])
             except Exception as exc:
-                logger.warning("Failed to execute exact table count query: %s", exc)
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.RESULT_VIEW_TABLE_EXACT_COUNT,
+                    exc=exc,
+                    fingerprint_subject=f"{query.source.datasource_id}\x00{source.fingerprint}\x00{type(exc).__name__}\x00{exc}",
+                    level="warning",
+                )
 
         return ResultPage(
             columns=list(res.get("columns") or []),
@@ -193,8 +209,12 @@ class ResultViewService:
             page_size=query.page_size,
             row_count=row_count,
             has_next_page=has_next,
-            executed_sql=page_sql,
             latency_ms=int(res.get("latencyMs") or 0),
+            consistency="live_query",
+            view_executed_at=datetime.now(UTC).isoformat(),
+            view_execution_id=f"view_{uuid4().hex}",
+            datasource_generation=source.datasource_generation,
+            query_fingerprint=source.fingerprint,
             warnings=res.get("warnings"),
             notices=res.get("notices"),
         )
@@ -215,14 +235,14 @@ class ResultViewService:
         return CsvExportService.stream_csv(rows, columns), columns
 
     def page(self, query: ResultPageQuery) -> ResultPage:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
-        source = self.load_verified_source(query.source, ctx)
+        source = self.load_verified_source(query.source)
+        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         page_sql = self.compiler.build_page_sql(query, source, ctx)
         self._validate_derived_sql(page_sql, ctx)
-        page_decision = self._result_view_decision(query.source.datasource_id, source.safe_sql, page_sql, scope="page")
+        page_decision = self._result_view_decision(source.datasource_id, source.safe_sql, page_sql, scope="page")
         res = self._execute_query(
             self.db,
-            query.source.datasource_id,
+            source.datasource_id,
             page_sql,
             safety_decision=page_decision,
             safety_policy="readonly",
@@ -237,14 +257,14 @@ class ResultViewService:
                 count_sql = self.compiler.build_count_sql(query, source, ctx)
                 self._validate_derived_sql(count_sql, ctx)
                 count_decision = self._result_view_decision(
-                    query.source.datasource_id,
+                    source.datasource_id,
                     source.safe_sql,
                     count_sql,
                     scope="count",
                 )
                 count_res = self._execute_query(
                     self.db,
-                    query.source.datasource_id,
+                    source.datasource_id,
                     count_sql,
                     safety_decision=count_decision,
                     safety_policy="readonly",
@@ -253,7 +273,13 @@ class ResultViewService:
                 if count_rows and count_rows[0]:
                     row_count = int(list(count_rows[0].values())[0])
             except Exception as exc:
-                logger.warning("Failed to execute exact count query: %s", exc)
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.RESULT_VIEW_EXACT_COUNT,
+                    exc=exc,
+                    fingerprint_subject=f"{source.datasource_id}\x00{source.fingerprint}\x00{type(exc).__name__}\x00{exc}",
+                    level="warning",
+                )
 
         return ResultPage(
             columns=list(res.get("columns") or []),
@@ -262,26 +288,89 @@ class ResultViewService:
             page_size=query.page_size,
             row_count=row_count,
             has_next_page=has_next,
-            executed_sql=page_sql,
             latency_ms=int(res.get("latencyMs") or 0),
+            consistency="live_reexecution",
+            original_executed_at=source.original_executed_at,
+            view_executed_at=datetime.now(UTC).isoformat(),
+            view_execution_id=f"view_{uuid4().hex}",
+            datasource_generation=source.datasource_generation,
+            query_fingerprint=source.fingerprint,
             warnings=res.get("warnings"),
             notices=res.get("notices"),
         )
 
     def export_csv_stream(self, query: ResultExportQuery, *, chunk_size: int = 1000) -> tuple[Iterator[str], list[str]]:
-        ctx = DialectContext.from_datasource_id(self.db, query.source.datasource_id)
-        source = self.load_verified_source(query.source, ctx)
+        source = self.load_verified_source(query.source)
+        ctx = DialectContext.from_datasource_id(self.db, source.datasource_id)
         export_sql = self.compiler.build_export_sql(query, source, ctx)
         self._validate_derived_sql(export_sql, ctx)
-        decision = self._result_view_decision(query.source.datasource_id, source.safe_sql, export_sql, scope="export")
+        decision = self._result_view_decision(source.datasource_id, source.safe_sql, export_sql, scope="export")
         columns = source.column_names
         rows = self.streaming_executor.stream_rows(
-            query.source.datasource_id,
+            source.datasource_id,
             export_sql,
             decision,
             chunk_size=chunk_size,
         )
         return CsvExportService.stream_csv(rows, columns), columns
+
+    def chart_data(self, artifact_id: str, *, max_rows: int = 5_000) -> ChartData:
+        chart = self.db.get(AgentArtifactRecord, artifact_id)
+        if chart is None:
+            raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Chart artifact was not found.", status_code=404)
+        if str(chart.type) != "chart":
+            raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Artifact must be a chart.")
+        descriptor = _artifact_payload(chart)
+        x_column = str(descriptor.get("x") or "").strip()
+        y_columns = descriptor.get("y")
+        y_column = (
+            str(y_columns[0]).strip()
+            if isinstance(y_columns, list) and y_columns
+            else ""
+        )
+        if not x_column or not y_column:
+            raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Chart artifact is missing its field mapping.")
+
+        source = self.load_verified_source(ResultSourceRef(artifact_id=artifact_id))
+        decision = self._result_view_decision(
+            source.datasource_id,
+            source.safe_sql,
+            source.safe_sql,
+            scope="chart",
+        )
+        rows: list[dict[str, Any]] = []
+        truncated = False
+        stream = self.streaming_executor.stream_rows(
+            source.datasource_id,
+            source.safe_sql,
+            decision,
+            chunk_size=min(max_rows + 1, 1_000),
+        )
+        try:
+            for row in stream:
+                if len(rows) >= max_rows:
+                    truncated = True
+                    break
+                rows.append(row)
+        finally:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        return ChartData(
+            series=build_chart_series(
+                rows,
+                x_column,
+                y_column,
+                aggregation=str(descriptor.get("aggregation") or "none"),
+            ),
+            sample_size=len(rows),
+            truncated=truncated,
+            original_executed_at=source.original_executed_at,
+            view_executed_at=datetime.now(UTC).isoformat(),
+            view_execution_id=f"view_{uuid4().hex}",
+            datasource_generation=source.datasource_generation,
+            query_fingerprint=source.fingerprint,
+        )
 
     def _execute_query(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         if self.row_executor is not None:
@@ -290,16 +379,52 @@ class ResultViewService:
 
         return execute_query(*args, **kwargs)
 
-    def _load_source_artifact(self, datasource_id: str, source_artifact_id: str) -> AgentArtifactRecord | None:
-        base_query = (
-            self.db.query(AgentArtifactRecord)
-            .join(AgentRun, AgentRun.id == AgentArtifactRecord.run_id)
-            .filter(AgentRun.datasource_id == datasource_id)
+    def _load_artifact_source(
+        self, artifact_id: str
+    ) -> tuple[AgentArtifactRecord, AgentArtifactRecord, AgentRun]:
+        requested = self.db.get(AgentArtifactRecord, artifact_id)
+        if requested is None:
+            raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Result artifact was not found.", status_code=404)
+        result: AgentArtifactRecord | None = requested
+        if str(requested.type) == "chart":
+            chart_payload = _artifact_payload(requested)
+            source_result_id = _derived_from_id(
+                requested,
+                descriptor_id=str(chart_payload.get("sourceResultArtifactId") or "").strip(),
+            )
+            result = self.db.get(AgentArtifactRecord, source_result_id)
+            if result is not None and (
+                str(result.session_id) != str(requested.session_id)
+                or str(result.run_id) != str(requested.run_id)
+            ):
+                raise ResultViewError("SOURCE_SQL_MISMATCH", "Chart artifact source is outside its Run.")
+        if result is None or str(result.type) != "result_view":
+            raise ResultViewError("SOURCE_ARTIFACT_UNSUPPORTED", "Artifact must resolve to a result view.")
+
+        descriptor = _artifact_payload(result)
+        source_artifact_id = _derived_from_id(
+            result,
+            descriptor_id=str(descriptor.get("sourceSqlArtifactId") or "").strip(),
         )
-        by_id = base_query.filter(AgentArtifactRecord.id == source_artifact_id).first()
-        if by_id is not None:
-            return by_id
-        return None
+        source = self.db.get(AgentArtifactRecord, source_artifact_id)
+        source_run = self.db.get(AgentRun, result.run_id)
+        if source is None or str(source.session_id) != str(result.session_id):
+            raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Source SQL artifact was not found.", status_code=404)
+        if source_run is None or str(source.run_id) != str(result.run_id):
+            raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Artifact source run was not found.", status_code=404)
+
+        current_generation = self.db.execute(
+            select(DataSource.connection_generation).where(DataSource.id == source_run.datasource_id)
+        ).scalar_one_or_none()
+        if current_generation is None:
+            raise ResultViewError("SOURCE_ARTIFACT_NOT_FOUND", "Artifact datasource was not found.", status_code=404)
+        if int(source_run.datasource_generation) != int(current_generation):
+            raise ResultViewError(
+                "SOURCE_DATASOURCE_CHANGED",
+                "The datasource connection changed after this result was created.",
+                status_code=409,
+            )
+        return result, source, source_run
 
     def _load_schema_table(self, datasource_id: str, table_id: str | None, table_name: str) -> SchemaTable | None:
         query = self.db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id)
@@ -359,12 +484,34 @@ def _artifact_payload(record: AgentArtifactRecord) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _derived_from_id(record: AgentArtifactRecord, *, descriptor_id: str) -> str:
+    try:
+        raw_relations = json.loads(str(record.relations_json or "[]"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raw_relations = []
+    source_ids = [
+        str(item.get("artifact_id") or "").strip()
+        for item in raw_relations
+        if isinstance(item, dict) and str(item.get("relation") or "") == "derived_from"
+    ]
+    source_ids = [item for item in source_ids if item]
+    if len(source_ids) != 1:
+        raise ResultViewError(
+            "SOURCE_ARTIFACT_NOT_FOUND",
+            "Artifact must have exactly one derived-from source.",
+            status_code=404,
+        )
+    if not descriptor_id or descriptor_id != source_ids[0]:
+        raise ResultViewError(
+            "SOURCE_SQL_MISMATCH",
+            "Artifact descriptor does not match its source relation.",
+        )
+    return source_ids[0]
+
+
 def _safe_sql_from_payload(payload: dict[str, object]) -> str:
-    for key in ("safeSql", "safe_sql", "sourceSql", "source_sql", "sql"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
+    value = payload.get("safeSql")
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _result_columns_from_payload(payload: dict[str, object]) -> list[ResultColumn]:
@@ -397,14 +544,10 @@ def _normalize_result_column_name(column: str) -> str:
 
 
 def _artifact_fingerprint(payload: dict[str, object], safe_sql: str, dialect: str) -> str:
-    raw = payload.get("fingerprint") or payload.get("sqlFingerprint") or payload.get("sql_fingerprint")
+    raw = payload.get("queryFingerprint")
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
     return result_source_fingerprint(safe_sql, dialect)
-
-
-def _result_source_fingerprint(sql: str, dialect: str) -> str:
-    return result_source_fingerprint(sql, dialect)
 
 
 def _qualified_table_identifier(schema: str | None, table: str, dialect: str) -> str:

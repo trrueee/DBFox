@@ -15,7 +15,7 @@ from engine.security.credential_vault import CredentialKind, InMemoryCredentialV
 
 
 def test_enrollment_returns_only_an_opaque_credential_reference(monkeypatch) -> None:
-    sentinel = "sk-phase1-enrollment-sentinel"
+    sentinel = "TEST_LLM_SECRET"
     vault = InMemoryCredentialVault()
     monkeypatch.setattr("engine.api.credentials.get_credential_vault", lambda: vault)
 

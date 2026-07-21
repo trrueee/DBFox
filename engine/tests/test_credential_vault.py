@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+import engine.security.credential_vault as credential_vault_module
 from engine.errors import DBFoxError
 from engine.security.credential_vault import (
     CredentialKind,
@@ -15,12 +18,12 @@ def test_vault_returns_opaque_id_and_not_the_secret() -> None:
 
     credential_id = vault.put(
         kind=CredentialKind.LLM_API_KEY,
-        secret="sk-phase1-sentinel",
+        secret="TEST_LLM_SECRET",
     )
 
     assert credential_id.startswith("cred_")
-    assert credential_id != "sk-phase1-sentinel"
-    assert vault.get(credential_id) == "sk-phase1-sentinel"
+    assert credential_id != "TEST_LLM_SECRET"
+    assert vault.get(credential_id) == "TEST_LLM_SECRET"
 
 
 def test_vault_rejects_unknown_or_wrong_kind() -> None:
@@ -55,9 +58,40 @@ def test_keyring_vault_fails_closed_when_keyring_is_unavailable(monkeypatch: pyt
     monkeypatch.setattr("engine.security.credential_vault.keyring.set_password", unavailable)
 
     with pytest.raises(DBFoxError) as exc_info:
-        vault.put(kind=CredentialKind.LLM_API_KEY, secret="sk-phase1-sentinel")
+        vault.put(kind=CredentialKind.LLM_API_KEY, secret="TEST_LLM_SECRET")
 
     assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+
+
+def test_credential_vault_has_no_legacy_file_based_secret_store(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A failed keyring write must not revive a local encrypted-secret fallback."""
+    vault = KeyringCredentialVault()
+    runtime_root = tmp_path / "runtime"
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("keyring unavailable")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        credential_vault_module,
+        "_require_os_native_keyring_backend",
+        lambda: None,
+    )
+    monkeypatch.setattr(credential_vault_module.keyring, "set_password", unavailable)
+
+    with pytest.raises(DBFoxError) as exc_info:
+        vault.put(kind=CredentialKind.LLM_API_KEY, secret="TEST_LLM_SECRET")
+
+    module_file = credential_vault_module.__file__
+    assert module_file is not None
+    engine_root = Path(module_file).resolve().parents[1]
+    assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
+    assert not runtime_root.exists()
+    assert not (engine_root / "crypto.py").exists()
 
 
 def test_keyring_reads_fail_closed_when_backend_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -93,7 +127,7 @@ def test_keyring_vault_rejects_an_insecure_backend_before_writing(
     )
 
     with pytest.raises(DBFoxError) as exc_info:
-        vault.put(kind=CredentialKind.LLM_API_KEY, secret="sk-phase1-sentinel")
+        vault.put(kind=CredentialKind.LLM_API_KEY, secret="TEST_LLM_SECRET")
 
     assert exc_info.value.code == "CREDENTIAL_VAULT_UNAVAILABLE"
     assert writes == []
@@ -173,7 +207,7 @@ def test_llm_config_resolves_a_secret_only_from_an_opaque_reference() -> None:
     vault = InMemoryCredentialVault()
     credential_id = vault.put(
         kind=CredentialKind.LLM_API_KEY,
-        secret="sk-phase1-llm-sentinel",
+        secret="TEST_LLM_SECRET",
     )
 
     config = resolve_product_llm_config_from_credential(
@@ -183,6 +217,6 @@ def test_llm_config_resolves_a_secret_only_from_an_opaque_reference() -> None:
         credential_vault=vault,
     )
 
-    assert config.api_key == "sk-phase1-llm-sentinel"
+    assert config.api_key == "TEST_LLM_SECRET"
     assert config.api_base == "https://example.test/v1"
     assert config.model_name == "test-model"

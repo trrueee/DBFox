@@ -41,51 +41,55 @@ class TestSerializeValue:
 
 class TestProcessRows:
     def test_empty_rows(self) -> None:
-        rows, cols, truncated, _ = _process_rows([], ["id", "name"])
-        assert rows == []
-        assert cols == ["id", "name"]
-        assert truncated is False
+        result = _process_rows([], ["id", "name"])
+        assert result.rows == []
+        assert result.columns == ["id", "name"]
+        assert result.truncated is False
 
     def test_basic_processing(self) -> None:
         raw = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
-        rows, cols, truncated, _ = _process_rows(raw, ["id", "name"])
-        assert rows == [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}]
-        assert cols == ["id", "name"]
-        assert truncated is False
+        result = _process_rows(raw, ["id", "name"])
+        assert result.rows == [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}]
+        assert result.columns == ["id", "name"]
+        assert result.truncated is False
 
     def test_column_limit_enforced(self) -> None:
         raw = [{"a": 1, "b": 2, "c": 3, "d": 4}]
-        rows, cols, _, _ = _process_rows(raw, ["a", "b", "c", "d"], max_columns=2)
-        assert cols == ["a", "b"]
+        result = _process_rows(raw, ["a", "b", "c", "d"], max_columns=2)
+        assert result.columns == ["a", "b"]
+        assert result.truncation.columns is True
 
     def test_cell_truncation(self) -> None:
         raw = [{"col": "x" * 100}]
-        rows, _, _, _ = _process_rows(raw, ["col"], max_cell_chars=10)
-        assert rows[0]["col"] == "x" * 10 + "..."
+        result = _process_rows(raw, ["col"], max_cell_chars=10)
+        assert result.rows[0]["col"] == "x" * 10 + "..."
+        assert result.truncation.cells is True
 
     def test_decimal_serialization(self) -> None:
         raw = [{"price": decimal.Decimal("9.99")}]
-        rows, _, _, _ = _process_rows(raw, ["price"])
-        assert rows[0]["price"] == "9.99"
+        result = _process_rows(raw, ["price"])
+        assert result.rows[0]["price"] == "9.99"
 
     def test_none_value_remains_none(self) -> None:
         raw = [{"col": None}]
-        rows, _, _, _ = _process_rows(raw, ["col"])
-        assert rows[0]["col"] is None
+        result = _process_rows(raw, ["col"])
+        assert result.rows[0]["col"] is None
 
     def test_response_byte_limit_truncates_rows(self) -> None:
         raw = [{"col": "x" * 20}, {"col": "y" * 20}]
-        rows, cols, truncated, response_bytes = _process_rows(raw, ["col"], max_response_bytes=35)
-        assert cols == ["col"]
-        assert len(rows) == 1
-        assert truncated is True
-        assert response_bytes <= 35
+        result = _process_rows(raw, ["col"], max_response_bytes=35)
+        assert result.columns == ["col"]
+        assert len(result.rows) == 1
+        assert result.truncation.response_bytes is True
+        assert result.response_bytes <= 35
 
 
 class TestMySQLPool:
     def test_queue_pool_checkout_does_not_require_sqlalchemy_dialect(self, monkeypatch) -> None:
-        import engine.sql.dialect.mysql as mysql_dialect
-        from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
+        import engine.connectivity._pools as pool_manager
+        from engine.connectivity._pools import _get_mysql_pool, _ping_mysql_connection
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
         from engine.sql.pool_registry import get_pool_registry
 
         class FakeConnection:
@@ -101,15 +105,34 @@ class TestMySQLPool:
                 pass
 
         get_pool_registry().dispose_all()
-        monkeypatch.setattr(mysql_dialect.pymysql, "connect", lambda **_params: FakeConnection())
+        monkeypatch.setattr(pool_manager.pymysql, "connect", lambda **_params: FakeConnection())
+        vault = InMemoryCredentialVault()
+        credential_id = vault.put(
+            kind=CredentialKind.DATASOURCE_PASSWORD,
+            secret="secret",
+        )
+        profile = ConnectionProfile.from_mapping(
+            {
+                "id": "ds-mysql",
+                "connection_generation": 1,
+                "is_managed": True,
+                "db_type": "mysql",
+                "host": "127.0.0.1",
+                "port": 3306,
+                "user": "root",
+                "username": "root",
+                "database_name": "app",
+                "password_credential_id": credential_id,
+            }
+        )
 
-        pool = get_mysql_pool("ds-mysql", {
-            "host": "127.0.0.1",
-            "port": 3306,
-            "user": "root",
-            "password": "secret",
-            "database": "app",
-        })
+        pool = _get_mysql_pool(
+            profile,
+            host="127.0.0.1",
+            port=3306,
+            params={"user": "root", "database": "app"},
+            vault=vault,
+        )
         conn_proxy = pool.connect()
         try:
             raw_conn = _ping_mysql_connection(conn_proxy)
@@ -123,9 +146,14 @@ class TestExecutorSQLite:
     """Integration test: execute real queries against the demo SQLite database."""
 
     def test_select_all_users(self, test_datasource_module) -> None:
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
-        rows, columns, truncated, _ = _execute_on_sqlite("SELECT id, username, email FROM users LIMIT 5", sqlite_path=test_datasource_module.database_name)
+        rows, columns, truncated, _ = _execute_on_sqlite(
+            "SELECT id, username, email FROM users LIMIT 5",
+            profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
+        )
         assert len(rows) >= 1
         assert "username" in columns
         assert "email" in columns
@@ -133,45 +161,61 @@ class TestExecutorSQLite:
         assert isinstance(rows[0]["username"], str)
 
     def test_aggregation_query(self, test_datasource_module) -> None:
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
-        rows, columns, _, _ = _execute_on_sqlite("SELECT COUNT(*) AS cnt FROM users", sqlite_path=test_datasource_module.database_name)
+        rows, columns, _, _ = _execute_on_sqlite(
+            "SELECT COUNT(*) AS cnt FROM users",
+            profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
+        )
         assert len(rows) == 1
         assert columns == ["cnt"]
         assert int(rows[0]["cnt"]) > 0
 
     def test_join_query(self, test_datasource_module) -> None:
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT u.username, o.total_amount FROM users u "
             "JOIN orders o ON u.id = o.user_id LIMIT 5",
-            sqlite_path=test_datasource_module.database_name,
+            profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
         )
         assert len(rows) >= 1
         assert "username" in columns
         assert "total_amount" in columns
 
     def test_row_limit_enforced(self, test_datasource_module) -> None:
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
-        rows, _, _, _ = _execute_on_sqlite("SELECT * FROM users", sqlite_path=test_datasource_module.database_name)
+        rows, _, _, _ = _execute_on_sqlite(
+            "SELECT * FROM users",
+            profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
+        )
         assert len(rows) <= MAX_ROWS
 
     def test_non_select_rejected(self, test_datasource_module) -> None:
         """SQLite executes DDL without issue, but guardrail should be tested separately."""
         # This test verifies SQLite execution works; guardrail handles DDL blocking.
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
         rows, columns, _, _ = _execute_on_sqlite(
             "SELECT name FROM sqlite_master WHERE type='table' LIMIT 5",
-            sqlite_path=test_datasource_module.database_name,
+            profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
         )
         assert len(columns) == 1
         assert "name" in columns
 
     def test_sqlite_timeout(self, test_datasource_module) -> None:
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
 
         with pytest.raises(TimeoutError):
             _execute_on_sqlite(
@@ -179,12 +223,14 @@ class TestExecutorSQLite:
                 "SELECT 1 UNION ALL SELECT x + 1 FROM cnt WHERE x < 100000000"
                 ") SELECT sum(x) FROM cnt",
                 timeout_ms=0,
-                sqlite_path=test_datasource_module.database_name,
+                profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
             )
 
     def test_sqlite_query_can_be_cancelled(self, test_datasource_module) -> None:
         from engine.errors import SQLQueryCancelledError
-        from engine.sql.executor import _execute_on_sqlite
+        from engine.connectivity.profile import ConnectionProfile
+        from engine.datasource import datasource_connection_dict
+        from engine.sql.dialect.sqlite import _execute_on_sqlite
         from engine.query_registry import QUERY_REGISTRY
 
         execution_id = "test-sqlite-cancel"
@@ -200,7 +246,7 @@ class TestExecutorSQLite:
                 long_sql,
                 timeout_ms=30000,
                 execution_id=execution_id,
-                sqlite_path=test_datasource_module.database_name,
+                profile=ConnectionProfile.from_mapping(datasource_connection_dict(test_datasource_module)),
             )
 
             deadline = time.time() + 3
@@ -267,7 +313,7 @@ class TestPerformanceAndExplain:
         assert "schema validation" in str(exc_info.value).lower() or "unknown" in str(exc_info.value).lower()
 
     def test_execute_query_rejects_mismatched_safety_decision(self, db_session_module, test_datasource_module) -> None:
-        from engine.sql.executor import validate_sql_schema
+        from engine.sql.safety_gate import validate_sql_schema
         from engine.errors import GuardrailValidationError
         from engine.sql.trust_gate import TrustGate
 
@@ -285,6 +331,21 @@ class TestPerformanceAndExplain:
             )
 
         assert any(check["rule"] == "safety_decision_sql_mismatch" for check in exc_info.value.checks)
+
+    def test_execute_query_rejects_a_changed_expected_connection_generation(
+        self,
+        db_session_module,
+        test_datasource_module,
+    ) -> None:
+        from engine.errors import SQLExecutionError
+
+        with pytest.raises(SQLExecutionError, match="Datasource connection profile changed"):
+            execute_query(
+                db_session_module,
+                test_datasource_module.id,
+                "SELECT id FROM users LIMIT 3",
+                expected_connection_generation=int(test_datasource_module.connection_generation) + 1,
+            )
 
     def test_execute_query_bypass_requires_testing_env(self, db_session_module, test_datasource_module, monkeypatch) -> None:
         from engine.errors import GuardrailValidationError

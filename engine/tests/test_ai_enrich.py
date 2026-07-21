@@ -7,6 +7,7 @@ import pytest
 import engine.api.datasources.schema as schema_api
 from engine.ai_index import enrich_tables_batch
 from engine.ai_enrich import ai_enrich_catalog
+from engine.environment.authoritative_inventory import AuthoritativeInventory
 from engine.environment.inventory import SchemaInventory
 from engine.environment.schema_catalog_sync import SchemaCatalogSync
 from engine.errors import DBFoxError
@@ -85,7 +86,7 @@ def test_ai_enrich_catalog_batches_tables_by_default(db_session, test_datasource
 
 
 def test_ai_enrich_does_not_use_environment_api_key(monkeypatch, db_session, test_datasource) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    monkeypatch.setenv("OPENAI_API_KEY", "TEST_LLM_SECRET")
     table = SchemaTable(
         id=str(uuid.uuid4()),
         data_source_id=test_datasource.id,
@@ -169,10 +170,11 @@ def test_catalog_sync_records_a_fixed_enrichment_failure_for_config_errors(
         fail_provider_config,
     )
 
-    result = SchemaCatalogSync().sync_inventory(
+    result = SchemaCatalogSync().sync_authoritative(
         db_session,
-        test_datasource.id,
-        SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite"),
+        AuthoritativeInventory.from_completed_inventory(
+            SchemaInventory(datasource_id=test_datasource.id, dialect="sqlite")
+        ),
         ai_enrich=True,
         llm_credential_id="cred_llm_api_key_schema_sync_test",
     )

@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from engine.agent_core.types import AgentRunResponse
+from engine.agent.service import AgentExecutionResult
 from engine.app.safe_errors import FixedErrorCode
 from engine.models import AgentGoldenTask
 
@@ -44,7 +44,7 @@ class AgentCaseEvaluator:
     def evaluate(
         self,
         task: AgentGoldenTask,
-        response: AgentRunResponse,
+        response: AgentExecutionResult,
         events: list[dict[str, Any]] | None = None,
         trace: list[dict[str, Any]] | None = None,
         db: Session | None = None,
@@ -60,7 +60,7 @@ class AgentCaseEvaluator:
 
         actual_tools = _extract_actual_tools(response, events or [])
         actual_artifact_types = [a.type for a in (response.artifacts or [])]
-        actual_intent = _extract_actual_intent(response)
+        actual_intent = _extract_actual_intent(response, actual_tools)
         actual_answer = _extract_answer_text(response)
 
         # 1. expected_intent
@@ -304,35 +304,34 @@ def _parse_json_dict(raw: str) -> dict[str, Any]:
         return {}
 
 
-def _extract_actual_tools(response: AgentRunResponse, events: list[dict[str, Any]]) -> list[str]:
+def _extract_actual_tools(response: AgentExecutionResult, events: list[dict[str, Any]]) -> list[str]:
     tools: set[str] = set()
     for step in response.steps or []:
         if step.name:
             tools.add(step.name)
     for event in events:
-        event_step = event.get("step") if isinstance(event.get("step"), dict) else None
-        if event_step:
-            name = event_step.get("name")
-            if name:
-                tools.add(str(name))
-        event_type = event.get("type", "")
-        if isinstance(event_type, str):
-            tools.add(event_type)
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        invocation = payload.get("tool_invocation") if isinstance(payload, dict) else None
+        if isinstance(invocation, dict) and invocation.get("tool_name"):
+            tools.add(str(invocation["tool_name"]))
     return sorted(tools)
 
 
-def _extract_actual_intent(response: AgentRunResponse) -> str | None:
-    for artifact in response.artifacts or []:
-        if artifact.type == "agent_plan" and isinstance(artifact.payload, dict):
-            intent = artifact.payload.get("intent")
-            if intent:
-                return str(intent)
-    if response.context_summary:
-        return response.context_summary
-    return None
+def _extract_actual_intent(response: AgentExecutionResult, actual_tools: list[str]) -> str:
+    tools = set(actual_tools)
+    if "analysis.review" in tools:
+        return "analytical"
+    if "sql.execute_readonly" in tools:
+        return "lookup"
+    if tools & {
+        "db.observe", "db.search", "db.inspect", "schema.list_tables",
+        "schema.list_tables_page", "schema.describe_table", "schema.expand_related_tables",
+    }:
+        return "schema"
+    return "direct"
 
 
-def _extract_answer_text(response: AgentRunResponse) -> str:
+def _extract_answer_text(response: AgentExecutionResult) -> str:
     parts: list[str] = []
     if response.answer and response.answer.answer:
         parts.append(response.answer.answer)
@@ -343,25 +342,30 @@ def _extract_answer_text(response: AgentRunResponse) -> str:
     return " ".join(parts)
 
 
-def _extract_approval_state(response: AgentRunResponse, events: list[dict[str, Any]]) -> str | None:
-    if response.status:
-        if response.status == "waiting_approval":
-            return "waiting_approval"
-        if response.status in ("approved", "success"):
-            return "approved"
-        if response.status == "rejected":
-            return "rejected"
+def _extract_approval_state(response: AgentExecutionResult, events: list[dict[str, Any]]) -> str | None:
+    latest_event_state: str | None = None
     for event in events:
-        etype = str(event.get("type", ""))
+        etype = str(event.get("event_type", ""))
         if "approval" in etype:
-            if "approved" in etype or "resolved" in etype:
-                return "approved"
-            if "rejected" in etype:
-                return "rejected"
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            approval = payload.get("approval") if isinstance(payload, dict) else None
+            status = str(approval.get("status") or "") if isinstance(approval, dict) else ""
+            if status in {"approved", "rejected", "pending", "expired"}:
+                latest_event_state = "waiting_approval" if status == "pending" else status
+            elif etype == "approval.requested":
+                latest_event_state = "waiting_approval"
+    if latest_event_state is not None:
+        return latest_event_state
+    if response.status == "waiting_approval":
+        return "waiting_approval"
+    if response.status == "approved":
+        return "approved"
+    if response.status == "rejected":
+        return "rejected"
     return "none"
 
 
-def _check_proposed_sql_safety(response: AgentRunResponse) -> list[str]:
+def _check_proposed_sql_safety(response: AgentExecutionResult) -> list[str]:
     failures: list[str] = []
     for artifact in response.artifacts or []:
         payload = artifact.payload if isinstance(artifact.payload, dict) else {}

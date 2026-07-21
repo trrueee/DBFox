@@ -2,8 +2,7 @@ from __future__ import annotations
 import re
 from typing import Any
 from sqlalchemy.orm import Session
-from engine.models import SemanticAlias
-from engine.policy.redactor import DataRedactor
+from engine.models import SchemaColumn, SchemaTable, SemanticAlias
 
 _SENSITIVE_PATTERN_STRINGS = [
     r"\b(password|passwd|secret|token|credential|api_key)\b",
@@ -70,6 +69,20 @@ def load_sensitivity(db: Session, datasource_id: str) -> re.Pattern:
             patterns.append(alias)
         else:
             patterns.append(re.escape(alias))
+    pii_column_names = (
+        db.query(SchemaColumn.column_name)
+        .join(SchemaTable, SchemaColumn.table_id == SchemaTable.id)
+        .filter(
+            SchemaTable.data_source_id == datasource_id,
+            SchemaColumn.is_pii.is_(True),
+        )
+        .all()
+    )
+    patterns.extend(
+        rf"\b{re.escape(str(column_name))}\b"
+        for (column_name,) in pii_column_names
+        if str(column_name).strip()
+    )
     if not patterns:
         return _SENSITIVE_FALLBACK
     return re.compile("|".join(patterns))
@@ -78,12 +91,7 @@ def redact_row(row: dict[str, Any], sensitivity: re.Pattern | None = None) -> di
     redacted: dict[str, Any] = {}
     for key, value in row.items():
         if sensitivity and sensitivity.search(key):
-            if isinstance(value, str):
-                redacted[key] = DataRedactor.redact_sql(value)
-            elif value is not None:
-                redacted[key] = "[REDACTED]"
-            else:
-                redacted[key] = None
+            redacted[key] = None if value is None else "[REDACTED]"
         else:
             redacted[key] = value
     return redacted

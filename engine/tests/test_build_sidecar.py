@@ -28,6 +28,18 @@ def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
     assert before_build.index("build_sidecar.py") < before_build.index("npm run build")
 
 
+def test_tauri_config_does_not_disable_platform_security_features() -> None:
+    config_path = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "tauri.conf.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    browser_args = " ".join(
+        window.get("additionalBrowserArgs", "")
+        for window in config["app"].get("windows", [])
+    )
+
+    assert "msSmartScreenProtection" not in browser_args
+    assert "--no-proxy-server" not in browser_args
+
+
 def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
     source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
 
@@ -35,6 +47,44 @@ def test_sidecar_builder_has_no_langsmith_plaintext_export_path() -> None:
     assert "langsmith.env" not in source
     assert "LANGCHAIN_" not in source
     assert "LANGSMITH_" not in source
+
+
+def test_duckdb_runtime_dependency_and_sidecar_import_are_declared() -> None:
+    root = Path(__file__).resolve().parents[2]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+
+    assert any(line.startswith("duckdb") for line in requirements.splitlines())
+    assert "duckdb" in build_sidecar.HIDDEN_IMPORTS
+
+
+def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> None:
+    root = Path(__file__).resolve().parents[2]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+
+    assert any(line.lower().startswith("pyyaml") for line in requirements.splitlines())
+    assert any(line.startswith("openai") for line in requirements.splitlines())
+    assert not any(line.startswith(("langgraph", "langchain", "langsmith")) for line in requirements.splitlines())
+    assert "openai" in build_sidecar.HIDDEN_IMPORTS
+    assert "langsmith" in build_sidecar.HIDDEN_IMPORTS
+
+
+def test_sidecar_build_dependencies_are_separate_from_runtime_dependencies() -> None:
+    root = Path(__file__).resolve().parents[2]
+    requirements = (root / "requirements-build.txt").read_text(encoding="utf-8")
+
+    assert "-r requirements.txt" in requirements
+    assert any(line.startswith("pyinstaller") for line in requirements.lower().splitlines())
+
+
+def test_removed_local_crypto_is_not_a_direct_runtime_dependency() -> None:
+    root = Path(__file__).resolve().parents[2]
+    requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+    development_requirements = (root / "requirements-dev.txt").read_text(encoding="utf-8")
+
+    assert not any(line.startswith("cryptography") for line in requirements.splitlines())
+    assert "types-cryptography" not in development_requirements
+    assert "cryptography" not in build_sidecar.HIDDEN_IMPORTS
+    assert not (root / "engine" / "crypto.py").exists()
 
 
 def test_token_only_does_not_write_production_static_token(monkeypatch, tmp_path) -> None:

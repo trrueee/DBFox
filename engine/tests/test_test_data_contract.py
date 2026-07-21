@@ -95,10 +95,8 @@ def test_generate_smart_test_data_rolls_back_target_sqlite_batch_on_failure(
         port=0,
         database_name=str(sqlite_path),
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         db_type="sqlite",
+        connection_generation=1,
         env="dev",
         status="active",
     )

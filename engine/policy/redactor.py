@@ -10,9 +10,11 @@ class DataRedactor:
     # Regular expressions for PII detection
     EMAIL_REGEX = re.compile(r"\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b")
     PHONE_REGEX = re.compile(
-        r"(?<!\d)(?:\+?86[-.\s]?)?1[3-9]\d{9}(?!\d)"
-        r"|(?<!\d)(?:\+?86[-.\s]?)?\d{3,4}[-\s]\d{7,8}(?!\d)"
-        r"|(?<![\d-])(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}(?![\d-])"
+        r"(?<![A-Za-z0-9_-])(?:"
+        r"(?:\+?86[-.\s]?)?1[3-9]\d{9}"
+        r"|(?:\+?86[-.\s]?)?\d{3,4}[-\s]\d{7,8}"
+        r"|(?:\+?1[-.\s]?)?(?:\(\d{3}\)|\d{3})[-.\s]\d{3}[-.\s]\d{4}"
+        r")(?![A-Za-z0-9_-])"
     )
     CREDIT_CARD_REGEX = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
     

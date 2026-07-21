@@ -5,11 +5,11 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Literal
 
-import pymysql
-
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 
-BackendKind = Literal["sqlite", "mysql", "postgresql"]
+BackendKind = Literal["sqlite", "duckdb", "mysql", "postgresql"]
 
 
 @dataclass
@@ -18,16 +18,18 @@ class RunningQuery:
     datasource_id: str
     backend: BackendKind
     sqlite_connection: sqlite3.Connection | None = None
+    duckdb_connection: Any = None
     mysql_thread_id: int | None = None
-    mysql_params: dict[str, Any] | None = None
+    mysql_profile: ConnectionProfile | None = None
     postgres_connection: Any = None
     cancel_requested: bool = False
 
 
 class QueryRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, connection_factory: ConnectionFactory | None = None) -> None:
         self._lock = threading.RLock()
         self._queries: dict[str, RunningQuery] = {}
+        self._connection_factory = connection_factory or ConnectionFactory()
 
     def register_sqlite(
         self,
@@ -61,14 +63,29 @@ class QueryRegistry:
                 cancel_requested=existing.cancel_requested if existing else False,
             )
 
+    def register_duckdb(
+        self,
+        execution_id: str,
+        datasource_id: str,
+        connection: Any,
+    ) -> None:
+        with self._lock:
+            existing = self._queries.get(execution_id)
+            self._queries[execution_id] = RunningQuery(
+                execution_id=execution_id,
+                datasource_id=datasource_id,
+                backend="duckdb",
+                duckdb_connection=connection,
+                cancel_requested=existing.cancel_requested if existing else False,
+            )
+
     def register_mysql(
         self,
         execution_id: str,
         datasource_id: str,
-        params: dict[str, Any],
+        profile: ConnectionProfile,
         thread_id: int,
     ) -> None:
-        safe_params = dict(params)
         with self._lock:
             existing = self._queries.get(execution_id)
             self._queries[execution_id] = RunningQuery(
@@ -76,7 +93,7 @@ class QueryRegistry:
                 datasource_id=datasource_id,
                 backend="mysql",
                 mysql_thread_id=thread_id,
-                mysql_params=safe_params,
+                mysql_profile=profile,
                 cancel_requested=existing.cancel_requested if existing else False,
             )
 
@@ -108,8 +125,9 @@ class QueryRegistry:
             query.cancel_requested = True
             backend = query.backend
             sqlite_connection = query.sqlite_connection
+            duckdb_connection = query.duckdb_connection
             mysql_thread_id = query.mysql_thread_id
-            mysql_params = dict(query.mysql_params or {})
+            mysql_profile = query.mysql_profile
             postgres_connection = query.postgres_connection
 
         if backend == "sqlite" and sqlite_connection is not None:
@@ -120,6 +138,23 @@ class QueryRegistry:
                 "executionId": execution_id,
                 "message": "SQLite query interruption requested.",
             }
+
+        if backend == "duckdb" and duckdb_connection is not None:
+            try:
+                duckdb_connection.interrupt()
+                return {
+                    "success": True,
+                    "cancelled": True,
+                    "executionId": execution_id,
+                    "message": "DuckDB query interruption requested.",
+                }
+            except Exception:
+                return {
+                    "success": False,
+                    "cancelled": False,
+                    "executionId": execution_id,
+                    "message": fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED),
+                }
 
         if backend == "postgresql" and postgres_connection is not None:
             try:
@@ -138,9 +173,9 @@ class QueryRegistry:
                     "message": fixed_error_message(FixedErrorCode.QUERY_CANCELLATION_FAILED),
                 }
 
-        if backend == "mysql" and mysql_thread_id is not None and mysql_params:
+        if backend == "mysql" and mysql_thread_id is not None and mysql_profile is not None:
             try:
-                self._kill_mysql_query(mysql_params, mysql_thread_id)
+                self._kill_mysql_query(mysql_profile, mysql_thread_id)
                 return {
                     "success": True,
                     "cancelled": True,
@@ -162,14 +197,16 @@ class QueryRegistry:
             "message": "Running query backend is not cancellable yet.",
         }
 
-    def _kill_mysql_query(self, params: dict[str, Any], thread_id: int) -> None:
-        params = dict(params)
-        killer = pymysql.connect(**params)
-        try:
+    def _kill_mysql_query(self, profile: ConnectionProfile, thread_id: int) -> None:
+        """Open a dedicated cancellation connection without retaining a password."""
+        with self._connection_factory.connection_scope(
+            profile,
+            purpose=ConnectionPurpose.QUERY,
+            read_only=False,
+            pooled=False,
+        ) as killer:
             with killer.cursor() as cursor:
                 cursor.execute("KILL QUERY %s", (thread_id,))
-        finally:
-            killer.close()
 
 
 QUERY_REGISTRY = QueryRegistry()

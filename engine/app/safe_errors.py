@@ -7,6 +7,9 @@ never rendered into public payloads or diagnostics.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
 from enum import Enum
 from logging import Logger
 from typing import Final, Literal
@@ -27,6 +30,7 @@ class FixedErrorCode(str, Enum):
     SOURCE_SQL_MISSING = "SOURCE_SQL_MISSING"
     SOURCE_SQL_MISMATCH = "SOURCE_SQL_MISMATCH"
     SOURCE_SQL_VALIDATION_FAILED = "SOURCE_SQL_VALIDATION_FAILED"
+    SOURCE_DATASOURCE_CHANGED = "SOURCE_DATASOURCE_CHANGED"
     TABLE_SOURCE_NOT_FOUND = "TABLE_SOURCE_NOT_FOUND"
     TABLE_COLUMNS_NOT_FOUND = "TABLE_COLUMNS_NOT_FOUND"
     DERIVED_SQL_VALIDATION_FAILED = "DERIVED_SQL_VALIDATION_FAILED"
@@ -42,6 +46,9 @@ class FixedErrorCode(str, Enum):
     SQL_EMPTY = "SQL_EMPTY"
     BACKUP_OPERATION_FAILED = "BACKUP_OPERATION_FAILED"
     BACKUP_CLIENT_NOT_FOUND = "BACKUP_CLIENT_NOT_FOUND"
+    RESTORE_REQUIRES_ISOLATED_TARGET = "RESTORE_REQUIRES_ISOLATED_TARGET"
+    RESTORE_OPERATION_FAILED = "RESTORE_OPERATION_FAILED"
+    RESTORE_VERSION_CONFLICT = "RESTORE_VERSION_CONFLICT"
     QUERY_EXECUTION_FAILED = "QUERY_EXECUTION_FAILED"
     QUERY_CANCELLATION_FAILED = "QUERY_CANCELLATION_FAILED"
     SCHEMA_SYNC_FAILED = "SCHEMA_SYNC_FAILED"
@@ -67,6 +74,7 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SOURCE_SQL_MISSING: "The source artifact does not contain safe SQL.",
     FixedErrorCode.SOURCE_SQL_MISMATCH: "Requested SQL does not match the source artifact.",
     FixedErrorCode.SOURCE_SQL_VALIDATION_FAILED: "The source SQL could not be validated.",
+    FixedErrorCode.SOURCE_DATASOURCE_CHANGED: "数据源连接已发生变化，请重新执行查询。",
     FixedErrorCode.TABLE_SOURCE_NOT_FOUND: "The requested table source was not found.",
     FixedErrorCode.TABLE_COLUMNS_NOT_FOUND: "The table source does not have synced columns.",
     FixedErrorCode.DERIVED_SQL_VALIDATION_FAILED: "The derived SQL could not be validated.",
@@ -82,6 +90,13 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
     FixedErrorCode.SQL_EMPTY: "SQL cannot be empty.",
     FixedErrorCode.BACKUP_OPERATION_FAILED: "The backup operation could not be completed.",
     FixedErrorCode.BACKUP_CLIENT_NOT_FOUND: "The database backup client is unavailable.",
+    FixedErrorCode.RESTORE_REQUIRES_ISOLATED_TARGET: (
+        "Database restore is unavailable until an isolated target-and-switch recovery workflow is configured."
+    ),
+    FixedErrorCode.RESTORE_OPERATION_FAILED: "The database restore could not be completed.",
+    FixedErrorCode.RESTORE_VERSION_CONFLICT: (
+        "The datasource changed while the restore was running; no cutover was performed."
+    ),
     FixedErrorCode.QUERY_EXECUTION_FAILED: "The query could not be completed.",
     FixedErrorCode.QUERY_CANCELLATION_FAILED: "The query cancellation request could not be completed.",
     FixedErrorCode.SCHEMA_SYNC_FAILED: "Schema synchronization failed.",
@@ -95,6 +110,7 @@ _FIXED_ERROR_MESSAGES: Final[dict[FixedErrorCode, str]] = {
 
 class SafeLogOperation(str, Enum):
     UNEXPECTED = "unexpected_internal_error"
+    AGENT_MODEL_PROVIDER_STREAM = "agent_model_provider_stream"
     AGENT_SQL_CONSOLE_EXECUTION = "agent_sql_console_execution"
     AGENT_RESULT_PAGE = "agent_result_page"
     AGENT_TABLE_RESULT_PAGE = "agent_table_result_page"
@@ -130,6 +146,7 @@ class SafeLogOperation(str, Enum):
     DB_TOOL_EXECUTION = "db_tool_execution"
     DATASOURCE_TEST_SSH_TUNNEL = "datasource_test_ssh_tunnel"
     DATASOURCE_TEST_SQLITE_CONNECTION = "datasource_test_sqlite_connection"
+    DATASOURCE_TEST_DUCKDB_CONNECTION = "datasource_test_duckdb_connection"
     DATASOURCE_TEST_POSTGRES_CONNECTION = "datasource_test_postgres_connection"
     DATASOURCE_TEST_MYSQL_CONNECTION = "datasource_test_mysql_connection"
     DATASOURCE_HEALTH_CHECK = "datasource_health_check"
@@ -151,6 +168,17 @@ class SafeLogOperation(str, Enum):
     QUERY_HISTORY_WRITE = "query_history_write"
     SQL_SENSITIVITY_LOAD = "sql_sensitivity_load"
     BACKUP_REFRESH_CATALOG = "backup_refresh_catalog"
+    POLICY_SQL_PARSE = "policy_sql_parse"
+    SQL_GUARDRAIL_PARSE = "sql_guardrail_parse"
+    SQL_GUARDRAIL_LIMIT_ENFORCEMENT = "sql_guardrail_limit_enforcement"
+    SQL_GUARDRAIL_GENERATED_SYNTAX = "sql_guardrail_generated_syntax"
+    SQL_SAFETY_BYPASS = "sql_safety_bypass"
+    SQL_SCHEMA_VALIDATION_PARSE = "sql_schema_validation_parse"
+    SQL_SCHEMA_VALIDATION_UNEXPECTED = "sql_schema_validation_unexpected"
+    SQL_MYSQL_TIMEOUT_ENFORCEMENT = "sql_mysql_timeout_enforcement"
+    SQL_POSTGRES_TIMEOUT_ENFORCEMENT = "sql_postgres_timeout_enforcement"
+    RESULT_VIEW_TABLE_EXACT_COUNT = "result_view_table_exact_count"
+    RESULT_VIEW_EXACT_COUNT = "result_view_exact_count"
     DB_SEARCH_FTS_FALLBACK = "db_search_fts_fallback"
     DB_INSPECT_INDEXES = "db_inspect_indexes"
     DB_INSPECT_ROW_ESTIMATE = "db_inspect_row_estimate"
@@ -173,14 +201,57 @@ def fixed_error_message(code: FixedErrorCode) -> str:
     return fixed_error_detail(code)["message"]
 
 
+_DIAGNOSTIC_FINGERPRINT_KEY: Final[bytes] = secrets.token_bytes(32)
+
+
+def diagnostic_fingerprint(value: object) -> str:
+    """Return an opaque, process-scoped correlation fingerprint.
+
+    Sensitive diagnostics are intentionally keyed with process-local entropy
+    instead of a plain digest.  This permits correlation inside one running
+    process without making low-entropy SQL literals or exception text
+    guessable from diagnostic logs after the process exits.
+    """
+    try:
+        payload = value if isinstance(value, bytes) else str(value).encode("utf-8", "replace")
+    except Exception:
+        payload = type(value).__name__.encode("utf-8")
+    return hmac.new(_DIAGNOSTIC_FINGERPRINT_KEY, payload, hashlib.sha256).hexdigest()[:24]
+
+
+def log_sensitive_diagnostic(
+    logger: Logger,
+    *,
+    operation: SafeLogOperation,
+    subject: object,
+    subject_type: Literal["sql", "exception", "event"],
+    level: Literal["warning", "error"] = "warning",
+) -> None:
+    """Log a cataloged diagnostic without rendering SQL or exception text."""
+    safe_operation = operation if isinstance(operation, SafeLogOperation) else SafeLogOperation.UNEXPECTED
+    log = logger.warning if level == "warning" else logger.error
+    log(
+        "code=%s type=%s fingerprint=%s",
+        safe_operation.value,
+        subject_type,
+        diagnostic_fingerprint(subject),
+    )
+
+
 def log_unexpected_exception(
     logger: Logger,
     *,
     operation: SafeLogOperation,
     exc: Exception,
+    fingerprint_subject: object | None = None,
     level: Literal["warning", "error"] = "error",
 ) -> None:
-    """Log a static operation label and exception class, never exception text."""
+    """Log a cataloged error code, exception type, and opaque fingerprint only."""
     safe_operation = operation if isinstance(operation, SafeLogOperation) else SafeLogOperation.UNEXPECTED
     log = logger.warning if level == "warning" else logger.error
-    log("%s failed (%s)", safe_operation.value, type(exc).__name__)
+    log(
+        "code=%s type=%s fingerprint=%s",
+        safe_operation.value,
+        type(exc).__name__,
+        diagnostic_fingerprint(exc if fingerprint_subject is None else fingerprint_subject),
+    )

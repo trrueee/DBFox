@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Final, Literal
+from typing import Any, Callable, Final, Literal
 
 from pydantic import ValidationError
 
-from engine.agent_core.types import ToolObservation
+from engine.tools.runtime.result import ToolResult
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.tools.runtime.context import ToolRunContext
 from engine.tools.runtime.registry import ToolRegistry
@@ -45,7 +45,9 @@ class ToolRuntime:
         state: dict[str, Any],
         request: Any | None,
         db: Any | None,
-    ) -> ToolObservation:
+        cancellation_probe: Callable[[], bool] | None = None,
+        deadline: float | None = None,
+    ) -> ToolResult:
         tool = self.registry.require(tool_name)
         start = time.perf_counter()
 
@@ -79,6 +81,18 @@ class ToolRuntime:
             for key in tool.state.consumes
             if key in state
         }
+        if cancellation_probe and cancellation_probe():
+            return ToolResult(
+                name=tool_name, status="failed", input=dict(raw_input),
+                error="Tool execution was cancelled.", error_code="TOOL_CANCELLED",
+                latency_ms=int((time.perf_counter() - start) * 1_000),
+            )
+        if deadline is not None and time.monotonic() >= deadline:
+            return ToolResult(
+                name=tool_name, status="failed", input=dict(raw_input),
+                error="Tool execution exceeded its deadline.", error_code="TOOL_TIMEOUT",
+                latency_ms=int((time.perf_counter() - start) * 1_000),
+            )
         try:
             output = tool.run(
                 parsed_input,
@@ -88,8 +102,22 @@ class ToolRuntime:
                     db=db,
                     read_only=tool.policy.side_effect not in {"write", "destructive"},
                     raw_input=coerced_input,
+                    cancellation_probe=cancellation_probe,
+                    deadline=deadline,
                 ),
             )
+            if cancellation_probe and cancellation_probe():
+                return ToolResult(
+                    name=tool_name, status="failed", input=dict(raw_input),
+                    error="Tool execution was cancelled.", error_code="TOOL_CANCELLED",
+                    latency_ms=int((time.perf_counter() - start) * 1_000),
+                )
+            if deadline is not None and time.monotonic() >= deadline:
+                return ToolResult(
+                    name=tool_name, status="failed", input=dict(raw_input),
+                    error="Tool execution exceeded its deadline.", error_code="TOOL_TIMEOUT",
+                    latency_ms=int((time.perf_counter() - start) * 1_000),
+                )
             parsed_output = tool.output_model.model_validate(output)
         except ValidationError as exc:
             return self._failed(
@@ -110,12 +138,13 @@ class ToolRuntime:
 
         elapsed = int((time.perf_counter() - start) * 1000)
         logger.info("%s OK (%dms)", tool_name, elapsed)
-        return ToolObservation(
+        return ToolResult(
             name=tool_name,
             status="success",
             input=dict(raw_input),
             output=parsed_output.model_dump(mode="json"),
             error=None,
+            error_code=None,
             latency_ms=elapsed,
         )
 
@@ -127,13 +156,13 @@ class ToolRuntime:
         code: ToolFailureCode,
         exc: Exception,
         start: float,
-    ) -> ToolObservation:
+    ) -> ToolResult:
         log_unexpected_exception(
             logger,
             operation=_TOOL_FAILURE_OPERATIONS[code],
             exc=exc,
         )
-        return ToolObservation(
+        return ToolResult(
             name=tool_name,
             status="failed",
             input=dict(raw_input),
@@ -143,5 +172,6 @@ class ToolRuntime:
                 "error_type": type(exc).__name__,
             },
             error=_TOOL_FAILURE_MESSAGES[code],
+            error_code=code,
             latency_ms=int((time.perf_counter() - start) * 1000),
         )

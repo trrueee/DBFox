@@ -17,6 +17,8 @@ from engine.sql.result_view.models import (
     ResultPageQuery,
     ResultViewError,
     ResultViewQuery,
+    TablePageQuery,
+    TableViewQuery,
     VerifiedResultSource,
 )
 
@@ -24,7 +26,7 @@ from engine.sql.result_view.models import (
 class ResultViewCompiler:
     def build_view_sql(
         self,
-        query: ResultViewQuery,
+        query: ResultViewQuery | TableViewQuery,
         source: VerifiedResultSource,
         ctx: DialectContext,
         *,
@@ -61,7 +63,7 @@ class ResultViewCompiler:
 
     def build_page_sql(
         self,
-        query: ResultPageQuery,
+        query: ResultPageQuery | TablePageQuery,
         source: VerifiedResultSource,
         ctx: DialectContext,
     ) -> str:
@@ -75,7 +77,7 @@ class ResultViewCompiler:
 
     def build_count_sql(
         self,
-        query: ResultPageQuery,
+        query: ResultPageQuery | TablePageQuery,
         source: VerifiedResultSource,
         ctx: DialectContext,
     ) -> str:
@@ -103,7 +105,7 @@ class ResultViewCompiler:
 
     def build_export_sql(
         self,
-        query: ResultViewQuery,
+        query: ResultViewQuery | TableViewQuery,
         source: VerifiedResultSource,
         ctx: DialectContext,
     ) -> str:

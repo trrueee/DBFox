@@ -8,10 +8,21 @@ works without it.
 from __future__ import annotations
 
 import logging
+from numbers import Real
+import re
 from typing import Any, Callable
 
+from pydantic import ValidationError
+
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
-from engine.evaluation.schemas import AgentEvalCase, AgentEvalCaseResult
+from engine.evaluation.schemas import (
+    AgentEvalCase,
+    AgentEvalCaseResult,
+    AgentEvalExpectation,
+    AgentEvalInput,
+    AnswerExpectation,
+)
+from engine.llm.endpoint_policy import LlmEndpointPolicyError, validate_runtime_llm_api_base
 from engine.security.credential_vault import (
     CredentialKind,
     CredentialVault,
@@ -20,6 +31,52 @@ from engine.security.credential_vault import (
 
 logger = logging.getLogger("dbfox.eval.langsmith_adapter")
 DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
+_EVAL_CATEGORIES = frozenset(
+    {
+        "chat",
+        "schema",
+        "semantic",
+        "sql_generation",
+        "data_lookup",
+        "result_analysis",
+        "policy",
+        "replan",
+        "artifact",
+    }
+)
+
+
+def _feedback_source_type(feedback: Any) -> str:
+    source = getattr(feedback, "feedback_source", None)
+    if isinstance(source, dict):
+        return str(source.get("type") or "").lower()
+    return str(getattr(source, "type", "") or "").lower()
+
+
+def _is_human_failure_feedback(feedback: Any) -> bool:
+    if _feedback_source_type(feedback) == "model":
+        return False
+    score = getattr(feedback, "score", None)
+    value = getattr(feedback, "value", None)
+    correction = getattr(feedback, "correction", None)
+    if score is False or value is False:
+        return True
+    if isinstance(score, Real) and not isinstance(score, bool):
+        return float(score) <= 0
+    return correction is not None and score is not True
+
+
+def _structured_correction(feedbacks: list[Any]) -> dict[str, Any]:
+    for feedback in reversed(feedbacks):
+        correction = getattr(feedback, "correction", None)
+        if isinstance(correction, dict):
+            return correction
+    return {}
+
+
+def _safe_case_id(run_id: object) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(run_id)).strip("._-")
+    return f"langsmith_{normalized or 'run'}"[:128]
 
 
 class LangSmithAdapter:
@@ -60,6 +117,16 @@ class LangSmithAdapter:
         if not self._credential_id:
             return None
 
+        # LangSmith is optional telemetry rather than an LLM provider, but it
+        # still receives a vault-held bearer credential.  Its optional endpoint
+        # override therefore passes through the same runtime DNS/IP admission
+        # boundary before the vault is read.  This prevents the otherwise
+        # unused override from becoming an SSRF/credential-exfiltration path.
+        try:
+            safe_endpoint = validate_runtime_llm_api_base(self._endpoint)
+        except LlmEndpointPolicyError:
+            return None
+
         try:
             from langsmith import Client  # type: ignore[import-untyped]
         except ImportError:
@@ -73,7 +140,7 @@ class LangSmithAdapter:
             )
             if not secret:
                 return None
-            return Client(api_key=secret, api_url=self._endpoint)
+            return Client(api_key=secret, api_url=safe_endpoint)
         except Exception:
             # LangSmith is optional.  Do not expose vault/provider details or
             # keep a plaintext fallback alive when its secure dependency fails.
@@ -208,9 +275,107 @@ class LangSmithAdapter:
         project_name: str,
     ) -> list[AgentEvalCase]:
         """Import human-annotated failure runs from LangSmith as new eval cases."""
-        if not self.available:
+        normalized_project = project_name.strip()
+        if not normalized_project:
             return []
-        # Future: query LangSmith for runs with low human feedback scores
-        # and convert them into AgentEvalCase definitions
-        logger.info("LangSmith annotated failure import not yet implemented.")
-        return []
+        client = self._create_client()
+        if client is None:
+            return []
+        try:
+            runs = list(
+                client.list_runs(
+                    project_name=normalized_project,
+                    is_root=True,
+                    select=["id", "inputs", "extra", "tags", "error"],
+                    limit=500,
+                )
+            )
+            run_ids = [getattr(run, "id", None) for run in runs]
+            run_ids = [run_id for run_id in run_ids if run_id is not None]
+            feedback_by_run: dict[str, list[Any]] = {}
+            for offset in range(0, len(run_ids), 100):
+                for feedback in client.list_feedback(run_ids=run_ids[offset : offset + 100]):
+                    run_id = getattr(feedback, "run_id", None)
+                    if run_id is None or not _is_human_failure_feedback(feedback):
+                        continue
+                    feedback_by_run.setdefault(str(run_id), []).append(feedback)
+
+            cases: list[AgentEvalCase] = []
+            for run in runs:
+                run_id = getattr(run, "id", None)
+                feedbacks = feedback_by_run.get(str(run_id), [])
+                if run_id is None or not feedbacks:
+                    continue
+                inputs = getattr(run, "inputs", None)
+                if not isinstance(inputs, dict):
+                    continue
+                question = str(inputs.get("question") or "").strip()
+                if not question:
+                    continue
+                correction = _structured_correction(feedbacks)
+                raw_expected = correction.get("expected")
+                if not isinstance(raw_expected, dict):
+                    raw_expected = inputs.get("expected")
+                try:
+                    expected = (
+                        AgentEvalExpectation.model_validate(raw_expected)
+                        if isinstance(raw_expected, dict)
+                        else AgentEvalExpectation(answer=AnswerExpectation())
+                    )
+                except ValidationError:
+                    continue
+
+                extra = getattr(run, "extra", None)
+                metadata = extra.get("metadata", {}) if isinstance(extra, dict) else {}
+                raw_category = correction.get("category") or (
+                    metadata.get("eval_category") if isinstance(metadata, dict) else None
+                )
+                category = str(raw_category or "chat")
+                if category not in _EVAL_CATEGORIES:
+                    category = "chat"
+                workspace_context = inputs.get("workspace_context")
+                if not isinstance(workspace_context, dict):
+                    workspace_context = None
+                feedback_keys = sorted(
+                    {
+                        str(getattr(feedback, "key", "")).strip()
+                        for feedback in feedbacks
+                        if str(getattr(feedback, "key", "")).strip()
+                    }
+                )
+                tags = sorted(
+                    {
+                        *[str(tag) for tag in (getattr(run, "tags", None) or [])],
+                        "annotated-failure",
+                        "langsmith-import",
+                    }
+                )
+                cases.append(
+                    AgentEvalCase(
+                        id=_safe_case_id(run_id),
+                        category=category,  # type: ignore[arg-type]
+                        description=str(correction.get("description") or "Imported LangSmith failure"),
+                        input=AgentEvalInput(
+                            question=question,
+                            workspace_context=workspace_context,
+                            datasource_fixture=inputs.get("datasource_fixture"),
+                            project_semantics_fixture=inputs.get("project_semantics_fixture"),
+                        ),
+                        expected=expected,
+                        metadata={
+                            "imported_from": "langsmith",
+                            "langsmith_run_id": str(run_id),
+                            "feedback_keys": feedback_keys,
+                        },
+                        tags=tags,
+                    )
+                )
+            return sorted(cases, key=lambda case: case.id)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.AGENT_EVAL_RUN,
+                exc=exc,
+                level="warning",
+            )
+            return []

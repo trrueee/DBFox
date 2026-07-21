@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from engine.errors import DBFoxError
+from engine.llm.endpoint_policy import LlmEndpointPolicyError, normalize_llm_api_base
 from engine.security.credential_vault import CredentialKind, CredentialVault, get_credential_vault
 
 DEFAULT_LLM_API_BASE = "https://api.openai.com/v1"
@@ -48,7 +49,7 @@ def _resolved_product_llm_config(
     """Build the internal config after the vault has supplied the secret."""
     return LlmConfig(
         api_key=vault_secret,
-        api_base=_clean(api_base) or DEFAULT_LLM_API_BASE,
+        api_base=normalize_llm_api_base(_clean(api_base) or DEFAULT_LLM_API_BASE),
         model_name=_clean(model_name) or DEFAULT_LLM_MODEL_NAME,
         source="product",
     )
@@ -66,8 +67,14 @@ def normalize_product_llm_preferences(
             "请先在设置中配置 LLM 凭据。",
             code="NO_LLM_CREDENTIAL",
         )
+    try:
+        normalized_api_base = normalize_llm_api_base(
+            _clean(api_base) or DEFAULT_LLM_API_BASE,
+        )
+    except LlmEndpointPolicyError as exc:
+        raise LlmConfigurationError(str(exc), code=exc.code) from exc
     return LlmConnectionPreferences(
-        api_base=_clean(api_base) or DEFAULT_LLM_API_BASE,
+        api_base=normalized_api_base,
         model_name=_clean(model_name) or DEFAULT_LLM_MODEL_NAME,
     )
 

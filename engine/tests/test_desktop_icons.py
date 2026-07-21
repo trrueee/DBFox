@@ -14,7 +14,8 @@ FAVICON = ROOT / "desktop" / "public" / "favicon.png"
 
 
 def _rgba(path: Path) -> Image.Image:
-    return Image.open(path).convert("RGBA")
+    with Image.open(path) as image:
+        return image.convert("RGBA")
 
 
 def _assert_image_transparent_padding(
@@ -81,7 +82,6 @@ def test_tauri_bundle_icons_are_transparent_and_safely_padded() -> None:
 
 
 def test_windows_ico_contains_common_shell_sizes() -> None:
-    icon = Image.open(TAURI_ICONS / "icon.ico")
     expected_sizes = {
         (16, 16),
         (24, 24),
@@ -92,16 +92,17 @@ def test_windows_ico_contains_common_shell_sizes() -> None:
         (256, 256),
     }
 
-    assert set(icon.ico.sizes()) >= expected_sizes
+    with Image.open(TAURI_ICONS / "icon.ico") as icon:
+        assert set(icon.ico.sizes()) >= expected_sizes
 
-    for size in expected_sizes:
-        frame = icon.ico.getimage(size).convert("RGBA")
-        label = f"icon.ico {size[0]}x{size[1]}"
+        for size in expected_sizes:
+            frame = icon.ico.getimage(size).convert("RGBA")
+            label = f"icon.ico {size[0]}x{size[1]}"
 
-        _assert_image_transparent_padding(frame, label, min_padding_ratio=0.16)
-        assert not _border_has_opaque_white_pixel(frame), (
-            f"{label} has opaque white pixels on the canvas border"
-        )
+            _assert_image_transparent_padding(frame, label, min_padding_ratio=0.16)
+            assert not _border_has_opaque_white_pixel(frame), (
+                f"{label} has opaque white pixels on the canvas border"
+            )
 
 
 def test_favicon_uses_same_transparent_mark_as_bundle_icon() -> None:
@@ -133,6 +134,10 @@ def test_windows_installer_uses_bundled_icon_for_distribution_shortcuts() -> Non
     assert "$SMPROGRAMS\\${PRODUCTNAME}.lnk" in hooks
     assert "CreateShortcut" in hooks
     assert "SHChangeNotify" in hooks
+    assert "!macro NSIS_HOOK_PREINSTALL" in hooks
+    assert "!macro NSIS_HOOK_PREUNINSTALL" in hooks
+    assert 'KillProcessCurrentUser "dbfox-engine.exe"' in hooks
+    assert 'KillProcess "dbfox-engine.exe"' in hooks
 
     wix_template = WIX_TEMPLATE.read_text(encoding="utf-8")
     assert re.search(

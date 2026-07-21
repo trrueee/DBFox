@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from engine.schemas.backup import BackupCreateRequest, RestoreConfirmRequest
+from engine.schemas.backup import BackupCreateRequest
 from engine.schemas.datasource import DataSourceCreateRequest, DataSourceTestRequest, DataSourceUpdateRequest
 from engine.api.agent import ConsoleExecuteRequest
 from engine.schemas.table_design import (
@@ -23,7 +23,6 @@ def _datasource_payload(**overrides: object) -> dict[str, object]:
         "port": 0,
         "database_name": "/tmp/local.db",
         "username": None,
-        "password": "",
         "connection_mode": "direct",
         "env": "dev",
     }
@@ -53,24 +52,34 @@ def test_datasource_update_uses_same_core_validation() -> None:
         DataSourceUpdateRequest(**_datasource_payload(db_type="sqlserver"))
 
 
+def _datasource_request_payload(
+    request_cls: type[DataSourceCreateRequest | DataSourceUpdateRequest | DataSourceTestRequest],
+) -> dict[str, object]:
+    payload = _datasource_payload()
+    if request_cls is DataSourceTestRequest:
+        return {
+            key: payload[key]
+            for key in ("db_type", "host", "port", "database_name", "username")
+        }
+    return payload
+
+
 @pytest.mark.parametrize(
     "request_cls",
     [DataSourceCreateRequest, DataSourceUpdateRequest, DataSourceTestRequest],
 )
-def test_datasource_secret_fields_preserve_surrounding_whitespace(
+@pytest.mark.parametrize("plaintext_field", ["password", "ssh_password", "ssh_pkey_passphrase"])
+def test_datasource_request_rejects_plaintext_secret_fields(
     request_cls: type[DataSourceCreateRequest | DataSourceUpdateRequest | DataSourceTestRequest],
+    plaintext_field: str,
 ) -> None:
-    request = request_cls(
-        **_datasource_payload(
-            password=" password ",
-            ssh_password=" ssh password ",
-            ssh_pkey_passphrase=" key passphrase ",
-        )
-    )
+    payload = _datasource_request_payload(request_cls)
+    payload[plaintext_field] = " plaintext secret "
 
-    assert request.password == " password "
-    assert request.ssh_password == " ssh password "
-    assert request.ssh_pkey_passphrase == " key passphrase "
+    with pytest.raises(ValidationError) as exc_info:
+        request_cls(**payload)
+
+    assert any(error["loc"][-1] == plaintext_field for error in exc_info.value.errors())
 
 
 @pytest.mark.parametrize(
@@ -193,18 +202,9 @@ def test_backup_create_request_rejects_invalid_core_fields(payload: dict[str, ob
         BackupCreateRequest(**payload)
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"confirm_token": ""},
-        {"confirm_token": "   "},
-        {"confirm_token": "t" * 257},
-        {"confirm_text": "x" * 257},
-    ],
-)
-def test_restore_confirm_request_rejects_invalid_confirmation_fields(payload: dict[str, object]) -> None:
+def test_backup_create_request_rejects_removed_fallback_contract() -> None:
     with pytest.raises(ValidationError):
-        RestoreConfirmRequest(**payload)
+        BackupCreateRequest(datasource_id="ds-1", allow_fallback=False)
 
 
 @pytest.mark.parametrize(

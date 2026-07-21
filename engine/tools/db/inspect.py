@@ -15,10 +15,11 @@ from sqlalchemy.orm import Session
 from sqlglot import exp
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
-from engine.datasource import datasource_connection_dict, get_mysql_connection_params, get_postgres_connection_params
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+from engine.datasource import datasource_connection_dict
 from engine.errors import ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable
-from engine.sql.pool_manager import get_mysql_pool, get_postgres_pool, _ping_mysql_connection
 from engine.tools.db._common import (
     _catalog_table,
     _column_summary,
@@ -29,7 +30,13 @@ from engine.tools.db._common import (
 logger = logging.getLogger("dbfox.tools.db.inspect")
 
 
-def db_inspect(db: Session, datasource_id: str, target: str) -> dict[str, Any]:
+def db_inspect(
+    db: Session,
+    datasource_id: str,
+    target: str,
+    *,
+    connection_factory: ConnectionFactory | None = None,
+) -> dict[str, Any]:
     """Live introspection of a table or column from the real database."""
     target = target.strip()
     if not target:
@@ -46,11 +53,11 @@ def db_inspect(db: Session, datasource_id: str, target: str) -> dict[str, Any]:
     dialect = (ds.db_type or "mysql").lower()
 
     if dialect == "sqlite":
-        inspector = SQLiteInspector(db, ds, target)
+        inspector = SQLiteInspector(db, ds, target, connection_factory=connection_factory)
     elif dialect in ("postgres", "postgresql"):
-        inspector = PostgreSQLInspector(db, ds, target)
+        inspector = PostgreSQLInspector(db, ds, target, connection_factory=connection_factory)
     else:
-        inspector = MySQLInspector(db, ds, target)
+        inspector = MySQLInspector(db, ds, target, connection_factory=connection_factory)
 
     output = inspector.inspect()
     _INSPECT_CACHE.set(cache_key, output)
@@ -126,11 +133,24 @@ def escape_identifier(name: str, dialect: str) -> str:
 
 
 class BaseInspector:
-    def __init__(self, db: Session, ds: DataSource, target: str):
+    def __init__(
+        self,
+        db: Session,
+        ds: DataSource,
+        target: str,
+        *,
+        connection_factory: ConnectionFactory | None = None,
+    ):
         self.db = db
         self.ds = ds
         self.target = target
         self.table_name, self.column_name, self.schema_name = _parse_target(target)
+        self.connection_factory = (
+            connection_factory if connection_factory is not None else ConnectionFactory()
+        )
+
+    def connection_profile(self) -> ConnectionProfile:
+        return ConnectionProfile.from_mapping(datasource_connection_dict(self.ds))
 
     @contextmanager
     def connect(self) -> Generator[Any, None, None]:
@@ -164,13 +184,14 @@ class BaseInspector:
 class SQLiteInspector(BaseInspector):
     @contextmanager
     def connect(self) -> Generator[Any, None, None]:
-        path = str(self.ds.database_name)
-        conn = sqlite3.connect(path)
-        conn.row_factory = sqlite3.Row
-        try:
+        profile = self.connection_profile()
+        with self.connection_factory.connection_scope(
+            profile,
+            purpose=ConnectionPurpose.SCHEMA_SYNC,
+            read_only=True,
+            sqlite_row_factory=sqlite3.Row,
+        ) as conn:
             yield conn
-        finally:
-            conn.close()
 
     def table_exists(self, conn: Any) -> bool:
         return _sqlite_table_exists(conn, self.table_name)
@@ -227,24 +248,19 @@ class SQLiteInspector(BaseInspector):
 class MySQLInspector(BaseInspector):
     @contextmanager
     def connect(self) -> Generator[Any, None, None]:
-        ds_dict = datasource_connection_dict(self.ds)
-        params = get_mysql_connection_params(ds_dict)
-        pool = get_mysql_pool(self.ds.id, params)
-        conn = pool.connect()
-        try:
-            _ping_mysql_connection(conn)
+        profile = self.connection_profile()
+        with self.connection_factory.connection_scope(
+            profile,
+            purpose=ConnectionPurpose.SCHEMA_SYNC,
+            read_only=True,
+        ) as conn:
             yield conn
-        finally:
-            conn.close()
 
     def table_exists(self, conn: Any) -> bool:
-        ds_dict = datasource_connection_dict(self.ds)
-        database = ds_dict.get("database_name", "")
-        return _mysql_table_exists(conn, database, self.table_name)
+        return _mysql_table_exists(conn, self.connection_profile().database_name, self.table_name)
 
     def get_table_payload(self, conn: Any) -> dict[str, Any]:
-        ds_dict = datasource_connection_dict(self.ds)
-        database = ds_dict.get("database_name", "")
+        database = self.connection_profile().database_name
         cur = conn.cursor()
         catalog = _catalog_table(self.db, self.ds.id, self.table_name)
         comment_map: dict[str, str] = {}
@@ -388,14 +404,13 @@ class MySQLInspector(BaseInspector):
 class PostgreSQLInspector(BaseInspector):
     @contextmanager
     def connect(self) -> Generator[Any, None, None]:
-        ds_dict = datasource_connection_dict(self.ds)
-        params = get_postgres_connection_params(ds_dict)
-        pool = get_postgres_pool(self.ds.id, params)
-        conn = pool.connect()
-        try:
+        profile = self.connection_profile()
+        with self.connection_factory.connection_scope(
+            profile,
+            purpose=ConnectionPurpose.SCHEMA_SYNC,
+            read_only=True,
+        ) as conn:
             yield conn
-        finally:
-            conn.close()
 
     def table_exists(self, conn: Any) -> bool:
         schema = self.schema_name or "public"

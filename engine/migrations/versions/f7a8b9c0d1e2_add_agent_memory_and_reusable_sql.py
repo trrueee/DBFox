@@ -8,7 +8,7 @@ Create Date: 2026-06-23
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Sequence, Union
 from uuid import uuid4
 
@@ -78,7 +78,7 @@ def upgrade() -> None:
     if not sa.inspect(bind).has_table("golden_sqls"):
         return
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     rows = bind.execute(
         sa.text("SELECT data_source_id, question, golden_sql, created_at FROM golden_sqls")
     ).mappings()

@@ -18,9 +18,7 @@ def _datasource(project_id: str | None, name: str) -> DataSource:
         port=0,
         database_name=":memory:",
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
+        connection_generation=1,
         status="active",
     )
 

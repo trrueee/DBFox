@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import socket
 import threading
-from typing import Any
+from typing import Any, TypeAlias
 
 from sshtunnel import SSHTunnelForwarder
 
@@ -18,6 +18,30 @@ from engine.security.credential_vault import CredentialKind, get_credential_vaul
 
 logger = logging.getLogger("dbfox.tunnel")
 
+TunnelResourceKey: TypeAlias = tuple[str, int, str]
+
+
+def _managed_tunnel_key(config: dict[str, Any]) -> TunnelResourceKey:
+    """Build the generation/profile key required for a managed SSH tunnel."""
+    datasource_id = str(config.get("id") or "").strip()
+    fingerprint = str(config.get("connection_fingerprint") or "").strip()
+    raw_generation = config.get("connection_generation")
+    if raw_generation is None:
+        raise DataSourceConnectionError(
+            "Managed SSH tunnel configuration is missing its connection generation."
+        )
+    try:
+        generation = int(raw_generation)
+    except (TypeError, ValueError) as exc:
+        raise DataSourceConnectionError(
+            "Managed SSH tunnel configuration is missing its connection generation."
+        ) from exc
+    if not datasource_id or not fingerprint or generation < 1:
+        raise DataSourceConnectionError(
+            "Managed SSH tunnel configuration is incomplete."
+        )
+    return (datasource_id, generation, fingerprint)
+
 
 class TunnelState:
     CONNECTED = "connected"
@@ -29,44 +53,48 @@ class TunnelState:
 
 class TunnelInstance:
     datasource_id: str
+    resource_key: TunnelResourceKey
     ds_dict: dict[str, Any]
     tunnel: SSHTunnelForwarder
     state: str
     error_message: str | None
 
-    def __init__(self, datasource_id: str, ds_dict: dict[str, Any], tunnel: SSHTunnelForwarder) -> None:
-        self.datasource_id = datasource_id
+    def __init__(
+        self,
+        resource_key: TunnelResourceKey,
+        ds_dict: dict[str, Any],
+        tunnel: SSHTunnelForwarder,
+    ) -> None:
+        self.datasource_id = resource_key[0]
+        self.resource_key = resource_key
         self.ds_dict = ds_dict
         self.tunnel = tunnel
         self.state = TunnelState.CONNECTED
         self.error_message = None
 
 
-def _create_physical_tunnel_forwarder(config: dict[str, Any], is_managed: bool) -> SSHTunnelForwarder:
+def _create_physical_tunnel_forwarder(config: dict[str, Any]) -> SSHTunnelForwarder:
+    """Open an SSH tunnel using opaque credential references only."""
     ssh_password = None
     pkey_passphrase = None
 
-    if is_managed:
-        vault = get_credential_vault()
-        ssh_password_id = config.get("ssh_password_credential_id")
-        if ssh_password_id:
-            ssh_password = vault.get(
-                str(ssh_password_id),
-                expected_kind=CredentialKind.SSH_PASSWORD,
-            )
-            if ssh_password is None:
-                raise DataSourceConnectionError("SSH password credential was not found.")
-        pkey_passphrase_id = config.get("ssh_key_passphrase_credential_id")
-        if pkey_passphrase_id:
-            pkey_passphrase = vault.get(
-                str(pkey_passphrase_id),
-                expected_kind=CredentialKind.SSH_KEY_PASSPHRASE,
-            )
-            if pkey_passphrase is None:
-                raise DataSourceConnectionError("SSH key passphrase credential was not found.")
-    else:
-        ssh_password = config.get("ssh_password")
-        pkey_passphrase = config.get("ssh_pkey_passphrase")
+    vault = get_credential_vault()
+    ssh_password_id = config.get("ssh_password_credential_id")
+    if ssh_password_id:
+        ssh_password = vault.get(
+            str(ssh_password_id),
+            expected_kind=CredentialKind.SSH_PASSWORD,
+        )
+        if ssh_password is None:
+            raise DataSourceConnectionError("SSH password credential was not found.")
+    pkey_passphrase_id = config.get("ssh_key_passphrase_credential_id")
+    if pkey_passphrase_id:
+        pkey_passphrase = vault.get(
+            str(pkey_passphrase_id),
+            expected_kind=CredentialKind.SSH_KEY_PASSPHRASE,
+        )
+        if pkey_passphrase is None:
+            raise DataSourceConnectionError("SSH key passphrase credential was not found.")
 
     ssh_pkey = config.get("ssh_pkey_path") if config.get("ssh_pkey_path") else None
     ssh_host = config.get("ssh_host")
@@ -76,10 +104,9 @@ def _create_physical_tunnel_forwarder(config: dict[str, Any], is_managed: bool) 
     target_host = config.get("host")
     target_port = int(config.get("port", 3306) or 3306)
 
-    tunnel_type = "managed_datasource" if is_managed else "temporary_test"
     logger.info(
-        "Starting %s SSH Tunnel: Jumpbox %s:%s -> Target %s:%s",
-        tunnel_type, ssh_host, ssh_port, target_host, target_port
+        "Starting SSH Tunnel: Jumpbox %s:%s -> Target %s:%s",
+        ssh_host, ssh_port, target_host, target_port
     )
 
     tunnel = SSHTunnelForwarder(
@@ -97,39 +124,56 @@ def _create_physical_tunnel_forwarder(config: dict[str, Any], is_managed: bool) 
 
 
 def open_temporary_tunnel(config: dict[str, Any]) -> SSHTunnelForwarder:
-    """Open a temporary SSH tunnel for test connections, mirroring keepalive and mapping logic."""
-    return _create_physical_tunnel_forwarder(config, is_managed=False)
+    """Open a temporary SSH tunnel from vault-backed credential references."""
+    return _create_physical_tunnel_forwarder(config)
 
 
 class TunnelManager:
     def __init__(self) -> None:
-        self._tunnels: dict[str, TunnelInstance] = {}
+        self._tunnels: dict[TunnelResourceKey, TunnelInstance] = {}
         self._lock = threading.Lock()
 
     def get_tunnel_state(self, datasource_id: str) -> str:
         with self._lock:
-            instance = self._tunnels.get(datasource_id)
-            if not instance:
+            instances = [
+                instance
+                for resource_key, instance in self._tunnels.items()
+                if resource_key[0] == datasource_id
+            ]
+            if not instances:
                 return TunnelState.CLOSED
-            return instance.state
+            if any(instance.state == TunnelState.CONNECTED for instance in instances):
+                return TunnelState.CONNECTED
+            return instances[-1].state
 
     def close_tunnel(self, datasource_id: str) -> None:
+        """Close every profile generation for a datasource.
+
+        A configuration update may have briefly left an old tunnel object in
+        flight while a new generation was opened.  Closing by datasource id is
+        deliberately broad so no prior host/SSH credential profile survives.
+        """
+        instances: list[TunnelInstance] = []
         with self._lock:
-            instance = self._tunnels.pop(datasource_id, None)
-            if instance:
-                instance.state = TunnelState.CLOSED
-                try:
-                    instance.tunnel.stop()
-                except Exception as exc:
-                    log_unexpected_exception(
-                        logger,
-                        operation=SafeLogOperation.SSH_TUNNEL_CLOSE,
-                        exc=exc,
-                    )
+            resource_keys = [key for key in self._tunnels if key[0] == datasource_id]
+            for resource_key in resource_keys:
+                instance = self._tunnels.pop(resource_key, None)
+                if instance is not None:
+                    instance.state = TunnelState.CLOSED
+                    instances.append(instance)
+        for instance in instances:
+            try:
+                instance.tunnel.stop()
+            except Exception as exc:
+                log_unexpected_exception(
+                    logger,
+                    operation=SafeLogOperation.SSH_TUNNEL_CLOSE,
+                    exc=exc,
+                )
 
     def close_all(self) -> None:
         with self._lock:
-            for ds_id, instance in list(self._tunnels.items()):
+            for resource_key, instance in list(self._tunnels.items()):
                 instance.state = TunnelState.CLOSED
                 try:
                     instance.tunnel.stop()
@@ -141,10 +185,10 @@ class TunnelManager:
                     )
             self._tunnels.clear()
 
-    def health_check(self, datasource_id: str) -> bool:
+    def health_check(self, resource_key: TunnelResourceKey) -> bool:
         """Validate that the tunnel object and local bind socket are alive."""
         with self._lock:
-            instance = self._tunnels.get(datasource_id)
+            instance = self._tunnels.get(resource_key)
             if not instance:
                 return False
 
@@ -170,7 +214,7 @@ class TunnelManager:
             )
 
         with self._lock:
-            instance = self._tunnels.get(datasource_id)
+            instance = self._tunnels.get(resource_key)
             if not instance:
                 return False
             if is_ok:
@@ -182,18 +226,23 @@ class TunnelManager:
 
     def get_or_reconnect(self, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
         """Get an active tunnel or self-heal a stale one."""
-        ds_id = ds_dict.get("id") or f"temp_{ds_dict.get('host')}_{ds_dict.get('port')}"
+        resource_key = _managed_tunnel_key(ds_dict)
+        datasource_id = resource_key[0]
 
         with self._lock:
-            instance = self._tunnels.get(ds_id)
+            instance = self._tunnels.get(resource_key)
 
         if not instance:
-            return self._create_tunnel(ds_id, ds_dict)
+            return self._create_tunnel(resource_key, ds_dict)
 
-        if self.health_check(ds_id):
+        if self.health_check(resource_key):
             return instance.tunnel
 
-        logger.info("SSH Tunnel for %s went stale. Initiating self-healing auto-reconnect...", ds_id)
+        logger.info(
+            "SSH Tunnel for %s generation %s went stale. Initiating self-healing auto-reconnect...",
+            datasource_id,
+            resource_key[1],
+        )
         with self._lock:
             instance.state = TunnelState.RECONNECTING
 
@@ -208,12 +257,18 @@ class TunnelManager:
                     level="warning",
                 )
 
+            # The old pool creator used the prior local bind port.  Remove it
+            # before publishing a reconnected tunnel so it cannot be reused if
+            # the operating system later recycles that port.
+            from engine.sql.pool_registry import get_pool_registry
+
+            get_pool_registry().dispose_resource(resource_key)
             new_tunnel = self._start_physical_tunnel(ds_dict)
             with self._lock:
                 instance.tunnel = new_tunnel
                 instance.state = TunnelState.CONNECTED
                 instance.error_message = None
-            logger.info("SSH Tunnel auto-reconnect successful for %s.", ds_id)
+            logger.info("SSH Tunnel auto-reconnect successful for %s.", datasource_id)
             return new_tunnel
         except Exception as exc:
             log_unexpected_exception(
@@ -228,27 +283,35 @@ class TunnelManager:
                 fixed_error_message(FixedErrorCode.DATASOURCE_CONNECTION_FAILED)
             ) from None
 
-    def _create_tunnel(self, ds_id: str, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-        logger.info("Creating new SSH tunnel for %s", ds_id)
+    def _create_tunnel(
+        self,
+        resource_key: TunnelResourceKey,
+        ds_dict: dict[str, Any],
+    ) -> SSHTunnelForwarder:
+        logger.info(
+            "Creating new SSH tunnel for %s generation %s",
+            resource_key[0],
+            resource_key[1],
+        )
         tunnel = self._start_physical_tunnel(ds_dict)
-        instance = TunnelInstance(ds_id, ds_dict, tunnel)
+        instance = TunnelInstance(resource_key, ds_dict, tunnel)
         with self._lock:
-            self._tunnels[ds_id] = instance
+            self._tunnels[resource_key] = instance
         return tunnel
 
     def _start_physical_tunnel(self, ds_dict: dict[str, Any]) -> SSHTunnelForwarder:
-        return _create_physical_tunnel_forwarder(ds_dict, is_managed=True)
+        return _create_physical_tunnel_forwarder(ds_dict)
 
     def cleanup_stale(self) -> None:
-        to_dispose: list[tuple[str, TunnelInstance]] = []
+        to_dispose: list[tuple[TunnelResourceKey, TunnelInstance]] = []
         with self._lock:
-            for ds_id, instance in list(self._tunnels.items()):
+            for resource_key, instance in list(self._tunnels.items()):
                 if not instance.tunnel.is_active:
-                    logger.info("Purging dead inactive tunnel instance: %s", ds_id)
-                    to_dispose.append((ds_id, instance))
-                    self._tunnels.pop(ds_id, None)
+                    logger.info("Purging dead inactive tunnel instance: %s", resource_key[0])
+                    to_dispose.append((resource_key, instance))
+                    self._tunnels.pop(resource_key, None)
 
-        for ds_id, instance in to_dispose:
+        for _resource_key, instance in to_dispose:
             try:
                 instance.tunnel.stop()
             except Exception as exc:

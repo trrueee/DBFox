@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +17,11 @@ class ToolRunContext(BaseModel):
     raw_input: Mapping[str, Any] = Field(default_factory=dict)
     db_session: Any | None = Field(default=None, exclude=True)
     request: Any | None = Field(default=None, exclude=True)
+    cancellation_probe: Callable[[], bool] | None = Field(default=None, exclude=True)
+    deadline: float | None = Field(default=None, exclude=True)
+
+    def is_cancelled(self) -> bool:
+        return bool(self.cancellation_probe and self.cancellation_probe())
 
     @classmethod
     def from_projection(
@@ -28,6 +33,8 @@ class ToolRunContext(BaseModel):
         read_only: bool,
         db_dialect: str = "mysql",
         raw_input: dict[str, Any] | None = None,
+        cancellation_probe: Callable[[], bool] | None = None,
+        deadline: float | None = None,
     ) -> "ToolRunContext":
         datasource_id = getattr(request, "datasource_id", "") if request is not None else ""
         thread_id = ""
@@ -44,6 +51,8 @@ class ToolRunContext(BaseModel):
             raw_input=MappingProxyType(dict(raw_input or {})),
             db_session=db,
             request=request,
+            cancellation_probe=cancellation_probe,
+            deadline=deadline,
         )
 
 

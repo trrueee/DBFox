@@ -20,9 +20,14 @@ from pathlib import Path
 logger = logging.getLogger("dbfox.db")
 
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
+
+if TYPE_CHECKING:
+    from alembic.config import Config
+
+from engine.app.safe_errors import diagnostic_fingerprint
+from engine.runtime_paths import PROJECT_DIR, private_runtime_dir, private_runtime_root
 
 # 1. 动态持久化路径解析
 # 环境变量 DBFOX_DATABASE_URL 允许 eval farm 隔离每个 worker 的 SQLite DB
@@ -30,33 +35,49 @@ _env_db_url = os.environ.get("DBFOX_DATABASE_URL", "")
 if _env_db_url:
     DATABASE_URL = _env_db_url
 else:
-    is_frozen = getattr(sys, "frozen", False)
-    if is_frozen:
-        from engine.runtime_paths import private_runtime_dir
-        DB_PATH = private_runtime_dir("data") / "dbfox_local.db"
-    else:
-        DB_PATH = Path(__file__).resolve().parent.parent / "dbfox_local.db"
+    # Source and packaged modes deliberately share the same private runtime
+    # layout.  A repository checkout is never a metadata-data directory.
+    DB_PATH = private_runtime_dir("data") / "dbfox_local.db"
     DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# Ensure DB_PATH is available for backward compat (checkpointer imports it)
+# Keep the resolved metadata path available for lifecycle reset and isolated tests.
 if "DB_PATH" not in dir():
     DB_PATH = Path(DATABASE_URL.replace("sqlite:///", ""))
+
+# This is the exact pre-Foundation source-mode location.  It is retired only
+# after a successful reset of the new private runtime; no arbitrary URL is
+# used as a deletion target.
+LEGACY_SOURCE_METADATA_PATH = PROJECT_DIR / "dbfox_local.db"
+LEGACY_SOURCE_RUNTIME_ROOT = LEGACY_SOURCE_METADATA_PATH.parent
 
 # Connection pool safety defaults. They intentionally mirror the retryable error
 # semantics used by Agent tool execution: stale connections should be detected
 # before use, long-lived pooled connections should be recycled, and pool waits
-# should fail fast enough for the graph to route/retry instead of hanging.
+# should fail fast enough for the Agent loop to classify and retry.
 DB_POOL_SIZE = int(os.environ.get("DBFOX_DB_POOL_SIZE", "20"))
 DB_MAX_OVERFLOW = int(os.environ.get("DBFOX_DB_MAX_OVERFLOW", "20"))
 DB_POOL_RECYCLE_SECONDS = int(os.environ.get("DBFOX_DB_POOL_RECYCLE_SECONDS", "1800"))
 DB_POOL_TIMEOUT_SECONDS = int(os.environ.get("DBFOX_DB_POOL_TIMEOUT_SECONDS", "30"))
 DB_SQLITE_TIMEOUT_SECONDS = float(os.environ.get("DBFOX_SQLITE_TIMEOUT_SECONDS", "30"))
 
+
+def _agent_write_trace_path(timestamp: str) -> Path:
+    """Keep opt-in write diagnostics inside the private runtime boundary."""
+    return private_runtime_dir("diagnostics") / f"db_write_trace_{timestamp}.jsonl"
+
+
+def _trace_error_diagnostic(exc: BaseException) -> dict[str, str]:
+    """Represent a database error without persisting its potentially sensitive text."""
+    return {
+        "error_type": type(exc).__name__,
+        "error_fingerprint": diagnostic_fingerprint(exc),
+    }
+
 def configure_sqlite_pragmas(database_url: str | None = None) -> None:
     """Apply WAL / busy_timeout / synchronous PRAGMAs for SQLite databases.
 
     Safe to call multiple times; no-op for non-SQLite URLs.
-    Must be called before Alembic inspection in init_db().
+    Must be called before Alembic inspection in the metadata initializer.
     """
     import sqlite3 as _sqlite3
     url = database_url or DATABASE_URL
@@ -70,6 +91,7 @@ def configure_sqlite_pragmas(database_url: str | None = None) -> None:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
         conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA secure_delete=ON")
     finally:
         conn.close()
 
@@ -106,6 +128,7 @@ def build_metadata_engine(database_url: str) -> Engine:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute(f"PRAGMA busy_timeout={int(DB_SQLITE_TIMEOUT_SECONDS * 1000)}")
                 cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA secure_delete=ON")
             finally:
                 cursor.close()
 
@@ -130,12 +153,9 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
     def _open_trace():
         global _trace_file
         if _trace_file is None:
-            from pathlib import Path as _Path
-            _dir = _Path(__file__).resolve().parent.parent / ".agent_eval" / "outputs"
-            _dir.mkdir(parents=True, exist_ok=True)
             import time as _t_time
             _ts = _t_time.strftime("%Y%m%d_%H%M%S")
-            _trace_file = open(str(_dir / f"db_write_trace_{_ts}.jsonl"), "a", encoding="utf-8")
+            _trace_file = open(str(_agent_write_trace_path(_ts)), "a", encoding="utf-8")
 
     from sqlalchemy import event as _ev3
     @_ev3.listens_for(engine, "before_cursor_execute")
@@ -171,10 +191,11 @@ if os.environ.get("AGENT_DB_WRITE_TRACE", "").lower() == "true":
             _open_trace()
             import json as _json
             rec = {
-                "type": "ERROR", "error": str(exc)[:200], "table": "?",
+                "type": "ERROR", "table": "?",
                 "thread": threading.current_thread().name,
                 "run_id": current_run_id.get(), "session_id": current_session_id.get(),
             }
+            rec.update(_trace_error_diagnostic(exc))
             with _trace_lock:
                 _trace_file.write(_json.dumps(rec, default=str) + "\n")
                 _trace_file.flush()
@@ -208,221 +229,99 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def _ensure_fts5(conn) -> None:
-    """Create FTS5 virtual tables if they don't exist."""
-    from sqlalchemy import text as sa_text
-    from sqlalchemy.exc import OperationalError
-    from engine.models import FTS5_DDL
-    from engine.persistence.search_index import ensure_query_history_search_schema
-
-    try:
-        conn.execute(sa_text("SELECT 1 FROM schema_search_fts LIMIT 0"))
-    except OperationalError as e:
-        if "no such table" in str(e).lower():
-            conn.execute(sa_text(FTS5_DDL))
-        else:
-            raise
-    except Exception:
-        raise
-
-    ensure_query_history_search_schema(conn)
-
-
-def _sqlite_table_columns(conn: Connection, table_name: str) -> set[str]:
-    """Return SQLite column names for a table, or an empty set if unavailable."""
-    safe_name = table_name.replace('"', '""')
-    rows = conn.exec_driver_sql(f'PRAGMA table_info("{safe_name}")').fetchall()
-    return {str(row[1]) for row in rows}
-
-
-def _has_columns(conn: Connection, table_name: str, column_names: set[str]) -> bool:
-    return column_names.issubset(_sqlite_table_columns(conn, table_name))
-
-
-def _infer_unversioned_legacy_revision(conn: Connection, tables: list[str]) -> str | None:
-    """Infer the latest completed Alembic revision for old local DBs without version table."""
-    existing_tables = set(tables)
-
-    if {"agent_session_memories", "reusable_sqls"}.issubset(existing_tables):
-        if "query_history_search_docs" in existing_tables:
-            return "0a1b2c3d4e5f"
-        return "f7a8b9c0d1e2"
-
-    if "agent_messages" in existing_tables and _has_columns(
-        conn,
-        "agent_sessions",
-        {"context_tables_json", "archived_at", "deleted_at"},
-    ):
-        return "f6a7b8c9d0e1"
-
-    if _has_columns(conn, "data_sources", {"enable_embedding_recall"}) and _has_columns(
-        conn,
-        "semantic_aliases",
-        {"embedding_blob", "embedding_synced_at"},
-    ):
-        return "d1e2f3a4b5c6"
-
-    if "schema_search_docs" in existing_tables and _has_columns(
-        conn,
-        "schema_tables",
-        {"schema_hash", "ai_description", "semantic_tags", "business_terms"},
-    ):
-        return "a6b7c8d9e0f1"
-
-    if {"agent_eval_runs", "agent_eval_case_results", "agent_golden_tasks"}.issubset(existing_tables):
-        return "d4e5f6a7b8c9"
-
-    if {"agent_approvals", "agent_checkpoints"}.issubset(existing_tables):
-        return "c3d4e5f6a7b8"
-
-    if {"semantic_aliases", "workspace_table_scopes"}.issubset(existing_tables):
-        return "b2c3d4e5f6a7"
-
-    if {"agent_sessions", "agent_runs", "agent_artifacts", "agent_runtime_events", "agent_trace_events"}.issubset(
-        existing_tables
-    ):
-        return "b1c2d3e4f5a6"
-
-    if _has_columns(
-        conn,
-        "data_sources",
-        {"last_test_at", "last_test_status", "last_test_latency_ms", "last_test_warnings"},
-    ):
-        return "f1a2b3c4d5e6"
-
-    if {"data_sources", "schema_tables", "schema_columns", "query_history"}.issubset(existing_tables):
-        return "99b4fdab0781"
-
-    return None
-
-
-def init_db() -> None:
-    """
-    数据库初始化与版本自动迁移迁移引擎
-    
-    在 main.py 的 lifespan 启动勾子中调用。
-    它负责：
-    1. 物理备份：修改表结构前，完整复制一份 `dbfox_local.db` 备用，防止迁移失败导致数据库损毁。
-    2. 兼容清理：若检测到极早期开发时手写的 `schema_migrations` 老旧迁移记录，则自动执行 v1~v10 的 SQL 平滑迁移。
-    3. 移交 Alembic：利用 stamp 标记为 baseline，完成对主流数据库迁移工具 Alembic 的平滑过渡。
-    4. 执行 Alembic：自动升级（upgrade head）到当前代码对应的最新表结构。
-    5. 容灾恢复：若发生任何无法恢复的异常，自动丢弃当前连接，从备份文件瞬间还原，保证系统稳定性。
-    """
-    from engine import models  # 必须在这里导入模型，确保所有映射关系已在 SQLAlchemy 中完成注册
-    import time
-    import sys
-    from pathlib import Path
-    from sqlalchemy import text
-    from sqlalchemy.engine import Connection
+def build_alembic_config(database_url: str) -> "Config":
+    """Build an explicit Alembic configuration for one metadata URL."""
     from alembic.config import Config
+
+    if getattr(sys, "frozen", False):
+        bundle_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        ini_path = bundle_root / "alembic.ini"
+        script_location = bundle_root / "engine" / "migrations"
+    else:
+        ini_path = PROJECT_DIR / "alembic.ini"
+        script_location = PROJECT_DIR / "engine" / "migrations"
+    if not ini_path.is_file() or not script_location.is_dir():
+        raise RuntimeError("DBFOX_METADATA_ALEMBIC_CONFIGURATION_MISSING")
+
+    config = Config(str(ini_path))
+    config.set_main_option("script_location", str(script_location))
+    config.set_main_option("sqlalchemy.url", database_url)
+    return config
+
+
+def run_alembic_upgrade(database_url: str) -> None:
+    """Run the sole schema authority for a metadata database."""
     from alembic import command
-    from engine.persistence.backup import MetadataBackupService
 
-    # 1. 物理安全备份机制 (Secure Database Backup)
-    backup_path = None
-    if DB_PATH.exists():
-        timestamp = int(time.time())
-        backup_name = f"{DB_PATH.name}.bak_{timestamp}"
-        backup_path = DB_PATH.with_name(backup_name)
-        try:
-            MetadataBackupService.backup_sqlite(DB_PATH, backup_path)
-            MetadataBackupService.prune_old_backups(DB_PATH, limit=5)
-        except Exception as e:
-            logger.warning("迁移警告：升级前未能成功备份元数据库文件: %s", e)
-            backup_path = None
+    configure_sqlite_pragmas(database_url)
+    # Release the process-global runtime pool before Alembic takes its SQLite
+    # mutex/snapshot lock.  Alembic owns recovery, not this caller.
+    if database_url == DATABASE_URL:
+        engine.dispose()
+    command.upgrade(build_alembic_config(database_url), "head")
 
-    # 0. Ensure SQLite PRAGMAs are configured before any Alembic work
-    configure_sqlite_pragmas(DATABASE_URL)
 
+def verify_metadata_database(database_url: str) -> None:
+    """Verify the migrated revision, FTS contract, and SQLite FK integrity."""
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import text
+
+    config = build_alembic_config(database_url)
+    expected_revision = ScriptDirectory.from_config(config).get_current_head()
+    metadata_engine = build_metadata_engine(database_url)
     try:
-        # 2. 动态计算 Alembic 配置文件及其脚本的绝对路径
-        is_frozen = getattr(sys, "frozen", False)
-        if is_frozen:
-            # 打包运行环境下，Alembic 配置文件和脚本会被释放在临时解压目录（_MEIPASS）中
-            meipass = getattr(sys, "_MEIPASS", None)
-            if meipass:
-                ini_path = Path(meipass) / "alembic.ini"
-                script_location = Path(meipass) / "engine" / "migrations"
-            else:
-                exec_dir = Path(sys.executable).parent
-                ini_path = exec_dir / "alembic.ini"
-                script_location = exec_dir / "engine" / "migrations"
-        else:
-            # 源码运行环境下，路径位于开发工作区中
-            ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
-            script_location = Path(__file__).resolve().parent / "migrations"
+        with metadata_engine.connect() as connection:
+            actual_revision = connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one_or_none()
+            if actual_revision != expected_revision:
+                raise RuntimeError("DBFOX_METADATA_REVISION_MISMATCH")
 
-        if not ini_path.exists():
-            logger.warning("Alembic配置文件不存在: %s", ini_path)
-            return
-
-        # 强制关闭所有连接，避免 Windows 下文件锁导致的迁移失败
-        try:
-            engine.dispose()
-        except Exception:
-            pass
-
-        alembic_cfg = Config(str(ini_path))
-        alembic_cfg.set_main_option("script_location", str(script_location))
-        alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
-
-        # If DB does not exist, create and stamp to head after creating tables.
-        # For existing DB, ensure version table and upgrade.
-        with engine.begin() as conn:
-            inspector = None
-            try:
-                from sqlalchemy import inspect
-                inspector = inspect(conn)
-                tables = inspector.get_table_names()
-                logger.debug("Alembic migration: found %d existing tables", len(tables))
-            except Exception as inspect_err:
-                logger.warning("Alembic migration: inspect failed: %s", inspect_err)
-                tables = []
-            if not tables:
-                logger.info("Alembic migration: no tables found, creating schema and stamping head")
-                Base.metadata.create_all(bind=conn)
-                _ensure_fts5(conn)
-                command.stamp(alembic_cfg, "head")
-            elif "alembic_version" not in tables:
-                model_tables = set(Base.metadata.tables.keys())
-                existing_tables = set(tables)
-                if model_tables.issubset(existing_tables):
-                    logger.warning(
-                        "Alembic migration: existing current schema has no version table; stamping head"
+            if connection.dialect.name == "sqlite":
+                objects = {
+                    str(row[0])
+                    for row in connection.execute(
+                        text("SELECT name FROM sqlite_master WHERE type IN ('table', 'trigger')")
                     )
-                    command.stamp(alembic_cfg, "head")
-                    _ensure_fts5(conn)
-                else:
-                    legacy_revision = _infer_unversioned_legacy_revision(conn, tables)
-                    if legacy_revision:
-                        missing = ", ".join(sorted(model_tables - existing_tables))
-                        logger.warning(
-                            "Alembic migration: inferred unversioned legacy schema at %s; "
-                            "missing current tables before upgrade: %s",
-                            legacy_revision,
-                            missing,
-                        )
-                        command.stamp(alembic_cfg, legacy_revision)
-                        command.upgrade(alembic_cfg, "head")
-                        _ensure_fts5(conn)
-                    else:
-                        missing = ", ".join(sorted(model_tables - existing_tables))
-                        raise RuntimeError(
-                            "Metadata database has existing tables but no Alembic version; "
-                            f"cannot safely migrate because required tables are missing: {missing}"
-                        )
-            else:
-                logger.info("Alembic migration: upgrading to head")
-                command.upgrade(alembic_cfg, "head")
-    except Exception as e:
-        logger.error("数据库初始化失败: %s", e)
-        if backup_path is not None and backup_path.exists():
-            try:
-                engine.dispose()
-                MetadataBackupService.restore_sqlite(backup_path, DB_PATH)
-                with engine.begin() as conn:
-                    _ensure_fts5(conn)
-                logger.info("已从备份恢复数据库")
-            except Exception as restore_err:
-                logger.error("恢复备份失败: %s", restore_err)
-        raise
+                }
+                required_objects = {
+                    "schema_search_fts",
+                    "query_history_fts",
+                    "query_history_search_docs_ai",
+                    "query_history_search_docs_ad",
+                    "query_history_search_docs_au",
+                }
+                if not required_objects.issubset(objects):
+                    raise RuntimeError("DBFOX_METADATA_FTS_CONTRACT_MISSING")
+                if connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall():
+                    raise RuntimeError("DBFOX_METADATA_FOREIGN_KEY_VIOLATION")
+    finally:
+        metadata_engine.dispose()
+
+
+def initialize_metadata_database() -> None:
+    """Initialize the private metadata runtime through Alembic and reset only.
+
+    There is deliberately no ORM ``create_all``, table-name inference, schema
+    stamp, or ad-hoc recovery path here.  Migrations own schema evolution;
+    the versioned reset owns destructive retirement of legacy runtime state.
+    """
+    run_alembic_upgrade(DATABASE_URL)
+    verify_metadata_database(DATABASE_URL)
+
+    from engine.security.runtime_reset import (
+        reset_legacy_runtime_state,
+        retire_legacy_project_runtime_dir,
+        retire_legacy_source_runtime,
+    )
+
+    runtime_root = private_runtime_root()
+    reset_legacy_runtime_state(DATABASE_URL, runtime_root)
+    verify_metadata_database(DATABASE_URL)
+
+    # A prior source-mode release stored metadata/checkpoints in the repository
+    # root.  After the new private runtime is healthy, retire exactly that
+    # known artifact family and nothing inferred from a database record.
+    if not _env_db_url and LEGACY_SOURCE_METADATA_PATH != DB_PATH:
+        retire_legacy_source_runtime(LEGACY_SOURCE_RUNTIME_ROOT)
+        retire_legacy_project_runtime_dir(runtime_root)

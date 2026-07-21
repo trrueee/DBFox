@@ -71,15 +71,24 @@ def test_generate_test_data_confirmation_binds_language(client, test_datasource,
         def __init__(self) -> None:
             self.created_details: dict[str, object] | None = None
 
-        def create_confirmation(self, datasource_id: str, action: str, details: dict[str, object], expected_confirm_text: str) -> str:
+        def create_confirmation(
+            self,
+            *,
+            db: Session,
+            datasource_id: str,
+            action: str,
+            details: dict[str, object],
+            expected_confirm_text: str,
+        ) -> str:
             self.created_details = details
             return "test-data-token"
 
         def validate_and_consume(
             self,
+            *,
+            db: Session,
             token: str,
             confirm_text: str,
-            *,
             expected_action: str,
             expected_datasource_id: str,
             expected_details: dict[str, object],

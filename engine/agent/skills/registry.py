@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.agent.skills.schemas import SkillSpec
-from engine.agent_core.extensions.discovery import (
+from engine.agent.skills.discovery import (
     SkillSource,
     BuiltinSkillSource,
     UserSkillSource,

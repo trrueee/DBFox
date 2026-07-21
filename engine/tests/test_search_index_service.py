@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from engine.crypto import encrypt_password
-from engine.models import DEFAULT_PROJECT_ID, DataSource, QueryHistory
+from engine.models import DEFAULT_PROJECT_ID, DataSource, Project, QueryHistory
 from engine.persistence.search_index import SearchIndexService
 
 
 def _datasource(db_session, datasource_id: str) -> DataSource:
-    cipher, nonce = encrypt_password("secret")
+    if db_session.get(Project, DEFAULT_PROJECT_ID) is None:
+        db_session.add(Project(id=DEFAULT_PROJECT_ID, name="Default project"))
+        db_session.flush()
     ds = DataSource(
         id=datasource_id,
         project_id=DEFAULT_PROJECT_ID,
@@ -15,8 +16,6 @@ def _datasource(db_session, datasource_id: str) -> DataSource:
         port=0,
         database_name=":memory:",
         username="readonly",
-        password_ciphertext=cipher,
-        password_nonce=nonce,
         db_type="sqlite",
         status="active",
     )
@@ -48,7 +47,7 @@ def test_query_history_index_search_and_delete(db_session) -> None:
     history = _history(db_session, "hist-1", "ds-search", "find revenue", "SELECT revenue FROM orders")
     service = SearchIndexService(db_session)
 
-    service.ensure_schema()
+    service.assert_schema()
     service.index_query_history(history)
     db_session.commit()
 
@@ -66,7 +65,7 @@ def test_query_history_index_clear_is_datasource_scoped(db_session) -> None:
     hist_a = _history(db_session, "hist-a", "ds-a", "customer churn", "SELECT churn FROM customers")
     hist_b = _history(db_session, "hist-b", "ds-b", "customer churn", "SELECT churn FROM customers")
     service = SearchIndexService(db_session)
-    service.ensure_schema()
+    service.assert_schema()
     service.index_query_history(hist_a)
     service.index_query_history(hist_b)
     db_session.commit()
@@ -83,7 +82,7 @@ def test_rebuild_query_history_index_backfills_existing_history(db_session) -> N
     _history(db_session, "hist-rebuild", "ds-rebuild", "gross margin", "SELECT margin FROM finance")
     service = SearchIndexService(db_session)
 
-    service.ensure_schema()
+    service.assert_schema()
     service.rebuild_query_history_index()
     db_session.commit()
 

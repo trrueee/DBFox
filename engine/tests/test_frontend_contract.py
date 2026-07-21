@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
-from engine.models import DataSource, QueryHistory
+from engine.models import DataSource, Project, QueryHistory
 from engine.sql.trust_gate import TrustGate
 from engine.sql.safety_gate import validate_sql_schema
 
@@ -29,6 +29,18 @@ def parse_types_ts_interface(interface_name: str) -> set[str]:
             fields.add(field_match.group(1))
     return fields
 
+
+def _ensure_project(db_session, project_id: str) -> None:
+    if db_session.get(Project, project_id) is None:
+        db_session.add(
+            Project(
+                id=project_id,
+                name=f"Frontend contract project {project_id}",
+                description="Project required by the datasource foreign key.",
+            )
+        )
+        db_session.flush()
+
 @pytest.fixture
 def client(db_session):
     from engine.db import get_db
@@ -43,6 +55,7 @@ def client(db_session):
         test_client.close()
 
 def test_datasource_response_shape_matches_types_ts(client, db_session):
+    _ensure_project(db_session, "default")
     ds = DataSource(
         id="ds-test-contract",
         project_id="default",
@@ -80,13 +93,13 @@ def test_sqlite_datasource_response_serializes_nullable_connection_fields():
 
     ds = DataSource(
         id="ds-sqlite-null-host",
-        project_id="default",
         name="sqlite_contract",
         db_type="sqlite",
         host=None,
         port=0,
         database_name="/tmp/local.db",
         username=None,
+        connection_generation=1,
         is_read_only=False,
         ssh_enabled=False,
         ssl_enabled=False,
@@ -102,6 +115,7 @@ def test_sqlite_datasource_response_serializes_nullable_connection_fields():
 
 def test_delete_datasource_accepts_confirmation_in_request_body(client, db_session, monkeypatch):
     monkeypatch.setenv("DBFOX_BYPASS_CONFIRMATION", "0")
+    _ensure_project(db_session, "default")
     ds = DataSource(
         id="ds-delete-body",
         project_id="default",
@@ -142,6 +156,7 @@ def test_delete_datasource_accepts_confirmation_in_request_body(client, db_sessi
 
 def test_datasource_health_failure_uses_fixed_code_and_persists_only_code(client, db_session, tmp_path):
     sentinel = "user-sqlite-path-secret-sentinel"
+    _ensure_project(db_session, "default")
     ds = DataSource(
         id="ds-health-fixed-code",
         project_id="default",
@@ -220,6 +235,7 @@ def test_datasource_health_unexpected_error_never_leaks_exception_text(
 def test_list_tables_reports_auto_sync_failure(client, db_session, monkeypatch):
     from engine.api.datasources import schema as datasource_schema_module
 
+    _ensure_project(db_session, "default")
     ds = DataSource(
         id="ds-auto-sync-failure",
         project_id="default",
@@ -264,7 +280,7 @@ def test_query_history_response_sanitizes_legacy_sensitive_fields(client, db_ses
         execution_status="failed",
         rows_returned=0,
         columns_returned=0,
-        error_message="driver leaked sk-live-secret1234567890",
+        error_message="driver leaked api_key = 'TEST_LLM_SECRET'",
     )
     db_session.add(history)
     db_session.commit()
@@ -281,7 +297,7 @@ def test_query_history_response_sanitizes_legacy_sensitive_fields(client, db_ses
     assert "raw-token" not in serialized
     assert "plain-secret" not in serialized
     assert "13800138000" not in serialized
-    assert "sk-live-secret1234567890" not in serialized
+    assert "TEST_LLM_SECRET" not in serialized
     assert "[REDACTED_EMAIL]" in serialized
 
 
@@ -302,9 +318,14 @@ def test_console_execute_response_is_artifact_backed(client, test_datasource):
     assert any(item["type"] == "sql" for item in result["artifacts"])
     assert any(item["type"] == "safety" for item in result["artifacts"])
     result_view = next(item for item in result["artifacts"] if item["type"] == "result_view")
-    assert result_view["payload"]["storageMode"] == "sql_backed"
-    assert result_view["payload"]["sourceSqlArtifactKey"] == result["sqlArtifactId"]
-    assert "rows" not in result_view["payload"]
+    assert result_view["payload"]["sourceSqlArtifactId"] == result["sqlArtifactId"]
+    assert result_view["payload"]["queryFingerprint"]
+    assert set(result_view["payload"]) == {
+        "sourceSqlArtifactId", "queryFingerprint", "datasourceGeneration", "columns",
+        "rowCount", "returnedRows", "latencyMs", "executedAt", "truncated",
+    }
+    for forbidden in {"rows", "previewRows", "safeSql", "sourceSql", "storageMode", "datasourceId"}:
+        assert forbidden not in result_view["payload"]
 
 def test_trust_gate_result_matches_types_ts(db_session, test_datasource):
     tg = TrustGate(db_session, validate_sql_schema)

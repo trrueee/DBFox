@@ -8,37 +8,38 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 
-_CREDENTIAL_ENV_PREFIXES = ("LANGCHAIN_", "LANGSMITH_")
-_CREDENTIAL_ENV_MARKERS = (
-    "API_KEY",
-    "TOKEN",
-    "SECRET",
-    "PASSWORD",
-    "PASSPHRASE",
+# A repository-local dotenv file is not a credential distribution channel.
+# Keep this list deliberately small and limited to non-sensitive operational
+# tuning.  Credentials, database URLs, runtime paths, security bypasses and
+# provider-specific settings must be injected by the parent process or stored
+# in the OS credential vault; a deny-list cannot safely anticipate every
+# provider's future secret variable name.
+_DOTENV_ALLOWED_CONFIGURATION = frozenset(
+    {
+        "DBFOX_ENGINE_PORT",
+        "DBFOX_DB_POOL_SIZE",
+        "DBFOX_DB_MAX_OVERFLOW",
+        "DBFOX_DB_POOL_RECYCLE_SECONDS",
+        "DBFOX_DB_POOL_TIMEOUT_SECONDS",
+        "DBFOX_SQLITE_TIMEOUT_SECONDS",
+        "DBFOX_SQL_MAX_POOLS",
+        "DBFOX_SQL_MAX_CONNECTIONS",
+        "DBFOX_EXPORT_MAX_ROWS",
+        "DBFOX_EXPORT_TIMEOUT_MS",
+        "DBFOX_AGENT_CHECKPOINT_RETENTION_DAYS",
+        "DBFOX_AGENT_CHECKPOINT_MAX_TERMINAL_RUNS",
+        "DBFOX_AGENT_CHECKPOINT_MAX_BYTES",
+    }
 )
 
 
-def _is_credential_environment_variable(name: str) -> bool:
-    """Return whether an environment variable name can carry a secret.
-
-    Runtime ``.env`` files are configuration inputs only.  Product credentials
-    are intentionally resolved at their provider boundary from
-    :class:`CredentialVault`; this guard prevents a dotenv file from quietly
-    recreating a plaintext credential fallback.
-    """
-    normalized = name.upper()
-    return normalized.startswith(_CREDENTIAL_ENV_PREFIXES) or any(
-        marker in normalized for marker in _CREDENTIAL_ENV_MARKERS
-    )
-
-
 def _load_non_secret_env_file(env_file: Path) -> None:
-    """Load non-secret values from one dotenv file without overriding process env."""
+    """Load allowlisted non-secret settings without overriding process env."""
     for name, value in dotenv_values(env_file).items():
         if (
             not name
             or value is None
-            or _is_credential_environment_variable(name)
+            or name not in _DOTENV_ALLOWED_CONFIGURATION
             or name in os.environ
         ):
             continue

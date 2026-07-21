@@ -14,7 +14,14 @@ from engine.app.safe_errors import (
     fixed_error_detail,
     log_unexpected_exception,
 )
-from engine.datasource import build_mysql_ssl_params, build_postgres_ssl_params, test_connection
+from engine.datasource import (
+    build_mysql_ssl_params,
+    build_postgres_ssl_params,
+    datasource_connection_dict,
+    test_connection,
+)
+from engine.connectivity.lifecycle import get_datasource_resource_lifecycle
+from engine.connectivity.profile import ConnectionProfile
 from engine.db import get_db
 from engine.errors import DBFoxError, DataSourceConnectionError, NotFoundError
 from engine.models import DataSource
@@ -65,32 +72,30 @@ def _require_credential_reference(
 
 
 def _connection_test_config(req: DataSourceTestRequest) -> dict[str, Any]:
-    """Resolve transient test credentials without persisting a secret field."""
+    """Build an opaque test profile; secrets remain in the credential vault."""
     vault = get_credential_vault()
     config = req.model_dump()
     config.pop("credential_lease_id", None)
+    config["is_managed"] = False
     if req.db_type in {"mysql", "postgresql"} and not req.password_credential_id:
         raise DataSourceConnectionError(
             "A password credential is required for network datasource connections."
         )
-    password_id = _require_credential_reference(
+    _require_credential_reference(
         vault,
         req.password_credential_id,
         CredentialKind.DATASOURCE_PASSWORD,
     )
-    ssh_password_id = _require_credential_reference(
+    _require_credential_reference(
         vault,
         req.ssh_password_credential_id,
         CredentialKind.SSH_PASSWORD,
     )
-    ssh_passphrase_id = _require_credential_reference(
+    _require_credential_reference(
         vault,
         req.ssh_key_passphrase_credential_id,
         CredentialKind.SSH_KEY_PASSPHRASE,
     )
-    config["password"] = vault.get(password_id) if password_id else ""
-    config["ssh_password"] = vault.get(ssh_password_id) if ssh_password_id else ""
-    config["ssh_pkey_passphrase"] = vault.get(ssh_passphrase_id) if ssh_passphrase_id else ""
     return config
 
 
@@ -165,6 +170,74 @@ def _delete_replaced_credentials(vault: CredentialVault, credential_ids: set[str
             vault.delete(credential_id)
         except Exception:
             logger.warning("Could not remove replaced credential reference %s", credential_id)
+
+
+def _datasource_profile(datasource: DataSource) -> ConnectionProfile:
+    """Build the managed connection profile used to fence reusable resources."""
+    return ConnectionProfile.from_mapping(datasource_connection_dict(datasource))
+
+
+def _effective_credential_references(
+    datasource: DataSource,
+    req: DataSourceUpdateRequest,
+) -> dict[str, str | None]:
+    """Canonicalize credential references for the requested connection mode.
+
+    Disabling SSH or switching to SQLite must remove now-unusable SSH/database
+    credential references rather than leaving dead secrets attached to metadata.
+    Network password references remain patch-like: an omitted value preserves
+    the existing credential for a network datasource.
+    """
+    network_dialect = req.db_type in {"mysql", "postgresql"}
+    password_credential_id = (
+        req.password_credential_id
+        if req.password_credential_id is not None
+        else datasource.password_credential_id
+    ) if network_dialect else None
+
+    if not network_dialect or not req.ssh_enabled:
+        return {
+            "password_credential_id": password_credential_id,
+            "ssh_password_credential_id": None,
+            "ssh_key_passphrase_credential_id": None,
+        }
+
+    return {
+        "password_credential_id": password_credential_id,
+        "ssh_password_credential_id": (
+            req.ssh_password_credential_id
+            if req.ssh_password_credential_id is not None
+            else datasource.ssh_password_credential_id
+        ),
+        "ssh_key_passphrase_credential_id": (
+            req.ssh_key_passphrase_credential_id
+            if req.ssh_key_passphrase_credential_id is not None
+            else datasource.ssh_key_passphrase_credential_id
+        ),
+    }
+
+
+def _validate_effective_credential_references(
+    vault: CredentialVault,
+    references: dict[str, str | None],
+) -> dict[str, str | None]:
+    return {
+        "password_credential_id": _require_credential_reference(
+            vault,
+            references["password_credential_id"],
+            CredentialKind.DATASOURCE_PASSWORD,
+        ),
+        "ssh_password_credential_id": _require_credential_reference(
+            vault,
+            references["ssh_password_credential_id"],
+            CredentialKind.SSH_PASSWORD,
+        ),
+        "ssh_key_passphrase_credential_id": _require_credential_reference(
+            vault,
+            references["ssh_key_passphrase_credential_id"],
+            CredentialKind.SSH_KEY_PASSPHRASE,
+        ),
+    }
 
 
 @router.post("/datasources/test")
@@ -289,6 +362,15 @@ def api_update_datasource(
     lease_id: str | None = None
     metadata_committed = False
     try:
+        previous_generation = datasource.connection_generation or 0
+        try:
+            previous_profile = _datasource_profile(datasource)
+        except DataSourceConnectionError:
+            # A runtime reset deliberately removes credential references and
+            # marks the datasource as needing credentials.  Editing is the
+            # recovery path, so an invalid predecessor must not prevent a new
+            # valid credential set from being saved.
+            previous_profile = None
         existing_credential_ids = {
             field: getattr(datasource, field)
             for field in (
@@ -297,13 +379,10 @@ def api_update_datasource(
                 "ssh_key_passphrase_credential_id",
             )
         }
+        effective_references = _effective_credential_references(datasource, req)
         changed_credential_ids = {
             credential_id
-            for field, credential_id in (
-                ("password_credential_id", req.password_credential_id),
-                ("ssh_password_credential_id", req.ssh_password_credential_id),
-                ("ssh_key_passphrase_credential_id", req.ssh_key_passphrase_credential_id),
-            )
+            for field, credential_id in effective_references.items()
             if credential_id and credential_id != existing_credential_ids[field]
         }
         lease_id = _claim_credential_lease(req, changed_credential_ids)
@@ -321,6 +400,10 @@ def api_update_datasource(
             build_mysql_ssl_params(config)
         elif req.db_type == "postgresql":
             build_postgres_ssl_params(config)
+        effective_references = _validate_effective_credential_references(
+            vault,
+            effective_references,
+        )
 
         set_model_attr(datasource, "name", req.name)
         set_model_attr(datasource, "db_type", req.db_type)
@@ -332,45 +415,39 @@ def api_update_datasource(
         set_model_attr(datasource, "is_read_only", req.is_read_only)
         set_model_attr(datasource, "env", req.env)
         set_model_attr(datasource, "ssh_enabled", req.ssh_enabled)
-        set_model_attr(datasource, "ssh_host", req.ssh_host)
-        set_model_attr(datasource, "ssh_port", req.ssh_port)
-        set_model_attr(datasource, "ssh_username", req.ssh_username)
-        set_model_attr(datasource, "ssh_pkey_path", req.ssh_pkey_path)
+        set_model_attr(datasource, "ssh_host", req.ssh_host if req.ssh_enabled else None)
+        set_model_attr(datasource, "ssh_port", req.ssh_port if req.ssh_enabled else 22)
+        set_model_attr(datasource, "ssh_username", req.ssh_username if req.ssh_enabled else None)
+        set_model_attr(
+            datasource,
+            "ssh_pkey_path",
+            (req.ssh_pkey_path or None) if req.ssh_enabled else None,
+        )
         set_model_attr(datasource, "ssl_enabled", req.ssl_enabled)
         set_model_attr(datasource, "ssl_ca_path", req.ssl_ca_path)
         set_model_attr(datasource, "ssl_cert_path", req.ssl_cert_path)
         set_model_attr(datasource, "ssl_key_path", req.ssl_key_path)
         set_model_attr(datasource, "ssl_verify_identity", req.ssl_verify_identity)
-        if req.password_credential_id is not None:
+        for field, credential_id in effective_references.items():
+            set_model_attr(datasource, field, credential_id)
+
+        proposed_profile = _datasource_profile(datasource)
+        connection_changed = (
+            previous_profile is None
+            or previous_profile.profile_fingerprint
+            != proposed_profile.profile_fingerprint
+        )
+        if connection_changed:
+            # This update is part of the same metadata transaction, ensuring a
+            # former A profile cannot be reused if a later edit returns to A.
             set_model_attr(
                 datasource,
-                "password_credential_id",
-                _require_credential_reference(
-                    vault,
-                    req.password_credential_id,
-                    CredentialKind.DATASOURCE_PASSWORD,
-                ),
+                "connection_generation",
+                previous_generation + 1,
             )
-        if req.ssh_password_credential_id is not None:
-            set_model_attr(
-                datasource,
-                "ssh_password_credential_id",
-                _require_credential_reference(
-                    vault,
-                    req.ssh_password_credential_id,
-                    CredentialKind.SSH_PASSWORD,
-                ),
-            )
-        if req.ssh_key_passphrase_credential_id is not None:
-            set_model_attr(
-                datasource,
-                "ssh_key_passphrase_credential_id",
-                _require_credential_reference(
-                    vault,
-                    req.ssh_key_passphrase_credential_id,
-                    CredentialKind.SSH_KEY_PASSPHRASE,
-                ),
-            )
+        current_profile = _datasource_profile(datasource)
+        if datasource.status == "needs_credentials":
+            set_model_attr(datasource, "status", "active")
 
         db.commit()
         metadata_committed = True
@@ -385,6 +462,14 @@ def api_update_datasource(
             )
             if credential_id
         }
+        if connection_changed:
+            # Publish the new generation and detach every prior pool/tunnel
+            # before the old vault secrets are eligible for deletion.
+            lifecycle = get_datasource_resource_lifecycle()
+            if previous_profile is None:
+                lifecycle.recover(current_profile)
+            else:
+                lifecycle.replace(previous_profile, current_profile)
         _delete_replaced_credentials(vault, old_credential_ids - current_credential_ids)
         return datasource_to_dict(datasource)
     except Exception:
@@ -412,6 +497,7 @@ def api_delete_datasource(
         confirm_text = confirm.confirm_text if confirm else None
         if not confirm_token:
             token = confirmation_manager.create_confirmation(
+                db=db,
                 datasource_id=id,
                 action="delete_datasource",
                 details=expected_details,
@@ -429,8 +515,9 @@ def api_delete_datasource(
             }
 
         is_valid, err_msg = confirmation_manager.validate_and_consume(
-            confirm_token,
-            confirm_text or "",
+            db=db,
+            token=confirm_token,
+            confirm_text=confirm_text or "",
             expected_action="delete_datasource",
             expected_datasource_id=id,
             expected_details=expected_details,
@@ -439,9 +526,6 @@ def api_delete_datasource(
             raise DBFoxError(message=err_msg, code="CONFIRMATION_FAILED")
 
     try:
-        from engine.datasource import close_active_tunnel
-        from engine.sql.pool_registry import get_pool_registry
-
         credential_ids = {
             credential_id
             for credential_id in (
@@ -451,10 +535,13 @@ def api_delete_datasource(
             )
             if credential_id
         }
-        close_active_tunnel(id)
-        get_pool_registry().dispose_datasource(id)
         db.delete(datasource)
         db.commit()
+        # Persist the deletion first.  Retiring before the commit would leave
+        # a still-persisted datasource unusable for this engine process when a
+        # database error rolls the deletion back.  The lifecycle fence still
+        # runs before the old vault credentials become eligible for deletion.
+        get_datasource_resource_lifecycle().retire(id)
         _delete_replaced_credentials(get_credential_vault(), credential_ids)
         return {"success": True, "message": "数据源已删除"}
     except Exception:
@@ -465,9 +552,7 @@ def api_delete_datasource(
 @router.post("/datasources/{id}/release")
 def api_release_datasource(id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
     try:
-        from engine.sql.pool_registry import get_pool_registry
-
-        get_pool_registry().dispose_datasource(id)
+        get_datasource_resource_lifecycle().release_pools(id)
         return {"success": True, "message": "数据源连接池已成功释放"}
     except Exception as exc:
         log_unexpected_exception(

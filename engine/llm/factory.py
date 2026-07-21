@@ -1,34 +1,29 @@
 """LLM client factory - single entry point for model client construction."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from langchain_openai import ChatOpenAI
+    from openai import OpenAI
 
 from engine.llm.config import LlmConfig
-from engine.llm.providers.openai import create_openai_client
+from engine.llm.providers.openai import create_openai_compatible_api_client
 
 
-@dataclass(frozen=True)
-class LlmCallOptions:
-    temperature: float = 0.0
-    max_tokens: int | None = None
-    timeout: float = 120.0
-
-
-def create_chat_model(
+def create_openai_compatible_client(
     config: LlmConfig,
-    options: LlmCallOptions | None = None,
-) -> "ChatOpenAI":
-    """Build a chat model from an already-resolved LLM configuration."""
-    resolved_options = options or LlmCallOptions()
-    return create_openai_client(
-        model_name=config.model_name,
+    *,
+    timeout: float = 120.0,
+) -> "OpenAI":
+    """Build a non-LangChain OpenAI-compatible client through the LLM boundary.
+
+    This is intentionally the only factory API for product code that needs
+    direct SDK access.  Provider-level endpoint validation and transport
+    ownership are therefore shared with the Agent model factory.
+    """
+
+    return create_openai_compatible_api_client(
         api_key=config.api_key,
         api_base=config.api_base,
-        temperature=resolved_options.temperature,
-        max_tokens=resolved_options.max_tokens,
-        timeout=resolved_options.timeout,
+        timeout=timeout,
     )

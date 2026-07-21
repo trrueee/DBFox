@@ -39,6 +39,8 @@ def sql_execute_readonly(
     question: str = "",
     safety: dict[str, Any] | None = None,
     ignored_model_sql: str | None = None,
+    execution_id: str | None = None,
+    expected_connection_generation: int | None = None,
 ) -> dict[str, Any]:
     """Execute a read-only SELECT SQL statement using the pre-validated safety decision."""
     start = time.perf_counter()
@@ -68,6 +70,8 @@ def sql_execute_readonly(
         safety_decision=safety,
         safety_policy="agent_readonly",
         redact=True,
+        execution_id=execution_id,
+        expected_connection_generation=expected_connection_generation,
     )
 
     rows = result.get("rows") or []

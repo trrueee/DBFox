@@ -39,6 +39,7 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
         expected_details = {"table_name": req.table_name, "row_count": req.row_count, "language": req.language}
         if not req.confirm_token:
             token = confirmation_manager.create_confirmation(
+                db=db,
                 datasource_id=req.datasource_id,
                 action="generate_test_data",
                 details=expected_details,
@@ -53,8 +54,9 @@ def api_generate_test_data(req: TestDataGenerateRequest, db: Session = Depends(g
             }
 
         is_valid, err_msg = confirmation_manager.validate_and_consume(
-            req.confirm_token,
-            req.confirm_text or "",
+            db=db,
+            token=req.confirm_token,
+            confirm_text=req.confirm_text or "",
             expected_action="generate_test_data",
             expected_datasource_id=req.datasource_id,
             expected_details=expected_details

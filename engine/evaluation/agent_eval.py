@@ -8,15 +8,27 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.agent import DBFoxAgentRuntime
-from engine.agent_core.persistence._common import _redact_runtime_event_value
-from engine.agent_core.types import AgentRunRequest, AgentWorkspaceContext
+from engine.agent.service import AgentExecutionRequest, execute_agent_sync
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.evaluation.agent_case_evaluator import AgentCaseEvaluator
 from engine.models import AgentEvalCaseResult, AgentEvalRun, AgentGoldenTask
 from engine.schemas.agent_eval import AgentEvalRunRequest, AgentEvalRunResponse, AgentEvalCaseResultResponse
 
 logger = logging.getLogger("dbfox.agent_eval")
+
+_SENSITIVE_KEYS = frozenset({"api_key", "authorization", "credential", "password", "secret", "token"})
+
+
+def _redact_runtime_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): ("[REDACTED]" if any(part in str(key).lower() for part in _SENSITIVE_KEYS)
+                       else _redact_runtime_value(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_runtime_value(item) for item in value]
+    return value
 
 
 class AgentEvalRunner:
@@ -74,30 +86,19 @@ class AgentEvalRunner:
         total_latency = 0
         case_telemetries: list[dict[str, Any]] = []
         case_responses: list[AgentEvalCaseResultResponse] = []
-        runtime = DBFoxAgentRuntime(self.db)
-
         for task in tasks:
             try:
                 start = time.monotonic()
-                workspace_ctx = _build_workspace_context(task)
-                agent_req = AgentRunRequest(
+                context_tables = _build_workspace_context(task)
+                agent_req = AgentExecutionRequest(
                     datasource_id=str(task.datasource_id),
                     question=str(task.question),
-                    session_id=None,
-                    execute=req.execute,
                     llm_credential_id=req.llm_credential_id,
                     api_base=req.api_base,
                     model_name=req.model_name,
-                    workspace_context=workspace_ctx,
+                    context_tables=context_tables,
                 )
-                events_payload: list[dict[str, Any]] = []
-                response = None
-                for event in runtime.run_iter(agent_req):
-                    events_payload.append(event.model_dump(mode="json"))
-                    if event.response is not None:
-                        response = event.response
-                if response is None:
-                    raise RuntimeError("Agent eval case completed without a final response.")
+                response, events_payload = execute_agent_sync(agent_req)
                 latency_ms = int((time.monotonic() - start) * 1000)
                 total_latency += latency_ms
 
@@ -228,32 +229,24 @@ class AgentEvalRunner:
         )
 
 
-def _build_workspace_context(task: AgentGoldenTask) -> AgentWorkspaceContext | None:
+def _build_workspace_context(task: AgentGoldenTask) -> list[str]:
     try:
         data = json.loads(str(task.workspace_context_json))
     except (json.JSONDecodeError, TypeError):
-        return None
+        return []
     if not isinstance(data, dict) or not data:
-        return None
+        return []
     selected = data.get("selected_table_names")
-    return AgentWorkspaceContext(
-        datasource_id=str(task.datasource_id),
-        active_sql=data.get("active_sql"),
-        last_error=data.get("last_error"),
-        last_query_result_preview=data.get("last_query_result_preview"),
-        selected_table_names=list(selected) if isinstance(selected, list) else [],
-        selected_artifact_id=data.get("selected_artifact_id"),
-        recent_agent_run_id=data.get("recent_agent_run_id"),
-    )
+    return [str(value) for value in selected] if isinstance(selected, list) else []
 
 
 def _safe_response_json(response: Any, *, eval_telemetry: dict[str, Any] | None = None) -> str:
     try:
-        data = _redact_runtime_event_value(response.model_dump(mode="json"))
+        data = _redact_runtime_value(response.model_dump(mode="json"))
         if not isinstance(data, dict):
             return "{}"
         if eval_telemetry is not None:
-            data["eval_telemetry"] = _redact_runtime_event_value(eval_telemetry)
+            data["eval_telemetry"] = _redact_runtime_value(eval_telemetry)
         return json.dumps(data, ensure_ascii=False, default=str)
     except Exception:
         return "{}"
@@ -268,11 +261,47 @@ def _runtime_product_telemetry(events: list[dict[str, Any]], response: Any) -> d
     failure_layer: str | None = None
     repair_attempts: set[str] = set()
     repair_events_without_attempt = 0
+    tool_started_at: dict[str, datetime] = {}
 
     for raw_event in events:
-        event = _redact_runtime_event_value(raw_event)
+        event = _redact_runtime_value(raw_event)
         if not isinstance(event, dict):
             continue
+        event_type = _clean_string(event.get("event_type"))
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        if event_type:
+            stage_counts[event_type] = stage_counts.get(event_type, 0) + 1
+        invocation = payload.get("tool_invocation") if isinstance(payload, dict) else None
+        if event_type == "tool.requested" and isinstance(invocation, dict):
+            tool_name = _clean_string(invocation.get("tool_name"))
+            if tool_name:
+                key = f"tool:{tool_name}"
+                stage_counts[key] = stage_counts.get(key, 0) + 1
+        invocation_id = _clean_string(payload.get("tool_invocation_id")) if isinstance(payload, dict) else None
+        timestamp = _event_datetime(event.get("timestamp"))
+        if event_type == "tool.running" and invocation_id and timestamp:
+            tool_started_at[invocation_id] = timestamp
+        if event_type in {"tool.completed", "tool.failed"} and invocation_id and timestamp:
+            started_at = tool_started_at.get(invocation_id)
+            if started_at:
+                stage_durations_ms["tool"] = stage_durations_ms.get("tool", 0) + max(
+                    0, int((timestamp - started_at).total_seconds() * 1_000)
+                )
+        if event_type == "observation.created" and isinstance(payload, dict):
+            observation = payload.get("observation")
+            if isinstance(observation, dict):
+                _append_unique(error_classes, observation.get("error_code"))
+        if event_type == "run.failed" and isinstance(payload, dict):
+            error = payload.get("error")
+            if isinstance(error, dict):
+                _append_unique(error_classes, error.get("code"))
+                if failure_layer is None:
+                    failure_layer = "runtime"
+        if event_type == "activity.updated" and isinstance(payload, dict):
+            activity = payload.get("activity")
+            if isinstance(activity, dict) and activity.get("kind") == "recovery":
+                repair_events_without_attempt += 1
+
         step = event.get("step")
         if not isinstance(step, dict):
             continue
@@ -316,6 +345,16 @@ def _runtime_product_telemetry(events: list[dict[str, Any]], response: Any) -> d
         "final_status": final_status,
         "final_success": final_success,
     }
+
+
+def _event_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 def _summarize_runtime_telemetry(case_telemetries: list[dict[str, Any]]) -> dict[str, Any]:

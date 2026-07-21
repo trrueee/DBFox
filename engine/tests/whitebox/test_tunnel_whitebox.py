@@ -4,6 +4,16 @@ from engine.app.safe_errors import FixedErrorCode, fixed_error_message
 from engine.errors import DataSourceConnectionError
 from engine.tunnel import TunnelManager, TunnelState
 
+
+def _managed_config(**overrides):
+    return {
+        "id": "ds-1",
+        "connection_generation": 1,
+        "connection_fingerprint": "profile-v1",
+        **overrides,
+    }
+
+
 # covers: TUNNEL-1 First get
 def test_tunnel1_first_get():
     mgr = TunnelManager()
@@ -13,7 +23,7 @@ def test_tunnel1_first_get():
     mgr._start_physical_tunnel = MagicMock(return_value=mock_tunnel)
     mgr.health_check = MagicMock(return_value=True)
     
-    ds_dict = {"id": "ds-1", "host": "127.0.0.1", "port": 3306}
+    ds_dict = _managed_config(host="127.0.0.1", port=3306)
     t = mgr.get_or_reconnect(ds_dict)
     assert t == mock_tunnel
     mgr._start_physical_tunnel.assert_called_once_with(ds_dict)
@@ -28,7 +38,7 @@ def test_tunnel2_reuse():
     mgr._start_physical_tunnel = MagicMock(return_value=mock_tunnel)
     mgr.health_check = MagicMock(return_value=True)
     
-    ds_dict = {"id": "ds-1"}
+    ds_dict = _managed_config()
     t1 = mgr.get_or_reconnect(ds_dict)
     t2 = mgr.get_or_reconnect(ds_dict)
     assert t1 == t2
@@ -47,7 +57,7 @@ def test_tunnel3_reconnect_success():
     
     mgr._start_physical_tunnel = MagicMock(side_effect=[mock_tunnel1, mock_tunnel2])
     mgr.health_check = MagicMock(return_value=True)
-    ds_dict = {"id": "ds-1"}
+    ds_dict = _managed_config()
     t1 = mgr.get_or_reconnect(ds_dict)
     assert t1 == mock_tunnel1
     
@@ -67,7 +77,7 @@ def test_tunnel4_reconnect_failure():
     sentinel = "ssh-reconnect-secret-sentinel"
     mgr._start_physical_tunnel = MagicMock(side_effect=[mock_tunnel1, Exception(sentinel)])
     mgr.health_check = MagicMock(return_value=True)
-    ds_dict = {"id": "ds-1"}
+    ds_dict = _managed_config()
     t1 = mgr.get_or_reconnect(ds_dict)
     assert t1 == mock_tunnel1
     
@@ -103,7 +113,7 @@ def test_tunnel6_stop_exception_swallowed():
     
     mgr._start_physical_tunnel = MagicMock(side_effect=[mock_tunnel1, mock_tunnel2])
     mgr.health_check = MagicMock(return_value=True)
-    ds_dict = {"id": "ds-1"}
+    ds_dict = _managed_config()
     mgr.get_or_reconnect(ds_dict)
     
     mgr.health_check = MagicMock(return_value=False)

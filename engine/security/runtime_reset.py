@@ -1,28 +1,45 @@
-"""One-time, deliberately limited cleanup for the Foundation v2 runtime.
+"""One-time destructive cleanup for the Foundation v2 runtime.
 
-The reset removes only runtime-derived metadata and a small, fixed family of
-local runtime files.  It deliberately has no credential-vault dependency:
-vault values are process-global and cannot participate in the metadata SQLite
-transaction safely.
+The reset has two durable phases.  The metadata transaction first clears the
+legacy database state and records a *pending* marker; only then are fixed,
+local runtime artifacts removed.  A failed external cleanup therefore remains
+pending and is retried safely on the next startup instead of leaving a
+marker-free, partially reset installation.
+
+The module deliberately has no credential-vault dependency: vault values are
+process-global and cannot participate in the metadata SQLite transaction
+safely.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 import os
 from pathlib import Path
 import re
 import stat
 from typing import Iterable
 
-from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine, make_url
 
 from engine.db import build_metadata_engine
 from engine.errors import DBFoxError
+from engine.runtime_paths import PROJECT_DIR
+from engine.security.runtime_reset_database import (
+    clear_database_runtime_state,
+    compact_metadata_after_reset,
+    mark_cleanup_completed,
+    read_marker,
+    write_pending_marker,
+)
 
 
-FOUNDATION_RUNTIME_VERSION = "2"
+# Version 2 was written by the first, incomplete reset implementation. Version
+# 3 introduced the durable cleanup protocol and strict privacy-preserving
+# allowlist. Version 4 retires the fixed legacy local AES key file that prior
+# releases wrote under the private runtime. Only these known predecessors may
+# be upgraded; any other value remains fail-closed.
+FOUNDATION_RUNTIME_VERSION = "4"
+_UPGRADABLE_LEGACY_RUNTIME_VERSIONS = frozenset({"2", "3"})
 
 
 class RuntimeResetPathError(DBFoxError):
@@ -61,28 +78,96 @@ RuntimeResetResult = ResetResult
 class _CleanupPlan:
     runtime_root: Path
     files: tuple[Path, ...]
+    protected_files: tuple[Path, ...]
+    # Directories are removed after files, in deepest-first order.  They are
+    # deliberately explicit instead of using a recursive remover so the same
+    # pinned-handle / dir-fd containment rules apply to every deletion.
+    directories: tuple[Path, ...] = ()
 
 
 _SIDECAR_SUFFIXES = ("", "-wal", "-shm", "-journal", ".version")
 _BACKUP_SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal", ".version")
 
-_AGENT_DELETE_ORDER = (
+_RESET_MARKER_MISSING = "missing"
+_RESET_MARKER_PENDING = "pending"
+_RESET_MARKER_COMPLETED = "completed"
+_RESET_MARKER_LEGACY = "legacy"
+
+_MAX_MANAGED_BACKUP_FILES = 10_000
+_MAX_MANAGED_BACKUP_DEPTH = 5
+_O_DIRECTORY = int(getattr(os, "O_DIRECTORY", 0))
+_O_NOFOLLOW = int(getattr(os, "O_NOFOLLOW", 0))
+
+# This was the exact source-checkout fallback used before private runtime
+# storage became mandatory.  Do not infer an arbitrary checkout subdirectory
+# from configuration or data records: only this fixed historical location is
+# eligible for retirement.
+_LEGACY_PROJECT_RUNTIME_DIR_NAME = ".dbfox_runtime"
+_LEGACY_PROJECT_RUNTIME_TOP_LEVEL_DIRS = frozenset(
+    {
+        "auth",
+        "backups",
+        "config",
+        "data",
+        "logs",
+        "memory",
+        "secrets",
+        "tests",
+    }
+)
+_MAX_LEGACY_PROJECT_RUNTIME_FILES = 10_000
+_MAX_LEGACY_PROJECT_RUNTIME_DEPTH = 8
+
+_RESET_DELETE_ORDER = (
+    # Leaf records first.  These can contain prompts, SQL, result rows, or
+    # serialized Agent state and are never allowed to cross the Foundation
+    # boundary.
+    "confirmation_tokens",
+    "agent_evidence",
+    "agent_question_requests",
+    "agent_observations",
     "agent_approvals",
+    "agent_events",
+    "agent_task_plans",
     "agent_checkpoints",
     "agent_artifacts",
+    "agent_tool_invocations",
+    "agent_turns",
     "agent_runtime_events",
     "agent_trace_events",
+    "agent_eval_case_results",
+    "workspace_table_scopes",
+    "query_history_search_docs",
+
+    # Runs must precede messages: the run FK uses SET NULL on a message but
+    # reset deletes both, and the explicit order is stable across SQLite.
     "agent_runs",
+    "agent_session_inputs",
     "agent_session_memories",
     "agent_messages",
     "agent_sessions",
-)
 
-_SCHEMA_DELETE_ORDER = (
+    "agent_eval_runs",
+    "agent_golden_tasks",
+
+    # Schema/search state is reconstructed from the datasource after users
+    # explicitly re-enrol credentials.
     "schema_search_docs",
-    "workspace_table_scopes",
     "schema_columns",
     "schema_tables",
+
+    "query_history",
+
+    # These records may contain source SQL, prompts, responses, backup paths,
+    # user business terminology, or other legacy state.  The Foundation reset
+    # intentionally preserves none of them.
+    "llm_logs",
+    "golden_sqls",
+    "reusable_sqls",
+    "semantic_aliases",
+    "domain_tag_rules",
+    "backup_records",
+    "table_design_drafts",
 )
 
 
@@ -97,9 +182,31 @@ def _is_link_or_reparse(file_stat: os.stat_result) -> bool:
 def _absolute_lexical_path(path: Path) -> Path:
     """Return an absolute lexical path without resolving links."""
     try:
-        return path if path.is_absolute() else Path.cwd() / path
+        absolute_path = path if path.is_absolute() else Path.cwd() / path
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         raise RuntimeResetPathError() from exc
+    _reject_windows_path_aliases(absolute_path)
+    return absolute_path
+
+
+def _reject_windows_path_aliases(path: Path) -> None:
+    """Reject Win32 spellings that can alias another path or an ADS stream.
+
+    The reset has no user-facing path input, so accepting names such as
+    ``state.db.`` or ``state.db::$DATA`` buys no compatibility and makes a
+    string-based path guard unsound on NTFS.  Handle identity checks below are
+    the final authority; this early rule keeps unsafe metadata URLs out of the
+    cleanup plan altogether.
+    """
+    if os.name != "nt":
+        return
+    for index, part in enumerate(path.parts):
+        if index == 0 and part == path.anchor:
+            continue
+        if part in {"", ".", ".."}:
+            continue
+        if part.endswith((".", " ")) or ":" in part:
+            raise RuntimeResetPathError()
 
 
 def _validate_existing_components(path: Path, *, require_all: bool) -> None:
@@ -193,6 +300,28 @@ def _validate_candidate(
     return raw_candidate
 
 
+def _validate_directory_candidate(
+    runtime_root: Path,
+    candidate: Path,
+    *,
+    require_existing: bool = False,
+) -> Path:
+    """Validate one exact directory without following links during removal."""
+    raw_candidate = _require_inside_runtime_root(runtime_root, candidate)
+    _validate_existing_components(raw_candidate, require_all=False)
+    try:
+        candidate_stat = raw_candidate.lstat()
+    except FileNotFoundError as exc:
+        if require_existing:
+            raise RuntimeResetPathError() from exc
+        return raw_candidate
+    except OSError as exc:
+        raise RuntimeResetPathError() from exc
+    if _is_link_or_reparse(candidate_stat) or not stat.S_ISDIR(candidate_stat.st_mode):
+        raise RuntimeResetPathError()
+    return raw_candidate
+
+
 def _metadata_path(metadata_url: str, runtime_root: Path) -> Path:
     try:
         metadata = make_url(metadata_url)
@@ -230,28 +359,22 @@ def _default_checkpoint_path(metadata_path: Path) -> Path:
     return metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
 
 
-def _checkpoint_files(
-    runtime_root: Path,
-    checkpoint_path: Path | None,
-    metadata_path: Path,
-) -> tuple[Path, ...]:
-    if checkpoint_path is None:
-        base = _default_checkpoint_path(metadata_path)
-    else:
-        try:
-            base = Path(checkpoint_path).expanduser()
-        except (TypeError, ValueError) as exc:
-            raise RuntimeResetPathError() from exc
-        if not base.is_absolute():
-            base = runtime_root / base
-    return _sidecar_family(base)
+def _checkpoint_files(metadata_path: Path) -> tuple[Path, ...]:
+    """Return the only checkpoint family owned by the Foundation runtime.
+
+    A reset must never accept a caller-selected file and relabel it as a
+    checkpoint.  The location is deterministic from the validated metadata
+    database, which also makes an interrupted cleanup safely resumable.
+    """
+    return _sidecar_family(_default_checkpoint_path(metadata_path))
 
 
 def _backup_family_files(metadata_path: Path) -> tuple[Path, ...]:
     """Return only exact ``<metadata-name>.bak_<digits>`` families."""
     pattern = re.compile(
-        rf"^{re.escape(metadata_path.name)}\.bak_(?P<timestamp>[0-9]+)"
-        rf"(?:{'|'.join(re.escape(suffix) for suffix in _BACKUP_SIDECAR_SUFFIXES)})?$"
+        rf"^(?P<base>{re.escape(metadata_path.name)}\.bak_(?P<timestamp>[0-9]+))"
+        rf"(?:{'|'.join(re.escape(suffix) for suffix in _BACKUP_SIDECAR_SUFFIXES)})?$",
+        flags=re.IGNORECASE if os.name == "nt" else 0,
     )
     base_names: set[str] = set()
     try:
@@ -259,7 +382,10 @@ def _backup_family_files(metadata_path: Path) -> tuple[Path, ...]:
             for entry in entries:
                 match = pattern.fullmatch(entry.name)
                 if match is not None:
-                    base_names.add(f"{metadata_path.name}.bak_{match.group('timestamp')}")
+                    # Keep the directory entry's real spelling.  NTFS is
+                    # case-insensitive, while a case-sensitive filesystem
+                    # must only touch the exact metadata family.
+                    base_names.add(match.group("base"))
     except OSError as exc:
         raise RuntimeResetPathError() from exc
 
@@ -269,15 +395,62 @@ def _backup_family_files(metadata_path: Path) -> tuple[Path, ...]:
     return tuple(files)
 
 
-def _path_key(path: Path) -> str:
-    return os.path.normcase(os.path.normpath(str(path)))
+def _managed_backup_files(runtime_root: Path) -> tuple[Path, ...]:
+    """Enumerate only regular files inside DBFox's owned backup directory.
+
+    Backup records are deleted by the reset, so their stored paths cannot be
+    trusted as cleanup instructions.  The runtime-owned ``backups`` directory
+    is the sole authority.  A link, special file, excessive depth, or
+    unreasonable file count fails closed rather than widening cleanup scope.
+    Empty directories are harmless and deliberately left behind.
+    """
+    backup_root = runtime_root / "backups"
+    try:
+        root_stat = backup_root.lstat()
+    except FileNotFoundError:
+        return ()
+    except OSError as exc:
+        raise RuntimeResetPathError() from exc
+    if _is_link_or_reparse(root_stat) or not stat.S_ISDIR(root_stat.st_mode):
+        raise RuntimeResetPathError()
+
+    files: list[Path] = []
+
+    def visit(directory: Path, depth: int) -> None:
+        if depth > _MAX_MANAGED_BACKUP_DEPTH:
+            raise RuntimeResetPathError()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    candidate = directory / entry.name
+                    try:
+                        candidate_stat = candidate.lstat()
+                    except OSError as exc:
+                        raise RuntimeResetPathError() from exc
+                    if _is_link_or_reparse(candidate_stat):
+                        raise RuntimeResetPathError()
+                    if stat.S_ISDIR(candidate_stat.st_mode):
+                        visit(candidate, depth + 1)
+                    elif stat.S_ISREG(candidate_stat.st_mode):
+                        files.append(candidate)
+                        if len(files) > _MAX_MANAGED_BACKUP_FILES:
+                            raise RuntimeResetPathError()
+                    else:
+                        raise RuntimeResetPathError()
+        except RuntimeResetPathError:
+            raise
+        except OSError as exc:
+            raise RuntimeResetPathError() from exc
+
+    visit(backup_root, 0)
+    return tuple(files)
 
 
 def _dedupe(paths: Iterable[Path]) -> tuple[Path, ...]:
     result: list[Path] = []
     seen: set[str] = set()
     for path in paths:
-        key = _path_key(path)
+        key = os.path.normcase(os.path.normpath(str(path)))
         if key not in seen:
             seen.add(key)
             result.append(path)
@@ -287,7 +460,6 @@ def _dedupe(paths: Iterable[Path]) -> tuple[Path, ...]:
 def _build_cleanup_plan(
     metadata_url: str,
     runtime_root: Path,
-    checkpoint_path: Path | None,
 ) -> _CleanupPlan:
     resolved_root = _require_runtime_root(runtime_root)
     metadata_path = _metadata_path(metadata_url, resolved_root)
@@ -301,123 +473,618 @@ def _build_cleanup_plan(
     cleanup_candidates = _dedupe(
         (
             *_backup_family_files(metadata_path),
-            *_checkpoint_files(resolved_root, checkpoint_path, metadata_path),
+            *_checkpoint_files(metadata_path),
+            *_managed_backup_files(resolved_root),
             resolved_root / "config" / "langsmith.env",
+            resolved_root / "config" / ".env",
+            # This is the sole former local credential-encryption key path.
+            # It is fixed beneath the validated private runtime; no user or
+            # metadata-provided path can influence its deletion.
+            resolved_root / "secrets" / ".secret_key",
         )
     )
     files = tuple(_validate_candidate(resolved_root, candidate) for candidate in cleanup_candidates)
 
-    # A caller must never be able to re-label the live metadata DB or one of
-    # its active sidecars as a checkpoint target.
-    metadata_keys = {_path_key(candidate) for candidate in metadata_files}
-    if any(_path_key(candidate) in metadata_keys for candidate in files):
+    # String comparison is intentionally not used for the live sidecar guard:
+    # NTFS aliases (case, trailing dots, alternate data streams, short names)
+    # can identify the same file through distinct spellings.  The secure
+    # remover compares pinned file identities immediately before deletion.
+    return _CleanupPlan(
+        runtime_root=resolved_root,
+        files=files,
+        protected_files=metadata_files,
+    )
+
+
+def _directory_trees_overlap(first: Path, second: Path) -> bool:
+    """Return whether two existing directory trees share an ancestor.
+
+    ``samefile`` compares filesystem identities instead of relying on Win32
+    spelling, case, or short-name aliases.  Both paths have already passed the
+    no-link validation performed by ``_require_runtime_root``.
+    """
+    for child, ancestor in ((first, second), (second, first)):
+        current = child
+        while True:
+            try:
+                if os.path.samefile(current, ancestor):
+                    return True
+            except OSError as exc:
+                raise RuntimeResetPathError() from exc
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+    return False
+
+
+def _build_legacy_project_runtime_cleanup_plan(
+    active_runtime_root: Path,
+) -> _CleanupPlan | None:
+    """Preflight the fixed source-checkout runtime tree before any deletion.
+
+    The legacy directory is deliberately not caller-selected.  Its historical
+    top-level layout is allowlisted, while nested content is limited to normal
+    directories and regular files.  A link, special file, unexpected top-level
+    name, or unreasonable tree fails closed before the first file is removed.
+    """
+    project_root = _require_runtime_root(PROJECT_DIR)
+    legacy_root = project_root / _LEGACY_PROJECT_RUNTIME_DIR_NAME
+    try:
+        legacy_root.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise RuntimeResetPathError() from exc
+    legacy_root = _validate_directory_candidate(
+        project_root,
+        legacy_root,
+        require_existing=True,
+    )
+
+    active_root = _require_runtime_root(active_runtime_root)
+    if _directory_trees_overlap(legacy_root, active_root):
         raise RuntimeResetPathError()
-    return _CleanupPlan(runtime_root=resolved_root, files=files)
+
+    files: list[Path] = []
+    directories: list[Path] = [legacy_root]
+
+    def visit(directory: Path, depth: int) -> None:
+        if depth > _MAX_LEGACY_PROJECT_RUNTIME_DEPTH:
+            raise RuntimeResetPathError()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in sorted(entries, key=lambda item: (item.name.casefold(), item.name)):
+                    candidate = directory / entry.name
+                    try:
+                        candidate_stat = candidate.lstat()
+                    except OSError as exc:
+                        raise RuntimeResetPathError() from exc
+                    if _is_link_or_reparse(candidate_stat):
+                        raise RuntimeResetPathError()
+                    if depth == 0 and (
+                        entry.name not in _LEGACY_PROJECT_RUNTIME_TOP_LEVEL_DIRS
+                        or not stat.S_ISDIR(candidate_stat.st_mode)
+                    ):
+                        raise RuntimeResetPathError()
+                    if stat.S_ISDIR(candidate_stat.st_mode):
+                        if depth >= _MAX_LEGACY_PROJECT_RUNTIME_DEPTH:
+                            raise RuntimeResetPathError()
+                        directories.append(candidate)
+                        visit(candidate, depth + 1)
+                    elif stat.S_ISREG(candidate_stat.st_mode):
+                        files.append(candidate)
+                        if len(files) > _MAX_LEGACY_PROJECT_RUNTIME_FILES:
+                            raise RuntimeResetPathError()
+                    else:
+                        raise RuntimeResetPathError()
+        except RuntimeResetPathError:
+            raise
+        except OSError as exc:
+            raise RuntimeResetPathError() from exc
+
+    visit(legacy_root, 0)
+    validated_files = tuple(
+        _validate_candidate(project_root, candidate)
+        for candidate in files
+    )
+    validated_directories = tuple(
+        _validate_directory_candidate(project_root, candidate, require_existing=True)
+        for candidate in sorted(
+            directories,
+            key=lambda candidate: (
+                len(candidate.relative_to(project_root).parts),
+                str(candidate).casefold(),
+                str(candidate),
+            ),
+            reverse=True,
+        )
+    )
+    return _CleanupPlan(
+        runtime_root=project_root,
+        files=validated_files,
+        protected_files=(),
+        directories=validated_directories,
+    )
+
+
+def _cleanup_relative_parts(runtime_root: Path, candidate: Path) -> tuple[str, ...]:
+    try:
+        relative = candidate.relative_to(runtime_root)
+    except ValueError as exc:
+        raise RuntimeResetPathError() from exc
+    parts = relative.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise RuntimeResetPathError()
+    return tuple(parts)
+
+
+def _remove_external_files_posix(plan: _CleanupPlan) -> None:
+    """Delete through pinned directory descriptors on POSIX platforms.
+
+    Each lookup is relative to an already-open parent directory and uses
+    ``O_NOFOLLOW``.  Replacing a path component after planning therefore
+    cannot redirect deletion outside the private runtime tree.
+    """
+    required_flags = _O_DIRECTORY | _O_NOFOLLOW
+    if (
+        not required_flags
+        or os.open not in os.supports_dir_fd
+        or os.unlink not in os.supports_dir_fd
+        or os.rmdir not in os.supports_dir_fd
+    ):
+        raise RuntimeResetPathError()
+
+    directory_flags = os.O_RDONLY | required_flags
+    try:
+        root_fd = os.open(plan.runtime_root.anchor, directory_flags)
+    except OSError as exc:
+        raise RuntimeResetPathError() from exc
+    try:
+        for part in plan.runtime_root.parts[1:]:
+            try:
+                child_fd = os.open(part, directory_flags, dir_fd=root_fd)
+            except OSError as exc:
+                raise RuntimeResetPathError() from exc
+            os.close(root_fd)
+            root_fd = child_fd
+
+        if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+            raise RuntimeResetPathError()
+
+        protected_identities: set[tuple[int, int]] = set()
+        for protected in plan.protected_files:
+            identity = _posix_file_identity(root_fd, plan.runtime_root, protected)
+            if identity is not None:
+                protected_identities.add(identity)
+
+        for candidate in plan.files:
+            _remove_posix_file(
+                root_fd,
+                plan.runtime_root,
+                candidate,
+                protected_identities,
+            )
+        for directory in plan.directories:
+            _remove_posix_directory(root_fd, plan.runtime_root, directory)
+    finally:
+        os.close(root_fd)
+
+
+def _posix_open_parent(root_fd: int, runtime_root: Path, candidate: Path) -> tuple[int, str]:
+    parts = _cleanup_relative_parts(runtime_root, candidate)
+    parent_fd = os.dup(root_fd)
+    try:
+        for part in parts[:-1]:
+            try:
+                child_fd = os.open(
+                    part,
+                    os.O_RDONLY | _O_DIRECTORY | _O_NOFOLLOW,
+                    dir_fd=parent_fd,
+                )
+            except FileNotFoundError:
+                os.close(parent_fd)
+                return -1, parts[-1]
+            except OSError as exc:
+                raise RuntimeResetPathError() from exc
+            os.close(parent_fd)
+            parent_fd = child_fd
+        return parent_fd, parts[-1]
+    except BaseException:
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        raise
+
+
+def _posix_file_identity(root_fd: int, runtime_root: Path, candidate: Path) -> tuple[int, int] | None:
+    parent_fd, leaf = _posix_open_parent(root_fd, runtime_root, candidate)
+    if parent_fd < 0:
+        return None
+    try:
+        try:
+            file_fd = os.open(leaf, os.O_RDONLY | _O_NOFOLLOW, dir_fd=parent_fd)
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            raise RuntimeResetPathError() from exc
+        try:
+            file_stat = os.fstat(file_fd)
+        finally:
+            os.close(file_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise RuntimeResetPathError()
+        return file_stat.st_dev, file_stat.st_ino
+    finally:
+        os.close(parent_fd)
+
+
+def _remove_posix_file(
+    root_fd: int,
+    runtime_root: Path,
+    candidate: Path,
+    protected_identities: set[tuple[int, int]],
+) -> None:
+    parent_fd, leaf = _posix_open_parent(root_fd, runtime_root, candidate)
+    if parent_fd < 0:
+        return
+    try:
+        try:
+            file_stat = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise RuntimeResetPathError() from exc
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise RuntimeResetPathError()
+        if (file_stat.st_dev, file_stat.st_ino) in protected_identities:
+            raise RuntimeResetPathError()
+        try:
+            os.unlink(leaf, dir_fd=parent_fd)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise RuntimeResetCleanupError() from exc
+    finally:
+        os.close(parent_fd)
+
+
+def _remove_posix_directory(root_fd: int, runtime_root: Path, directory: Path) -> None:
+    """Remove one preflighted empty directory through its pinned parent fd."""
+    parent_fd, leaf = _posix_open_parent(root_fd, runtime_root, directory)
+    if parent_fd < 0:
+        return
+    try:
+        try:
+            directory_stat = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise RuntimeResetPathError() from exc
+        if not stat.S_ISDIR(directory_stat.st_mode):
+            raise RuntimeResetPathError()
+        try:
+            os.rmdir(leaf, dir_fd=parent_fd)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            # A concurrent writer or a newly introduced link/file leaves the
+            # directory non-empty; never widen the cleanup scope to recover.
+            raise RuntimeResetCleanupError() from exc
+    finally:
+        os.close(parent_fd)
+
+
+def _remove_external_files_windows(plan: _CleanupPlan) -> None:
+    """Delete fixed runtime files by handle, never by a mutable Win32 path."""
+    import ctypes
+    import ntpath
+    from ctypes import wintypes
+
+    class _ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", wintypes.DWORD),
+            ("ftCreationTime", wintypes.FILETIME),
+            ("ftLastAccessTime", wintypes.FILETIME),
+            ("ftLastWriteTime", wintypes.FILETIME),
+            ("dwVolumeSerialNumber", wintypes.DWORD),
+            ("nFileSizeHigh", wintypes.DWORD),
+            ("nFileSizeLow", wintypes.DWORD),
+            ("nNumberOfLinks", wintypes.DWORD),
+            ("nFileIndexHigh", wintypes.DWORD),
+            ("nFileIndexLow", wintypes.DWORD),
+        ]
+
+    class _FileDispositionInformation(ctypes.Structure):
+        _fields_ = [("delete_file", wintypes.BOOL)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    create_file.restype = wintypes.HANDLE
+    get_information = kernel32.GetFileInformationByHandle
+    get_information.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ByHandleFileInformation)]
+    get_information.restype = wintypes.BOOL
+    get_final_path = kernel32.GetFinalPathNameByHandleW
+    get_final_path.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+    get_final_path.restype = wintypes.DWORD
+    set_information = kernel32.SetFileInformationByHandle
+    set_information.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    set_information.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+
+    delete_access = 0x00010000
+    read_attributes = 0x00000080
+    share_read_write = 0x00000003
+    open_existing_disposition = 3
+    file_attribute_reparse_point = 0x00000400
+    file_flag_backup_semantics = 0x02000000
+    file_flag_open_reparse_point = 0x00200000
+    file_disposition_information = 4
+    file_name_normalized = 0
+    error_file_not_found = 2
+    error_path_not_found = 3
+    invalid_handle_value = ctypes.c_void_p(-1).value
+
+    def close(pinned: tuple[int, tuple[int, int], str, int] | None) -> None:
+        if pinned is not None:
+            close_handle(pinned[0])
+
+    def final_path(handle: int) -> str:
+        required = get_final_path(handle, None, 0, file_name_normalized)
+        if not required:
+            raise RuntimeResetPathError()
+        buffer = ctypes.create_unicode_buffer(required + 1)
+        copied = get_final_path(handle, buffer, len(buffer), file_name_normalized)
+        if not copied or copied >= len(buffer):
+            raise RuntimeResetPathError()
+        return ntpath.normcase(ntpath.normpath(buffer.value))
+
+    def is_inside(root_path: str, child_path: str) -> bool:
+        try:
+            return ntpath.commonpath([root_path, child_path]) == root_path
+        except ValueError:
+            return False
+
+    def open_existing_handle(
+        path: Path,
+        *,
+        directory: bool,
+        delete: bool,
+    ) -> tuple[int, tuple[int, int], str, int] | None:
+        flags = file_flag_open_reparse_point
+        if directory:
+            flags |= file_flag_backup_semantics
+        handle = create_file(
+            str(path),
+            read_attributes | (delete_access if delete else 0),
+            share_read_write,
+            None,
+            open_existing_disposition,
+            flags,
+            None,
+        )
+        if handle == invalid_handle_value:
+            error = ctypes.get_last_error()
+            if error in {error_file_not_found, error_path_not_found}:
+                return None
+            raise RuntimeResetCleanupError() from OSError(error, "CreateFileW failed")
+        info = _ByHandleFileInformation()
+        if not get_information(handle, ctypes.byref(info)):
+            error = ctypes.get_last_error()
+            close_handle(handle)
+            raise RuntimeResetCleanupError() from OSError(error, "GetFileInformationByHandle failed")
+        attributes = int(info.dwFileAttributes)
+        # Win32 attributes are authoritative here; opening a directory needs
+        # BACKUP_SEMANTICS, while a reparse point must never be followed.
+        if attributes & file_attribute_reparse_point or (directory != bool(attributes & 0x10)):
+            close_handle(handle)
+            raise RuntimeResetPathError()
+        identity = (
+            int(info.dwVolumeSerialNumber),
+            (int(info.nFileIndexHigh) << 32) | int(info.nFileIndexLow),
+        )
+        try:
+            resolved_path = final_path(handle)
+        except BaseException:
+            close_handle(handle)
+            raise
+        return handle, identity, resolved_path, attributes
+
+    root = open_existing_handle(plan.runtime_root, directory=True, delete=False)
+    if root is None:
+        raise RuntimeResetPathError()
+    root_path = root[2]
+    pinned: list[tuple[int, tuple[int, int], str, int]] = [root]
+
+    def open_under_root(
+        candidate: Path,
+        *,
+        required: bool,
+        delete: bool,
+        directory: bool,
+    ) -> tuple[
+        tuple[int, tuple[int, int], str, int] | None,
+        tuple[tuple[int, tuple[int, int], str, int], ...],
+    ]:
+        parts = _cleanup_relative_parts(plan.runtime_root, candidate)
+        current = plan.runtime_root
+        local_parents: list[tuple[int, tuple[int, int], str, int]] = []
+        try:
+            for part in parts[:-1]:
+                current = current / part
+                parent = open_existing_handle(current, directory=True, delete=False)
+                if parent is None:
+                    if required:
+                        raise RuntimeResetPathError()
+                    for opened_parent in reversed(local_parents):
+                        close(opened_parent)
+                    return None, ()
+                if not is_inside(root_path, parent[2]):
+                    close(parent)
+                    raise RuntimeResetPathError()
+                local_parents.append(parent)
+            target = open_existing_handle(candidate, directory=directory, delete=delete)
+            if target is None:
+                if required:
+                    raise RuntimeResetPathError()
+                for opened_parent in reversed(local_parents):
+                    close(opened_parent)
+                return None, ()
+            if not is_inside(root_path, target[2]):
+                close(target)
+                raise RuntimeResetPathError()
+            return target, tuple(local_parents)
+        except BaseException:
+            for parent in reversed(local_parents):
+                close(parent)
+            raise
+
+    try:
+        protected_identities: set[tuple[int, int]] = set()
+        for protected in plan.protected_files:
+            protected_handle, protected_parents = open_under_root(
+                protected,
+                required=protected == plan.protected_files[0],
+                delete=False,
+                directory=False,
+            )
+            if protected_handle is not None:
+                protected_identities.add(protected_handle[1])
+                pinned.extend(protected_parents)
+                pinned.append(protected_handle)
+
+        for candidate in plan.files:
+            target, target_parents = open_under_root(
+                candidate,
+                required=False,
+                delete=True,
+                directory=False,
+            )
+            if target is None:
+                continue
+            try:
+                if target[1] in protected_identities:
+                    raise RuntimeResetPathError()
+                disposition = _FileDispositionInformation(True)
+                if not set_information(
+                    target[0],
+                    file_disposition_information,
+                    ctypes.byref(disposition),
+                    ctypes.sizeof(disposition),
+                ):
+                    error = ctypes.get_last_error()
+                    raise RuntimeResetCleanupError() from OSError(
+                        error,
+                        "SetFileInformationByHandle failed",
+                    )
+            finally:
+                close(target)
+                for parent in reversed(target_parents):
+                    close(parent)
+        for directory in plan.directories:
+            target, target_parents = open_under_root(
+                directory,
+                required=False,
+                delete=True,
+                directory=True,
+            )
+            if target is None:
+                continue
+            try:
+                disposition = _FileDispositionInformation(True)
+                if not set_information(
+                    target[0],
+                    file_disposition_information,
+                    ctypes.byref(disposition),
+                    ctypes.sizeof(disposition),
+                ):
+                    error = ctypes.get_last_error()
+                    raise RuntimeResetCleanupError() from OSError(
+                        error,
+                        "SetFileInformationByHandle directory delete failed",
+                    )
+            finally:
+                close(target)
+                for parent in reversed(target_parents):
+                    close(parent)
+    finally:
+        for handle in reversed(pinned):
+            close(handle)
 
 
 def _remove_external_files(plan: _CleanupPlan) -> None:
-    # Revalidate the root as well as every entry to fail closed if a link,
-    # junction, reparse point, or directory appears after the complete plan.
+    # The initial plan check is a fail-closed early rejection.  Actual removal
+    # below repeats containment and uses pinned OS handles, so no mutable path
+    # is ever passed to unlink on Windows.
     if _require_runtime_root(plan.runtime_root) != plan.runtime_root:
         raise RuntimeResetPathError()
-    for candidate in plan.files:
-        _validate_candidate(plan.runtime_root, candidate)
-        try:
-            candidate.unlink(missing_ok=True)
-        except OSError as exc:
-            raise RuntimeResetCleanupError() from exc
+    if os.name == "nt":
+        _remove_external_files_windows(plan)
+    else:
+        _remove_external_files_posix(plan)
 
 
-def _read_marker(connection: Connection) -> bool:
-    marker = connection.execute(
-        text("SELECT runtime_version FROM foundation_runtime_state WHERE id = 1")
-    ).scalar_one_or_none()
-    if marker is None:
-        return False
-    if str(marker) != FOUNDATION_RUNTIME_VERSION:
-        raise RuntimeResetStateError()
-    return True
+def _read_marker(connection: Connection) -> str:
+    return read_marker(
+        connection,
+        runtime_version=FOUNDATION_RUNTIME_VERSION,
+        upgradable_versions=_UPGRADABLE_LEGACY_RUNTIME_VERSIONS,
+        state_error=RuntimeResetStateError,
+    )
 
 
 def _clear_database_runtime_state(connection: Connection) -> None:
-    # Agent children must precede runs, and runs/messages/memory must precede
-    # sessions. The names are constants, never user data.
-    for table_name in _AGENT_DELETE_ORDER:
-        connection.execute(text(f"DELETE FROM {table_name}"))
+    clear_database_runtime_state(connection, delete_order=_RESET_DELETE_ORDER)
 
-    # Evaluation data stays, but no retained row may point at a deleted run.
-    connection.execute(text("UPDATE agent_eval_case_results SET run_id = NULL WHERE run_id IS NOT NULL"))
 
-    # Workspace scope refers to schema tables; columns can self-reference.
-    for table_name in _SCHEMA_DELETE_ORDER:
-        connection.execute(text(f"DELETE FROM {table_name}"))
-
-    connection.execute(
-        text(
-            """
-            UPDATE data_sources
-            SET password_credential_id = NULL,
-                ssh_password_credential_id = NULL,
-                ssh_key_passphrase_credential_id = NULL,
-                last_test_at = NULL,
-                last_test_status = NULL,
-                last_test_error = NULL,
-                last_test_latency_ms = NULL,
-                last_test_readonly = NULL,
-                last_test_server_version = NULL,
-                last_test_tables_count = NULL,
-                last_test_warnings = NULL,
-                last_sync_at = NULL,
-                last_sync_status = NULL,
-                last_sync_error = NULL
-            """
-        )
-    )
-    connection.execute(
-        text(
-            """
-            UPDATE database_environments
-            SET password_credential_id = NULL,
-                status = 'created',
-                last_health_status = NULL,
-                last_health_at = NULL,
-                last_error = NULL
-            """
-        )
+def _write_pending_marker(connection: Connection) -> None:
+    """Durably record that database reset completed but cleanup is pending."""
+    write_pending_marker(
+        connection,
+        runtime_version=FOUNDATION_RUNTIME_VERSION,
     )
 
-    # schema_search_fts is external-content FTS5 without delete triggers.
-    connection.execute(text("INSERT INTO schema_search_fts(schema_search_fts) VALUES ('rebuild')"))
 
-
-def _write_marker(connection: Connection) -> None:
-    """Insert the marker as the final successful database statement."""
-    connection.execute(
-        text(
-            """
-            INSERT INTO foundation_runtime_state (id, runtime_version, reset_completed_at)
-            VALUES (:id, :runtime_version, :reset_completed_at)
-            """
-        ),
-        {
-            "id": 1,
-            "runtime_version": FOUNDATION_RUNTIME_VERSION,
-            "reset_completed_at": datetime.now(UTC),
-        },
+def _mark_cleanup_completed(connection: Connection) -> None:
+    mark_cleanup_completed(
+        connection,
+        runtime_version=FOUNDATION_RUNTIME_VERSION,
     )
+
+
+def _compact_metadata_after_reset(engine: Engine) -> None:
+    """Rewrite the metadata file and truncate WAL before completing reset.
+
+    ``secure_delete`` is enabled on every metadata connection, but historical
+    plaintext can already be on SQLite free pages or in the WAL.  A one-time
+    VACUUM copies only live pages into a new file; checkpointing then removes
+    the old WAL.  A failure intentionally leaves the durable marker pending so
+    the next startup retries rather than claiming a completed privacy reset.
+    """
+    compact_metadata_after_reset(engine, cleanup_error=RuntimeResetCleanupError)
 
 
 def reset_legacy_runtime_state(
     metadata_url: str,
     runtime_root: Path,
-    *,
-    checkpoint_path: Path | None = None,
 ) -> ResetResult:
-    """Perform the Foundation v2 reset once for a local metadata SQLite DB.
+    """Perform the current Foundation reset once for a local metadata SQLite DB.
 
-    A SQLite ``BEGIN IMMEDIATE`` serializes the first reset. External cleanup
-    is fully preflighted and happens before metadata rows change; a cleanup
-    failure therefore leaves the transaction unmodified and marker-free.
+    The first transaction deletes database state and commits a pending marker.
+    A second, writer-serialized transaction removes only fixed runtime files
+    and changes that marker to completed.  If cleanup fails or the process
+    crashes, the durable pending marker makes the next startup retry cleanup
+    without reintroducing a marker-free partial reset.
     """
     resolved_root = _require_runtime_root(runtime_root)
     _metadata_path(metadata_url, resolved_root)
@@ -429,20 +1096,58 @@ def reset_legacy_runtime_state(
     try:
         if engine.dialect.name != "sqlite":
             raise RuntimeResetPathError()
+
+        # Preflight all fixed artifacts before any metadata row changes.  The
+        # handle-based remover repeats these checks at deletion time.
+        plan = _build_cleanup_plan(metadata_url, resolved_root)
+
         with engine.connect() as connection:
             try:
-                # Deferred SQLite transactions permit two callers to read an
-                # absent marker concurrently. Acquire the writer reservation
-                # before the re-read so exactly one caller resets.
                 connection.exec_driver_sql("BEGIN IMMEDIATE")
-                if _read_marker(connection):
+                state = _read_marker(connection)
+                if state == _RESET_MARKER_COMPLETED:
                     connection.commit()
                     return ResetResult(False, FOUNDATION_RUNTIME_VERSION)
+                if state in {_RESET_MARKER_MISSING, _RESET_MARKER_LEGACY}:
+                    _clear_database_runtime_state(connection)
+                    _write_pending_marker(connection)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction():
+                    connection.rollback()
+                raise
 
-                plan = _build_cleanup_plan(metadata_url, resolved_root, checkpoint_path)
+        with engine.connect() as connection:
+            try:
+                # Keep the SQLite writer reservation through cleanup and the
+                # completion transition. Another startup may observe pending
+                # between phases, but only one can own this final phase.
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+                state = _read_marker(connection)
+                if state == _RESET_MARKER_COMPLETED:
+                    connection.commit()
+                    return ResetResult(False, FOUNDATION_RUNTIME_VERSION)
+                if state != _RESET_MARKER_PENDING:
+                    raise RuntimeResetStateError()
                 _remove_external_files(plan)
-                _clear_database_runtime_state(connection)
-                _write_marker(connection)
+                connection.commit()
+            except Exception:
+                if connection.in_transaction():
+                    connection.rollback()
+                raise
+
+        _compact_metadata_after_reset(engine)
+
+        with engine.connect() as connection:
+            try:
+                connection.exec_driver_sql("BEGIN IMMEDIATE")
+                state = _read_marker(connection)
+                if state == _RESET_MARKER_COMPLETED:
+                    connection.commit()
+                    return ResetResult(False, FOUNDATION_RUNTIME_VERSION)
+                if state != _RESET_MARKER_PENDING:
+                    raise RuntimeResetStateError()
+                _mark_cleanup_completed(connection)
                 connection.commit()
                 return ResetResult(True, FOUNDATION_RUNTIME_VERSION)
             except Exception:
@@ -451,3 +1156,52 @@ def reset_legacy_runtime_state(
                 raise
     finally:
         engine.dispose()
+
+
+def retire_legacy_source_runtime(runtime_root: Path) -> bool:
+    """Delete the exact pre-Foundation source-mode metadata artifact family.
+
+    This is intentionally narrower than the normal reset: it is used only
+    after the application has successfully initialized its new private
+    runtime.  It never follows stored database paths or scans arbitrary source
+    directories; the only permitted names are the historical metadata file,
+    its SQLite/checkpoint sidecars, and its exact timestamped metadata backups.
+    """
+    resolved_root = _require_runtime_root(runtime_root)
+    legacy_metadata = resolved_root / "dbfox_local.db"
+    cleanup_candidates = _dedupe(
+        (
+            *_sidecar_family(legacy_metadata),
+            *_checkpoint_files(legacy_metadata),
+            *_backup_family_files(legacy_metadata),
+        )
+    )
+    files = tuple(_validate_candidate(resolved_root, candidate) for candidate in cleanup_candidates)
+    if not any(candidate.exists() for candidate in files):
+        return False
+    _remove_external_files(
+        _CleanupPlan(
+            runtime_root=resolved_root,
+            files=files,
+            protected_files=(),
+        )
+    )
+    return True
+
+
+def retire_legacy_project_runtime_dir(active_runtime_root: Path) -> bool:
+    """Retire the fixed pre-Foundation checkout-local runtime directory.
+
+    This is intentionally independent from ``retire_legacy_source_runtime``:
+    the latter owns only a narrow SQLite artifact family, while this function
+    owns the single historical ``PROJECT_DIR/.dbfox_runtime`` tree.  It is safe
+    to call repeatedly after the new private runtime has been initialized and
+    verified.  If the old tree is active, linked, malformed, or changes during
+    retirement, cleanup fails closed rather than following or deleting a
+    caller-controlled path.
+    """
+    plan = _build_legacy_project_runtime_cleanup_plan(active_runtime_root)
+    if plan is None:
+        return False
+    _remove_external_files(plan)
+    return True

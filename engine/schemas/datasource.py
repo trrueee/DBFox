@@ -32,6 +32,7 @@ class DataSourceResponse(BaseModel):
     database_name: str | None = None
     username: str | None = None
     password_credential_id: str | None = None
+    connection_generation: int = 1
     connection_mode: str | None = None
     is_read_only: bool = False
     env: str | None = None

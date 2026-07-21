@@ -14,9 +14,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from engine.models import SchemaTable, SchemaColumn, SchemaSearchDoc
+from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.environment.authoritative_inventory import (
+    AuthoritativeInventory,
+    SchemaInspectionError,
+    SchemaInspectionErrorCode,
+)
+from engine.models import DataSource, SchemaTable, SchemaColumn, SchemaSearchDoc
 from engine.environment.inventory import (
-    SchemaInventory,
     SyncResult,
     TableInventory,
 )
@@ -161,7 +166,7 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
 
 
 class SchemaCatalogSync:
-    """Sync a SchemaInventory into DBFox's system catalog."""
+    """Sync authoritative inspection snapshots into DBFox's system catalog."""
 
     def sync(
         self,
@@ -174,10 +179,26 @@ class SchemaCatalogSync:
         ai_model_name: str | None = None,
     ) -> SyncResult:
         """Introspect and sync. Returns counts of created/updated/removed."""
-        inventory = introspect_datasource(db, datasource_id)
-        return self.sync_inventory(
+        try:
+            inventory = introspect_datasource(db, datasource_id)
+            if inventory.datasource_id != datasource_id:
+                raise SchemaInspectionError(
+                    datasource_id,
+                    SchemaInspectionErrorCode.INSPECTION_FAILED,
+                )
+        except SchemaInspectionError:
+            self._record_inspection_failure(db, datasource_id)
+            raise
+        except Exception as exc:
+            logger.warning("Schema inspection failed (%s)", type(exc).__name__)
+            error = SchemaInspectionError(
+                datasource_id,
+                SchemaInspectionErrorCode.INSPECTION_FAILED,
+            )
+            self._record_inspection_failure(db, datasource_id)
+            raise error from None
+        return self.sync_authoritative(
             db,
-            datasource_id,
             inventory,
             ai_enrich=ai_enrich,
             llm_credential_id=llm_credential_id,
@@ -185,17 +206,65 @@ class SchemaCatalogSync:
             ai_model_name=ai_model_name,
         )
 
-    def sync_inventory(
+    @staticmethod
+    def _record_inspection_failure(db: Session, datasource_id: str) -> None:
+        """Persist a bounded, redacted failure state without touching catalog rows."""
+        try:
+            db.rollback()
+            db.query(DataSource).filter(DataSource.id == datasource_id).update(
+                {
+                    "last_sync_at": utcnow(),
+                    "last_sync_status": "failed",
+                    "last_sync_error": fixed_error_message(FixedErrorCode.SCHEMA_SYNC_FAILED),
+                }
+            )
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Could not record schema inspection failure (%s)", type(exc).__name__)
+
+    def sync_authoritative(
         self,
         db: Session,
-        datasource_id: str,
-        inventory: SchemaInventory,
+        inventory: AuthoritativeInventory,
         *,
         ai_enrich: bool = False,
         llm_credential_id: str | None = None,
         ai_api_base: str | None = None,
         ai_model_name: str | None = None,
     ) -> SyncResult:
+        """Reconcile the catalog from one complete, authoritative snapshot."""
+        if not isinstance(inventory, AuthoritativeInventory):
+            raise TypeError(
+                "SchemaCatalogSync.sync_authoritative requires AuthoritativeInventory."
+            )
+
+        try:
+            return self._sync_authoritative(
+                db,
+                inventory,
+                ai_enrich=ai_enrich,
+                llm_credential_id=llm_credential_id,
+                ai_api_base=ai_api_base,
+                ai_model_name=ai_model_name,
+            )
+        except Exception:
+            db.rollback()
+            raise
+
+    def _sync_authoritative(
+        self,
+        db: Session,
+        inventory: AuthoritativeInventory,
+        *,
+        ai_enrich: bool = False,
+        llm_credential_id: str | None = None,
+        ai_api_base: str | None = None,
+        ai_model_name: str | None = None,
+    ) -> SyncResult:
+        """Perform the one transaction after authoritative input validation."""
+
+        datasource_id = inventory.datasource_id
         result = SyncResult(datasource_id=datasource_id)
 
         # Upsert tables
@@ -352,6 +421,20 @@ class SchemaCatalogSync:
             result.ai_enrich_result = enrich_result
 
         return result
+
+    def sync_inventory(
+        self,
+        db: Session,
+        datasource_id: str,
+        inventory: object,
+        **_kwargs: Any,
+    ) -> SyncResult:
+        """Reject legacy snapshots so only completed inspections can mutate catalog state."""
+        del db, datasource_id, inventory
+        raise TypeError(
+            "SchemaCatalogSync.sync_inventory is no longer supported; "
+            "use sync_authoritative with AuthoritativeInventory."
+        )
 
     def _sync_columns(
         self,

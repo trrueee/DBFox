@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import time
 import uuid
 from typing import Any
@@ -16,11 +15,9 @@ from engine.app.safe_errors import (
     fixed_error_message,
     log_unexpected_exception,
 )
-from engine.datasource import (
-    datasource_connection_dict,
-    get_mysql_connection_params,
-    get_postgres_connection_params,
-)
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile
+from engine.datasource import datasource_connection_dict
 from engine.errors import (
     GuardrailValidationError,
     SQLExecutionError,
@@ -31,7 +28,6 @@ from engine.models import DataSource, QueryHistory
 from engine.policy.redactor import DataRedactor
 from engine.policy.sensitivity import _SENSITIVE_FALLBACK
 from engine.persistence.search_index import SearchIndexService
-from engine.query_registry import QUERY_REGISTRY
 
 
 def _sql_execution_failure_message() -> str:
@@ -79,23 +75,20 @@ def _write_query_history(db: Session, history: QueryHistory) -> str | None:
         return None
     finally:
         audit_db.close()
-from engine.sql.pool_manager import get_mysql_pool, get_postgres_pool, _ping_mysql_connection
-from engine.sql.dialect.sqlite import _execute_on_sqlite, _execute_on_sqlite_profiled
+from engine.sql.dialect.sqlite import _execute_on_sqlite_profiled
 from engine.sql.dialect.postgres import _execute_on_postgres_profiled
-from engine.sql.dialect.mysql import _execute_on_mysql, _execute_on_mysql_profiled
+from engine.sql.dialect.mysql import _execute_on_mysql_profiled
+from engine.sql.result_limits import MAX_CELL_CHARS, MAX_COLUMNS, MAX_RESPONSE_BYTES, MAX_ROWS
 from engine.sql.row_serializer import (
-    _fetch_and_serialize, _serialize_value, _process_rows,
-    JSON_OVERHEAD_BYTES, MAX_ROWS, MAX_COLUMNS, MAX_CELL_CHARS, MAX_RESPONSE_BYTES,
-    TRUNCATION_LEN, TRUNCATION_SUFFIX, ProcessedRows,
+    _process_rows, _serialize_value,
+    JSON_OVERHEAD_BYTES,
+    ResultTruncation,
 )
 from engine.sql.safety_gate import (
-    guardrail_bypass_allowed,
     _resolve_execution_safety_decision,
     _decision_checks_for_history,
     _decision_checks_for_error,
     _decision_block_message,
-    validate_sql_schema,
-    _is_projection_alias_reference,
 )
 from engine.sql.guardrail import GuardrailResult
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision
@@ -118,6 +111,7 @@ def _run_approved_query(
     guardrail_ms: int,
     guard_checks_json: str,
     redact: bool = True,
+    expected_connection_generation: int | None = None,
 ) -> dict[str, Any]:
     """Execute safety-approved SQL on the target datasource and record history.
 
@@ -129,7 +123,7 @@ def _run_approved_query(
     start_time = time.time()
     rows: list[dict[str, Any]] = []
     columns: list[str] = []
-    truncated = False
+    truncation = ResultTruncation()
     response_bytes = JSON_OVERHEAD_BYTES
     error_message: str | None = None
     execution_status = "success"
@@ -140,31 +134,55 @@ def _run_approved_query(
     serialize_ms = 0
 
     try:
-        db_type = str(getattr(ds, "db_type", None) or "mysql")
-        if db_type == "sqlite":
-            rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_sqlite_profiled(
+        # Reload immediately before deriving the connection profile. A stale
+        # ORM identity map must not let an Agent run use a datasource that was
+        # reconfigured after the run captured its generation.
+        db.refresh(ds)
+        _assert_expected_connection_generation(ds, expected_connection_generation)
+        profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+        factory = ConnectionFactory()
+        if profile.dialect == "sqlite":
+            execution_result = _execute_on_sqlite_profiled(
                 safe_sql,
+                profile=profile,
                 execution_id=execution_id,
                 datasource_id=datasource_id,
-                sqlite_path=str(getattr(ds, "database_name", "") or ""),
-                read_only=bool(getattr(ds, "is_read_only", False)),
+                connection_factory=factory,
             )
-        elif db_type == "postgresql":
-            conn_params = get_postgres_connection_params(datasource_connection_dict(ds))
-            rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_postgres_profiled(
+        elif profile.dialect == "duckdb":
+            from engine.sql.dialect.duckdb import _execute_on_duckdb_profiled
+
+            execution_result = _execute_on_duckdb_profiled(
                 datasource_id,
-                conn_params,
+                profile,
                 safe_sql,
                 execution_id=execution_id,
+                connection_factory=factory,
+            )
+        elif profile.dialect == "postgresql":
+            execution_result = _execute_on_postgres_profiled(
+                datasource_id,
+                profile,
+                safe_sql,
+                execution_id=execution_id,
+                connection_factory=factory,
             )
         else:
-            conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
-            rows, columns, truncated, response_bytes, connect_ms, execute_ms, fetch_ms, serialize_ms = _execute_on_mysql_profiled(
+            execution_result = _execute_on_mysql_profiled(
                 datasource_id,
-                conn_params,
+                profile,
                 safe_sql,
                 execution_id=execution_id,
+                connection_factory=factory,
             )
+        rows = execution_result.rows
+        columns = execution_result.columns
+        truncation = execution_result.truncation
+        response_bytes = execution_result.response_bytes
+        connect_ms = execution_result.connect_ms
+        execute_ms = execution_result.execute_ms
+        fetch_ms = execution_result.fetch_ms
+        serialize_ms = execution_result.serialize_ms
     except SQLQueryCancelledError:
         execution_status = "cancelled"
         error_message = _sql_execution_failure_message()
@@ -219,24 +237,30 @@ def _run_approved_query(
             )
             rows = [redact_row(row, _SENSITIVE_FALLBACK) for row in rows]
 
-    # Detect cell truncation precisely: _process_rows cuts long strings to exactly
-    # MAX_CELL_CHARS chars + TRUNCATION_SUFFIX, so only that shape indicates a truncated cell.
-    # (Checking just endswith(TRUNCATION_SUFFIX) false-positives on legitimate data.)
-    cell_truncated = any(
-        isinstance(v, str) and len(v) == MAX_CELL_CHARS + TRUNCATION_LEN and v.endswith(TRUNCATION_SUFFIX)
-        for r in rows
-        for v in r.values()
-    )
+        # Redaction can change the serialized byte size (for example, a number
+        # can become the literal "[REDACTED]"). Re-apply the transport contract
+        # to the final client-visible rows so responseBytes and its truncation
+        # marker remain exact.
+        redacted_payload = _process_rows(rows, columns)
+        rows = redacted_payload.rows
+        columns = redacted_payload.columns
+        response_bytes = redacted_payload.response_bytes
+        truncation = truncation.merged_with(redacted_payload.truncation)
+
+    truncated = truncation.truncated
+    cell_truncated = truncation.cells
 
     warnings = []
     notices = []
-    if truncated:
+    if truncation.rows:
+        warnings.append(f"查询结果超过最大 {MAX_ROWS} 行限制，仅返回前 {MAX_ROWS} 行")
+    if truncation.columns:
+        warnings.append(f"列数超过最大展示限制，仅显示前 {MAX_COLUMNS} 列")
+    if truncation.response_bytes:
         warnings.append("查询结果已超过最大传输字节限制，部分行被截断")
     if cell_truncated:
         # Informational, not a problem: long text cells are clipped for preview/transfer.
         notices.append(f"部分长文本字段仅返回前 {MAX_CELL_CHARS} 字符")
-    if len(columns) > MAX_COLUMNS:
-        warnings.append("列数超过最大展示限制，仅显示前 100 列")
 
     return {
         "success": True,
@@ -249,6 +273,9 @@ def _run_approved_query(
         "historyId": history_id,
         "executionId": execution_id,
         "truncated": truncated,
+        "rowTruncated": truncation.rows,
+        "columnTruncated": truncation.columns,
+        "responseBytesTruncated": truncation.response_bytes,
         "cellTruncated": cell_truncated,
         "responseBytes": response_bytes,
         "maxResponseBytes": MAX_RESPONSE_BYTES,
@@ -272,6 +299,7 @@ def execute_query(
     safety_decision: ExecutionSafetyDecision | dict[str, Any] | None = None,
     safety_policy: ExecutionPolicy = "readonly",
     redact: bool = True,
+    expected_connection_generation: int | None = None,
 ) -> dict[str, Any]:
     """
     Safely executes a SQL query:
@@ -282,6 +310,7 @@ def execute_query(
     ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
     if not ds:
         raise ValueError("Data source not found")
+    _assert_expected_connection_generation(ds, expected_connection_generation)
 
     execution_id = execution_id or f"exec-{uuid.uuid4()}"
     
@@ -339,9 +368,20 @@ def execute_query(
         guardrail_ms=guardrail_ms,
         guard_checks_json=guard_checks_json,
         redact=redact,
+        expected_connection_generation=expected_connection_generation,
     )
     result["safetyDecision"] = decision.model_dump(mode="json")
     return result
+
+
+def _assert_expected_connection_generation(
+    datasource: DataSource,
+    expected_connection_generation: int | None,
+) -> None:
+    if expected_connection_generation is None:
+        return
+    if int(datasource.connection_generation) != int(expected_connection_generation):
+        raise SQLExecutionError("Datasource connection profile changed.")
 
 def _validate_explain_sql(sql: str, dialect: str) -> None:
     """Secondary safety check for EXPLAIN inputs — delegated to shared module.
@@ -382,22 +422,25 @@ def explain_sql(
             checks=_decision_checks_for_error(decision),
         )
     safe_sql = str(decision.safe_sql or "").strip()
-    db_type = str(getattr(ds, "db_type", None) or "mysql")
-    _validate_explain_sql(safe_sql, db_type)
+    profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+    _validate_explain_sql(safe_sql, profile.dialect)
         
     warnings: list[str] = []
     records: list[dict[str, Any]] = []
 
-    if db_type == "sqlite":
+    if profile.dialect == "sqlite":
         from engine.sql.dialect.sqlite import explain as explain_sqlite
-        records, warnings = explain_sqlite(str(getattr(ds, "database_name", "") or ""), safe_sql)
-    elif db_type in ("postgresql", "postgres"):
+        records, warnings = explain_sqlite(profile, safe_sql)
+    elif profile.dialect == "duckdb":
+        from engine.sql.dialect.duckdb import explain as explain_duckdb
+
+        records, warnings = explain_duckdb(profile, safe_sql)
+    elif profile.dialect == "postgresql":
         from engine.sql.postgres_explain import explain_postgres_sql
         return explain_postgres_sql(db, datasource_id, sql_str)
     else:
-        conn_params = get_mysql_connection_params(datasource_connection_dict(ds))
         from engine.sql.dialect.mysql import explain as explain_mysql
-        records, warnings = explain_mysql(datasource_id, conn_params, safe_sql)
+        records, warnings = explain_mysql(profile, safe_sql)
             
     return {
         "success": True,

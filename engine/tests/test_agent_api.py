@@ -11,12 +11,12 @@ from pydantic import ValidationError
 import engine.api.agent as agent_module
 from fastapi import HTTPException
 
-from engine.agent_core.types import AgentResumeRequest, AgentRunRequest, AgentRunResponse, AgentRuntimeEvent
-from engine.api.agent import ResultPageRequest, sse_failed_event
+from engine.api.agent import ResultPageRequest
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
 from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
 from engine.sql.trust_gate import ExecutionSafetyDecision
+from engine.sql.result_view.fingerprint import result_source_fingerprint
 
 
 def _add_pagination_source(
@@ -26,7 +26,7 @@ def _add_pagination_source(
     artifact_type: str = "sql",
     safe_sql: str = "SELECT id, amount FROM orders",
     columns: list[str] | None = None,
-) -> None:
+) -> str:
     now = datetime.now(UTC)
     datasource = DataSource(
         id="ds-page",
@@ -36,6 +36,7 @@ def _add_pagination_source(
         port=3306,
         database_name="dbfox",
         username="root",
+        connection_generation=1,
     )
     session = AgentSession(
         id="conv-page",
@@ -49,10 +50,16 @@ def _add_pagination_source(
         id="run-page",
         session_id="conv-page",
         datasource_id="ds-page",
+        datasource_generation=1,
+        llm_credential_id="credential-page",
         question="Orders",
+        request_json=json.dumps({"question": "Orders"}),
         status="completed",
+        version=2,
+        cancel_requested=False,
         created_at=now,
         updated_at=now,
+        completed_at=now,
     )
     artifact = AgentArtifactRecord(
         id=artifact_id,
@@ -64,18 +71,53 @@ def _add_pagination_source(
         payload_json=json.dumps(
             {
                 "safeSql": safe_sql,
-                "columns": columns or ["id", "amount"],
-                "storageMode": "sql_backed",
+                "dialect": "mysql",
+                "queryFingerprint": result_source_fingerprint(safe_sql, "mysql"),
             }
         ),
         presentation_json=json.dumps({"mode": "both", "priority": 1, "collapsed": False}),
         depends_on_json=json.dumps(["safety_candidate"]),
+        refs_json="{}",
+        relations_json="[]",
         status="completed",
         sequence=1,
         created_at=now,
     )
-    db_session.add_all([datasource, session, run, artifact])
+    # The fixture uses scalar FK IDs rather than ORM relationships. Flush each
+    # parent first so strict SQLite foreign-key enforcement validates the same
+    # insertion order required by real persistence code.
+    db_session.add(datasource)
+    db_session.flush()
+    db_session.add(session)
+    db_session.flush()
+    db_session.add(run)
+    db_session.flush()
+    db_session.add(artifact)
+    db_session.flush()
+    result_id = f"result-for-{artifact_id}"
+    db_session.add(AgentArtifactRecord(
+        id=result_id,
+        run_id="run-page",
+        session_id="conv-page",
+        semantic_id="result_view",
+        type="result_view",
+        title="Orders result",
+        payload_json=json.dumps({
+            "sourceSqlArtifactId": artifact_id,
+            "queryFingerprint": result_source_fingerprint(safe_sql, "mysql"),
+            "datasourceGeneration": 1,
+            "columns": columns or ["id", "amount"],
+        }),
+        presentation_json="{}",
+        depends_on_json=json.dumps([artifact_id]),
+        refs_json="{}",
+        relations_json=json.dumps([{"relation": "derived_from", "artifact_id": artifact_id}]),
+        status="completed",
+        sequence=2,
+        created_at=now,
+    ))
     db_session.commit()
+    return result_id
 
 
 def _add_table_result_source(
@@ -120,6 +162,7 @@ def _add_console_datasource(db_session, *, datasource_id: str = "ds-console") ->
             port=3306,
             database_name="dbfox",
             username="root",
+            connection_generation=11,
         )
     )
     db_session.commit()
@@ -131,22 +174,35 @@ def test_reusable_sql_memory_is_not_public_agent_api():
     assert "/agent/reusable-sqls" not in route_paths
 
 
+def test_legacy_agent_run_surface_is_removed() -> None:
+    retired_symbols = (
+        "api_agent_run",
+        "api_agent_run_resume",
+        "api_agent_run_stream",
+        "api_agent_run_resume_stream",
+        "api_cancel_agent_run",
+        "api_resolve_agent_approval",
+        "api_get_agent_run",
+    )
+    assert all(not hasattr(agent_module, symbol) for symbol in retired_symbols)
+
+
 def test_llm_test_uses_product_config_and_factory(monkeypatch):
     captured: dict[str, object] = {}
 
-    class FakeClient:
-        def invoke(self, prompt: str) -> None:
-            captured["prompt"] = prompt
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured["completion"] = kwargs
 
-    def fake_create_chat_model(config, options):
-        captured["config"] = config
-        captured["options"] = options
-        return FakeClient()
+    def fake_create_client(**kwargs):
+        captured["client_kwargs"] = kwargs
+        return SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
 
     def fake_resolve_product_config(**kwargs):
         captured["resolve_kwargs"] = kwargs
         return SimpleNamespace(
             model_name="qwen-plus",
+            api_key="test-secret",
             api_base="https://example.test/v1",
             source="product",
         )
@@ -156,7 +212,7 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
         "resolve_product_llm_config_from_credential",
         fake_resolve_product_config,
     )
-    monkeypatch.setattr(agent_module, "create_chat_model", fake_create_chat_model)
+    monkeypatch.setattr(agent_module, "create_openai_compatible_api_client", fake_create_client)
 
     response = agent_module.api_llm_test(
         agent_module.LlmTestRequest(
@@ -166,27 +222,25 @@ def test_llm_test_uses_product_config_and_factory(monkeypatch):
         )
     )
 
-    config = captured["config"]
-    options = captured["options"]
     resolve_kwargs = captured["resolve_kwargs"]
     assert response.ok is True
     assert response.model == "qwen-plus"
     assert response.api_base == "https://example.test/v1"
-    assert captured["prompt"] == "ping"
-    assert config.api_base == "https://example.test/v1"
-    assert config.model_name == "qwen-plus"
-    assert config.source == "product"
+    assert captured["completion"] == {
+        "model": "qwen-plus", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1,
+    }
+    assert captured["client_kwargs"] == {
+        "api_key": "test-secret", "api_base": "https://example.test/v1", "timeout": 10.0,
+    }
     assert resolve_kwargs == {
         "llm_credential_id": "cred_llm_api_key_test",
         "api_base": "https://example.test/v1",
         "model_name": "qwen-plus",
     }
-    assert options.timeout == 10.0
-    assert options.max_tokens == 1
 
 
 def test_llm_test_requires_opaque_credential_reference_even_when_env_exists(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    monkeypatch.setenv("OPENAI_API_KEY", "TEST_LLM_SECRET")
 
     with pytest.raises(ValidationError):
         agent_module.LlmTestRequest(
@@ -272,42 +326,45 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     assert response.notices == ["preview notice"]
 
     records = (
-        db_session.query(AgentArtifactRecord)
-        .filter(AgentArtifactRecord.run_id == response.runId)
-        .order_by(AgentArtifactRecord.sequence)
+            db_session.query(AgentArtifactRecord)
+            .filter(AgentArtifactRecord.run_id == response.runId)
+            .order_by(AgentArtifactRecord.sequence)
         .all()
     )
-    assert [record.type for record in records] == ["result_view", "sql", "safety"]
+    assert [record.type for record in records] == ["safety", "sql", "result_view"]
     result_record = next(record for record in records if record.type == "result_view")
     sql_record = next(record for record in records if record.type == "sql")
     safety_record = next(record for record in records if record.type == "safety")
     result_payload = json.loads(result_record.payload_json)
 
-    assert result_payload["storageMode"] == "sql_backed"
-    assert result_payload["sourceSqlArtifactKey"] == sql_record.id
-    assert result_payload["sourceSqlSemanticKey"] == sql_record.semantic_id
-    assert result_payload["safetyArtifactKey"] == safety_record.id
-    assert result_payload["safetySemanticKey"] == safety_record.semantic_id
-    assert result_payload["safeSql"] == sql
+    assert result_payload["sourceSqlArtifactId"] == sql_record.id
+    assert safety_record.id
     assert "rows" not in result_payload
-    assert result_payload["previewRows"] == [{"id": 1, "name": "Ada"}]
+    assert "previewRows" not in result_payload
+    assert result_payload["queryFingerprint"]
+    assert set(result_payload) == {
+        "sourceSqlArtifactId", "queryFingerprint", "datasourceGeneration", "columns",
+        "rowCount", "returnedRows", "latencyMs", "executedAt", "truncated",
+    }
 
     run = db_session.get(AgentRun, response.runId)
     assert run is not None
     assert run.status == "completed"
-    run_payload = json.loads(run.response_json)
+    assert run.datasource_generation == 11
+    run_payload = json.loads(run.result_json)
     assert "rows" not in (run_payload.get("execution") or {})
 
 
-def test_result_page_rejects_safe_sql_that_differs_from_source_artifact(db_session):
-    _add_pagination_source(db_session)
+def test_result_page_rejects_descriptor_fingerprint_that_differs_from_source_artifact(db_session):
+    result_id = _add_pagination_source(db_session)
+    result = db_session.get(AgentArtifactRecord, result_id)
+    result.payload_json = json.dumps({**json.loads(result.payload_json), "queryFingerprint": "mismatch"})
+    db_session.commit()
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-sql-page",
-                safeSql="SELECT id FROM users",
                 page=1,
                 pageSize=20,
             ),
@@ -428,14 +485,12 @@ def test_table_result_page_returns_structured_datasource_not_found_error(db_sess
 
 
 def test_result_page_rejects_result_view_as_source_sql_artifact(db_session):
-    _add_pagination_source(db_session, artifact_id="artifact-result-page", artifact_type="result_view")
+    result_id = _add_pagination_source(db_session, artifact_id="artifact-result-page", artifact_type="result_view")
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-result-page",
-                safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
             ),
@@ -447,7 +502,7 @@ def test_result_page_rejects_result_view_as_source_sql_artifact(db_session):
 
 
 def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_session):
-    _add_pagination_source(db_session)
+    result_id = _add_pagination_source(db_session)
     executed_sql: dict[str, str] = {}
 
     def fake_execute_query(_db, datasource_id, sql, **kwargs):
@@ -466,10 +521,8 @@ def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_s
     monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
 
     response = agent_module.api_agent_result_page(
+        result_id,
         ResultPageRequest(
-            datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-sql-page",
-            safeSql="SELECT id, amount FROM orders",
             page=1,
             pageSize=20,
             sort=[agent_module.ResultSort(column="id", direction="desc")],
@@ -485,14 +538,12 @@ def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_s
 
 
 def test_result_page_rejects_persisted_non_select_source_sql(db_session):
-    _add_pagination_source(db_session, safe_sql="DELETE FROM orders")
+    result_id = _add_pagination_source(db_session, safe_sql="DELETE FROM orders")
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-sql-page",
-                safeSql="DELETE FROM orders",
                 page=1,
                 pageSize=20,
             ),
@@ -504,7 +555,7 @@ def test_result_page_rejects_persisted_non_select_source_sql(db_session):
 
 
 def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, db_session):
-    _add_pagination_source(db_session)
+    result_id = _add_pagination_source(db_session)
 
     def fail_execute_query(*_args, **_kwargs):
         raise AssertionError("sort validation must run before execution")
@@ -513,10 +564,8 @@ def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, d
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-sql-page",
-                safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
                 sort=[agent_module.ResultSort(column="users.password", direction="asc")],
@@ -529,7 +578,7 @@ def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, d
 
 
 def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db_session):
-    _add_pagination_source(
+    result_id = _add_pagination_source(
         db_session,
         safe_sql="SELECT id, name, status, amount FROM orders",
         columns=["id", "name", "status", "amount"],
@@ -552,10 +601,8 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
     monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
 
     response = agent_module.api_agent_result_page(
+        result_id,
         ResultPageRequest(
-            datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-sql-page",
-            safeSql="SELECT id, name, status, amount FROM orders",
             page=1,
             pageSize=20,
             filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
@@ -571,7 +618,7 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
 
 
 def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_session):
-    _add_pagination_source(
+    result_id = _add_pagination_source(
         db_session,
         safe_sql="SELECT id, name, status, amount FROM orders",
         columns=["id", "name", "status", "amount"],
@@ -602,10 +649,8 @@ def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_ses
     monkeypatch.setattr("engine.sql.executor.execute_query", fake_execute_query)
 
     response = agent_module.api_agent_result_page(
+        result_id,
         ResultPageRequest(
-            datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-sql-page",
-            safeSql="SELECT id, name, status, amount FROM orders",
             page=1,
             pageSize=20,
             filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
@@ -635,16 +680,13 @@ def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_ses
 def test_result_page_request_rejects_invalid_pagination_bounds(page, page_size):
     with pytest.raises(ValidationError):
         ResultPageRequest(
-            datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-sql-page",
-            safeSql="SELECT id, amount FROM orders",
             page=page,
             pageSize=page_size,
         )
 
 
 def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):
-    _add_pagination_source(db_session)
+    result_id = _add_pagination_source(db_session)
 
     def fail_execute_query(*_args, **_kwargs):
         raise AssertionError("filter validation must run before execution")
@@ -653,10 +695,8 @@ def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch,
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-sql-page",
-                safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
                 filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
@@ -669,7 +709,7 @@ def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch,
 
 
 def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
-    _add_pagination_source(
+    result_id = _add_pagination_source(
         db_session,
         safe_sql="SELECT id, created_at, status FROM orders",
         columns=["id", "created_at", "status"],
@@ -689,10 +729,8 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
     )
 
     response = agent_module.api_agent_result_export(
+        result_id,
         agent_module.ResultExportRequest(
-            datasourceId="ds-page",
-            sourceSqlArtifactId="artifact-sql-page",
-            safeSql="SELECT id, created_at, status FROM orders",
             filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
             search="2026",
             sort=[agent_module.ResultSort(column="created_at", direction="desc")],
@@ -712,7 +750,7 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
 
 
 def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):
-    _add_pagination_source(db_session)
+    result_id = _add_pagination_source(db_session)
 
     def fail_execute_query(*_args, **_kwargs):
         raise AssertionError("filter validation must run before export execution")
@@ -721,10 +759,8 @@ def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatc
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_export(
+            result_id,
             agent_module.ResultExportRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-sql-page",
-                safeSql="SELECT id, amount FROM orders",
                 filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
             ),
             db_session,
@@ -734,319 +770,11 @@ def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatc
     assert exc_info.value.detail["code"] == "FILTER_COLUMN_NOT_ALLOWED"
 
 
-def test_sse_failed_event() -> None:
-    failure = agent_module.PublicAgentFailure(
-        code="ERR_CODE",
-        message="Fixed failure message.",
-        status_code=500,
-    )
-    event_str = sse_failed_event("evt_123", "run_456", failure)
-    assert event_str.startswith("event: agent.run.failed\n")
-    
-    lines = event_str.strip().split("\n")
-    assert len(lines) >= 2
-    assert lines[0] == "event: agent.run.failed"
-    assert lines[1].startswith("data: ")
-    
-    data_json = lines[1][6:]
-    payload = json.loads(data_json)
-    assert payload["event_id"] == "evt_123"
-    assert payload["run_id"] == "run_456"
-    assert payload["error"] == "Fixed failure message."
-    assert payload["code"] == "ERR_CODE"
-    assert payload["type"] == "agent.run.failed"
-
-
-def test_sse_failed_event_uses_mapped_failure_message() -> None:
-    failure = agent_module.public_agent_failure(
-        RuntimeError("mysql://root:secret@1.2.3.4/prod password=secret"),
-        operation="run",
-    )
-    event_str = sse_failed_event(
-        "evt_123",
-        "run_456",
-        failure,
-    )
-
-    data_json = event_str.strip().split("\n")[1][6:]
-    payload = json.loads(data_json)
-    assert payload["code"] == "AGENT_RUNTIME_ERROR"
-    assert payload["error"] == "The agent run could not be completed."
-    assert "secret" not in payload["error"]
-    assert "mysql://root" not in payload["error"]
-
-
-def _smoke_response(req: AgentRunRequest, *, run_id: str = "run-smoke") -> AgentRunResponse:
-    return AgentRunResponse(
-        run_id=run_id,
-        session_id=req.session_id or "session-smoke",
-        conversation_id=req.conversation_id or req.session_id,
-        user_message_id=req.user_message_id,
-        assistant_message_id=req.assistant_message_id,
-        success=True,
-        status="completed",
-        question=req.question,
-        explanation="mock LLM smoke completed",
-    )
-
-
-def test_api_agent_run_normalizes_product_llm_config_before_runtime(monkeypatch) -> None:
-    captured: dict[str, AgentRunRequest] = {}
-
-    class FakeDb:
-        def rollback(self) -> None:
-            raise AssertionError("successful smoke run should not rollback")
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run(self, req: AgentRunRequest) -> AgentRunResponse:
-            captured["req"] = req
-            return _smoke_response(req)
-
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    response = agent_module.api_agent_run(
-        AgentRunRequest(
-            datasource_id="ds-1",
-            question="orders",
-            llm_credential_id="cred_llm_api_key_test",
-            api_base=" https://dashscope.example/v1 ",
-            model_name=" qwen-plus ",
-        ),
-        FakeDb(),  # type: ignore[arg-type]
-    )
-
-    runtime_req = captured["req"]
-    assert response.success is True
-    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
-    assert runtime_req.api_base == "https://dashscope.example/v1"
-    assert runtime_req.model_name == "qwen-plus"
-
-
-def test_api_agent_run_applies_default_product_llm_base_and_model(monkeypatch) -> None:
-    captured: dict[str, AgentRunRequest] = {}
-
-    class FakeDb:
-        def rollback(self) -> None:
-            raise AssertionError("successful smoke run should not rollback")
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run(self, req: AgentRunRequest) -> AgentRunResponse:
-            captured["req"] = req
-            return _smoke_response(req)
-
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    agent_module.api_agent_run(
-        AgentRunRequest(
-            datasource_id="ds-1",
-            question="orders",
-            llm_credential_id="cred_llm_api_key_test",
-            api_base=" ",
-            model_name=" ",
-        ),
-        FakeDb(),  # type: ignore[arg-type]
-    )
-
-    runtime_req = captured["req"]
-    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
-    assert runtime_req.api_base == "https://api.openai.com/v1"
-    assert runtime_req.model_name == "gpt-4o-mini"
-
-
-def test_api_agent_run_stream_normalizes_product_llm_config_before_runtime(monkeypatch) -> None:
-    captured: dict[str, AgentRunRequest] = {}
-
-    class FakeDb:
-        def rollback(self) -> None:
-            raise AssertionError("successful smoke stream should not rollback")
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run_iter(self, req: AgentRunRequest):
-            captured["req"] = req
-            yield AgentRuntimeEvent(
-                event_id="evt-smoke-final",
-                run_id="run-smoke",
-                sequence=1,
-                created_at_ms=1,
-                type="agent.run.completed",
-                response=_smoke_response(req, run_id="run-smoke"),
-            )
-
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    response = agent_module.api_agent_run_stream(
-        AgentRunRequest(
-            datasource_id="ds-1",
-            question="orders",
-            llm_credential_id="cred_llm_api_key_test",
-            api_base=" https://dashscope.example/v1 ",
-            model_name=" qwen-plus ",
-        ),
-        FakeDb(),  # type: ignore[arg-type]
-    )
-    body = asyncio.run(_streaming_response_text(response))
-
-    runtime_req = captured["req"]
-    assert "agent.run.completed" in body
-    assert runtime_req.llm_credential_id == "cred_llm_api_key_test"
-    assert runtime_req.api_base == "https://dashscope.example/v1"
-    assert runtime_req.model_name == "qwen-plus"
-
-
-def test_api_agent_run_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
-    class FakeDb:
-        def __init__(self) -> None:
-            self.rollback_calls = 0
-
-        def rollback(self) -> None:
-            self.rollback_calls += 1
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run(self, _req: AgentRunRequest) -> None:
-            raise RuntimeError("mysql://root:secret@1.2.3.4/prod password=secret")
-
-    fake_db = FakeDb()
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    with pytest.raises(HTTPException) as exc_info:
-        agent_module.api_agent_run(
-            AgentRunRequest(
-                datasource_id="ds-1",
-                question="hello",
-                llm_credential_id="cred_llm_api_key_test",
-            ),
-            fake_db,  # type: ignore[arg-type]
-        )
-
-    assert fake_db.rollback_calls == 1
-    assert exc_info.value.status_code == 500
-    assert exc_info.value.detail["code"] == "AGENT_RUNTIME_ERROR"
-    assert exc_info.value.detail["message"] == "The agent run could not be completed."
-    assert "secret" not in exc_info.value.detail["message"]
-    assert "mysql://root" not in exc_info.value.detail["message"]
-
-
 async def _streaming_response_text(response) -> str:
     chunks: list[str] = []
     async for chunk in response.body_iterator:
         chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
     return "".join(chunks)
-
-
-def test_api_agent_run_stream_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
-    class FakeDb:
-        def __init__(self) -> None:
-            self.rollback_calls = 0
-
-        def rollback(self) -> None:
-            self.rollback_calls += 1
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run_iter(self, _req: AgentRunRequest):
-            raise RuntimeError("stream boom")
-            yield  # pragma: no cover
-
-    fake_db = FakeDb()
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    response = agent_module.api_agent_run_stream(
-        AgentRunRequest(
-            datasource_id="ds-1",
-            question="hello",
-            llm_credential_id="cred_llm_api_key_test",
-        ),
-        fake_db,  # type: ignore[arg-type]
-    )
-    body = asyncio.run(_streaming_response_text(response))
-
-    assert fake_db.rollback_calls == 1
-    assert "AGENT_RUNTIME_ERROR" in body
-
-
-def test_api_agent_run_stream_includes_conversation_message_ids(monkeypatch) -> None:
-    class FakeDb:
-        def rollback(self) -> None:
-            pass
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def run_iter(self, _req: AgentRunRequest):
-            yield AgentRuntimeEvent(
-                event_id="evt-1",
-                run_id="run-1",
-                sequence=1,
-                created_at_ms=1,
-                type="agent.run.started",
-            )
-
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-    response = agent_module.api_agent_run_stream(
-        AgentRunRequest(
-            datasource_id="ds-1",
-            question="hello",
-            session_id="conv-1",
-            conversation_id="conv-1",
-            user_message_id="msg-user-1",
-            assistant_message_id="msg-assistant-1",
-            llm_credential_id="cred_llm_api_key_test",
-        ),
-        FakeDb(),  # type: ignore[arg-type]
-    )
-    body = asyncio.run(_streaming_response_text(response))
-    data_line = next(line for line in body.splitlines() if line.startswith("data: "))
-    payload = json.loads(data_line[6:])
-
-    assert payload["conversation_id"] == "conv-1"
-    assert payload["user_message_id"] == "msg-user-1"
-    assert payload["assistant_message_id"] == "msg-assistant-1"
-    assert payload["message_id"] == "msg-assistant-1"
-
-
-def test_api_agent_resume_stream_rolls_back_db_session_on_unhandled_exception(monkeypatch) -> None:
-    class FakeDb:
-        def __init__(self) -> None:
-            self.rollback_calls = 0
-
-        def rollback(self) -> None:
-            self.rollback_calls += 1
-
-    class FakeRuntime:
-        def __init__(self, _db) -> None:
-            pass
-
-        def resume_iter(self, _run_id: str, _approval_id: str | None = None):
-            raise RuntimeError("resume boom")
-            yield  # pragma: no cover
-
-    fake_db = FakeDb()
-    monkeypatch.setattr(agent_module, "DBFoxAgentRuntime", FakeRuntime)
-
-    response = agent_module.api_agent_run_resume_stream(
-        "run-1",
-        AgentResumeRequest(approval_id="approval-1"),
-        fake_db,  # type: ignore[arg-type]
-    )
-    body = asyncio.run(_streaming_response_text(response))
-
-    assert fake_db.rollback_calls == 1
-    assert "AGENT_RESUME_ERROR" in body
 
 
 def test_datasource_connection_dict() -> None:
@@ -1150,7 +878,7 @@ def test_console_unexpected_error_never_leaks_exception_text(monkeypatch, db_ses
 
 
 def test_result_page_unexpected_error_never_leaks_exception_text(monkeypatch, db_session, caplog) -> None:
-    _add_pagination_source(db_session, artifact_id="artifact-boundary-page")
+    result_id = _add_pagination_source(db_session, artifact_id="artifact-boundary-page")
     sentinel = "result-page-secret-sentinel"
 
     def fail_page(_self, _query):
@@ -1167,10 +895,8 @@ def test_result_page_unexpected_error_never_leaks_exception_text(monkeypatch, db
             scoped_monkeypatch.setattr(agent_module, "logger", capture_logger)
             with pytest.raises(HTTPException) as exc_info:
                 agent_module.api_agent_result_page(
+                    result_id,
                     ResultPageRequest(
-                        datasourceId="ds-page",
-                        sourceSqlArtifactId="artifact-boundary-page",
-                        safeSql="SELECT id, amount FROM orders",
                         page=1,
                         pageSize=20,
                     ),
@@ -1193,7 +919,7 @@ def test_result_page_unexpected_error_never_leaks_exception_text(monkeypatch, db
 def test_result_view_error_never_leaks_its_code_or_message(monkeypatch, db_session) -> None:
     from engine.sql.result_view.models import ResultViewError
 
-    _add_pagination_source(db_session, artifact_id="artifact-boundary-result-view")
+    result_id = _add_pagination_source(db_session, artifact_id="artifact-boundary-result-view")
     sentinel = "result-view-error-secret-sentinel"
 
     def fail_page(_self, _query):
@@ -1207,10 +933,8 @@ def test_result_view_error_never_leaks_its_code_or_message(monkeypatch, db_sessi
 
     with pytest.raises(HTTPException) as exc_info:
         agent_module.api_agent_result_page(
+            result_id,
             ResultPageRequest(
-                datasourceId="ds-page",
-                sourceSqlArtifactId="artifact-boundary-result-view",
-                safeSql="SELECT id, amount FROM orders",
                 page=1,
                 pageSize=20,
             ),

@@ -1,21 +1,11 @@
+import logging
+
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from engine.models import Base, SchemaTable, SchemaColumn, DataSource
+import sqlglot
+from engine.models import SchemaTable, SchemaColumn, DataSource
 from engine.sql.safety_gate import validate_sql_schema, _resolve_execution_safety_decision
 from engine.errors import GuardrailValidationError
 from engine.sql.trust_gate import ExecutionSafetyDecision
-
-@pytest.fixture
-def db_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    try:
-        yield session
-    finally:
-        session.close()
 
 def _create_test_ds(db_session, ds_id="ds-123", env="dev"):
     ds = DataSource(
@@ -26,8 +16,6 @@ def _create_test_ds(db_session, ds_id="ds-123", env="dev"):
         host="localhost",
         database_name="test.db",
         username="test",
-        password_ciphertext="cipher",
-        password_nonce="nonce"
     )
     db_session.add(ds)
     db_session.commit()
@@ -38,6 +26,33 @@ def test_sv1_empty_cache(db_session):
     _create_test_ds(db_session, "ds-123")
     warnings = validate_sql_schema("SELECT id FROM users", db_session, "ds-123")
     assert warnings == []
+
+
+def test_schema_validation_parse_diagnostic_never_logs_sql_or_exception_text(db_session, caplog, monkeypatch):
+    import engine.sql.safety_gate as safety_gate
+
+    _create_test_ds(db_session, "ds-private-log")
+    table = SchemaTable(data_source_id="ds-private-log", table_name="users", table_schema="public")
+    table.columns.append(SchemaColumn(column_name="id", column_type="integer"))
+    db_session.add(table)
+    db_session.commit()
+
+    sql_secret = "SELECT token FROM users WHERE token = 'schema-sql-secret'"
+    exception_secret = "schema-driver-secret"
+
+    def fail_parse(*_args, **_kwargs):
+        raise sqlglot.errors.ParseError(exception_secret)
+
+    monkeypatch.setattr(safety_gate.sqlglot, "parse_one", fail_parse)
+    with caplog.at_level(logging.WARNING, logger="dbfox.sql.executor"):
+        warnings = safety_gate.validate_sql_schema(sql_secret, db_session, "ds-private-log")
+
+    assert warnings == ["Schema validation could not parse SQL for safety check."]
+    assert sql_secret not in caplog.text
+    assert exception_secret not in caplog.text
+    assert "code=sql_schema_validation_parse" in caplog.text
+    assert "type=ParseError" in caplog.text
+    assert "fingerprint=" in caplog.text
 
 # covers: SV-2 Table and column exist
 def test_sv2_exist(db_session):

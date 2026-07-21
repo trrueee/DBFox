@@ -5,18 +5,21 @@ Supports SQLite, MySQL, PostgreSQL, and DuckDB.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any
+import ssl
+from typing import Any, Mapping
 
 from sqlalchemy.orm import Session
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
-from engine.errors import DBFoxError, DataSourceConnectionError
-from engine.security.credential_vault import (
-    CredentialKind,
-    CredentialVaultUnavailableError,
-    get_credential_vault,
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+from engine.environment.authoritative_inventory import (
+    AuthoritativeInventory,
+    SchemaInspectionError,
+    SchemaInspectionErrorCode,
 )
+from engine.errors import DataSourceConnectionError
+from engine.security.credential_vault import CredentialVaultUnavailableError
 from engine.environment.datasource_resolver import (
     ResolvedDataSource,
     resolve_datasource,
@@ -31,43 +34,111 @@ from engine.environment.inventory import (
 logger = logging.getLogger("dbfox.environment.schema_introspector")
 
 
-class SchemaIntrospector:
-    """Introspect a live datasource and return a SchemaInventory."""
+def _connection_error_code(exc: Exception) -> SchemaInspectionErrorCode:
+    """Classify only stable exception types; never inspect secret-bearing text."""
+    if isinstance(exc, ssl.SSLError):
+        return SchemaInspectionErrorCode.TLS_FAILED
+    return SchemaInspectionErrorCode.CONNECTION_FAILED
 
-    def inspect(self, db: Session, datasource_id: str) -> SchemaInventory:
+
+class SchemaIntrospector:
+    """Introspect a live datasource into one complete authoritative snapshot."""
+
+    def __init__(self, *, connection_factory: ConnectionFactory | None = None) -> None:
+        self._connection_factory = connection_factory
+
+    def _factory(self) -> ConnectionFactory:
+        return self._connection_factory or ConnectionFactory()
+
+    def inspect(self, db: Session, datasource_id: str) -> AuthoritativeInventory:
         from engine.models import DataSource
         from engine.datasource import datasource_connection_dict
 
-        resolved = resolve_datasource(db, datasource_id)
+        try:
+            resolved = resolve_datasource(db, datasource_id)
+        except Exception:
+            raise SchemaInspectionError(
+                datasource_id,
+                SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND,
+            ) from None
+
         ds = db.query(DataSource).filter(DataSource.id == datasource_id).first()
+        if ds is None:
+            raise SchemaInspectionError(
+                datasource_id,
+                SchemaInspectionErrorCode.DATASOURCE_NOT_FOUND,
+            )
 
-        # Resolve SSH tunnel if enabled
-        tunnel = None
-        if ds and ds.ssh_enabled and resolved.dialect in ("mysql", "postgres"):
-            try:
-                from engine.datasource import get_or_create_tunnel_for_dict
-                tunnel = get_or_create_tunnel_for_dict(datasource_connection_dict(ds))
-            except DBFoxError:
-                raise
-            except Exception as exc:
-                logger.warning(
-                    "SSH tunnel setup failed for datasource %s (%s)",
+        profile: ConnectionProfile | None = None
+        try:
+            if resolved.dialect == "sqlite":
+                profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+                inventory = self._inspect_sqlite(resolved, profile, self._factory())
+            elif resolved.dialect == "mysql":
+                if not ds.password_credential_id:
+                    raise SchemaInspectionError(
+                        datasource_id,
+                        SchemaInspectionErrorCode.CREDENTIAL_UNAVAILABLE,
+                    )
+                profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+                inventory = self._inspect_mysql(resolved, profile, self._factory())
+            elif resolved.dialect == "postgres":
+                if not ds.password_credential_id:
+                    raise SchemaInspectionError(
+                        datasource_id,
+                        SchemaInspectionErrorCode.CREDENTIAL_UNAVAILABLE,
+                    )
+                profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+                inventory = self._inspect_postgres(resolved, profile, self._factory())
+            elif resolved.dialect == "duckdb":
+                profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+                if profile.database_name.strip() == ":memory:":
+                    raise SchemaInspectionError(
+                        datasource_id,
+                        SchemaInspectionErrorCode.DUCKDB_MEMORY_UNSUPPORTED,
+                    )
+                inventory = self._inspect_duckdb(resolved, profile, self._factory())
+            else:
+                raise SchemaInspectionError(
                     datasource_id,
-                    type(exc).__name__,
+                    SchemaInspectionErrorCode.INSPECTION_FAILED,
                 )
-                raise DataSourceConnectionError(
-                    "Unable to establish the configured SSH tunnel."
-                ) from None
+        except SchemaInspectionError:
+            raise
+        except CredentialVaultUnavailableError:
+            raise SchemaInspectionError(
+                datasource_id,
+                SchemaInspectionErrorCode.CREDENTIAL_UNAVAILABLE,
+            ) from None
+        except DataSourceConnectionError:
+            raise SchemaInspectionError(
+                datasource_id,
+                (
+                    SchemaInspectionErrorCode.SSH_FAILED
+                    if profile is not None and profile.ssh_enabled
+                    else (
+                        SchemaInspectionErrorCode.TLS_FAILED
+                        if profile is not None and profile.ssl_enabled
+                        else SchemaInspectionErrorCode.CONNECTION_FAILED
+                    )
+                ),
+            ) from None
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.UNEXPECTED,
+                exc=exc,
+                level="warning",
+            )
+            raise SchemaInspectionError(
+                datasource_id,
+                SchemaInspectionErrorCode.INSPECTION_FAILED,
+            ) from None
 
-        if resolved.dialect == "sqlite":
-            return self._inspect_sqlite(resolved)
-        if resolved.dialect == "mysql":
-            return self._inspect_mysql(db, resolved, tunnel)
-        if resolved.dialect == "postgres":
-            return self._inspect_postgres(db, resolved, tunnel)
-        if resolved.dialect == "duckdb":
-            return self._inspect_duckdb(resolved)
-        raise ValueError(f"Unsupported datasource dialect: {resolved.dialect}")
+        return AuthoritativeInventory.from_completed_inventory(
+            inventory,
+            generation=int(getattr(ds, "generation", 0) or 0),
+        )
 
     # ------------------------------------------------------------------
     # Shared template
@@ -88,31 +159,45 @@ class SchemaIntrospector:
             column_count=sum(len(t.columns) for t in tables),
         )
 
-    @staticmethod
-    def _empty_inventory(resolved: ResolvedDataSource, database_name: str) -> SchemaInventory:
-        return SchemaInventory(
-            datasource_id=resolved.datasource_id,
-            dialect=resolved.dialect,
-            database_name=database_name,
-        )
-
     # ------------------------------------------------------------------
     # SQLite
     # ------------------------------------------------------------------
 
-    def _inspect_sqlite(self, resolved: ResolvedDataSource) -> SchemaInventory:
+    def _inspect_sqlite(
+        self,
+        resolved: ResolvedDataSource,
+        profile: ConnectionProfile,
+        factory: ConnectionFactory,
+    ) -> SchemaInventory:
         import sqlite3
 
-        db_path = resolved.database_path or ""
-        if not db_path or not Path(db_path).exists():
-            return self._empty_inventory(resolved, db_path)
-
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        conn.row_factory = sqlite3.Row
         try:
-            return self._build_inventory(resolved, self._sqlite_tables(conn), db_path)
-        finally:
-            conn.close()
+            db_path = factory.sqlite_path(profile)
+        except DataSourceConnectionError:
+            raise SchemaInspectionError(
+                resolved.datasource_id,
+                SchemaInspectionErrorCode.SQLITE_PATH_UNAVAILABLE,
+            ) from None
+
+        try:
+            with factory.connection_scope(
+                profile,
+                purpose=ConnectionPurpose.SCHEMA_SYNC,
+                read_only=True,
+                sqlite_row_factory=sqlite3.Row,
+            ) as conn:
+                return self._build_inventory(resolved, self._sqlite_tables(conn), str(db_path))
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.UNEXPECTED,
+                exc=exc,
+                level="warning",
+            )
+            raise SchemaInspectionError(
+                resolved.datasource_id,
+                _connection_error_code(exc),
+            ) from None
 
     def _sqlite_tables(self, conn: Any) -> list[TableInventory]:
         tables: list[TableInventory] = []
@@ -188,22 +273,27 @@ class SchemaIntrospector:
     # MySQL
     # ------------------------------------------------------------------
 
-    def _inspect_mysql(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> SchemaInventory:
-        import pymysql
-
-        host = "127.0.0.1" if tunnel else (resolved.host or "127.0.0.1")
-        port = tunnel.local_bind_port if tunnel else (resolved.port or 3306)
-        pw = self._decrypt_datasource_password(db, resolved.datasource_id)
+    def _inspect_mysql(
+        self,
+        resolved: ResolvedDataSource,
+        profile: ConnectionProfile,
+        factory: ConnectionFactory,
+    ) -> SchemaInventory:
         try:
-            conn = pymysql.connect(
-                host=host,
-                port=port,
-                user=resolved.username or "root",
-                password=pw,
-                database=resolved.database,
-                charset="utf8mb4",
-                connect_timeout=10,
-            )
+            with factory.connection_scope(
+                profile,
+                purpose=ConnectionPurpose.SCHEMA_SYNC,
+                read_only=True,
+            ) as conn:
+                return self._build_inventory(
+                    resolved,
+                    self._mysql_tables(conn, resolved.database or ""),
+                    resolved.database or "",
+                )
+        except CredentialVaultUnavailableError:
+            raise
+        except DataSourceConnectionError:
+            raise
         except Exception as exc:
             log_unexpected_exception(
                 logger,
@@ -211,16 +301,10 @@ class SchemaIntrospector:
                 exc=exc,
                 level="warning",
             )
-            return self._empty_inventory(resolved, resolved.safe_display_name)
-
-        try:
-            return self._build_inventory(
-                resolved,
-                self._mysql_tables(conn, resolved.database or ""),
-                resolved.database or "",
-            )
-        finally:
-            conn.close()
+            raise SchemaInspectionError(
+                resolved.datasource_id,
+                _connection_error_code(exc),
+            ) from None
 
     def _mysql_tables(self, conn: Any, database: str) -> list[TableInventory]:
         tables: list[TableInventory] = []
@@ -232,7 +316,11 @@ class SchemaIntrospector:
             "ORDER BY TABLE_NAME",
             (database,),
         )
-        for table_name, table_type, comment, table_rows in cursor.fetchall():
+        for row in cursor.fetchall():
+            table_name = _row_value(row, 0, "TABLE_NAME")
+            table_type = _row_value(row, 1, "TABLE_TYPE")
+            comment = _row_value(row, 2, "TABLE_COMMENT")
+            table_rows = _row_value(row, 3, "TABLE_ROWS")
             columns = self._mysql_columns(cursor, database, table_name)
             fks = self._mysql_foreign_keys(cursor, database, table_name)
             sample = self._mysql_sample(conn, table_name)
@@ -260,7 +348,14 @@ class SchemaIntrospector:
             "ORDER BY ORDINAL_POSITION",
             (database, table_name),
         )
-        for col_name, data_type, col_type, nullable, default, col_key, col_comment in cursor.fetchall():
+        for row in cursor.fetchall():
+            col_name = _row_value(row, 0, "COLUMN_NAME")
+            data_type = _row_value(row, 1, "DATA_TYPE")
+            col_type = _row_value(row, 2, "COLUMN_TYPE")
+            nullable = _row_value(row, 3, "IS_NULLABLE")
+            default = _row_value(row, 4, "COLUMN_DEFAULT")
+            col_key = _row_value(row, 5, "COLUMN_KEY")
+            col_comment = _row_value(row, 6, "COLUMN_COMMENT")
             columns.append(
                 ColumnInventory(
                     column_name=col_name,
@@ -284,7 +379,10 @@ class SchemaIntrospector:
             "AND REFERENCED_TABLE_NAME IS NOT NULL",
             (database, table_name),
         )
-        for col_name, ref_table, ref_col in cursor.fetchall():
+        for row in cursor.fetchall():
+            col_name = _row_value(row, 0, "COLUMN_NAME")
+            ref_table = _row_value(row, 1, "REFERENCED_TABLE_NAME")
+            ref_col = _row_value(row, 2, "REFERENCED_COLUMN_NAME")
             fks.append(
                 ForeignKeyInventory(
                     column_name=col_name,
@@ -301,8 +399,11 @@ class SchemaIntrospector:
                 f"SELECT * FROM {_quote_sql_identifier(table_name, '`')} LIMIT %s",
                 (limit,),
             )
+            rows = cursor.fetchall()
+            if rows and isinstance(rows[0], Mapping):
+                return [dict(row) for row in rows]
             col_names = [desc[0] for desc in cursor.description]
-            return [dict(zip(col_names, row)) for row in cursor.fetchall()]
+            return [dict(zip(col_names, row)) for row in rows]
         except Exception:
             return []
 
@@ -310,41 +411,38 @@ class SchemaIntrospector:
     # PostgreSQL
     # ------------------------------------------------------------------
 
-    def _inspect_postgres(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> SchemaInventory:
+    def _inspect_postgres(
+        self,
+        resolved: ResolvedDataSource,
+        profile: ConnectionProfile,
+        factory: ConnectionFactory,
+    ) -> SchemaInventory:
         try:
-            conn = self._connect_postgres(db, resolved, tunnel)
-        except DBFoxError:
+            with factory.connection_scope(
+                profile,
+                purpose=ConnectionPurpose.SCHEMA_SYNC,
+                read_only=True,
+            ) as conn:
+                return self._build_inventory(
+                    resolved,
+                    self._postgres_tables(conn),
+                    resolved.database or resolved.safe_display_name,
+                )
+        except CredentialVaultUnavailableError:
+            raise
+        except DataSourceConnectionError:
             raise
         except Exception as exc:
-            logger.warning(
-                "PostgreSQL connect failed for datasource %s (%s)",
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.UNEXPECTED,
+                exc=exc,
+                level="warning",
+            )
+            raise SchemaInspectionError(
                 resolved.datasource_id,
-                type(exc).__name__,
-            )
-            return self._empty_inventory(resolved, resolved.safe_display_name)
-
-        try:
-            return self._build_inventory(
-                resolved,
-                self._postgres_tables(conn),
-                resolved.database or resolved.safe_display_name,
-            )
-        finally:
-            conn.close()
-
-    def _connect_postgres(self, db: Session, resolved: ResolvedDataSource, tunnel: Any = None) -> Any:
-        import psycopg2
-
-        host = "127.0.0.1" if tunnel else (resolved.host or "127.0.0.1")
-        port = tunnel.local_bind_port if tunnel else (resolved.port or 5432)
-        return psycopg2.connect(
-            host=host,
-            port=port,
-            user=resolved.username or "postgres",
-            password=self._decrypt_datasource_password(db, resolved.datasource_id),
-            dbname=resolved.database or "postgres",
-            connect_timeout=10,
-        )
+                _connection_error_code(exc),
+            ) from None
 
     def _postgres_tables(self, conn: Any) -> list[TableInventory]:
         cursor = conn.cursor()
@@ -477,9 +575,32 @@ class SchemaIntrospector:
     # DuckDB
     # ------------------------------------------------------------------
 
-    def _inspect_duckdb(self, resolved: ResolvedDataSource) -> SchemaInventory:
+    def _inspect_duckdb(
+        self,
+        resolved: ResolvedDataSource,
+        profile: ConnectionProfile,
+        factory: ConnectionFactory,
+    ) -> SchemaInventory:
         try:
-            conn = self._connect_duckdb(resolved)
+            with factory.connection_scope(
+                profile,
+                purpose=ConnectionPurpose.SCHEMA_SYNC,
+                read_only=True,
+            ) as conn:
+                return self._build_inventory(
+                    resolved,
+                    self._duckdb_tables(conn),
+                    str(profile.database_name),
+                )
+        except DataSourceConnectionError:
+            raise SchemaInspectionError(
+                resolved.datasource_id,
+                (
+                    SchemaInspectionErrorCode.DUCKDB_MEMORY_UNSUPPORTED
+                    if profile.database_name.strip() == ":memory:"
+                    else SchemaInspectionErrorCode.DUCKDB_PATH_UNAVAILABLE
+                ),
+            ) from None
         except Exception as exc:
             log_unexpected_exception(
                 logger,
@@ -487,22 +608,10 @@ class SchemaIntrospector:
                 exc=exc,
                 level="warning",
             )
-            return self._empty_inventory(resolved, resolved.safe_display_name)
-
-        try:
-            return self._build_inventory(
-                resolved,
-                self._duckdb_tables(conn),
-                resolved.database or resolved.safe_display_name,
-            )
-        finally:
-            conn.close()
-
-    def _connect_duckdb(self, resolved: ResolvedDataSource) -> Any:
-        import duckdb
-
-        database = resolved.database_path or resolved.database or ":memory:"
-        return duckdb.connect(database=database, read_only=database != ":memory:")
+            raise SchemaInspectionError(
+                resolved.datasource_id,
+                SchemaInspectionErrorCode.CONNECTION_FAILED,
+            ) from None
 
     def _duckdb_tables(self, conn: Any) -> list[TableInventory]:
         cursor = conn.cursor()
@@ -569,24 +678,21 @@ class SchemaIntrospector:
         ]
 
         # ---- Resolve real primary keys via table_constraints ----
-        pk_cols: set[str] = set()
-        try:
-            pk_rows = cursor.execute(
-                """
-                SELECT kcu.column_name
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu
-                  ON tc.constraint_name = kcu.constraint_name
-                 AND tc.table_schema = kcu.table_schema
-                WHERE tc.constraint_type = 'PRIMARY KEY'
-                  AND tc.table_schema = ?
-                  AND tc.table_name = ?
-                """,
-                (schema, table_name),
-            ).fetchall()
-            pk_cols = {str(r[0]) for r in pk_rows}
-        except Exception:
-            pass
+        cursor.execute(
+            """
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            WHERE tc.constraint_type = 'PRIMARY KEY'
+              AND tc.table_schema = ?
+              AND tc.table_name = ?
+            """,
+            (schema, table_name),
+        )
+        pk_rows = cursor.fetchall()
+        pk_cols = {str(r[0]) for r in pk_rows}
 
         # ---- Resolve real foreign keys ----
         fk_cols = {fk.column_name for fk in self._duckdb_foreign_keys(conn, schema, table_name)}
@@ -601,19 +707,16 @@ class SchemaIntrospector:
 
     def _duckdb_foreign_keys(self, conn: Any, schema: str, table_name: str) -> list[ForeignKeyInventory]:
         cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                SELECT column_name, referenced_table_name, referenced_column_name
-                FROM information_schema.key_column_usage
-                WHERE table_schema = ? AND table_name = ?
-                  AND referenced_table_name IS NOT NULL
-                ORDER BY ordinal_position
-                """,
-                (schema, table_name),
-            )
-        except Exception:
-            return []
+        cursor.execute(
+            """
+            SELECT column_name, referenced_table_name, referenced_column_name
+            FROM information_schema.key_column_usage
+            WHERE table_schema = ? AND table_name = ?
+              AND referenced_table_name IS NOT NULL
+            ORDER BY ordinal_position
+            """,
+            (schema, table_name),
+        )
         return [
             ForeignKeyInventory(
                 column_name=str(col_name),
@@ -655,49 +758,20 @@ class SchemaIntrospector:
         except Exception:
             return None
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _decrypt_datasource_password(self, db: Session, datasource_id: str) -> str:
-        from engine.models import DataSource as DS
-
-        ds = db.query(DS).filter(DS.id == datasource_id).first()
-        if ds is None:
-            raise DataSourceConnectionError("Datasource was not found.")
-        credential_id = ds.password_credential_id
-        if not credential_id:
-            raise DataSourceConnectionError(
-                "A password credential is required for network datasource connections."
-            )
-        try:
-            secret = get_credential_vault().get(
-                str(credential_id),
-                expected_kind=CredentialKind.DATASOURCE_PASSWORD,
-            )
-        except CredentialVaultUnavailableError:
-            raise
-        except Exception as exc:
-            logger.warning(
-                "Datasource credential lookup failed for %s (%s)",
-                datasource_id,
-                type(exc).__name__,
-            )
-            raise CredentialVaultUnavailableError() from None
-        if not secret:
-            raise DataSourceConnectionError(
-                "Datasource credential reference was not found or has the wrong kind."
-            )
-        return secret
-
-
 # Module-level convenience
-def introspect_datasource(db: Session, datasource_id: str) -> SchemaInventory:
+def introspect_datasource(db: Session, datasource_id: str) -> AuthoritativeInventory:
     return SchemaIntrospector().inspect(db, datasource_id)
 
 
 def _quote_sql_identifier(identifier: str, quote: str = '"') -> str:
     return quote + identifier.replace(quote, quote + quote) + quote
+
+
+def _row_value(row: Any, index: int, key: str) -> Any:
+    """Read both DB-API tuples and the factory's MySQL DictCursor rows."""
+    if isinstance(row, Mapping):
+        return row.get(key)
+    return row[index]
 
 
 def _qualified_name(schema: str, table: str, quote: str = '"') -> str:

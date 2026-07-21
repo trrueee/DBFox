@@ -23,8 +23,8 @@ from engine.sql.executor import (
     _decision_block_message,
     _resolve_execution_safety_decision,
     _run_approved_query,
-    guardrail_bypass_allowed,
 )
+from engine.sql.safety_gate import guardrail_bypass_allowed
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision

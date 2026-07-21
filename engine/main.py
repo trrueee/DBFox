@@ -15,12 +15,11 @@ import os
 import secrets
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any
 
 from engine.runtime_env import load_runtime_env
 
-# Load env files before any LangChain imports so tracing configuration is active.
+# Load runtime configuration before provider and database clients initialize.
 load_runtime_env()
 
 import uvicorn
@@ -29,9 +28,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from engine.api import router
-from engine.db import init_db
+from engine.db import SessionLocal, initialize_metadata_database
+from engine.agent.coordinator import SessionCoordinator
+from engine.agent.loop import RunLoop
+from engine.app.request_limits import AgentInputRequestBodyLimitMiddleware
 from engine.diagnostics.logs import configure_diagnostic_logging
-from engine.errors import DBFoxError, NotFoundError
+from engine.errors import BackupSourceMismatchError, DBFoxError, NotFoundError
 from engine.schemas import ErrorResponse
 from engine.engine_runtime.credentials import RuntimeCredentialPolicy
 from engine.runtime_paths import private_runtime_file
@@ -43,6 +45,7 @@ DIAGNOSTIC_LOG_FILE = configure_diagnostic_logging()
 SAFE_DBFOX_ERROR_MESSAGE = "Request could not be completed."
 _SAFE_DBFOX_ERROR_CODES: tuple[tuple[type[DBFoxError], str], ...] = (
     (CredentialVaultUnavailableError, "CREDENTIAL_VAULT_UNAVAILABLE"),
+    (BackupSourceMismatchError, "BACKUP_SOURCE_MISMATCH"),
 )
 
 
@@ -52,10 +55,6 @@ def _safe_dbfox_error_code(exc: DBFoxError) -> str:
         if isinstance(exc, error_type):
             return code
     return "DBFOX_ERROR"
-
-# 计算当前 main.py 所在的 engine 目录以及项目根目录
-ENGINE_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = ENGINE_DIR.parent
 
 # 1. 本地引擎安全性：生成或读取本地安全访问令牌 (Local Secure Token)
 TOKEN_FILE = private_runtime_file("auth", ".local_token")
@@ -82,40 +81,6 @@ ALLOWED_TAURI_ORIGINS = {
     "https://tauri.localhost",
 }
 
-# Frontend dev env file helpers.
-FRONTEND_ENV_KEYS = {"VITE_LOCAL_ENGINE_PORT", "VITE_LOCAL_ENGINE_TOKEN"}
-
-
-def _frontend_env_content(token: str, port: int | str | None = None) -> str:
-    engine_port = str(port or os.environ.get("DBFOX_ENGINE_PORT", "18625"))
-    return f"VITE_LOCAL_ENGINE_PORT={engine_port}\nVITE_LOCAL_ENGINE_TOKEN={token}\n"
-
-
-def _is_dbfox_owned_frontend_env(content: str) -> bool:
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, separator, _value = line.partition("=")
-        if separator != "=" or key not in FRONTEND_ENV_KEYS:
-            return False
-    return True
-
-
-def _write_frontend_env_file_if_owned(env_file: Path, token: str) -> None:
-    expected_content = _frontend_env_content(token)
-    existing_content = ""
-    if env_file.exists():
-        existing_content = env_file.read_text("utf-8")
-        if existing_content == expected_content:
-            return
-        if not _is_dbfox_owned_frontend_env(existing_content):
-            logger.info("Skipping automatic desktop/.env.local write; custom content is present.")
-            return
-
-    env_file.write_text(expected_content, "utf-8")
-
-
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> Any:
     """
@@ -132,19 +97,25 @@ async def lifespan(application: FastAPI) -> Any:
     """
     # --- 【启动时任务】 ---
 
-    # Write the frontend dev env file (source-mode local development only).
-    # Moved here from module level so that importing engine.main no longer
-    # performs filesystem writes — improves test isolation.
-    if not is_frozen:
-        FRONTEND_ENV_FILE = PROJECT_DIR / "desktop" / ".env.local"
-        try:
-            _write_frontend_env_file_if_owned(FRONTEND_ENV_FILE, LOCAL_SECURE_TOKEN)
-        except OSError:
-            logger.warning(
-                "无法自动将 Token 写入前端 .env.local 配置文件，前端可能需要手动配置环境变量。"
-            )
+    initialize_metadata_database()
 
-    init_db()  # 初始化本地 SQLite 数据库（自动检查并运行表结构迁移）
+    # Security audit is local product data with an explicit bounded lifecycle.
+    # Prune before the coordinator starts so startup recovery cannot race it.
+    from engine.agent.repositories.write_transaction import begin_agent_write
+    from engine.security.audit import SecurityAuditService
+    with SessionLocal() as audit_session:
+        begin_agent_write(audit_session)
+        SecurityAuditService(audit_session).enforce_retention()
+        audit_session.commit()
+
+    # Agent execution is independent from HTTP/SSE connections. Session leases
+    # and the event log are database-owned; this coordinator only schedules work.
+    agent_coordinator = SessionCoordinator(
+        session_factory=SessionLocal,
+        run_loop=RunLoop(session_factory=SessionLocal),
+    )
+    agent_coordinator.start()
+    application.state.agent_coordinator = agent_coordinator
 
     port = os.environ.get("DBFOX_ENGINE_PORT", "18625")
     print("===========================================================")
@@ -156,21 +127,27 @@ async def lifespan(application: FastAPI) -> Any:
     yield  # 此时程序处于运行态，等待并处理前端的所有 API 请求
     
     # --- 【停机时任务】 ---
-    from engine.datasource import close_all_tunnels
-    close_all_tunnels()  # 安全关闭并释放所有已建立的数据源 SSH 加密隧道连接，防止僵尸进程
+    agent_coordinator.stop()
+    application.state.agent_coordinator = None
+    from engine.connectivity.lifecycle import close_all_managed_datasource_resources
+    from engine.llm.http_clients import close_llm_http_clients
+    close_all_managed_datasource_resources()
+    await close_llm_http_clients()
 
 
 # 实例化 FastAPI 核心应用对象
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
-    version="1.0.1",
+    version="1.0.2",
     lifespan=lifespan,
     # 如果是在生产打包（frozen）模式下，关闭自动生成的交互式接口文档，提高安全性
     docs_url=None if is_frozen else "/docs",
     redoc_url=None if is_frozen else "/redoc",
     openapi_url=None if is_frozen else "/openapi.json",
 )
+
+app.add_middleware(AgentInputRequestBodyLimitMiddleware)
 
 # 2. 核心安全防护中间件 (Security Guard Middleware)
 # 拦截所有请求，校验请求来源 Origin 并且强制校验 X-Local-Token 头部，防止 CSRF 或非法调用
@@ -302,7 +279,13 @@ async def dbfox_error_handler(request: Request, exc: DBFoxError) -> JSONResponse
         code,
     )
     return JSONResponse(
-        status_code=404 if isinstance(exc, NotFoundError) else 400,
+        status_code=(
+            404
+            if isinstance(exc, NotFoundError)
+            else 409
+            if isinstance(exc, BackupSourceMismatchError)
+            else 400
+        ),
         content={
             "detail": ErrorResponse(
                 code=code,
@@ -352,7 +335,7 @@ def api_health() -> dict[str, str]:
     """
     系统健康检查接口
     """
-    return {"status": "healthy", "version": "1.0.1", "mode": "standalone"}
+    return {"status": "healthy", "version": "1.0.2", "mode": "standalone"}
 
 
 # 将 api 目录下的多模块业务路由（路由组）挂载进应用

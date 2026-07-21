@@ -1,12 +1,30 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.connectivity.profile import ConnectionProfile
 from engine.query_registry import QueryRegistry
 
 
-def test_mysql_cancel_uses_parameterized_kill_query(monkeypatch) -> None:
+def _mysql_profile() -> ConnectionProfile:
+    return ConnectionProfile.from_mapping(
+        {
+            "id": "ds-mysql",
+            "is_managed": True,
+            "connection_generation": 1,
+            "db_type": "mysql",
+            "host": "localhost",
+            "port": 3306,
+            "database_name": "warehouse",
+            "username": "readonly",
+            "password_credential_id": "cred_datasource_password_test",
+        }
+    )
+
+
+def test_mysql_cancel_uses_parameterized_kill_query() -> None:
     execute_calls: list[tuple[Any, ...]] = []
     closed = False
 
@@ -28,12 +46,18 @@ def test_mysql_cancel_uses_parameterized_kill_query(monkeypatch) -> None:
             nonlocal closed
             closed = True
 
-    def fake_connect(**_params: Any) -> FakeConnection:
-        return FakeConnection()
+    class FakeConnectionFactory:
+        @contextmanager
+        def connection_scope(self, *_args: Any, **_kwargs: Any):
+            connection = FakeConnection()
+            try:
+                yield connection
+            finally:
+                connection.close()
 
-    monkeypatch.setattr("engine.query_registry.pymysql.connect", fake_connect)
+    registry = QueryRegistry(connection_factory=FakeConnectionFactory())
 
-    QueryRegistry()._kill_mysql_query({"host": "localhost"}, 123)
+    registry._kill_mysql_query(_mysql_profile(), 123)
 
     assert execute_calls == [("KILL QUERY %s", (123,))]
     assert closed is True
@@ -49,7 +73,7 @@ def test_mysql_cancel_failure_uses_fixed_error_catalog(monkeypatch) -> None:
     registry.register_mysql(
         execution_id="mysql-sensitive-cancel",
         datasource_id="ds-mysql",
-        params={"host": "localhost"},
+        profile=_mysql_profile(),
         thread_id=321,
     )
 

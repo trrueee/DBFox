@@ -28,9 +28,7 @@ class ResultColumn(BaseModel):
 
 
 class ResultSourceRef(BaseModel):
-    datasource_id: str
-    source_sql_artifact_id: str
-    safe_sql: str
+    artifact_id: str
 
 
 class TableSourceRef(BaseModel):
@@ -91,6 +89,8 @@ class VerifiedResultSource(BaseModel):
     dialect: str
     columns: list[ResultColumn]
     fingerprint: str
+    datasource_generation: int
+    original_executed_at: str | None = None
 
     @property
     def column_names(self) -> list[str]:
@@ -104,10 +104,27 @@ class ResultPage(BaseModel):
     page_size: int
     row_count: int | None = None
     has_next_page: bool
-    executed_sql: str
     latency_ms: int
+    consistency: Literal["live_reexecution", "live_query"]
+    original_executed_at: str | None = None
+    view_executed_at: str
+    view_execution_id: str
+    datasource_generation: int
+    query_fingerprint: str
     warnings: list[str] | None = None
     notices: list[str] | None = None
+
+
+class ChartData(BaseModel):
+    series: list[dict[str, Any]]
+    sample_size: int
+    truncated: bool = False
+    consistency: Literal["live_reexecution"] = "live_reexecution"
+    original_executed_at: str | None = None
+    view_executed_at: str
+    view_execution_id: str
+    datasource_generation: int
+    query_fingerprint: str
 
 
 class ResultViewError(ValueError):

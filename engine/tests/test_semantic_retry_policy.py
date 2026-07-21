@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from engine.agent_core.semantic_contract import QueryContract
-from engine.agent_core.semantic_retry_policy import accept_semantic_retry, should_retry_semantic
-from engine.agent_core.sql_semantic_verifier import SemanticViolation
+from engine.sql.semantics.contract import QueryContract
+from engine.sql.semantics.retry import accept_semantic_retry, should_retry_semantic
+from engine.sql.semantics.verifier import SemanticViolation
 
 
 def test_semantic_retry_policy_requires_api_key_and_high_confidence_contract() -> None:
@@ -14,9 +14,9 @@ def test_semantic_retry_policy_requires_api_key_and_high_confidence_contract() -
         )
     ]
 
-    assert should_retry_semantic(QueryContract(confidence=0.75), violations, "sk-test") is True
+    assert should_retry_semantic(QueryContract(confidence=0.75), violations, "TEST_LLM_SECRET") is True
     assert should_retry_semantic(QueryContract(confidence=0.75), violations, None) is False
-    assert should_retry_semantic(QueryContract(confidence=0.5), violations, "sk-test") is False
+    assert should_retry_semantic(QueryContract(confidence=0.5), violations, "TEST_LLM_SECRET") is False
 
 
 def test_semantic_retry_policy_accepts_projection_only_improvement() -> None:

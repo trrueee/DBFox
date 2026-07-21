@@ -6,30 +6,48 @@ import json
 import logging
 import re
 import time
+import warnings
 from typing import Any
 
 from engine.llm.config import LlmConfig
+from engine.llm.factory import create_openai_compatible_client
 
 logger = logging.getLogger("dbfox.ai_index")
 LLM_ENRICH_FAILED = "LLM_ENRICH_FAILED"
+AI_ENRICH_LLM_TIMEOUT_SECONDS = 120.0
 
 # ── Tokenization ────────────────────────────────────────────────────────────────
 
-# Lazy-load jieba to avoid import cost when ai_index is unused
-_jieba_loaded = False
+# Lazy-load jieba to avoid import cost when ai_index is unused.  Jieba 0.42.1
+# still imports the deprecated pkg_resources API and has no newer upstream
+# release, so isolate only those third-party import warnings here.
+_jieba_module: Any | None = None
 
 
-def _ensure_jieba():
-    global _jieba_loaded
-    if not _jieba_loaded:
-        import jieba
+def _load_jieba() -> Any:
+    global _jieba_module
+    if _jieba_module is None:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"pkg_resources is deprecated as an API.*",
+                category=DeprecationWarning,
+            )
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Deprecated call to `pkg_resources\.declare_namespace.*",
+                category=DeprecationWarning,
+            )
+            import jieba
+
         jieba.setLogLevel(logging.WARNING)
-        _jieba_loaded = True
+        _jieba_module = jieba
+    return _jieba_module
 
 
 def _lcut(text: str) -> list[str]:
     """jieba lcut polyfill — works with both jieba and jieba3k."""
-    import jieba
+    jieba = _load_jieba()
     if hasattr(jieba, "lcut"):
         return list(jieba.lcut(text))
     return list(jieba.cut(text))
@@ -37,9 +55,6 @@ def _lcut(text: str) -> list[str]:
 
 def tokenize_query(query: str) -> list[str]:
     """Tokenize a user query into Chinese + English tokens."""
-    _ensure_jieba()
-    import jieba
-
     tokens: list[str] = []
     # English / numeric tokens
     eng_tokens = re.findall(r"[A-Za-z0-9_]+", query)
@@ -54,8 +69,6 @@ def tokenize_query(query: str) -> list[str]:
 
 def segment_for_fts(text: str) -> str:
     """Segment Chinese text with jieba for FTS5 insertion (spaces between words)."""
-    _ensure_jieba()
-    import jieba
     if not text:
         return ""
     # Split on existing whitespace, segment each chunk
@@ -257,14 +270,9 @@ def _call_aliyun_llm(
     llm_config: LlmConfig,
 ) -> str:
     """Call Aliyun (Qwen) via OpenAI-compatible API."""
-    import httpx
-    from openai import OpenAI
-
     resolved_api_key = llm_config.api_key.strip()
     if not resolved_api_key:
         raise RuntimeError("请先在设置中配置 LLM API Key。")
-
-    resolved_api_base = llm_config.api_base.strip()
 
     # ── Timing & token budget ──
     prompt_chars = len(prompt)
@@ -272,13 +280,17 @@ def _call_aliyun_llm(
     estimated_input_tokens = int(prompt_chars / 2.5)
     output_tokens = min(8192, max(2048, estimated_input_tokens * 2))
 
-    # ── Call with timeout ──
-    timeout = httpx.Timeout(30.0, read=120.0)
-    client = OpenAI(
-        api_key=resolved_api_key,
-        base_url=resolved_api_base,
-        timeout=timeout,
-        max_retries=0,  # we handle retries in enrich_tables_batch
+    # The shared factory repeats endpoint DNS/IP admission immediately before
+    # construction and injects an owned no-redirect, no-proxy HTTP transport.
+    # Retrying remains owned by ``enrich_tables_batch``.
+    client = create_openai_compatible_client(
+        LlmConfig(
+            api_key=resolved_api_key,
+            api_base=llm_config.api_base,
+            model_name=llm_config.model_name,
+            source=llm_config.source,
+        ),
+        timeout=AI_ENRICH_LLM_TIMEOUT_SECONDS,
     )
     response = client.chat.completions.create(
         model=llm_config.model_name,

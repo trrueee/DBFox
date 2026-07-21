@@ -57,8 +57,12 @@ def _default_runtime_root() -> Path:
             return Path(xdg_data_home) / "dbfox"
         return Path.home() / ".local" / "share" / "dbfox"
 
-    # 如果以上系统变量都读取失败（极少见），则退化使用项目根目录下的临时运行目录
-    return PROJECT_DIR / ".dbfox_runtime"
+    # APPDATA is unavailable only in a broken Windows user profile.  Do not
+    # fall back to the repository: it is source-controlled/shared storage and
+    # can expose credentials, tokens, metadata, and diagnostics.  Callers may
+    # explicitly set DBFOX_RUNTIME_DIR when an alternate private location is
+    # required.
+    raise OSError("DBFOX private runtime root is unavailable; set DBFOX_RUNTIME_DIR")
 
 
 def _chmod_private(path: Path, *, is_dir: bool) -> None:
@@ -80,6 +84,30 @@ def _chmod_private(path: Path, *, is_dir: bool) -> None:
         pass
 
 
+def private_runtime_root() -> Path:
+    """Return the single application-owned root for all mutable runtime data.
+
+    Metadata, checkpoints, backups, diagnostics, and transient configuration
+    must share this root so a versioned reset can reason about one bounded
+    ownership domain.  Source-mode execution intentionally uses the same
+    private location as packaged execution; repository directories are never
+    an application data store.
+    """
+    root = _default_runtime_root()
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        _chmod_private(root, is_dir=True)
+        probe = root / ".write_test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return root
+    except OSError as exc:
+        raise OSError(
+            "Unable to initialize DBFOX private runtime root; "
+            "set DBFOX_RUNTIME_DIR to an application-owned writable directory"
+        ) from exc
+
+
 def private_runtime_dir(name: str) -> Path:
     """
     安全地创建并返回一个指定名称的私有运行期子目录
@@ -92,28 +120,15 @@ def private_runtime_dir(name: str) -> Path:
       - `probe.write_text(...)` 向文件写入字符串。
       - `probe.unlink(missing_ok=True)` 删除文件，`missing_ok=True` 表示如果文件不存在也不报错。
     """
-    # 备选目录：首选系统应用数据区，次选项目根目录
-    candidates = [_default_runtime_root(), PROJECT_DIR / ".dbfox_runtime"]
-    last_error: OSError | None = None
-
-    for root in candidates:
-        try:
-            path = root / name
-            path.mkdir(parents=True, exist_ok=True)  # 创建子目录
-            _chmod_private(path, is_dir=True)        # 设置安全权限
-            
-            # 进行写入测试，确保这个目录当前确实可写（排除权限不足等问题）
-            probe = path / ".write_test"
-            probe.write_text("", encoding="utf-8")
-            probe.unlink(missing_ok=True)            # 删除测试文件
-            return path
-        except OSError as exc:
-            last_error = exc                         # 记录发生的错误，并尝试下一个备选目录
-
-    # 如果所有备选目录都无法创建或写入，则对外抛出最后一个捕获到的操作系统错误
-    if last_error:
-        raise last_error
-    raise OSError("Unable to create DBFox runtime directory")
+    if not name or Path(name).name != name:
+        raise ValueError("Runtime directory name must be one path component")
+    path = private_runtime_root() / name
+    path.mkdir(parents=True, exist_ok=True)
+    _chmod_private(path, is_dir=True)
+    probe = path / ".write_test"
+    probe.write_text("", encoding="utf-8")
+    probe.unlink(missing_ok=True)
+    return path
 
 
 def private_runtime_file(name: str, filename: str) -> Path:

@@ -74,7 +74,7 @@ class AgentEvalRunRequest(BaseModel):
     task_ids: list[str] | None = None
     tags: list[str] | None = None
     source: str | None = None
-    llm_credential_id: str | None = None
+    llm_credential_id: str
     api_base: str | None = None
     model_name: str | None = None
     execute: bool = False

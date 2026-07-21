@@ -237,22 +237,19 @@ def _is_confirmation_only_safety(safety: dict[str, Any]) -> bool:
 
 
 def repair_plan_to_progress_decision(plan: SqlRepairPlan) -> dict[str, Any]:
-    """Convert SqlRepairPlan to progress_decision dict."""
-    from engine.agent.progress.schemas import ProgressDecision
-
-    decision = ProgressDecision(
-        status="continue",
-        reason_summary=plan.recovery_strategy,
-        failure_layer=plan.failure_layer,  # type: ignore[arg-type]
-        root_cause=plan.root_cause,
-        recovery_strategy=plan.recovery_strategy,
-        next_action_hint=plan.next_action_hint,
-        user_visible_update=plan.user_visible_update,
-        next_tool_groups=plan.next_tool_groups,
-        retry_budget=plan.retry_budget,
-        should_retry=plan.should_retry,
-    )
-    return decision.model_dump(mode="json")
+    """Project the repair plan into a provider-neutral model context value."""
+    return {
+        "status": "continue",
+        "reason_summary": plan.recovery_strategy,
+        "failure_layer": plan.failure_layer,
+        "root_cause": plan.root_cause,
+        "recovery_strategy": plan.recovery_strategy,
+        "next_action_hint": plan.next_action_hint,
+        "user_visible_update": plan.user_visible_update,
+        "next_tool_groups": list(plan.next_tool_groups),
+        "retry_budget": plan.retry_budget,
+        "should_retry": plan.should_retry,
+    }
 
 
 def _first_text_value(mapping: dict[str, Any], keys: tuple[str, ...]) -> str:

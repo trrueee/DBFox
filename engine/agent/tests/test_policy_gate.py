@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from engine.policy.gate import PolicyGate
-from engine.tools.runtime import BaseTool, ToolPolicy, ToolRegistry
+from engine.tools.runtime import BaseTool, ToolExecutionSpec, ToolPolicy, ToolRegistry
 
 
 class EmptyInput(BaseModel):
@@ -26,6 +26,15 @@ class PolicyTestTool(BaseTool[EmptyInput, EmptyOutput]):
         self.group = name.split(".", 1)[0]
         self.description = f"Test tool: {name}"
         self.policy = policy
+        if policy.side_effect == "read":
+            self.execution = ToolExecutionSpec(capabilities=("database_read",))
+        elif policy.side_effect in {"write", "destructive"}:
+            self.execution = ToolExecutionSpec(
+                backend="isolated_process",
+                capabilities=("database_write",),
+            )
+        else:
+            self.execution = ToolExecutionSpec()
 
     def run(self, tool_input, context):
         return EmptyOutput()
@@ -65,14 +74,14 @@ class TestPolicyGateBasics:
         assert decision.status == "allowed"
 
     def test_write_tool_blocked(self):
-        registry = ToolRegistry()
+        registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
         registry.register(_make_tool("dangerous.write", side_effect="write"))
         gate = PolicyGate(registry)
         decision = gate.check({}, "dangerous.write", {})
         assert decision.status == "blocked"
 
     def test_destructive_tool_blocked(self):
-        registry = ToolRegistry()
+        registry = ToolRegistry(available_backends=frozenset({"in_process", "isolated_process"}))
         registry.register(_make_tool("dangerous.drop", side_effect="destructive"))
         gate = PolicyGate(registry)
         decision = gate.check({}, "dangerous.drop", {})

@@ -7,6 +7,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import engine as engine_package
 from engine.db import build_metadata_engine, configure_sqlite_pragmas, DATABASE_URL
 
 
@@ -50,8 +51,15 @@ class TestConfigureSqlitePragmas:
         finally:
             if saved is not None:
                 sys.modules[mod_name] = saved
+                # ``importlib.import_module`` also replaces the attribute on the
+                # parent package. Restoring only ``sys.modules`` leaves later
+                # ``import engine.db`` statements bound to the temporary module
+                # and makes the suite order-dependent.
+                engine_package.db = saved
             else:
                 sys.modules.pop(mod_name, None)
+                if hasattr(engine_package, "db"):
+                    delattr(engine_package, "db")
 
 
 def test_build_metadata_engine_enables_foreign_keys_for_each_sqlite_connection(tmp_path: Path) -> None:

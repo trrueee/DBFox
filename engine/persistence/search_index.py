@@ -9,91 +9,29 @@ from sqlalchemy.orm import Session
 from engine.models import QueryHistory
 
 
-QUERY_HISTORY_SEARCH_DOCS_DDL = """
-CREATE TABLE IF NOT EXISTS query_history_search_docs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    history_id VARCHAR NOT NULL UNIQUE,
-    datasource_id VARCHAR NOT NULL,
-    question TEXT,
-    submitted_sql TEXT,
-    generated_sql TEXT,
-    safe_sql TEXT,
-    executed_sql TEXT,
-    error_message TEXT,
-    search_text TEXT NOT NULL DEFAULT '',
-    created_at DATETIME,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(history_id) REFERENCES query_history(id) ON DELETE CASCADE
-)
-"""
+def assert_query_history_search_schema(bind: Any) -> None:
+    """Fail closed when Alembic's query-history search contract is absent.
 
-QUERY_HISTORY_SEARCH_DOCS_INDEX_DDL = """
-CREATE INDEX IF NOT EXISTS ix_query_history_search_docs_datasource
-ON query_history_search_docs (datasource_id)
-"""
-
-QUERY_HISTORY_FTS_DDL = """
-CREATE VIRTUAL TABLE IF NOT EXISTS query_history_fts
-USING fts5(search_text, content='query_history_search_docs', content_rowid='id')
-"""
-
-QUERY_HISTORY_FTS_TRIGGERS = [
+    FTS tables and triggers are schema, not a runtime repair mechanism.  The
+    application startup verifier and migrations own their creation; this
+    service only checks the contract before manipulating indexed content.
     """
-    CREATE TRIGGER IF NOT EXISTS query_history_search_docs_ai
-    AFTER INSERT ON query_history_search_docs BEGIN
-        INSERT INTO query_history_fts(rowid, search_text)
-        VALUES (new.id, new.search_text);
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS query_history_search_docs_ad
-    AFTER DELETE ON query_history_search_docs BEGIN
-        INSERT INTO query_history_fts(query_history_fts, rowid, search_text)
-        VALUES ('delete', old.id, old.search_text);
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS query_history_search_docs_au
-    AFTER UPDATE ON query_history_search_docs BEGIN
-        INSERT INTO query_history_fts(query_history_fts, rowid, search_text)
-        VALUES ('delete', old.id, old.search_text);
-        INSERT INTO query_history_fts(rowid, search_text)
-        VALUES (new.id, new.search_text);
-    END
-    """,
-]
-
-
-def _fts_has_expected_schema(bind: Any) -> bool:
     try:
         bind.execute(sa_text("SELECT search_text FROM query_history_fts LIMIT 0"))
-        return True
+        bind.execute(sa_text("SELECT 1 FROM query_history_search_docs LIMIT 0"))
     except OperationalError as exc:
-        message = str(exc).lower()
-        if "no such table" in message or "no such column" in message:
-            return False
-        raise
-
-
-def ensure_query_history_search_schema(bind: Any) -> None:
-    bind.execute(sa_text(QUERY_HISTORY_SEARCH_DOCS_DDL))
-    bind.execute(sa_text(QUERY_HISTORY_SEARCH_DOCS_INDEX_DDL))
-    if not _fts_has_expected_schema(bind):
-        bind.execute(sa_text("DROP TABLE IF EXISTS query_history_fts"))
-    bind.execute(sa_text(QUERY_HISTORY_FTS_DDL))
-    for ddl in QUERY_HISTORY_FTS_TRIGGERS:
-        bind.execute(sa_text(ddl))
+        raise RuntimeError("DBFOX_METADATA_FTS_CONTRACT_MISSING") from exc
 
 
 class SearchIndexService:
     def __init__(self, db: Session):
         self.db = db
 
-    def ensure_schema(self) -> None:
-        ensure_query_history_search_schema(self.db)
+    def assert_schema(self) -> None:
+        assert_query_history_search_schema(self.db)
 
     def rebuild_query_history_index(self) -> None:
-        self.ensure_schema()
+        self.assert_schema()
         self.db.execute(sa_text("DELETE FROM query_history_search_docs"))
         self.db.execute(
             sa_text(
@@ -128,7 +66,7 @@ class SearchIndexService:
         self.db.execute(sa_text("INSERT INTO query_history_fts(query_history_fts) VALUES ('rebuild')"))
 
     def index_query_history(self, history: QueryHistory) -> None:
-        self.ensure_schema()
+        self.assert_schema()
         self.db.execute(
             sa_text(
                 """
@@ -163,19 +101,21 @@ class SearchIndexService:
                 "executed_sql": history.executed_sql or "",
                 "error_message": history.error_message or "",
                 "search_text": self._history_search_text(history),
-                "created_at": history.created_at,
+                # Raw SQLite text statements must not rely on Python 3.12's
+                # deprecated default datetime adapter.
+                "created_at": history.created_at.isoformat(),
             },
         )
 
     def delete_query_history(self, history_id: str) -> None:
-        self.ensure_schema()
+        self.assert_schema()
         self.db.execute(
             sa_text("DELETE FROM query_history_search_docs WHERE history_id = :history_id"),
             {"history_id": history_id},
         )
 
     def clear_query_history(self, datasource_id: str) -> None:
-        self.ensure_schema()
+        self.assert_schema()
         self.db.execute(
             sa_text("DELETE FROM query_history_search_docs WHERE datasource_id = :datasource_id"),
             {"datasource_id": datasource_id},
@@ -188,7 +128,7 @@ class SearchIndexService:
         datasource_id: str | None = None,
         limit: int = 50,
     ) -> list[str]:
-        self.ensure_schema()
+        self.assert_schema()
         term = search.strip()
         if not term:
             return []

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 from engine.ai_index import (
     build_column_search_text,
     build_table_search_text,
@@ -9,6 +13,26 @@ from engine.ai_index import (
     segment_for_fts,
     tokenize_query,
 )
+
+
+def test_jieba_import_isolated_from_upstream_pkg_resources_deprecations():
+    root = Path(__file__).resolve().parents[2]
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "error::DeprecationWarning",
+            "-c",
+            "from engine.ai_index import tokenize_query; assert tokenize_query('中文搜索')",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_tokenize_query_chinese_english_mixed():

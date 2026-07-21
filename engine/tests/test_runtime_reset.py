@@ -1,8 +1,10 @@
-"""Contract tests for the one-way Foundation v2 runtime reset."""
+"""Contract tests for the one-way, privacy-preserving Foundation reset."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+import inspect
+import os
 from pathlib import Path
 from threading import Event
 
@@ -16,17 +18,15 @@ from engine.db import build_metadata_engine
 from engine.models import (
     AgentApproval,
     AgentArtifactRecord,
-    AgentCheckpoint,
     AgentEvalCaseResult,
     AgentEvalRun,
     AgentGoldenTask,
     AgentMessage,
     AgentRun,
-    AgentRuntimeEventRecord,
     AgentSession,
     AgentSessionMemory,
-    AgentTraceEventRecord,
     BackupRecord,
+    ConfirmationToken,
     DataSource,
     DatabaseEnvironment,
     DomainTagRule,
@@ -50,16 +50,27 @@ from engine.security.runtime_reset import (
     RuntimeResetPathError,
     RuntimeResetStateError,
     reset_legacy_runtime_state,
+    retire_legacy_project_runtime_dir,
+    retire_legacy_source_runtime,
 )
 
 
 _PURGED_TABLES = (
+    "confirmation_tokens",
     "agent_approvals",
-    "agent_checkpoints",
     "agent_artifacts",
-    "agent_runtime_events",
-    "agent_trace_events",
+    "agent_events",
+    "agent_task_plans",
+    "agent_evidence",
+    "agent_question_requests",
+    "agent_observations",
+    "agent_tool_invocations",
+    "agent_turns",
+    "agent_eval_case_results",
+    "agent_eval_runs",
+    "agent_golden_tasks",
     "agent_runs",
+    "agent_session_inputs",
     "agent_session_memories",
     "agent_messages",
     "agent_sessions",
@@ -67,25 +78,21 @@ _PURGED_TABLES = (
     "schema_columns",
     "workspace_table_scopes",
     "schema_tables",
+    "query_history_search_docs",
+    "query_history",
+    "llm_logs",
+    "golden_sqls",
+    "reusable_sqls",
+    "semantic_aliases",
+    "domain_tag_rules",
+    "backup_records",
+    "table_design_drafts",
 )
 
 _PRESERVED_TABLES = (
     "projects",
     "data_sources",
     "database_environments",
-    "agent_eval_case_results",
-    "agent_eval_runs",
-    "agent_golden_tasks",
-    "semantic_aliases",
-    "domain_tag_rules",
-    "query_history_search_docs",
-    "query_history",
-    "query_history_fts",
-    "llm_logs",
-    "golden_sqls",
-    "reusable_sqls",
-    "backup_records",
-    "table_design_drafts",
 )
 
 
@@ -131,6 +138,19 @@ def _marker(metadata_url: str) -> tuple[str, object] | None:
             return None if row is None else (str(row[0]), row[1])
     finally:
         engine.dispose()
+
+
+def _sqlite_family_bytes(path: Path) -> bytes:
+    chunks: list[bytes] = []
+    for candidate in (
+        path,
+        path.with_name(f"{path.name}-wal"),
+        path.with_name(f"{path.name}-shm"),
+        path.with_name(f"{path.name}-journal"),
+    ):
+        if candidate.exists():
+            chunks.append(candidate.read_bytes())
+    return b"".join(chunks)
 
 
 def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> dict[str, str]:
@@ -202,7 +222,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
             environment = DatabaseEnvironment(
                 id="environment-1",
                 project_id=project.id,
-                datasource_id=datasource.id,
                 name="Warehouse environment",
                 runtime="docker",
                 engine_type="postgresql",
@@ -305,16 +324,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         step_name="execute",
                         policy_decision_json='{"allow": false}',
                     ),
-                    AgentCheckpoint(
-                        id="agent-checkpoint-1",
-                        run_id=agent_run.id,
-                        session_id=agent_session.id,
-                        checkpoint_index=1,
-                        status="waiting",
-                        state_json='{"sensitive": true}',
-                        completed_steps_json="[]",
-                        pending_steps_json='["execute"]',
-                    ),
                     AgentArtifactRecord(
                         id="agent-artifact-1",
                         run_id=agent_run.id,
@@ -324,24 +333,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         title="Sensitive result",
                         payload_json='{"rows": ["sensitive"]}',
                         presentation_json="{}",
-                    ),
-                    AgentRuntimeEventRecord(
-                        id="agent-runtime-event-1",
-                        run_id=agent_run.id,
-                        session_id=agent_session.id,
-                        sequence=1,
-                        type="progress",
-                        event_json='{"sensitive": true}',
-                        created_at_ms=1,
-                    ),
-                    AgentTraceEventRecord(
-                        id="agent-trace-event-1",
-                        run_id=agent_run.id,
-                        session_id=agent_session.id,
-                        sequence=1,
-                        type="trace",
-                        event_json='{"sensitive": true}',
-                        created_at_ms=1,
                     ),
                 )
             )
@@ -372,12 +363,21 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
 
             session.add_all(
                 (
+                    ConfirmationToken(
+                        token="confirmation-token-1",
+                        expires_at=9_999_999_999,
+                        datasource_id=datasource.id,
+                        action="restore_backup",
+                        details_json='{"sensitive":true}',
+                        expected_confirm_text="Warehouse endpoint",
+                    ),
                     LLMLog(
                         id="llm-log-1",
                         data_source_id=datasource.id,
                         request_type="agent",
-                        prompt_text="sensitive prompt",
-                        response_text="sensitive response",
+                        prompt_hash=LLMLog.fingerprint_request("test", hmac_key=b"t" * 32),
+                        model_name="test-model",
+                        status="completed",
                     ),
                     GoldenSQL(
                         id="golden-sql-1",
@@ -450,7 +450,7 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
     }
 
 
-def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata(tmp_path: Path) -> None:
+def test_foundation_reset_preserves_only_non_secret_endpoint_metadata(tmp_path: Path) -> None:
     runtime_root = tmp_path / "runtime"
     metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
     vault = InMemoryCredentialVault()
@@ -481,7 +481,6 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
             assert datasource.project_id == project.id
             assert datasource.environment_id == environment.id
             assert environment.project_id == project.id
-            assert environment.datasource_id == datasource.id
             assert (
                 datasource.name,
                 datasource.db_type,
@@ -493,11 +492,9 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
                 datasource.ssh_host,
                 datasource.ssh_port,
                 datasource.ssh_username,
-                datasource.ssh_pkey_path,
                 datasource.ssl_enabled,
                 datasource.ssl_ca_path,
                 datasource.ssl_cert_path,
-                datasource.ssl_key_path,
                 datasource.ssl_verify_identity,
                 datasource.connection_mode,
                 datasource.is_read_only,
@@ -513,11 +510,9 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
                 "bastion.example.test",
                 2222,
                 "tunnel-user",
-                "C:/keys/dbfox.pem",
                 True,
                 "C:/certs/ca.pem",
                 "C:/certs/client.pem",
-                "C:/certs/client.key",
                 False,
                 "ssh",
                 True,
@@ -526,6 +521,8 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
             assert datasource.password_credential_id is None
             assert datasource.ssh_password_credential_id is None
             assert datasource.ssh_key_passphrase_credential_id is None
+            assert datasource.ssh_pkey_path is None
+            assert datasource.ssl_key_path is None
             assert environment.password_credential_id is None
             assert (
                 datasource.last_test_at,
@@ -546,9 +543,7 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
                 environment.last_error,
             ) == (None,) * 3
             assert environment.status == "created"
-            eval_result = session.get(AgentEvalCaseResult, "eval-result-1")
-            assert eval_result is not None
-            assert eval_result.run_id is None
+            assert datasource.status == "needs_credentials"
     finally:
         engine.dispose()
 
@@ -559,6 +554,13 @@ def test_foundation_reset_clears_runtime_and_schema_cache_but_preserves_metadata
                 text(
                     "SELECT COUNT(*) FROM schema_search_fts "
                     "WHERE schema_search_fts MATCH :query"
+                ),
+                {"query": "sensitive"},
+            ).scalar_one() == 0
+            assert connection.execute(
+                text(
+                    "SELECT COUNT(*) FROM query_history_fts "
+                    "WHERE query_history_fts MATCH :query"
                 ),
                 {"query": "sensitive"},
             ).scalar_one() == 0
@@ -641,7 +643,14 @@ def test_foundation_reset_removes_safe_checkpoint_sidecars_and_legacy_backups(tm
     langsmith_env = runtime_root / "config" / "langsmith.env"
     langsmith_env.parent.mkdir(parents=True)
     langsmith_env.write_text("LANGCHAIN_API_KEY=lsv2-sensitive", encoding="utf-8")
-    unrelated_env = runtime_root / "config" / ".env"
+    legacy_env = runtime_root / "config" / ".env"
+    legacy_env.write_text("OPENAI_API_KEY=legacy-sensitive", encoding="utf-8")
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    legacy_secret_key.write_bytes(b"legacy-local-crypto-key")
+    unrelated_secret = runtime_root / "secrets" / "keep.key"
+    unrelated_secret.write_bytes(b"keep")
+    unrelated_env = runtime_root / "config" / "keep.env"
     unrelated_env.write_text("KEEP=true", encoding="utf-8")
     unrelated_backup = runtime_root / "other-metadata.db.bak_123456"
     unrelated_backup.write_bytes(b"keep me")
@@ -661,6 +670,9 @@ def test_foundation_reset_removes_safe_checkpoint_sidecars_and_legacy_backups(tm
         assert not legacy_backup.with_name(f"{legacy_backup.name}{suffix}").exists()
     assert metadata_version.exists()
     assert not langsmith_env.exists()
+    assert not legacy_env.exists()
+    assert not legacy_secret_key.exists()
+    assert unrelated_secret.exists()
     assert unrelated_env.exists()
     assert unrelated_backup.exists()
     assert non_timestamp_backup.exists()
@@ -672,21 +684,15 @@ def test_foundation_reset_removes_safe_checkpoint_sidecars_and_legacy_backups(tm
     assert checkpoint_path.exists()
 
 
-def test_foundation_reset_rejects_paths_outside_runtime_root_without_deleting_them(tmp_path: Path) -> None:
+def test_foundation_reset_has_no_caller_selected_cleanup_target(tmp_path: Path) -> None:
     runtime_root = tmp_path / "runtime"
     metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
     outside_checkpoint = tmp_path / "outside-checkpoint.sqlite"
     outside_checkpoint.write_bytes(b"outside checkpoint")
 
-    with pytest.raises(RuntimeResetPathError):
-        reset_legacy_runtime_state(
-            metadata_url,
-            runtime_root,
-            checkpoint_path=outside_checkpoint,
-        )
-
+    assert "checkpoint_path" not in inspect.signature(reset_legacy_runtime_state).parameters
+    reset_legacy_runtime_state(metadata_url, runtime_root)
     assert outside_checkpoint.exists()
-    assert _marker(metadata_url) is None
 
     outside_root = tmp_path / "outside-runtime"
     outside_metadata_url, outside_metadata_path = _create_v2_metadata_db(outside_root)
@@ -700,39 +706,36 @@ def test_foundation_reset_rejects_paths_outside_runtime_root_without_deleting_th
     assert _marker(outside_metadata_url) is None
 
 
-def test_unsafe_checkpoint_sidecar_preflight_leaves_no_marker_and_is_retryable(tmp_path: Path) -> None:
+def test_unsafe_default_checkpoint_sidecar_preflight_leaves_no_marker_and_is_retryable(tmp_path: Path) -> None:
     runtime_root = tmp_path / "runtime"
-    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
-    checkpoint_path = runtime_root / "agent-checkpoints.sqlite"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.write_bytes(b"checkpoint")
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    legacy_secret_key.write_bytes(b"legacy-local-crypto-key")
     unsafe_sidecar = checkpoint_path.with_name(f"{checkpoint_path.name}-wal")
     unsafe_sidecar.mkdir()
     vault = InMemoryCredentialVault()
     credentials = _seed_volatile_state(metadata_url, vault)
 
     with pytest.raises(RuntimeResetPathError):
-        reset_legacy_runtime_state(
-            metadata_url,
-            runtime_root,
-            checkpoint_path=checkpoint_path,
-        )
+        reset_legacy_runtime_state(metadata_url, runtime_root)
 
     assert _marker(metadata_url) is None
     assert checkpoint_path.exists()
+    assert legacy_secret_key.exists()
     assert unsafe_sidecar.is_dir()
     assert _count_rows(metadata_url, "agent_runs") == 1
     assert vault.get(credentials["datasource_password_id"]) == "datasource password"
 
     unsafe_sidecar.rmdir()
-    retry_result = reset_legacy_runtime_state(
-        metadata_url,
-        runtime_root,
-        checkpoint_path=checkpoint_path,
-    )
+    retry_result = reset_legacy_runtime_state(metadata_url, runtime_root)
 
     assert retry_result.reset_performed is True
     assert _marker(metadata_url) is not None
     assert not checkpoint_path.exists()
+    assert not legacy_secret_key.exists()
 
 
 def test_unsafe_matching_backup_sidecar_preflight_leaves_all_external_files_and_db_unchanged(
@@ -740,7 +743,7 @@ def test_unsafe_matching_backup_sidecar_preflight_leaves_all_external_files_and_
 ) -> None:
     runtime_root = tmp_path / "runtime"
     metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
-    checkpoint_path = runtime_root / "agent-checkpoints.sqlite"
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.write_bytes(b"checkpoint")
     legacy_backup = runtime_root / f"{metadata_path.name}.bak_20260711"
     legacy_backup.write_bytes(b"legacy metadata")
@@ -749,11 +752,7 @@ def test_unsafe_matching_backup_sidecar_preflight_leaves_all_external_files_and_
     _seed_volatile_state(metadata_url, InMemoryCredentialVault())
 
     with pytest.raises(RuntimeResetPathError):
-        reset_legacy_runtime_state(
-            metadata_url,
-            runtime_root,
-            checkpoint_path=checkpoint_path,
-        )
+        reset_legacy_runtime_state(metadata_url, runtime_root)
 
     # The whole plan is checked before the first unlink, not just the target
     # that happened to be encountered first.
@@ -764,57 +763,456 @@ def test_unsafe_matching_backup_sidecar_preflight_leaves_all_external_files_and_
     assert _count_rows(metadata_url, "agent_runs") == 1
 
     unsafe_sidecar.rmdir()
-    retry = reset_legacy_runtime_state(
-        metadata_url,
-        runtime_root,
-        checkpoint_path=checkpoint_path,
-    )
+    retry = reset_legacy_runtime_state(metadata_url, runtime_root)
     assert retry.reset_performed is True
     assert not checkpoint_path.exists()
     assert not legacy_backup.exists()
 
 
-def test_external_cleanup_error_leaves_no_marker_and_is_retryable(
+def test_legacy_secret_key_cleanup_rejects_a_link_without_touching_its_target(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
+    outside_secret = tmp_path / "outside-secret"
+    outside_secret.write_bytes(b"must-survive")
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    try:
+        legacy_secret_key.symlink_to(outside_secret)
+    except OSError:
+        pytest.skip("creating a file symlink is not permitted on this host")
+
+    with pytest.raises(RuntimeResetPathError):
+        reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert _marker(metadata_url) is None
+    assert outside_secret.read_bytes() == b"must-survive"
+    assert legacy_secret_key.is_symlink()
+
+
+def test_external_cleanup_failure_is_durably_pending_and_retryable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runtime_root = tmp_path / "runtime"
-    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
-    checkpoint_path = runtime_root / "agent-checkpoints.sqlite"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.write_bytes(b"checkpoint")
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    legacy_secret_key.write_bytes(b"legacy-local-crypto-key")
     vault = InMemoryCredentialVault()
     _seed_volatile_state(metadata_url, vault)
 
     import engine.security.runtime_reset as runtime_reset
 
-    original_unlink = Path.unlink
+    original_cleanup = runtime_reset._remove_external_files
 
-    def fail_checkpoint_unlink(self: Path, *args: object, **kwargs: object) -> None:
-        if self == checkpoint_path:
-            raise OSError("injected external cleanup failure")
-        original_unlink(self, *args, **kwargs)
+    def fail_cleanup(_plan: object) -> None:
+        raise RuntimeResetCleanupError()
 
-    monkeypatch.setattr(runtime_reset.Path, "unlink", fail_checkpoint_unlink)
+    monkeypatch.setattr(runtime_reset, "_remove_external_files", fail_cleanup)
     with pytest.raises(RuntimeResetCleanupError):
-        reset_legacy_runtime_state(
-            metadata_url,
-            runtime_root,
-            checkpoint_path=checkpoint_path,
-        )
+        reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert _marker(metadata_url) == (FOUNDATION_RUNTIME_VERSION, None)
+    assert checkpoint_path.exists()
+    assert legacy_secret_key.exists()
+    assert _count_rows(metadata_url, "agent_runs") == 0
+
+    monkeypatch.setattr(runtime_reset, "_remove_external_files", original_cleanup)
+    retry_result = reset_legacy_runtime_state(metadata_url, runtime_root)
+    assert retry_result.reset_performed is True
+    assert _marker(metadata_url)[1] is not None
+    assert not checkpoint_path.exists()
+    assert not legacy_secret_key.exists()
+
+
+def test_database_reset_failure_never_starts_external_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
+    checkpoint_path.write_bytes(b"checkpoint")
+
+    import engine.security.runtime_reset as runtime_reset
+
+    def fail_database_clear(_connection: object) -> None:
+        raise RuntimeError("injected database clear failure")
+
+    monkeypatch.setattr(runtime_reset, "_clear_database_runtime_state", fail_database_clear)
+    with pytest.raises(RuntimeError, match="injected database clear failure"):
+        reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert checkpoint_path.exists()
+    assert _marker(metadata_url) is None
+
+
+@pytest.mark.parametrize("legacy_version", ("2", "3"))
+def test_known_legacy_marker_is_upgraded_to_the_v4_strict_reset(
+    tmp_path: Path,
+    legacy_version: str,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
+    _seed_volatile_state(metadata_url, InMemoryCredentialVault())
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    legacy_secret_key.write_bytes(b"legacy-local-crypto-key")
+    engine = build_metadata_engine(metadata_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO foundation_runtime_state (id, runtime_version, reset_completed_at) "
+                    "VALUES (1, :legacy_version, CURRENT_TIMESTAMP)"
+                ),
+                {"legacy_version": legacy_version},
+            )
+    finally:
+        engine.dispose()
+
+    result = reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert result.reset_performed is True
+    assert _marker(metadata_url)[0] == FOUNDATION_RUNTIME_VERSION
+    assert _marker(metadata_url)[1] is not None
+    assert not legacy_secret_key.exists()
+    for table_name in _PURGED_TABLES:
+        assert _count_rows(metadata_url, table_name) == 0
+
+
+def test_runtime_root_cleanup_uses_shared_layout_not_metadata_parent(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root / "data")
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
+    checkpoint_path.write_bytes(b"checkpoint")
+    langsmith_env = runtime_root / "config" / "langsmith.env"
+    private_env = runtime_root / "config" / ".env"
+    langsmith_env.parent.mkdir(parents=True)
+    langsmith_env.write_text("LANGCHAIN_API_KEY=legacy", encoding="utf-8")
+    private_env.write_text("OPENAI_API_KEY=legacy", encoding="utf-8")
+    legacy_secret_key = runtime_root / "secrets" / ".secret_key"
+    legacy_secret_key.parent.mkdir()
+    legacy_secret_key.write_bytes(b"legacy-local-crypto-key")
+
+    reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert not checkpoint_path.exists()
+    assert not langsmith_env.exists()
+    assert not private_env.exists()
+    assert not legacy_secret_key.exists()
+
+
+def test_reset_vacuums_deleted_legacy_text_from_metadata_and_wal(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    sentinel = "foundation-reset-physical-sentinel-50e00cc8"
+    _seed_volatile_state(metadata_url, InMemoryCredentialVault())
+    engine = build_metadata_engine(metadata_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO query_history "
+                    "(id, data_source_id, question, guardrail_result, created_at) "
+                    "VALUES (:id, :datasource_id, :question, :guardrail_result, CURRENT_TIMESTAMP)"
+                ),
+                {
+                    "id": "physical-sentinel-history",
+                    "datasource_id": "datasource-1",
+                    "question": sentinel,
+                    "guardrail_result": "allowed",
+                },
+            )
+    finally:
+        engine.dispose()
+
+    assert sentinel.encode("utf-8") in _sqlite_family_bytes(metadata_path)
+
+    reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert sentinel.encode("utf-8") not in _sqlite_family_bytes(metadata_path)
+
+
+def test_runtime_reset_removes_only_regular_files_from_owned_backup_tree(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
+    managed_backup = runtime_root / "backups" / "project-1" / "datasource-1" / "dump.sql"
+    managed_backup.parent.mkdir(parents=True)
+    managed_backup.write_text("legacy business data", encoding="utf-8")
+    outside_file = tmp_path / "outside.sql"
+    outside_file.write_text("must survive", encoding="utf-8")
+
+    reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert not managed_backup.exists()
+    assert outside_file.read_text(encoding="utf-8") == "must survive"
+
+
+def test_runtime_reset_rejects_links_in_owned_backup_tree_before_database_reset(
+    tmp_path: Path,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    (outside_dir / "dump.sql").write_text("must survive", encoding="utf-8")
+    backup_link = runtime_root / "backups" / "linked"
+    backup_link.parent.mkdir()
+    try:
+        backup_link.symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("creating a directory symlink is not permitted on this host")
+
+    with pytest.raises(RuntimeResetPathError):
+        reset_legacy_runtime_state(metadata_url, runtime_root)
 
     assert _marker(metadata_url) is None
-    assert checkpoint_path.exists()
-    assert _count_rows(metadata_url, "agent_runs") == 1
+    assert (outside_dir / "dump.sql").exists()
 
-    monkeypatch.setattr(runtime_reset.Path, "unlink", original_unlink)
-    retry_result = reset_legacy_runtime_state(
-        metadata_url,
-        runtime_root,
-        checkpoint_path=checkpoint_path,
-    )
-    assert retry_result.reset_performed is True
-    assert _marker(metadata_url) is not None
-    assert not checkpoint_path.exists()
+
+def test_retire_legacy_source_runtime_deletes_only_the_historical_artifact_family(
+    tmp_path: Path,
+) -> None:
+    legacy_root = tmp_path / "legacy-source"
+    legacy_root.mkdir()
+    metadata = legacy_root / "dbfox_local.db"
+    checkpoint = legacy_root / "dbfox_agent_core_checkpoints.sqlite"
+    backup = legacy_root / "dbfox_local.db.bak_20260711"
+    for base in (metadata, checkpoint, backup):
+        for suffix in ("", "-wal", "-shm", "-journal", ".version"):
+            base.with_name(f"{base.name}{suffix}").write_bytes(b"legacy")
+    unrelated = legacy_root / "do-not-delete.txt"
+    unrelated.write_text("keep", encoding="utf-8")
+
+    assert retire_legacy_source_runtime(legacy_root) is True
+
+    for base in (metadata, checkpoint, backup):
+        for suffix in ("", "-wal", "-shm", "-journal", ".version"):
+            assert not base.with_name(f"{base.name}{suffix}").exists()
+    assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert retire_legacy_source_runtime(legacy_root) is False
+
+
+def test_retire_legacy_project_runtime_dir_removes_only_fixed_historical_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.security.runtime_reset as runtime_reset
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    legacy_root = project_root / ".dbfox_runtime"
+    active_runtime_root = tmp_path / "private-runtime"
+    active_runtime_root.mkdir()
+    for relative_path in (
+        "auth/.local_token",
+        "config/legacy.env",
+        "data/dbfox_local.db",
+        "logs/dbfox-engine.log",
+        "memory/long_term_memory.sqlite",
+        "secrets/.secret_key",
+        "backups/project/datasource/backup.sql",
+        "tests/test_backup_runtime/run/backups/project/datasource/dump.sql",
+    ):
+        path = legacy_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("legacy", encoding="utf-8")
+    outside_file = project_root / "do-not-delete.txt"
+    outside_file.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(runtime_reset, "PROJECT_DIR", project_root)
+
+    assert retire_legacy_project_runtime_dir(active_runtime_root) is True
+
+    assert not legacy_root.exists()
+    assert outside_file.read_text(encoding="utf-8") == "keep"
+    assert retire_legacy_project_runtime_dir(active_runtime_root) is False
+
+
+def test_retire_legacy_project_runtime_dir_rejects_active_or_unknown_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.security.runtime_reset as runtime_reset
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    legacy_root = project_root / ".dbfox_runtime"
+    (legacy_root / "auth").mkdir(parents=True)
+    (legacy_root / "auth" / ".local_token").write_text("legacy", encoding="utf-8")
+    monkeypatch.setattr(runtime_reset, "PROJECT_DIR", project_root)
+
+    with pytest.raises(RuntimeResetPathError):
+        retire_legacy_project_runtime_dir(legacy_root)
+    assert (legacy_root / "auth" / ".local_token").exists()
+
+    active_runtime_root = tmp_path / "private-runtime"
+    active_runtime_root.mkdir()
+    (legacy_root / "unexpected").mkdir()
+    with pytest.raises(RuntimeResetPathError):
+        retire_legacy_project_runtime_dir(active_runtime_root)
+    assert (legacy_root / "auth" / ".local_token").exists()
+
+
+def test_retire_legacy_project_runtime_dir_rejects_links_before_removal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.security.runtime_reset as runtime_reset
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    legacy_root = project_root / ".dbfox_runtime"
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_file = outside_dir / "must-survive.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    legacy_root.mkdir()
+    link = legacy_root / "auth"
+    try:
+        link.symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("creating a directory symlink is not permitted on this host")
+    monkeypatch.setattr(runtime_reset, "PROJECT_DIR", project_root)
+
+    with pytest.raises(RuntimeResetPathError):
+        retire_legacy_project_runtime_dir(tmp_path / "private-runtime")
+
+    assert link.exists()
+    assert outside_file.read_text(encoding="utf-8") == "outside"
+
+
+def test_retire_legacy_project_runtime_dir_cannot_follow_a_raced_child_link(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import engine.security.runtime_reset as runtime_reset
+
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    legacy_root = project_root / ".dbfox_runtime"
+    auth_dir = legacy_root / "auth"
+    auth_dir.mkdir(parents=True)
+    legacy_token = auth_dir / ".local_token"
+    legacy_token.write_text("legacy", encoding="utf-8")
+    active_runtime_root = tmp_path / "private-runtime"
+    active_runtime_root.mkdir()
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_token = outside_dir / ".local_token"
+    outside_token.write_text("outside", encoding="utf-8")
+    probe = tmp_path / "probe-link"
+    try:
+        probe.symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("creating a directory symlink is not permitted on this host")
+    else:
+        probe.unlink()
+    monkeypatch.setattr(runtime_reset, "PROJECT_DIR", project_root)
+
+    original_remove = runtime_reset._remove_external_files
+    parked_auth = legacy_root / "auth-parked"
+
+    def replace_child_after_preflight(plan: object) -> None:
+        auth_dir.rename(parked_auth)
+        auth_dir.symlink_to(outside_dir, target_is_directory=True)
+        original_remove(plan)
+
+    monkeypatch.setattr(runtime_reset, "_remove_external_files", replace_child_after_preflight)
+    with pytest.raises(RuntimeResetPathError):
+        retire_legacy_project_runtime_dir(active_runtime_root)
+
+    assert outside_token.read_text(encoding="utf-8") == "outside"
+    assert (parked_auth / ".local_token").read_text(encoding="utf-8") == "legacy"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Win32 alias behavior")
+def test_windows_metadata_aliases_are_rejected_before_cleanup(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
+    checkpoint_path.write_bytes(b"checkpoint")
+    protected_sidecar = metadata_path.with_name(f"{metadata_path.name}.version")
+    protected_sidecar.write_text("must survive", encoding="utf-8")
+
+    for alias_name in (f"{metadata_path.name}.", f"{metadata_path.name}::$DATA"):
+        aliased_url = _sqlite_url(metadata_path.with_name(alias_name))
+        with pytest.raises(RuntimeResetPathError):
+            reset_legacy_runtime_state(aliased_url, runtime_root)
+
+    assert protected_sidecar.exists()
+    assert checkpoint_path.exists()
+    assert _marker(metadata_url) is None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="NTFS is case-insensitive")
+def test_windows_case_varied_metadata_url_purges_matching_backup_family(tmp_path: Path) -> None:
+    runtime_root = tmp_path / "runtime"
+    _metadata_url, metadata_path = _create_v2_metadata_db(runtime_root, name="metadata.db")
+    legacy_backup = runtime_root / "metadata.db.bak_20260711"
+    legacy_backup.write_bytes(b"legacy ciphertext")
+    aliased_url = _sqlite_url(metadata_path.with_name("METADATA.DB"))
+
+    reset_legacy_runtime_state(aliased_url, runtime_root)
+
+    assert not legacy_backup.exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Win32 reparse-point semantics")
+def test_windows_parent_reparse_after_plan_validation_cannot_delete_outside_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_root = tmp_path / "runtime"
+    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
+    config_dir = runtime_root / "config"
+    langsmith_env = config_dir / "langsmith.env"
+    config_dir.mkdir()
+    langsmith_env.write_text("legacy", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_env = outside_dir / "langsmith.env"
+    outside_env.write_text("outside must survive", encoding="utf-8")
+
+    probe = tmp_path / "probe-link"
+    try:
+        probe.symlink_to(outside_dir, target_is_directory=True)
+    except OSError:
+        pytest.skip("creating a directory symlink is not permitted on this Windows host")
+    else:
+        probe.unlink()
+
+    import engine.security.runtime_reset as runtime_reset
+
+    original_require_root = runtime_reset._require_runtime_root
+    call_count = 0
+    parked_config = runtime_root / "config-parked"
+
+    def replace_config_after_validation(path: Path) -> Path:
+        nonlocal call_count
+        result = original_require_root(path)
+        call_count += 1
+        if call_count == 3:
+            config_dir.rename(parked_config)
+            config_dir.symlink_to(outside_dir, target_is_directory=True)
+        return result
+
+    monkeypatch.setattr(runtime_reset, "_require_runtime_root", replace_config_after_validation)
+    with pytest.raises(RuntimeResetPathError):
+        reset_legacy_runtime_state(metadata_url, runtime_root)
+
+    assert outside_env.read_text(encoding="utf-8") == "outside must survive"
+    assert _marker(metadata_url) == (FOUNDATION_RUNTIME_VERSION, None)
+
+    monkeypatch.setattr(runtime_reset, "_require_runtime_root", original_require_root)
+    config_dir.unlink()
+    parked_config.rename(config_dir)
+    assert reset_legacy_runtime_state(metadata_url, runtime_root).reset_performed is True
+    assert not langsmith_env.exists()
 
 
 def test_first_reset_waits_for_sqlite_writer_before_external_cleanup(
@@ -823,8 +1221,8 @@ def test_first_reset_waits_for_sqlite_writer_before_external_cleanup(
 ) -> None:
     """The first-run marker check must be serialized before file deletion."""
     runtime_root = tmp_path / "runtime"
-    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
-    checkpoint_path = runtime_root / "agent-checkpoints.sqlite"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.write_bytes(b"checkpoint")
 
     import engine.security.runtime_reset as runtime_reset
@@ -846,7 +1244,6 @@ def test_first_reset_waits_for_sqlite_writer_before_external_cleanup(
                     reset_legacy_runtime_state,
                     metadata_url,
                     runtime_root,
-                    checkpoint_path=checkpoint_path,
                 )
                 assert not cleanup_started.wait(timeout=0.2)
                 locker.rollback()
@@ -861,8 +1258,8 @@ def test_first_reset_waits_for_sqlite_writer_before_external_cleanup(
 
 def test_unknown_runtime_marker_fails_closed_without_external_cleanup(tmp_path: Path) -> None:
     runtime_root = tmp_path / "runtime"
-    metadata_url, _metadata_path = _create_v2_metadata_db(runtime_root)
-    checkpoint_path = runtime_root / "agent-checkpoints.sqlite"
+    metadata_url, metadata_path = _create_v2_metadata_db(runtime_root)
+    checkpoint_path = metadata_path.with_name("dbfox_agent_core_checkpoints.sqlite")
     checkpoint_path.write_bytes(b"must remain")
     engine = build_metadata_engine(metadata_url)
     try:
@@ -877,11 +1274,7 @@ def test_unknown_runtime_marker_fails_closed_without_external_cleanup(tmp_path: 
         engine.dispose()
 
     with pytest.raises(RuntimeResetStateError):
-        reset_legacy_runtime_state(
-            metadata_url,
-            runtime_root,
-            checkpoint_path=checkpoint_path,
-        )
+        reset_legacy_runtime_state(metadata_url, runtime_root)
 
     assert checkpoint_path.exists()
     assert _marker(metadata_url) is not None

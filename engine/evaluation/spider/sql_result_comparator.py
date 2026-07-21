@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import math
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from engine.app.safe_errors import FixedErrorCode, fixed_error_message
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 
 
 @dataclass
@@ -29,13 +30,18 @@ class SqlComparisonResult:
 
 def execute_sqlite_query(db_path: str | Path, sql: str, *, timeout_seconds: int = 10) -> SqlExecutionResult:
     try:
-        conn = sqlite3.connect(str(db_path), timeout=timeout_seconds)
-        try:
+        profile = ConnectionProfile.from_mapping(
+            {"db_type": "sqlite", "database_name": str(db_path)}
+        )
+        with ConnectionFactory().sqlite_connection_scope(
+            profile,
+            purpose=ConnectionPurpose.QUERY,
+            read_only=True,
+            timeout_seconds=timeout_seconds,
+        ) as conn:
             cursor = conn.execute(sql)
             rows = cursor.fetchall()
             return SqlExecutionResult(success=True, rows=[tuple(row) for row in rows])
-        finally:
-            conn.close()
     except Exception:
         return SqlExecutionResult(
             success=False,

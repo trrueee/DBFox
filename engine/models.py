@@ -1,4 +1,6 @@
-import os
+import hashlib
+import hmac
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -22,6 +24,8 @@ from engine.db import Base
 
 DEFAULT_PROJECT_ID = "default-project"
 DEFAULT_PROJECT_NAME = "Default Workspace"
+_LLM_REQUEST_FINGERPRINT_RE = re.compile(r"hmac-sha256:[0-9a-f]{64}$")
+_LLM_ERROR_CODE_RE = re.compile(r"[A-Z][A-Z0-9_]{0,63}$")
 
 
 def generate_uuid() -> str:
@@ -79,7 +83,6 @@ class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
     username = Column(String, nullable=False)
     password_credential_id = Column(String, nullable=True)
 
-    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="SET NULL"), nullable=True)
     status = Column(String, nullable=False, default="created")
     last_health_status = Column(String, nullable=True)
     last_health_at = Column(DateTime, nullable=True)
@@ -89,7 +92,6 @@ class DatabaseEnvironment(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     project = relationship("Project", back_populates="environments")
-    datasource = relationship("DataSource", foreign_keys=[datasource_id])
 
 
 class FoundationRuntimeState(Base):  # type: ignore[misc,valid-type]
@@ -103,6 +105,27 @@ class FoundationRuntimeState(Base):  # type: ignore[misc,valid-type]
     id = Column(Integer, primary_key=True, default=1)
     runtime_version = Column(String, nullable=False)
     reset_completed_at = Column(DateTime, nullable=True)
+
+
+class ConfirmationToken(Base):  # type: ignore[misc,valid-type]
+    """Persistent, one-time confirmation state for destructive operations.
+
+    The token record intentionally has no foreign key to a datasource: a
+    confirmation is validated immediately before an operation may delete that
+    datasource, and the binding is enforced atomically by the policy service.
+    """
+
+    __tablename__ = "confirmation_tokens"
+    __table_args__ = (
+        Index("ix_confirmation_tokens_expires_at", "expires_at"),
+    )
+
+    token = Column(Text, primary_key=True)
+    expires_at = Column(Float, nullable=False)
+    datasource_id = Column(Text, nullable=False)
+    action = Column(Text, nullable=False)
+    details_json = Column(Text, nullable=False, default="{}")
+    expected_confirm_text = Column(Text, nullable=False, default="")
 
 
 class DataSource(Base):  # type: ignore[misc,valid-type]
@@ -142,6 +165,10 @@ class DataSource(Base):  # type: ignore[misc,valid-type]
     ssl_verify_identity = Column(Boolean, nullable=False, default=True)
 
     connection_mode = Column(String, nullable=False, default="direct")
+    # Incremented with every connection-affecting metadata or credential
+    # reference change.  Reusable pools and SSH tunnels are fenced by this
+    # value so a later update can never reuse a prior connection profile.
+    connection_generation = Column(Integer, nullable=False, default=1, server_default="1")
     is_read_only = Column(Boolean, nullable=False, default=False)
     env = Column(String, nullable=False, default="dev")
     status = Column(String, nullable=False, default="active")
@@ -192,6 +219,9 @@ class BackupRecord(Base):  # type: ignore[misc,valid-type]
     file_path = Column(Text, nullable=True)
     file_size_bytes = Column(Integer, nullable=True)
     checksum_sha256 = Column(String, nullable=True)
+    source_connection_generation = Column(Integer, nullable=True)
+    source_profile_fingerprint = Column(String, nullable=True)
+    source_database_name = Column(String, nullable=True)
 
     started_at = Column(DateTime, nullable=False, default=utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -201,6 +231,31 @@ class BackupRecord(Base):  # type: ignore[misc,valid-type]
 
     project = relationship("Project", back_populates="backups")
     datasource = relationship("DataSource", back_populates="backups")
+
+
+class RestoreOperation(Base):  # type: ignore[misc,valid-type]
+    """Durable audit record for isolated database restore and metadata cutover."""
+
+    __tablename__ = "restore_operations"
+    __table_args__ = (
+        Index("ix_restore_operations_backup", "backup_id"),
+        Index("ix_restore_operations_datasource", "datasource_id"),
+        Index("ix_restore_operations_created", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    backup_id = Column(String, ForeignKey("backup_records.id", ondelete="CASCADE"), nullable=False)
+    datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="running")
+    source_database_name = Column(String, nullable=False)
+    target_database_name = Column(String, nullable=False)
+    expected_generation = Column(Integer, nullable=False)
+    committed_generation = Column(Integer, nullable=True)
+    validated_table_count = Column(Integer, nullable=True)
+    error_code = Column(String, nullable=True)
+    started_at = Column(DateTime, nullable=False, default=utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
 class SchemaTable(Base):  # type: ignore[misc,valid-type]
@@ -318,17 +373,6 @@ class SchemaSearchDoc(Base):  # type: ignore[misc,valid-type]
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
 
-FTS5_DDL = """
-CREATE VIRTUAL TABLE IF NOT EXISTS schema_search_fts
-USING fts5(search_text, content='schema_search_docs', content_rowid='id')
-"""
-
-QUERY_HISTORY_FTS_DDL = """
-CREATE VIRTUAL TABLE IF NOT EXISTS query_history_fts
-USING fts5(search_text, content='query_history_search_docs', content_rowid='id')
-"""
-
-
 class QueryHistory(Base):  # type: ignore[misc,valid-type]
     __tablename__ = "query_history"
     __table_args__ = (
@@ -389,6 +433,15 @@ class QueryHistorySearchDoc(Base):  # type: ignore[misc,valid-type]
 
 
 class LLMLog(Base):  # type: ignore[misc,valid-type]
+    """Non-sensitive telemetry for an LLM invocation.
+
+    This record is deliberately not an audit transcript.  Prompts, model
+    responses, provider error text, and free-form validation warnings can
+    contain user data, schema details, or credentials and must never enter
+    metadata storage.  Callers may store only a non-reversible request
+    fingerprint plus bounded operational fields.
+    """
+
     __tablename__ = "llm_logs"
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -396,30 +449,52 @@ class LLMLog(Base):  # type: ignore[misc,valid-type]
     request_type = Column(String, nullable=False)
 
     prompt_hash = Column(String, nullable=True)
-    prompt_text = Column(Text, nullable=True)
-    response_text = Column(Text, nullable=True)
 
     model_name = Column(String, nullable=True)
     latency_ms = Column(Integer, nullable=True)
     status = Column(String, nullable=True)
-    error_message = Column(Text, nullable=True)
+    error_code = Column(String, nullable=True)
 
     # Prompt versioning & RAG audit fields
     prompt_version = Column(String, nullable=True)
     prompt_template_hash = Column(String, nullable=True)
     model_temperature = Column(Float, nullable=True)
     max_tokens = Column(Integer, nullable=True)
-    schema_validation_warnings = Column(Text, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
     datasource = relationship("DataSource")
 
-    @validates("prompt_text", "response_text")
-    def _redact_plaintext_by_default(self, _key: str, value: str | None) -> str | None:
-        if os.getenv("DBFOX_ALLOW_LLM_PLAINTEXT_LOGS") == "1":
-            return value
-        return None
+    @staticmethod
+    def fingerprint_request(request: str | bytes, *, hmac_key: bytes) -> str:
+        """Build the only accepted request fingerprint format.
+
+        The caller owns the per-install secret; this model intentionally does
+        not load credentials or create any secret-bearing runtime state.
+        """
+        if len(hmac_key) < 32:
+            raise ValueError("LLM request fingerprint key must contain at least 32 bytes.")
+        request_bytes = request.encode("utf-8") if isinstance(request, str) else request
+        if not isinstance(request_bytes, bytes):
+            raise TypeError("LLM request fingerprint input must be str or bytes.")
+        digest = hmac.new(hmac_key, request_bytes, hashlib.sha256).hexdigest()
+        return f"hmac-sha256:{digest}"
+
+    @validates("prompt_hash")
+    def _validate_prompt_hash(self, _key: str, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not _LLM_REQUEST_FINGERPRINT_RE.fullmatch(value):
+            raise ValueError("LLM prompt hash must be an hmac-sha256 request fingerprint.")
+        return value
+
+    @validates("error_code")
+    def _validate_error_code(self, _key: str, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not _LLM_ERROR_CODE_RE.fullmatch(value):
+            raise ValueError("LLM error code must be a fixed uppercase identifier.")
+        return value
 
 
 
@@ -481,6 +556,15 @@ class AgentSession(Base):  # type: ignore[misc,valid-type]
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=True)
     context_tables_json = Column(Text, nullable=False, default="[]")
+    input_sequence = Column(Integer, nullable=False, default=0)
+    event_sequence = Column(Integer, nullable=False, default=0)
+    event_floor_sequence = Column(Integer, nullable=False, default=0)
+    lease_owner = Column(String, nullable=True)
+    lease_token = Column(Integer, nullable=False, default=0)
+    lease_expires_at = Column(DateTime, nullable=True)
+    selected_artifact_id = Column(String, nullable=True)
+    context_epoch = Column(Integer, nullable=False, default=0)
+    message_sequence = Column(Integer, nullable=False, default=0)
     archived_at = Column(DateTime, nullable=True)
     deleted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
@@ -548,8 +632,11 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
 
     id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    input_id = Column(String, ForeignKey("agent_session_inputs.id", ondelete="RESTRICT"), nullable=True)
+    session_sequence = Column(Integer, nullable=False, default=0)
     parent_run_id = Column(String, nullable=True)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
+    datasource_generation = Column(Integer, nullable=False, default=0)
     llm_credential_id = Column(String, nullable=True)
     api_base = Column(String, nullable=True)
     model_name = Column(String, nullable=True)
@@ -557,6 +644,19 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
     assistant_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     question = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="running")
+    version = Column(Integer, nullable=False, default=0)
+    lease_token = Column(Integer, nullable=False, default=0)
+    execution_id = Column(String, nullable=True)
+    current_turn_id = Column(String, nullable=True)
+    request_json = Column(Text, nullable=False, default="{}")
+    result_json = Column(Text, nullable=True)
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    consumed_input_tokens = Column(Integer, nullable=False, default=0, server_default="0")
+    consumed_output_tokens = Column(Integer, nullable=False, default=0, server_default="0")
+    consumed_tokens = Column(Integer, nullable=False, default=0, server_default="0")
+    consumed_cost_usd = Column(Float, nullable=False, default=0.0, server_default="0")
+    provider_retry_count = Column(Integer, nullable=False, default=0, server_default="0")
+    repair_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     current_step_name = Column(String, nullable=True)
     waiting_approval_id = Column(String, nullable=True)
     response_json = Column(Text, nullable=True)
@@ -571,10 +671,7 @@ class AgentRun(Base):  # type: ignore[misc,valid-type]
 
     session = relationship("AgentSession", back_populates="runs")
     artifacts = relationship("AgentArtifactRecord", back_populates="run", cascade="all, delete-orphan")
-    runtime_events = relationship("AgentRuntimeEventRecord", back_populates="run", cascade="all, delete-orphan")
-    trace_events = relationship("AgentTraceEventRecord", back_populates="run", cascade="all, delete-orphan")
     approvals = relationship("AgentApproval", back_populates="run", cascade="all, delete-orphan")
-    checkpoints = relationship("AgentCheckpoint", back_populates="run", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<AgentRun id={self.id!r} status={self.status!r} datasource_id={self.datasource_id!r}>"
@@ -593,8 +690,11 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     step_name = Column(String, nullable=False)
     tool_name = Column(String, nullable=True)
+    turn_id = Column(String, nullable=True)
+    tool_invocation_id = Column(String, nullable=True)
 
     status = Column(String, nullable=False, default="pending")
+    version = Column(Integer, nullable=False, default=0)
     risk_level = Column(String, nullable=False, default="warning")
     reason = Column(Text, nullable=True)
 
@@ -604,6 +704,7 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
     decided_by = Column(String, nullable=True)
     decision_note = Column(Text, nullable=True)
     decided_at = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=utcnow)
     expires_at = Column(DateTime, nullable=True)
@@ -612,33 +713,6 @@ class AgentApproval(Base):  # type: ignore[misc,valid-type]
 
     def __repr__(self) -> str:
         return f"<AgentApproval id={self.id!r} status={self.status!r} risk_level={self.risk_level!r}>"
-
-
-class AgentCheckpoint(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_checkpoints"
-    __table_args__ = (
-        Index("ix_agent_checkpoints_run", "run_id"),
-        Index("ix_agent_checkpoints_session", "session_id"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
-    session_id = Column(String, nullable=False)
-
-    checkpoint_index = Column(Integer, nullable=False)
-    status = Column(String, nullable=False)
-    current_step_name = Column(String, nullable=True)
-    next_step_name = Column(String, nullable=True)
-
-    plan_json = Column(Text, nullable=True)
-    state_json = Column(Text, nullable=False)
-    completed_steps_json = Column(Text, nullable=False)
-    pending_steps_json = Column(Text, nullable=False)
-    artifacts_json = Column(Text, nullable=True)
-
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-
-    run = relationship("AgentRun", back_populates="checkpoints")
 
 
 class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
@@ -652,7 +726,9 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     session_id = Column(String, nullable=False)
     message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
+    turn_id = Column(String, nullable=True)
     semantic_id = Column(String, nullable=True)
+    version = Column(Integer, nullable=False, default=1)
     type = Column(String, nullable=False)
     title = Column(String, nullable=False)
     produced_by_step = Column(String, nullable=True)
@@ -660,6 +736,10 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     payload_json = Column(Text, nullable=False)
     presentation_json = Column(Text, nullable=False)
     refs_json = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    payload_ref = Column(String, nullable=True)
+    provenance_json = Column(Text, nullable=False, default="{}")
+    relations_json = Column(Text, nullable=False, default="[]")
     status = Column(String, nullable=False, default="completed")
     sequence = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
@@ -667,42 +747,224 @@ class AgentArtifactRecord(Base):  # type: ignore[misc,valid-type]
     run = relationship("AgentRun", back_populates="artifacts")
 
 
-class AgentRuntimeEventRecord(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_runtime_events"
+class AgentSessionInput(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_session_inputs"
     __table_args__ = (
-        Index("ix_agent_runtime_events_run", "run_id"),
-        Index("ix_agent_runtime_events_session", "session_id"),
+        UniqueConstraint("session_id", "sequence", name="uq_agent_session_inputs_sequence"),
+        UniqueConstraint("session_id", "idempotency_key", name="uq_agent_session_inputs_idempotency"),
+        Index("ix_agent_session_inputs_status", "session_id", "status", "sequence"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
-    session_id = Column(String, nullable=False)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, nullable=True)
+    message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
     sequence = Column(Integer, nullable=False)
-    type = Column(String, nullable=False)
-    event_json = Column(Text, nullable=False)
-    created_at_ms = Column(Integer, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
+    idempotency_key = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    delivery_mode = Column(String, nullable=False, default="queue")
+    selected_artifact_ids_json = Column(Text, nullable=False, default="[]")
+    workspace_context_json = Column(Text, nullable=False, default="{}")
+    reply_to_request_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="admitted")
+    admitted_at = Column(DateTime, nullable=False, default=utcnow)
+    consumed_at = Column(DateTime, nullable=True)
 
-    run = relationship("AgentRun", back_populates="runtime_events")
 
-
-class AgentTraceEventRecord(Base):  # type: ignore[misc,valid-type]
-    __tablename__ = "agent_trace_events"
+class AgentTurn(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_turns"
     __table_args__ = (
-        Index("ix_agent_trace_events_run", "run_id"),
-        Index("ix_agent_trace_events_session", "session_id"),
+        UniqueConstraint("run_id", "sequence", name="uq_agent_turns_run_sequence"),
+        Index("ix_agent_turns_session", "session_id", "created_at"),
+        Index("ix_agent_turns_status", "status"),
     )
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
-    session_id = Column(String, nullable=False)
     sequence = Column(Integer, nullable=False)
-    type = Column(String, nullable=False)
-    event_json = Column(Text, nullable=False)
-    created_at_ms = Column(Integer, nullable=False)
+    attempt = Column(Integer, nullable=False, default=1)
+    status = Column(String, nullable=False, default="running")
+    agent_definition_version = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False)
+    prompt_hash = Column(String, nullable=False)
+    context_snapshot_json = Column(Text, nullable=False, default="{}")
+    context_hash = Column(String, nullable=False)
+    tool_materialization_json = Column(Text, nullable=False, default="{}")
+    tool_materialization_hash = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    model_name = Column(String, nullable=False)
+    draft_text = Column(Text, nullable=False, default="")
+    reasoning_summary = Column(Text, nullable=False, default="")
+    tool_calls_json = Column(Text, nullable=False, default="[]")
+    usage_json = Column(Text, nullable=False, default="{}")
+    finish_signal = Column(String, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class AgentToolInvocation(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_tool_invocations"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "provider_call_id", name="uq_agent_tool_invocations_provider_call"),
+        UniqueConstraint("idempotency_key", name="uq_agent_tool_invocations_idempotency"),
+        Index("ix_agent_tool_invocations_run", "run_id", "created_at"),
+        Index("ix_agent_tool_invocations_status", "status"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="CASCADE"), nullable=False)
+    provider_call_id = Column(String, nullable=False)
+    tool_name = Column(String, nullable=False)
+    tool_version = Column(String, nullable=False)
+    input_json = Column(Text, nullable=False)
+    input_hash = Column(String, nullable=False)
+    idempotency_key = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="requested")
+    policy_json = Column(Text, nullable=False, default="{}")
+    approval_id = Column(String, ForeignKey("agent_approvals.id", ondelete="SET NULL"), nullable=True)
+    recovery_policy = Column(String, nullable=False)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    result_ref = Column(String, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class AgentObservationRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_observations"
+    __table_args__ = (
+        UniqueConstraint("run_id", "sequence", name="uq_agent_observations_run_sequence"),
+        UniqueConstraint("tool_invocation_id", name="uq_agent_observations_invocation"),
+        Index("ix_agent_observations_session", "session_id", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="CASCADE"), nullable=False)
+    tool_invocation_id = Column(String, ForeignKey("agent_tool_invocations.id", ondelete="CASCADE"), nullable=False)
+    sequence = Column(Integer, nullable=False)
+    status = Column(String, nullable=False)
+    model_visible_summary = Column(Text, nullable=False)
+    structured_result_ref = Column(String, nullable=True)
+    artifact_ids_json = Column(Text, nullable=False, default="[]")
+    facts_json = Column(Text, nullable=False, default="{}")
+    error_code = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    retryable = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, nullable=False, default=utcnow)
 
-    run = relationship("AgentRun", back_populates="trace_events")
+
+class AgentEvidenceRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_evidence"
+    __table_args__ = (
+        Index("ix_agent_evidence_run", "run_id"),
+        Index("ix_agent_evidence_artifact", "artifact_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    claim_id = Column(String, nullable=False)
+    artifact_id = Column(String, ForeignKey("agent_artifacts.id", ondelete="RESTRICT"), nullable=False)
+    label = Column(String, nullable=False)
+    query_fingerprint = Column(String, nullable=False)
+    observed_at = Column(DateTime, nullable=False)
+    locator_json = Column(Text, nullable=False, default="{}")
+    value_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class AgentQuestionRequest(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_question_requests"
+    __table_args__ = (
+        Index("ix_agent_question_requests_run", "run_id"),
+        Index("ix_agent_question_requests_status", "status"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    version = Column(Integer, nullable=False, default=0)
+    question = Column(Text, nullable=False)
+    reason = Column(Text, nullable=False)
+    options_json = Column(Text, nullable=False, default="[]")
+    allow_free_text = Column(Boolean, nullable=False, default=True)
+    response_message_id = Column(String, ForeignKey("agent_messages.id", ondelete="SET NULL"), nullable=True)
+    response_json = Column(Text, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    answered_at = Column(DateTime, nullable=True)
+
+
+class AgentEventRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_events"
+    __table_args__ = (
+        UniqueConstraint("session_id", "sequence", name="uq_agent_events_session_sequence"),
+        Index("ix_agent_events_run", "run_id", "sequence"),
+        Index("ix_agent_events_session", "session_id", "sequence"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=True)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="SET NULL"), nullable=True)
+    sequence = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
+    event_version = Column(Integer, nullable=False, default=1)
+    payload_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+
+
+class AgentTaskPlanRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "agent_task_plans"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_agent_task_plans_run"),
+        Index("ix_agent_task_plans_session", "session_id", "updated_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
+    run_id = Column(String, ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    turn_id = Column(String, ForeignKey("agent_turns.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    objective = Column(Text, nullable=False)
+    steps_json = Column(Text, nullable=False, default="[]")
+    status = Column(String, nullable=False, default="active")
+    summary = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utcnow)
+    updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+
+class SecurityAuditRecord(Base):  # type: ignore[misc,valid-type]
+    __tablename__ = "security_audit_records"
+    __table_args__ = (
+        Index("ix_security_audit_created", "created_at"),
+        Index("ix_security_audit_action", "action", "created_at"),
+        Index("ix_security_audit_session", "session_id", "created_at"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    action = Column(String, nullable=False)
+    outcome = Column(String, nullable=False)
+    actor_type = Column(String, nullable=False, default="local_user")
+    actor_id = Column(String, nullable=True)
+    resource_type = Column(String, nullable=False)
+    resource_id = Column(String, nullable=True)
+    session_id = Column(String, nullable=True)
+    run_id = Column(String, nullable=True)
+    correlation_id = Column(String, nullable=False)
+    details_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=utcnow)
 
 
 class TableDesignDraft(Base):  # type: ignore[misc,valid-type]

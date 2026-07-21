@@ -1,6 +1,7 @@
 import pytest
 
 from engine.policy.redactor import DataRedactor
+from engine.policy.sensitivity import _SENSITIVE_FALLBACK, load_sensitivity, redact_row
 
 def test_data_redactor_pii_and_credentials() -> None:
     # Test credentials redaction
@@ -44,13 +45,60 @@ def test_data_redactor_masks_common_phone_formats_without_card_false_positives()
     assert "[REDACTED_CARD]" not in redacted
 
 
-def test_data_redactor_masks_raw_api_key_tokens() -> None:
-    message = "model provider rejected key sk-live-secret1234567890 for request"
+def test_data_redactor_does_not_corrupt_opaque_artifact_identifiers() -> None:
+    artifact_id = "agent/run/console-run-08c893c1-75b6-4f23-a551-9863276fda4f/artifact/001"
+
+    assert DataRedactor.redact_sql(artifact_id) == artifact_id
+
+
+def test_data_redactor_masks_api_key_assignments_without_key_shaped_fixtures() -> None:
+    message = "model provider rejected api_key = 'TEST_LLM_SECRET' for request"
 
     redacted = DataRedactor.redact_sql(message)
 
-    assert "sk-live-secret1234567890" not in redacted
-    assert "[REDACTED_API_KEY]" in redacted
+    assert "TEST_LLM_SECRET" not in redacted
+    assert "api_key = '[REDACTED_SECURE]'" in redacted
+
+
+def test_sensitive_columns_mask_entire_values_not_only_recognizable_pii() -> None:
+    secret = "opaque-value-that-does-not-look-like-a-credential"
+
+    redacted = redact_row(
+        {"password": secret, "email": "person@example.test", "display_name": "Ada"},
+        _SENSITIVE_FALLBACK,
+    )
+
+    assert redacted == {
+        "password": "[REDACTED]",
+        "email": "[REDACTED]",
+        "display_name": "Ada",
+    }
+    assert secret not in str(redacted)
+
+
+def test_schema_pii_flag_extends_datasource_sensitivity_policy(db_session, test_datasource) -> None:
+    from engine.models import SchemaColumn, SchemaTable
+
+    table = SchemaTable(
+        id="table-pii-policy",
+        data_source_id=test_datasource.id,
+        table_schema="main",
+        table_name="customers",
+    )
+    db_session.add(table)
+    db_session.flush()
+    db_session.add(SchemaColumn(
+        id="column-pii-policy",
+        table_id=table.id,
+        column_name="customer_code",
+        is_pii=True,
+    ))
+    db_session.commit()
+
+    sensitivity = load_sensitivity(db_session, test_datasource.id)
+    redacted = redact_row({"customer_code": "internal-42", "status": "active"}, sensitivity)
+
+    assert redacted == {"customer_code": "[REDACTED]", "status": "active"}
 
 
 def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None:
@@ -73,6 +121,7 @@ def test_executor_redacts_sensitive_queries(db_session, test_datasource) -> None
 
 
 def test_executor_history_redacts_sensitive_error_messages(db_session, test_datasource, monkeypatch) -> None:
+    from engine.app.safe_errors import FixedErrorCode, fixed_error_message
     from engine.models import QueryHistory
     from engine.sql.executor import _run_approved_query
 
@@ -105,8 +154,7 @@ def test_executor_history_redacts_sensitive_error_messages(db_session, test_data
     assert history is not None
     assert "user@example.com" not in history.error_message
     assert "driver-secret" not in history.error_message
-    assert "[REDACTED_EMAIL]" in history.error_message
-    assert "[REDACTED]" in history.error_message
+    assert history.error_message == fixed_error_message(FixedErrorCode.SQL_EXECUTION_FAILED)
 
 
 def test_table_design_history_redacts_sensitive_ddl(db_session, tmp_path) -> None:
@@ -114,6 +162,7 @@ def test_table_design_history_redacts_sensitive_ddl(db_session, tmp_path) -> Non
     from engine.table_design import execute_table_design_ddl
 
     sqlite_path = tmp_path / "table-design.db"
+    sqlite_path.touch()
     datasource = DataSource(
         id="ds-table-design-redaction",
         name="table-design-redaction",
@@ -121,9 +170,6 @@ def test_table_design_history_redacts_sensitive_ddl(db_session, tmp_path) -> Non
         port=0,
         database_name=str(sqlite_path),
         username="",
-        password_ciphertext="",
-        password_nonce="",
-        password_key_version="v1",
         db_type="sqlite",
         env="dev",
         status="active",

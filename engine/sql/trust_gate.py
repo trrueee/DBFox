@@ -267,7 +267,10 @@ def _is_auto_limit_only_warning(guardrail: GuardrailResult) -> bool:
         for check in checks
         if isinstance(check, dict) and str(check.get("level") or "").strip() != "warn"
     }
-    return warning_rules == {"auto_limit"} and not non_warning_rules
+    # Both a missing outer LIMIT and an excessive/dynamic outer LIMIT are
+    # rewritten to the same server-enforced result cap.  They are therefore
+    # informational only once no other validation warning remains.
+    return warning_rules.issubset({"auto_limit", "limit_hard_cap"}) and not non_warning_rules
 
 
 def _should_dry_run(sql: str) -> bool:

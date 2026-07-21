@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from engine.agent_core.chart_builder import suggest_plotly_chart
+from engine.agent.plan import PlanStep, PlanStepStatus
+from engine.tools.chart_suggestion import suggest_plotly_chart
+from engine.sql.result_view.models import ResultPageQuery, ResultSourceRef
+from engine.sql.result_view.service import ResultViewService
+from engine.models import AgentArtifactRecord
 from engine.environment.tools import (
     environment_get_profile,
     schema_describe_table,
@@ -77,6 +81,68 @@ class EscalateInput(BaseModel):
     reason: str = Field(default="", description="Why this group is needed for the current task.")
 
 
+class QuestionRequestInput(BaseModel):
+    question: str = Field(
+        min_length=1,
+        max_length=4_000,
+        description="One concise business clarification needed before the analysis can continue.",
+    )
+    reason: str = Field(
+        min_length=1,
+        max_length=2_000,
+        description="Why verified analysis cannot proceed safely without this answer.",
+    )
+    options: list[dict[str, str]] = Field(
+        default_factory=list,
+        max_length=12,
+        description="Optional choices. Each item has value, label, and optional description.",
+    )
+    allow_free_text: bool = Field(
+        default=True,
+        description="Whether the user may provide an answer outside the listed options.",
+    )
+
+
+class AnalysisCoverageInput(BaseModel):
+    goal: str = Field(min_length=1, max_length=500, description="A user goal that has been addressed.")
+    conclusion: str = Field(min_length=1, max_length=1_000, description="The concise supported conclusion.")
+    artifact_ids: list[str] = Field(
+        min_length=1, max_length=12,
+        description="Observed result Artifact IDs that support this goal.",
+    )
+
+
+class AnalysisReviewInput(BaseModel):
+    goal: str = Field(min_length=1, max_length=1_000, description="The user's overall analytical goal.")
+    coverage: list[AnalysisCoverageInput] = Field(
+        min_length=1, max_length=12,
+        description="Goals already covered by verified result Artifacts.",
+    )
+    remaining: list[str] = Field(
+        default_factory=list, max_length=12,
+        description="Material unresolved goals. Keep empty only when the analysis is ready to synthesize.",
+    )
+    confidence: str = Field(
+        pattern="^(low|medium|high)$",
+        description="Confidence after considering data quality and remaining gaps.",
+    )
+
+
+class PlanUpdateInput(BaseModel):
+    objective: str = Field(min_length=1, max_length=1_000)
+    steps: list[PlanStep] = Field(min_length=1, max_length=12)
+    summary: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_plan_shape(self) -> "PlanUpdateInput":
+        ids = [step.id for step in self.steps]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Task Plan step IDs must be unique")
+        if sum(step.status is PlanStepStatus.IN_PROGRESS for step in self.steps) > 1:
+            raise ValueError("Task Plan can have at most one in-progress step")
+        return self
+
+
 class DescribeTableInput(BaseModel):
     table_name: str = Field(description="Name of the table to describe.")
 
@@ -99,6 +165,12 @@ class ExpandRelatedTablesInput(BaseModel):
 
 class ChartSuggestInput(BaseModel):
     force: bool = Field(default=False, description="Force chart generation even if data seems unsuitable.")
+
+
+class ArtifactInspectInput(BaseModel):
+    artifact_id: str = Field(description="Result or chart Artifact ID to inspect through the live Result Gateway.")
+    page: int = Field(default=1, ge=1, description="Result page to load.")
+    page_size: int = Field(default=50, ge=1, le=50, description="Rows to expose to this ReAct step only.")
 
 
 # ── Control ────────────────────────────────────────────────────────────────────
@@ -137,6 +209,87 @@ class EscalateTool(BaseTool[EscalateInput, LooseOutput]):
         return LooseOutput.model_validate({
             "escalated": True, "group": group, "reason": reason,
             "escalated_tool_groups": current_groups + [group],
+        })
+
+
+class RequestQuestionTool(BaseTool[QuestionRequestInput, LooseOutput]):
+    name = "question.request"
+    group = "control"
+    description = (
+        "Pause the current analysis and ask the user for missing business information. "
+        "Use only when database exploration cannot resolve the ambiguity. This is not "
+        "an authorization request and must never be used to approve a tool action."
+    )
+    input_model = QuestionRequestInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="none", risk_level="safe")
+    execution = ToolExecutionSpec(idempotent=True)
+    state = ToolStateSpec()
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: QuestionRequestInput, context: ToolRunContext) -> LooseOutput:
+        raise RuntimeError("question.request is settled by the Session runtime")
+
+
+class AnalysisReviewTool(BaseTool[AnalysisReviewInput, LooseOutput]):
+    name = "analysis.review"
+    group = "control"
+    description = (
+        "Review whether a non-trivial data analysis has covered the user's goals before final synthesis. "
+        "Link each covered goal to observed result Artifact IDs and list material remaining work. "
+        "This does not finish the Run; the Runtime independently validates the proposal."
+    )
+    input_model = AnalysisReviewInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="none", risk_level="safe")
+    execution = ToolExecutionSpec(idempotent=True)
+    state = ToolStateSpec(produces=("analysis_review",), merge_strategy="new")
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: AnalysisReviewInput, context: ToolRunContext) -> LooseOutput:
+        artifact_ids: list[str] = []
+        for coverage in tool_input.coverage:
+            for artifact_id in coverage.artifact_ids:
+                artifact = context.db_session.get(AgentArtifactRecord, artifact_id)
+                if (
+                    artifact is None
+                    or str(artifact.session_id) != str(context.request.session_id)
+                    or str(artifact.run_id) != str(context.request.run_id)
+                    or str(artifact.type) != "result_view"
+                ):
+                    raise RuntimeError(f"Analysis coverage references an unavailable result Artifact: {artifact_id}")
+                if artifact_id not in artifact_ids:
+                    artifact_ids.append(artifact_id)
+        return LooseOutput.model_validate({
+            "ready": not tool_input.remaining,
+            "goal": tool_input.goal,
+            "coverage": [item.model_dump(mode="json") for item in tool_input.coverage],
+            "remaining": tool_input.remaining,
+            "confidence": tool_input.confidence,
+            "artifactIds": artifact_ids,
+        })
+
+
+class PlanUpdateTool(BaseTool[PlanUpdateInput, LooseOutput]):
+    name = "plan.update"
+    group = "control"
+    description = (
+        "Create or meaningfully revise the visible analysis plan for a multi-part task. "
+        "The plan is dynamic progress state, not a fixed workflow: keep stable step IDs, "
+        "mark at most one step in progress, and attach real Artifact IDs to completed evidence steps."
+    )
+    input_model = PlanUpdateInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="none", risk_level="safe")
+    execution = ToolExecutionSpec(capabilities=("metadata_write",))
+    state = ToolStateSpec(produces=("analysis_plan",), merge_strategy="new")
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: PlanUpdateInput, context: ToolRunContext) -> LooseOutput:
+        return LooseOutput.model_validate({
+            "objective": tool_input.objective,
+            "steps": [step.model_dump(mode="json") for step in tool_input.steps],
+            "summary": tool_input.summary,
         })
 
 
@@ -199,7 +352,7 @@ class SchemaRefreshCatalogTool(BaseTool[RefreshCatalogInput, LooseOutput]):
     input_model = RefreshCatalogInput
     output_model = LooseOutput
     policy = ToolPolicy()
-    execution = ToolExecutionSpec()
+    execution = ToolExecutionSpec(capabilities=("metadata_write", "database_read"))
     state = ToolStateSpec()
     artifacts = ArtifactSpec()
 
@@ -342,7 +495,7 @@ class DbPreviewTool(BaseTool[PreviewInput, LooseOutput]):
     input_model = PreviewInput
     output_model = LooseOutput
     policy = ToolPolicy(side_effect="read", risk_level="safe")
-    execution = ToolExecutionSpec()
+    execution = ToolExecutionSpec(capabilities=("database_read",))
     state = ToolStateSpec(
         produces=("db_preview",),
         clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
@@ -395,9 +548,9 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
     input_model = SqlExecuteReadonlyInput
     output_model = LooseOutput
     policy = ToolPolicy(side_effect="read", risk_level="warning", requires_validated_sql=True)
-    execution = ToolExecutionSpec()
+    execution = ToolExecutionSpec(capabilities=("metadata_read", "database_read"))
     state = ToolStateSpec(
-        consumes=("safety", "sql"),
+        consumes=("safety", "sql", "execution_id"),
         produces=("execution",),
         clear_on_success=("error", "last_error_telemetry", "last_failed_tool_call"),
         merge_strategy="new",
@@ -412,6 +565,12 @@ class SqlExecuteReadonlyTool(BaseTool[SqlExecuteReadonlyInput, LooseOutput]):
             question=tool_input.question or "",
             safety=context.state.get("safety"),
             ignored_model_sql=ignored_model_sql,
+            execution_id=str(context.state.get("execution_id") or "") or None,
+            expected_connection_generation=getattr(
+                context.request,
+                "datasource_generation",
+                None,
+            ),
         ))
 
 
@@ -429,16 +588,72 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
     )
     input_model = ChartSuggestInput
     output_model = LooseOutput
-    policy = ToolPolicy()
-    execution = ToolExecutionSpec()
-    state = ToolStateSpec(consumes=("execution",), produces=("chart_suggestion",), merge_strategy="new")
+    policy = ToolPolicy(side_effect="read", risk_level="safe")
+    execution = ToolExecutionSpec(capabilities=("metadata_read", "database_read"))
+    state = ToolStateSpec(consumes=("latest_result_artifact_id",), produces=("chart_suggestion",), merge_strategy="new")
     artifacts = ArtifactSpec(emit=True, artifact_types=("chart",))
 
     def run(self, tool_input: ChartSuggestInput, context: ToolRunContext) -> LooseOutput:
-        execution = context.state.get("execution")
-        if not isinstance(execution, dict) or not execution.get("success"):
-            raise RuntimeError("No successful execution result available for chart suggestion.")
+        artifact_id = str(context.state.get("latest_result_artifact_id") or "").strip()
+        if not artifact_id:
+            raise RuntimeError("No query result artifact is available for chart suggestion.")
+        service = ResultViewService(context.db_session)
+        page = service.page(ResultPageQuery(
+            source=ResultSourceRef(artifact_id=artifact_id),
+            page=1,
+            page_size=500,
+            count_mode="none",
+        ))
+        execution = {
+            "success": True,
+            "columns": page.columns,
+            "rows": page.rows,
+            "rowCount": page.row_count if page.row_count is not None else len(page.rows),
+            "truncated": page.has_next_page,
+        }
         return LooseOutput.model_validate(suggest_plotly_chart(execution))
+
+
+class ArtifactInspectTool(BaseTool[ArtifactInspectInput, LooseOutput]):
+    name = "artifact.inspect"
+    group = "result"
+    description = (
+        "Inspect a result or chart Artifact by ID. The gateway re-executes its verified source SQL and "
+        "returns one short-lived page for the current reasoning step; rows are never persisted in memory."
+    )
+    input_model = ArtifactInspectInput
+    output_model = LooseOutput
+    policy = ToolPolicy(side_effect="read", risk_level="safe")
+    execution = ToolExecutionSpec(capabilities=("metadata_read", "database_read"))
+    state = ToolStateSpec()
+    artifacts = ArtifactSpec()
+
+    def run(self, tool_input: ArtifactInspectInput, context: ToolRunContext) -> LooseOutput:
+        artifact = context.db_session.get(AgentArtifactRecord, tool_input.artifact_id)
+        if artifact is None or str(artifact.session_id) != str(context.request.session_id):
+            raise RuntimeError("Artifact is unavailable in the current session.")
+        service = ResultViewService(context.db_session)
+        source = service.load_verified_source(ResultSourceRef(artifact_id=tool_input.artifact_id))
+        page = service.page(ResultPageQuery(
+            source=ResultSourceRef(artifact_id=tool_input.artifact_id),
+            page=tool_input.page,
+            page_size=tool_input.page_size,
+            count_mode="estimate",
+        ))
+        return LooseOutput.model_validate({
+            "artifact_id": tool_input.artifact_id,
+            "queryFingerprint": source.fingerprint,
+            "columns": page.columns,
+            "rows": page.rows,
+            "page": page.page,
+            "page_size": page.page_size,
+            "rowCount": page.row_count,
+            "returnedRows": len(page.rows),
+            "hasNextPage": page.has_next_page,
+            "latencyMs": page.latency_ms,
+            "warnings": page.warnings or [],
+            "notices": page.notices or [],
+        })
 
 
 # ── Registry ───────────────────────────────────────────────────────────────────
@@ -447,6 +662,9 @@ class ChartSuggestTool(BaseTool[ChartSuggestInput, LooseOutput]):
 def register_dbfox_tools() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(EscalateTool())
+    registry.register(RequestQuestionTool())
+    registry.register(AnalysisReviewTool())
+    registry.register(PlanUpdateTool())
     registry.register(EnvironmentGetProfileTool())
     registry.register(SchemaListTablesTool())
     registry.register(SchemaDescribeTableTool())
@@ -459,6 +677,6 @@ def register_dbfox_tools() -> ToolRegistry:
     registry.register(DbPreviewTool())
     registry.register(SqlValidateTool())
     registry.register(SqlExecuteReadonlyTool())
-
+    registry.register(ArtifactInspectTool())
     registry.register(ChartSuggestTool())
     return registry

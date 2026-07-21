@@ -9,6 +9,11 @@ import sqlglot
 from sqlglot import exp
 from sqlalchemy.orm import Session
 
+from engine.app.safe_errors import (
+    SafeLogOperation,
+    log_sensitive_diagnostic,
+    log_unexpected_exception,
+)
 from engine.errors import GuardrailValidationError
 from engine.models import DataSource, SchemaTable
 from engine.sql.trust_gate import ExecutionPolicy, ExecutionSafetyDecision, TrustGate
@@ -29,7 +34,7 @@ def build_derived_sql(
     try:
         parsed_base = sqlglot.parse_one(base_sql, read=dialect)
     except Exception as e:
-        raise DerivedSqlError(f"Failed to parse base SQL: {e}")
+        raise DerivedSqlError("Failed to parse base SQL.") from e
     if not isinstance(parsed_base, exp.Select):
         raise DerivedSqlError("Base SQL must be a SELECT statement.")
     base_expr = cast(exp.Select, parsed_base)
@@ -169,9 +174,11 @@ def _resolve_execution_safety_decision(
                     "message": f"bypass_guardrail blocked: datasource env is '{ds_env}', only dev/test allowed.",
                 }],
             )
-        logger.warning(
-            "TrustGate bypass active: datasource=%s env=%s policy=%s",
-            datasource_id, ds_env, policy,
+        log_sensitive_diagnostic(
+            logger,
+            operation=SafeLogOperation.SQL_SAFETY_BYPASS,
+            subject=f"{datasource_id}\x00{ds_env}\x00{policy}",
+            subject_type="event",
         )
         guard_res = {
             "result": "pass",
@@ -370,10 +377,22 @@ def validate_sql_schema(
                         tbl_list = ", ".join(f"`{t}`" for t in queried_valid_tables)
                         warnings.append(f"生成 SQL 中的字段 `{col_node.name}` 不存在于查询的表 {tbl_list} 中")
     except sqlglot.errors.ParseError as e:
-        logger.warning("Schema validation parse error for datasource %s: %s", datasource_id, e)
-        warnings.append(f"Schema validation could not parse SQL for safety check: {e}")
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.SQL_SCHEMA_VALIDATION_PARSE,
+            exc=e,
+            fingerprint_subject=f"{datasource_id}\x00{generated_sql}\x00{type(e).__name__}\x00{e}",
+            level="warning",
+        )
+        warnings.append("Schema validation could not parse SQL for safety check.")
     except Exception as e:
-        logger.exception("Unexpected schema validation error for datasource %s", datasource_id)
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.SQL_SCHEMA_VALIDATION_UNEXPECTED,
+            exc=e,
+            fingerprint_subject=f"{datasource_id}\x00{generated_sql}\x00{type(e).__name__}\x00{e}",
+            level="warning",
+        )
         warnings.append("Schema validation encountered an unexpected error — SQL was not verified against local schema cache.")
     return warnings
 

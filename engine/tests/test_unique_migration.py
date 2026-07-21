@@ -35,8 +35,7 @@ def test_unique_constraints_enforcement(db_session) -> None:
         port=3306,
         database_name="test_db",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce"
+        connection_generation=1,
     )
     db.add(ds1)
     db.commit()
@@ -49,8 +48,7 @@ def test_unique_constraints_enforcement(db_session) -> None:
         port=3306,
         database_name="test_db",
         username="root",
-        password_ciphertext="cipher",
-        password_nonce="nonce"
+        connection_generation=1,
     )
     db.add(ds2)
     with pytest.raises(IntegrityError):

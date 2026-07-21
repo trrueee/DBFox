@@ -8,7 +8,13 @@ import re
 import sqlglot
 from sqlglot import exp
 from engine.sql.parser import normalize_dialect as _sqlglot_dialect, parse_sql
+from engine.sql.result_limits import MAX_ROWS
 
+from engine.app.safe_errors import (
+    SafeLogOperation,
+    log_sensitive_diagnostic,
+    log_unexpected_exception,
+)
 from engine.errors import GuardrailValidationError
 
 logger = logging.getLogger("dbfox.guardrail")
@@ -185,6 +191,34 @@ def _projection_has_star(projection: exp.Expression) -> bool:
         return True
     return False
 
+
+def _outer_limit_value(limit: exp.Expression | None) -> int | None:
+    """Return a literal outer LIMIT/FETCH value, if it is statically bounded."""
+    if limit is None:
+        return None
+
+    value = limit.args.get("expression")
+    if value is None:
+        # SQLGlot represents ``FETCH FIRST n ROWS ONLY`` with ``count``.
+        value = limit.args.get("count")
+    if not isinstance(value, exp.Literal) or value.is_string:
+        return None
+
+    try:
+        return int(value.this)
+    except (TypeError, ValueError):
+        return None
+
+
+def _outer_limit_can_exceed_row_count(limit: exp.Expression | None) -> bool:
+    """Whether a syntactic LIMIT can return more rows than its literal count."""
+    if limit is None:
+        return False
+    options = limit.args.get("limit_options")
+    if not isinstance(options, exp.LimitOptions):
+        return False
+    return bool(options.args.get("percent") or options.args.get("with_ties"))
+
 def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     """
     Analyzes SQL using sqlglot AST parsing to enforce V1 security guidelines.
@@ -285,11 +319,22 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
 
         expression: exp.Expression = expressions[0]  # type: ignore[assignment]
     except Exception as e:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.SQL_GUARDRAIL_PARSE,
+            exc=e,
+            fingerprint_subject=f"{sql_str}\x00{type(e).__name__}\x00{e}",
+            level="warning",
+        )
         return {
             "result": "reject",
             "originalSql": sql_str,
             "safeSql": "",
-            "checks": [{"rule": "syntax_error", "level": "reject", "message": f"SQL 语法解析错误: {str(e)}"}],
+            "checks": [{
+                "rule": "syntax_error",
+                "level": "reject",
+                "message": "SQL could not be parsed safely.",
+            }],
             "message": "拒绝执行：语法解析失败"
         }
 
@@ -408,27 +453,55 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
             "message": "建议不要在生产环境使用 SELECT *。显式指定所需字段能显著优化查询性能并减少网卡开销。"
         })
 
-    # 5. Check and inject LIMIT 1000 if no limit exists
-    # Find if there is an outer limit
-    has_limit = expression.args.get("limit") is not None
+    # 5. Enforce the result contract at the database server.  A client-side
+    # fetch cap alone still lets an explicit ``LIMIT 1000000`` consume server
+    # resources.  Only the outer query controls rows sent to the client; a
+    # nested LIMIT is intentionally not treated as that boundary.
+    outer_limit = expression.args.get("limit")
+    outer_limit_value = _outer_limit_value(outer_limit)
     safe_expression = expression.copy()
-    
-    if not has_limit:
-        # Inject LIMIT 1000 to the AST in a type-safe way
+
+    must_apply_hard_cap = (
+        outer_limit is None
+        or outer_limit_value is None
+        or outer_limit_value < 0
+        or outer_limit_value > MAX_ROWS
+        or _outer_limit_can_exceed_row_count(outer_limit)
+    )
+    if must_apply_hard_cap:
         try:
-            if isinstance(expression, (exp.Select, exp.Union, exp.Intersect, exp.Except)):
-                safe_expression = safe_expression.limit(1000)  # type: ignore[attr-defined]
-                checks.append({
-                    "rule": "auto_limit",
-                    "level": "warn",
-                    "message": "未检测到 LIMIT 约束，系统已自动追加 LIMIT 1000 以防大表全表扫描挂起连接。"
-                })
-        except Exception:
-            logger.warning("LIMIT injection via AST failed; query will run without auto-LIMIT")
+            safe_expression = safe_expression.limit(MAX_ROWS)
+        except Exception as exc:
+            log_unexpected_exception(
+                logger,
+                operation=SafeLogOperation.SQL_GUARDRAIL_LIMIT_ENFORCEMENT,
+                exc=exc,
+                fingerprint_subject=f"{sql_str}\x00{type(exc).__name__}\x00{exc}",
+                level="warning",
+            )
+            return {
+                "result": "reject",
+                "originalSql": sql_str,
+                "safeSql": "",
+                "checks": [{
+                    "rule": "result_limit_enforcement_failed",
+                    "level": "reject",
+                    "message": "无法为查询施加服务端结果集上限，已拒绝执行。",
+                }],
+                "message": "拒绝执行：无法施加服务端结果集上限。",
+            }
+
+        if outer_limit is None:
             checks.append({
-                "rule": "auto_limit_failed",
+                "rule": "auto_limit",
                 "level": "warn",
-                "message": "系统未能自动追加 LIMIT 约束，查询将以原始形式执行。"
+                "message": f"未检测到外层 LIMIT，系统已追加 LIMIT {MAX_ROWS} 以约束服务端结果集。",
+            })
+        else:
+            checks.append({
+                "rule": "limit_hard_cap",
+                "level": "warn",
+                "message": f"查询的外层 LIMIT 已收敛为服务端上限 {MAX_ROWS}。",
             })
             
     safe_sql = safe_expression.sql(dialect=sqlglot_dialect)
@@ -442,9 +515,11 @@ def guardrail_check(sql_str: str, dialect: str = "mysql") -> GuardrailResult:
     )
     for token in _BROKEN_TOKENS:
         if token in _SAFE_SQL_UPPER:
-            logger.warning(
-                "guardrail_check: detected broken MySQL syntax token=%r in safe_sql=%r",
-                token, safe_sql,
+            log_sensitive_diagnostic(
+                logger,
+                operation=SafeLogOperation.SQL_GUARDRAIL_GENERATED_SYNTAX,
+                subject=safe_sql,
+                subject_type="sql",
             )
             checks.append({
                 "rule": "mysql_syntax_invalid",

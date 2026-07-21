@@ -16,7 +16,7 @@ def test_load_runtime_env_never_reads_private_runtime_config_files(tmp_path, mon
         "DBFOX_ENGINE_PORT=29999\n",
         encoding="utf-8",
     )
-    private_env.write_text("OPENAI_API_KEY=sk-test\n", encoding="utf-8")
+    private_env.write_text("OPENAI_API_KEY=TEST_LLM_SECRET\n", encoding="utf-8")
 
     monkeypatch.setenv("DBFOX_RUNTIME_DIR", str(runtime_root))
     monkeypatch.delenv("LANGCHAIN_TRACING_V2", raising=False)
@@ -33,7 +33,7 @@ def test_load_runtime_env_never_reads_private_runtime_config_files(tmp_path, mon
     assert "DBFOX_ENGINE_PORT" not in os.environ
 
 
-def test_load_runtime_env_loads_configuration_but_rejects_plaintext_credentials(
+def test_load_runtime_env_loads_only_explicitly_allowed_non_secret_configuration(
     tmp_path,
     monkeypatch,
 ):
@@ -42,22 +42,32 @@ def test_load_runtime_env_loads_configuration_but_rejects_plaintext_credentials(
     project_env = tmp_path / ".env"
     project_env.write_text(
         "DBFOX_ENGINE_PORT=29999\n"
+        "DBFOX_DB_POOL_SIZE=42\n"
+        "DBFOX_EXPORT_TIMEOUT_MS=12345\n"
         "DBFOX_DATABASE_URL=sqlite:///safe.db\n"
-        "OPENAI_API_KEY=sk-test\n"
+        "OPENAI_API_KEY=TEST_LLM_SECRET\n"
+        "AZURE_OPENAI_KEY=TEST_LLM_SECRET\n"
+        "LLM_KEY=TEST_LLM_SECRET\n"
         "LANGCHAIN_API_KEY=lsv2-test\n"
         "LANGSMITH_PROJECT=should-not-load\n"
         "CUSTOM_PROVIDER_API_KEY=provider-secret\n"
-        "DBFOX_ENGINE_TOKEN=engine-secret\n",
+        "DBFOX_ENGINE_TOKEN=engine-secret\n"
+        "DBFOX_ALLOW_GUARDRAIL_BYPASS=1\n",
         encoding="utf-8",
     )
     for name in (
         "DBFOX_ENGINE_PORT",
+        "DBFOX_DB_POOL_SIZE",
+        "DBFOX_EXPORT_TIMEOUT_MS",
         "DBFOX_DATABASE_URL",
         "OPENAI_API_KEY",
+        "AZURE_OPENAI_KEY",
+        "LLM_KEY",
         "LANGCHAIN_API_KEY",
         "LANGSMITH_PROJECT",
         "CUSTOM_PROVIDER_API_KEY",
         "DBFOX_ENGINE_TOKEN",
+        "DBFOX_ALLOW_GUARDRAIL_BYPASS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -65,12 +75,17 @@ def test_load_runtime_env_loads_configuration_but_rejects_plaintext_credentials(
 
     assert loaded == [project_env]
     assert os.environ["DBFOX_ENGINE_PORT"] == "29999"
-    assert os.environ["DBFOX_DATABASE_URL"] == "sqlite:///safe.db"
+    assert os.environ["DBFOX_DB_POOL_SIZE"] == "42"
+    assert os.environ["DBFOX_EXPORT_TIMEOUT_MS"] == "12345"
     for name in (
+        "DBFOX_DATABASE_URL",
         "OPENAI_API_KEY",
+        "AZURE_OPENAI_KEY",
+        "LLM_KEY",
         "LANGCHAIN_API_KEY",
         "LANGSMITH_PROJECT",
         "CUSTOM_PROVIDER_API_KEY",
         "DBFOX_ENGINE_TOKEN",
+        "DBFOX_ALLOW_GUARDRAIL_BYPASS",
     ):
         assert name not in os.environ

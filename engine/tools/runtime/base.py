@@ -3,12 +3,23 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 RiskLevel = Literal["safe", "warning", "danger"]
 SideEffect = Literal["none", "read", "write", "destructive"]
 ConcurrencyMode = Literal["sequential", "parallel_safe"]
 MergeStrategy = Literal["reuse", "new", "always_new"]
+ToolExecutionBackend = Literal["in_process", "isolated_process"]
+ToolCapability = Literal[
+    "metadata_read",
+    "metadata_write",
+    "database_read",
+    "database_write",
+    "filesystem_read",
+    "filesystem_write",
+    "network",
+    "subprocess",
+]
 
 
 class ToolPolicy(BaseModel):
@@ -21,11 +32,22 @@ class ToolPolicy(BaseModel):
 
 
 class ToolExecutionSpec(BaseModel):
-    timeout_seconds: int = 30
+    timeout_seconds: int = Field(default=30, ge=1, le=3_600)
     idempotent: bool = True
     retryable: bool = False
-    max_retries: int = 0
+    max_retries: int = Field(default=0, ge=0, le=5)
     concurrency: ConcurrencyMode = "sequential"
+    max_output_bytes: int = Field(default=1_000_000, ge=1_024, le=16_000_000)
+    backend: ToolExecutionBackend = "in_process"
+    capabilities: tuple[ToolCapability, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_retry_contract(self) -> "ToolExecutionSpec":
+        if self.max_retries and (not self.retryable or not self.idempotent):
+            raise ValueError("Tool retries require an idempotent, retryable execution contract")
+        if len(set(self.capabilities)) != len(self.capabilities):
+            raise ValueError("Tool capabilities must not contain duplicates")
+        return self
 
 
 class ToolStateSpec(BaseModel):

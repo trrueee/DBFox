@@ -1,8 +1,7 @@
 """Skill loading utilities — validate raw dicts into SkillSpec.
 
-This module lives in the agent layer because it depends on SkillSpec
-(which is an agent-layer type).  The agent_core/extensions/loader.py
-handles tool loading only — no agent-layer dependencies.
+This module lives in the agent layer because it validates the stable
+Agent-owned SkillSpec contract.
 """
 
 from __future__ import annotations

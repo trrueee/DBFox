@@ -1,4 +1,4 @@
-from engine.sql.executor import validate_sql_schema
+from engine.sql.safety_gate import validate_sql_schema
 from engine.schema_sync import sync_schema
 from engine.sql.dry_run import DryRunResult
 from engine.sql.trust_gate import TrustGate

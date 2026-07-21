@@ -5,7 +5,7 @@ import json
 from typing import Any
 from uuid import uuid4
 
-from engine.agent_core.types import ToolObservation
+from engine.tools.runtime.result import ToolResult
 
 
 def _fingerprint(sql: str) -> str:
@@ -73,7 +73,7 @@ def apply_tool_observation_to_state(
     *,
     state: dict[str, Any],
     tool_name: str,
-    observation: ToolObservation,
+    observation: ToolResult,
     merge_strategy: str = "reuse",
 ) -> dict[str, Any]:
     output = observation.output or {}
@@ -200,7 +200,7 @@ def _apply_success_output(tool_name: str, output: dict[str, Any]) -> dict[str, A
 def _apply_failed_telemetry(
     state: dict[str, Any],
     tool_name: str,
-    observation: ToolObservation,
+    observation: ToolResult,
     output: dict[str, Any],
     update: dict[str, Any],
 ) -> None:

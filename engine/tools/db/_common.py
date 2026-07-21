@@ -7,7 +7,7 @@ from typing import Any, Final, Literal
 
 from sqlalchemy.orm import Session
 
-from engine.agent_core.types import ToolObservation
+from engine.tools.runtime.result import ToolResult as ToolObservation
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.errors import DBFoxError, GuardrailValidationError, SQLExecutionError, SQLQueryTimeoutError, ToolInputError
 from engine.models import DataSource, SchemaColumn, SchemaTable

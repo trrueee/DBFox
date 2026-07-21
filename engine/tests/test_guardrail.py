@@ -1,5 +1,6 @@
 """Guardrail test suite — 对应第一版.md Section 18.1"""
 import inspect
+import logging
 
 import pytest
 from engine.sql.guardrail import guardrail_check, GuardrailResult
@@ -163,6 +164,28 @@ def test_syntax_error() -> None:
     r = guardrail_check("BROKEN !!! NOT VALID SQL @@@ ###")
     assert r["result"] == "reject"
     assert any(c["rule"] == "syntax_error" for c in r["checks"])
+
+
+def test_guardrail_parse_diagnostic_never_logs_sql_or_exception_text(caplog, monkeypatch) -> None:
+    import engine.sql.guardrail as guardrail_module
+
+    sql_secret = "SELECT token FROM users WHERE token = 'guardrail-sql-secret'"
+    exception_secret = "guardrail-driver-secret"
+
+    def fail_parse(*_args, **_kwargs):
+        raise RuntimeError(exception_secret)
+
+    monkeypatch.setattr(guardrail_module, "parse_sql", fail_parse)
+    with caplog.at_level(logging.WARNING, logger="dbfox.guardrail"):
+        result = guardrail_module.guardrail_check(sql_secret)
+
+    assert result["result"] == "reject"
+    assert result["checks"][0]["message"] == "SQL could not be parsed safely."
+    assert sql_secret not in caplog.text
+    assert exception_secret not in caplog.text
+    assert "code=sql_guardrail_parse" in caplog.text
+    assert "type=RuntimeError" in caplog.text
+    assert "fingerprint=" in caplog.text
 
 
 def test_mysql_syntax_invalid_message_does_not_echo_broken_order_tokens() -> None:

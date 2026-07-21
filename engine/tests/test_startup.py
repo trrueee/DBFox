@@ -2,17 +2,11 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from engine.db import Base, engine as db_engine
-# Ensure all ORM tables exist in the test database so that app-level
-# TestClient requests (e.g. /api/v1/datasources) do not fail with a
-# missing-table error.
-Base.metadata.create_all(bind=db_engine)
-
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
 from engine.dev_server import bind_engine_socket
-from engine.main import _write_frontend_env_file_if_owned
+import engine.dev_server as dev_server_module
 
 def test_fastapi_app_startup_and_health() -> None:
     """
@@ -27,7 +21,7 @@ def test_fastapi_app_startup_and_health() -> None:
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
-    assert data["version"] == "1.0.1"
+    assert data["version"] == "1.0.2"
 
 
 def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:
@@ -96,42 +90,11 @@ def test_protected_routes_compare_local_token_in_constant_time(monkeypatch) -> N
     assert response.status_code != 401
 
 
-def test_dev_frontend_env_writer_skips_user_owned_env_file(tmp_path: Path) -> None:
-    """A .env.local containing custom user keys must never be overwritten."""
-    env_file = tmp_path / ".env.local"
-    user_owned_content = "VITE_CUSTOM_FLAG=1\n"
-    env_file.write_text(user_owned_content, encoding="utf-8")
+def test_source_engine_never_writes_a_workspace_frontend_env_file() -> None:
+    """Source mode must not place a live engine token in the repository."""
+    source = Path(main_module.__file__).read_text(encoding="utf-8")
+    dev_server_source = Path(dev_server_module.__file__).read_text(encoding="utf-8")
 
-    _write_frontend_env_file_if_owned(env_file, "test-token")
-
-    # File is untouched because it contains non-DBFox keys.
-    assert env_file.read_text("utf-8") == user_owned_content
-
-
-def test_dev_frontend_env_writer_updates_dbfox_owned_env_file(tmp_path: Path) -> None:
-    """A DBFox-owned .env.local is refreshed when the token changes."""
-    env_file = tmp_path / ".env.local"
-    env_file.write_text(_frontend_env_content_with("old-token"), encoding="utf-8")
-
-    _write_frontend_env_file_if_owned(env_file, "new-token")
-
-    content = env_file.read_text("utf-8")
-    assert "new-token" in content
-    assert "old-token" not in content
-
-
-def test_dev_frontend_env_writer_creates_missing_env_file(tmp_path: Path) -> None:
-    """A missing .env.local is created fresh with the current token."""
-    env_file = tmp_path / ".env.local"
-    assert not env_file.exists()
-
-    _write_frontend_env_file_if_owned(env_file, "fresh-token")
-
-    content = env_file.read_text("utf-8")
-    assert "VITE_LOCAL_ENGINE_PORT" in content
-    assert "fresh-token" in content
-
-
-def _frontend_env_content_with(token: str) -> str:
-    """Helper mirroring engine.main._frontend_env_content layout."""
-    return f"VITE_LOCAL_ENGINE_PORT=18625\nVITE_LOCAL_ENGINE_TOKEN={token}\n"
+    assert "desktop/.env.local" not in source
+    assert "VITE_LOCAL_ENGINE_TOKEN" not in source
+    assert ".env.local" not in dev_server_source

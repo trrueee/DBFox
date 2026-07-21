@@ -117,17 +117,31 @@ class PoolRegistry:
 
         Returns the number of pools that were disposed.
         """
+        return self._dispose_matching(
+            lambda key: bool(key) and key[0] == datasource_id,
+            description=f"datasource {datasource_id}",
+        )
+
+    def dispose_resource(self, resource_prefix: tuple[str, int, str]) -> int:
+        """Dispose pools for exactly one datasource generation/profile key."""
+        return self._dispose_matching(
+            lambda key: tuple(key[:3]) == resource_prefix,
+            description="datasource resource",
+        )
+
+    def _dispose_matching(self, predicate: Any, *, description: str) -> int:
+        """Remove matching registry ownership before disposing DBAPI resources."""
         to_dispose: list[PoolEntry] = []
         with self._lock:
-            keys_to_dispose = [k for k in self._pools if k[0] == datasource_id]
-            for k in keys_to_dispose:
-                entry = self._pools.pop(k, None)
+            keys_to_dispose = [key for key in self._pools if predicate(key)]
+            for key in keys_to_dispose:
+                entry = self._pools.pop(key, None)
                 if entry is not None:
                     to_dispose.append(entry)
             if keys_to_dispose:
                 logger.info(
-                    "PoolRegistry: disposing %d pool(s) for datasource %s",
-                    len(keys_to_dispose), datasource_id,
+                    "PoolRegistry: disposing %d pool(s) for %s",
+                    len(keys_to_dispose), description,
                 )
 
         for entry in to_dispose:

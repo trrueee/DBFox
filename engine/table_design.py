@@ -254,12 +254,12 @@ def generate_create_table_ddl(design: Mapping[str, Any]) -> dict[str, Any]:
 
 def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str, Any]:
     from engine.models import DataSource, QueryHistory
-    from engine.datasource import get_mysql_connection_params
+    from engine.connectivity.factory import ConnectionFactory
+    from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+    from engine.datasource import datasource_connection_dict
     from engine.app.safe_errors import FixedErrorCode, fixed_error_message
     from engine.policy.redactor import DataRedactor
-    from engine.sql.executor import _ping_mysql_connection, get_mysql_pool
     from engine.environment.schema_catalog_sync import ensure_catalog
-    import sqlite3
     import time
     import uuid
 
@@ -280,44 +280,30 @@ def execute_table_design_ddl(db: Any, datasource_id: str, ddl: str) -> dict[str,
     error_message = None
 
     try:
-        if ds.db_type == "sqlite":
-            conn = sqlite3.connect(str(ds.database_name))
+        profile = ConnectionProfile.from_mapping(datasource_connection_dict(ds))
+        factory = ConnectionFactory()
+        if profile.dialect not in {"sqlite", "mysql"}:
+            raise TableDesignError("表设计执行目前仅支持 SQLite 和 MySQL 数据源。")
+
+        with factory.connection_scope(
+            profile,
+            purpose=ConnectionPurpose.TABLE_DESIGN,
+            read_only=False,
+        ) as conn:
+            cursor: Any | None = None
             try:
                 cursor = conn.cursor()
                 cursor.execute(clean_ddl)
                 conn.commit()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                raise
             finally:
-                conn.close()
-        else:
-            # MySQL
-            conn_params = get_mysql_connection_params({
-                "host": ds.host,
-                "port": ds.port,
-                "username": ds.username,
-                "database_name": ds.database_name,
-                "password_credential_id": ds.password_credential_id,
-                "ssh_enabled": ds.ssh_enabled,
-                "ssh_host": ds.ssh_host,
-                "ssh_port": ds.ssh_port,
-                "ssh_username": ds.ssh_username,
-                "ssh_password_credential_id": ds.ssh_password_credential_id,
-                "ssh_pkey_path": ds.ssh_pkey_path,
-                "ssh_key_passphrase_credential_id": ds.ssh_key_passphrase_credential_id,
-                "ssl_enabled": ds.ssl_enabled,
-                "ssl_ca_path": ds.ssl_ca_path,
-                "ssl_cert_path": ds.ssl_cert_path,
-                "ssl_key_path": ds.ssl_key_path,
-                "ssl_verify_identity": ds.ssl_verify_identity,
-            })
-            pool = get_mysql_pool(datasource_id, conn_params)
-            conn_proxy: Any = pool.connect()
-            try:
-                _ping_mysql_connection(conn_proxy)
-                with conn_proxy.cursor() as cursor:
-                    cursor.execute(clean_ddl)
-                conn_proxy.commit()
-            finally:
-                conn_proxy.close()
+                if cursor is not None:
+                    cursor.close()
     except Exception:
         execution_status = "failed"
         error_message = fixed_error_message(FixedErrorCode.TABLE_DESIGN_ERROR)

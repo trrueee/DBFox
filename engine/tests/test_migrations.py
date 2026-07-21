@@ -6,13 +6,14 @@ import sqlite3
 import subprocess
 import sys
 import tarfile
+import warnings
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
 import pytest
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, SAWarning
 
 from engine.db import Base
 from engine.migrations.sqlite_mutex import SQLITE_MIGRATION_LOCKED, sqlite_migration_mutex
@@ -20,6 +21,7 @@ from engine.models import FoundationRuntimeState
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
+FOUNDATION_HEAD_REVISION = "e9f0a1b2c3d4"
 HISTORICAL_MODELS_REVISION = "918ea80d"
 _QUERY_HISTORY_FTS_TRIGGERS = {
     "query_history_search_docs_ai",
@@ -153,7 +155,20 @@ def _assert_final_contract(engine) -> None:
         for check in inspector.get_check_constraints("foundation_runtime_state")
     )
 
+    assert _column_names(engine, "confirmation_tokens") == {
+        "token",
+        "expires_at",
+        "datasource_id",
+        "action",
+        "details_json",
+        "expected_confirm_text",
+    }
+    assert {
+        "ix_confirmation_tokens_expires_at",
+    }.issubset({index["name"] for index in inspector.get_indexes("confirmation_tokens")})
+
     data_source_columns = _column_names(engine, "data_sources")
+    assert "connection_generation" in data_source_columns
     assert {
         "password_credential_id",
         "ssh_password_credential_id",
@@ -168,6 +183,7 @@ def _assert_final_contract(engine) -> None:
     }
 
     environment_columns = _column_names(engine, "database_environments")
+    assert "datasource_id" not in environment_columns
     assert {
         "password_credential_id",
     } == {
@@ -183,7 +199,63 @@ def _assert_final_contract(engine) -> None:
         "llm_credential_id",
         "api_base",
         "model_name",
+        "input_id",
+        "session_sequence",
+        "datasource_generation",
+        "version",
+        "lease_token",
+        "request_json",
+        "result_json",
+        "cancel_requested",
     }.issubset(_column_names(engine, "agent_runs"))
+
+    assert {
+        "agent_session_inputs",
+        "agent_turns",
+        "agent_tool_invocations",
+        "agent_observations",
+        "agent_evidence",
+        "agent_question_requests",
+        "agent_events",
+        "agent_task_plans",
+    }.issubset(tables)
+    assert {
+        "input_sequence",
+        "event_sequence",
+        "event_floor_sequence",
+        "lease_owner",
+        "lease_token",
+        "lease_expires_at",
+        "selected_artifact_id",
+        "context_epoch",
+    }.issubset(_column_names(engine, "agent_sessions"))
+
+    assert not any(name.startswith("agent_runtime_") for name in tables)
+    assert {"agent_checkpoints", "agent_trace_events"}.isdisjoint(tables)
+    assert {
+        "turn_id", "tool_invocation_id", "version", "consumed_at",
+    }.issubset(_column_names(engine, "agent_approvals"))
+    artifact_columns = _column_names(engine, "agent_artifacts")
+    assert {
+        "turn_id", "version", "payload_ref", "provenance_json", "relations_json",
+    }.issubset(artifact_columns)
+    assert "preview_json" not in artifact_columns
+
+    assert _column_names(engine, "llm_logs") == {
+        "id",
+        "data_source_id",
+        "request_type",
+        "prompt_hash",
+        "model_name",
+        "latency_ms",
+        "status",
+        "error_code",
+        "prompt_version",
+        "prompt_template_hash",
+        "model_temperature",
+        "max_tokens",
+        "created_at",
+    }
 
     data_source_fks = inspector.get_foreign_keys("data_sources")
     assert any(
@@ -193,10 +265,9 @@ def _assert_final_contract(engine) -> None:
         for fk in data_source_fks
     )
     environment_fks = inspector.get_foreign_keys("database_environments")
-    assert any(
+    assert not any(
         fk["constrained_columns"] == ["datasource_id"]
         and fk["referred_table"] == "data_sources"
-        and fk["options"].get("ondelete") == "SET NULL"
         for fk in environment_fks
     )
 
@@ -243,11 +314,176 @@ def test_fresh_upgrade_has_the_complete_foundation_v2_contract(monkeypatch, tmp_
     try:
         with engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                FOUNDATION_V2_REVISION
+                FOUNDATION_HEAD_REVISION
             )
             assert connection.execute(text("SELECT COUNT(*) FROM foundation_runtime_state")).scalar_one() == 0
         _assert_final_contract(engine)
         command.check(_alembic_config(database_url))
+    finally:
+        engine.dispose()
+
+
+def test_metadata_model_has_no_foreign_key_sort_cycle() -> None:
+    """The authoritative metadata model must have a deterministic FK order."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SAWarning)
+        assert [table.name for table in Base.metadata.sorted_tables]
+
+
+def test_confirmation_token_migration_adopts_legacy_runtime_table(monkeypatch, tmp_path: Path) -> None:
+    database_url = _sqlite_url(tmp_path / "legacy-confirmations.db")
+    _upgrade(monkeypatch, database_url, "4e7f9a1b2c3d")
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE confirmation_tokens (
+                        token TEXT PRIMARY KEY,
+                        expires_at REAL NOT NULL,
+                        datasource_id TEXT NOT NULL,
+                        action TEXT NOT NULL,
+                        details_json TEXT NOT NULL DEFAULT '{}',
+                        expected_confirm_text TEXT NOT NULL DEFAULT ''
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO confirmation_tokens (
+                        token, expires_at, datasource_id, action, details_json, expected_confirm_text
+                    ) VALUES ('legacy-token', 9999999999, 'source-1', 'delete_datasource', '{}', 'Source')
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+                FOUNDATION_HEAD_REVISION
+            )
+            assert connection.execute(
+                text("SELECT token, expires_at, datasource_id, action FROM confirmation_tokens")
+            ).one() == ("legacy-token", 9999999999.0, "source-1", "delete_datasource")
+        _assert_final_contract(engine)
+    finally:
+        engine.dispose()
+
+
+def test_llm_telemetry_migration_removes_preexisting_plaintext_columns(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "llm-plaintext.db")
+    _upgrade(monkeypatch, database_url, FOUNDATION_V2_REVISION)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            # Model the already-deployed v2 table, which may have been created
+            # by the previous ORM contract before this immutable migration.
+            for column in (
+                "prompt_text TEXT",
+                "response_text TEXT",
+                "error_message TEXT",
+                "schema_validation_warnings TEXT",
+            ):
+                connection.execute(text(f"ALTER TABLE llm_logs ADD COLUMN {column}"))
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO llm_logs (
+                        id, request_type, prompt_hash, prompt_text, response_text,
+                        model_name, latency_ms, status, error_message,
+                        prompt_version, prompt_template_hash, model_temperature,
+                        max_tokens, schema_validation_warnings, created_at
+                    ) VALUES (
+                        'legacy-llm-log', 'text_to_sql', 'customer email: secret@example.test',
+                        'customer email: secret@example.test', 'SELECT * FROM customers',
+                        'legacy-model', 17, 'failed', 'provider echoed a secret',
+                        'v2', 'template-fingerprint', 0.1, 256,
+                        'free-form provider warning', CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+                FOUNDATION_HEAD_REVISION
+            )
+            migrated = connection.execute(
+                text(
+                    """
+                    SELECT prompt_hash, model_name, latency_ms, status, error_code,
+                           prompt_version, prompt_template_hash, model_temperature, max_tokens
+                    FROM llm_logs WHERE id = 'legacy-llm-log'
+                    """
+                )
+            ).mappings().one()
+        assert dict(migrated) == {
+            "prompt_hash": None,
+            "model_name": "legacy-model",
+            "latency_ms": 17,
+            "status": "failed",
+            "error_code": "LLM_INVOCATION_FAILED",
+            "prompt_version": "v2",
+            "prompt_template_hash": "template-fingerprint",
+            "model_temperature": 0.1,
+            "max_tokens": 256,
+        }
+        _assert_final_contract(engine)
+    finally:
+        engine.dispose()
+
+
+def test_llm_telemetry_migration_clears_unverifiable_legacy_fingerprints(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    database_url = _sqlite_url(tmp_path / "llm-legacy-fingerprint.db")
+    _upgrade(monkeypatch, database_url, FOUNDATION_V2_REVISION)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO llm_logs (id, request_type, prompt_hash, status, created_at)
+                    VALUES (
+                        'legacy-fingerprint-log', 'text_to_sql',
+                        'customer email: secret@example.test', 'completed', CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
+    finally:
+        engine.dispose()
+
+    _upgrade(monkeypatch, database_url)
+
+    engine = create_engine(database_url)
+    try:
+        with engine.connect() as connection:
+            assert connection.execute(
+                text("SELECT prompt_hash FROM llm_logs WHERE id = 'legacy-fingerprint-log'")
+            ).scalar_one() is None
     finally:
         engine.dispose()
 
@@ -378,7 +614,8 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             migrated = connection.execute(
                 text(
                     """
-                    SELECT id, environment_id, host, port, database_name, username, password_credential_id
+                    SELECT id, environment_id, host, port, database_name, username,
+                           password_credential_id, connection_generation
                     FROM data_sources WHERE id = 'source-1'
                     """
                 )
@@ -391,6 +628,7 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             "database_name": "analytics",
             "username": "readonly",
             "password_credential_id": None,
+            "connection_generation": 1,
         }
         with engine.connect() as connection:
             orphan_endpoint = connection.execute(
@@ -416,13 +654,12 @@ def test_canonical_2b_upgrade_preserves_endpoint_metadata_and_removes_legacy_sec
             environment = connection.execute(
                 text(
                     """
-                    SELECT datasource_id, host, port, database_name, username, password_credential_id
+                    SELECT host, port, database_name, username, password_credential_id
                     FROM database_environments WHERE id = 'environment-1'
                     """
                 )
             ).mappings().one()
             assert dict(environment) == {
-                "datasource_id": "source-1",
                 "host": "db.internal",
                 "port": 5432,
                 "database_name": "analytics",

@@ -1,40 +1,40 @@
 """OpenAI-compatible provider (covers OpenAI / Qwen / DeepSeek / local)."""
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+from engine.llm.endpoint_policy import resolve_runtime_llm_endpoint
+from engine.llm.http_clients import get_llm_http_clients
 
 if TYPE_CHECKING:
-    from langchain_openai import ChatOpenAI
+    from openai import OpenAI
 
 
-def create_openai_client(
+def create_openai_compatible_api_client(
     *,
-    model_name: str,
     api_key: str,
     api_base: str,
-    temperature: float = 0.0,
-    max_tokens: int | None = None,
     timeout: float = 120.0,
-) -> "ChatOpenAI":
-    """Build a ChatOpenAI client with reasoning-model awareness."""
-    from langchain_openai import ChatOpenAI
-    model_lower = model_name.lower()
-    is_reasoning = any(
-        term in model_lower
-        for term in ("o1", "o3", "r1", "reasoner", "reasoning", "qwq")
+) -> "OpenAI":
+    """Build the synchronous OpenAI SDK client behind the common LLM boundary.
+
+    Keeping construction here ensures every model call receives the same
+    runtime DNS/IP admission check and application-owned transport. In
+    particular, the bearer credential must never be
+    sent through an environment proxy or followed to a redirect target.
+    """
+
+    from openai import OpenAI
+
+    endpoint = resolve_runtime_llm_endpoint(api_base)
+    http_client, _http_async_client = get_llm_http_clients(
+        endpoint=endpoint,
+        timeout=timeout,
     )
-
-    kwargs: dict[str, Any] = {
-        "model": model_name,
-        "api_key": api_key,
-        "base_url": api_base,
-        "timeout": timeout,
-        "max_retries": 0,
-    }
-
-    if not is_reasoning:
-        kwargs["temperature"] = temperature
-        if max_tokens is not None:
-            kwargs["max_tokens"] = max_tokens
-
-    return ChatOpenAI(**kwargs)
+    return OpenAI(
+        api_key=api_key,
+        base_url=endpoint.api_base,
+        timeout=timeout,
+        max_retries=0,
+        http_client=http_client,
+    )

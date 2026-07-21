@@ -1,4 +1,4 @@
-"""Skill contract schemas — Pydantic models for DBFox Agent v2 Skill layer.
+"""Stable skill contracts for the DBFox Agent.
 
 A Skill is a curated execution pattern that bundles:
 - Tool-group boundaries (what's allowed, what's forbidden)
@@ -40,7 +40,7 @@ class SkillRecoveryRule(BaseModel):
 class SkillSpec(BaseModel):
     """A curated execution pattern for a specific DBFox task type.
 
-    Skills bridge the gap between "flat tool list" and "reliable execution":
+    Skills turn a flat tool list into reliable execution guidance:
     they give the ReAct model a tested tool sequence, safety boundaries,
     success criteria, and recovery playbooks for common failures.
     """

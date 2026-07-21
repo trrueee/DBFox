@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 from typing import Any, Sequence, Tuple
 
 from sqlalchemy.orm import Session
 
+from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
+from engine.datasource import datasource_connection_dict
 from engine.errors import DBFoxError
 from engine.test_data.policy import require_writable_test_datasource
 
@@ -34,16 +36,19 @@ def execute_test_data_inserts(
     if db_type != "sqlite":
         raise DBFoxError(message="测试数据生成暂不支持 MySQL，请使用 SQLite 数据源。", code="TEST_DATA_UNSUPPORTED")
 
-    db_path = str(datasource.database_name or "")
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
-    try:
-        conn.execute("BEGIN")
-        for insert_sql, params in statements:
-            conn.execute(insert_sql, params)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    profile = ConnectionProfile.from_mapping(datasource_connection_dict(datasource))
+    with ConnectionFactory().connection_scope(
+        profile,
+        purpose=ConnectionPurpose.TEST_DATA,
+        read_only=False,
+        pooled=False,
+    ) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.execute("BEGIN")
+            for insert_sql, params in statements:
+                conn.execute(insert_sql, params)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise

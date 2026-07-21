@@ -19,7 +19,7 @@ from typing import Any
 # Ensure the engine package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from engine.db import SessionLocal, engine, Base
+from engine.db import SessionLocal, initialize_metadata_database
 from engine.models import AgentGoldenTask
 from engine.evaluation.agent_eval import AgentEvalRunner
 from engine.evaluation.benchmarks.importer import load_and_import_benchmark
@@ -85,6 +85,9 @@ def main() -> None:
     parser.add_argument("--file-path", default=None, help="Path to benchmark file for import")
     parser.add_argument("--limit", type=int, default=None, help="Max cases to import")
     parser.add_argument("--execute", type=str, default="false", help="Allow SQL execution (true/false)")
+    parser.add_argument("--llm-credential-id", required=True, help="Credential vault reference for the eval provider")
+    parser.add_argument("--api-base", default=None, help="Optional OpenAI-compatible API base URL")
+    parser.add_argument("--model-name", default=None, help="Optional provider model name")
     parser.add_argument("--json", action="store_true", dest="json_output", help="Output JSON summary")
 
     args = parser.parse_args()
@@ -92,7 +95,7 @@ def main() -> None:
     project_id: str | None = args.project_id
     execute_flag: bool = args.execute.lower() in ("true", "1", "yes")
 
-    Base.metadata.create_all(bind=engine)
+    initialize_metadata_database()
     db = SessionLocal()
 
     try:
@@ -122,6 +125,9 @@ def main() -> None:
             project_id=project_id,
             task_ids=task_ids,
             source=args.source if not args.fixtures else None,
+            llm_credential_id=args.llm_credential_id,
+            api_base=args.api_base,
+            model_name=args.model_name,
             execute=execute_flag,
         )
 

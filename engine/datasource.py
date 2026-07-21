@@ -1,14 +1,18 @@
+"""Compatibility entry points backed by the typed connectivity boundary."""
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any
-
-import pymysql
+from typing import Any, Mapping
 
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
+from engine.connectivity.factory import (
+    ConnectionFactory,
+    build_mysql_ssl_params,
+    build_postgres_ssl_params,
+)
+from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.errors import DataSourceConnectionError
-from engine.security.credential_vault import CredentialKind, get_credential_vault
+from engine.security.credential_vault import get_credential_vault
 from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
 from engine.tunnel import (
     TUNNEL_MANAGER,
@@ -18,208 +22,85 @@ from engine.tunnel import (
     open_temporary_tunnel,
 )
 
+
 logger = logging.getLogger("dbfox.datasource")
 
 
-def _resolve_credential_secret(
-    datasource_dict: dict[str, Any],
-    field: str,
-    kind: CredentialKind,
-) -> str:
-    credential_id = datasource_dict.get(field)
-    if not credential_id:
-        raise DataSourceConnectionError(
-            "A password credential is required for network datasource connections."
-        )
-    secret = get_credential_vault().get(str(credential_id), expected_kind=kind)
-    if not secret:
-        raise DataSourceConnectionError(
-            "Credential reference was not found or has the wrong kind."
-        )
-    return secret
+def _profile(
+    config: Mapping[str, Any] | ConnectionProfile,
+    *,
+    expected_dialect: str | None = None,
+) -> ConnectionProfile:
+    if isinstance(config, ConnectionProfile):
+        profile = config
+    else:
+        normalized = dict(config)
+        if expected_dialect and not normalized.get("db_type"):
+            normalized["db_type"] = expected_dialect
+        profile = ConnectionProfile.from_mapping(normalized)
+    if expected_dialect and profile.dialect != expected_dialect:
+        raise DataSourceConnectionError("Connection profile dialect does not match the requested driver.")
+    return profile
 
 
-def _normalized_optional_path(value: Any) -> str | None:
-    if value is None:
+def _factory() -> ConnectionFactory:
+    """Resolve the vault only at the runtime connection boundary."""
+    return ConnectionFactory(vault=get_credential_vault())
+
+
+def _test_purpose(profile: ConnectionProfile) -> ConnectionPurpose:
+    return ConnectionPurpose.HEALTH_CHECK if profile.is_managed else ConnectionPurpose.CONNECTION_TEST
+
+
+def _first_row_value(row: Any) -> Any | None:
+    """Return the first selected value for tuple- and dict-based cursors."""
+    if not row:
         return None
-    text = str(value).strip()
-    return text or None
+    if isinstance(row, Mapping):
+        return next(iter(row.values()), None)
+    return row[0]
 
 
-def _require_existing_sqlite_file(db_path: Any) -> Path:
-    path_text = str(db_path or "").strip()
-    if not path_text:
-        raise DataSourceConnectionError("未提供 SQLite 数据库文件路径。")
-    path = Path(path_text).expanduser()
-    if not path.is_file():
-        raise DataSourceConnectionError("SQLite database file is unavailable.")
-    return path
+def _log_connection_failure(operation: SafeLogOperation, exc: DataSourceConnectionError) -> None:
+    """Record only the driver exception class when a boundary wrapped it.
 
-
-def build_mysql_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
-    """Build PyMySQL SSL parameters with certificate verification enabled."""
-    if not config.get("ssl_enabled"):
-        return {}
-
-    ca_path = _normalized_optional_path(config.get("ssl_ca_path"))
-    cert_path = _normalized_optional_path(config.get("ssl_cert_path"))
-    key_path = _normalized_optional_path(config.get("ssl_key_path"))
-    verify_identity = bool(config.get("ssl_verify_identity", True))
-
-    if verify_identity and not ca_path:
-        raise DataSourceConnectionError("SSL identity verification requires a CA certificate path.")
-
-    ssl_params: dict[str, Any] = {
-        "ssl_verify_cert": True,
-        "ssl_verify_identity": verify_identity,
-    }
-    if ca_path:
-        ssl_params["ssl_ca"] = ca_path
-    if cert_path:
-        ssl_params["ssl_cert"] = cert_path
-    if key_path:
-        ssl_params["ssl_key"] = key_path
-    return ssl_params
-
-
-def build_postgres_ssl_params(config: dict[str, Any]) -> dict[str, Any]:
-    """Build psycopg2 SSL parameters from the shared datasource SSL fields."""
-    if not config.get("ssl_enabled"):
-        return {}
-
-    ca_path = _normalized_optional_path(config.get("ssl_ca_path"))
-    cert_path = _normalized_optional_path(config.get("ssl_cert_path"))
-    key_path = _normalized_optional_path(config.get("ssl_key_path"))
-    verify_identity = bool(config.get("ssl_verify_identity", True))
-
-    if verify_identity and not ca_path:
-        raise DataSourceConnectionError("PostgreSQL SSL identity verification requires a CA certificate path.")
-
-    params: dict[str, Any] = {
-        "sslmode": "verify-full" if verify_identity else ("verify-ca" if ca_path else "require"),
-    }
-    if ca_path:
-        params["sslrootcert"] = ca_path
-    if cert_path:
-        params["sslcert"] = cert_path
-    if key_path:
-        params["sslkey"] = key_path
-    return params
-
-
-def get_mysql_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Resolve an OS-vault password and construct PyMySQL parameters."""
-    pw = _resolve_credential_secret(
-        datasource_dict,
-        "password_credential_id",
-        CredentialKind.DATASOURCE_PASSWORD,
-    )
-    host = datasource_dict["host"]
-    port = datasource_dict["port"]
-
-    if datasource_dict.get("ssh_enabled"):
-        tunnel = get_or_create_tunnel_for_dict(datasource_dict)
-        host = "127.0.0.1"
-        port = tunnel.local_bind_port
-
-    params = {
-        "host": host,
-        "port": port,
-        "user": datasource_dict["username"],
-        "password": pw,
-        "database": datasource_dict["database_name"],
-        "charset": "utf8mb4",
-        "cursorclass": pymysql.cursors.DictCursor,
-        "connect_timeout": 5,
-        "read_timeout": 10,
-        "write_timeout": 10,
-    }
-    params.update(build_mysql_ssl_params(datasource_dict))
-    return params
-
-
-def get_postgres_connection_params(datasource_dict: dict[str, Any]) -> dict[str, Any]:
-    """Resolve an OS-vault password and construct PostgreSQL parameters."""
-    pw = _resolve_credential_secret(
-        datasource_dict,
-        "password_credential_id",
-        CredentialKind.DATASOURCE_PASSWORD,
-    )
-    host = datasource_dict["host"]
-    port = int(datasource_dict.get("port", 5432) or 5432)
-
-    if datasource_dict.get("ssh_enabled"):
-        tunnel = get_or_create_tunnel_for_dict(datasource_dict)
-        host = "127.0.0.1"
-        port = tunnel.local_bind_port
-
-    params = {
-        "host": host,
-        "port": port,
-        "user": datasource_dict["username"],
-        "password": pw,
-        "database": datasource_dict["database_name"],
-    }
-    params.update(build_postgres_ssl_params(datasource_dict))
-    return params
-
-
-def _setup_test_tunnel(config: dict[str, Any]) -> tuple[str, int, Any | None]:
-    """Resolve SSH tunnel for a connection test. Returns (host, port, tunnel).
-
-    When SSH is enabled, the returned host/port point to the local tunnel
-    endpoint.  When SSH is disabled or not configured, the original host/port
-    are returned unchanged and *tunnel* is ``None``.
+    ``ConnectionFactory`` deliberately replaces driver messages with a stable
+    public error.  Preserve a useful diagnostic signal here without ever
+    logging the wrapped message, which can contain a DSN or password.
+    Expected validation failures have no cause and are intentionally silent.
     """
-    if not config.get("ssh_enabled"):
-        return config.get("host", ""), config.get("port", 3306), None
 
-    try:
-        if config.get("is_managed"):
-            tunnel = get_or_create_tunnel_for_dict(config)
-        else:
-            tunnel = open_temporary_tunnel(config)
-        return "127.0.0.1", tunnel.local_bind_port, tunnel
-    except Exception as exc:
+    cause = exc.__cause__
+    if isinstance(cause, Exception):
         log_unexpected_exception(
             logger,
-            operation=SafeLogOperation.DATASOURCE_TEST_SSH_TUNNEL,
-            exc=exc,
+            operation=operation,
+            exc=cause,
             level="warning",
         )
-        raise DataSourceConnectionError("无法建立 SSH 隧道，请检查跳板机配置。") from None
 
 
-def _cleanup_test_tunnel(tunnel: Any | None, config: dict[str, Any]) -> None:
-    """Stop a temporary test tunnel unless it is managed."""
-    if tunnel is not None and not config.get("is_managed"):
-        try:
-            tunnel.stop()
-        except Exception as exc:
-            logger.warning("Failed to stop temporary test tunnel (%s)", type(exc).__name__)
+def test_connection(config: Mapping[str, Any] | ConnectionProfile) -> dict[str, Any]:
+    """Test connectivity without ever accepting plaintext credentials in config."""
+    profile = _profile(config)
+    factory = _factory()
+    if profile.dialect == "sqlite":
+        return _test_sqlite_connection(profile, factory)
+    if profile.dialect == "duckdb":
+        return _test_duckdb_connection(profile, factory)
+    if profile.dialect == "postgresql":
+        return _test_postgres_connection(profile, factory)
+    return _test_mysql_connection(profile, factory)
 
 
-def test_connection(config: dict[str, Any]) -> dict[str, Any]:
-    """Test connectivity to a database — dispatches to the dialect-specific strategy."""
-    db_type = config.get("db_type", "mysql")
-
-    if db_type == "sqlite":
-        return _test_sqlite_connection(config)
-    if db_type == "postgresql":
-        return _test_postgres_connection(config)
-    return _test_mysql_connection(config)
-
-
-# ── Dialect-specific connection testers ──────────────────────────────────────────
-
-
-def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
-    import sqlite3
-
-    db_path = _require_existing_sqlite_file(config.get("database_name", ""))
+def _test_sqlite_connection(profile: ConnectionProfile, factory: ConnectionFactory) -> dict[str, Any]:
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", timeout=5, uri=True)
-        try:
+        with factory.connection_scope(
+            profile,
+            purpose=_test_purpose(profile),
+            read_only=True,
+            pooled=False,
+        ) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT sqlite_version()")
             version_row = cursor.fetchone()
@@ -230,10 +111,9 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
             tables_count = int(tables_row[0]) if tables_row else 0
 
             permission_report = SQLitePermissionProbe(
-                database_path=db_path,
+                database_path=factory.sqlite_path(profile),
                 connection_readonly=True,
             ).probe(conn)
-
             return {
                 "ok": True,
                 "serverVersion": f"SQLite {version}",
@@ -243,9 +123,8 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
                 "permissionReport": permission_report.model_dump(),
                 "message": "SQLite 数据库连接测试成功！",
             }
-        finally:
-            conn.close()
-    except DataSourceConnectionError:
+    except DataSourceConnectionError as exc:
+        _log_connection_failure(SafeLogOperation.DATASOURCE_TEST_SQLITE_CONNECTION, exc)
         raise
     except Exception as exc:
         log_unexpected_exception(
@@ -257,41 +136,70 @@ def _test_sqlite_connection(config: dict[str, Any]) -> dict[str, Any]:
         raise DataSourceConnectionError("无法建立 SQLite 数据库连接，请检查路径配置。") from None
 
 
-def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
-    import psycopg2
-
-    host = config.get("host", "")
-    port = config.get("port", 5432)
-    database_name = config.get("database_name", "")
-    username = config.get("username", "")
-    password = config.get("password", "")
-
-    if not host or not database_name or not username:
-        raise DataSourceConnectionError("Missing host, database name, or username configuration.")
-
-    temp_tunnel = None
+def _test_duckdb_connection(profile: ConnectionProfile, factory: ConnectionFactory) -> dict[str, Any]:
     try:
-        test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
-        conn = psycopg2.connect(
-            host=test_host, port=test_port, user=username, password=password,
-            database=database_name, connect_timeout=5,
-            **build_postgres_ssl_params(config),
+        with factory.connection_scope(
+            profile,
+            purpose=_test_purpose(profile),
+            read_only=True,
+            pooled=False,
+        ) as conn:
+            version_row = conn.execute("SELECT version()").fetchone()
+            version = str(version_row[0]) if version_row else "unknown"
+            tables_row = conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog')"
+            ).fetchone()
+            tables_count = int(tables_row[0]) if tables_row else 0
+            return {
+                "ok": True,
+                "serverVersion": f"DuckDB {version}",
+                "readonly": True,
+                "tablesCount": tables_count,
+                "warnings": [],
+                "permissionReport": {
+                    "readonly": True,
+                    "writable_privileges": [],
+                    "warnings": [],
+                    "evidence": {"probe": "duckdb_read_only_connection"},
+                },
+                "message": "DuckDB 数据库连接测试成功！",
+            }
+    except DataSourceConnectionError as exc:
+        _log_connection_failure(SafeLogOperation.DATASOURCE_TEST_DUCKDB_CONNECTION, exc)
+        raise
+    except Exception as exc:
+        log_unexpected_exception(
+            logger,
+            operation=SafeLogOperation.DATASOURCE_TEST_DUCKDB_CONNECTION,
+            exc=exc,
+            level="warning",
         )
-        try:
+        raise DataSourceConnectionError("无法建立 DuckDB 数据库连接，请检查路径配置。") from None
+
+
+def _test_postgres_connection(profile: ConnectionProfile, factory: ConnectionFactory) -> dict[str, Any]:
+    try:
+        with factory.connection_scope(
+            profile,
+            purpose=_test_purpose(profile),
+            read_only=True,
+            pooled=False,
+        ) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT version()")
                 version_row = cursor.fetchone()
                 version = str(version_row[0]) if version_row else "unknown"
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT COUNT(*) FROM information_schema.tables
                     WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                """)
+                    """
+                )
                 tables_row = cursor.fetchone()
                 tables_count = int(tables_row[0]) if tables_row else 0
 
             permission_report = PostgresPermissionProbe().probe(conn)
-
             return {
                 "ok": True,
                 "serverVersion": version,
@@ -301,9 +209,8 @@ def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
                 "permissionReport": permission_report.model_dump(),
                 "message": "PostgreSQL 数据库连接测试成功！",
             }
-        finally:
-            conn.close()
-    except DataSourceConnectionError:
+    except DataSourceConnectionError as exc:
+        _log_connection_failure(SafeLogOperation.DATASOURCE_TEST_POSTGRES_CONNECTION, exc)
         raise
     except Exception as exc:
         log_unexpected_exception(
@@ -313,43 +220,31 @@ def _test_postgres_connection(config: dict[str, Any]) -> dict[str, Any]:
             level="warning",
         )
         raise DataSourceConnectionError("无法建立 PostgreSQL 数据库连接，请检查配置信息。") from None
-    finally:
-        _cleanup_test_tunnel(temp_tunnel, config)
 
 
-def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
-    host = config.get("host", "")
-    port = config.get("port", 3306)
-    database_name = config.get("database_name", "")
-    username = config.get("username", "")
-    password = config.get("password", "")
-
-    if not host or not database_name or not username:
-        raise DataSourceConnectionError("Missing host, database name, or username configuration.")
-
-    temp_tunnel = None
+def _test_mysql_connection(profile: ConnectionProfile, factory: ConnectionFactory) -> dict[str, Any]:
     try:
-        test_host, test_port, temp_tunnel = _setup_test_tunnel(config)
-        conn = pymysql.connect(
-            host=test_host, port=test_port, user=username, password=password,
-            database=database_name, charset="utf8mb4", connect_timeout=5,
-            **build_mysql_ssl_params(config),
-        )
-        try:
+        with factory.connection_scope(
+            profile,
+            purpose=_test_purpose(profile),
+            read_only=True,
+            pooled=False,
+        ) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT VERSION()")
                 version_row = cursor.fetchone()
-                version = str(version_row[0]) if version_row else "unknown"
+                version_value = _first_row_value(version_row)
+                version = str(version_value) if version_value is not None else "unknown"
 
                 cursor.execute(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = %s",
-                    (database_name,),
+                    (profile.database_name,),
                 )
                 tables_row = cursor.fetchone()
-                tables_count = int(tables_row[0]) if tables_row else 0
+                tables_value = _first_row_value(tables_row)
+                tables_count = int(tables_value) if tables_value is not None else 0
 
             permission_report = MySQLPermissionProbe().probe(conn)
-
             return {
                 "ok": True,
                 "serverVersion": version,
@@ -359,9 +254,8 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
                 "permissionReport": permission_report.model_dump(),
                 "message": "数据库连接测试成功！",
             }
-        finally:
-            conn.close()
-    except DataSourceConnectionError:
+    except DataSourceConnectionError as exc:
+        _log_connection_failure(SafeLogOperation.DATASOURCE_TEST_MYSQL_CONNECTION, exc)
         raise
     except Exception as exc:
         log_unexpected_exception(
@@ -371,23 +265,23 @@ def _test_mysql_connection(config: dict[str, Any]) -> dict[str, Any]:
             level="warning",
         )
         raise DataSourceConnectionError("无法建立 MySQL 数据库连接，请检查主机、端口、用户名和 SSL 配置。") from None
-    finally:
-        _cleanup_test_tunnel(temp_tunnel, config)
 
 
 def datasource_connection_dict(ds: Any) -> dict[str, Any]:
-    """Build a plain dict from a DataSource row for connection helpers.
-
-    Shared by schema sync, PostgreSQL EXPLAIN, and other paths that need the
-    full datasource metadata (including SSL fields) as a dict.
-    """
+    """Extract opaque connection metadata from a persisted datasource row."""
     return {
         "id": ds.id,
+        "is_managed": True,
+        "db_type": ds.db_type or "mysql",
         "host": ds.host,
         "port": ds.port,
         "username": ds.username,
         "database_name": ds.database_name,
         "password_credential_id": ds.password_credential_id,
+        # Do not normalize a corrupted or missing persisted generation to one:
+        # ``ConnectionProfile`` is the validation boundary that must reject it
+        # rather than potentially colliding with an existing resource key.
+        "connection_generation": ds.connection_generation,
         "ssh_enabled": ds.ssh_enabled,
         "ssh_host": ds.ssh_host,
         "ssh_port": ds.ssh_port,
