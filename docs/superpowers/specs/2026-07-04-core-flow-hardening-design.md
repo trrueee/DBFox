@@ -310,7 +310,7 @@ Diagnostics must correlate major operations with a stable trace id:
 - workspace view refresh;
 - sidecar startup.
 
-The diagnostics export must preserve useful timings and errors while redacting credentials, tokens, SQL secrets, and LLM plaintext unless explicitly enabled by existing configuration.
+The diagnostics export must preserve useful timings and fixed error codes while excluding credentials, tokens, SQL secrets, and all LLM plaintext.
 
 For P0, trace id correlation is required for datasource sync, SQL execution, and agent runs even before the full desktop smoke path is automated.
 
