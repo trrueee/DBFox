@@ -73,19 +73,16 @@ HIDDEN_IMPORTS = [
     "watchfiles",
     "alembic",
     "psycopg2",
+    "duckdb",
     "pymysql",
     "sshtunnel",
     "keyring",
     "sqlglot",
     "httpx",
-    "cryptography",
     "dotenv",
     "python_multipart",
-    "langgraph",
-    "langgraph.checkpoint.sqlite",
-    "langchain",
-    "langchain_openai",
-    "langchain_core",
+    "openai",
+    "langsmith",
 ]
 
 SIDECAR_RUNTIME_EXCLUDED_DIRS = {
@@ -123,7 +120,7 @@ def _venv_python() -> str:
             f"  [FAIL] 构建虚拟环境未找到: {BUILD_VENV}\n"
             f"  请先创建并安装依赖:\n"
             f"    python -m venv {BUILD_VENV}\n"
-            f"    {BUILD_VENV / 'Scripts' / 'pip'} install -r requirements.txt",
+            f"    {BUILD_VENV / 'Scripts' / 'pip'} install -r requirements-build.txt",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -235,6 +232,10 @@ def main() -> None:
     print("DBFox Sidecar Builder")
     print("=" * 55)
 
+    # Validate build prerequisites before producing any generated credential
+    # material.  A failed package build must not leave a stale dev token behind.
+    python_exe = None if args.token_only else _venv_python()
+
     token = generate_token()
     print(f"\n[1/3] Dev token ({len(token)} hex chars)")
     write_env_local(token)
@@ -243,8 +244,8 @@ def main() -> None:
         print("\n  Done (token-only mode).")
         return
 
-    python_exe = _venv_python()
     print(f"\n[2/3] PyInstaller build")
+    assert python_exe is not None
     binary = build_pyinstaller(python_exe)
 
     print("\n[3/3] Install to Tauri binaries")

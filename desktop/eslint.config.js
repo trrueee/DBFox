@@ -24,4 +24,17 @@ export default defineConfig([
       'react-refresh/only-export-components': 'warn',
     },
   },
+  {
+    // TanStack Table intentionally exposes mutable callback-bearing instances.
+    // React Compiler detects that boundary and skips only these components;
+    // runtime hook validation remains enabled everywhere else.
+    files: [
+      'src/components/DataTable.tsx',
+      'src/features/workspace/artifacts/table/ArtifactTableGrid.tsx',
+      'src/features/workspace/table/TablePreviewPane.tsx',
+    ],
+    rules: {
+      'react-hooks/incompatible-library': 'off',
+    },
+  },
 ])

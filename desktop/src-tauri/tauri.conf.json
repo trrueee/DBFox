@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nickknapton88/tauri-docs/v2.11.2/src/content/docs/reference/config/schema.json",
   "productName": "DBFox",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.dbfox.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -19,12 +19,13 @@
         "minHeight": 680,
         "resizable": true,
         "fullscreen": false,
-        "decorations": false,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --no-proxy-server"
+        "decorations": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* https:; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com https://fonts.loli.net"
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'none'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data:; font-src 'self'",
+      "devCsp": null,
+      "dangerousDisableAssetCspModification": false
     }
   },
   "bundle": {

@@ -1,95 +1,406 @@
-name: ci
+name: CI
 
 on:
   pull_request:
   push:
     branches:
       - main
+  # Re-evaluate known-vulnerability feeds even when source dependencies have
+  # not changed.  The offset avoids the busiest top-of-hour GitHub window.
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+# Pull requests do not need write access.  Keep the token minimally scoped even
+# on trusted branch pushes so a compromised test dependency cannot mutate the
+# repository or its releases.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12.8"
+  NODE_VERSION: "22.14.0"
+  RUST_VERSION: "1.95.0"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_INPUT: "1"
+  PIP_REQUIRE_HASHES: "1"
 
 jobs:
-  # ─────────────────────────────────────────────
-  # Job 1: Backend — pytest + mypy + migrations
-  # ─────────────────────────────────────────────
-  backend:
-    runs-on: ubuntu-latest
+  migration-and-python-quality:
+    name: Migration contract and Python quality
+    runs-on: ubuntu-24.04
+    env:
+      DBFOX_DATABASE_URL: sqlite:///${{ runner.temp }}/dbfox-migration-ci.db
+      DBFOX_MIGRATE_ONLY: "1"
+      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          python-version: "3.12"
-          cache: 'pip'
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.lock
+            requirements-build.lock
 
-      - name: Run pytest test suite
+      - name: Install development dependencies
         run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+
+      - name: Compile all Python runtime modules
+        run: python -m compileall -q engine build_sidecar.py
+
+      - name: Type-check the complete Python runtime
+        run: >-
+          python -m mypy --no-warn-unused-configs --follow-imports=skip
+          engine build_sidecar.py
+
+      - name: Verify committed dependency lock contracts
+        run: python -m pytest engine/tests/test_engineering_contracts.py -q --tb=short
+
+      - name: Enforce Python dependency licenses and generate CycloneDX inventory
+        run: python scripts/dependency_governance.py --ecosystem python --output reports/dbfox-python-sbom.cdx.json
+
+      - name: Verify a fresh metadata database upgrades and models are migration-complete
+        run: |
+          rm -f "$RUNNER_TEMP/dbfox-migration-ci.db"
+          python -m alembic upgrade head
+          python -m alembic check
+          python -m pytest \
+            engine/tests/test_migrations.py \
+            engine/tests/test_fts_migration_repair.py \
+            engine/tests/test_db_init.py \
+            -q --tb=short
+
+  backend-core:
+    name: Backend core regression
+    needs: migration-and-python-quality
+    runs-on: ubuntu-24.04
+    env:
+      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.lock
+
+      - name: Install development dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+
+      - name: Run backend tests without external services or live LLM credentials
+        run: >-
           python -m pytest engine/tests -q --tb=short
+          -m "not e2e and not integration and not real_llm"
 
-      - name: Run static type checking with mypy
+  agent-runtime:
+    name: Agent runtime regression
+    needs: migration-and-python-quality
+    runs-on: ubuntu-24.04
+    env:
+      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.lock
+
+      - name: Install development dependencies
         run: |
-          python -m mypy engine
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
 
-      - name: Verify Alembic migrations apply cleanly on empty database
+      - name: Run deterministic Agent and durable-runtime tests
+        run: >-
+          python -m pytest engine/agent/tests -q --tb=short
+          -m "not e2e and not integration and not real_llm"
+
+  evaluation:
+    name: Evaluation regression
+    needs: migration-and-python-quality
+    runs-on: ubuntu-24.04
+    env:
+      DBFOX_RUNTIME_DIR: ${{ runner.temp }}/dbfox-runtime
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.lock
+
+      - name: Install development dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
+
+      - name: Run local evaluation, benchmark, and adapter contract tests
+        run: |
+          python -m pytest \
+            engine/evaluation/tests \
+            engine/tests/test_agent_case_evaluator.py \
+            engine/tests/test_agent_eval_api.py \
+            engine/tests/test_agent_eval_models.py \
+            engine/tests/test_agent_eval_runner.py \
+            engine/tests/test_benchmark_adapters.py \
+            engine/tests/test_evaluation_error_boundary.py \
+            engine/tests/test_langsmith_adapter_credentials.py \
+            engine/tests/test_spider_loader.py \
+            -q --tb=short \
+            -m "not e2e and not integration and not real_llm"
+
+  sidecar-build:
+    name: Frozen sidecar build smoke
+    needs: migration-and-python-quality
+    runs-on: ubuntu-24.04
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-build.lock
+
+      - name: Build a clean PyInstaller sidecar
+        run: |
+          python -m venv .build_venv
+          ./.build_venv/bin/python -m pip install --require-hashes -r requirements-build.lock
+          ./.build_venv/bin/python -m pip check
+          ./.build_venv/bin/python build_sidecar.py
+          test -x desktop/src-tauri/binaries/dbfox-engine-x86_64-unknown-linux-gnu
+
+  supply-chain-audit:
+    name: Locked dependency security audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # Audit only committed lockfiles.  No lifecycle scripts or dependency
+      # resolver is allowed to execute while collecting vulnerability metadata.
+      CARGO_HOME: ${{ runner.temp }}/cargo-home
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      GIT_TERMINAL_PROMPT: "0"
+      npm_config_fetch_retries: "2"
+      npm_config_fetch_timeout: "30000"
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download the checksum-verified OSV Scanner
         env:
-          DBFOX_MIGRATE_ONLY: "1"
+          OSV_SCANNER_URL: https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
+          OSV_SCANNER_SHA256: bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc
         run: |
-          rm -f "$RUNNER_TEMP/dbfox_migration_test.db"
-          export DBFOX_DATABASE_URL="sqlite:///$RUNNER_TEMP/dbfox_migration_test.db"
-          python << 'EOF'
-          from alembic.config import Config
-          from alembic import command
-          cfg = Config('alembic.ini')
-          cfg.set_main_option('script_location', 'engine/migrations')
-          command.upgrade(cfg, 'head')
-          print('Alembic upgrade head: OK')
-          EOF
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 2 --connect-timeout 15 --max-time 120 \
+            --output "$RUNNER_TEMP/osv-scanner" "$OSV_SCANNER_URL"
+          echo "$OSV_SCANNER_SHA256  $RUNNER_TEMP/osv-scanner" | sha256sum --check --strict
+          chmod 0755 "$RUNNER_TEMP/osv-scanner"
 
-      - name: FastAPI startup smoke test
+      - name: Audit all committed Python hash locks against OSV
         run: |
-          rm -f /tmp/dbfox_smoke_test.db
-          python -c "
-          import os
-          os.environ['DBFOX_DATABASE_URL'] = 'sqlite:////tmp/dbfox_smoke_test.db'
-          from engine.main import app
-          from fastapi.testclient import TestClient
-          client = TestClient(app)
-          r = client.get('/api/v1/health')
-          assert r.status_code == 200, f'Health check failed: {r.status_code} {r.text}'
-          assert r.json()['status'] == 'healthy', f'Unexpected health payload: {r.json()}'
-          print('FastAPI smoke test: OK')
-          "
+          timeout 120s "$RUNNER_TEMP/osv-scanner" scan source --no-resolve --data-source=native --verbosity=warn \
+            --lockfile=requirements.txt:requirements.lock \
+            --lockfile=requirements.txt:requirements-dev.lock \
+            --lockfile=requirements.txt:requirements-build.lock
 
-  # ─────────────────────────────────────────────
-  # Job 2: Frontend — lint + build
-  # ─────────────────────────────────────────────
+      # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Audit the committed frontend lockfile without installing packages
+        working-directory: desktop
+        run: >-
+          timeout 90s npm audit --package-lock-only --ignore-scripts
+          --audit-level=high --registry=https://registry.npmjs.org
+
+      - name: Enforce frontend dependency licenses and generate CycloneDX inventory
+        run: python scripts/dependency_governance.py --ecosystem node --output reports/dbfox-node-sbom.cdx.json
+
+      - name: Download the checksum-verified Cargo advisory scanner
+        env:
+          CARGO_AUDIT_URL: https://github.com/rustsec/rustsec/releases/download/cargo-audit/v0.22.2/cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz
+          CARGO_AUDIT_SHA256: ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39
+        run: |
+          mkdir -p "$RUNNER_TEMP/cargo-audit"
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 2 --connect-timeout 15 --max-time 120 \
+            --output "$RUNNER_TEMP/cargo-audit.tgz" "$CARGO_AUDIT_URL"
+          echo "$CARGO_AUDIT_SHA256  $RUNNER_TEMP/cargo-audit.tgz" | sha256sum --check --strict
+          tar --extract --gzip --file "$RUNNER_TEMP/cargo-audit.tgz" --directory "$RUNNER_TEMP/cargo-audit" --strip-components=1
+
+      - name: Audit the committed Cargo lockfile against RustSec
+        working-directory: desktop/src-tauri
+        run: |
+          CARGO_AUDIT_BIN="$RUNNER_TEMP/cargo-audit/cargo-audit"
+          test -x "$CARGO_AUDIT_BIN"
+          timeout 120s "$CARGO_AUDIT_BIN" audit --db "$RUNNER_TEMP/rustsec-advisory-db" --file Cargo.lock --color never
+
   frontend:
-    runs-on: ubuntu-latest
+    name: Frontend test, lint, and build
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          node-version: "22"
-          cache: 'npm'
+          persist-credentials: false
+
+      # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install npm dependencies
+      - name: Install locked frontend dependencies
         run: npm ci
 
-      - name: ESLint — TypeScript/React static analysis
+      - name: Run ESLint
         run: npm run lint
 
-      - name: Run frontend unit tests
-        run: npm test
+      - name: Run frontend unit tests serially for deterministic memory usage
+        run: npm test -- --maxWorkers=1
 
-      - name: Compile and Build React/Vite APP
+      - name: Compile and build the frontend
         run: npm run build
+
+  rust:
+    name: Rust format, lint, and test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: desktop/src-tauri
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Install Linux libraries required by Tauri's Rust test build
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install the repository-pinned Rust toolchain
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --component clippy,rustfmt
+
+      - name: Validate the committed Cargo dependency graph
+        run: cargo metadata --locked --format-version 1 --no-deps
+
+      - name: Enforce Rust dependency licenses and generate CycloneDX inventory
+        working-directory: .
+        run: python scripts/dependency_governance.py --ecosystem rust --output reports/dbfox-rust-sbom.cdx.json
+
+      - name: Enforce Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy with warnings denied
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run Rust unit tests with the committed lockfile
+        run: cargo test --locked
+
+  release-platform-contract:
+    name: Release contract (${{ matrix.os }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      # v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-build.lock
+            requirements-dev.lock
+
+      # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Linux desktop build libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install the repository-pinned Rust toolchain
+        run: rustup toolchain install "${{ env.RUST_VERSION }}" --profile minimal
+
+      - name: Install locked build dependencies
+        run: python -m pip install --require-hashes -r requirements-build.lock -r requirements-dev.lock
+
+      - name: Install locked frontend dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Verify platform-sensitive sidecar contracts
+        run: python -m pytest engine/tests/test_build_sidecar.py -q --tb=short
+
+      - name: Build the frozen engine sidecar for this platform
+        run: python build_sidecar.py
+
+      - name: Compile the desktop application without installer bundling
+        working-directory: desktop
+        run: npm run tauri build -- --no-bundle

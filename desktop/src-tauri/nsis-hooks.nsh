@@ -3,6 +3,31 @@
   Call DBFoxRefreshShortcutIcon
 !macroend
 
+!macro DBFOX_STOP_SIDECAR
+  !if "${INSTALLMODE}" == "currentUser"
+    nsis_tauri_utils::KillProcessCurrentUser "dbfox-engine.exe"
+  !else
+    nsis_tauri_utils::KillProcess "dbfox-engine.exe"
+  !endif
+  Pop $R0
+  Sleep 500
+
+  ${If} $R0 != 0
+  ${AndIf} $R0 != 2
+    Abort "DBFox 本地引擎仍在运行，请关闭 DBFox 后重试。"
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_PREINSTALL
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro DBFOX_STOP_SIDECAR
+!macroend
+
+!macro NSIS_HOOK_PREUNINSTALL
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro DBFOX_STOP_SIDECAR
+!macroend
+
 Function DBFoxRefreshShortcutIcon
   Exch $R9
 

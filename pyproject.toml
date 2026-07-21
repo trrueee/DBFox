@@ -16,8 +16,7 @@ check_untyped_defs = false
 
 [[tool.mypy.overrides]]
 module = [
-    "engine.agent.*",
-    "engine.agent_core.*",
+    "engine.agent.repositories.*",
     "engine.api.*",
     "engine.environment.*",
     "engine.memory.*",
@@ -31,14 +30,10 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = [
+    "engine.agent.*",
     "engine.api.agent",
     "engine.api.datasources",
     "engine.api.table_design",
-    "engine.agent.app.service",
-    "engine.agent_core.event_store",
-    "engine.agent_core.memory_projection",
-    "engine.agent_core.persistence.*",
-    "engine.agent_core.types",
     "engine.sql.dialect_context",
     "engine.sql.executor",
     "engine.sql.execution.*",

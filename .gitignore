@@ -159,6 +159,8 @@ Thumbs.db
 .windsurf/
 .aider*
 .codex/
+.codex-remote-attachments/
+.playwright-cli/
 .agents/
 .superpowers/
 .worktrees/

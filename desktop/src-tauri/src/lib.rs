@@ -1,12 +1,29 @@
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
+
+mod sidecar_log;
+
+#[cfg(test)]
+use sidecar_log::{redact_sidecar_log_message, SIDECAR_LOG_MAX_MESSAGE_CHARS};
+use sidecar_log::{retire_legacy_temp_sidecar_log, SidecarLog};
+
+// build_sidecar.py and the Tauri external-bin contract intentionally publish
+// Windows artifacts with the MSVC triplet.  Reject a GNU host explicitly
+// instead of producing an installer whose Rust binary and sidecar disagree.
+#[cfg(all(target_os = "windows", target_env = "gnu"))]
+compile_error!(
+    "DBFox Windows desktop builds require the MSVC Rust toolchain (for example: cargo +stable-x86_64-pc-windows-msvc ...)."
+);
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -14,7 +31,72 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-struct PythonEngine(Mutex<EngineSupervisor>);
+#[derive(Clone)]
+struct PythonEngine(Arc<EngineRuntime>);
+
+#[derive(Debug)]
+struct EngineRuntime {
+    supervisor: Mutex<EngineSupervisor>,
+    startup_cancelled: AtomicBool,
+}
+
+impl Drop for EngineRuntime {
+    fn drop(&mut self) {
+        self.startup_cancelled.store(true, Ordering::Release);
+        if let Ok(supervisor) = self.supervisor.get_mut() {
+            supervisor.stop();
+        }
+    }
+}
+
+impl PythonEngine {
+    fn starting() -> Self {
+        Self(Arc::new(EngineRuntime {
+            supervisor: Mutex::new(EngineSupervisor::starting()),
+            startup_cancelled: AtomicBool::new(false),
+        }))
+    }
+
+    fn start_in_background(&self, log: SidecarLog) {
+        let engine = self.clone();
+        std::thread::spawn(move || {
+            let mut started = EngineSupervisor::start(log, &engine.0.startup_cancelled);
+            if engine.0.startup_cancelled.load(Ordering::Acquire) {
+                started.stop();
+                return;
+            }
+
+            let mut current = match engine.0.supervisor.lock() {
+                Ok(current) => current,
+                Err(_) => {
+                    started.stop();
+                    return;
+                }
+            };
+            if engine.0.startup_cancelled.load(Ordering::Acquire) {
+                started.stop();
+                return;
+            }
+            *current = started;
+        });
+    }
+
+    fn restart(&self, log: SidecarLog) -> Result<(), String> {
+        self.0.startup_cancelled.store(true, Ordering::Release);
+        {
+            let mut current = self
+                .0
+                .supervisor
+                .lock()
+                .map_err(|_| "Engine supervisor lock poisoned".to_string())?;
+            current.stop();
+            *current = EngineSupervisor::starting();
+        }
+        self.0.startup_cancelled.store(false, Ordering::Release);
+        self.start_in_background(log);
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EngineConfig {
@@ -22,10 +104,95 @@ struct EngineConfig {
     token: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum EngineStartupState {
+    Starting,
+    Ready,
+    Failed,
+    Stopped,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EngineStartupStatus {
+    state: EngineStartupState,
+    error: Option<String>,
+}
+
 #[tauri::command]
 fn get_engine_config(engine: tauri::State<'_, PythonEngine>) -> Result<EngineConfig, String> {
-    let guard = engine.0.lock().map_err(|_| "Engine supervisor lock poisoned".to_string())?;
+    let guard = engine
+        .0
+        .supervisor
+        .lock()
+        .map_err(|_| "Engine supervisor lock poisoned".to_string())?;
     guard.engine_config()
+}
+
+#[tauri::command]
+fn get_engine_startup_status(
+    engine: tauri::State<'_, PythonEngine>,
+) -> Result<EngineStartupStatus, String> {
+    let guard = engine
+        .0
+        .supervisor
+        .lock()
+        .map_err(|_| "Engine supervisor lock poisoned".to_string())?;
+    Ok(guard.startup_status())
+}
+
+#[tauri::command]
+fn restart_python_engine(
+    app: tauri::AppHandle,
+    engine: tauri::State<'_, PythonEngine>,
+) -> Result<(), String> {
+    let log_directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    let sidecar_log = SidecarLog::new(log_directory)?;
+    engine.restart(sidecar_log)
+}
+
+#[tauri::command]
+fn open_diagnostic_logs(app: tauri::AppHandle) -> Result<(), String> {
+    let log_directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&log_directory).map_err(|error| error.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("explorer.exe");
+        command.arg(&log_directory);
+        return command
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open diagnostic log directory: {error}"));
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("open");
+        command.arg(&log_directory);
+        return command
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open diagnostic log directory: {error}"));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut command = Command::new("xdg-open");
+        command.arg(&log_directory);
+        return command
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open diagnostic log directory: {error}"));
+    }
+
+    #[allow(unreachable_code)]
+    Err("Opening diagnostic logs is not supported on this platform".to_string())
 }
 
 fn generate_random_token() -> String {
@@ -34,18 +201,12 @@ fn generate_random_token() -> String {
     rand::thread_rng().fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
-impl Drop for PythonEngine {
-    fn drop(&mut self) {
-        stop_python_engine(self);
-    }
-}
-
 #[derive(Debug)]
 struct EngineSupervisor {
     child: Option<Child>,
     port: Option<u16>,
     token: String,
-    ready: bool,
+    state: EngineStartupState,
     error: Option<String>,
 }
 
@@ -55,52 +216,80 @@ struct EngineReadyPayload {
 }
 
 impl EngineSupervisor {
-    fn start() -> Self {
-        let token = generate_random_token();
-        let mut supervisor = EngineSupervisor {
+    fn starting() -> Self {
+        Self {
             child: None,
             port: None,
-            token: token.clone(),
-            ready: false,
+            token: String::new(),
+            state: EngineStartupState::Starting,
             error: None,
-        };
+        }
+    }
 
-        let mut child = match spawn_python_engine(&token) {
+    fn start(log: SidecarLog, startup_cancelled: &AtomicBool) -> Self {
+        let token = generate_random_token();
+        let mut supervisor = EngineSupervisor::starting();
+        supervisor.token = token.clone();
+
+        if startup_cancelled.load(Ordering::Acquire) {
+            supervisor.stop();
+            return supervisor;
+        }
+
+        let mut child = match spawn_python_engine(&token, &log) {
             Ok(child) => child,
             Err(error) => {
                 supervisor.error = Some(error);
+                supervisor.state = EngineStartupState::Failed;
                 return supervisor;
             }
         };
 
         if let Some(stderr) = child.stderr.take() {
-            drain_engine_pipe(stderr, "stderr");
+            drain_engine_pipe(stderr, "stderr", log.clone());
         }
 
         let stdout = match child.stdout.take() {
             Some(stdout) => stdout,
             None => {
                 let error = "Python engine stdout was not captured".to_string();
-                log_sidecar_error(&error);
+                log.error(&error);
                 stop_engine_child(child);
                 supervisor.error = Some(error);
+                supervisor.state = EngineStartupState::Failed;
                 return supervisor;
             }
         };
 
-        let ready_lines = spawn_stdout_reader(stdout);
-        match wait_for_engine_ready(&mut child, ready_lines, Duration::from_secs(20))
-            .and_then(|port| wait_for_engine_health(port, Duration::from_secs(20)).map(|_| port))
-        {
+        let ready_lines = spawn_stdout_reader(stdout, log.clone());
+        match wait_for_engine_ready(
+            &mut child,
+            ready_lines,
+            Duration::from_secs(20),
+            startup_cancelled,
+        )
+        .and_then(|port| {
+            wait_for_engine_health(port, Duration::from_secs(20), startup_cancelled).map(|_| port)
+        }) {
             Ok(port) => {
-                supervisor.port = Some(port);
-                supervisor.ready = true;
-                supervisor.child = Some(child);
+                if startup_cancelled.load(Ordering::Acquire) {
+                    stop_engine_child(child);
+                    supervisor.stop();
+                } else {
+                    supervisor.port = Some(port);
+                    supervisor.state = EngineStartupState::Ready;
+                    supervisor.child = Some(child);
+                }
             }
             Err(error) => {
-                log_sidecar_error(&format!("Python engine failed readiness: {}", error));
                 stop_engine_child(child);
-                supervisor.error = Some(error);
+                if startup_cancelled.load(Ordering::Acquire) {
+                    supervisor.stop();
+                } else {
+                    log.error(&format!("Python engine failed readiness: {}", error));
+                    supervisor.error = Some(error);
+                    supervisor.state = EngineStartupState::Failed;
+                }
             }
         }
 
@@ -108,7 +297,7 @@ impl EngineSupervisor {
     }
 
     fn engine_config(&self) -> Result<EngineConfig, String> {
-        if self.ready {
+        if self.state == EngineStartupState::Ready {
             if let Some(port) = self.port {
                 return Ok(EngineConfig {
                     port,
@@ -116,20 +305,57 @@ impl EngineSupervisor {
                 });
             }
         }
-        Err(self
-            .error
-            .clone()
-            .unwrap_or_else(|| "Python engine is not ready".to_string()))
+        match self.state {
+            EngineStartupState::Starting => Err("Python engine is still starting".to_string()),
+            EngineStartupState::Failed => Err(self
+                .error
+                .clone()
+                .unwrap_or_else(|| "Python engine failed to start".to_string())),
+            EngineStartupState::Stopped => Err("Python engine was stopped".to_string()),
+            EngineStartupState::Ready => {
+                Err("Python engine is missing its listening port".to_string())
+            }
+        }
+    }
+
+    fn startup_status(&self) -> EngineStartupStatus {
+        EngineStartupStatus {
+            state: self.state.clone(),
+            error: self.error.clone(),
+        }
+    }
+
+    fn stop(&mut self) {
+        if let Some(child) = self.child.take() {
+            stop_engine_child(child);
+        }
+        self.port = None;
+        self.state = EngineStartupState::Stopped;
+        self.error = None;
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let engine_supervisor = EngineSupervisor::start();
-
     tauri::Builder::default()
-        .manage(PythonEngine(Mutex::new(engine_supervisor)))
-        .invoke_handler(tauri::generate_handler![get_engine_config])
+        .setup(|app| {
+            retire_legacy_temp_sidecar_log().map_err(std::io::Error::other)?;
+            let log_directory = app
+                .path()
+                .app_log_dir()
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            let sidecar_log = SidecarLog::new(log_directory).map_err(std::io::Error::other)?;
+            let engine = PythonEngine::starting();
+            app.manage(engine.clone());
+            engine.start_in_background(sidecar_log);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_engine_config,
+            get_engine_startup_status,
+            restart_python_engine,
+            open_diagnostic_logs
+        ])
         .on_window_event(|window, event| {
             if matches!(
                 event,
@@ -143,26 +369,10 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running DBFox");
 }
-fn log_sidecar_error(message: &str) {
-    let log_path = std::env::temp_dir().join("dbfox-sidecar.log");
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs().to_string())
-        .unwrap_or_default();
-    let entry = format!("[{}] {}\n", ts, message);
-    let _ = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
-    eprintln!("{}", message);
-}
-
 fn stop_python_engine(engine: &PythonEngine) {
-    if let Ok(mut guard) = engine.0.lock() {
-        if let Some(child) = guard.child.take() {
-            stop_engine_child(child);
-        }
+    engine.0.startup_cancelled.store(true, Ordering::Release);
+    if let Ok(mut guard) = engine.0.supervisor.lock() {
+        guard.stop();
     }
 }
 
@@ -215,10 +425,7 @@ fn sidecar_candidate_paths(exe_dir: &Path) -> Vec<PathBuf> {
             format!("dbfox-engine-{}.exe", triplet),
         ]
     } else {
-        vec![
-            "dbfox-engine".into(),
-            format!("dbfox-engine-{}", triplet),
-        ]
+        vec!["dbfox-engine".into(), format!("dbfox-engine-{}", triplet)]
     };
 
     for name in &names {
@@ -238,7 +445,7 @@ fn parse_engine_ready_line(line: &str) -> Option<u16> {
         .map(|ready| ready.port)
 }
 
-fn spawn_stdout_reader<R>(stdout: R) -> mpsc::Receiver<String>
+fn spawn_stdout_reader<R>(stdout: R, log: SidecarLog) -> mpsc::Receiver<String>
 where
     R: Read + Send + 'static,
 {
@@ -251,7 +458,7 @@ where
                     let _ = tx.send(line);
                 }
                 Err(error) => {
-                    log_sidecar_error(&format!("Failed reading Python engine stdout: {}", error));
+                    log.error(&format!("Failed reading Python engine stdout: {}", error));
                     break;
                 }
             }
@@ -260,14 +467,32 @@ where
     rx
 }
 
-fn drain_engine_pipe<R>(pipe: R, stream_name: &'static str)
+fn drain_engine_pipe<R>(pipe: R, stream_name: &'static str, log: SidecarLog)
 where
     R: Read + Send + 'static,
 {
     std::thread::spawn(move || {
         let reader = BufReader::new(pipe);
-        for line in reader.lines().flatten() {
-            log_sidecar_error(&format!("Python engine {}: {}", stream_name, line));
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    // The engine already owns redacted diagnostics.  Do not duplicate
+                    // raw stdout/stderr here because a third-party library can emit
+                    // credential-bearing request context.
+                    log.error(&format!(
+                        "Python engine {} emitted {} bytes of diagnostic output.",
+                        stream_name,
+                        line.len()
+                    ));
+                }
+                Err(error) => {
+                    log.error(&format!(
+                        "Failed reading Python engine {}: {}",
+                        stream_name, error
+                    ));
+                    break;
+                }
+            }
         }
     });
 }
@@ -276,9 +501,13 @@ fn wait_for_engine_ready(
     child: &mut Child,
     lines: mpsc::Receiver<String>,
     timeout: Duration,
+    startup_cancelled: &AtomicBool,
 ) -> Result<u16, String> {
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
+        if startup_cancelled.load(Ordering::Acquire) {
+            return Err("Python engine startup was cancelled".to_string());
+        }
         match lines.recv_timeout(Duration::from_millis(100)) {
             Ok(line) => {
                 if let Some(port) = parse_engine_ready_line(&line) {
@@ -300,10 +529,17 @@ fn wait_for_engine_ready(
     Err("Timed out waiting for Python engine ready line".to_string())
 }
 
-fn wait_for_engine_health(port: u16, timeout: Duration) -> Result<(), String> {
+fn wait_for_engine_health(
+    port: u16,
+    timeout: Duration,
+    startup_cancelled: &AtomicBool,
+) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     let mut last_error = "health endpoint was not reachable".to_string();
     while Instant::now() < deadline {
+        if startup_cancelled.load(Ordering::Acquire) {
+            return Err("Python engine startup was cancelled".to_string());
+        }
         match probe_engine_health(port) {
             Ok(()) => return Ok(()),
             Err(error) => last_error = error,
@@ -340,7 +576,7 @@ fn python_dev_engine_args() -> [&'static str; 3] {
     ["-m", "engine.main", "--no-reload"]
 }
 
-fn spawn_python_engine(token: &str) -> Result<Child, String> {
+fn spawn_python_engine(token: &str, log: &SidecarLog) -> Result<Child, String> {
     if cfg!(debug_assertions) {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -364,7 +600,7 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
             }
             Err(e) => {
                 let error = format!("Failed to start Python Dev engine: {}", e);
-                log_sidecar_error(&error);
+                log.error(&error);
                 Err(error)
             }
         }
@@ -374,7 +610,7 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
             Ok(path) => path,
             Err(e) => {
                 let error = format!("Unable to resolve current exe path: {}", e);
-                log_sidecar_error(&error);
+                log.error(&error);
                 return Err(error);
             }
         };
@@ -382,7 +618,7 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
             Some(dir) => dir,
             None => {
                 let error = "Unable to resolve exe parent directory".to_string();
-                log_sidecar_error(&error);
+                log.error(&error);
                 return Err(error);
             }
         };
@@ -405,11 +641,8 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
                 Ok(child)
             }
             Err(e) => {
-                let error = format!(
-                    "Failed to start Sidecar Engine at {:?}: {}",
-                    final_path, e
-                );
-                log_sidecar_error(&error);
+                let error = format!("Failed to start Sidecar Engine at {:?}: {}", final_path, e);
+                log.error(&error);
                 Err(error)
             }
         }
@@ -419,6 +652,14 @@ fn spawn_python_engine(token: &str) -> Result<Child, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_log_directory(label: &str) -> PathBuf {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should be after the Unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("dbfox-sidecar-log-test-{}-{}", label, nonce))
+    }
 
     #[test]
     fn sidecar_candidates_include_generic_binary_next_to_app() {
@@ -455,7 +696,10 @@ mod tests {
 
     #[test]
     fn ignores_non_ready_stdout_line() {
-        assert_eq!(parse_engine_ready_line("INFO: started server process"), None);
+        assert_eq!(
+            parse_engine_ready_line("INFO: started server process"),
+            None
+        );
     }
 
     #[test]
@@ -472,12 +716,61 @@ mod tests {
             child: None,
             port: Some(18731),
             token: "test-token".to_string(),
-            ready: true,
+            state: EngineStartupState::Ready,
             error: None,
         };
 
-        let config = supervisor.engine_config().expect("ready supervisor should expose config");
+        let config = supervisor
+            .engine_config()
+            .expect("ready supervisor should expose config");
         assert_eq!(config.port, 18731);
         assert_eq!(config.token, "test-token");
+    }
+
+    #[test]
+    fn supervisor_exposes_starting_and_stopped_lifecycle_states() {
+        let mut supervisor = EngineSupervisor::starting();
+        assert_eq!(
+            supervisor.startup_status().state,
+            EngineStartupState::Starting
+        );
+        assert!(supervisor.engine_config().is_err());
+
+        supervisor.stop();
+        assert_eq!(
+            supervisor.startup_status().state,
+            EngineStartupState::Stopped
+        );
+        assert!(supervisor.engine_config().is_err());
+    }
+
+    #[test]
+    fn sidecar_log_redacts_sensitive_content_and_rotates() {
+        let directory = test_log_directory("redact-rotate");
+        let log = SidecarLog::with_limits(directory.clone(), 1, 1)
+            .expect("test sidecar log directory should be creatable");
+
+        log.error("safe startup diagnostic");
+        log.error("token=must-not-be-persisted");
+
+        let current = fs::read_to_string(log.log_path()).expect("current log should exist");
+        let backup = fs::read_to_string(log.log_path().with_extension("log.1"))
+            .expect("rotated backup should exist");
+        assert!(current.contains("[REDACTED sidecar diagnostic"));
+        assert!(backup.contains("safe startup diagnostic"));
+        assert!(!current.contains("must-not-be-persisted"));
+        assert!(!backup.contains("must-not-be-persisted"));
+
+        fs::remove_dir_all(directory).expect("test sidecar log directory should be removable");
+    }
+
+    #[test]
+    fn sidecar_log_redacts_urls_and_bounds_non_sensitive_messages() {
+        assert_eq!(
+            redact_sidecar_log_message("https://example.invalid/request"),
+            "[REDACTED sidecar diagnostic containing sensitive-looking data]"
+        );
+        let oversized = "x".repeat(SIDECAR_LOG_MAX_MESSAGE_CHARS + 1);
+        assert!(redact_sidecar_log_message(&oversized).ends_with("… [truncated]"));
     }
 }
