@@ -38,13 +38,10 @@ describe("api type contracts", () => {
 
   it("does not expose rows-returning query execution clients in the desktop app", () => {
     const queryClient = workspaceSource("src/lib/api/query.ts");
-    const engineApi = workspaceSource("src/features/engine/engineApi.ts");
     const queryTypes = groupedTypesSource("query.ts");
 
     expect(queryClient).not.toContain("/query/execute");
     expect(queryClient).not.toContain("executeSql");
-    expect(engineApi).not.toContain("executeSql");
-    expect(engineApi).not.toContain("EngineSqlResult");
     expect(queryTypes).not.toContain("export interface QueryResult");
     expect(existsSync(resolve(process.cwd(), "src/components/ConsoleTranscript.tsx"))).toBe(false);
   });

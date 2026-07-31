@@ -85,13 +85,11 @@ describe("SQL Console tab state isolation", () => {
     const ws = read("features/workspace/SqlConsoleWorkspace.tsx");
     const conversationWorkspace = read("features/conversation/workspace/ConversationWorkspace.tsx");
     const messageList = read("features/conversation/workspace/MessageList.tsx");
-    const artifactRenderer = read("features/workspace/artifacts/ArtifactRenderer.tsx");
     const sqlArtifact = read("features/workspace/artifacts/SqlArtifactView.tsx");
 
     expect(ws).not.toContain("onSetSqlQuery");
     expect(conversationWorkspace).not.toContain("onSetSqlQuery");
     expect(messageList).not.toContain("onSetSqlQuery");
-    expect(artifactRenderer).not.toContain("onSetSqlQuery");
     expect(sqlArtifact).not.toContain("onSetSqlQuery");
   });
 

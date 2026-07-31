@@ -185,13 +185,6 @@
            transition-colors;
   }
 
-  /* ── DataTable menu items (used in embedded style) ── */
-  .data-table-menu-item {
-    @apply flex items-center gap-2 w-full px-2 py-1.5 text-[12px] text-left
-           text-[hsl(var(--foreground))] border-none bg-transparent
-           rounded cursor-pointer hover:bg-[hsl(var(--primary)/0.08)] hover:text-[hsl(var(--primary))]
-           transition-colors;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════

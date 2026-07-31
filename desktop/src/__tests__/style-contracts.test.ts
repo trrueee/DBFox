@@ -99,20 +99,6 @@ const utilityClassPattern = /\b(?:sm:max-w-|p-\d|px-\d|py-\d|gap-\d|space-y-|bor
 
 const surfaces = [
   {
-    sourcePath: join(componentDir, "ConfirmDialog.tsx"),
-    cssPath: join(componentDir, "ConfirmDialog.css"),
-    importStatement: 'import "./ConfirmDialog.css"',
-    selectors: [
-      ".confirm-dialog-content",
-      ".confirm-dialog-title-row",
-      ".confirm-dialog-icon",
-      ".confirm-dialog-icon--danger",
-      ".confirm-dialog-icon--warning",
-      ".confirm-dialog-icon--info",
-      ".confirm-dialog-message",
-    ],
-  },
-  {
     sourcePath: join(componentDir, "DangerConfirmDialog.tsx"),
     cssPath: join(componentDir, "DangerConfirmDialog.css"),
     importStatement: 'import "./DangerConfirmDialog.css"',
@@ -324,199 +310,6 @@ describe("Toast Radix foundation", () => {
     for (const selector of requiredSelectors) {
       expect(css).toContain(selector);
     }
-  });
-});
-
-}
-
-// Source: desktop/src/components/data-grid/__tests__/DataGridCell.styles.test.ts
-{
-
-const dataGridCellSource = join(process.cwd(), "src/components/data-grid/DataGridCell.tsx");
-const cellValuePreviewSource = join(process.cwd(), "src/components/data-grid/CellValuePreview.tsx");
-const cellValuePreviewCss = join(process.cwd(), "src/components/data-grid/CellValuePreview.css");
-const dataTableSource = join(process.cwd(), "src/components/DataTable.tsx");
-
-describe("DataGridCell preview foundation", () => {
-  it("delegates long content positioning to the shared DBFox HoverCard preview", () => {
-    const source = readFileSync(dataGridCellSource, "utf8");
-    const previewSource = readFileSync(cellValuePreviewSource, "utf8");
-
-    expect(source).toContain("CellValuePreview");
-    expect(source).not.toContain("HoverCard");
-    expect(previewSource).toContain("HoverCard");
-    expect(previewSource).toContain("HoverCardContent");
-    expect(previewSource).toContain("HoverCardTrigger");
-    expect(source).not.toContain("onPreviewChange");
-    expect(source).not.toContain("getBoundingClientRect");
-    expect(source).not.toContain("DOMRect");
-    expect(source).not.toContain("style={{");
-    expect(previewSource).not.toContain("style={{");
-  });
-
-  it("removes the parent-level fixed preview overlay and keeps preview styling local", () => {
-    const tableSource = readFileSync(dataTableSource, "utf8");
-    const css = readFileSync(cellValuePreviewCss, "utf8");
-
-    expect(tableSource).not.toContain("const [preview");
-    expect(tableSource).not.toContain("setPreview");
-    expect(tableSource).not.toContain("window.innerWidth");
-    expect(tableSource).not.toContain("data-grid-preview animate-fade-in");
-
-    expect(css).toContain(".dbfox-cell-preview-trigger");
-    expect(css).toContain(".dbfox-cell-preview-card");
-    expect(css).toContain(".dbfox-cell-preview-header");
-    expect(css).toContain(".dbfox-cell-preview-body");
-    expect(css).toContain(".dbfox-cell-preview-footer");
-    expect(css).not.toContain("position: fixed");
-  });
-});
-
-}
-
-// Source: desktop/src/components/data-grid/__tests__/DataGridColumnMenu.styles.test.ts
-{
-
-const dataTableSource = join(process.cwd(), "src/components/DataTable.tsx");
-const headerCellSource = join(process.cwd(), "src/components/data-grid/DataGridHeaderCell.tsx");
-const columnMenuSource = join(process.cwd(), "src/components/data-grid/DataGridColumnMenu.tsx");
-const dataGridCss = join(process.cwd(), "src/components/data-grid/data-grid.css");
-
-describe("DataGrid column menu foundation", () => {
-  it("uses DBFox DropdownMenu instead of parent-managed menu state", () => {
-    const tableSource = readFileSync(dataTableSource, "utf8");
-    const headerSource = readFileSync(headerCellSource, "utf8");
-    const menuSource = readFileSync(columnMenuSource, "utf8");
-
-    expect(headerSource).toContain("DropdownMenu");
-    expect(headerSource).toContain("DropdownMenuTrigger");
-    expect(headerSource).toContain("Tooltip");
-    expect(headerSource).toContain("TooltipTrigger");
-    expect(headerSource).toContain("TooltipContent");
-    expect(headerSource).toContain("列操作");
-    expect(menuSource).toContain("DropdownMenuContent");
-    expect(menuSource).toContain("DropdownMenuItem");
-    expect(menuSource).not.toContain('className="data-grid-menu" onClick');
-
-    expect(tableSource).not.toContain("openColumnMenu");
-    expect(tableSource).not.toContain("setOpenColumnMenu");
-    expect(headerSource).not.toContain("menuOpen");
-    expect(headerSource).not.toContain("onToggleMenu");
-  });
-
-  it("lets Radix own overlay positioning while DBFox owns menu appearance", () => {
-    const css = readFileSync(dataGridCss, "utf8");
-
-    expect(css).toContain(".data-grid-menu");
-    expect(css).toContain(".data-grid-menu-item");
-    expect(css).not.toContain("position: absolute");
-    expect(css).not.toContain("top: 30px");
-    expect(css).not.toContain("right: 0");
-  });
-});
-
-}
-
-// Source: desktop/src/components/data-grid/__tests__/DataGridContextMenu.styles.test.ts
-{
-
-const dataTableSource = join(process.cwd(), "src/components/DataTable.tsx");
-const contextMenuSource = join(process.cwd(), "src/components/data-grid/DataGridContextMenu.tsx");
-const typesSource = join(process.cwd(), "src/components/data-grid/types.ts");
-const dataGridCss = join(process.cwd(), "src/components/data-grid/data-grid.css");
-
-describe("DataGrid context menu foundation", () => {
-  it("uses DBFox ContextMenu instead of parent-managed x/y state", () => {
-    const tableSource = readFileSync(dataTableSource, "utf8");
-    const menuSource = readFileSync(contextMenuSource, "utf8");
-    const types = readFileSync(typesSource, "utf8");
-
-    expect(tableSource).toContain("ContextMenu");
-    expect(tableSource).toContain("ContextMenuTrigger");
-    expect(menuSource).toContain("ContextMenuContent");
-    expect(menuSource).toContain("ContextMenuItem");
-    expect(menuSource).toContain("ContextMenuSeparator");
-
-    expect(tableSource).not.toContain("setContextMenu");
-    expect(tableSource).not.toContain("contextMenu");
-    expect(tableSource).not.toContain("clientX");
-    expect(tableSource).not.toContain("clientY");
-    expect(types).not.toContain("DataGridContextMenuState");
-  });
-
-  it("removes fixed backdrop positioning while keeping DBFox menu styling local", () => {
-    const menuSource = readFileSync(contextMenuSource, "utf8");
-    const css = readFileSync(dataGridCss, "utf8");
-    const contextMenuCss = css.match(/\.data-grid-context-menu\s*\{[\s\S]*?\}/)?.[0] ?? "";
-
-    expect(menuSource).not.toContain('style={{ position: "fixed"');
-    expect(menuSource).not.toContain("style={{ left:");
-    expect(menuSource).not.toContain("onClose");
-    expect(contextMenuCss).toContain(".data-grid-context-menu");
-    expect(contextMenuCss).not.toContain("position: fixed");
-    expect(contextMenuCss).not.toContain("z-index: 3000");
-  });
-});
-
-}
-
-// Source: desktop/src/components/data-grid/__tests__/DataTableTanStackCore.styles.test.ts
-{
-
-const dataTableSource = join(process.cwd(), "src/components/DataTable.tsx");
-const dataGridCss = join(process.cwd(), "src/components/data-grid/data-grid.css");
-const packageJson = join(process.cwd(), "package.json");
-
-describe("DataTable TanStack core", () => {
-  it("uses TanStack Table for sorting, filtering, column visibility, and row modeling", () => {
-    const source = readFileSync(dataTableSource, "utf8");
-    const manifest = readFileSync(packageJson, "utf8");
-
-    expect(manifest).toContain('"@tanstack/react-table"');
-    expect(source).toContain('from "@tanstack/react-table"');
-    expect(source).toContain("useReactTable");
-    expect(source).toContain("getCoreRowModel");
-    expect(source).toContain("getFilteredRowModel");
-    expect(source).toContain("getSortedRowModel");
-    expect(source).toContain("table.getRowModel().rows");
-    expect(source).not.toContain("useDataTableView");
-    expect(source).not.toContain("visibleRows.map");
-  });
-
-  it("keeps the data-grid visual frame polished with local CSS boundaries", () => {
-    const css = readFileSync(dataGridCss, "utf8");
-
-    expect(css).toMatch(/\.data-grid-root\s*{[^}]*border:\s*1px solid var\(--border-light\);/s);
-    expect(css).toMatch(/\.data-grid-root\s*{[^}]*border-radius:\s*8px;/s);
-    expect(css).toMatch(/\.data-grid-root\s*{[^}]*box-shadow:/s);
-    expect(css).toMatch(/\.data-grid-table\s*{[^}]*border-collapse:\s*separate;/s);
-    expect(css).toMatch(/\.data-grid-table\s*{[^}]*border-spacing:\s*0;/s);
-  });
-});
-
-}
-
-// Source: desktop/src/components/data-grid/__tests__/DataTableVirtualization.styles.test.ts
-{
-
-const dataTableSource = join(process.cwd(), "src/components/DataTable.tsx");
-const dataGridCss = join(process.cwd(), "src/components/data-grid/data-grid.css");
-const packageJson = join(process.cwd(), "package.json");
-
-describe("DataTable virtualization foundation", () => {
-  it("uses TanStack Virtual for large result rendering without handwritten row-window math", () => {
-    const source = readFileSync(dataTableSource, "utf8");
-    const css = readFileSync(dataGridCss, "utf8");
-    const manifest = readFileSync(packageJson, "utf8");
-
-    expect(manifest).toContain('"@tanstack/react-virtual"');
-    expect(source).toContain('from "@tanstack/react-virtual"');
-    expect(source).toContain("useVirtualizer");
-    expect(source).toContain("rowVirtualizer");
-    expect(source).toContain("virtualRows.map");
-    expect(source).not.toContain("visibleRows.map((row, rowIndex)");
-    expect(css).toContain(".data-grid-virtual-spacer");
-    expect(css).toContain(".data-grid-virtual-spacer-cell");
   });
 });
 
@@ -2124,41 +1917,6 @@ describe("TablePreviewPane styles", () => {
 
 }
 
-// Source: desktop/src/features/workspace/artifacts/__tests__/EmptyArtifactsState.styles.test.ts
-{
-
-const emptyArtifactsSource = join(process.cwd(), "src/features/workspace/artifacts/EmptyArtifactsState.tsx");
-const emptyArtifactsCss = join(process.cwd(), "src/features/workspace/artifacts/EmptyArtifactsState.css");
-const emptyArtifactsAppCss = join(process.cwd(), "src/App.css");
-
-const emptyArtifactsSelectors = [
-  ".hifi-ai-card",
-  ".hifi-ai-card-header",
-  ".hifi-ai-card-body",
-  ".hifi-artifact-empty",
-  ".hifi-artifact-empty-header",
-  ".hifi-artifact-empty-icon",
-  ".hifi-artifact-empty-body",
-];
-
-describe("EmptyArtifactsState styles", () => {
-  it("keeps empty artifact presentation in the artifact feature stylesheet", () => {
-    const source = readFileSync(emptyArtifactsSource, "utf8");
-    const globalCss = readFileSync(emptyArtifactsAppCss, "utf8");
-
-    expect(source).toContain('import "./EmptyArtifactsState.css";');
-    expect(existsSync(emptyArtifactsCss)).toBe(true);
-
-    const localCss = readFileSync(emptyArtifactsCss, "utf8");
-    for (const selector of emptyArtifactsSelectors) {
-      expect(localCss).toContain(selector);
-      expect(globalCss).not.toContain(selector);
-    }
-  });
-});
-
-}
-
 // Source: desktop/src/pages/__tests__/DiagnosticsPage.styles.test.ts
 {
 
@@ -2537,7 +2295,6 @@ describe("agent visual tokens", () => {
     for (const relativePath of [
       "App.css",
       "features/conversation/workspace/conversationWorkspace.css",
-      "components/data-grid/data-grid.css",
     ]) {
       const source = read(relativePath);
       expect(source, relativePath).not.toMatch(/background:\s*#(?:fff|ffffff|f8fafc|f1f5f9|fbfcfe)\b/i);
