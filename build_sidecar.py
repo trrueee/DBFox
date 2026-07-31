@@ -28,6 +28,7 @@ ENGINE_DIR = ROOT / "engine"
 DESKTOP_DIR = ROOT / "desktop"
 BINARIES_DIR = DESKTOP_DIR / "src-tauri" / "binaries"
 BUILD_VENV = ROOT / ".build_venv"
+BUILD_LOCK = ROOT / "requirements-build.lock"
 
 
 def get_target_triplet() -> str:
@@ -82,7 +83,6 @@ HIDDEN_IMPORTS = [
     "dotenv",
     "python_multipart",
     "openai",
-    "langsmith",
 ]
 
 SIDECAR_RUNTIME_EXCLUDED_DIRS = {
@@ -120,7 +120,7 @@ def _venv_python() -> str:
             f"  [FAIL] 构建虚拟环境未找到: {BUILD_VENV}\n"
             f"  请先创建并安装依赖:\n"
             f"    python -m venv {BUILD_VENV}\n"
-            f"    {BUILD_VENV / 'Scripts' / 'pip'} install -r requirements-build.txt",
+            f"    {BUILD_VENV / 'Scripts' / 'pip'} install --require-hashes -r requirements-build.lock",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -129,6 +129,35 @@ def _venv_python() -> str:
 
 def generate_token() -> str:
     return secrets.token_hex(32)
+
+
+def sync_build_environment(python_exe: str) -> None:
+    uv_exe = shutil.which("uv")
+    if uv_exe is None:
+        print(
+            "  [FAIL] uv is required for reproducible release builds.\n"
+            "  Install uv, then rerun the build.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if not BUILD_LOCK.exists():
+        print(f"  [FAIL] Build lock file not found: {BUILD_LOCK}", file=sys.stderr)
+        sys.exit(1)
+    result = subprocess.run(
+        [
+            uv_exe,
+            "pip",
+            "sync",
+            str(BUILD_LOCK),
+            "--python",
+            python_exe,
+        ],
+        cwd=str(ROOT),
+    )
+    if result.returncode != 0:
+        print("  [FAIL] Locked build environment sync failed", file=sys.stderr)
+        sys.exit(result.returncode)
+    print(f"  [OK] Synced from {BUILD_LOCK.name}")
 
 
 def write_env_local(token: str) -> Path:
@@ -179,7 +208,10 @@ def build_pyinstaller(python_exe: str) -> Path:
     cmd = [
         python_exe, "-m", "PyInstaller",
         "--onefile",
-        "--noconsole",
+        # The desktop supervisor reads a machine protocol from stdout
+        # (DBFOX_ENGINE_READY / DBFOX_ENGINE_STAGE).  Keep real stdio handles;
+        # the Rust parent suppresses the Windows console window when spawning.
+        "--console",
         "--name", "dbfox-engine",
         "--distpath", str(dist_dir),
         "--workpath", str(work_dir),
@@ -236,19 +268,25 @@ def main() -> None:
     # material.  A failed package build must not leave a stale dev token behind.
     python_exe = None if args.token_only else _venv_python()
 
-    token = generate_token()
-    print(f"\n[1/3] Dev token ({len(token)} hex chars)")
-    write_env_local(token)
-
     if args.token_only:
+        token = generate_token()
+        print(f"\n[1/1] Dev token ({len(token)} hex chars)")
+        write_env_local(token)
         print("\n  Done (token-only mode).")
         return
 
-    print(f"\n[2/3] PyInstaller build")
     assert python_exe is not None
+    print("\n[1/4] Sync locked build environment")
+    sync_build_environment(python_exe)
+
+    token = generate_token()
+    print(f"\n[2/4] Dev token ({len(token)} hex chars)")
+    write_env_local(token)
+
+    print(f"\n[3/4] PyInstaller build")
     binary = build_pyinstaller(python_exe)
 
-    print("\n[3/3] Install to Tauri binaries")
+    print("\n[4/4] Install to Tauri binaries")
     dest = install_sidecar(binary)
 
     shutil.rmtree(ROOT / "pyinstaller_dist", ignore_errors=True)

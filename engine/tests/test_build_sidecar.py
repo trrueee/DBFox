@@ -28,6 +28,18 @@ def test_tauri_package_build_rebuilds_sidecar_before_frontend() -> None:
     assert before_build.index("build_sidecar.py") < before_build.index("npm run build")
 
 
+def test_packaged_sidecar_preserves_control_stream_without_showing_a_window() -> None:
+    root = Path(__file__).resolve().parents[2]
+    builder_source = Path(build_sidecar.__file__).read_text(encoding="utf-8")
+    supervisor_source = (root / "desktop" / "src-tauri" / "src" / "lib.rs").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"--console"' in builder_source
+    assert '"--noconsole"' not in builder_source
+    assert "command.creation_flags(CREATE_NO_WINDOW);" in supervisor_source
+
+
 def test_tauri_config_does_not_disable_platform_security_features() -> None:
     config_path = Path(__file__).resolve().parents[2] / "desktop" / "src-tauri" / "tauri.conf.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -65,7 +77,7 @@ def test_dynamic_runtime_dependencies_are_declared_for_the_frozen_sidecar() -> N
     assert any(line.startswith("openai") for line in requirements.splitlines())
     assert not any(line.startswith(("langgraph", "langchain", "langsmith")) for line in requirements.splitlines())
     assert "openai" in build_sidecar.HIDDEN_IMPORTS
-    assert "langsmith" in build_sidecar.HIDDEN_IMPORTS
+    assert "langsmith" not in build_sidecar.HIDDEN_IMPORTS
 
 
 def test_sidecar_build_dependencies_are_separate_from_runtime_dependencies() -> None:

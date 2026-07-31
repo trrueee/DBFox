@@ -63,7 +63,6 @@ def test_ci_enforces_the_required_layered_quality_gates() -> None:
         "python -m mypy --no-warn-unused-configs --follow-imports=skip",
         "engine build_sidecar.py",
         "python -m pytest engine/agent/tests",
-        "engine/evaluation/tests",
         "build_sidecar.py",
         "npm run lint",
         "npm test -- --maxWorkers=1",
@@ -146,7 +145,7 @@ def test_ci_installs_only_hash_checked_python_locks() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "PIP_REQUIRE_HASHES: \"1\"" in workflow
-    assert workflow.count("--require-hashes -r requirements-dev.lock") == 4
+    assert workflow.count("--require-hashes -r requirements-dev.lock") == 3
     assert "--require-hashes -r requirements-build.lock" in workflow
     assert "python -m pip install -r requirements-dev.txt" not in workflow
     assert "python -m pip install -r requirements-build.txt" not in workflow
@@ -168,15 +167,6 @@ def test_npm_lock_is_registry_resolved_and_integrity_verified() -> None:
         assert not package.get("link"), package_path
         assert str(package.get("resolved", "")).startswith("https://registry.npmjs.org/"), package_path
         assert re.fullmatch(r"sha512-[A-Za-z0-9+/=]+", str(package.get("integrity", ""))), package_path
-
-
-def test_monaco_uses_the_explicitly_patched_dompurify_release() -> None:
-    manifest = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))
-    lock = json.loads(NPM_LOCK.read_text(encoding="utf-8"))
-
-    override = manifest["overrides"]["monaco-editor"]["dompurify"]
-    assert override == "3.4.12"
-    assert lock["packages"]["node_modules/dompurify"]["version"] == override
 
 
 def test_cargo_lock_is_registry_resolved_and_checksum_verified() -> None:

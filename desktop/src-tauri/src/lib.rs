@@ -60,7 +60,13 @@ impl PythonEngine {
     fn start_in_background(&self, log: SidecarLog) {
         let engine = self.clone();
         std::thread::spawn(move || {
-            let mut started = EngineSupervisor::start(log, &engine.0.startup_cancelled);
+            let progress_engine = engine.clone();
+            let mut started =
+                EngineSupervisor::start(log, &engine.0.startup_cancelled, move |stage| {
+                    if let Ok(mut current) = progress_engine.0.supervisor.lock() {
+                        current.stage = Some(stage.to_string());
+                    }
+                });
             if engine.0.startup_cancelled.load(Ordering::Acquire) {
                 started.stop();
                 return;
@@ -118,6 +124,7 @@ enum EngineStartupState {
 struct EngineStartupStatus {
     state: EngineStartupState,
     error: Option<String>,
+    stage: Option<String>,
 }
 
 #[tauri::command]
@@ -208,11 +215,17 @@ struct EngineSupervisor {
     token: String,
     state: EngineStartupState,
     error: Option<String>,
+    stage: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct EngineReadyPayload {
     port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+struct EngineStagePayload {
+    stage: String,
 }
 
 impl EngineSupervisor {
@@ -223,13 +236,18 @@ impl EngineSupervisor {
             token: String::new(),
             state: EngineStartupState::Starting,
             error: None,
+            stage: Some("starting".to_string()),
         }
     }
 
-    fn start(log: SidecarLog, startup_cancelled: &AtomicBool) -> Self {
+    fn start<F>(log: SidecarLog, startup_cancelled: &AtomicBool, on_stage: F) -> Self
+    where
+        F: Fn(&str),
+    {
         let token = generate_random_token();
         let mut supervisor = EngineSupervisor::starting();
         supervisor.token = token.clone();
+        on_stage("launching");
 
         if startup_cancelled.load(Ordering::Acquire) {
             supervisor.stop();
@@ -241,6 +259,7 @@ impl EngineSupervisor {
             Err(error) => {
                 supervisor.error = Some(error);
                 supervisor.state = EngineStartupState::Failed;
+                supervisor.stage = Some("failed".to_string());
                 return supervisor;
             }
         };
@@ -257,6 +276,7 @@ impl EngineSupervisor {
                 stop_engine_child(child);
                 supervisor.error = Some(error);
                 supervisor.state = EngineStartupState::Failed;
+                supervisor.stage = Some("failed".to_string());
                 return supervisor;
             }
         };
@@ -264,12 +284,21 @@ impl EngineSupervisor {
         let ready_lines = spawn_stdout_reader(stdout, log.clone());
         match wait_for_engine_ready(
             &mut child,
-            ready_lines,
+            &ready_lines,
             Duration::from_secs(20),
             startup_cancelled,
+            &on_stage,
         )
         .and_then(|port| {
-            wait_for_engine_health(port, Duration::from_secs(20), startup_cancelled).map(|_| port)
+            wait_for_engine_health(
+                &mut child,
+                port,
+                &ready_lines,
+                Duration::from_secs(20),
+                startup_cancelled,
+                &on_stage,
+            )
+            .map(|_| port)
         }) {
             Ok(port) => {
                 if startup_cancelled.load(Ordering::Acquire) {
@@ -278,6 +307,7 @@ impl EngineSupervisor {
                 } else {
                     supervisor.port = Some(port);
                     supervisor.state = EngineStartupState::Ready;
+                    supervisor.stage = Some("ready".to_string());
                     supervisor.child = Some(child);
                 }
             }
@@ -289,6 +319,7 @@ impl EngineSupervisor {
                     log.error(&format!("Python engine failed readiness: {}", error));
                     supervisor.error = Some(error);
                     supervisor.state = EngineStartupState::Failed;
+                    supervisor.stage = Some("failed".to_string());
                 }
             }
         }
@@ -322,6 +353,7 @@ impl EngineSupervisor {
         EngineStartupStatus {
             state: self.state.clone(),
             error: self.error.clone(),
+            stage: self.stage.clone(),
         }
     }
 
@@ -332,6 +364,7 @@ impl EngineSupervisor {
         self.port = None;
         self.state = EngineStartupState::Stopped;
         self.error = None;
+        self.stage = Some("stopped".to_string());
     }
 }
 
@@ -445,6 +478,13 @@ fn parse_engine_ready_line(line: &str) -> Option<u16> {
         .map(|ready| ready.port)
 }
 
+fn parse_engine_stage_line(line: &str) -> Option<String> {
+    let payload = line.strip_prefix("DBFOX_ENGINE_STAGE")?.trim();
+    serde_json::from_str::<EngineStagePayload>(payload)
+        .ok()
+        .map(|value| value.stage)
+}
+
 fn spawn_stdout_reader<R>(stdout: R, log: SidecarLog) -> mpsc::Receiver<String>
 where
     R: Read + Send + 'static,
@@ -497,12 +537,16 @@ where
     });
 }
 
-fn wait_for_engine_ready(
+fn wait_for_engine_ready<F>(
     child: &mut Child,
-    lines: mpsc::Receiver<String>,
+    lines: &mpsc::Receiver<String>,
     timeout: Duration,
     startup_cancelled: &AtomicBool,
-) -> Result<u16, String> {
+    on_stage: &F,
+) -> Result<u16, String>
+where
+    F: Fn(&str),
+{
     let deadline = Instant::now() + timeout;
     while Instant::now() < deadline {
         if startup_cancelled.load(Ordering::Acquire) {
@@ -511,7 +555,11 @@ fn wait_for_engine_ready(
         match lines.recv_timeout(Duration::from_millis(100)) {
             Ok(line) => {
                 if let Some(port) = parse_engine_ready_line(&line) {
+                    on_stage("initializing");
                     return Ok(port);
+                }
+                if let Some(stage) = parse_engine_stage_line(&line) {
+                    on_stage(&stage);
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -529,16 +577,33 @@ fn wait_for_engine_ready(
     Err("Timed out waiting for Python engine ready line".to_string())
 }
 
-fn wait_for_engine_health(
+fn wait_for_engine_health<F>(
+    child: &mut Child,
     port: u16,
+    lines: &mpsc::Receiver<String>,
     timeout: Duration,
     startup_cancelled: &AtomicBool,
-) -> Result<(), String> {
+    on_stage: &F,
+) -> Result<(), String>
+where
+    F: Fn(&str),
+{
     let deadline = Instant::now() + timeout;
     let mut last_error = "health endpoint was not reachable".to_string();
     while Instant::now() < deadline {
         if startup_cancelled.load(Ordering::Acquire) {
             return Err("Python engine startup was cancelled".to_string());
+        }
+        while let Ok(line) = lines.try_recv() {
+            if let Some(stage) = parse_engine_stage_line(&line) {
+                on_stage(&stage);
+            }
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return Err(format!(
+                "Python engine exited before becoming healthy: {} ({})",
+                status, last_error
+            ));
         }
         match probe_engine_health(port) {
             Ok(()) => return Ok(()),
@@ -546,7 +611,10 @@ fn wait_for_engine_health(
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    Err(last_error)
+    Err(format!(
+        "Timed out waiting for Python engine health endpoint: {}",
+        last_error
+    ))
 }
 
 fn probe_engine_health(port: u16) -> Result<(), String> {
@@ -628,14 +696,17 @@ fn spawn_python_engine(token: &str, log: &SidecarLog) -> Result<Child, String> {
 
         let final_path = sidecar_path.unwrap_or_else(|| candidates[0].clone());
 
-        match Command::new(&final_path)
+        let mut command = Command::new(&final_path);
+        command
             .env("DBFOX_ENGINE_PORT", "0")
             .env("DBFOX_ENGINE_TOKEN", token)
             .current_dir(exe_dir)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
+            .stderr(Stdio::piped());
+        #[cfg(target_os = "windows")]
+        command.creation_flags(CREATE_NO_WINDOW);
+
+        match command.spawn() {
             Ok(child) => {
                 println!("DBFox Sidecar Engine (Prod) started (pid: {})", child.id());
                 Ok(child)
@@ -703,6 +774,40 @@ mod tests {
     }
 
     #[test]
+    fn parses_engine_stage_stdout_line() {
+        let line = r#"DBFOX_ENGINE_STAGE {"stage":"migrating"}"#;
+        assert_eq!(parse_engine_stage_line(line), Some("migrating".to_string()));
+        assert_eq!(parse_engine_stage_line("INFO: migration started"), None);
+    }
+
+    #[test]
+    fn engine_health_wait_has_a_total_deadline() {
+        let mut child = Command::new("ping")
+            .args(["127.0.0.1", "-n", "6"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("test child should start");
+        let (_sender, receiver) = mpsc::channel();
+        let cancelled = AtomicBool::new(false);
+
+        let result = wait_for_engine_health(
+            &mut child,
+            1,
+            &receiver,
+            Duration::from_millis(1),
+            &cancelled,
+            &|_| {},
+        );
+        stop_engine_child(child);
+
+        assert!(result
+            .expect_err("health wait must time out")
+            .contains("Timed out waiting for Python engine health endpoint"));
+    }
+
+    #[test]
     fn dev_engine_args_disable_python_reload() {
         assert_eq!(
             python_dev_engine_args(),
@@ -718,6 +823,7 @@ mod tests {
             token: "test-token".to_string(),
             state: EngineStartupState::Ready,
             error: None,
+            stage: Some("ready".to_string()),
         };
 
         let config = supervisor
