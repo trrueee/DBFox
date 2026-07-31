@@ -3,32 +3,31 @@ from __future__ import annotations
 import logging
 from typing import cast
 
-from engine.app.errors import public_error, public_message
 from engine.app.safe_errors import (
     FixedErrorCode,
     SafeLogOperation,
     fixed_error_detail,
+    fixed_error_message,
     log_unexpected_exception,
 )
 
 
 def test_public_error_uses_only_fixed_catalog_entries() -> None:
-    detail = public_error(FixedErrorCode.CONSOLE_EXECUTION_ERROR)
+    detail = fixed_error_detail(FixedErrorCode.CONSOLE_EXECUTION_ERROR)
 
     assert detail == {
         "code": "CONSOLE_EXECUTION_ERROR",
         "message": "The SQL Console request could not be completed.",
     }
-    assert public_message(FixedErrorCode.SQL_EMPTY) == "SQL cannot be empty."
+    assert fixed_error_message(FixedErrorCode.SQL_EMPTY) == "SQL cannot be empty."
 
 
 def test_public_error_unknown_value_falls_back_without_rendering_input() -> None:
     sentinel = "public-error-secret-sentinel"
 
-    detail = public_error(cast(FixedErrorCode, f"caller-code-{sentinel}"))
-    direct_detail = fixed_error_detail(cast(FixedErrorCode, f"caller-code-{sentinel}"))
+    detail = fixed_error_detail(cast(FixedErrorCode, f"caller-code-{sentinel}"))
 
-    assert detail == direct_detail == {
+    assert detail == {
         "code": "INTERNAL_ERROR",
         "message": "The request could not be completed.",
     }

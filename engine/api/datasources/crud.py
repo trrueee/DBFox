@@ -14,9 +14,11 @@ from engine.app.safe_errors import (
     fixed_error_detail,
     log_unexpected_exception,
 )
-from engine.datasource import (
+from engine.connectivity.factory import (
     build_mysql_ssl_params,
     build_postgres_ssl_params,
+)
+from engine.datasource import (
     datasource_connection_dict,
     test_connection,
 )

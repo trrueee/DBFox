@@ -11,7 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from engine.json_codec import JsonCodecError, loads
 
@@ -75,7 +76,27 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
     db.flush()
 
     # 2. Fetch all tables and their columns
-    tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+    tables = list(
+        db.execute(
+            select(SchemaTable)
+            .options(selectinload(SchemaTable.columns))
+            .where(SchemaTable.data_source_id == datasource_id)
+        ).scalars()
+    )
+    foreign_table_ids = {
+        str(column.foreign_table_id)
+        for table in tables
+        for column in table.columns
+        if column.is_foreign_key and column.foreign_table_id
+    }
+    foreign_table_names = {
+        str(table_id): str(table_name)
+        for table_id, table_name in db.execute(
+            select(SchemaTable.id, SchemaTable.table_name).where(
+                SchemaTable.id.in_(foreign_table_ids)
+            )
+        )
+    } if foreign_table_ids else {}
 
     for table in tables:
         tags = _parse_string_list(table.semantic_tags)
@@ -87,11 +108,21 @@ def rebuild_search_docs(db: Session, datasource_id: str) -> None:
         col_descs = {str(c.column_name): c.ai_description for c in cols if c.ai_description}
 
         # Connected tables
-        fk_ids = {col.foreign_table_id for col in cols if col.is_foreign_key and col.foreign_table_id}
-        relation_text = None
-        if fk_ids:
-            targets = db.query(SchemaTable.table_name).filter(SchemaTable.id.in_(fk_ids)).all()
-            relation_text = ", ".join(sorted(str(t[0]) for t in targets)) or None
+        fk_ids = {
+            str(col.foreign_table_id)
+            for col in cols
+            if col.is_foreign_key and col.foreign_table_id
+        }
+        relation_text = (
+            ", ".join(
+                sorted(
+                    foreign_table_names[table_id]
+                    for table_id in fk_ids
+                    if table_id in foreign_table_names
+                )
+            )
+            or None
+        )
 
         search_text = build_table_search_text(
             table_schema=str(table.table_schema or ""),
@@ -278,6 +309,15 @@ class SchemaCatalogSync:
             .all()
         }
         incoming_table_keys: set[tuple[str, str]] = set()
+        existing_columns_by_table: dict[str, dict[str, SchemaColumn]] = {}
+        for column in db.execute(
+            select(SchemaColumn)
+            .join(SchemaTable, SchemaColumn.table_id == SchemaTable.id)
+            .where(SchemaTable.data_source_id == datasource_id)
+        ).scalars():
+            existing_columns_by_table.setdefault(str(column.table_id), {})[
+                str(column.column_name)
+            ] = column
 
         for table_inv in inventory.tables:
             table_key = _table_identity(table_inv.table_schema, table_inv.table_name)
@@ -312,7 +352,13 @@ class SchemaCatalogSync:
             existing_tables[table_key] = schema_table
 
             # Upsert columns
-            self._sync_columns(db, schema_table.id, table_inv, result)
+            self._sync_columns(
+                db,
+                schema_table.id,
+                table_inv,
+                result,
+                existing_columns=existing_columns_by_table.get(str(schema_table.id), {}),
+            )
 
         # Remove tables that no longer exist in the live datasource
         removed_keys = set(existing_tables.keys()) - incoming_table_keys
@@ -325,7 +371,13 @@ class SchemaCatalogSync:
             result.tables_removed += 1
 
         # Resolve foreign keys
-        all_tables = db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+        all_tables = list(
+            db.execute(
+                select(SchemaTable)
+                .options(selectinload(SchemaTable.columns))
+                .where(SchemaTable.data_source_id == datasource_id)
+            ).scalars()
+        )
         table_key_to_id = {_table_identity(t.table_schema, t.table_name): t.id for t in all_tables}
         table_ids_by_name: dict[str, list[str]] = {}
 
@@ -437,13 +489,10 @@ class SchemaCatalogSync:
         table_id: str,
         table_inv: TableInventory,
         result: SyncResult,
+        *,
+        existing_columns: dict[str, SchemaColumn],
     ) -> None:
-        existing_cols: dict[str, SchemaColumn] = {
-            c.column_name: c
-            for c in db.query(SchemaColumn)
-            .filter(SchemaColumn.table_id == table_id)
-            .all()
-        }
+        existing_cols = existing_columns
         incoming_col_names: set[str] = set()
 
         for col_inv in table_inv.columns:

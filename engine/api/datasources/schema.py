@@ -5,7 +5,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from engine.api.datasources.common import schema_column_to_dict, schema_table_to_dict
 from engine.db import get_db
@@ -42,7 +43,13 @@ class SchemaSyncRequest(BaseModel):
 
 
 def load_schema_tables(db: Session, datasource_id: str) -> list[SchemaTable]:
-    return db.query(SchemaTable).filter(SchemaTable.data_source_id == datasource_id).all()
+    return list(
+        db.execute(
+            select(SchemaTable)
+            .options(selectinload(SchemaTable.columns))
+            .where(SchemaTable.data_source_id == datasource_id)
+        ).scalars()
+    )
 
 
 @router.post(

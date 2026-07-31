@@ -9,8 +9,9 @@ from fastapi import HTTPException
 import engine.connectivity.resources as connectivity_resources_module
 import engine.datasource as datasource_module
 import engine.tunnel as tunnel_module
-from engine.datasource import build_postgres_ssl_params, test_connection as run_test_connection
+from engine.connectivity.factory import build_postgres_ssl_params
 from engine.connectivity.profile import ConnectionProfile
+from engine.datasource import test_connection as run_test_connection
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 
@@ -296,7 +297,7 @@ def test_postgres_ssl_params_map_shared_fields() -> None:
 
 
 from unittest.mock import MagicMock, patch
-from engine.datasource import TUNNEL_MANAGER, get_or_create_tunnel_for_dict, open_temporary_tunnel
+from engine.tunnel import TUNNEL_MANAGER, get_or_create_tunnel_for_dict, open_temporary_tunnel
 
 @patch("engine.tunnel.SSHTunnelForwarder")
 def test_temporary_tunnel_stops_on_success_and_failure(mock_tunnel_class) -> None:
@@ -420,7 +421,7 @@ def test_managed_tunnel_does_not_stop_on_test_connection(mock_tunnel_class) -> N
 
 @patch("engine.tunnel.TUNNEL_MANAGER")
 def test_close_active_tunnel_calls_manager(mock_manager) -> None:
-    from engine.datasource import close_active_tunnel
+    from engine.tunnel import close_active_tunnel
     close_active_tunnel("some_id")
     mock_manager.close_tunnel.assert_called_once_with("some_id")
 

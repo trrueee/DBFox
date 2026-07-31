@@ -1,8 +1,7 @@
 import pytest
 
-from engine.connectivity.factory import ConnectionFactory
+from engine.connectivity.factory import ConnectionFactory, build_mysql_ssl_params
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
-from engine.datasource import build_mysql_ssl_params
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import CredentialKind, InMemoryCredentialVault
 

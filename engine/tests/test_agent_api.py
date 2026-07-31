@@ -15,9 +15,10 @@ from fastapi import HTTPException
 from engine.api.agent import ResultPageRequest
 from engine.datasource import datasource_connection_dict
 from engine.projects.service import resolve_project_id, get_or_create_default_project, Project
-from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
+from engine.models import DEFAULT_PROJECT_ID, AgentArtifactRecord, AgentEventRecord, AgentRun, AgentSession, DataSource, SchemaColumn, SchemaTable
 from engine.sql.trust_gate import ExecutionSafetyDecision
 from engine.sql.result_view.fingerprint import result_source_fingerprint
+from engine.sql.result_view.models import ResultFilter, ResultSort
 
 
 def _add_pagination_source(
@@ -363,6 +364,19 @@ def test_console_execute_persists_sql_backed_artifact_chain(monkeypatch, db_sess
     assert run.datasource_generation == 11
     run_payload = json.loads(run.result_json)
     assert "rows" not in (run_payload.get("execution") or {})
+    completed_event = (
+        db_session.query(AgentEventRecord)
+        .filter(
+            AgentEventRecord.run_id == response.runId,
+            AgentEventRecord.type == "run.completed",
+        )
+        .one()
+    )
+    event_run = json.loads(completed_event.payload_json)["run"]
+    assert event_run["id"] == response.runId
+    assert event_run["session_id"] == response.sessionId
+    assert event_run["status"] == "completed"
+    assert event_run["version"] == run.version
 
 
 def test_result_page_rejects_descriptor_fingerprint_that_differs_from_source_artifact(db_session):
@@ -416,9 +430,9 @@ def test_table_result_page_uses_schema_table_source_for_derived_query(monkeypatc
             tableName="orders",
             page=1,
             pageSize=1,
-            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
             search="paid",
-            sort=[agent_module.ResultSort(column="amount", direction="desc")],
+            sort=[ResultSort(column="amount", direction="desc")],
         ),
         db_session,
     )
@@ -454,9 +468,9 @@ def test_table_result_export_streams_schema_table_source(monkeypatch, db_session
             datasourceId="ds-table-page",
             tableId="schema-table-page-orders",
             tableName="orders",
-            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
             search="paid",
-            sort=[agent_module.ResultSort(column="amount", direction="desc")],
+            sort=[ResultSort(column="amount", direction="desc")],
         ),
         db_session,
     )
@@ -535,7 +549,7 @@ def test_result_page_uses_persisted_safe_sql_for_derived_query(monkeypatch, db_s
         ResultPageRequest(
             page=1,
             pageSize=20,
-            sort=[agent_module.ResultSort(column="id", direction="desc")],
+            sort=[ResultSort(column="id", direction="desc")],
         ),
         db_session,
     )
@@ -578,7 +592,7 @@ def test_result_page_rejects_sort_columns_outside_source_artifact(monkeypatch, d
             ResultPageRequest(
                 page=1,
                 pageSize=20,
-                sort=[agent_module.ResultSort(column="users.password", direction="asc")],
+                sort=[ResultSort(column="users.password", direction="asc")],
             ),
             db_session,
         )
@@ -615,7 +629,7 @@ def test_result_page_applies_filters_and_search_to_derived_query(monkeypatch, db
         ResultPageRequest(
             page=1,
             pageSize=20,
-            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
             search="Acme",
         ),
         db_session,
@@ -663,7 +677,7 @@ def test_result_page_exact_count_uses_filtered_derived_query(monkeypatch, db_ses
         ResultPageRequest(
             page=1,
             pageSize=20,
-            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
             search="Acme",
             countMode="exact",
         ),
@@ -695,6 +709,38 @@ def test_result_page_request_rejects_invalid_pagination_bounds(page, page_size):
         )
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"page": 1, "pageSize": 20, "search": "x" * 513},
+        {
+            "page": 1,
+            "pageSize": 20,
+            "filters": [
+                {"column": "status", "operator": "equals", "value": "paid"}
+            ] * 17,
+        },
+        {
+            "page": 1,
+            "pageSize": 20,
+            "filters": [
+                {"column": "status", "operator": "equals", "value": "x" * 4097}
+            ],
+        },
+        {
+            "page": 1,
+            "pageSize": 20,
+            "filters": [
+                {"column": "status", "operator": "unknown", "value": "paid"}
+            ],
+        },
+    ],
+)
+def test_result_page_request_rejects_unbounded_query_inputs(payload):
+    with pytest.raises(ValidationError):
+        ResultPageRequest.model_validate(payload)
+
+
 def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch, db_session):
     result_id = _add_pagination_source(db_session)
 
@@ -709,7 +755,7 @@ def test_result_page_rejects_filter_columns_outside_source_artifact(monkeypatch,
             ResultPageRequest(
                 page=1,
                 pageSize=20,
-                filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
+                filters=[ResultFilter(column="users.password", operator="contains", value="x")],
             ),
             db_session,
         )
@@ -741,9 +787,9 @@ def test_result_export_streams_all_matching_rows(monkeypatch, db_session):
     response = agent_module.api_agent_result_export(
         result_id,
         agent_module.ResultExportRequest(
-            filters=[agent_module.ResultFilter(column="status", operator="equals", value="paid")],
+            filters=[ResultFilter(column="status", operator="equals", value="paid")],
             search="2026",
-            sort=[agent_module.ResultSort(column="created_at", direction="desc")],
+            sort=[ResultSort(column="created_at", direction="desc")],
         ),
         db_session,
     )
@@ -771,7 +817,7 @@ def test_result_export_rejects_filter_columns_outside_source_artifact(monkeypatc
         agent_module.api_agent_result_export(
             result_id,
             agent_module.ResultExportRequest(
-                filters=[agent_module.ResultFilter(column="users.password", operator="contains", value="x")],
+                filters=[ResultFilter(column="users.password", operator="contains", value="x")],
             ),
             db_session,
         )

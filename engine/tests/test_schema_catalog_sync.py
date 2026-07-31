@@ -14,6 +14,7 @@ from engine.environment.schema_catalog_sync import (
     SchemaCatalogSync,
     ensure_catalog,
 )
+from engine.api.datasources.schema import load_schema_tables
 from engine.models import DataSource, SchemaTable, SchemaColumn
 
 
@@ -234,6 +235,37 @@ def test_er_diagram_build_has_bounded_catalog_queries(
         event.remove(bind, "before_cursor_execute", record_statement)
 
     assert diagram["nodes"]
+    assert len(statements) == 2
+
+
+def test_schema_table_listing_has_bounded_catalog_queries(
+    db_session,
+    test_datasource,
+) -> None:
+    datasource_id = test_datasource.id
+    sync_schema(db_session, datasource_id)
+    db_session.expire_all()
+    statements: list[str] = []
+    bind = db_session.get_bind()
+
+    def record_statement(
+        _connection,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(bind, "before_cursor_execute", record_statement)
+    try:
+        tables = load_schema_tables(db_session, datasource_id)
+        assert sum(len(table.columns) for table in tables) > 0
+    finally:
+        event.remove(bind, "before_cursor_execute", record_statement)
+
     assert len(statements) == 2
 
 

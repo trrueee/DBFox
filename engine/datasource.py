@@ -1,4 +1,4 @@
-"""Compatibility entry points backed by the typed connectivity boundary."""
+"""Datasource profile projection and connection-test application service."""
 from __future__ import annotations
 
 import logging
@@ -7,20 +7,11 @@ from typing import Any, Mapping
 from engine.app.safe_errors import SafeLogOperation, log_unexpected_exception
 from engine.connectivity.factory import (
     ConnectionFactory,
-    build_mysql_ssl_params,
-    build_postgres_ssl_params,
 )
 from engine.connectivity.profile import ConnectionProfile, ConnectionPurpose
 from engine.errors import DataSourceConnectionError
 from engine.security.credential_vault import get_credential_vault
 from engine.sql.permissions import MySQLPermissionProbe, PostgresPermissionProbe, SQLitePermissionProbe
-from engine.tunnel import (
-    TUNNEL_MANAGER,
-    close_active_tunnel,
-    close_all_tunnels,
-    get_or_create_tunnel_for_dict,
-    open_temporary_tunnel,
-)
 
 
 logger = logging.getLogger("dbfox.datasource")

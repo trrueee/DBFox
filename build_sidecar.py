@@ -81,7 +81,6 @@ HIDDEN_IMPORTS = [
     "sqlglot",
     "httpx",
     "dotenv",
-    "python_multipart",
     "openai",
 ]
 

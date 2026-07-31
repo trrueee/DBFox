@@ -210,46 +210,45 @@ def api_agent_console_execute(req: ConsoleExecuteRequest, db: Session = Depends(
 # Agent Result Pagination API
 # ---------------------------------------------------------------------------
 
-class ResultSort(BaseModel):
-    column: str
-    direction: Literal["asc", "desc"]
-
-class ResultFilter(BaseModel):
-    column: str
-    operator: str
-    value: Any
-
 class ResultPageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     page: int = Field(ge=1)
     pageSize: int = Field(ge=1, le=500)
-    sort: list[ResultSort] | None = None
-    filters: list[ResultFilter] | None = None
-    search: str | None = None
+    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
+    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    search: str | None = Field(default=None, max_length=512)
     countMode: Literal["none", "exact", "estimate"] = "none"
 
 class TableResultPageRequest(BaseModel):
-    datasourceId: str
-    tableId: str | None = None
-    tableName: str
+    model_config = ConfigDict(extra="forbid")
+
+    datasourceId: str = Field(min_length=1, max_length=256)
+    tableId: str | None = Field(default=None, min_length=1, max_length=256)
+    tableName: str = Field(min_length=1, max_length=256)
     page: int = Field(ge=1)
     pageSize: int = Field(ge=1, le=500)
-    sort: list[ResultSort] | None = None
-    filters: list[ResultFilter] | None = None
-    search: str | None = None
+    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
+    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    search: str | None = Field(default=None, max_length=512)
     countMode: Literal["none", "exact", "estimate"] = "none"
 
 class TableResultExportRequest(BaseModel):
-    datasourceId: str
-    tableId: str | None = None
-    tableName: str
-    sort: list[ResultSort] | None = None
-    filters: list[ResultFilter] | None = None
-    search: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    datasourceId: str = Field(min_length=1, max_length=256)
+    tableId: str | None = Field(default=None, min_length=1, max_length=256)
+    tableName: str = Field(min_length=1, max_length=256)
+    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
+    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    search: str | None = Field(default=None, max_length=512)
 
 class ResultExportRequest(BaseModel):
-    sort: list[ResultSort] | None = None
-    filters: list[ResultFilter] | None = None
-    search: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    sort: list[ServiceResultSort] | None = Field(default=None, max_length=16)
+    filters: list[ServiceResultFilter] | None = Field(default=None, max_length=16)
+    search: str | None = Field(default=None, max_length=512)
 
 class ResultPageResponse(BaseModel):
     columns: list[str]
@@ -298,12 +297,12 @@ def _table_source_ref(req: TableResultPageRequest | TableResultExportRequest) ->
     )
 
 
-def _result_filters(filters: list[ResultFilter] | None) -> list[ServiceResultFilter]:
-    return [ServiceResultFilter.model_validate(item.model_dump()) for item in (filters or [])]
+def _result_filters(filters: list[ServiceResultFilter] | None) -> list[ServiceResultFilter]:
+    return list(filters or [])
 
 
-def _result_sorts(sorts: list[ResultSort] | None) -> list[ServiceResultSort]:
-    return [ServiceResultSort.model_validate(item.model_dump()) for item in (sorts or [])]
+def _result_sorts(sorts: list[ServiceResultSort] | None) -> list[ServiceResultSort]:
+    return list(sorts or [])
 
 
 _RESULT_VIEW_ERROR_CODES: Final[dict[str, FixedErrorCode]] = {

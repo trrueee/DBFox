@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ResultFilterOperator = Literal[
@@ -21,38 +21,47 @@ ResultFilterOperator = Literal[
     "not_in",
 ]
 
-
-class ResultColumn(BaseModel):
-    name: str
-    type: str | None = None
-
-
-class ResultSourceRef(BaseModel):
-    artifact_id: str
+ResultIdentifier = Annotated[str, Field(min_length=1, max_length=256)]
+ResultSearch = Annotated[str, Field(max_length=512)]
+ResultScalar = Annotated[str, Field(max_length=4_096)] | int | float | bool | None
+ResultFilterValue = ResultScalar | Annotated[list[ResultScalar], Field(max_length=100)]
 
 
-class TableSourceRef(BaseModel):
-    datasource_id: str
-    table_id: str | None = None
-    table_name: str
+class ResultViewModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-class ResultFilter(BaseModel):
-    column: str
+class ResultColumn(ResultViewModel):
+    name: ResultIdentifier
+    type: Annotated[str, Field(max_length=256)] | None = None
+
+
+class ResultSourceRef(ResultViewModel):
+    artifact_id: ResultIdentifier
+
+
+class TableSourceRef(ResultViewModel):
+    datasource_id: ResultIdentifier
+    table_id: ResultIdentifier | None = None
+    table_name: ResultIdentifier
+
+
+class ResultFilter(ResultViewModel):
+    column: ResultIdentifier
     operator: ResultFilterOperator
-    value: Any = None
+    value: ResultFilterValue = None
 
 
-class ResultSort(BaseModel):
-    column: str
+class ResultSort(ResultViewModel):
+    column: ResultIdentifier
     direction: Literal["asc", "desc"]
 
 
-class ResultViewQuery(BaseModel):
+class ResultViewQuery(ResultViewModel):
     source: ResultSourceRef
-    filters: list[ResultFilter] = Field(default_factory=list)
-    sort: list[ResultSort] = Field(default_factory=list)
-    search: str | None = None
+    filters: list[ResultFilter] = Field(default_factory=list, max_length=16)
+    sort: list[ResultSort] = Field(default_factory=list, max_length=16)
+    search: ResultSearch | None = None
 
 
 class ResultPageQuery(ResultViewQuery):
@@ -65,11 +74,11 @@ class ResultExportQuery(ResultViewQuery):
     format: Literal["csv"] = "csv"
 
 
-class TableViewQuery(BaseModel):
+class TableViewQuery(ResultViewModel):
     source: TableSourceRef
-    filters: list[ResultFilter] = Field(default_factory=list)
-    sort: list[ResultSort] = Field(default_factory=list)
-    search: str | None = None
+    filters: list[ResultFilter] = Field(default_factory=list, max_length=16)
+    sort: list[ResultSort] = Field(default_factory=list, max_length=16)
+    search: ResultSearch | None = None
 
 
 class TablePageQuery(TableViewQuery):
@@ -97,7 +106,7 @@ class VerifiedResultSource(BaseModel):
         return [column.name for column in self.columns if column.name]
 
 
-class ResultPage(BaseModel):
+class ResultPage(ResultViewModel):
     columns: list[str]
     rows: list[dict[str, Any]]
     page: int
@@ -115,7 +124,7 @@ class ResultPage(BaseModel):
     notices: list[str] | None = None
 
 
-class ChartData(BaseModel):
+class ChartData(ResultViewModel):
     series: list[dict[str, Any]]
     sample_size: int
     truncated: bool = False
