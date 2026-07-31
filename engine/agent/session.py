@@ -22,22 +22,6 @@ class SessionInputStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class SessionInput(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    id: str
-    session_id: str
-    sequence: int = Field(ge=1)
-    idempotency_key: str
-    content: str
-    delivery_mode: DeliveryMode = DeliveryMode.QUEUE
-    selected_artifact_ids: list[str] = Field(default_factory=list)
-    workspace_context: dict[str, object] = Field(default_factory=dict)
-    reply_to_request_id: str | None = None
-    status: SessionInputStatus = SessionInputStatus.ADMITTED
-    admitted_at: datetime
-
-
 class SessionLease(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

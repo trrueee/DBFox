@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
@@ -25,7 +25,6 @@ class DialectContext(BaseModel):
 
     datasource_id: str
     dialect: SqlDialect
-    schema_cache: Any | None = None
 
     @property
     def sqlglot_dialect(self) -> str:

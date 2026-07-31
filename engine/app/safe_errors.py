@@ -152,8 +152,6 @@ class SafeLogOperation(str, Enum):
     SSH_TUNNEL_RECONNECT_STOP_PREVIOUS = "ssh_tunnel_reconnect_stop_previous"
     SSH_TUNNEL_RECONNECT = "ssh_tunnel_reconnect"
     SSH_TUNNEL_CLEANUP_STALE = "ssh_tunnel_cleanup_stale"
-    SCHEMA_INTROSPECTION_MYSQL_CONNECT = "schema_introspection_mysql_connect"
-    SCHEMA_INTROSPECTION_DUCKDB_CONNECT = "schema_introspection_duckdb_connect"
     QUERY_EXPLAIN = "query_explain"
     QUERY_HISTORY_INDEX_DELETE = "query_history_index_delete"
     QUERY_HISTORY_INDEX_CLEAR = "query_history_index_clear"

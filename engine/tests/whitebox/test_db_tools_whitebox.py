@@ -1,5 +1,5 @@
 import pytest
-from engine.tools.db.preview import _build_preview_sql, _build_where_clause
+from engine.tools.db.preview import _build_preview_sql
 from engine.errors import ToolInputError
 from engine.sql.builder import build_where_clause
 
@@ -41,33 +41,33 @@ def test_preview7_empty_columns():
 
 # covers: WHERE-1 op="=" value=None
 def test_where1_null():
-    res = _build_where_clause({"column": "id", "op": "=", "value": None}, "`")
+    res = build_where_clause({"column": "id", "op": "=", "value": None}, "mysql")
     assert res == "`id` IS NULL"
 
 # covers: WHERE-2 op="=" value=int
 def test_where2_int():
-    res = _build_where_clause({"column": "id", "op": "=", "value": 123}, "`")
+    res = build_where_clause({"column": "id", "op": "=", "value": 123}, "mysql")
     assert res == "`id` = 123"
 
 # covers: WHERE-3 op="LIKE" value="%a'b%"
 def test_where3_like_escape():
-    res = _build_where_clause({"column": "name", "op": "LIKE", "value": "%a'b%"}, "`")
+    res = build_where_clause({"column": "name", "op": "LIKE", "value": "%a'b%"}, "mysql")
     assert res == "`name` LIKE '%a''b%'"
 
 # covers: WHERE-4 op="IN" value=list
 def test_where4_in():
-    res = _build_where_clause({"column": "name", "op": "IN", "value": ["a", "b"]}, "`")
+    res = build_where_clause({"column": "name", "op": "IN", "value": ["a", "b"]}, "mysql")
     assert res == "`name` IN ('a', 'b')"
 
 # covers: WHERE-5 op="DELETE"
 def test_where5_unsafe_op():
     with pytest.raises(ValueError) as exc:
-        _build_where_clause({"column": "id", "op": "DELETE", "value": 1}, "`")
+        build_where_clause({"column": "id", "op": "DELETE", "value": 1}, "mysql")
     assert "Unsafe operator" in str(exc.value)
 
 # covers: WHERE-6 op="IN" value not list
 def test_where6_in_non_list():
-    res = _build_where_clause({"column": "name", "op": "IN", "value": "a"}, "`")
+    res = build_where_clause({"column": "name", "op": "IN", "value": "a"}, "mysql")
     assert res == "`name` IN 'a'"
 
 

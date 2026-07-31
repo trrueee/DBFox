@@ -219,15 +219,6 @@ class Artifact(BaseModel):
         return self
 
 
-class ArtifactSelection(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    session_id: str
-    artifact_id: str
-    selected_by: str
-    reason: str | None = None
-
-
 class ArtifactSelectionSuggestion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

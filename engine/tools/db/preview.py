@@ -155,18 +155,6 @@ def _build_preview_sql(
     )
 
 
-def _build_where_clause(where: dict[str, Any], quote: str) -> str | None:
-    from engine.sql.builder import build_where_clause
-    dialect = "mysql" if quote == "`" else "sqlite" if quote == '"' else "postgres"
-    return build_where_clause(where, dialect)
-
-
-def _build_order_clause(order: dict[str, Any], quote: str) -> str | None:
-    from engine.sql.builder import build_order_clause
-    dialect = "mysql" if quote == "`" else "sqlite" if quote == '"' else "postgres"
-    return build_order_clause(order, dialect)
-
-
 def _structured_column_refs(where: dict[str, Any] | None) -> list[str]:
     if not isinstance(where, dict):
         return []

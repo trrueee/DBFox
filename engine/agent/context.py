@@ -126,21 +126,6 @@ class ContextSnapshot(BaseModel):
     sources: list[ContextSource] = Field(default_factory=list)
     hash: str
 
-    def to_model_messages(
-        self,
-        *,
-        system_prompt: str,
-        factual_context: str | None = None,
-        max_prompt_tokens: int = 32_768,
-        reserved_tokens: int = 0,
-    ) -> list[dict[str, Any]]:
-        return self.model_message_plan(
-            system_prompt=system_prompt,
-            factual_context=factual_context,
-            max_prompt_tokens=max_prompt_tokens,
-            reserved_tokens=reserved_tokens,
-        ).messages
-
     def model_message_plan(
         self,
         *,

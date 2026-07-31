@@ -8,13 +8,6 @@ SUPPORTED_CHART_TYPES = frozenset({"line", "bar", "area", "scatter", "pie"})
 NON_CHART_TYPE = "none"
 
 
-def is_chartable_suggestion(suggestion: dict[str, Any] | None) -> bool:
-    if not isinstance(suggestion, dict) or suggestion.get("chartable") is False:
-        return False
-    chart_type = str(suggestion.get("chart_type") or suggestion.get("type") or "").strip().lower()
-    return chart_type in SUPPORTED_CHART_TYPES
-
-
 def suggest_plotly_chart(execution: dict[str, Any] | None) -> dict[str, Any]:
     """Return a safe chart suggestion with optional Plotly-ready series.
 

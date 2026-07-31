@@ -78,7 +78,6 @@ class ResultViewService:
         source_ctx = DialectContext(
             datasource_id=datasource_id,
             dialect=ctx.dialect,
-            schema_cache=ctx.schema_cache,
         )
         warnings = SqlSafetyService().validate_source_artifact_sql(persisted_safe_sql, source_ctx)
         if warnings:
