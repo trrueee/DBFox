@@ -156,16 +156,6 @@ def test_snapshot_restores_messages_run_artifact_and_event_cursor(client, db_ses
     assert artifacts.status_code == 200
     assert artifacts.json()[0]["type"] == "sql"
 
-    trace = client.get(
-        f"/api/v1/conversations/conversation-1/runs/{admitted.run_id}/trace",
-        headers=_headers(),
-    )
-    assert trace.status_code == 200
-    assert {span["kind"] for span in trace.json()["spans"]} >= {
-        "run", "turn", "model", "tool", "policy",
-    }
-
-
 def test_unknown_datasource_is_rejected(client):
     response = client.post(
         "/api/v1/conversations",

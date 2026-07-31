@@ -305,7 +305,6 @@ def _seed_volatile_state(metadata_url: str, vault: InMemoryCredentialVault) -> d
                         id="agent-memory-1",
                         session_id=agent_session.id,
                         datasource_id=datasource.id,
-                        conversation_summary="sensitive memory",
                     ),
                     AgentApproval(
                         id="agent-approval-1",

@@ -598,20 +598,12 @@ class RunRepository:
             },
             "datasource_generation": current_generation,
         }
-        conversation_summary = "\n\n".join(
-            (
-                f"问题：{str(item.get('question') or '')[:300]}\n"
-                f"结论：{str(item.get('answer_summary') or '')[:700]}"
-            )
-            for item in recent_runs[-4:]
-        )[:4_000]
         if row is None:
             self.session.add(AgentSessionMemory(
                 session_id=str(aggregate.id), datasource_id=str(aggregate.datasource_id),
-                conversation_summary=conversation_summary, memory_json=_json(memory),
+                memory_json=_json(memory),
             ))
         else:
-            row.conversation_summary = conversation_summary
             row.memory_json = _json(memory)
             row.updated_at = _utcnow()
         aggregate.context_epoch = int(aggregate.context_epoch or 0) + 1

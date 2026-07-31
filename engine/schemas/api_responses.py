@@ -260,28 +260,6 @@ class EvidenceResponse(BaseModel):
     value: Any | None = None
 
 
-class TraceSpanResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    parent_id: str | None = None
-    kind: Literal["run", "turn", "model", "tool", "policy", "approval"]
-    name: str
-    status: str
-    started_at: str | None = None
-    ended_at: str | None = None
-    attributes: dict[str, Any]
-
-
-class RunTraceResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    trace_id: str
-    session_id: str
-    run_id: str
-    spans: list[TraceSpanResponse]
-
-
 class RunCancelledResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

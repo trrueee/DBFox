@@ -21,7 +21,7 @@ from engine.models import FoundationRuntimeState
 
 
 FOUNDATION_V2_REVISION = "3c5d7e9f1a2b"
-FOUNDATION_HEAD_REVISION = "0a1b2c3d4e6f"
+FOUNDATION_HEAD_REVISION = "b1c2d3e4f607"
 HISTORICAL_MODELS_REVISION = "918ea80d"
 _QUERY_HISTORY_FTS_TRIGGERS = {
     "query_history_search_docs_ai",

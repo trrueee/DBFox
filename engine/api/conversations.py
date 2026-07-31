@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import queue
 import threading
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -28,13 +27,9 @@ from engine.agent.run_item import (
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.question import QuestionRepository
-from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import EventHistoryGap, SessionRepository
-from engine.agent.repositories.write_transaction import begin_agent_write
-from engine.agent.run import TERMINAL_RUN_STATUSES
 from engine.agent.session import DeliveryMode
 from engine.json_codec import dumps as json_dumps, loads as json_loads
-from engine.agent.tracing import build_run_trace
 from engine.db import SessionLocal, get_db
 from engine.errors import DBFoxError
 from engine.llm.config import LlmConfigurationError, normalize_product_llm_preferences
@@ -53,7 +48,6 @@ from engine.schemas.api_responses import (
     ConversationSummaryResponse,
     EvidenceResponse,
     RunCancelledResponse,
-    RunTraceResponse,
 )
 
 
@@ -133,21 +127,16 @@ def create_conversation(
     payload: ConversationCreateRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    begin_agent_write(db)
     if db.get(DataSource, payload.datasource_id) is None:
         raise HTTPException(
             status_code=404,
             detail={"code": "DATASOURCE_NOT_FOUND", "message": "Datasource not found."},
         )
-    now = datetime.now(UTC)
-    row = AgentSession(
+    row = SessionRepository(db).create(
         datasource_id=payload.datasource_id,
         title=payload.title or "New conversation",
-        context_tables_json=json_dumps(payload.context_tables),
-        created_at=now,
-        updated_at=now,
+        context_tables=payload.context_tables,
     )
-    db.add(row)
     db.commit()
     detail = conversation_snapshot(db, str(row.id))
     assert detail is not None
@@ -255,21 +244,6 @@ def get_run_evidence(
     } for row in rows]
 
 
-@router.get(
-    "/conversations/{conversation_id}/runs/{run_id}/trace",
-    response_model=RunTraceResponse,
-)
-def get_run_trace(
-    conversation_id: str,
-    run_id: str,
-    db: Session = Depends(get_db),
-) -> dict[str, object]:
-    trace = build_run_trace(db, session_id=conversation_id, run_id=run_id)
-    if trace is None:
-        raise HTTPException(status_code=404, detail={"code": "RUN_NOT_FOUND"})
-    return trace
-
-
 @router.patch(
     "/conversations/{conversation_id}",
     response_model=ConversationSnapshotResponse,
@@ -279,16 +253,14 @@ def patch_conversation(
     payload: ConversationPatchRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, object]:
-    row = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if row is None or row.deleted_at is not None:
+    row = SessionRepository(db).update_metadata(
+        session_id=conversation_id,
+        title=payload.title,
+        context_tables=payload.context_tables,
+        archived=payload.archived,
+    )
+    if row is None:
         raise DBFoxError("Conversation not found.", code="CONVERSATION_NOT_FOUND")
-    if payload.title is not None:
-        row.title = payload.title
-    if payload.context_tables is not None:
-        row.context_tables_json = json_dumps(payload.context_tables)
-    if payload.archived is not None:
-        row.archived_at = datetime.now(UTC) if payload.archived else None
-    row.updated_at = datetime.now(UTC)
     db.commit()
     detail = conversation_snapshot(db, conversation_id)
     assert detail is not None
@@ -304,39 +276,17 @@ def delete_conversation(
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
-    row = db.query(AgentSession).filter(AgentSession.id == conversation_id).first()
-    if row is None or row.deleted_at is not None:
-        return {"status": "ok"}
-    active_runs = list(db.execute(
-        select(AgentRun).where(
-            AgentRun.session_id == conversation_id,
-            AgentRun.status.not_in([status.value for status in TERMINAL_RUN_STATUSES]),
-        )
-    ).scalars().all())
-    if not active_runs:
-        db.delete(row)
-        db.commit()
-        return {"status": "ok"}
-
-    coordinator = _coordinator(request)
-    now = datetime.now(UTC)
-    row.deleted_at = now
-    row.archived_at = now
-    row.updated_at = now
-    repository = RunRepository(db)
-    execution_ids: list[str] = []
-    for run in active_runs:
-        repository.request_cancel(run_id=str(run.id))
-        if run.execution_id:
-            execution_ids.append(str(run.execution_id))
+    deletion = SessionRepository(db).request_delete(session_id=conversation_id)
+    coordinator = _coordinator(request) if deletion.status == "deleting" else None
     db.commit()
-    if execution_ids:
+    if deletion.execution_ids:
         from engine.query_registry import QUERY_REGISTRY
 
-        for execution_id in execution_ids:
+        for execution_id in deletion.execution_ids:
             QUERY_REGISTRY.cancel(execution_id)
-    coordinator.wake(conversation_id)
-    return {"status": "deleting"}
+    if coordinator is not None:
+        coordinator.wake(conversation_id)
+    return {"status": deletion.status}
 
 
 def _coordinator(request: Request):

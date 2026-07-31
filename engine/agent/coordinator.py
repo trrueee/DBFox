@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from engine.agent.loop import RunLoop
 from engine.agent.repositories.approval import ApprovalRepository
 from engine.agent.repositories.question import QuestionRepository
-from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.run import RunStatus, SessionLeaseConflict
 from engine.agent.session import SessionInputStatus, SessionLease
@@ -115,13 +114,12 @@ class SessionCoordinator:
             except Exception:
                 logger.exception("Agent RunLoop failed run_id=%s", run_id)
                 try:
-                    with self.session_factory() as db:
-                        RunRepository(db).fail(
-                            lease=lease, run_id=run_id,
-                            error_code="AGENT_RUNTIME_ERROR",
-                            message="分析未能完成，请重试。",
-                        )
-                        db.commit()
+                    self.run_loop.terminalizer.fail(
+                        lease,
+                        run_id,
+                        "AGENT_RUNTIME_ERROR",
+                        "分析未能完成，请重试。",
+                    )
                 except Exception:
                     logger.exception("Agent failure terminalization failed run_id=%s", run_id)
             finally:

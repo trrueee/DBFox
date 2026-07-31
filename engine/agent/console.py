@@ -13,16 +13,17 @@ from engine.agent.artifact import (
     Artifact,
     ArtifactRelation,
     ArtifactRelationType,
+    ArtifactSelectionSuggestion,
     ArtifactType,
 )
-from engine.agent.events import RuntimeEventType
+from engine.agent.response import AnswerCandidate, CompletionDisposition, ResponseComposer
 from engine.agent.repositories.artifact import ArtifactRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
-from engine.agent.session import SessionInputStatus, SessionLease
+from engine.agent.session import SessionLease
+from engine.agent.terminalizer import Terminalizer
 from engine.errors import DBFoxError
-from engine.json_codec import dumps as json_dumps
-from engine.models import AgentMessage, AgentRun, AgentSession, AgentSessionInput, DataSource
+from engine.models import AgentSession, DataSource
 from engine.policy.engine import PolicyEngine
 from engine.sql.dialect_context import DialectContext
 from engine.sql.executor import execute_query
@@ -154,33 +155,24 @@ class ConsoleRunService:
                 code="CONSOLE_SQL_ARTIFACT_MISSING",
             )
 
-        stored_run = self.session.get(AgentRun, admission.run_id)
-        stored_input = self.session.get(AgentSessionInput, admission.input_id)
-        assistant = self.session.get(AgentMessage, admission.assistant_message_id)
-        if stored_run is None or stored_input is None:
-            raise DBFoxError(
-                "Console execution state was not persisted.",
-                code="CONSOLE_STATE_MISSING",
-            )
-        stored_run.status = "completed"
-        stored_run.result_json = json_dumps(
-            {
-                "status": "completed",
-                "sql": safe_sql,
-                "safety": safety,
-                "execution": _execution_summary(execution),
-            }
-        )
-        stored_input.status = SessionInputStatus.CONSUMED.value
-        if assistant is not None:
-            assistant.status = "completed"
-            assistant.content = "SQL Console execution completed."
-        sessions.append_event(
-            lease=lease,
-            event_type=RuntimeEventType.RUN_COMPLETED,
+        result_artifact_id = _artifact_id_by_type(artifacts, "result_view")
+        response = ResponseComposer().compose(
+            session_id=session_id,
             run_id=admission.run_id,
-            payload={"run": {"id": admission.run_id, "status": "completed"}},
+            completion_disposition=CompletionDisposition.COMPLETE,
+            limitation_codes=[],
+            answer=AnswerCandidate(text="SQL Console execution completed."),
+            artifacts=artifacts,
+            selection_suggestion=(
+                ArtifactSelectionSuggestion(
+                    artifact_id=result_artifact_id,
+                    reason="SQL Console 查询结果",
+                )
+                if result_artifact_id
+                else None
+            ),
         )
+        Terminalizer.complete_in_session(self.session, lease, response)
         sessions.release(lease=lease)
         self.session.commit()
         return ConsoleExecutionResult(
@@ -188,7 +180,7 @@ class ConsoleRunService:
             session_id=session_id,
             sql_artifact_id=sql_artifact_id,
             safety_artifact_id=_artifact_id_by_type(artifacts, "safety"),
-            result_artifact_id=_artifact_id_by_type(artifacts, "result_view"),
+            result_artifact_id=result_artifact_id,
             artifacts=tuple(artifacts),
             warnings=tuple(str(item) for item in execution.get("warnings") or []),
             notices=tuple(str(item) for item in execution.get("notices") or []),
@@ -290,20 +282,6 @@ def _safety_payload(decision: Any) -> dict[str, Any]:
         "policy": decision.policy,
         "safeSql": decision.safe_sql,
         "originalSql": decision.original_sql,
-    }
-
-
-def _execution_summary(execution: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "success": bool(execution.get("success")),
-        "rowCount": int(execution.get("rowCount") or 0),
-        "columns": list(execution.get("columns") or []),
-        "latencyMs": int(execution.get("latencyMs") or 0),
-        "truncated": bool(execution.get("truncated")),
-        "historyId": execution.get("historyId"),
-        "executionId": execution.get("executionId"),
-        "warnings": list(execution.get("warnings") or []),
-        "notices": list(execution.get("notices") or []),
     }
 
 

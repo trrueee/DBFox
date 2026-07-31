@@ -618,8 +618,6 @@ class AgentSessionMemory(Base):  # type: ignore[misc,valid-type]
     id = Column(String, primary_key=True, default=generate_uuid)
     session_id = Column(String, ForeignKey("agent_sessions.id", ondelete="CASCADE"), nullable=False)
     datasource_id = Column(String, ForeignKey("data_sources.id", ondelete="CASCADE"), nullable=False)
-    conversation_summary = Column(Text, nullable=True)
-    summary_cursor_message_id = Column(String, nullable=True)
     memory_json = Column(Text, nullable=False, default="{}")
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)

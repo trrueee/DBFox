@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from sqlalchemy import delete, func, select
@@ -19,7 +19,6 @@ from engine.agent.events import (
 )
 from engine.agent.run import RunStatus, SessionLeaseConflict, TERMINAL_RUN_STATUSES
 from engine.agent.run_item import (
-    final_answer_item,
     dump_run_item,
     project_run,
     user_message_item,
@@ -71,11 +70,105 @@ class Admission:
     run_version: int
 
 
+@dataclass(frozen=True)
+class SessionDeletion:
+    status: Literal["ok", "deleting"]
+    execution_ids: tuple[str, ...] = ()
+
+
 class SessionRepository:
     """Repository methods participate in the caller's short database transaction."""
 
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def create(
+        self,
+        *,
+        datasource_id: str,
+        title: str,
+        context_tables: list[str],
+    ) -> AgentSession:
+        begin_agent_write(self.session)
+        now = _utcnow()
+        aggregate = AgentSession(
+            datasource_id=datasource_id,
+            title=title,
+            context_tables_json=_json(context_tables),
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(aggregate)
+        self.session.flush()
+        return aggregate
+
+    def update_metadata(
+        self,
+        *,
+        session_id: str,
+        title: str | None,
+        context_tables: list[str] | None,
+        archived: bool | None,
+    ) -> AgentSession | None:
+        begin_agent_write(self.session)
+        aggregate = self.session.execute(
+            select(AgentSession)
+            .where(AgentSession.id == session_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if aggregate is None or aggregate.deleted_at is not None:
+            return None
+        if title is not None:
+            aggregate.title = title
+        if context_tables is not None:
+            aggregate.context_tables_json = _json(context_tables)
+        if archived is not None:
+            aggregate.archived_at = _utcnow() if archived else None
+        aggregate.updated_at = _utcnow()
+        self.session.flush()
+        return aggregate
+
+    def request_delete(self, *, session_id: str) -> SessionDeletion:
+        """Delete an idle Session or atomically request cancellation of its work."""
+
+        begin_agent_write(self.session)
+        aggregate = self.session.execute(
+            select(AgentSession)
+            .where(AgentSession.id == session_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if aggregate is None or aggregate.deleted_at is not None:
+            return SessionDeletion(status="ok")
+        active_runs = list(self.session.execute(
+            select(AgentRun).where(
+                AgentRun.session_id == session_id,
+                AgentRun.status.not_in(
+                    [status.value for status in TERMINAL_RUN_STATUSES]
+                ),
+            ).with_for_update()
+        ).scalars())
+        if not active_runs:
+            self.session.delete(aggregate)
+            self.session.flush()
+            return SessionDeletion(status="ok")
+
+        now = _utcnow()
+        aggregate.deleted_at = now
+        aggregate.archived_at = now
+        aggregate.updated_at = now
+        from engine.agent.repositories.run import RunRepository
+
+        runs = RunRepository(self.session)
+        execution_ids: list[str] = []
+        for run in active_runs:
+            runs.request_cancel(run_id=str(run.id))
+            if run.execution_id:
+                execution_ids.append(str(run.execution_id))
+        self.session.flush()
+        return SessionDeletion(
+            status="deleting",
+            execution_ids=tuple(execution_ids),
+        )
 
     def admit(
         self,
@@ -773,47 +866,18 @@ class SessionRepository:
             .order_by(AgentRun.session_sequence)
             .with_for_update()
         ).scalars().all()
-        now = _utcnow()
         for run in rows:
             run.cancel_requested = True
-            if run.status == RunStatus.RUNNING.value:
-                run.status = RunStatus.CANCELLING.value
-                event_type = RuntimeEventType.RUN_UPDATED
-            else:
-                run.status = RunStatus.CANCELLED.value
-                run.completed_at = now
-                event_type = RuntimeEventType.RUN_CANCELLED
-                assistant = self.session.get(AgentMessage, run.assistant_message_id)
-                if assistant is not None:
-                    assistant.status = "cancelled"
-                    assistant.updated_at = now
+            run.status = RunStatus.CANCELLING.value
             run.version = int(run.version or 0) + 1
-            run.updated_at = now
-            inputs = self.session.execute(
-                select(AgentSessionInput).where(
-                    AgentSessionInput.run_id == run.id,
-                    AgentSessionInput.status == SessionInputStatus.ADMITTED.value,
-                ).with_for_update()
-            ).scalars().all()
-            for admitted in inputs:
-                admitted.status = SessionInputStatus.CANCELLED.value
-                admitted.consumed_at = now
+            run.updated_at = _utcnow()
             self._append_event(
                 aggregate,
-                event_type,
+                RuntimeEventType.RUN_UPDATED,
                 run_id=str(run.id),
                 payload={"run": project_run(run)},
-                now=now,
+                now=run.updated_at,
             )
-            assistant = self.session.get(AgentMessage, run.assistant_message_id)
-            if assistant is not None and str(assistant.status) == "cancelled" and str(assistant.content):
-                self._append_event(
-                    aggregate,
-                    RuntimeEventType.RUN_ITEM_CANCELLED,
-                    run_id=str(run.id),
-                    payload={"item": dump_run_item(final_answer_item(assistant, run=run))},
-                    now=now,
-                )
 
     def _session_for_update(self, session_id: str) -> AgentSession:
         begin_agent_write(self.session)

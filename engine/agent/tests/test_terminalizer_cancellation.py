@@ -270,3 +270,66 @@ def test_cancellation_terminalizes_the_visible_plan(
     )
     assert plan_item["status"] == "cancelled"
     assert plan_item["completed_at"] is not None
+
+
+def test_failure_terminalizes_pending_children_in_one_transaction(
+    db_session,
+    test_datasource,
+) -> None:
+    tools = materialize_tools(
+        register_dbfox_tools(),
+        allowed_groups={"query"},
+        execution_mode="agent_autonomous_read",
+    )
+    sessions, admission, lease, turn = _start_run(
+        db_session,
+        test_datasource,
+        session_id="session_fail_children",
+        materialization=tools,
+    )
+    PlanRepository(db_session).update(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        objective="执行查询",
+        steps=[PlanStep(id="query", title="执行查询", status=PlanStepStatus.IN_PROGRESS)],
+        summary=None,
+    )
+    invocation = ToolInvocationRepository(db_session).request(
+        lease=lease,
+        run_id=admission.run_id,
+        turn_id=str(turn.id),
+        provider_call_id="fail-approval-call",
+        tool_name="sql_execute_readonly",
+        raw_input={},
+        materialization=tools,
+        policy_decision={
+            "status": "approval_required",
+            "reason": "需要确认",
+            "risk_level": "warning",
+        },
+    )
+    approval = ApprovalRepository(db_session).request(
+        lease=lease,
+        invocation_id=invocation.id,
+        policy_decision={
+            "status": "approval_required",
+            "reason": "需要确认",
+            "risk_level": "warning",
+        },
+    )
+    db_session.commit()
+
+    factory = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)
+    Terminalizer(session_factory=factory).fail(
+        lease,
+        admission.run_id,
+        "AGENT_RUNTIME_ERROR",
+        "分析未能完成，请重试。",
+    )
+    db_session.expire_all()
+
+    assert db_session.get(AgentRun, admission.run_id).status == "failed"
+    assert db_session.get(AgentApproval, approval.id).status == ApprovalStatus.CANCELLED.value
+    assert db_session.get(AgentToolInvocation, invocation.id).status == ToolInvocationStatus.CANCELLED.value
+    assert db_session.query(AgentTaskPlanRecord).filter_by(run_id=admission.run_id).one().status == "failed"

@@ -221,7 +221,7 @@ def test_steer_joins_the_active_run_and_is_consumed_at_the_next_turn_boundary(
     assert stored.status == "consumed"
 
 
-def test_cancel_and_replace_cancels_queued_work_and_admits_one_new_run(
+def test_cancel_and_replace_requests_cancellation_before_admitting_one_new_run(
     db_session, test_datasource
 ) -> None:
     _session(db_session, str(test_datasource.id))
@@ -244,8 +244,8 @@ def test_cancel_and_replace_cancels_queued_work_and_admits_one_new_run(
     )
     db_session.commit()
 
-    assert db_session.get(AgentRun, first.run_id).status == "cancelled"
-    assert db_session.get(AgentRun, second.run_id).status == "cancelled"
+    assert db_session.get(AgentRun, first.run_id).status == "cancelling"
+    assert db_session.get(AgentRun, second.run_id).status == "cancelling"
     assert db_session.get(AgentRun, replacement.run_id).status == "queued"
-    assert db_session.get(AgentSessionInput, first.input_id).status == "cancelled"
-    assert db_session.get(AgentSessionInput, second.input_id).status == "cancelled"
+    assert db_session.get(AgentSessionInput, first.input_id).status == "admitted"
+    assert db_session.get(AgentSessionInput, second.input_id).status == "admitted"

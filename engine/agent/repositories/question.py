@@ -18,7 +18,6 @@ from engine.agent.question import (
     QuestionRequest,
     QuestionStatus,
 )
-from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.session import SessionRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.repositories.write_transaction import begin_agent_write
@@ -333,11 +332,14 @@ class QuestionRepository:
             turn_id=str(row.turn_id),
             payload={"item": dump_run_item(question_item(row))},
         )
-        RunRepository(self.session).fail(
-            lease=lease,
-            run_id=str(run.id),
-            error_code="AGENT_QUESTION_EXPIRED",
-            message="等待补充信息已超时，请重新发起分析。",
+        from engine.agent.terminalizer import Terminalizer
+
+        Terminalizer.fail_in_session(
+            self.session,
+            lease,
+            str(run.id),
+            "AGENT_QUESTION_EXPIRED",
+            "等待补充信息已超时，请重新发起分析。",
         )
         return value
 

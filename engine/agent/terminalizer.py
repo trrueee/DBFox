@@ -24,6 +24,7 @@ from engine.agent.repositories.run import RunRepository
 from engine.agent.repositories.tool import ToolInvocationRepository
 from engine.agent.response import (
     AnswerCandidate,
+    ComposedResponse,
     CompletionDisposition,
     CompletionLimitationCode,
     ResponseComposer,
@@ -143,14 +144,11 @@ class Terminalizer:
                 artifacts=artifacts,
                 selection_suggestion=suggestion,
             )
-            PlanRepository(db).terminalize(
-                lease=lease,
-                run_id=run_id,
-                status=PlanStatus.PARTIAL if partial else PlanStatus.COMPLETED,
-            )
-            RunRepository(db).complete(
-                lease=lease,
-                response=response,
+            self.complete_in_session(
+                db,
+                lease,
+                response,
+                plan_status=PlanStatus.PARTIAL if partial else PlanStatus.COMPLETED,
                 memory_delta={
                     "verified_claims": [
                         {
@@ -168,46 +166,100 @@ class Terminalizer:
             )
             db.commit()
 
+    @staticmethod
+    def complete_in_session(
+        db: Session,
+        lease: SessionLease,
+        response: ComposedResponse,
+        *,
+        plan_status: PlanStatus = PlanStatus.COMPLETED,
+        memory_delta: dict[str, Any] | None = None,
+    ) -> None:
+        """Atomically settle the Plan and persist the canonical terminal response."""
+
+        if plan_status not in {PlanStatus.COMPLETED, PlanStatus.PARTIAL}:
+            raise ValueError("Successful Run terminalization requires a completed or partial Plan")
+        PlanRepository(db).terminalize(
+            lease=lease,
+            run_id=response.run_id,
+            status=plan_status,
+        )
+        RunRepository(db).complete(
+            lease=lease,
+            response=response,
+            memory_delta=memory_delta or {},
+        )
+
+    @staticmethod
+    def cancel_in_session(db: Session, lease: SessionLease, run_id: str) -> None:
+        """Atomically settle every durable child before cancelling a Run."""
+
+        ApprovalRepository(db).cancel_pending_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        QuestionRepository(db).cancel_pending_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        ToolInvocationRepository(db).cancel_active_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        PlanRepository(db).terminalize(
+            lease=lease,
+            run_id=run_id,
+            status=PlanStatus.CANCELLED,
+        )
+        RunRepository(db).cancel(lease=lease, run_id=run_id)
+
     def cancelled(self, lease: SessionLease, run_id: str) -> bool:
         with self.session_factory() as db:
             repository = RunRepository(db)
             requested = repository.cancellation_requested(lease=lease, run_id=run_id)
             if requested:
-                ApprovalRepository(db).cancel_pending_for_run(
-                    lease=lease,
-                    run_id=run_id,
-                )
-                QuestionRepository(db).cancel_pending_for_run(
-                    lease=lease,
-                    run_id=run_id,
-                )
-                ToolInvocationRepository(db).cancel_active_for_run(
-                    lease=lease,
-                    run_id=run_id,
-                )
-                PlanRepository(db).terminalize(
-                    lease=lease,
-                    run_id=run_id,
-                    status=PlanStatus.CANCELLED,
-                )
-                repository.cancel(lease=lease, run_id=run_id)
+                self.cancel_in_session(db, lease, run_id)
                 db.commit()
             return requested
 
+    @staticmethod
+    def fail_in_session(
+        db: Session,
+        lease: SessionLease,
+        run_id: str,
+        code: str,
+        message: str,
+    ) -> None:
+        """Atomically settle every durable child before failing a Run."""
+
+        ApprovalRepository(db).cancel_pending_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        QuestionRepository(db).cancel_pending_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        ToolInvocationRepository(db).cancel_active_for_run(
+            lease=lease,
+            run_id=run_id,
+        )
+        PlanRepository(db).terminalize(
+            lease=lease,
+            run_id=run_id,
+            status=PlanStatus.FAILED,
+            summary=message,
+        )
+        RunRepository(db).fail(
+            lease=lease,
+            run_id=run_id,
+            error_code=code,
+            message=message,
+        )
+
     def fail(self, lease: SessionLease, run_id: str, code: str, message: str) -> None:
         with self.session_factory() as db:
-            PlanRepository(db).terminalize(
-                lease=lease,
-                run_id=run_id,
-                status=PlanStatus.FAILED,
-                summary=message,
-            )
-            RunRepository(db).fail(
-                lease=lease,
-                run_id=run_id,
-                error_code=code,
-                message=message,
-            )
+            self.fail_in_session(db, lease, run_id, code, message)
             db.commit()
 
 def _claim_text_for_citation(text: str, start: int, end: int) -> str:
