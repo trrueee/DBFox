@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from engine import __version__
 from engine.main import LOCAL_SECURE_TOKEN, app
 import engine.main as main_module
 from engine.dev_server import _RELOAD_EXCLUDES
@@ -21,7 +22,7 @@ def test_fastapi_app_startup_and_health() -> None:
     data = response.json()
     assert data["status"] == "healthy"
     assert "version" in data
-    assert data["version"] == "1.0.2"
+    assert data["version"] == __version__
 
 
 def test_dev_reload_excludes_avoid_root_runtime_and_frontend_dirs() -> None:

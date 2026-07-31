@@ -2,7 +2,7 @@
 
 > 文档状态：当前前端专题事实源
 >
-> 最后核验：2026-07-20
+> 最后核验：2026-07-31
 
 ## 1. 设计目标
 
@@ -34,9 +34,8 @@ flowchart TB
 
   subgraph Conversation["Agent 交互"]
     HEADER["ConversationHeader"]
-    MESSAGES["MessageList / MessageBubble"]
-    ACTIVITY["ActivityFeed"]
-    INTERRUPT["ApprovalCard / QuestionCard"]
+    MESSAGES["MessageList / AgentTimeline"]
+    INTERRUPT["ApprovalAuditCard / QuestionCard"]
     COMPOSER["Composer"]
     DOCK["ArtifactDock / EvidencePanel"]
   end
@@ -82,7 +81,7 @@ flowchart LR
   TABBAR --> TABLE["Table Workspace"]
   TABBAR --> CONFIG["Datasource / LLM / Diagnostics"]
 
-  CONV --> CENTER["Message + Activity + Composer"]
+  CONV --> CENTER["Agent Timeline + Composer"]
   CONV --> RIGHT["Artifact Dock"]
   RIGHT --> SQLART["SQL Artifact"]
   RIGHT --> RESULT["Result View"]
@@ -108,7 +107,7 @@ sequenceDiagram
   participant API as FastAPI
   participant SSE as Event Stream
   participant Reducer as Projection Reducer
-  participant View as Message / Activity / Dock
+  participant View as Timeline / Dock
 
   User->>Composer: 提交输入与 delivery mode
   Composer->>Store: sendMessage
@@ -130,23 +129,23 @@ sequenceDiagram
 3. 切换到 live 通知；
 4. 发现 sequence gap 时放弃局部猜测，重新加载 snapshot。
 
-## 5. Message Parts 与过程呈现
+## 5. Responses Items 与过程呈现
 
 ```mermaid
 flowchart TB
-  EVENT["公共 Agent Events"] --> REDUCER["Conversation Reducer"]
-  REDUCER --> PARTS["Ordered Message Parts"]
-  PARTS --> ACT["Activity"]
-  PARTS --> APPROVAL["Approval / Question"]
-  PARTS --> ANSWER["Streaming Answer"]
-  PARTS --> CITE["Inline Evidence"]
-  PARTS --> REF["Artifact References"]
+  EVENT["Committed Runtime Events"] --> REDUCER["Conversation Reducer"]
+  REDUCER --> ITEMS["Ordered Run Items"]
+  ITEMS --> COMMENTARY["Commentary Message"]
+  ITEMS --> TOOL["Function Call + Output"]
+  ITEMS --> APPROVAL["Approval / Question / Plan"]
+  ITEMS --> ANSWER["Final Answer"]
+  ANSWER --> CITE["Evidence / Artifact References"]
 ```
 
 设计约束：
 
-- Activity Feed 展示产品动作和公开 reasoning summary，不展示私有 chain-of-thought。
-- live 活动与 snapshot 活动使用稳定 ID，刷新后不得生成重复步骤。
+- Agent Timeline 按服务端 sequence 展示 commentary、工具调用、工具结果、Plan、Approval、Question 和 final answer，不展示私有 chain-of-thought。
+- live Item 与 snapshot Item 使用稳定 ID 和 revision，刷新后不得生成重复步骤。
 - Approval/Question 在待处理时固定靠近 Composer；处理后成为只读历史部分。
 - Answer 使用增量合并和平滑显示；终态消息以持久投影为准。
 - Citation 由 Markdown AST 插件解析为句内 Evidence 按钮，不依赖字符串后处理。
@@ -189,7 +188,7 @@ Result Gateway 的页面响应同时携带 `originalExecutedAt` 与 `viewExecute
 |---|---|---|
 | 导航状态 | `workspaceStore` | 活动标签、标签顺序、工件区布局 |
 | 数据源导航状态 | `datasourceStore` | 当前数据源、Schema 树、同步状态 |
-| 会话公共投影 | `conversationStore` | Message、Run、Activity、Artifact、Evidence |
+| 会话公共投影 | `conversationStore` | Run、Run Item、Artifact、Approval、Question、Plan |
 | 组合视图 | `useConversationViewModel` | 当前 Run、排序后的消息和工件 |
 | 当前页面数据 | 组件/SQL-backed hook | Result 当前页、Chart 当前序列 |
 | 服务端事实 | FastAPI + 元数据库 | Run 状态、Approval、Artifact 关系、Event sequence |
@@ -242,13 +241,13 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 
 前端测试分为：
 
-- reducer/event contract：去重、gap、correlation、Plan、Approval、Artifact；
-- product interaction：Composer、Activity、Question、Artifact Dock、SQL-backed table；
+- reducer/event contract：去重、gap、correlation、Plan、Approval、Question、Artifact；
+- product interaction：Composer、Agent Timeline、Question、Artifact Dock、SQL-backed table；
 - accessibility：焦点、role、label、键盘、reduced motion；
 - security：CSP、sanitize、外部导航、secret-safe error；
 - engineering：TypeScript、ESLint、production build、bundle budget。
 
-最后一次完整回归为 76 files / 411 tests passed；production build 和 bundle budget 通过。
+最后一次完整回归为 68 files / 341 tests passed；production build 和 bundle budget 通过。
 
 ## 14. 关键文件
 
@@ -258,8 +257,8 @@ API error 先映射为用户可理解文案，技术 detail 留在诊断。Engin
 | Workspace | `desktop/src/features/appShell/WorkspaceRouter.tsx` |
 | Conversation | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | Reducer | `desktop/src/stores/conversationStoreReducer.ts` |
-| Stream | `desktop/src/features/conversation/conversationRepository.ts` |
-| Activity | `desktop/src/features/conversation/workspace/ActivityFeed.tsx` |
+| Stream | `desktop/src/features/conversation/conversationStreamRuntime.ts`、`conversationRepository.ts` |
+| Timeline | `desktop/src/features/conversation/workspace/MessageList.tsx`、`AgentTimeline.tsx` |
 | Artifact Dock | `desktop/src/features/conversation/workspace/ArtifactDock.tsx` |
 | Result state | `desktop/src/features/workspace/sqlBacked/useSqlBackedDataView.ts` |
 | Tokens | `desktop/src/styles/tokens.css` |

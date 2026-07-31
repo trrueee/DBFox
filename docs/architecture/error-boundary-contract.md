@@ -2,52 +2,41 @@
 
 ## Goal
 
-No untrusted exception text may cross into an HTTP/SSE response, browser state,
-Agent state, LangGraph checkpoint, event payload, SQLite record, or log. This
+No untrusted exception text may cross into an HTTP/SSE response, browser
+projection, Responses Item, Tool Observation, persistence record, or log. This
 includes provider, driver, tunnel, vault, user-input, and chained exception
 text.
 
-## Authoritative model
+## Authoritative implementation
 
-Failure data that crosses a trust boundary is an allowlisted error code, not a
-message or an exception:
+`engine/app/safe_errors.py` is the single public-error catalog. Boundary code
+accepts `FixedErrorCode` members and renders them through
+`fixed_error_detail()` or `fixed_error_message()`. Unknown values fall back to
+`INTERNAL_ERROR`; arbitrary caller text never becomes a public code or message.
 
-```python
-class ErrorCode(StrEnum):
-    INTERNAL = "INTERNAL_ERROR"
-    DATASOURCE_CONNECTION = "DATASOURCE_CONNECTION_FAILED"
-    SSH_TUNNEL = "SSH_TUNNEL_FAILED"
-    AGENT_RUNTIME = "AGENT_RUNTIME_ERROR"
-    TOOL_EXECUTION = "TOOL_EXECUTION_ERROR"
-    EVALUATION = "EVALUATION_ERROR"
-```
-
-The code-to-message/status mapping is private, static, and finite. Only that
-mapping may render a public message. Callers must map arbitrary exceptions to
-a fixed fallback code before building state, observations, persistence DTOs,
-or responses.
+`log_unexpected_exception()` records only a finite `SafeLogOperation`, the
+exception type, and an opaque diagnostic fingerprint. It never logs
+`str(exc)`, exception arguments, causes, tracebacks, credentials, SQL results,
+or provider response bodies.
 
 ## Rules
 
-- Never serialize `str(exc)`, `exc.args`, exception causes, tracebacks, or
-  provider/driver response text.
-- Logs record a fixed operation and allowlisted error code; they do not accept
-  an exception object or arbitrary context string.
-- `ToolObservation`, Agent state, trace events, checkpoints, runtime events,
-  evaluation results, tunnel state, and health records persist error codes
-  only.
-- A LangGraph node must convert an exception before returning state because a
-  graph checkpoint can be written before application-level persistence runs.
-- API handlers may propagate deliberately typed, static public errors, but
-  must map all catch-all exceptions to a fixed internal code.
-- Existing persisted error strings, agent checkpoints/events, evaluation
-  failures, datasource health text, tunnel text, and logs require destructive
-  reset or rotation; they cannot be retroactively trusted.
+- API handlers may propagate deliberately typed, static domain errors. Catch-all
+  paths must map to a `FixedErrorCode` before creating a response.
+- Runtime events, Run Items, Tool Observations, Artifact metadata, datasource
+  health, and persisted failure records contain cataloged codes and bounded
+  public summaries only.
+- Provider and database failures are converted before they enter the durable
+  Agent transcript. Recovery reads the already-sanitized persisted record; it
+  does not reconstruct a message from an exception.
+- Frontend projections render public codes/messages and keep transport or stack
+  diagnostics out of Zustand state.
+- Do not add an error facade, alias map, or compatibility wrapper around
+  `safe_errors.py`; callers import the authoritative helpers directly.
 
 ## Verification
 
-Every new boundary needs a sentinel exception regression that proves the
-sentinel is absent from logs, public responses, in-memory boundary DTOs,
-LangGraph checkpoint bytes, and persisted SQLite JSON/text. Add a policy test
-for boundary modules that rejects raw exception formatting and traceback
-logging.
+Every new trust boundary needs a sentinel regression proving the sentinel is
+absent from logs, HTTP/SSE responses, Run Items, Tool Observations, and database
+records. Architecture tests must also reject raw exception formatting and
+traceback logging in boundary modules.

@@ -359,7 +359,7 @@ Python sidecar 由 `build_sidecar.py` 构建，前端由 TypeScript/Vite 构建�
 | 桌面生命周期 | `desktop/src-tauri/src/lib.rs`、`desktop/src/components/EngineStartupGate.tsx` |
 | 前端对话 | `desktop/src/features/conversation/workspace/ConversationWorkspace.tsx` |
 | 前端状态归并 | `desktop/src/stores/conversationStoreReducer.ts` |
-| Activity / Artifact | `ActivityFeed.tsx`、`ArtifactDock.tsx` |
+| Timeline / Artifact | `MessageList.tsx`、`AgentTimeline.tsx`、`ArtifactDock.tsx` |
 | Result 当前页 | `desktop/src/features/workspace/sqlBacked/useSqlBackedDataView.ts` |
 | API | `engine/api/__init__.py`、`engine/api/conversations.py`、`engine/api/agent.py` |
 | Agent Harness | `engine/agent/coordinator.py`、`engine/agent/loop.py` |

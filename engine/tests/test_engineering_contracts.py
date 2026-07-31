@@ -7,6 +7,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from engine import __version__
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -88,6 +90,18 @@ def test_rust_toolchain_and_lockfile_are_explicit() -> None:
     assert (ROOT / "desktop" / "src-tauri" / "Cargo.lock").is_file()
     assert 'target_env = "gnu"' in rust_host
     assert "Windows desktop builds require the MSVC Rust toolchain" in rust_host
+
+
+def test_application_manifests_match_the_engine_version() -> None:
+    npm_version = json.loads(NPM_MANIFEST.read_text(encoding="utf-8"))["version"]
+    cargo_version = tomllib.loads(
+        (ROOT / "desktop" / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
+    )["package"]["version"]
+    tauri_version = json.loads(
+        (ROOT / "desktop" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )["version"]
+
+    assert {npm_version, cargo_version, tauri_version} == {__version__}
 
 
 def test_no_orphan_root_npm_lockfile_exists() -> None:

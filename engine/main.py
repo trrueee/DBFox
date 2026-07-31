@@ -17,6 +17,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
+from engine import __version__
 from engine.runtime_env import load_runtime_env
 
 # Load runtime configuration before provider and database clients initialize.
@@ -163,7 +164,7 @@ async def lifespan(application: FastAPI) -> Any:
 app = FastAPI(
     title="DBFox Local Engine",
     description="专为 DBFox 桌面外壳设计的安全数据库客户端核心引擎",
-    version="1.0.2",
+    version=__version__,
     lifespan=lifespan,
     # 如果是在生产打包（frozen）模式下，关闭自动生成的交互式接口文档，提高安全性
     docs_url=None if is_frozen else "/docs",
@@ -359,7 +360,7 @@ def api_health() -> dict[str, str]:
     """
     系统健康检查接口
     """
-    return {"status": "healthy", "version": "1.0.2", "mode": "standalone"}
+    return {"status": "healthy", "version": __version__, "mode": "standalone"}
 
 
 # 将 api 目录下的多模块业务路由（路由组）挂载进应用
