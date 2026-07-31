@@ -42,7 +42,7 @@ flowchart LR
 | 工具结算 | 叶子结果 | Durable Observation + TransientToolResult | Observation 唯一绑定 invocation | 已闭环 |
 | 工件 | SQL、安全决策、查询描述符和关系 | SQL/Result/Chart Artifact | 按 ID 与关系重建 | 已闭环 |
 | 数据读取 | Result Artifact ID + 页/筛选/排序参数 | 当前请求的短暂行数据 | 重新解析 SQL 来源并实时查询 | 已闭环 |
-| 完成判断 | TaskPolicy、Observations、Result IDs、analysis.review、引用标记、预算 | continue/repair/synthesize/partial/fail | focus 写入 Run，下一 Turn 重建 | 已闭环 |
+| 完成判断 | 模型输出、待结算动作、Observations、Result IDs、引用标记、预算 | continue/repair/synthesize/partial/fail | focus 写入 Run，下一 Turn 重建 | 已闭环 |
 | 证据 | 最终回答中的受控 Artifact 引用 | claim-level Evidence + answer offsets | Snapshot 从 Evidence 表恢复 | 已闭环 |
 | 终态提交 | AnswerCandidate、Artifacts、Evidence、Memory delta | Message/Run/Evidence/Memory/Event 原子提交 | 事务回滚，不产生半终态 | 已闭环 |
 | 实时与刷新 | Event cursor + LiveStream delta | Zustand product projection | Snapshot → replay → live；gap 后重载 | 已闭环 |
@@ -59,9 +59,9 @@ flowchart LR
 ### ReAct Harness
 
 - 循环为普通领域代码，不存在可配置 Graph 节点或 LangGraph thread/state/checkpoint。
-- Provider finish signal 只是输入；Runtime 仍检查工具结算、任务类型、Result Artifact、分析覆盖和内联证据。
-- 简单查值、Schema 问题和复杂分析使用不同完成约束；自然语言标记位于版本化 `AgentDefinition.TaskPolicy`，不是散落在节点中的流程分支。
-- 复杂趋势、对比、异常、原因等任务必须调用 `analysis.review`，将动态目标绑定到真实 Result Artifact；它是覆盖审查能力，不是完成命令或固定工作流节点。
+- Provider finish signal 只是输入；Runtime 仍检查工具结算、答案候选、实际 Result Artifact 引用和运行预算。
+- Runtime 不包含关键词任务分类器或 Router；模型依据当前上下文和工具描述选择行动，完成门禁不从用户文本推断任务类型。
+- `analysis_review` 是模型按需使用的证据覆盖工具，不由关键词触发，也不是完成命令或固定工作流节点。
 
 ### Tool Runtime
 

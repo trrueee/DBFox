@@ -230,6 +230,10 @@ flowchart LR
 
 SQLite 忽略 `SELECT FOR UPDATE` 的行锁语义，因此 Agent 聚合写入先使用短 `BEGIN IMMEDIATE` 获得 writer reservation。sequence、lease token、run version、实体写入和 event append 在短事务中提交；LLM 调用和目标数据库查询永远不占用元数据库写事务。
 
+同一规则适用于 Agent Evaluation 等外围模块：评测 Run 和每个 Case 的
+bookkeeping 独立提交，调用 Agent 时外层不得持有 SQLite 写事务。WAL 和
+`busy_timeout` 是并发缓冲，不是长事务锁问题的解决方案。
+
 ### 7.3 Lease 与 fencing
 
 Session lease 包含 owner、token 和过期时间。worker 只能使用当前 token 提交；过期 worker 即使继续运行也会在 Repository 边界被拒绝。启动恢复扫描未完成 Run，关闭残留 running Turn，然后依据持久工具状态决定继续、失败或 unknown。
@@ -272,6 +276,11 @@ Evidence 可以保存少量明确结论值、维度 locator、Artifact ID、fing
 ### 10.2 Approval
 
 Policy 使用 canonical tool name 和授权后的输入判定风险。需要批准时持久化 Approval 并暂停同一个 Run。用户决定与 invocation/version/generation 绑定，不能批准后替换参数。批准、拒绝、取消和导出进入 SecurityAuditRecord。
+
+Canonical Tool ID 在 Registry、模型 Provider、Policy、持久化和 Evaluation
+全链路保持同一个值，格式固定为 `^[A-Za-z0-9_-]{1,64}$`，例如
+`sql_validate`。领域分组由 `ToolSpec.group` 表达，不从名称解析；系统不提供
+点号名称到下划线名称的运行时映射。
 
 ### 10.3 Credential 与日志
 

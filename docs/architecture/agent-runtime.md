@@ -1,8 +1,11 @@
 # DBFox Agent Runtime 架构
 
 > 文档状态：当前 Agent 专题事实源
-> 最后核验：2026-07-20
+> 最后核验：2026-07-26
 > 代码边界：`engine/agent/`、`engine/tools/runtime/`、`engine/agent/repositories/`
+>
+> RunItem、SSE、Snapshot 与前端状态的重构目标只在
+> [Canonical RunItem 架构](./agent-runtime-item-protocol.md) 定义，其他文档不得另建兼容协议或 Activity 映射。
 
 ## 1. 架构决定
 
@@ -123,10 +126,13 @@ flowchart TD
 Provider 的 finish signal 不是最终完成权。Runtime 继续检查：
 
 - 工具是否全部结算；
-- 任务类型要求的 Result Artifact 是否存在；
-- 复杂分析是否完成覆盖复核；
-- 数据事实是否带有效 Artifact 引用；
+- 是否存在可交付的回答正文；
+- 当前 Run 若产生了 verified result，数据事实是否引用了真实 Result Artifact；
+- 引用是否全部来自当前 Run 已观察到的 Artifact；
 - 预算是否耗尽以及能否交付部分结果。
+
+CompletionPolicy 不读取用户文本关键词，也不先做 chat/schema/analysis 路由。
+`analysis_review` 是可选的证据覆盖工具，不是完成前置节点。
 
 ## 6. Run 状态机
 
@@ -184,7 +190,7 @@ flowchart LR
   TOOLDEF --> POLICY["Policy Spec"]
   TOOLDEF --> EXEC["Execution Spec"]
   TOOLDEF --> STATE["State Consumption"]
-  TOOLDEF --> ART["Artifact Spec"]
+  TOOLDEF --> SEMANTICS["Observation / Result Semantics"]
   TOOLDEF --> VERSION["Version"]
   VERSION --> MATERIAL["Turn Tool Materialization + Hash"]
   MATERIAL --> PROVIDER["Provider Tool Schema"]
@@ -211,10 +217,14 @@ flowchart TB
 
 - L0 可以短暂包含当前工具结果，Turn 结束后释放；
 - L1 保存缺失项、预算、Observation 和 Artifact 引用；
-- L2 保存有界历史摘要、工作集、未解决问题和最近工件引用；
+- L2 只保存 datasource generation 匹配的工作集、未解决问题和已验证事实；
 - L3 按需通过工具读取 Schema、索引和可复用 SQL，不全量注入；
 - L4 只保存用户偏好，不保存数据库事实或凭据；
 - 所有持久层都禁止结果行和任意敏感单元格副本。
+
+最近的已完成消息只通过 canonical Session History 注入一次。Session Memory
+不得再次复制最近问题和回答；需要压缩长历史时，应只概括被预算淘汰的旧消息，
+不能与仍在窗口内的原文重复。
 
 ## 10. Artifact、Evidence 与回答
 
@@ -254,10 +264,17 @@ flowchart LR
 
 - 新模型提供商实现统一 Model Adapter，输出规范化 `TurnStreamItem`。
 - 新工具通过 Registry 注册完整定义，不向 RunLoop 增加工具名判断。
-- 新完成策略进入版本化 `AgentDefinition.TaskPolicy`，不增加固定流程节点。
-- 新 Artifact 定义描述符、关系、Evidence 定位和前端 renderer，不保存结果副本。
+- 完成判断只读取模型输出、待结算动作、持久 Observation、Artifact 引用和运行预算，不从用户文本推断任务类型。
+- 新 Artifact 定义 payload、关系、Evidence 定位和前端 renderer，不保存结果副本。当前核心 SQL/Result/Chart 投影仍集中在 ArtifactRepository；在引入插件工具前，应把它收敛为工具拥有的 typed projector，而不是增加第二份工具名映射。
 - 新 Activity 必须来自公共事件映射，定义稳定 ID、状态和用户可理解文案。
 - 新恢复能力必须先定义持久状态和事务，再增加实时行为。
+
+Tool ID 是 Registry、Provider 请求/响应、Policy、Invocation、Observation、Evaluation
+共同使用的唯一标识，不再区分“内部名”和“模型别名”。ID 必须匹配
+`^[A-Za-z0-9_-]{1,64}$`，当前采用清晰的 snake_case（例如
+`sql_validate`、`sql_execute_readonly`、`artifact_inspect`）。工具所属领域由
+`ToolSpec.group` 显式表达，禁止从名字前缀推断，也禁止在 Provider Adapter
+增加名称映射。该约束在工具类定义时校验，因此不合规工具不会进入 Registry。
 
 ## 13. RunControl 与预算账本
 
@@ -275,7 +292,7 @@ Run 创建时固定 `RunLimits` 和原始 deadline。恢复后的 worker 继续�
 
 Provider adapter 只负责规范化 stream 和 usage；是否重试、是否还有预算由 RunControl 决定，不能由 SDK 内部不可见重试改变工具调用次数。
 
-终态由公共 `CompletionDisposition` 表达：`complete` 不允许 limitation；`bounded_partial` 必须携带稳定 limitation code。Turn、Tool、Token、Cost、Deadline、Provider 和 Repair 达限时，Runtime 先按任务类型检查是否已有可交付工作：数据任务必须有成功的只读 Result Artifact，Schema 任务必须有成功观察，直接回答必须有正文或成功观察。满足才提交受限回答，否则明确失败，不能把“只生成了 SQL”包装成数据结论。
+终态由公共 `CompletionDisposition` 表达：`complete` 不允许 limitation；`bounded_partial` 必须携带稳定 limitation code。Turn、Tool、Token、Cost、Deadline、Provider 和 Repair 达限时，Runtime 检查是否已有可交付正文或成功工件；如果当前 Run 产生了 verified result，回答还必须带有效引用。满足才提交受限回答，否则明确失败，不能把“只生成了 SQL”包装成数据结论。
 
 ProgressGuard 在每个继续边界对 Observation、Artifact 和 Plan 的业务事实生成稳定指纹，排除 record ID、执行时间和 latency 等记录抖动。相同指纹连续达到阈值后停止重复尝试；计数写入 Run 工作状态，因此进程恢复不会重置。已有可交付工作时 limitation 为 `NO_PROGRESS`，否则终态为 `AGENT_NO_PROGRESS`。
 
@@ -301,7 +318,7 @@ Plan 约束：
 - step ID 在计划调整中保持稳定，不用数组下标表示身份；
 - 最多一个 step 为 `in_progress`；
 - `evidence_required=true` 的 completed step 必须引用当前 Run 产生的 Artifact；
-- `plan.update` 是普通受控工具，Plan 不反向规定 RunLoop 节点顺序；
+- `plan_update` 是普通受控工具，Plan 不反向规定 RunLoop 节点顺序；
 - `plan.updated` 进入公共事件和 Activity Feed，刷新后由 canonical record 恢复。
 
 ## 15. 持久化与恢复语义
@@ -309,6 +326,10 @@ Plan 约束：
 ### 15.1 Single-writer transaction
 
 Agent Repository 写入前通过 `BEGIN IMMEDIATE` 获取 SQLite writer reservation。读取可变 aggregate、检查 lease/version、修改实体和 append event 都发生在同一短事务。目标数据库访问和 Provider 调用必须位于事务之外。
+
+评测、批处理和管理任务同样遵守该边界：先提交自身 bookkeeping，再调用
+Agent；每个 case 结果作为独立事务提交。WAL 与 `busy_timeout` 只负责吸收短暂
+竞争，不能补救跨模型调用、网络访问或目标数据库查询持有的长写事务。
 
 ### 15.2 进程恢复
 
@@ -374,10 +395,14 @@ Activity Feed 的可见过程包括：
 - 正在检查 Schema 或执行查询；
 - Tool succeeded/failed/rejected；
 - 等待 Approval/Question；
-- 中断恢复、修复和完成摘要；
+- 真实 provider reasoning summary（仅在 provider 明确提供时）；
+- 中断恢复和修复；
 - 关联 Artifact 快捷入口。
 
 私有 chain-of-thought 不展示。Provider 可输出 `reasoning_summary`，但必须是适合用户阅读的简洁摘要，由协议明确标记，不把原始推理 token 当产品内容。
+Turn start/finish 本身不生成“已完成分析”之类的推测性 Activity；Run 完成只由
+`answer.completed` 与 terminal Run event 表达。任意 Activity 数量也不作为计划进度，
+只有 versioned Task Plan 可以展示步骤完成比例。
 
 ## 19. 当前验证与开放边界
 

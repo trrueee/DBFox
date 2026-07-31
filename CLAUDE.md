@@ -53,24 +53,23 @@ cd desktop && npm test
 
 ## Key Conventions
 - **Backend startup**: ALWAYS `python -m engine.main` (module mode), NEVER `python engine/main.py`
-- **Frontend env**: Engine auto-writes `desktop/.env.local` with `VITE_LOCAL_ENGINE_PORT` + `VITE_LOCAL_ENGINE_TOKEN` at startup
+- **Frontend env**: `build_sidecar.py` writes `desktop/.env.local`; the backend never writes frontend source-tree configuration at runtime
 - **Default ports**: Backend 18625, Frontend 5173
 - **Database**: SQLite by default at `./dbfox_local.db`, WAL mode, auto-migration on startup
 - **Migrations**: Alembic in `engine/migrations/versions/`
 - **Python deps**: `requirements.txt` (runtime) + `requirements-dev.txt` (dev)
 
 ## Agent Tool Chain
-Registered tools (see `engine/tools/dbfox_tools.py`):
-- `db.observe`, `db.search`, `db.inspect`, `db.preview`
-- `sql.validate`, `sql.execute_readonly`
-- `chart.suggest`
-- `answer.synthesize`
-- `escalate.tool_group`
-- Model-authored SQL must use `sql.validate` followed by `sql.execute_readonly`; the retired `db.query` fast path must not be referenced.
-
-Agent skills (YAML): `engine/agent/skills/builtin/` — `result_analysis.yaml`, `schema_exploration.yaml`
+Registered functions are defined once in `engine/tools/builtin/registry.py`:
+- Runtime control: `request_clarification`, `update_plan`
+- Catalog: `catalog_overview`, `catalog_refresh`, `schema_list`, `schema_search`, `schema_inspect`
+- Query: `data_preview`, `sql_validate`, `sql_execute_readonly`
+- Results: `result_inspect`, `result_profile`, `chart_create`
+- Model-authored SQL must use `sql_validate`, then pass the immutable validation Artifact ID to `sql_execute_readonly`. The execution tool never accepts raw SQL.
+- Tool contracts are strict, content-addressed per Turn, and include input/output Schema, policy, execution, semantics, and presentation.
 
 ## Anti-patterns
 - ❌ `python engine/main.py` — use `python -m engine.main`
-- ❌ Do NOT reference `result.profile` — this tool was deleted in MVP simplification (2026-06)
-- ❌ The "result" tool group has zero registered tools
+- ❌ Do not add aliases for retired dotted tool names.
+- ❌ Do not parse textual Thought/Action/Observation; the Agent uses native Responses Items.
+- ❌ Do not drive the Agent Loop from React or Zustand.

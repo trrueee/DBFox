@@ -50,7 +50,7 @@ cd desktop && npm run tauri build
 
 4. **Token variable naming**: `build_sidecar.py` writes `VITE_LOCAL_ENGINE_TOKEN` (not `VITE_DBFOX_STATIC_TOKEN`). Frontend reads `VITE_LOCAL_ENGINE_TOKEN` + `VITE_LOCAL_ENGINE_PORT`.
 
-5. **Hidden imports**: `sshtunnel`, `keyring`, `langgraph`, `langchain_core` must be installed in `.build_venv` and added as hidden imports in the PyInstaller spec.
+5. **Hidden imports**: runtime-only dependencies such as `sshtunnel` and `keyring` must be installed in `.build_venv` and added to the PyInstaller analysis when static discovery cannot find them.
 
 6. **`alembic.ini` bundling**: Must be explicitly added to PyInstaller bundle via `--add-data`.
 

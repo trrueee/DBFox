@@ -104,6 +104,7 @@ artifacts/runtime-logs/
 !artifacts/spider_*.json
 reports/
 tmp_tables.json
+output/
 
 # ============================================================
 # LangGraph / Agent Runtime
@@ -165,3 +166,4 @@ Thumbs.db
 .superpowers/
 .worktrees/
 docs/skills/
+.mimocode/.cron-lock

@@ -66,7 +66,7 @@ DBFox Agent 是面向数据库工作的智能数据分析师。它不以“生�
 
 ### 3.4 DBFox 保留的核心设计
 
-- 统一的 BaseTool、ToolPolicy、ToolExecutionSpec、ToolStateSpec 和 ArtifactSpec；
+- 统一的 BaseTool、ToolPolicy、ToolExecutionSpec、ToolStateSpec 和 ToolSemanticSpec；
 - 数据分析师 System Prompt：主动探索、交叉验证、尽可能发现更多有价值信息；
 - 一等 Artifact/Evidence 模型；
 - 数据库安全、只读、确认和敏感数据策略；

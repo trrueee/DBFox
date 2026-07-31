@@ -8,8 +8,9 @@
 2. [前端架构](./frontend.md) 与 [后端架构](./backend.md)：两个技术面的状态、边界、性能、安全和测试细节。
 3. [功能模块与执行管线](../functional-modules-and-execution-pipelines.md)：模块职责、输入输出、状态变化和故障路径。
 4. [Agent Runtime](./agent-runtime.md)：Session、ReAct、工具、计划、记忆、事件和恢复的专题设计。
-5. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
-6. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
+5. [Agent Typed RunItem 协议](./agent-runtime-item-protocol.md)：中间摘要、计划、工具、审批、正式回答及 SSE 恢复的统一合同。
+6. [前后端与 Agent 深度评审](../reviews/frontend-backend-agent-architecture-deep-review.md)：当前设计符合度、开放风险和评审问题。
+7. [实施后全局核验](../reviews/architecture-global-verification.md)：修复前证据与实施后权威结论。
 
 以下文档属于历史决策材料，不可覆盖当前事实：
 

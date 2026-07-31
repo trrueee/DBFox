@@ -44,7 +44,7 @@
 
 | 基础 | 决定 |
 |---|---|
-| `BaseTool`、`ToolSpec`、`ToolPolicy`、`ToolExecutionSpec`、`ToolStateSpec`、`ArtifactSpec` | 作为统一工具定义基础 |
+| `BaseTool`、`ToolSpec`、`ToolPolicy`、`ToolExecutionSpec`、`ToolStateSpec`、`ToolSemanticSpec` | 作为统一工具定义基础 |
 | Run 状态版本检查和取消栅栏 | 纳入 `RunRepository` |
 | Supervisor 使用独立数据库 Session | 保留执行隔离原则 |
 | Approval 原子消费 | 纳入 `ApprovalRepository` |
