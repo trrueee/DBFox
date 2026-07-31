@@ -1,57 +1,37 @@
-import { request } from "./client";
+import {
+  clearDiagnosticLogsApiV1DiagnosticsLogsClearPost,
+  clearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost,
+  getDiagnosticLogsApiV1DiagnosticsLogsGet,
+} from "./generated/sdk.gen";
+import type {
+  DiagnosticLogsResponse,
+  DiagnosticLogSourceResponse,
+} from "./generated/types.gen";
 
-export interface DiagnosticLogSource {
-  name: string;
-  path: string;
-  exists: boolean;
-  size_bytes: number;
-  modified_at: string | null;
-  content: string;
-}
-
-export interface DiagnosticLogsResponse {
-  generated_at: string;
-  policy: {
-    redacted: boolean;
-    max_lines_per_source: number;
-    omitted: string[];
-  };
-  environment: Record<string, unknown>;
-  sources: DiagnosticLogSource[];
-  security_audit: {
-    retention_days: number;
-    export_window_days: number;
-    max_records: number;
-    records: Array<{
-      id: string;
-      action: string;
-      outcome: string;
-      actorType: string;
-      resourceType: string;
-      resourceId: string | null;
-      sessionId: string | null;
-      runId: string | null;
-      correlationId: string;
-      details: Record<string, unknown>;
-      createdAt: string;
-    }>;
-  };
-}
+export type DiagnosticLogSource = DiagnosticLogSourceResponse;
+export type { DiagnosticLogsResponse };
 
 export const diagnosticsApi = {
-  getLogs: (maxLines = 300) =>
-    request<DiagnosticLogsResponse>(
-      `/diagnostics/logs?max_lines=${encodeURIComponent(String(maxLines))}`,
-    ),
+  async getLogs(maxLines = 300) {
+    const { data } = await getDiagnosticLogsApiV1DiagnosticsLogsGet({
+      query: { max_lines: maxLines },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  clearLogs: () =>
-    request<{ cleared: boolean; sources_cleared: string[] }>("/diagnostics/logs/clear", {
-      method: "POST",
-    }),
+  async clearLogs() {
+    const { data } = await clearDiagnosticLogsApiV1DiagnosticsLogsClearPost({
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  clearSecurityAudit: (confirmText: string) =>
-    request<{ cleared: boolean; records_deleted: number }>("/diagnostics/security-audit/clear", {
-      method: "POST",
-      body: JSON.stringify({ confirm_text: confirmText }),
-    }),
+  async clearSecurityAudit(confirmText: string) {
+    const { data } = await clearSecurityAuditApiV1DiagnosticsSecurityAuditClearPost({
+      body: { confirm_text: confirmText },
+      throwOnError: true,
+    });
+    return data;
+  },
 };

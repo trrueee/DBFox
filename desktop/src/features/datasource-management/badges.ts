@@ -3,7 +3,7 @@ import type { DataSource } from "../../lib/api";
 export const healthType = (ds: DataSource) =>
   ds.last_test_status === "success" ? "success" : ds.last_test_status === "failed" ? "error" : "idle";
 
-export const fmtDate = (value?: string) =>
+export const fmtDate = (value?: string | null) =>
   value
     ? new Date(value).toLocaleString("zh-CN", {
         month: "short",
@@ -20,7 +20,7 @@ export const dbBadge = (ds: DataSource) =>
       ? { label: "Lite", color: "var(--color-text-muted)", bg: "var(--color-border)" }
       : { label: "MySQL", color: "var(--color-info)", bg: "var(--color-info-soft)" };
 
-export const envBadge = (env?: string) =>
+export const envBadge = (env?: string | null) =>
   env === "prod"
     ? { label: "生产", color: "var(--color-danger)", bg: "var(--color-danger-soft)" }
     : env === "test"

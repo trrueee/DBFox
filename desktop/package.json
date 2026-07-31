@@ -4,21 +4,23 @@
   "engines": {
     "node": ">=20.19.0"
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && node ./scripts/build.mjs && node ./scripts/check-bundle-budget.mjs",
+    "generate:api": "node ./scripts/generate-api.mjs",
     "check:bundle": "node ./scripts/check-bundle-budget.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node ./scripts/run-rust-tool.mjs tauri",
+    "test:sidecar": "node ./scripts/smoke-sidecar.mjs",
+    "test:rust": "node ./scripts/run-rust-tool.mjs cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run --reporter=dot",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
-    "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-collapsible": "^1.1.16",
     "@radix-ui/react-context-menu": "^2.3.1",
     "@radix-ui/react-dialog": "^1.1.16",
@@ -34,6 +36,7 @@
     "@radix-ui/react-tabs": "^1.1.15",
     "@radix-ui/react-toast": "^1.2.17",
     "@radix-ui/react-tooltip": "^1.2.9",
+    "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.14.3",
     "@tauri-apps/api": "^2.11.0",
@@ -57,13 +60,9 @@
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },
-  "overrides": {
-    "monaco-editor": {
-      "dompurify": "3.4.12"
-    }
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@hey-api/openapi-ts": "^0.99.0",
     "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

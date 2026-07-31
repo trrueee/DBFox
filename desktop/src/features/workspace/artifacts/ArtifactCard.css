@@ -50,27 +50,27 @@
 }
 
 .artifact-card-table .artifact-card-badge {
-  border-color: #BFDBFE;
-  background: #EFF6FF;
+  border-color: color-mix(in srgb, var(--color-info) 36%, var(--color-border));
+  background: var(--color-info-soft);
   color: var(--color-info);
 }
 
 .artifact-card-chart .artifact-card-badge {
-  border-color: #DDD6FE;
-  background: #F5F3FF;
+  border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  background: var(--color-primary-soft);
   color: var(--color-primary);
 }
 
 .artifact-card-sql .artifact-card-badge {
-  border-color: #FDE68A;
-  background: #FFFBEB;
-  color: #B45309;
+  border-color: var(--trust-warning-border);
+  background: var(--trust-warning-bg);
+  color: var(--trust-warning);
 }
 
 .artifact-card-insight .artifact-card-badge {
-  border-color: #A7F3D0;
-  background: #ECFDF5;
-  color: #059669;
+  border-color: var(--trust-safe-border);
+  background: var(--trust-safe-bg);
+  color: var(--trust-safe);
 }
 
 .artifact-card-desc,

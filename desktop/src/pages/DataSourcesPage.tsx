@@ -9,6 +9,7 @@ import {
   DataSourceForm,
   DataSourceList,
 } from "../features/datasource-management";
+import { useDatasourceState } from "../features/datasource/useDatasourceState";
 import "../features/datasource-management/DataSourceManagement.css";
 import {
   emptyDatasourceForm,
@@ -21,7 +22,7 @@ import {
 } from "../features/datasource-management/formState";
 import { api } from "../lib/api";
 import { getUserErrorMessage } from "../lib/api/client";
-import type { DataSource, DataSourceActions, Project, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
+import type { DataSource, SchemaSyncOptions, SchemaSyncResult } from "../lib/api";
 import { stripSensitiveDatasourceForm } from "../lib/datasourceFormSecurity";
 import {
   buildDatasourceCreatePayload,
@@ -38,25 +39,16 @@ import {
 } from "../lib/api/credentials";
 
 interface DataSourcesPageProps {
-  onSelectDataSource: (ds: DataSource | null) => void;
-  activeDataSource: DataSource | null;
-  activeProject: Project | null;
-  onRefreshDatasources: () => Promise<void>;
   initialShowAddForm?: boolean;
-  datasources: DataSource[];
-  actions?: DataSourceActions;
   chrome?: "page" | "workspace";
 }
 
-const firstSchemaSyncWarning = (result: unknown): string | null => {
-  const syncResult = result as SchemaSyncResult | null | undefined;
-  if (syncResult?.warnings?.length) return syncResult.warnings[0];
-  return null;
+const firstSchemaSyncIssue = (result: SchemaSyncResult | null): string | null => {
+  return result?.aiEnrich?.errors?.[0] ?? null;
 };
 
-const aiEnrichSyncMessage = (result: unknown): { text: string; type: ToastType } | null => {
-  const syncResult = result as SchemaSyncResult | null | undefined;
-  const enrich = syncResult?.aiEnrich;
+const aiEnrichSyncMessage = (result: SchemaSyncResult | null): { text: string; type: ToastType } | null => {
+  const enrich = result?.aiEnrich;
   if (!enrich) return null;
 
   const count = Number(enrich.enriched_count || 0);
@@ -73,9 +65,9 @@ const aiEnrichSyncMessage = (result: unknown): { text: string; type: ToastType }
 
 const schemaSyncToast = (
   baseMessage: string,
-  result: unknown,
+  result: SchemaSyncResult | null,
 ): { message: string; type: ToastType; inline: string | null } => {
-  const warning = firstSchemaSyncWarning(result);
+  const warning = firstSchemaSyncIssue(result);
   const enrich = aiEnrichSyncMessage(result);
   const type = warning || enrich?.type === "warning" ? "warning" : "success";
   const detail = warning || enrich?.text || "";
@@ -124,20 +116,19 @@ async function enrollDatasourceCredentials(
 }
 
 export const DataSourcesPage = ({
-  onSelectDataSource,
-  activeDataSource,
-  activeProject,
-  onRefreshDatasources,
   initialShowAddForm,
-  datasources,
-  actions,
   chrome = "page",
 }: DataSourcesPageProps) => {
   const toast = useToast();
-  const createDatasource = actions?.createDatasource;
-  const updateDatasource = actions?.updateDatasource;
-  const deleteDatasource = actions?.deleteDatasource;
-  const syncSchema = actions?.syncSchema;
+  const {
+    datasources,
+    activeDatasource,
+    setActiveDatasourceId,
+    createDatasource,
+    updateDatasource,
+    deleteDatasource,
+    syncSchema,
+  } = useDatasourceState();
 
   const [selectedId, setSelectedId] = useState("");
   const [mode, setMode] = useState<PageMode>(initialShowAddForm ? "create" : "detail");
@@ -153,13 +144,6 @@ export const DataSourcesPage = ({
   const preferredIdRef = useRef<string | null>(null);
 
   const selected = datasources.find((datasource) => datasource.id === selectedId) || null;
-
-  const loadDatasources = async (preferredId?: string) => {
-    if (preferredId) {
-      preferredIdRef.current = preferredId;
-    }
-    await onRefreshDatasources();
-  };
 
   if (initialShowAddForm !== prevInitialShowAddForm) {
     setPrevInitialShowAddForm(initialShowAddForm);
@@ -182,15 +166,10 @@ export const DataSourcesPage = ({
     setSelectedId((current) => {
       if (preferredId !== null && datasources.some((item) => item.id === preferredId)) return preferredId;
       if (current && datasources.some((item) => item.id === current)) return current;
-      if (activeDataSource && datasources.some((item) => item.id === activeDataSource.id)) return activeDataSource.id;
+      if (activeDatasource && datasources.some((item) => item.id === activeDatasource.id)) return activeDatasource.id;
       return datasources[0]?.id || "";
     });
-  }, [datasources, activeDataSource]);
-
-  useEffect(() => {
-    void onRefreshDatasources();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProject?.id]);
+  }, [datasources, activeDatasource]);
 
   const startCreate = () => {
     setMode("create");
@@ -202,6 +181,12 @@ export const DataSourcesPage = ({
   const startEdit = (datasource: DataSource) => {
     setMode("edit");
     setForm(formFromDataSource(datasource));
+    setFormError("");
+    setTestResult({ status: "idle", message: "" });
+  };
+
+  const cancelForm = () => {
+    setMode("detail");
     setFormError("");
     setTestResult({ status: "idle", message: "" });
   };
@@ -218,10 +203,7 @@ export const DataSourcesPage = ({
     if (!selectedId || actionState !== "idle") return;
     try {
       setActionState("syncing");
-      const syncFn = syncSchema || api.syncSchema;
-      const syncResult = await syncFn(selectedId, schemaSyncOptions(syncAiEnrich));
-      await loadDatasources(selectedId);
-      await onRefreshDatasources();
+      const syncResult = await syncSchema(selectedId, schemaSyncOptions(syncAiEnrich));
       const feedback = schemaSyncToast("表结构已同步", syncResult);
       setLastSyncFeedback(feedback.inline);
       toast.toast(feedback.message, feedback.type);
@@ -253,7 +235,15 @@ export const DataSourcesPage = ({
             enrollment.credentialLeaseId,
           ),
         );
-        setTestResult({ status: "success", message: result.message ?? "连接成功。", details: result });
+        setTestResult({
+          status: "success",
+          message: result.message ?? "连接成功。",
+          details: {
+            serverVersion: result.serverVersion ?? undefined,
+            readonly: result.readonly ?? undefined,
+            tablesCount: result.tablesCount ?? undefined,
+          },
+        });
       } finally {
         if (enrollment.credentialLeaseId) {
           await releaseCredentialLease(enrollment.credentialLeaseId).catch(() => undefined);
@@ -270,14 +260,12 @@ export const DataSourcesPage = ({
       setActionState("saving");
       setFormError("");
       setTestResult({ status: "idle", message: "" });
-      const createFn = createDatasource || api.createDatasource;
-      const syncFn = syncSchema || api.syncSchema;
       const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
       credentialLeaseId = enrollment.credentialLeaseId;
-      const created = await createFn(
+      const created = await createDatasource(
         buildDatasourceCreatePayload(
           nextForm as DatasourceFormShape,
-          activeProject?.id,
+          undefined,
           enrollment.references,
           enrollment.credentialLeaseId,
         ),
@@ -285,17 +273,17 @@ export const DataSourcesPage = ({
       setMode("detail");
       setForm(emptyDatasourceForm());
 
-      let syncResult: unknown = null;
+      let syncResult: SchemaSyncResult | null = null;
       let syncError: unknown = null;
       try {
-        syncResult = await syncFn(created.id, schemaSyncOptions(syncAiEnrich));
+        syncResult = await syncSchema(created.id, schemaSyncOptions(syncAiEnrich));
       } catch (error: unknown) {
         syncError = error;
       }
 
-      await loadDatasources(created.id);
-      await onRefreshDatasources();
-      onSelectDataSource(created);
+      preferredIdRef.current = created.id;
+      setSelectedId(created.id);
+      setActiveDatasourceId(created.id);
       if (syncError) {
         const message = getUserErrorMessage(syncError, "表结构同步失败，请重试。");
         setLastSyncFeedback(`表结构同步失败：${message}`);
@@ -323,10 +311,9 @@ export const DataSourcesPage = ({
       setActionState("saving");
       setFormError("");
       setTestResult({ status: "idle", message: "" });
-      const updateFn = updateDatasource || api.updateDatasource;
       const enrollment = await enrollDatasourceCredentials(nextForm as DatasourceFormShape);
       credentialLeaseId = enrollment.credentialLeaseId;
-      await updateFn(
+      await updateDatasource(
         selected.id,
         buildDatasourceUpdatePayload(
           nextForm as DatasourceFormShape,
@@ -336,8 +323,6 @@ export const DataSourcesPage = ({
       );
       setForm((current) => stripSensitiveDatasourceForm(current));
       setMode("detail");
-      await loadDatasources(selected.id);
-      await onRefreshDatasources();
       toast.toast("数据源已更新", "success");
     } catch (error: unknown) {
       setFormError(getUserErrorMessage(error, "更新失败，请重试。"));
@@ -353,29 +338,24 @@ export const DataSourcesPage = ({
     if (!selected) return;
     try {
       setActionState("deleting");
-      const deleteFn = deleteDatasource || api.deleteDatasource;
-      const res = await deleteFn(selected.id);
-      const raw = res as Record<string, unknown> | null;
-      if (raw && raw.requires_confirmation) {
+      const res = await deleteDatasource(selected.id);
+      if ("requires_confirmation" in res) {
         setConfirmDetails({
-          confirm_token: raw.confirm_token as string,
-          impact_summary: raw.impact_summary as string,
-          expected_confirm_text: raw.expected_confirm_text as string,
+          confirm_token: res.confirm_token,
+          impact_summary: res.impact_summary,
+          expected_confirm_text: res.expected_confirm_text,
           onConfirm: async (text: string) => {
-            await deleteFn(selected.id, { token: raw.confirm_token as string, text });
+            await deleteDatasource(selected.id, {
+              confirm_token: res.confirm_token,
+              confirm_text: text,
+            });
             setConfirmDetails(null);
-            await loadDatasources();
-            await onRefreshDatasources();
-            if (activeDataSource?.id === selected.id) onSelectDataSource(null);
             toast.toast("数据源已删除", "success");
           },
           onCancel: () => setConfirmDetails(null),
         });
         return;
       }
-      await loadDatasources();
-      await onRefreshDatasources();
-      if (activeDataSource?.id === selected.id) onSelectDataSource(null);
       toast.toast("数据源已删除", "success");
     } catch (err: unknown) {
       toast.toast(getUserErrorMessage(err, "删除数据源失败，请重试。"), "error");
@@ -386,19 +366,17 @@ export const DataSourcesPage = ({
 
   return (
     <div className={`hifi-tab-pane ds-page${chrome === "workspace" ? " ds-page--workspace" : ""}`}>
-      {chrome === "workspace" ? (
+      {chrome === "workspace" ? mode === "detail" ? (
         <div className="ds-page-toolbar">
           <span className="ds-page-toolbar__meta">
-            {mode === "create" ? "正在创建连接" : datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
+            {datasources.length > 0 ? `${datasources.length} 个连接` : "尚未创建连接"}
           </span>
-          {mode !== "create" ? (
-            <Button type="button" onClick={startCreate}>
-              <Plus size={13} />
-              新建连接
-            </Button>
-          ) : null}
+          <Button type="button" onClick={startCreate}>
+            <Plus size={13} />
+            新建连接
+          </Button>
         </div>
-      ) : (
+      ) : null : (
         <div className="ds-page-header">
           <div>
             <h2 className="ds-page-title">数据源管理</h2>
@@ -426,8 +404,8 @@ export const DataSourcesPage = ({
           }
         />
       ) : (
-        <div className={`ds-page-console${mode === "create" ? " ds-page-console--focused" : ""}`}>
-          {mode !== "create" ? (
+        <div className={`ds-page-console${mode !== "detail" ? " ds-page-console--focused" : ""}`}>
+          {mode === "detail" ? (
             <DataSourceList
               datasources={datasources}
               selectedId={selectedId}
@@ -448,7 +426,7 @@ export const DataSourcesPage = ({
                 lastSyncFeedback={lastSyncFeedback}
                 onSyncAiEnrichChange={setSyncAiEnrich}
                 onActivate={(datasource) => {
-                  onSelectDataSource(datasource);
+                  setActiveDatasourceId(datasource.id);
                   toast.toast(`已激活: ${datasource.name}`, "success");
                 }}
                 onEdit={startEdit}
@@ -468,6 +446,7 @@ export const DataSourcesPage = ({
                 updateForm={updateForm}
                 onTestConnection={handleTestConnection}
                 onSubmit={mode === "create" ? handleCreate : handleUpdate}
+                onCancel={cancelForm}
               />
             )}
           </div>

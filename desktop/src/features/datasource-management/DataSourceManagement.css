@@ -848,7 +848,33 @@
 }
 
 .ds-page-console--focused {
+  display: block;
   grid-template-columns: minmax(0, 1fr);
+  border: 0;
+  border-radius: 0;
+  background: var(--surface-raised);
+}
+
+.ds-page-console--focused .ds-page-detail-shell {
+  height: 100%;
+  background: var(--surface-raised);
+}
+
+.ds-page-console--focused .ds-form.settings-form {
+  background: var(--surface-raised);
+}
+
+.ds-page-console--focused .ds-form-intro {
+  box-sizing: border-box;
+  width: min(100%, 936px);
+  margin: 0 auto;
+  border-bottom: 0;
+  background: transparent;
+  padding: 34px 28px 28px;
+}
+
+.ds-page-console--focused .ds-form-scroll {
+  padding: 0 28px;
 }
 
 @keyframes ds-settings-reveal {
@@ -862,7 +888,7 @@
   }
 
   .ds-page-console.ds-page-console--focused {
-    grid-template-columns: minmax(0, 1fr);
+    display: block;
   }
 
   .ds-form-grid--two,
@@ -883,6 +909,14 @@
 
   .ds-form-intro {
     padding: 14px;
+  }
+
+  .ds-page-console--focused .ds-form-intro {
+    padding: 24px 16px 20px;
+  }
+
+  .ds-page-console--focused .ds-form-scroll {
+    padding: 0 16px;
   }
 }
 

@@ -13,14 +13,11 @@ vi.mock("../../../lib/api/agent", () => ({
   },
 }));
 
-vi.mock("../../../components/SqlEditor", () => ({
-  SqlEditor: () => <div data-testid="monaco-editor-mock" />,
-}));
-
 const datasource: DataSource = {
   id: "ds-1",
   name: "Local SQLite",
   db_type: "sqlite",
+  env: "dev",
   host: null,
   port: 0,
   database_name: "app.db",
@@ -41,9 +38,16 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
   artifacts: [
     {
       id: "agent/run/console-run-1/artifact/001/sql_query_a1",
-      semantic_id: "sql_query_a1",
+      session_id: "sql-1",
+      run_id: "console-run-1",
+      turn_id: null,
+      semantic_key: "sql_query_a1",
+      version: 1,
       type: "sql",
       title: "Validated SQL",
+      status: "completed",
+      visibility: "supporting",
+      summary: null,
       payload: {
         sql: "SELECT 1 AS id, 'Ada' AS name",
         validationStatus: "passed",
@@ -51,28 +55,49 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
         rowCount: 1,
         latencyMs: 7,
       },
-      presentation: { mode: "dock", priority: 70, collapsed: true },
-      depends_on: [],
+      payload_ref: null,
+      provenance: {},
+      relations: [],
     },
     {
       id: "agent/run/console-run-1/artifact/002/safety_report_a1",
-      semantic_id: "safety_report_a1",
+      session_id: "sql-1",
+      run_id: "console-run-1",
+      turn_id: null,
+      semantic_key: "safety_report_a1",
+      version: 1,
       type: "safety",
       title: "Safety report",
+      status: "completed",
+      visibility: "internal",
+      summary: null,
       payload: {
         passed: true,
         canExecute: true,
         requiresApproval: false,
         safeSql: "SELECT 1 AS id, 'Ada' AS name",
       },
-      presentation: { mode: "dock", priority: 75, collapsed: true },
-      depends_on: ["agent/run/console-run-1/artifact/001/sql_query_a1"],
+      payload_ref: null,
+      provenance: {},
+      relations: [
+        {
+          relation: "supports",
+          artifact_id: "agent/run/console-run-1/artifact/001/sql_query_a1",
+        },
+      ],
     },
     {
       id: "agent/run/console-run-1/artifact/003/result_view_a1",
-      semantic_id: "result_view_a1",
+      session_id: "sql-1",
+      run_id: "console-run-1",
+      turn_id: null,
+      semantic_key: "result_view_a1",
+      version: 1,
       type: "result_view",
       title: "Result view",
+      status: "completed",
+      visibility: "primary",
+      summary: null,
       payload: {
         sourceSqlArtifactId: "agent/run/console-run-1/artifact/001/sql_query_a1",
         safetyArtifactId: "agent/run/console-run-1/artifact/002/safety_report_a1",
@@ -86,10 +111,17 @@ const consoleArtifactResponse: ConsoleExecuteResponse = {
         returnedRows: 1,
         latencyMs: 7,
       },
-      presentation: { mode: "both", priority: 20, collapsed: false },
-      depends_on: [
-        "agent/run/console-run-1/artifact/001/sql_query_a1",
-        "agent/run/console-run-1/artifact/002/safety_report_a1",
+      payload_ref: null,
+      provenance: {},
+      relations: [
+        {
+          relation: "derived_from",
+          artifact_id: "agent/run/console-run-1/artifact/001/sql_query_a1",
+        },
+        {
+          relation: "validated_by",
+          artifact_id: "agent/run/console-run-1/artifact/002/safety_report_a1",
+        },
       ],
     },
   ],
@@ -158,7 +190,6 @@ describe("SqlConsoleWorkspace", () => {
     expect(editor).toBeTruthy();
     expect(editor.closest(".sql-console-scroll")).toBeTruthy();
     expect(container.querySelector(".sql-console-editor-inline")).toBeNull();
-    expect(screen.queryByTestId("monaco-editor-mock")).toBeNull();
     expect(container.querySelector(".sql-console-editor-shell")).toBeNull();
     expect((screen.getByRole("button", { name: /运行/ }) as HTMLButtonElement).disabled).toBe(true);
   });

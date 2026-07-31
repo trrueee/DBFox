@@ -23,7 +23,7 @@ interface DataSourceDetailProps {
 const dbBadgeType = (datasource: DataSource) =>
   datasource.db_type === "postgresql" ? "postgresql" : datasource.db_type === "sqlite" ? "sqlite" : "mysql";
 
-const envBadgeType = (env?: string) => (env === "prod" ? "prod" : env === "test" ? "test" : "dev");
+const envBadgeType = (env?: string | null) => (env === "prod" ? "prod" : env === "test" ? "test" : "dev");
 
 export const DataSourceDetail = ({
   selected,

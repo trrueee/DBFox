@@ -53,7 +53,7 @@ describe("EngineStartupGate", () => {
       </EngineStartupGate>,
     );
 
-    expect(screen.getByText("正在加载，请稍候…")).toBeTruthy();
+    expect(screen.getByText("正在启动 DBFox…")).toBeTruthy();
     expect(screen.queryByText("Workspace ready")).toBeNull();
 
     await act(async () => {

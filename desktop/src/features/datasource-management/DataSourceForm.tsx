@@ -27,9 +27,15 @@ interface DataSourceFormProps {
   updateForm: (key: keyof DatasourceFormState, value: string | number | boolean) => void;
   onTestConnection: (form: DatasourceFormState) => void;
   onSubmit: (form: DatasourceFormState) => void;
+  onCancel: () => void;
 }
 
-const dbTypeOptions = [
+const dbTypeOptions: ReadonlyArray<{
+  id: DatasourceFormState["db_type"];
+  label: string;
+  Icon: typeof Database;
+  port: number;
+}> = [
   { id: "mysql", label: "MySQL", Icon: Database, port: 3306 },
   { id: "postgresql", label: "PostgreSQL", Icon: Server, port: 5432 },
   { id: "sqlite", label: "SQLite", Icon: FileCode2, port: 0 },
@@ -46,6 +52,7 @@ export const DataSourceForm = ({
   updateForm,
   onTestConnection,
   onSubmit,
+  onCancel,
 }: DataSourceFormProps) => {
   const {
     clearErrors,
@@ -57,6 +64,8 @@ export const DataSourceForm = ({
   } = useForm<DatasourceFormState>({
     values: form,
     resolver: zodResolver(datasourceFormSchema),
+    mode: "onBlur",
+    reValidateMode: "onChange",
   });
   const values = useWatch({ control }) as DatasourceFormState;
   const validationError = firstFormError(formState.errors);
@@ -141,10 +150,10 @@ export const DataSourceForm = ({
   );
 
   return (
-    <form onSubmit={handleSubmit(submitValidForm)} className="hifi-card hifi-datasource-form ds-form settings-form">
+    <form onSubmit={handleSubmit(submitValidForm)} className="hifi-datasource-form ds-form settings-form">
       <header className="ds-form-intro">
         <div>
-          <h3 className="hifi-card-title">{mode === "create" ? "建立数据连接" : "编辑数据连接"}</h3>
+          <h3 className="hifi-card-title">{mode === "create" ? "连接配置" : "编辑连接配置"}</h3>
           <p>{mode === "create" ? "填写连接信息后，DBFox 会测试连接并读取数据库结构。" : "更新后可重新测试连接，确认凭据和网络配置有效。"}</p>
         </div>
         <span className="ds-form-intro__badge">{isSqlite ? "本地文件" : "远程数据库"}</span>
@@ -237,7 +246,11 @@ export const DataSourceForm = ({
             <div className="ds-form-grid ds-form-grid--two ds-form-grid--access">
               <div className="ds-form-field">
                 <label className="settings-field__label" htmlFor="ds-env">环境标签</label>
-                <Select id="ds-env" value={values.env} onChange={(event) => setField("env", event.target.value)}>
+                <Select
+                  id="ds-env"
+                  value={values.env}
+                  onChange={(event) => setField("env", event.target.value as DatasourceFormState["env"])}
+                >
                   <option value="dev">开发环境</option>
                   <option value="test">测试环境</option>
                   <option value="prod">生产环境</option>
@@ -352,6 +365,14 @@ export const DataSourceForm = ({
       </div>
 
       <SettingsActionBar status={status}>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={actionsDisabled || testResult.status === "testing"}
+        >
+          取消
+        </Button>
         <Button
           type="button"
           variant="outline"

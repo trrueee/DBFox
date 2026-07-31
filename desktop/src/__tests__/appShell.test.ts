@@ -22,10 +22,11 @@ describe("app shell layout", () => {
 
   it("resizes the sidebar through the DBFox resizable primitive", () => {
     const app = read("App.tsx");
+    const layout = read("features/appShell/ResizableWorkspaceLayout.tsx");
     const resizable = read("components/ui/resizable.tsx");
 
-    expect(app).toContain("ResizablePanelGroup");
-    expect(app).toContain("ResizableHandle");
+    expect(layout).toContain("ResizablePanelGroup");
+    expect(layout).toContain("ResizableHandle");
     expect(app).not.toContain("handleResizeStart");
     expect(resizable).toContain('from "react-resizable-panels"');
   });

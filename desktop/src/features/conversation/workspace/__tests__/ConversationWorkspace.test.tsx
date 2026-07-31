@@ -1,21 +1,17 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationArtifact, ConversationDetail, ConversationMessage, ConversationRun } from "../../../../types/conversation";
+import type {
+  ApprovalItem,
+  AssistantMessageItem,
+  ConversationArtifact,
+  ConversationDetail,
+  ConversationRun,
+  ConversationRunItem,
+} from "../../../../types/conversation";
 import { ConversationWorkspace } from "../ConversationWorkspace";
 
 const viewModel = vi.hoisted(() => ({
-  current: {
-    detail: null as ConversationDetail | null,
-    messages: [] as ConversationMessage[],
-    runs: [] as ConversationRun[],
-    artifacts: [] as ConversationArtifact[],
-    runningRun: null as ConversationRun | null,
-    openConversation: vi.fn(),
-    sendMessage: vi.fn(),
-    cancelRun: vi.fn(),
-    resolveApproval: vi.fn(),
-    selectArtifact: vi.fn(),
-  },
+  current: {} as Record<string, unknown>,
 }));
 
 vi.mock("../useConversationViewModel", () => ({
@@ -29,147 +25,227 @@ describe("ConversationWorkspace", () => {
       unobserve() {}
       disconnect() {}
     }
-
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
-    Object.defineProperty(window, "ResizeObserver", { configurable: true, value: ResizeObserverMock });
+    Object.defineProperty(window, "ResizeObserver", {
+      configurable: true,
+      value: ResizeObserverMock,
+    });
     HTMLElement.prototype.scrollTo = vi.fn();
     window.localStorage.clear();
     cleanup();
     viewModel.current = {
-      detail: conversationDetail(),
-      messages: conversationMessages(),
-      runs: [],
-      artifacts: conversationArtifacts(),
+      detail: detail(),
+      items: [] as ConversationRunItem[],
+      runs: [] as ConversationRun[],
+      artifacts: artifacts(),
       runningRun: null,
       openConversation: vi.fn(),
       sendMessage: vi.fn(),
       cancelRun: vi.fn(),
       resolveApproval: vi.fn(),
+      resolveQuestion: vi.fn(),
       selectArtifact: vi.fn(),
+      loadRunArtifacts: vi.fn().mockResolvedValue(undefined),
     };
   });
 
-  it("keeps the conversation header inside the left pane and makes artifact nav the right pane top content", () => {
-    const onOpenSqlConsole = vi.fn();
-    render(
-      <ConversationWorkspace
-        conversationId="conv-1"
-        onOpenHistory={vi.fn()}
-        onOpenSqlConsole={onOpenSqlConsole}
-        onOpenResultTab={vi.fn()}
-        onDelete={vi.fn()}
-      />,
-    );
-
+  it("keeps the conversation and core artifact dock in separate resizable panels", () => {
+    renderWorkspace();
     const conversationPane = screen.getByRole("region", { name: "Conversation" });
     const artifactDock = screen.getByRole("complementary", { name: "Artifact dock" });
-
-    expect(screen.getByRole("heading", { name: "Revenue investigation" }).closest(".conv-conversation-pane")).toBe(
-      conversationPane,
-    );
     expect(conversationPane.closest(".conv-artifact-main-panel")).toBeTruthy();
     expect(artifactDock.closest(".conv-artifact-dock-panel")).toBeTruthy();
-    expect(artifactDock.closest(".conv-artifact-panel-group")).toBeTruthy();
-    expect(screen.getByRole("separator", { name: "调整工件区宽度" }).classList.contains("conv-artifact-resizer")).toBe(
-      true,
-    );
-    expect(screen.getByText("会话 conv-1").closest(".conv-conversation-pane")).toBe(conversationPane);
-    expect(artifactDock.querySelector(".conv-artifact-dock-header")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "收起工件区" })).toBeTruthy();
-    expect(screen.queryByText("产物")).toBeNull();
-    expect(screen.queryByText("2 items")).toBeNull();
-    expect(artifactDock.querySelector(".conv-artifact-dock-list")).toBeTruthy();
-    expect(artifactDock.querySelector(".conv-artifact-dock-preview")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Revenue Result Result" }).getAttribute("aria-pressed")).toBe("true");
-
-    fireEvent.click(screen.getByRole("button", { name: "Revenue SQL SQL" }));
-
-    expect(viewModel.current.selectArtifact).toHaveBeenCalledWith("conv-1", "sql-1");
-    expect(onOpenSqlConsole).not.toHaveBeenCalled();
+    expect(screen.getByRole("separator", { name: "调整工件区宽度" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Revenue Result Result" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Revenue SQL SQL" })).toBeNull();
   });
 
-  it("pins a pending approval directly above the composer", () => {
-    viewModel.current.runningRun = {
-      id: "run-approval", conversation_id: "conv-1", datasource_id: "warehouse",
-      question: "执行查询", assistant_message_id: "message-1", status: "waiting_approval",
-      approval: {
-        id: "approval-1", run_id: "run-approval", session_id: "conv-1",
-        tool_name: "sql.execute_readonly", status: "pending", risk_level: "warning",
-        reason: "需要确认本次只读查询", requested_action: { sql: "SELECT 1" },
-      },
+  it("pins the canonical waiting approval above the composer", () => {
+    const runningRun = run("waiting_approval");
+    const approval = approvalItem();
+    viewModel.current = {
+      ...viewModel.current,
+      runs: [runningRun],
+      runningRun,
+      items: [approval],
     };
-    render(
-      <ConversationWorkspace
-        conversationId="conv-1" onOpenHistory={vi.fn()} onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()} onDelete={vi.fn()}
-      />,
-    );
-
+    renderWorkspace();
     const card = screen.getByRole("region", { name: "需要批准" });
     expect(card.closest(".conv-pinned-action")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "批准执行" }));
-    expect(viewModel.current.resolveApproval).toHaveBeenCalledWith("run-approval", "approval-1", true);
+    expect(viewModel.current.resolveApproval as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      "run-approval",
+      "approval-1",
+      true,
+    );
+  });
+
+  it("loads newly referenced artifacts and reveals a result artifact selected from a citation", async () => {
+    const completedRun = run("completed");
+    const answer = answerItem();
+    viewModel.current = {
+      ...viewModel.current,
+      detail: { ...detail(), selected_artifact_id: null },
+      items: [answer],
+      runs: [completedRun],
+      artifacts: [],
+    };
+    const rendered = renderWorkspace();
+
+    await waitFor(() => {
+      expect(viewModel.current.loadRunArtifacts as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+        "session-1",
+        completedRun.id,
+        ["result-1"],
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "查看证据：查询结果" }));
+    expect(viewModel.current.selectArtifact as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      "session-1",
+      "result-1",
+    );
+
+    viewModel.current = {
+      ...viewModel.current,
+      detail: { ...detail(), selected_artifact_id: "result-1" },
+      artifacts: artifacts(),
+    };
+    rendered.rerender(workspace());
+    expect(screen.getByRole("complementary", { name: "Artifact dock" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Revenue Result Result" })).toBeTruthy();
   });
 });
 
-function conversationDetail(): ConversationDetail {
-  const messages = conversationMessages();
-  const artifacts = conversationArtifacts();
+function renderWorkspace() {
+  return render(workspace());
+}
+
+function workspace() {
+  return (
+    <ConversationWorkspace
+      conversationId="session-1"
+      onOpenHistory={vi.fn()}
+      onOpenSqlConsole={vi.fn()}
+      onOpenResultTab={vi.fn()}
+      onDelete={vi.fn()}
+    />
+  );
+}
+
+function detail(): ConversationDetail {
   return {
-    id: "conv-1",
+    protocol_version: 2,
+    id: "session-1",
     title: "Revenue investigation",
     datasource_id: "warehouse",
     context_tables: [],
-    created_at: null,
-    updated_at: null,
-    messages,
     runs: [],
-    artifacts,
-    approvals: [],
+    items: [],
     selected_artifact_id: "result-1",
+    cursor: 0,
   };
 }
 
-function conversationMessages(): ConversationMessage[] {
-  return [
-    {
-      id: "message-1",
-      conversation_id: "conv-1",
-      role: "assistant",
-      content: "I found the revenue trend.",
-      status: "completed",
-      sequence: 1,
-      created_at: null,
-      updated_at: null,
-    },
-  ];
+function run(status: ConversationRun["status"]): ConversationRun {
+  return {
+    id: "run-approval",
+    session_id: "session-1",
+    input_id: "input-1",
+    session_sequence: 1,
+    user_message_id: "user-1",
+    datasource_id: "warehouse",
+    question: "执行查询",
+    status,
+    version: 1,
+    cancel_requested: false,
+    result: {},
+    error: null,
+  };
 }
 
-function conversationArtifacts(): ConversationArtifact[] {
+function approvalItem(): ApprovalItem {
+  return {
+    id: "approval-1",
+    type: "approval",
+    session_id: "session-1",
+    run_id: "run-approval",
+    turn_id: "turn-1",
+    sequence: 2,
+    revision: 1,
+    status: "waiting",
+    created_at: "2026-07-26T00:00:00Z",
+    payload: {
+      version: 0,
+      risk_level: "warning",
+      reason: "需要确认本次只读查询",
+      requested_action: { sql: "SELECT 1" },
+    },
+  };
+}
+
+function answerItem(): AssistantMessageItem {
+  return {
+    id: "message-1",
+    type: "message",
+    session_id: "session-1",
+    run_id: "run-approval",
+    turn_id: "turn-1",
+    sequence: 3,
+    revision: 1,
+    status: "completed",
+    created_at: "2026-07-26T00:00:00Z",
+    completed_at: "2026-07-26T00:00:01Z",
+    payload: {
+      role: "assistant",
+      phase: "final_answer",
+      content: "查询得到结果。",
+      evidence: [{
+        id: "evidence-1",
+        claim_id: "claim-1",
+        artifact_id: "result-1",
+        label: "查询结果",
+        query_fingerprint: "query-revenue",
+        observed_at: "2026-07-26T00:00:00Z",
+        locator: {},
+      }],
+      artifact_refs: [{ artifact_id: "result-1", label: "查询结果" }],
+      completion_disposition: "complete",
+      limitation_codes: [],
+    },
+  };
+}
+
+function artifacts(): ConversationArtifact[] {
   return [
     {
       id: "sql-1",
-      semantic_id: "sql_candidate",
-      conversation_id: "conv-1",
+      session_id: "session-1",
       run_id: "run-1",
-      message_id: "message-1",
+      semantic_key: "sql",
+      version: 1,
       type: "sql",
       title: "Revenue SQL",
       status: "completed",
-      sequence: 1,
-      payload: { sql: "SELECT revenue FROM orders" },
-      depends_on: [],
+      visibility: "supporting",
+      payload: {
+        sql: "SELECT revenue FROM orders",
+        safeSql: "SELECT revenue FROM orders",
+        dialect: "sqlite",
+        queryFingerprint: "sql-revenue",
+      },
+      provenance: {},
+      relations: [],
     },
     {
       id: "result-1",
-      semantic_id: "result_view_1",
-      conversation_id: "conv-1",
+      session_id: "session-1",
       run_id: "run-1",
-      message_id: "message-1",
+      semantic_key: "result",
+      version: 1,
       type: "result_view",
       title: "Revenue Result",
       status: "completed",
-      sequence: 2,
+      visibility: "primary",
       payload: {
         sourceSqlArtifactId: "sql-1",
         queryFingerprint: "query-revenue",
@@ -178,10 +254,11 @@ function conversationArtifacts(): ConversationArtifact[] {
         rowCount: 1,
         returnedRows: 1,
         latencyMs: 1,
-        executedAt: "2026-07-19T00:00:00Z",
+        executedAt: "2026-07-26T00:00:00Z",
         truncated: false,
       },
-      depends_on: ["sql_candidate"],
+      provenance: {},
+      relations: [{ relation: "executed_as", artifact_id: "sql-1" }],
     },
   ];
 }

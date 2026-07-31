@@ -1,181 +1,108 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConversationArtifact, ConversationMessage, ConversationRun } from "../../../../types/conversation";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  AssistantMessageItem,
+  ConversationRun,
+  UserMessageItem,
+} from "../../../../types/conversation";
 import { MessageList } from "../MessageList";
 
+function run(id: string, sequence: number): ConversationRun {
+  return {
+    id,
+    session_id: "session-1",
+    input_id: `input-${sequence}`,
+    session_sequence: sequence,
+    user_message_id: `user-${sequence}`,
+    datasource_id: "ds-1",
+    question: `问题 ${sequence}`,
+    status: "completed",
+    version: 1,
+    cancel_requested: false,
+    result: {},
+    error: null,
+  };
+}
+
+function user(runId: string, sequence: number): UserMessageItem {
+  return {
+    id: `user-${sequence}`,
+    type: "message",
+    session_id: "session-1",
+    run_id: runId,
+    sequence: sequence * 2 - 1,
+    revision: 1,
+    status: "completed",
+    created_at: `2026-07-26T00:00:0${sequence}Z`,
+    payload: {
+      role: "user",
+      content: `问题 ${sequence}`,
+      evidence: [],
+      artifact_refs: [],
+      limitation_codes: [],
+    },
+  };
+}
+
+function answer(runId: string, sequence: number): AssistantMessageItem {
+  return {
+    id: `message-${sequence}`,
+    type: "message",
+    session_id: "session-1",
+    run_id: runId,
+    turn_id: `turn-${sequence}`,
+    sequence: sequence * 2,
+    revision: 1,
+    status: "completed",
+    created_at: `2026-07-26T00:00:0${sequence}Z`,
+    completed_at: `2026-07-26T00:01:0${sequence}Z`,
+    payload: {
+      role: "assistant",
+      phase: "final_answer",
+      content: `回答 ${sequence}`,
+      evidence: [],
+      artifact_refs: [],
+      completion_disposition: "complete",
+      limitation_codes: [],
+    },
+  };
+}
+
 describe("MessageList", () => {
-  beforeEach(() => {
-    class ResizeObserverMock {
-      private readonly callback: ResizeObserverCallback;
-      constructor(callback: ResizeObserverCallback) {
-        this.callback = callback;
-      }
-      observe(target: Element) {
-        this.callback([{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry], this);
-      }
-      unobserve() {}
-      disconnect() {}
-    }
-
-    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
-    HTMLElement.prototype.scrollTo = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, get: () => 720 });
-    Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, get: () => 800 });
-    HTMLElement.prototype.getBoundingClientRect = vi.fn(() => ({
-      bottom: 720,
-      height: 720,
-      left: 0,
-      right: 800,
-      top: 0,
-      width: 800,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }));
-    cleanup();
-  });
-
-  it("attaches runs and artifacts to the addressed assistant message", () => {
-    const messages: ConversationMessage[] = [
-      {
-        id: "user-1",
-        conversation_id: "conv-1",
-        role: "user",
-        content: "分析订单",
-        status: "completed",
-        sequence: 1,
-        created_at: null,
-        updated_at: null,
-      },
-      {
-        id: "assistant-1",
-        conversation_id: "conv-1",
-        role: "assistant",
-        content: "订单查询完成。",
-        status: "completed",
-        sequence: 2,
-        created_at: null,
-        updated_at: null,
-      },
-    ];
-    const runs: ConversationRun[] = [
-      {
-        id: "run-1",
-        conversation_id: "conv-1",
-        datasource_id: "ds-1",
-        question: "分析订单",
-        assistant_message_id: "assistant-1",
-        status: "completed",
-        answer: {
-          answer: "订单查询完成。",
-          key_findings: [],
-          evidence: [{
-            artifact_id: "sql_candidate",
-            label: "SQL #1",
-            query_fingerprint: "query-orders",
-            observed_at: "2026-07-19T00:00:00Z",
-          }],
-          caveats: [],
-          recommendations: [],
-          follow_up_questions: [],
-        },
-      },
-    ];
-    const artifacts: ConversationArtifact[] = [
-      {
-        id: "artifact-sql",
-        semantic_id: "sql_candidate",
-        conversation_id: "conv-1",
-        run_id: "run-1",
-        message_id: "assistant-1",
-        type: "sql",
-        title: "SQL",
-        status: "completed",
-        payload: { sql: "SELECT id FROM orders" },
-        depends_on: [],
-      },
-    ];
-
+  afterEach(cleanup);
+  it("projects each run's user input and answer without cross-run leakage", () => {
+    const runs = [run("run-1", 1), run("run-2", 2)];
     render(
       <MessageList
-        messages={messages}
         runs={runs}
-        artifacts={artifacts}
+        items={[
+          user("run-1", 1),
+          answer("run-1", 1),
+          user("run-2", 2),
+          answer("run-2", 2),
+        ]}
+        artifacts={[]}
         onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
       />,
     );
-
-    expect(screen.getByRole("button", { name: "SQL: SQL" })).toBeTruthy();
+    expect(screen.getByText("问题 1")).toBeTruthy();
+    expect(screen.getByText("回答 1")).toBeTruthy();
+    expect(screen.getByText("问题 2")).toBeTruthy();
+    expect(screen.getByText("回答 2")).toBeTruthy();
   });
 
-  it("scrolls when the latest message content grows during streaming", async () => {
-    const scrollTo = vi.fn();
-    HTMLElement.prototype.scrollTo = scrollTo;
-    const baseMessage: ConversationMessage = {
-      id: "assistant-stream",
-      conversation_id: "conv-stream",
-      role: "assistant",
-      content: "Hel",
-      status: "streaming",
-      sequence: 1,
-      created_at: null,
-      updated_at: null,
-    };
-
-    const { rerender } = render(
+  it("shows the user question immediately while a run is queued", () => {
+    const queued = run("run-queued", 1);
+    queued.status = "queued";
+    render(
       <MessageList
-        messages={[baseMessage]}
-        runs={[]}
+        runs={[queued]}
+        items={[user("run-queued", 1)]}
         artifacts={[]}
         onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
       />,
     );
-
-    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(1));
-
-    rerender(
-      <MessageList
-        messages={[{ ...baseMessage, content: "Hello" }]}
-        runs={[]}
-        artifacts={[]}
-        onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => expect(scrollTo).toHaveBeenCalledTimes(2));
-  });
-
-  it("virtualizes long conversations while keeping stable message identities", async () => {
-    const messages: ConversationMessage[] = Array.from({ length: 60 }, (_, index) => ({
-      id: `message-${index + 1}`,
-      conversation_id: "conv-long",
-      role: index % 2 === 0 ? "user" : "assistant",
-      content: `Message ${index + 1}`,
-      status: "completed",
-      sequence: index + 1,
-      created_at: null,
-      updated_at: null,
-    }));
-
-    const { container } = render(
-      <MessageList
-        messages={messages}
-        runs={[]}
-        artifacts={[]}
-        onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
-      />,
-    );
-
-    expect(container.querySelector(".conv-message-column")?.classList.contains("is-virtualized")).toBe(true);
-    await waitFor(() => {
-      const virtualRows = container.querySelectorAll(".conv-message-virtual-row");
-      expect(virtualRows.length).toBeGreaterThan(0);
-      expect(virtualRows.length).toBeLessThan(messages.length);
-      expect(virtualRows[0]?.getAttribute("data-index")).toBeTruthy();
-    });
+    expect(screen.getByText("问题 1")).toBeTruthy();
+    expect(screen.getByText("正在理解问题")).toBeTruthy();
   });
 });

@@ -28,27 +28,33 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
   return [
     {
       id: "artifact-sql",
-      semantic_id: "sql_candidate",
-      conversation_id: "conv",
+      semantic_key: "sql_candidate",
+      session_id: "conv",
       run_id: "run",
-      message_id: "assistant",
+      version: 1,
       type: "sql",
+      visibility: "supporting",
       title: "SQL",
       status: "completed",
-      sequence: 1,
-      payload: { sql: "SELECT id, amount FROM orders" },
-      depends_on: [],
+      payload: {
+        sql: "SELECT id, amount FROM orders",
+        safeSql: "SELECT id, amount FROM orders",
+        dialect: "sqlite",
+        queryFingerprint: "sql-orders",
+      },
+      provenance: {},
+      relations: [],
     },
     {
       id: "artifact-safety",
-      semantic_id: "safety_report",
-      conversation_id: "conv",
+      semantic_key: "safety_report",
+      session_id: "conv",
       run_id: "run",
-      message_id: "assistant",
+      version: 1,
       type: "safety",
+      visibility: "internal",
       title: "Safety",
       status: "completed",
-      sequence: 2,
       payload: {
         passed: true,
         canExecute: true,
@@ -57,38 +63,41 @@ function trustedQueryArtifacts(): ConversationArtifact[] {
         schemaWarningsCount: 0,
         safeSql: "SELECT id, amount FROM orders WHERE amount > 10",
       },
-      depends_on: ["sql_candidate"],
+      provenance: {},
+      relations: [{ relation: "validated_by", artifact_id: "artifact-sql" }],
     },
     {
       id: "artifact-result",
-      semantic_id: "result_view_1",
-      conversation_id: "conv",
+      semantic_key: "result_view_1",
+      session_id: "conv",
       run_id: "run",
-      message_id: "assistant",
+      version: 1,
       type: "result_view",
+      visibility: "primary",
       title: "Order result",
       status: "completed",
-      sequence: 3,
       payload: {
         sourceSqlArtifactId: "artifact-sql",
         queryFingerprint: "query-1",
         columns: ["id", "amount"],
         rowCount: 1,
       },
-      depends_on: ["sql_candidate"],
+      provenance: {},
+      relations: [{ relation: "executed_as", artifact_id: "artifact-sql" }],
     },
     {
       id: "artifact-chart",
-      semantic_id: "chart_1",
-      conversation_id: "conv",
+      semantic_key: "chart_1",
+      session_id: "conv",
       run_id: "run",
-      message_id: "assistant",
+      version: 1,
       type: "chart",
+      visibility: "primary",
       title: "Amount chart",
       status: "completed",
-      sequence: 4,
       payload: { chartType: "bar", sourceResultArtifactId: "artifact-result", x: "id", y: "amount", aggregation: "none" },
-      depends_on: ["result_view_1"],
+      provenance: {},
+      relations: [{ relation: "visualized_as", artifact_id: "artifact-result" }],
     },
   ];
 }
@@ -114,48 +123,52 @@ describe("ArtifactDock", () => {
     });
   });
 
-  it("renders the backend-selected result and keeps every related artifact selectable", async () => {
+  it("renders only core user-facing artifacts and keeps audit artifacts hidden", async () => {
     const onSelectArtifact = vi.fn();
     render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         selectedArtifactId="artifact-result"
-        onOpenSqlConsole={vi.fn()}
         onOpenResultTab={vi.fn()}
         onSelectArtifact={onSelectArtifact}
       />,
     );
 
     expect(screen.getByRole("complementary", { name: "Artifact dock" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "SQL SQL" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Safety Safety" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "SQL SQL" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Safety Safety" })).toBeNull();
     expect(screen.getByRole("button", { name: "Order result Result" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Amount chart Chart" })).toBeTruthy();
     expect(await screen.findByText("本页 1 / 共 1 行")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "SQL SQL" }));
+    fireEvent.click(screen.getByRole("button", { name: "Amount chart Chart" }));
 
-    expect(onSelectArtifact).toHaveBeenCalledWith("artifact-sql");
+    expect(onSelectArtifact).toHaveBeenCalledWith("artifact-chart");
   });
 
-  it("changes only when the backend selection changes", () => {
+  it("falls back to the latest primary artifact when selection points to supporting material", () => {
     const artifacts = trustedQueryArtifacts();
     const latestSql: ConversationArtifact = {
       ...artifacts[0],
       id: "artifact-sql-latest",
-      semantic_id: "sql_candidate_latest",
+      semantic_key: "sql_candidate_latest",
       run_id: "run-latest",
       title: "Latest SQL",
-      sequence: 5,
-      payload: { sql: "SELECT COUNT(*) AS count FROM orders" },
+      version: 2,
+      payload: {
+        sql: "SELECT COUNT(*) AS count FROM orders",
+        safeSql: "SELECT COUNT(*) AS count FROM orders",
+        dialect: "sqlite",
+        queryFingerprint: "sql-orders-count",
+      },
     };
     const latestResult: ConversationArtifact = {
       ...artifacts[2],
       id: "artifact-result-latest",
-      semantic_id: "result_view_latest",
+      semantic_key: "result_view_latest",
       run_id: "run-latest",
       title: "Latest result",
-      sequence: 6,
+      version: 2,
       payload: {
         sourceSqlArtifactId: "artifact-sql-latest",
         queryFingerprint: "query-latest",
@@ -163,29 +176,17 @@ describe("ArtifactDock", () => {
         rowCount: 1,
       },
     };
-    artifacts.push(latestSql);
+    artifacts.push(latestSql, latestResult);
 
-    const { rerender } = render(
+    render(
       <ArtifactDock
         artifacts={artifacts}
         selectedArtifactId="artifact-sql-latest"
-        onOpenSqlConsole={vi.fn()}
         onOpenResultTab={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Latest SQL SQL" }).getAttribute("aria-pressed"))
-      .toBe("true");
-
-    rerender(
-      <ArtifactDock
-        artifacts={[...artifacts, latestResult]}
-        selectedArtifactId="artifact-result-latest"
-        onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
-      />,
-    );
-
+    expect(screen.queryByRole("button", { name: "Latest SQL SQL" })).toBeNull();
     expect(screen.getByRole("button", { name: "Latest result Result" }).getAttribute("aria-pressed"))
       .toBe("true");
     expect(agentApi.fetchArtifactPage).toHaveBeenCalledWith(
@@ -195,30 +196,24 @@ describe("ArtifactDock", () => {
     );
   });
 
-  it("honors a selected artifact id from the conversation evidence chip", () => {
-    const { container } = render(
+  it("never promotes an internal safety record into the artifact dock", () => {
+    render(
       <ArtifactDock
         artifacts={trustedQueryArtifacts()}
         selectedArtifactId="artifact-safety"
-        onOpenSqlConsole={vi.fn()}
         onOpenResultTab={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Safety Safety" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("安全检查")).toBeTruthy();
-    expect(screen.getByText("安全策略：已通过")).toBeTruthy();
-    expect(screen.getByText("表结构提醒：0")).toBeTruthy();
-    expect(container.querySelector(".conv-dock-safety-card .sql-code-block")).toBeTruthy();
-    expect(container.querySelector(".conv-dock-safety-card .sql-token-keyword")?.textContent).toBe("SELECT");
+    expect(screen.queryByRole("button", { name: "Safety Safety" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Order result Result" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("renders dock content without owning split pane resize state", () => {
     render(
-      <ArtifactDock
-        artifacts={trustedQueryArtifacts()}
-        onOpenSqlConsole={vi.fn()}
-        onOpenResultTab={vi.fn()}
+        <ArtifactDock
+          artifacts={trustedQueryArtifacts()}
+          onOpenResultTab={vi.fn()}
       />,
     );
 

@@ -1,12 +1,46 @@
 .artifact-action-button {
-  min-height: 24px;
+  min-height: 32px;
   gap: 4px;
   font-size: var(--ui-font-caption);
 }
 
 .artifact-action-button--sm {
-  min-height: 22px;
+  min-height: 28px;
   font-size: var(--ui-font-micro);
+}
+
+.artifact-unsupported {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+}
+
+.artifact-unsupported__icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.artifact-unsupported__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--ui-font-caption);
+  line-height: 1.5;
+}
+
+.artifact-unsupported__copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--ui-font-label);
 }
 
 .sql-artifact__editor {
@@ -20,10 +54,10 @@
 .sql-code-block {
   margin: 0;
   padding: 12px;
-  border: 1px solid #d0d7de;
+  border: 1px solid var(--sql-code-border);
   border-radius: var(--radius-control);
-  background: #f6f8fa;
-  color: #24292f;
+  background: var(--sql-code-surface);
+  color: var(--sql-code-text);
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   font-size: var(--ui-font-label);
   line-height: 1.75;
@@ -34,35 +68,35 @@
 }
 
 .sql-token-keyword {
-  color: #0550ae;
+  color: var(--sql-code-keyword);
   font-weight: 600;
 }
 
 .sql-token-function {
-  color: #8250df;
+  color: var(--sql-code-function);
   font-weight: 600;
 }
 
 .sql-token-string {
-  color: #116329;
+  color: var(--sql-code-string);
 }
 
 .sql-token-number {
-  color: #953800;
+  color: var(--sql-code-number);
 }
 
 .sql-token-comment {
-  color: #6e7781;
+  color: var(--sql-code-comment);
   font-style: italic;
 }
 
 .sql-token-operator,
 .sql-token-punctuation {
-  color: #57606a;
+  color: var(--sql-code-punctuation);
 }
 
 .sql-token-identifier {
-  color: #24292f;
+  color: var(--sql-code-text);
 }
 
 .chart-artifact-card .artifact-card-body {

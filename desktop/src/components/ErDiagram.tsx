@@ -479,7 +479,7 @@ export function ErDiagram({
             label: n.label,
             comment: n.comment,
             fields: visibleFields,
-            module_tag: n.module_tag,
+            module_tag: n.module_tag ?? "通用模块",
             isFocus: n.label === focusTable,
             isCollapsed: collapsed,
             totalFieldCount: n.fields.length,

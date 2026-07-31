@@ -4,6 +4,7 @@ import { defaultSql } from "../features/workspace/defaultSql";
 import type { SqlConsoleTabState } from "../features/workspace/SqlConsoleWorkspace";
 import type { ConversationSummary } from "../types/conversation";
 import type { ResultViewArtifact } from "../types/agentArtifact";
+import type { AppSettingsSection } from "../types/settings";
 
 interface WorkspaceState {
   tabs: WorkspaceTab[];
@@ -12,6 +13,8 @@ interface WorkspaceState {
   selectedTables: string[];
   contextTables: string[];
   tableSubTabs: Record<string, string>;
+  settingsOpen: boolean;
+  settingsSection: AppSettingsSection;
   _tabSeq: { sql: number; multiTable: number; queryResult: number; message: number };
 }
 
@@ -25,13 +28,13 @@ interface WorkspaceActions {
   setTabs: (updater: WorkspaceTab[] | ((prev: WorkspaceTab[]) => WorkspaceTab[])) => void;
   closeTab: (tabId: string) => void;
   openSqlConsole: (initialSql?: string, datasourceId?: string, datasourceDbType?: string | null) => void;
-  openLlmConfigTab: () => void;
+  openSettings: (section?: AppSettingsSection) => void;
+  closeSettings: () => void;
+  setSettingsSection: (section: AppSettingsSection) => void;
   openConversationHistoryTab: () => void;
   openSmartQueryTab: () => void;
   openConnectionManagerTab: () => void;
   openNewConnectionTab: () => void;
-  openAgentEvalTab: () => void;
-  openDiagnosticsTab: () => void;
   openConversationResult: (conv: Pick<ConversationSummary, "id" | "title">) => void;
   openArtifactResultTab: (artifact: ResultViewArtifact) => void;
   openTableTab: (tableName: string, initialSubtab?: string, datasource?: TableTabDatasourceContext) => void;
@@ -64,9 +67,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
   selectedTables: [],
   contextTables: [],
   tableSubTabs: {},
+  settingsOpen: false,
+  settingsSection: "model",
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 
-  setActiveTabId: (id) => set({ activeTabId: id }),
+  setActiveTabId: (id) => set({ activeTabId: id, settingsOpen: false }),
 
   setTabs: (updater) =>
     set((state) => ({ tabs: typeof updater === "function" ? updater(state.tabs) : updater })),
@@ -108,19 +113,16 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           ...state.sqlConsoleState,
           [tabId]: { draftSql: initialSql ?? defaultSql, entries: [], running: false },
         },
+        settingsOpen: false,
       };
     });
   },
 
-  openLlmConfigTab: () => {
-    const tabId = "llm-config";
-    set((state) => ({
-      tabs: state.tabs.some((tab) => tab.id === tabId)
-        ? state.tabs
-        : [...state.tabs, { id: tabId, title: "LLM 配置", type: "llm-config" }],
-      activeTabId: tabId,
-    }));
-  },
+  openSettings: (section = "model") => set({ settingsOpen: true, settingsSection: section }),
+
+  closeSettings: () => set({ settingsOpen: false }),
+
+  setSettingsSection: (settingsSection) => set({ settingsSection }),
 
   openConversationHistoryTab: () => {
     const tabId = "conversation-history";
@@ -129,6 +131,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         ? state.tabs
         : [...state.tabs, { id: tabId, title: "历史记录", type: "conversation-history" }],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -136,6 +139,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((tab) => tab.id === HOME_TAB.id) ? state.tabs : [HOME_TAB, ...state.tabs],
       activeTabId: HOME_TAB.id,
+      settingsOpen: false,
     }));
   },
 
@@ -146,6 +150,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "数据源管理" } : tab))
         : [...state.tabs, { id: tabId, title: "数据源管理", type: "datasource-settings" }],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -156,26 +161,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         ? state.tabs.map((tab) => (tab.id === tabId ? { ...tab, title: "新建数据源" } : tab))
         : [...state.tabs, { id: tabId, title: "新建数据源", type: "datasource-settings" }],
       activeTabId: tabId,
-    }));
-  },
-
-  openAgentEvalTab: () => {
-    const tabId = "agent-eval";
-    set((state) => ({
-      tabs: state.tabs.some((tab) => tab.id === tabId)
-        ? state.tabs
-        : [...state.tabs, { id: tabId, title: "智能评测", type: "agent-eval" }],
-      activeTabId: tabId,
-    }));
-  },
-
-  openDiagnosticsTab: () => {
-    const tabId = "diagnostics";
-    set((state) => ({
-      tabs: state.tabs.some((tab) => tab.id === tabId)
-        ? state.tabs
-        : [...state.tabs, { id: tabId, title: "诊断日志", type: "diagnostics" }],
-      activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -186,6 +172,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         ? state.tabs
         : [...state.tabs, { id: tabId, title: conv.title, type: "query-result", conversationId: conv.id }],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -198,6 +185,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
           )
         : [...state.tabs, { id: tabId, title: artifact.title, type: "artifact-result", artifactResult: artifact }],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -222,6 +210,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
       tableSubTabs: initialSubtab
         ? { ...state.tableSubTabs, [tabId]: initialSubtab }
         : state.tableSubTabs,
+      settingsOpen: false,
     }));
   },
 
@@ -234,6 +223,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
     set((state) => ({
       tabs: [...state.tabs, { id: tabId, title, type: "multi-table", selectedTables: tables }],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
   },
 
@@ -257,6 +247,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()((set, get) => ({
         },
       ],
       activeTabId: tabId,
+      settingsOpen: false,
     }));
     return tabId;
   },

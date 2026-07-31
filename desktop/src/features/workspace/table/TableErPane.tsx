@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Button, EmptyState, ErrorState, LoadingState, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
 import type { ERDiagramData } from "../../../lib/api";
-import { request } from "../../../lib/api/client";
+import { apiGetErDiagramApiV1SchemaErDiagramGet } from "../../../lib/api/generated/sdk.gen";
 import "./TableErPane.css";
 
 interface TableErPaneProps {
@@ -31,9 +31,10 @@ export function TableErPane({ tableId, datasourceId }: TableErPaneProps) {
       setLoading(true);
       setError("");
       try {
-        const result = await request<ERDiagramData>(
-          `/schema/er-diagram?datasource_id=${encodeURIComponent(datasourceId)}`
-        );
+        const { data: result } = await apiGetErDiagramApiV1SchemaErDiagramGet({
+          query: { datasource_id: datasourceId },
+          throwOnError: true,
+        });
         if (!cancelled) setData(result);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "无法加载 ER 关系图");

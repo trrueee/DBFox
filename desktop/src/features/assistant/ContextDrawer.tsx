@@ -1,7 +1,7 @@
 import { Info, Sparkles, X } from "lucide-react";
 import type { WorkspaceTab } from "../../types/workspace";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useDatasourceStore } from "../../stores/datasourceStore";
+import { useDatasourceState } from "../datasource/useDatasourceState";
 import { getStoredApiConfig } from "../../lib/llmConfig";
 import "./ContextDrawer.css";
 
@@ -52,10 +52,7 @@ function AiSuggest({ onGenerateIndexSql }: { onGenerateIndexSql: () => void }) {
 }
 
 function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; contextTables: string[] }) {
-  const tables = useDatasourceStore((s) => s.tables);
-  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
-  const datasources = useDatasourceStore((s) => s.datasources);
-  const activeDs = datasources.find((ds) => ds.id === activeDatasourceId) ?? datasources[0] ?? null;
+  const { tables, activeDatasource: activeDs } = useDatasourceState();
   const apiConfig = getStoredApiConfig();
 
   if (activeTab.type === "table") {
@@ -90,7 +87,7 @@ function PropsPanel({ activeTab, contextTables }: { activeTab: WorkspaceTab; con
       <InfoList
         rows={[
           ["连接名称:", activeDs ? activeDs.name : "—"],
-          ["激活数据库:", activeDs ? activeDs.database_name : "—"],
+          ["激活数据库:", activeDs?.database_name || "—"],
           ["连接主机:", activeDs?.host ? `${activeDs.host}:${activeDs.port}` : "—"],
           ["事务模式:", "AUTO-COMMIT"],
         ]}

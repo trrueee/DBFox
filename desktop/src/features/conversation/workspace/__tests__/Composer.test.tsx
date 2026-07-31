@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "../Composer";
 
@@ -19,8 +25,8 @@ describe("Composer", () => {
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();
   });
 
-  it("sends trimmed text and clears the composer", () => {
-    const onSend = vi.fn();
+  it("sends trimmed text and clears the composer after admission succeeds", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
     render(<Composer running={false} onSend={onSend} onCancel={vi.fn()} />);
 
     const input = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
@@ -28,11 +34,23 @@ describe("Composer", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
 
     expect(onSend).toHaveBeenCalledWith("分析订单趋势", "queue");
-    expect(input.value).toBe("");
+    await waitFor(() => expect(input.value).toBe(""));
+  });
+
+  it("preserves the draft when admission fails", async () => {
+    const onSend = vi.fn().mockRejectedValue(new Error("network unavailable"));
+    render(<Composer running={false} onSend={onSend} onCancel={vi.fn()} />);
+
+    const input = screen.getByRole("textbox", { name: "继续提问" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "保留这段问题" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledOnce());
+    expect(input.value).toBe("保留这段问题");
   });
 
   it("shows a pause control while running", () => {
-    const onCancel = vi.fn();
+    const onCancel = vi.fn().mockResolvedValue(undefined);
     render(<Composer running={true} onSend={vi.fn()} onCancel={onCancel} />);
 
     expect(screen.getByRole("button", { name: "发送" })).toBeTruthy();

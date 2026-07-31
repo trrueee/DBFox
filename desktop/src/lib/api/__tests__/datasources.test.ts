@@ -8,32 +8,32 @@ afterEach(() => {
 
 describe("datasourcesApi", () => {
   it("syncs schema docs without AI metadata payload by default", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 
     await datasourcesApi.syncSchema("ds-1");
 
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/datasources/ds-1/sync");
-    expect(options?.method).toBe("POST");
-    expect(options?.body).toBeUndefined();
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url).toContain("/datasources/ds-1/sync");
+    expect(request.method).toBe("POST");
+    expect(await request.clone().text()).toBe("");
   });
 
   it("sends delete confirmation in the request body instead of the URL", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const fetchMock = vi.fn(async () => Response.json({ success: true, message: "deleted" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await datasourcesApi.deleteDatasource("ds-1", {
-      token: "sensitive-token",
-      text: "Production DB",
+      confirm_token: "sensitive-token",
+      confirm_text: "Production DB",
     });
 
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain("/datasources/ds-1");
-    expect(String(url)).not.toContain("sensitive-token");
-    expect(String(url)).not.toContain("Production%20DB");
-    expect(options?.method).toBe("DELETE");
-    expect(JSON.parse(String(options?.body))).toEqual({
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url).toContain("/datasources/ds-1");
+    expect(request.url).not.toContain("sensitive-token");
+    expect(request.url).not.toContain("Production%20DB");
+    expect(request.method).toBe("DELETE");
+    expect(await request.clone().json()).toEqual({
       confirm_token: "sensitive-token",
       confirm_text: "Production DB",
     });

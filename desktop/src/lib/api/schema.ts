@@ -1,47 +1,33 @@
-import { request } from "./client";
+import {
+  apiListColumnsApiV1SchemaTablesTableIdColumnsGet,
+  apiListTablesApiV1SchemaTablesGet,
+} from "./generated/sdk.gen";
+import type {
+  SchemaColumnResponse,
+  SchemaTableResponse,
+} from "./generated/types.gen";
 
-export interface EngineSchemaTable {
-  id: string;
-  table_schema?: string | null;
-  table_name: string;
-  table_comment: string;
-  table_type?: string | null;
-  row_count_estimate?: number | null;
-  columns_count?: number | null;
-  module_tag?: string | null;
-  ai_description?: string | null;
-  semantic_tags?: string | null;
-  business_terms?: string | null;
-  ai_confidence?: number | null;
-  subject_area?: string | null;
-}
-
-export interface EngineColumn {
-  id: string;
-  column_name: string;
-  data_type: string;
-  column_type: string;
-  is_nullable: boolean;
-  column_default: string;
-  column_comment: string;
-  is_primary_key: boolean;
-  is_foreign_key: boolean;
-  foreign_table_id?: string | null;
-  foreign_column_id?: string | null;
-  ai_description?: string | null;
-  semantic_tags?: string | null;
-  business_terms?: string | null;
-  ai_confidence?: number | null;
-}
+export type EngineSchemaTable = SchemaTableResponse;
+export type EngineColumn = SchemaColumnResponse;
 
 export const schemaApi = {
-  listTables: (datasourceId: string) =>
-    request<EngineSchemaTable[]>("/schema/tables?datasource_id=" + encodeURIComponent(datasourceId)),
+  async listTables(datasourceId: string) {
+    const { data } = await apiListTablesApiV1SchemaTablesGet({
+      query: { datasource_id: datasourceId },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  listColumns: (tableId: string) =>
-    request<EngineColumn[]>("/schema/tables/" + encodeURIComponent(tableId) + "/columns"),
+  async listColumns(tableId: string) {
+    const { data } = await apiListColumnsApiV1SchemaTablesTableIdColumnsGet({
+      path: { table_id: tableId },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  findTableByName: async (datasourceId: string, tableName: string) => {
+  async findTableByName(datasourceId: string, tableName: string) {
     const tables = await schemaApi.listTables(datasourceId);
     return tables.find((item) => item.table_name === tableName) ?? null;
   },

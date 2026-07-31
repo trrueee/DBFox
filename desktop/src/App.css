@@ -103,27 +103,36 @@
   padding-right: 4px;
 }
 
-.app-cmd-btn {
-  height: 26px;
-  padding: 0 8px;
+.app-cmd-btn {
+  height: 26px;
+  min-width: 132px;
+  padding: 0 7px 0 9px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-control);
-  background: var(--color-bg);
+  background: var(--surface-panel-muted);
   color: var(--color-text-secondary);
   font-size: var(--ui-font-label);
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-}
-.app-cmd-btn:hover {
-  border-color: var(--hairline-strong);
-  color: var(--color-text-primary);
-}
-.app-cmd-btn kbd {
-  background: var(--hairline-strong);
+  transition: border-color 0.15s, color 0.15s;
+}
+.app-cmd-btn:hover {
+  border-color: var(--color-border-hover);
+  background: var(--control-bg-hover);
+  color: var(--color-text-primary);
+}
+.app-cmd-btn span {
+  margin-right: auto;
+}
+.app-cmd-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.app-cmd-btn kbd {
+  background: var(--surface-elevated);
   color: var(--color-text-muted);
   padding: 0 5px;
   border-radius: 4px;
@@ -254,8 +263,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%);
-  color: #FFFFFF;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   font-size: var(--ui-font-control);
   font-weight: 600;
   display: flex;
@@ -265,7 +274,7 @@
   box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
 }
 
-/* Grid Layout 闂?now driven by .app-body flex; kept for legacy nesting */
+/* Workspace content participates in the .app-body flex layout. */
 .hifi-workspace {
   flex: 1;
   display: flex;
@@ -476,7 +485,7 @@
 }
 
 .hifi-panel-tab-close:hover {
-  background: #E2E8F0;
+  background: var(--color-border);
   color: var(--color-text-primary);
 }
 
@@ -837,8 +846,8 @@
   position: fixed;
   bottom: 24px;
   left: 24px;
-  background: #0F172A;
-  color: #FFFFFF;
+  background: var(--sql-code-surface);
+  color: var(--sql-code-text);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: var(--ui-font-label);

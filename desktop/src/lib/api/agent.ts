@@ -1,77 +1,106 @@
-import { request, requestBlob } from "./client";
+import {
+  apiAgentChartDataApiV1ArtifactsArtifactIdChartDataPost,
+  apiAgentConsoleExecuteApiV1AgentConsoleExecutePost,
+  apiLlmTestApiV1AgentLlmTestPost,
+  apiAgentResultExportApiV1ArtifactsArtifactIdExportPost,
+  apiAgentResultPageApiV1ArtifactsArtifactIdPagePost,
+  apiAgentTableResultExportApiV1AgentResultsTableExportPost,
+  apiAgentTableResultPageApiV1AgentResultsTablePagePost,
+} from "./generated/sdk.gen";
 import type {
   ConsoleExecuteRequest,
-  ConsoleExecuteResponse,
-  ChartDataResponse,
+  LlmTestResponse,
   ResultExportRequest,
   ResultPageRequest,
-  ResultPageResponse,
   TableResultExportRequest,
   TableResultPageRequest,
-} from "./types";
+} from "./generated/types.gen";
 
-
-export const agentApi = {
-  executeSqlConsole: (value: ConsoleExecuteRequest) =>
-    request<ConsoleExecuteResponse>("/agent/console/execute", {
-      method: "POST",
-      body: JSON.stringify(value),
-    }),
-
-  fetchArtifactPage: (artifactId: string, value: ResultPageRequest, signal?: AbortSignal) =>
-    request<ResultPageResponse>(`/artifacts/${encodeURIComponent(artifactId)}/page`, {
-      method: "POST",
-      body: JSON.stringify(value),
-      signal,
-    }),
-
-  fetchArtifactChartData: (artifactId: string) =>
-    request<ChartDataResponse>(`/artifacts/${encodeURIComponent(artifactId)}/chart-data`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    }),
-
-  exportArtifactCsv: (artifactId: string, value: ResultExportRequest) =>
-    requestBlob(`/artifacts/${encodeURIComponent(artifactId)}/export`, {
-      method: "POST",
-      body: JSON.stringify(value),
-    }),
-
-  fetchTableResultPage: (value: TableResultPageRequest) =>
-    request<ResultPageResponse>("/agent/results/table/page", {
-      method: "POST",
-      body: JSON.stringify(value),
-    }),
-
-  exportTableResultCsv: (value: TableResultExportRequest) =>
-    requestBlob("/agent/results/table/export", {
-      method: "POST",
-      body: JSON.stringify(value),
-    }),
+const requireBlob = (value: unknown): Blob => {
+  if (!(value instanceof Blob)) {
+    throw new TypeError("The export endpoint did not return a Blob.");
+  }
+  return value;
 };
 
+export const agentApi = {
+  async executeSqlConsole(value: ConsoleExecuteRequest) {
+    const { data } = await apiAgentConsoleExecuteApiV1AgentConsoleExecutePost({
+      body: value,
+      throwOnError: true,
+    });
+    return data;
+  },
 
-export interface LlmTestResponse {
-  ok: boolean;
-  model: string;
-  api_base: string;
-  latency_ms: number;
-  error_code: string | null;
-  error_message: string | null;
-}
+  async fetchArtifactPage(
+    artifactId: string,
+    value: ResultPageRequest,
+    signal?: AbortSignal,
+  ) {
+    const { data } = await apiAgentResultPageApiV1ArtifactsArtifactIdPagePost({
+      path: { artifact_id: artifactId },
+      body: value,
+      signal,
+      throwOnError: true,
+    });
+    return data;
+  },
 
+  async fetchArtifactChartData(artifactId: string) {
+    const { data } = await apiAgentChartDataApiV1ArtifactsArtifactIdChartDataPost({
+      path: { artifact_id: artifactId },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-export function testLlmConnection(
+  async exportArtifactCsv(
+    artifactId: string,
+    value: ResultExportRequest,
+  ): Promise<Blob> {
+    const { data } = await apiAgentResultExportApiV1ArtifactsArtifactIdExportPost({
+      path: { artifact_id: artifactId },
+      body: value,
+      parseAs: "blob",
+      throwOnError: true,
+    });
+    return requireBlob(data);
+  },
+
+  async fetchTableResultPage(value: TableResultPageRequest) {
+    const { data } = await apiAgentTableResultPageApiV1AgentResultsTablePagePost({
+      body: value,
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async exportTableResultCsv(
+    value: TableResultExportRequest,
+  ): Promise<Blob> {
+    const { data } = await apiAgentTableResultExportApiV1AgentResultsTableExportPost({
+      body: value,
+      parseAs: "blob",
+      throwOnError: true,
+    });
+    return requireBlob(data);
+  },
+};
+
+export type { LlmTestResponse };
+
+export async function testLlmConnection(
   llmCredentialId: string,
   apiBase: string,
   modelName: string,
 ): Promise<LlmTestResponse> {
-  return request<LlmTestResponse>("/agent/llm/test", {
-    method: "POST",
-    body: JSON.stringify({
+  const { data } = await apiLlmTestApiV1AgentLlmTestPost({
+    body: {
       llm_credential_id: llmCredentialId,
       api_base: apiBase,
       model_name: modelName,
-    }),
+    },
+    throwOnError: true,
   });
+  return data;
 }

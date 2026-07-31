@@ -18,6 +18,7 @@ function renderForm(overrides: Partial<React.ComponentProps<typeof DataSourceFor
     updateForm,
     onTestConnection: vi.fn(),
     onSubmit: vi.fn(),
+    onCancel: vi.fn(),
     ...overrides,
   };
 
@@ -42,6 +43,7 @@ describe("DataSourceForm", () => {
         id: "ds-structure",
         name: "Local",
         db_type: "sqlite",
+        env: "dev",
         connection_mode: "direct",
         host: null,
         port: 0,
@@ -94,5 +96,14 @@ describe("DataSourceForm", () => {
         port: 3306,
       })),
     );
+  });
+
+  it("provides a visible cancel action for leaving the connection editor", () => {
+    const onCancel = vi.fn();
+    renderForm({ onCancel });
+
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

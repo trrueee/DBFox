@@ -22,8 +22,8 @@ export function useSmoothedStreamingText(targetText: string, active: boolean, id
     applyRenderState({ identity, displayed: active && targetText && !reducedMotion ? "" : targetText, streamWasActive: active });
   } else if (active && !renderState.streamWasActive) {
     applyRenderState({ ...renderState, streamWasActive: true });
-  } else if ((reducedMotion || !renderState.streamWasActive) && renderState.displayed !== targetText) {
-    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });
+  } else if ((!active || reducedMotion || !renderState.streamWasActive) && renderState.displayed !== targetText) {
+    applyRenderState({ ...renderState, displayed: targetText, streamWasActive: false });
   } else if (renderState.streamWasActive && renderState.displayed
     && (!targetText.startsWith(renderState.displayed) || renderState.displayed.length > targetText.length)) {
     applyRenderState({ ...renderState, displayed: targetText, streamWasActive: active });

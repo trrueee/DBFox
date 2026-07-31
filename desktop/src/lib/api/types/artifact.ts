@@ -11,9 +11,6 @@ export type AgentArtifactType =
   | "recommendation";
 
 export interface AgentArtifactPayloadCommon {
-  sql?: unknown;
-  safeSql?: unknown;
-  sourceRefs?: unknown;
   sourceSqlArtifactId?: unknown;
   sourceResultArtifactId?: unknown;
   safetyArtifactId?: unknown;
@@ -33,7 +30,6 @@ export interface AgentArtifactPayloadCommon {
   error?: unknown;
   description?: unknown;
   purpose?: unknown;
-  usedTables?: unknown;
   validationStatus?: unknown;
   executionStatus?: unknown;
   chartType?: unknown;
@@ -80,10 +76,12 @@ export type AgentPlanArtifactPayload = AgentArtifactPayloadCommon & {
   intent?: Record<string, unknown>;
 };
 
-export type AgentSqlArtifactPayload = AgentArtifactPayloadCommon & {
-  sql?: string;
-  safeSql?: string;
-};
+export interface AgentSqlArtifactPayload {
+  sql: string;
+  safeSql: string;
+  dialect: string;
+  queryFingerprint: string;
+}
 
 export type AgentSafetyArtifactPayload = AgentArtifactPayloadCommon & {
   canExecute?: boolean;
@@ -91,19 +89,26 @@ export type AgentSafetyArtifactPayload = AgentArtifactPayloadCommon & {
   passed?: boolean;
 };
 
-export type AgentResultViewArtifactPayload = AgentArtifactPayloadCommon & {
+export interface AgentResultViewArtifactPayload {
   sourceSqlArtifactId: string;
   queryFingerprint: string;
-  datasourceGeneration: number;
+  datasourceGeneration: number | null;
   columns: Array<string | { name: string; type?: string }>;
   rowCount: number;
   returnedRows: number;
-  latencyMs: number;
+  latencyMs: number | null;
   executedAt: string;
   truncated: boolean;
-};
+}
 
-export type AgentChartArtifactPayload = AgentArtifactPayloadCommon;
+export interface AgentChartArtifactPayload {
+  sourceResultArtifactId: string;
+  chartType: string;
+  x?: string | null;
+  y: string[];
+  aggregation?: string | null;
+  title?: string | null;
+}
 
 export type AgentTextArtifactPayload = AgentArtifactPayloadCommon & {
   content?: string;
@@ -137,10 +142,6 @@ export interface AgentArtifact {
   produced_by_step?: string | null;
   depends_on?: string[];
 }
-
-// Artifact categorization — matches backend EVIDENCE_ARTIFACT_TYPES / PROCESS_ARTIFACT_TYPES
-export const EVIDENCE_ARTIFACT_TYPES = new Set(["table", "chart", "sql"]);
-export const PROCESS_ARTIFACT_TYPES = new Set(["query_plan", "sql_suggestion", "safety", "agent_plan", "error"]);
 
 export interface AgentArtifactRecord {
   id: string;

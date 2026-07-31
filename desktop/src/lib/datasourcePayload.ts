@@ -1,7 +1,11 @@
-/** Build API payloads for datasource test/create — strip UI-only fields. */
+import type {
+  DataSourceCreateRequest,
+  DataSourceTestRequest,
+  DataSourceUpdateRequest,
+} from "./api/generated/types.gen";
 
 export interface DatasourceFormShape {
-  db_type: string;
+  db_type: NonNullable<DataSourceTestRequest["db_type"]>;
   name?: string;
   host?: string;
   port?: number;
@@ -9,7 +13,7 @@ export interface DatasourceFormShape {
   username?: string;
   password?: string;
   is_read_only?: boolean;
-  env?: string;
+  env?: NonNullable<DataSourceCreateRequest["env"]>;
   ssh_enabled?: boolean;
   ssh_host?: string;
   ssh_port?: number;
@@ -35,7 +39,7 @@ export function buildDatasourceTestPayload(
   form: DatasourceFormShape,
   credentials: DatasourceCredentialReferences = {},
   credentialLeaseId: string | null = null,
-) {
+): DataSourceTestRequest {
   return {
     db_type: form.db_type || "mysql",
     host: form.host || null,
@@ -64,7 +68,7 @@ export function buildDatasourceCreatePayload(
   projectId?: string,
   credentials: DatasourceCredentialReferences = {},
   credentialLeaseId: string | null = null,
-) {
+): DataSourceCreateRequest {
   return {
     ...buildDatasourceTestPayload(form, credentials, credentialLeaseId),
     project_id: projectId,
@@ -79,7 +83,7 @@ export function buildDatasourceUpdatePayload(
   form: DatasourceFormShape,
   credentials: DatasourceCredentialReferences = {},
   credentialLeaseId: string | null = null,
-) {
+): DataSourceUpdateRequest {
   return {
     ...buildDatasourceTestPayload(form, credentials, credentialLeaseId),
     name: form.name || "",

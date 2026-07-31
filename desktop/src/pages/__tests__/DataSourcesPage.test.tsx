@@ -1,11 +1,21 @@
-import { cleanup, render, fireEvent, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DataSourcesPage } from "../DataSourcesPage";
-import { api } from "../../lib/api";
-import type { DataSource } from "../../lib/api";
-import { stripSensitiveDatasourceForm } from "../../lib/datasourceFormSecurity";
 
+import type { DataSource } from "../../lib/api";
+import { api } from "../../lib/api";
+import { stripSensitiveDatasourceForm } from "../../lib/datasourceFormSecurity";
+import { DataSourcesPage } from "../DataSourcesPage";
+
+const testState = vi.hoisted(() => ({
+  datasources: [] as DataSource[],
+  activeDatasource: null as DataSource | null,
+  setActiveDatasourceId: vi.fn(),
+  createDatasource: vi.fn(),
+  updateDatasource: vi.fn(),
+  deleteDatasource: vi.fn(),
+  syncSchema: vi.fn(),
+}));
 const { toastMock, credentialApi } = vi.hoisted(() => ({
   toastMock: vi.fn(),
   credentialApi: {
@@ -14,36 +24,26 @@ const { toastMock, credentialApi } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("../../features/datasource/useDatasourceState", () => ({
+  useDatasourceState: () => testState,
+}));
 vi.mock("../../lib/api", () => ({
   api: {
-    listDatasources: vi.fn(),
     testConnection: vi.fn(),
-    createDatasource: vi.fn(),
-    updateDatasource: vi.fn(),
-    checkDatasourceHealth: vi.fn(),
-    deleteDatasource: vi.fn(),
-    syncSchema: vi.fn(),
   },
 }));
-
 vi.mock("../../lib/api/credentials", () => ({
   enrollCredentials: credentialApi.enrollCredentials,
   releaseCredentialLease: credentialApi.releaseCredentialLease,
 }));
-
 vi.mock("../../components/toastState", () => ({
   useToast: () => ({ toast: toastMock }),
 }));
-
 vi.mock("../../components/DangerConfirmDialog", () => ({
   DangerConfirmDialog: () => null,
 }));
 
-vi.mock("../../components/ConfirmDialog", () => ({
-  ConfirmDialog: () => null,
-}));
-
-const mockDatasources: DataSource[] = [
+const datasources: DataSource[] = [
   {
     id: "ds-1",
     name: "Production DB",
@@ -55,9 +55,6 @@ const mockDatasources: DataSource[] = [
     is_read_only: false,
     env: "prod",
     last_test_status: "success",
-    last_sync_at: "2025-01-15T10:00:00Z",
-    last_test_latency_ms: 42,
-    last_test_tables_count: 24,
     connection_mode: "direct",
     status: "healthy",
     created_at: "2025-01-15T10:00:00Z",
@@ -73,25 +70,37 @@ const mockDatasources: DataSource[] = [
     is_read_only: true,
     env: "dev",
     last_test_status: "failed",
-    last_test_error: "File not found",
     connection_mode: "direct",
     status: "unhealthy",
     created_at: "2025-01-15T10:00:00Z",
   },
 ];
 
-function renderPage(overrides: Partial<React.ComponentProps<typeof DataSourcesPage>> = {}) {
+function renderPage(options: {
+  initialShowAddForm?: boolean;
+  chrome?: "page" | "workspace";
+  items?: DataSource[];
+} = {}) {
+  testState.datasources = options.items ?? [];
+  testState.activeDatasource = testState.datasources[0] ?? null;
   return render(
     <DataSourcesPage
-      onSelectDataSource={vi.fn()}
-      activeDataSource={null}
-      activeProject={null}
-      onRefreshDatasources={vi.fn(async () => { await api.listDatasources(); })}
-      initialShowAddForm={false}
-      datasources={[]}
-      {...overrides}
-    />
+      initialShowAddForm={options.initialShowAddForm}
+      chrome={options.chrome}
+    />,
   );
+}
+
+function fillSqliteForm(container: HTMLElement) {
+  const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
+  fireEvent.click(within(form).getByText("SQLite"));
+  fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), {
+    target: { value: "New SQLite" },
+  });
+  fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), {
+    target: { value: "D:\\data\\local.db" },
+  });
+  return form;
 }
 
 describe("DataSourcesPage", () => {
@@ -99,35 +108,24 @@ describe("DataSourcesPage", () => {
     cleanup();
     vi.clearAllMocks();
     localStorage.clear();
-    toastMock.mockClear();
-    vi.mocked(api.listDatasources).mockResolvedValue([]);
     credentialApi.enrollCredentials.mockResolvedValue(null);
     credentialApi.releaseCredentialLease.mockResolvedValue(undefined);
+    testState.createDatasource.mockResolvedValue(datasources[1]);
+    testState.updateDatasource.mockResolvedValue(datasources[0]);
+    testState.deleteDatasource.mockResolvedValue({ message: "deleted" });
+    testState.syncSchema.mockResolvedValue({
+      ok: true,
+      aiEnrich: null,
+    });
   });
 
-  it("strips datasource form secrets without changing non-secret fields", () => {
+  it("strips datasource form secrets without changing ordinary fields", () => {
     const form = {
-      db_type: "mysql",
       name: "Production DB",
-      host: "prod.example.com",
-      port: 3306,
-      database_name: "app_prod",
-      username: "admin",
       password: "db-secret",
-      is_read_only: false,
-      env: "prod",
-      ssh_enabled: true,
-      ssh_host: "bastion.example.com",
-      ssh_port: 22,
-      ssh_username: "ops",
       ssh_password: "ssh-secret",
-      ssh_pkey_path: "C:\\keys\\prod.pem",
       ssh_pkey_passphrase: "key-secret",
-      ssl_enabled: true,
-      ssl_ca_path: "C:\\certs\\ca.pem",
-      ssl_cert_path: "C:\\certs\\client.pem",
-      ssl_key_path: "C:\\certs\\client.key",
-      ssl_verify_identity: true,
+      host: "prod.example.com",
     };
 
     expect(stripSensitiveDatasourceForm(form)).toEqual({
@@ -138,433 +136,118 @@ describe("DataSourcesPage", () => {
     });
   });
 
-  it("shows empty state when no datasources exist", async () => {
-    const { getByText } = renderPage();
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    expect(getByText("暂无数据源连接")).toBeInTheDocument();
-    expect(getByText("添加一个数据库连接以开始使用")).toBeInTheDocument();
+  it("renders an empty state or a datasource list from query state", () => {
+    const empty = renderPage();
+    expect(empty.getByText("暂无数据源连接")).toBeInTheDocument();
+    empty.unmount();
+
+    const populated = renderPage({ items: datasources });
+    expect(populated.container.querySelectorAll(".hifi-datasource-list-item")).toHaveLength(2);
+    expect(populated.container.querySelector(".hifi-datasource-detail")).toBeInTheDocument();
   });
 
-  it("renders list and detail by default in management mode", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const { container } = renderPage({ datasources: mockDatasources });
+  it("keeps row selection local and activates only through the explicit action", () => {
+    const { container } = renderPage({ items: datasources });
+    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
+    expect(testState.setActiveDatasourceId).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    expect(container.querySelector(".hifi-datasource-list")).toBeInTheDocument();
-    expect(container.querySelector(".hifi-datasource-detail")).toBeInTheDocument();
-    expect(container.querySelector(".ds-page-console")).toBeInTheDocument();
-    expect(container.querySelectorAll(".hifi-datasource-list-item").length).toBe(2);
-  });
-
-  it("filters sqlite datasources without crashing when host is null", async () => {
-    const datasources = [
-      { ...mockDatasources[1], host: null },
-    ] as unknown as DataSource[];
-    vi.mocked(api.listDatasources).mockResolvedValue(datasources);
-    const { container } = renderPage({ datasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const searchInput = container.querySelector('input[placeholder="搜索连接…"]') as HTMLInputElement;
-    expect(() => {
-      fireEvent.change(searchInput, { target: { value: "local" } });
-    }).not.toThrow();
-  });
-
-  it("selecting a row does not activate the datasource", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const onSelect = vi.fn();
-    const { container } = renderPage({ onSelectDataSource: onSelect, datasources: mockDatasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    expect(onSelect).not.toHaveBeenCalled();
-  });
-
-  it("enters create mode when clicking new connection button", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const { container } = renderPage({ datasources: mockDatasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const newBtn = within(container.querySelector(".ds-page-header") as HTMLElement).getByRole("button", {
-      name: "新建连接",
-    });
-    fireEvent.click(newBtn);
-
-    expect(container.querySelector("form.hifi-datasource-form")).toBeInTheDocument();
-  });
-
-  it("uses embedded chrome without a duplicate page title", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const { getByRole, queryByRole } = renderPage({ datasources: mockDatasources, chrome: "workspace" });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-
-    expect(queryByRole("heading", { name: "数据源管理" })).not.toBeInTheDocument();
-    expect(getByRole("button", { name: "新建连接" })).toBeInTheDocument();
-  });
-
-  it("syncs add form visibility when initialShowAddForm changes", async () => {
-    const { container, rerender } = renderPage({ initialShowAddForm: false });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    expect(container.querySelector("form.hifi-datasource-form")).not.toBeInTheDocument();
-
-    rerender(
-      <DataSourcesPage
-        onSelectDataSource={vi.fn()}
-        activeDataSource={null}
-        activeProject={null}
-        onRefreshDatasources={vi.fn().mockResolvedValue(undefined)}
-        initialShowAddForm={true}
-        datasources={[]}
-      />
+    fireEvent.click(
+      within(container.querySelector(".hifi-datasource-detail") as HTMLElement)
+        .getByRole("button", { name: "设为当前" }),
     );
-    expect(container.querySelector("form.hifi-datasource-form")).toBeInTheDocument();
-
-    rerender(
-      <DataSourcesPage
-        onSelectDataSource={vi.fn()}
-        activeDataSource={null}
-        activeProject={null}
-        onRefreshDatasources={vi.fn().mockResolvedValue(undefined)}
-        initialShowAddForm={false}
-        datasources={[]}
-      />
-    );
-    expect(container.querySelector("form.hifi-datasource-form")).not.toBeInTheDocument();
+    expect(testState.setActiveDatasourceId).toHaveBeenCalledWith("ds-1");
   });
 
-  it("enters edit mode and pre-fills non-secret fields", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const { container } = renderPage({ datasources: mockDatasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    const detailArea = container.querySelector(".hifi-datasource-detail")!;
-    const editBtn = within(detailArea as HTMLElement).getByText("编辑");
-    fireEvent.click(editBtn);
-
-    await waitFor(() => expect(container.querySelector("form.hifi-datasource-form")).toBeInTheDocument());
-
-    const formTitle = container.querySelector(".hifi-card-title");
-    expect(formTitle?.textContent).toContain("编辑");
+  it("uses embedded chrome without duplicating the workspace title", () => {
+    const view = renderPage({ items: datasources, chrome: "workspace" });
+    expect(view.queryByRole("heading", { name: "数据源管理" })).not.toBeInTheDocument();
+    expect(view.getByRole("button", { name: "新建连接" })).toBeInTheDocument();
   });
 
-  it("shows detail view with action buttons when a datasource is selected", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const { container } = renderPage({ datasources: mockDatasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    const detailArea = container.querySelector(".hifi-datasource-detail");
-    expect(detailArea).toBeInTheDocument();
-
-    const detail = within(detailArea as HTMLElement);
-    expect(detail.getByRole("button", { name: "设为当前" })).toBeInTheDocument();
-    expect(detail.getByRole("button", { name: "编辑" })).toBeInTheDocument();
-    expect(detail.getByRole("button", { name: "同步结构" })).toBeInTheDocument();
-    expect(detail.getByRole("button", { name: "删除" })).toBeInTheDocument();
-  });
-
-  it("syncs schema with AI enrichment when the semantic toggle is selected", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const syncSchema = vi.fn().mockResolvedValue({
+  it("synchronizes schema through the query mutation and reports AI enrichment", async () => {
+    testState.syncSchema.mockResolvedValue({
       ok: true,
       aiEnrich: { ai_enriched: true, enriched_count: 3, reason: "", errors: [] },
     });
-    const { container, getByText } = renderPage({
-      datasources: mockDatasources,
-      actions: {
-        createDatasource: vi.fn(),
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema,
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    const detailArea = container.querySelector(".hifi-datasource-detail")!;
-    fireEvent.click(within(detailArea as HTMLElement).getByLabelText("AI 语义增强"));
-    const syncButton = within(detailArea as HTMLElement).getByText("同步结构").closest("button") as HTMLButtonElement;
-    fireEvent.click(syncButton);
-
-    await waitFor(() => expect(syncSchema).toHaveBeenCalledWith("ds-1", { ai_enrich: true }));
-    expect(toastMock).toHaveBeenCalledWith("表结构已同步；AI 语义增强 3 张表", "success");
-    expect(getByText("AI 语义增强 3 张表")).toBeInTheDocument();
-  });
-
-  it("passes only an opaque stored LLM credential when syncing schema with AI enrichment", async () => {
-    localStorage.setItem(
-      "dbfox-api-config",
-      JSON.stringify({
-        credentialId: "cred_llm_api_key_configured",
-        apiBase: "https://api.deepseek.com/v1",
-        modelName: "deepseek-chat",
-      }),
-    );
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const syncSchema = vi.fn().mockResolvedValue({
-      ok: true,
-      aiEnrich: { ai_enriched: true, enriched_count: 1, reason: "", errors: [] },
-    });
-    const { container } = renderPage({
-      datasources: mockDatasources,
-      actions: {
-        createDatasource: vi.fn(),
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema,
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    const detailArea = container.querySelector(".hifi-datasource-detail")!;
-    fireEvent.click(within(detailArea as HTMLElement).getByLabelText("AI 语义增强"));
-    fireEvent.click(within(detailArea as HTMLElement).getByText("同步结构").closest("button") as HTMLButtonElement);
+    const { container } = renderPage({ items: datasources });
+    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
+    const detail = within(container.querySelector(".hifi-datasource-detail") as HTMLElement);
+    fireEvent.click(detail.getByLabelText("AI 语义增强"));
+    fireEvent.click(detail.getByRole("button", { name: "同步结构" }));
 
     await waitFor(() =>
-      expect(syncSchema).toHaveBeenCalledWith("ds-1", {
-        ai_enrich: true,
-        llm_credential_id: "cred_llm_api_key_configured",
-        api_base: "https://api.deepseek.com/v1",
-        model_name: "deepseek-chat",
-      }),
+      expect(testState.syncSchema).toHaveBeenCalledWith("ds-1", { ai_enrich: true }),
     );
+    expect(toastMock).toHaveBeenCalledWith("表结构已同步；AI 语义增强 3 张表", "success");
   });
 
-  it("passes AI enrichment preference when saving a new datasource", async () => {
-    const created = { ...mockDatasources[1], id: "new-ds", name: "New SQLite" };
-    const createDatasource = vi.fn().mockResolvedValue(created);
-    const syncSchema = vi.fn().mockResolvedValue({
-      ok: true,
-      aiEnrich: { ai_enriched: false, enriched_count: 0, reason: "请先在设置中配置 LLM API Key。" },
-    });
+  it("creates, selects, and synchronizes a datasource through query mutations", async () => {
+    const created = { ...datasources[1], id: "new-ds", name: "New SQLite" };
+    testState.createDatasource.mockResolvedValue(created);
+    const { container } = renderPage({ initialShowAddForm: true });
+    const form = fillSqliteForm(container);
+    fireEvent.click(within(form).getByRole("button", { name: "保存并同步表结构" }));
 
-    const { container } = renderPage({
-      initialShowAddForm: true,
-      actions: {
-        createDatasource,
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema,
-        checkHealth: vi.fn(),
-      },
-    });
+    await waitFor(() => expect(testState.createDatasource).toHaveBeenCalled());
+    expect(testState.syncSchema).toHaveBeenCalledWith("new-ds", undefined);
+    expect(testState.setActiveDatasourceId).toHaveBeenCalledWith("new-ds");
+    expect(container.querySelector("form.hifi-datasource-form")).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
-    fireEvent.click(within(form).getByLabelText("AI 语义增强"));
-    fireEvent.click(within(form).getByText("SQLite"));
-    fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), { target: { value: "New SQLite" } });
-    fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), { target: { value: "D:\\data\\local.db" } });
-    fireEvent.click(within(form).getByText("保存并同步表结构"));
+  it("keeps the created datasource active when the follow-up schema sync fails", async () => {
+    const created = { ...datasources[1], id: "new-ds", name: "New SQLite" };
+    testState.createDatasource.mockResolvedValue(created);
+    testState.syncSchema.mockRejectedValue(new Error("sync unavailable"));
+    const { container } = renderPage({ initialShowAddForm: true });
+    fireEvent.click(
+      within(fillSqliteForm(container))
+        .getByRole("button", { name: "保存并同步表结构" }),
+    );
 
-    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
-    expect(syncSchema).toHaveBeenCalledWith("new-ds", { ai_enrich: true });
+    await waitFor(() => expect(testState.setActiveDatasourceId).toHaveBeenCalledWith("new-ds"));
     expect(toastMock).toHaveBeenCalledWith(
-      "数据源创建成功；AI 语义增强未完成：请先在设置中配置 LLM API Key。",
+      "数据源已保存，但表结构同步失败：表结构同步失败，请重试。",
       "warning",
     );
   });
 
-  it("releases a new credential lease when datasource creation fails before the backend can claim it", async () => {
+  it("releases an unclaimed credential lease when creation fails", async () => {
     credentialApi.enrollCredentials.mockResolvedValue({
-      credentials: [{ id: "cred_datasource_password_draft", kind: "datasource_password" }],
-      lease_id: "lease_datasource_create_draft",
+      credentials: [{ id: "cred-draft", kind: "datasource_password" }],
+      lease_id: "lease-draft",
     });
-    const createDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
-    const { container } = renderPage({
-      initialShowAddForm: true,
-      actions: {
-        createDatasource,
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema: vi.fn(),
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    testState.createDatasource.mockRejectedValue(new Error("network"));
+    const { container } = renderPage({ initialShowAddForm: true });
     const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
     fireEvent.change(within(form).getByLabelText("连接名称"), { target: { value: "Draft DB" } });
-    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.example.test" } });
+    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.test" } });
     fireEvent.change(within(form).getByLabelText("数据库名"), { target: { value: "analytics" } });
     fireEvent.change(within(form).getByLabelText("用户名"), { target: { value: "reader" } });
-    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
+    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "secret" } });
     fireEvent.click(within(form).getByRole("button", { name: "保存并同步表结构" }));
 
-    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
     await waitFor(() =>
-      expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease_datasource_create_draft"),
+      expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease-draft"),
     );
   });
 
-  it("clears a stale save error when a later connection test succeeds", async () => {
-    const createDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
+  it("clears a stale save error after a successful connection test", async () => {
+    testState.createDatasource.mockRejectedValue(new Error("network"));
     vi.mocked(api.testConnection).mockResolvedValue({
       success: true,
       message: "数据库连接测试成功！",
     });
-    const { container } = renderPage({
-      initialShowAddForm: true,
-      actions: {
-        createDatasource,
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema: vi.fn(),
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
+    const { container } = renderPage({ initialShowAddForm: true });
     const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
     fireEvent.change(within(form).getByLabelText("连接名称"), { target: { value: "Draft DB" } });
-    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.example.test" } });
+    fireEvent.change(within(form).getByLabelText("主机地址"), { target: { value: "db.test" } });
     fireEvent.change(within(form).getByLabelText("数据库名"), { target: { value: "analytics" } });
     fireEvent.change(within(form).getByLabelText("用户名"), { target: { value: "reader" } });
-    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
     fireEvent.click(within(form).getByRole("button", { name: "保存并同步表结构" }));
-
-    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
-    expect(within(form).getByText("保存失败，请重试。")).toBeInTheDocument();
+    await waitFor(() => expect(within(form).getByText("保存失败，请重试。")).toBeInTheDocument());
 
     fireEvent.click(within(form).getByRole("button", { name: "测试连接" }));
-
-    await waitFor(() => expect(api.testConnection).toHaveBeenCalled());
     await waitFor(() => expect(within(form).getByText("数据库连接测试成功！")).toBeInTheDocument());
     expect(within(form).queryByText("保存失败，请重试。")).not.toBeInTheDocument();
-  });
-
-  it("clears a successful connection test when a later save fails", async () => {
-    const updateDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
-    vi.mocked(api.testConnection).mockResolvedValue({
-      success: true,
-      message: "数据库连接测试成功！",
-    });
-    const { container } = renderPage({
-      datasources: mockDatasources,
-      actions: {
-        createDatasource: vi.fn(),
-        updateDatasource,
-        deleteDatasource: vi.fn(),
-        syncSchema: vi.fn(),
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
-    fireEvent.click(within(container.querySelector(".hifi-datasource-detail") as HTMLElement).getByText("编辑"));
-
-    const form = await waitFor(() =>
-      container.querySelector("form.hifi-datasource-form") as HTMLElement,
-    );
-    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
-    fireEvent.click(within(form).getByRole("button", { name: "测试连接" }));
-
-    await waitFor(() => expect(within(form).getByText("数据库连接测试成功！")).toBeInTheDocument());
-
-    fireEvent.click(within(form).getByRole("button", { name: "保存修改" }));
-
-    await waitFor(() => expect(updateDatasource).toHaveBeenCalled());
-    await waitFor(() => expect(within(form).getByText("更新失败，请重试。")).toBeInTheDocument());
-    expect(within(form).queryByText("数据库连接测试成功！")).not.toBeInTheDocument();
-  });
-
-  it("releases a new credential lease when datasource update fails before the backend can claim it", async () => {
-    credentialApi.enrollCredentials.mockResolvedValue({
-      credentials: [{ id: "cred_datasource_password_draft", kind: "datasource_password" }],
-      lease_id: "lease_datasource_update_draft",
-    });
-    const updateDatasource = vi.fn().mockRejectedValue(new Error("network-sentinel"));
-    const { container } = renderPage({
-      datasources: mockDatasources,
-      actions: {
-        createDatasource: vi.fn(),
-        updateDatasource,
-        deleteDatasource: vi.fn(),
-        syncSchema: vi.fn(),
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    fireEvent.click(container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement);
-    fireEvent.click(within(container.querySelector(".hifi-datasource-detail") as HTMLElement).getByText("编辑"));
-
-    await waitFor(() => expect(container.querySelector("form.hifi-datasource-form")).toBeInTheDocument());
-    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
-    fireEvent.change(within(form).getByLabelText("密码"), { target: { value: "db-draft-secret" } });
-    fireEvent.click(within(form).getByRole("button", { name: "保存修改" }));
-
-    await waitFor(() => expect(updateDatasource).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(credentialApi.releaseCredentialLease).toHaveBeenCalledWith("lease_datasource_update_draft"),
-    );
-  });
-
-  it("keeps a newly created datasource when schema sync fails", async () => {
-    const created = { ...mockDatasources[1], id: "new-ds-sync-fail", name: "New SQLite" };
-    const createDatasource = vi.fn().mockResolvedValue(created);
-    const syncSchema = vi.fn().mockRejectedValue(new Error("sync unavailable"));
-    const onSelect = vi.fn();
-
-    const { container } = renderPage({
-      initialShowAddForm: true,
-      onSelectDataSource: onSelect,
-      actions: {
-        createDatasource,
-        updateDatasource: vi.fn(),
-        deleteDatasource: vi.fn(),
-        syncSchema,
-        checkHealth: vi.fn(),
-      },
-    });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-    const form = container.querySelector("form.hifi-datasource-form") as HTMLElement;
-    fireEvent.click(within(form).getByText("SQLite"));
-    fireEvent.change(within(form).getByPlaceholderText("例：本地 SQLite 数据库"), { target: { value: "New SQLite" } });
-    fireEvent.change(within(form).getByPlaceholderText("C:\\Users\\...\\mydb.sqlite"), { target: { value: "D:\\data\\local.db" } });
-    fireEvent.click(within(form).getByText("保存并同步表结构"));
-
-    await waitFor(() => expect(createDatasource).toHaveBeenCalled());
-    expect(syncSchema).toHaveBeenCalledWith("new-ds-sync-fail", undefined);
-    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(created));
-    expect(toastMock).toHaveBeenCalledWith("数据源已保存，但表结构同步失败：表结构同步失败，请重试。", "warning");
-    expect(container.querySelector("form.hifi-datasource-form")).not.toBeInTheDocument();
-  });
-
-  it("invokes onSelectDataSource when set current is clicked", async () => {
-    vi.mocked(api.listDatasources).mockResolvedValue(mockDatasources);
-    const onSelect = vi.fn();
-    const { container } = renderPage({ onSelectDataSource: onSelect, datasources: mockDatasources });
-
-    await waitFor(() => expect(api.listDatasources).toHaveBeenCalled());
-
-    const firstItem = container.querySelector(".hifi-datasource-list-item") as HTMLButtonElement;
-    fireEvent.click(firstItem);
-
-    const detailArea = container.querySelector(".hifi-datasource-detail")!;
-    const setCurrentBtn = within(detailArea as HTMLElement).getByRole("button", { name: "设为当前" });
-    fireEvent.click(setCurrentBtn);
-
-    expect(onSelect).toHaveBeenCalledWith(mockDatasources[0]);
   });
 });

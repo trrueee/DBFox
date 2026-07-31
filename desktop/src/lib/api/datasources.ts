@@ -1,46 +1,86 @@
-import { request } from "./client";
+import {
+  apiCheckDatasourceHealthApiV1DatasourcesIdHealthPost,
+  apiCreateDatasourceApiV1DatasourcesPost,
+  apiDeleteDatasourceApiV1DatasourcesIdDelete,
+  apiListDatasourcesApiV1DatasourcesGet,
+  apiReleaseDatasourceApiV1DatasourcesIdReleasePost,
+  apiSyncSchemaApiV1DatasourcesIdSyncPost,
+  apiTestConnectionApiV1DatasourcesTestPost,
+  apiUpdateDatasourceApiV1DatasourcesIdPut,
+} from "./generated/sdk.gen";
 import type {
-  DangerousOperationResult,
-  DataSource,
   DataSourceCreateParams,
-  DataSourceHealthResult,
   DataSourceTestParams,
-  DataSourceTestResult,
   DataSourceUpdateParams,
   DeleteConfirm,
   SchemaSyncOptions,
-  SchemaSyncResult,
 } from "./types";
 
 export const datasourcesApi = {
-  testConnection: (params: DataSourceTestParams) =>
-    request<DataSourceTestResult>("/datasources/test", { method: "POST", body: JSON.stringify(params) }),
-
-  createDatasource: (params: DataSourceCreateParams) =>
-    request<DataSource>("/datasources", { method: "POST", body: JSON.stringify(params) }),
-
-  listDatasources: (projectId?: string) =>
-    request<DataSource[]>(projectId ? `/datasources?project_id=${encodeURIComponent(projectId)}` : "/datasources"),
-
-  checkDatasourceHealth: (id: string) =>
-    request<DataSourceHealthResult>(`/datasources/${id}/health`, { method: "POST" }),
-
-  deleteDatasource: (id: string, confirm?: DeleteConfirm) => {
-    return request<DangerousOperationResult<{ success: boolean; message: string }>>(`/datasources/${id}`, {
-      method: "DELETE",
-      body: confirm ? JSON.stringify({ confirm_token: confirm.token, confirm_text: confirm.text }) : undefined,
+  async testConnection(params: DataSourceTestParams) {
+    const { data } = await apiTestConnectionApiV1DatasourcesTestPost({
+      body: params,
+      throwOnError: true,
     });
+    return data;
   },
 
-  updateDatasource: (id: string, params: DataSourceUpdateParams) =>
-    request<DataSource>(`/datasources/${id}`, { method: "PUT", body: JSON.stringify(params) }),
+  async createDatasource(params: DataSourceCreateParams) {
+    const { data } = await apiCreateDatasourceApiV1DatasourcesPost({
+      body: params,
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  syncSchema: (id: string, options?: SchemaSyncOptions) =>
-    request<SchemaSyncResult>(`/datasources/${id}/sync`, {
-      method: "POST",
-      body: options ? JSON.stringify(options) : undefined,
-    }),
+  async listDatasources(projectId?: string) {
+    const { data } = await apiListDatasourcesApiV1DatasourcesGet({
+      query: { project_id: projectId },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  releaseDatasource: (id: string) =>
-    request<{ success: boolean; message: string }>(`/datasources/${id}/release`, { method: "POST" }),
+  async checkDatasourceHealth(id: string) {
+    const { data } = await apiCheckDatasourceHealthApiV1DatasourcesIdHealthPost({
+      path: { id },
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async deleteDatasource(id: string, confirm?: DeleteConfirm) {
+    const { data } = await apiDeleteDatasourceApiV1DatasourcesIdDelete({
+      path: { id },
+      body: confirm,
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async updateDatasource(id: string, params: DataSourceUpdateParams) {
+    const { data } = await apiUpdateDatasourceApiV1DatasourcesIdPut({
+      path: { id },
+      body: params,
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async syncSchema(id: string, options?: SchemaSyncOptions) {
+    const { data } = await apiSyncSchemaApiV1DatasourcesIdSyncPost({
+      path: { id },
+      body: options,
+      throwOnError: true,
+    });
+    return data;
+  },
+
+  async releaseDatasource(id: string) {
+    const { data } = await apiReleaseDatasourceApiV1DatasourcesIdReleasePost({
+      path: { id },
+      throwOnError: true,
+    });
+    return data;
+  },
 };

@@ -2,11 +2,10 @@ import { useState, type ChangeEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { AlertCircle, CheckCircle2, Cpu, Eye, EyeOff, Server, Zap } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+import { Select } from "./ui/select";
 import {
-  SettingsActionBar,
   SettingsContent,
   SettingsField,
   SettingsSection,
@@ -26,10 +25,10 @@ interface LlmConfigPanelProps {
   onChange: (partial: Partial<LlmConfigDraft>) => void;
   onSave?: () => void | Promise<void>;
   onTestConnection?: () => boolean | void | Promise<boolean | void>;
-  saved?: boolean;
-  variant?: "dialog" | "page";
-  chrome?: "page" | "workspace";
 }
+
+const AUTO_MODEL_VALUE = "__auto__";
+const CUSTOM_MODEL_VALUE = "__custom__";
 
 const llmConfigSchema = z.object({
   credentialId: z.string(),
@@ -45,14 +44,14 @@ export function LlmConfigPanel({
   onChange,
   onSave,
   onTestConnection,
-  saved = false,
-  variant = "page",
-  chrome = "page",
 }: LlmConfigPanelProps) {
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testState, setTestState] = useState<"idle" | "success" | "error">("idle");
+  const [customModelMode, setCustomModelMode] = useState(
+    () => Boolean(config.modelName) && !LLM_MODEL_PRESETS.some((preset) => preset.value === config.modelName),
+  );
   const {
     formState,
     handleSubmit,
@@ -65,11 +64,7 @@ export function LlmConfigPanel({
     resolver: zodResolver(llmConfigSchema),
   });
   const values = useWatch({ control }) as LlmConfigDraft;
-  const presetValues = LLM_MODEL_PRESETS.map((m) => m.value);
-  const isCustomModel = Boolean(values.modelName) && !presetValues.includes(values.modelName);
   const activePreset = findModelPreset(values.modelName);
-  const embeddedWorkspace = chrome === "workspace";
-
   const applyConfigPatch = (partial: Partial<LlmConfigDraft>) => {
     for (const [key, value] of Object.entries(partial) as Array<[keyof LlmConfigDraft, string]>) {
       setValue(key, value, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
@@ -90,13 +85,11 @@ export function LlmConfigPanel({
   };
 
   const submitValidConfig = async () => {
-    if (variant === "page") {
-      setSaving(true);
-      try {
-        await onSave?.();
-      } finally {
-        setSaving(false);
-      }
+    setSaving(true);
+    try {
+      await onSave?.();
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -117,28 +110,12 @@ export function LlmConfigPanel({
   return (
     <form
       onSubmit={handleSubmit(submitValidConfig)}
-      className={variant === "page" ? `llm-settings-form hifi-settings-page${embeddedWorkspace ? " hifi-settings-page--workspace" : ""}` : "llm-settings-form llm-settings-form--dialog hifi-settings-dialog-body"}
+      className="llm-settings-form"
     >
-      {variant === "page" && !embeddedWorkspace ? (
-        <header className="llm-settings-intro hifi-settings-page-header">
-          <div className="llm-settings-intro__icon hifi-settings-page-icon">
-            <Zap size={16} />
-          </div>
-          <div>
-            <h2 className="hifi-settings-page-title">LLM 配置</h2>
-            <p className="hifi-settings-page-desc">
-              配置智能问数使用的模型服务。凭据进入系统安全存储，不写入会话、日志或工件。
-            </p>
-          </div>
-        </header>
-      ) : null}
-
-      <div className="llm-settings-scroll hifi-settings-body">
-        <SettingsContent className="llm-settings-content">
+      <SettingsContent className="llm-settings-content">
         <SettingsSection
-          icon={Cpu}
-          title="LLM 服务配置"
-          description="连接 OpenAI 兼容端点，包括 OpenAI、Qwen、DeepSeek 和 OpenRouter。"
+          title="服务连接"
+          description="连接 OpenAI 兼容服务，凭据只保存在本机安全存储中。"
         >
 
         <SettingsField label="API Key" htmlFor="llm-api-key" hint="凭据由系统安全存储管理，不会进入 Agent 上下文。">
@@ -177,117 +154,111 @@ export function LlmConfigPanel({
           />
         </SettingsField>
 
-        <SettingsField label="模型" htmlFor="llm-model"
-          hint={isCustomModel ? "使用自定义模型名称" : activePreset ? `${activePreset.label} · ${activePreset.provider}` : undefined}>
-          <div className="hifi-model-chips">
-            {LLM_MODEL_PRESETS.filter((m) => m.value !== "").map((m) => {
-              const active = values.modelName === m.value;
-              return (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => {
-                    if (active) {
-                      applyConfigPatch({ modelName: "" });
-                    } else {
-                      applyConfigPatch(applyModelPresetSelection(m.value, values.apiBase));
-                    }
-                  }}
-                  className={`hifi-model-chip${active ? " active" : ""}`}
-                  title={m.apiBase}
-                >
-                  {active ? <CheckCircle2 size={10} /> : null}
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
-          <input
-            id="llm-model"
-            placeholder="或输入自定义模型名称…"
-            value={isCustomModel ? values.modelName : ""}
-            onChange={(e) => {
-              const name = e.target.value;
-              if (!name) {
-                applyConfigPatch({ modelName: "" });
-                return;
-              }
-              applyConfigPatch({
-                modelName: name,
-                apiBase: resolveApiBaseForCustomInput(name, values.apiBase),
-              });
-            }}
-            className="hifi-settings-input hifi-settings-input-compact hifi-settings-input--mono hifi-settings-input--custom-model"
-          />
-        </SettingsField>
-
         </SettingsSection>
 
-        <SettingsSection icon={Server} title="当前配置" description="保存前确认凭据、端点和模型选择。">
-        <div className="hifi-settings-status-list">
-          <div className="hifi-settings-status-row">
-            <span>API Key</span>
-            {values.apiKey ? (
-              <Badge variant="success" className="hifi-settings-status-badge">
-                <CheckCircle2 size={9} />已配置
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="hifi-settings-status-badge">
-                <AlertCircle size={9} />未设置
-              </Badge>
-            )}
-          </div>
-          <div className="hifi-settings-status-row">
-            <span>Endpoint</span>
-            <span className="hifi-settings-mono hifi-settings-status-value">
-              {values.apiBase || DEFAULT_LLM_API_BASE}
-            </span>
-          </div>
-          <div className="hifi-settings-status-row">
-            <span>Model</span>
-            <span className="hifi-settings-mono">{values.modelName || "自动检测"}</span>
-          </div>
-        </div>
-
-        {saved ? (
-          <SettingsStatus tone="success" label="配置已保存" description="新的模型设置会用于后续智能问数。" />
-        ) : null}
-        </SettingsSection>
-        </SettingsContent>
-      </div>
-
-      {variant === "page" && (onSave || onTestConnection) ? (
-        <SettingsActionBar
-          className="hifi-settings-footer"
-          status={testing ? (
-            <SettingsStatus tone="loading" label="正在测试模型连接…" />
-          ) : testState === "success" ? (
-            <SettingsStatus tone="success" label="模型连接可用" />
-          ) : testState === "error" ? (
-            <SettingsStatus tone="danger" label="模型连接不可用" description="请检查凭据、端点和模型名称。" />
-          ) : (
-            <span className="llm-settings-action-hint">测试连接不会保存当前修改。</span>
-          )}
+        <SettingsSection
+          title="模型选择"
+          description="选择默认模型；服务端使用自定义名称时可单独填写。"
         >
-          {onTestConnection ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={testing || saving}
-              onClick={() => void handleSubmit(testValidConfig)()}
-            >
-              {testing ? "测试中…" : "测试连接"}
-            </Button>
-          ) : <span />}
-          {onSave ? (
-            <Button type="submit" size="sm" className="hifi-settings-submit-btn" disabled={testing || saving}>
-              <CheckCircle2 size={13} />
-              {saving ? "正在保存…" : "保存配置"}
-            </Button>
-          ) : null}
-        </SettingsActionBar>
-      ) : null}
+          <SettingsField
+            label="默认模型"
+            htmlFor="llm-model-preset"
+            hint={
+              customModelMode
+                ? "使用服务端提供的模型标识。"
+                : activePreset
+                  ? `${activePreset.label} · ${activePreset.provider}`
+                  : "自动检测可用模型。"
+            }
+          >
+            <div className="llm-model-control">
+              <Select
+                id="llm-model-preset"
+                aria-label="默认模型"
+                value={customModelMode ? CUSTOM_MODEL_VALUE : values.modelName || AUTO_MODEL_VALUE}
+                onChange={(event) => {
+                  const selected = event.target.value;
+                  if (selected === CUSTOM_MODEL_VALUE) {
+                    setCustomModelMode(true);
+                    applyConfigPatch({ modelName: "" });
+                    return;
+                  }
+                  setCustomModelMode(false);
+                  const modelName = selected === AUTO_MODEL_VALUE ? "" : selected;
+                  applyConfigPatch(applyModelPresetSelection(modelName, values.apiBase));
+                }}
+                className="llm-model-select"
+              >
+                {LLM_MODEL_PRESETS.map((preset) => (
+                  <option
+                    key={preset.value || AUTO_MODEL_VALUE}
+                    value={preset.value || AUTO_MODEL_VALUE}
+                  >
+                    {preset.label}
+                  </option>
+                ))}
+                <option value={CUSTOM_MODEL_VALUE}>自定义模型…</option>
+              </Select>
+              {customModelMode ? (
+                <input
+                  id="llm-model-custom"
+                  aria-label="自定义模型名称"
+                  placeholder="输入模型名称，例如 gpt-4.1"
+                  value={values.modelName}
+                  onChange={(event) => {
+                    const name = event.target.value;
+                    applyConfigPatch({
+                      modelName: name,
+                      apiBase: resolveApiBaseForCustomInput(name, values.apiBase),
+                    });
+                  }}
+                  className="hifi-settings-input hifi-settings-input--mono"
+                />
+              ) : null}
+            </div>
+          </SettingsField>
+
+        {onSave || onTestConnection ? (
+          <div className="llm-settings-inline-actions">
+            <div className="llm-settings-inline-status" aria-live="polite">
+              {testing ? (
+                <SettingsStatus tone="loading" label="正在测试模型连接…" />
+              ) : testState === "success" ? (
+                <SettingsStatus tone="success" label="模型连接可用" />
+              ) : testState === "error" ? (
+                <SettingsStatus
+                  tone="danger"
+                  label="模型连接不可用"
+                  description="请检查凭据、端点和模型名称。"
+                />
+              ) : (
+                <span className="llm-settings-action-hint">测试连接不会保存当前修改。</span>
+              )}
+            </div>
+            <div className="llm-settings-inline-buttons">
+              {onTestConnection ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={testing || saving}
+                  onClick={() => void handleSubmit(testValidConfig)()}
+                >
+                  {testing ? "测试中…" : "测试连接"}
+                </Button>
+              ) : null}
+              {onSave ? (
+                <Button type="submit" size="sm" className="hifi-settings-submit-btn" disabled={testing || saving}>
+                  <CheckCircle2 size={13} />
+                  {saving ? "正在保存…" : "保存配置"}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        </SettingsSection>
+      </SettingsContent>
     </form>
   );
 }

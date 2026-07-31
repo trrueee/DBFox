@@ -29,6 +29,7 @@ const approvalStatuses: Record<string, StatusPresentation> = {
   approved: { label: "已确认", tone: "success" },
   rejected: { label: "已拒绝", tone: "error" },
   expired: { label: "已失效", tone: "idle" },
+  cancelled: { label: "已取消", tone: "idle" },
 };
 
 const errorMessagesByCode: Record<string, string> = {

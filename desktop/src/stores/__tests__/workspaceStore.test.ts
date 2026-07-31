@@ -9,6 +9,8 @@ const INITIAL = {
   selectedTables: [],
   contextTables: [],
   tableSubTabs: {},
+  settingsOpen: false,
+  settingsSection: "model" as const,
   _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
 };
 
@@ -58,7 +60,7 @@ describe("workspaceStore — tabs", () => {
   });
 
   it("setTabs accepts an updater function", () => {
-    useWorkspaceStore.getState().setTabs((prev) => [...prev, { id: "x", title: "X", type: "llm-config" }]);
+    useWorkspaceStore.getState().setTabs((prev) => [...prev, { id: "x", title: "X", type: "table" }]);
     expect(useWorkspaceStore.getState().tabs.find((t) => t.id === "x")).toBeDefined();
   });
 
@@ -67,16 +69,28 @@ describe("workspaceStore — tabs", () => {
     expect(useWorkspaceStore.getState().tabs[0].agentStatus).toBe("running");
   });
 
-  it("openDiagnosticsTab opens a single diagnostics tab and activates it", () => {
-    useWorkspaceStore.getState().openDiagnosticsTab();
-    useWorkspaceStore.getState().openDiagnosticsTab();
+  it("opens settings as an app mode without adding a workspace tab", () => {
+    useWorkspaceStore.getState().openSettings("model");
+    expect(useWorkspaceStore.getState()).toMatchObject({
+      settingsOpen: true,
+      settingsSection: "model",
+      activeTabId: "smart-query",
+    });
+    expect(useWorkspaceStore.getState().tabs).toHaveLength(1);
 
-    const s = useWorkspaceStore.getState();
-    const diagnosticTabs = s.tabs.filter((t) => t.type === "diagnostics");
-    expect(diagnosticTabs).toHaveLength(1);
-    expect(diagnosticTabs[0].id).toBe("diagnostics");
-    expect(diagnosticTabs[0].title).toBe("诊断日志");
-    expect(s.activeTabId).toBe("diagnostics");
+    useWorkspaceStore.getState().setSettingsSection("diagnostics");
+    expect(useWorkspaceStore.getState().settingsSection).toBe("diagnostics");
+
+    useWorkspaceStore.getState().closeSettings();
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
+  });
+
+  it("returns to the workspace when a workspace action is opened", () => {
+    useWorkspaceStore.getState().openSettings("diagnostics");
+    useWorkspaceStore.getState().openSqlConsole();
+
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(false);
+    expect(useWorkspaceStore.getState().activeTabId).toBe("sql-1");
   });
 
   it("binds table tabs to the datasource active when they are opened", () => {

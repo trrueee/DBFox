@@ -1,52 +1,156 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { getUserErrorMessage } from "../../../lib/api/client";
 import { useConversationStore } from "../../../stores/conversationStore";
-import type { ConversationArtifact, ConversationMessage, ConversationRun } from "../../../types/conversation";
+import { isTerminalRun } from "../conversationState";
+import type {
+  ConversationArtifact,
+  ConversationDeliveryMode,
+  ConversationRun,
+  ConversationRunItem,
+} from "../../../types/conversation";
 
 export function useConversationViewModel(conversationId: string) {
+  const pendingSendIntent = useRef<{
+    conversationId: string;
+    content: string;
+    mode: ConversationDeliveryMode;
+    idempotencyKey: string;
+  } | null>(null);
   const detail = useConversationStore((state) => state.detailById[conversationId]);
-  const messagesById = useConversationStore((state) => state.messagesById);
-  const runsById = useConversationStore((state) => state.runsById);
   const artifactsById = useConversationStore((state) => state.artifactsById);
-  const openConversation = useConversationStore((state) => state.openConversation);
-  const sendMessage = useConversationStore((state) => state.sendMessage);
-  const cancelRun = useConversationStore((state) => state.cancelRun);
-  const resolveApproval = useConversationStore((state) => state.resolveApproval);
-  const resolveQuestion = useConversationStore((state) => state.resolveQuestion);
+  const openConversationAction = useConversationStore((state) => state.openConversation);
+  const sendMessageAction = useConversationStore((state) => state.sendMessage);
+  const cancelRunAction = useConversationStore((state) => state.cancelRun);
+  const resolveApprovalAction = useConversationStore((state) => state.resolveApproval);
+  const resolveQuestionAction = useConversationStore((state) => state.resolveQuestion);
   const selectArtifact = useConversationStore((state) => state.selectArtifact);
+  const loadRunArtifacts = useConversationStore((state) => state.loadRunArtifacts);
+  const openMutation = useMutation({
+    mutationFn: openConversationAction,
+  });
+  const sendMutation = useMutation({
+    mutationFn: ({
+      targetConversationId,
+      content,
+      mode,
+      idempotencyKey,
+    }: {
+      targetConversationId: string;
+      content: string;
+      mode: ConversationDeliveryMode;
+      idempotencyKey: string;
+    }) => sendMessageAction(targetConversationId, content, mode, idempotencyKey),
+  });
+  const cancelMutation = useMutation({
+    mutationFn: cancelRunAction,
+  });
+  const approvalMutation = useMutation({
+    mutationFn: ({
+      runId,
+      approvalId,
+      approved,
+    }: {
+      runId: string;
+      approvalId: string;
+      approved: boolean;
+    }) => resolveApprovalAction(runId, approvalId, approved),
+  });
+  const questionMutation = useMutation({
+    mutationFn: ({
+      runId,
+      questionId,
+      response,
+    }: {
+      runId: string;
+      questionId: string;
+      response: { selected_value?: string; text?: string };
+    }) => resolveQuestionAction(runId, questionId, response),
+  });
 
-  const messages = useMemo<ConversationMessage[]>(
-    () => detail?.messages.map((item) => messagesById[item.id] || item) || [],
-    [detail, messagesById],
+  const items = useMemo<ConversationRunItem[]>(
+    () => detail?.items || [],
+    [detail],
   );
-
   const runs = useMemo<ConversationRun[]>(
-    () => detail?.runs.map((item) => runsById[item.id] || item) || [],
-    [detail, runsById],
+    () => detail?.runs || [],
+    [detail],
   );
-
   const artifacts = useMemo<ConversationArtifact[]>(
-    () =>
-      detail?.artifacts.map((item) => artifactsById[item.id] || item) ||
-      Object.values(artifactsById).filter((item) => item.conversation_id === conversationId),
-    [artifactsById, conversationId, detail],
+    () => Object.values(artifactsById).filter(
+      (artifact) => artifact.session_id === conversationId,
+    ),
+    [artifactsById, conversationId],
   );
-
   const runningRun = useMemo(
-    () => runs.find((run) => ["running", "waiting_approval", "waiting_input", "cancelling"].includes(run.status)) || null,
+    () => runs.find((run) => !isTerminalRun(run.status)) || null,
     [runs],
   );
 
   return {
     detail,
-    messages,
+    items,
     runs,
     artifacts,
     runningRun,
-    openConversation,
-    sendMessage,
-    cancelRun,
-    resolveApproval,
-    resolveQuestion,
+    openConversation: openMutation.mutateAsync,
+    conversationLoadError: openMutation.error
+      ? getUserErrorMessage(openMutation.error, "对话载入失败，请重试。")
+      : null,
+    sendMessage: async (
+      targetConversationId: string,
+      content: string,
+      mode: ConversationDeliveryMode,
+    ) => {
+      let intent = pendingSendIntent.current;
+      if (
+        !intent
+        || intent.conversationId !== targetConversationId
+        || intent.content !== content
+        || intent.mode !== mode
+      ) {
+        intent = {
+          conversationId: targetConversationId,
+          content,
+          mode,
+          idempotencyKey: globalThis.crypto.randomUUID(),
+        };
+        pendingSendIntent.current = intent;
+      }
+      await sendMutation.mutateAsync({
+        targetConversationId,
+        content,
+        mode,
+        idempotencyKey: intent.idempotencyKey,
+      });
+      if (pendingSendIntent.current === intent) pendingSendIntent.current = null;
+    },
+    sending: sendMutation.isPending,
+    sendError: sendMutation.error
+      ? getUserErrorMessage(sendMutation.error, "消息发送失败，请重试。")
+      : null,
+    cancelRun: (runId: string) => cancelMutation.mutateAsync(runId),
+    cancelling: cancelMutation.isPending,
+    resolveApproval: (runId: string, approvalId: string, approved: boolean) =>
+      approvalMutation.mutateAsync({ runId, approvalId, approved }),
+    resolvingApprovalId: approvalMutation.isPending
+      ? approvalMutation.variables?.approvalId ?? null
+      : null,
+    approvalError: approvalMutation.error
+      ? getUserErrorMessage(approvalMutation.error, "审批提交失败，请重试。")
+      : null,
+    resolveQuestion: (
+      runId: string,
+      questionId: string,
+      response: { selected_value?: string; text?: string },
+    ) => questionMutation.mutateAsync({ runId, questionId, response }),
+    resolvingQuestionId: questionMutation.isPending
+      ? questionMutation.variables?.questionId ?? null
+      : null,
+    questionError: questionMutation.error
+      ? getUserErrorMessage(questionMutation.error, "回答提交失败，请重试。")
+      : null,
     selectArtifact,
+    loadRunArtifacts,
   };
 }

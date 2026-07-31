@@ -47,18 +47,18 @@
   --ui-font-display: 24px;
   --ui-font-code: 13px;
   --ui-font-data: 12px;
-  --agent-font-display: 20px;
-  --agent-font-subtitle: 17px;
-  --agent-font-title: 15px;
-  --agent-font-body: 15px;
-  --agent-font-input: 15px;
-  --agent-font-ui: 13px;
-  --agent-font-label: 12px;
+  --agent-font-display: 21px;
+  --agent-font-subtitle: 18px;
+  --agent-font-title: 16px;
+  --agent-font-body: 16px;
+  --agent-font-input: 16px;
+  --agent-font-ui: 14px;
+  --agent-font-label: 13px;
   --agent-font-caption: 12px;
   --agent-font-micro: 12px;
   --agent-font-code: 13px;
 
-  /* ── Semantic Aliases (legacy compat) ── */
+  /* ── Semantic role tokens ── */
   --accent-indigo: var(--color-primary);
   --accent-teal: var(--color-secondary);
   --accent-green: var(--color-success);
@@ -174,6 +174,13 @@
   --trust-danger-border: #FECACA;
   --sql-code-surface: #F6F8FA;
   --sql-code-border: #D0D7DE;
+  --sql-code-text: #253047;
+  --sql-code-keyword: #5544C7;
+  --sql-code-function: #6554D9;
+  --sql-code-string: #168A68;
+  --sql-code-number: #526071;
+  --sql-code-comment: #64748B;
+  --sql-code-punctuation: #526071;
 
   /* ── shadcn/Radix HSL Bridge ──
      These exist only to satisfy imported UI primitives.
@@ -215,13 +222,13 @@
   --ui-font-display: 24px;
   --ui-font-code: 13px;
   --ui-font-data: 12px;
-  --agent-font-display: 20px;
-  --agent-font-subtitle: 17px;
-  --agent-font-title: 15px;
-  --agent-font-body: 15px;
-  --agent-font-input: 15px;
-  --agent-font-ui: 13px;
-  --agent-font-label: 12px;
+  --agent-font-display: 21px;
+  --agent-font-subtitle: 18px;
+  --agent-font-title: 16px;
+  --agent-font-body: 16px;
+  --agent-font-input: 16px;
+  --agent-font-ui: 14px;
+  --agent-font-label: 13px;
   --agent-font-caption: 12px;
   --agent-font-micro: 12px;
   --agent-font-code: 13px;
@@ -327,6 +334,13 @@
   --trust-danger-border: #7F1D1D;
   --sql-code-surface: #101828;
   --sql-code-border: #2A3850;
+  --sql-code-text: #E7ECF5;
+  --sql-code-keyword: #C4B5FD;
+  --sql-code-function: #A79BFF;
+  --sql-code-string: #4FD1A5;
+  --sql-code-number: #B5C0D0;
+  --sql-code-comment: #8F9DB2;
+  --sql-code-punctuation: #B5C0D0;
 
   /* shadcn/Radix dark bridge */
   --primary: 247 100% 80%;

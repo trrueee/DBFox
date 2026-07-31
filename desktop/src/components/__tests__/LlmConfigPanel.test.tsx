@@ -7,11 +7,9 @@ import { DEFAULT_LLM_API_BASE } from "../../lib/llmPresets";
 describe("LlmConfigPanel", () => {
   afterEach(() => cleanup());
 
-  it("uses embedded chrome without rendering its own page title", () => {
+  it("renders one focused settings flow without duplicate summaries", () => {
     render(
       <LlmConfigPanel
-        chrome="workspace"
-        variant="page"
         config={{ credentialId: "", apiKey: "", apiBase: DEFAULT_LLM_API_BASE, modelName: "" }}
         onChange={vi.fn()}
         onSave={vi.fn()}
@@ -20,7 +18,9 @@ describe("LlmConfigPanel", () => {
     );
 
     expect(screen.queryByRole("heading", { name: "LLM 配置" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "LLM 服务配置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "服务连接" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "模型选择" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "当前配置" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "测试连接" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
   });
@@ -29,7 +29,6 @@ describe("LlmConfigPanel", () => {
 
     render(
       <LlmConfigPanel
-        variant="page"
         config={{ credentialId: "cred_llm_api_key_test", apiKey: "TEST_LLM_SECRET", apiBase: DEFAULT_LLM_API_BASE, modelName: "gpt-4o" }}
         onChange={vi.fn()}
         onSave={onSave}

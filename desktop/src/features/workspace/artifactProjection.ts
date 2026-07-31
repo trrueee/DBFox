@@ -62,27 +62,20 @@ function mapArtifact(artifact: ApiAgentArtifact): ViewAgentArtifact | null {
 }
 
 function mapSqlArtifact(artifact: ApiAgentArtifact): SqlArtifact | null {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const sql = firstString(payload, ["sql", "safeSql"]);
   if (!sql) return null;
   return {
     id: artifact.id,
     type: "sql",
     title: artifact.type === "sql_suggestion" ? "SQL 修改建议" : "执行的 SQL",
-    description: typeof payload.reason === "string" ? payload.reason : undefined,
     sql,
-    purpose: firstString(payload, ["purpose"]),
-    usedTables: stringArray(payload.usedTables),
-    validationStatus: firstString(payload, ["validationStatus"]),
-    executionStatus: firstString(payload, ["executionStatus"]),
-    rowCount: numberValue(payload, ["rowCount"]),
-    latencyMs: numberValue(payload, ["latencyMs"]),
     depends_on: artifact.depends_on,
   };
 }
 
 function mapResultViewArtifact(artifact: ApiAgentArtifact): ResultViewArtifact | null {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const columns = resultColumnsFromPayload(payload.columns);
   const columnNames = columnNamesFromColumns(columns);
   if (columnNames.length === 0) return null;
@@ -133,7 +126,7 @@ function columnNamesFromColumns(columns: ResultViewArtifact["columns"]): string[
 }
 
 function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const canExecute = Boolean(payload.canExecute);
   const requiresApproval = Boolean(payload.requiresApproval);
   const passed = Boolean(payload.passed ?? canExecute);
@@ -167,7 +160,7 @@ function mapSafetyArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
 }
 
 function mapChartArtifact(artifact: ApiAgentArtifact): ChartArtifact | null {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const chartType = firstString(payload, ["chartType"]).toLowerCase();
   const x = typeof payload.x === "string" ? payload.x : "";
   const y = stringArray(payload.y);
@@ -191,7 +184,7 @@ function mapChartArtifact(artifact: ApiAgentArtifact): ChartArtifact | null {
 }
 
 function mapInsightArtifact(artifact: ApiAgentArtifact): MarkdownArtifact | null {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   if (artifact.semantic_id === "semantic_resolution") return null;
 
   const lines: string[] = [];
@@ -214,7 +207,7 @@ function mapInsightArtifact(artifact: ApiAgentArtifact): MarkdownArtifact | null
 }
 
 function mapRecommendationArtifact(artifact: ApiAgentArtifact): MarkdownArtifact | null {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const lines: string[] = [];
   if (Array.isArray(payload.recommendations)) {
     for (const item of payload.recommendations) {
@@ -236,7 +229,7 @@ function mapRecommendationArtifact(artifact: ApiAgentArtifact): MarkdownArtifact
 }
 
 function mapErrorArtifact(artifact: ApiAgentArtifact): MarkdownArtifact {
-  const payload = artifact.payload || {};
+  const payload = artifact.payload as Record<string, unknown>;
   const message = firstString(payload, ["message", "error", "detail", "reason"]) || JSON.stringify(payload);
   return {
     id: artifact.id,

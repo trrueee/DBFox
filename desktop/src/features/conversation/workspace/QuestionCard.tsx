@@ -1,29 +1,33 @@
 import { HelpCircle } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useEffect, useRef, useState } from "react";
-import type { ConversationQuestion } from "../../../types/conversation";
+import type { QuestionItem } from "../../../types/conversation";
 
 export function QuestionCard({
   question,
   onRespond,
+  submitting = false,
+  error,
 }: {
-  question: ConversationQuestion;
-  onRespond: (response: { selected_value?: string; text?: string }) => void;
+  question: QuestionItem;
+  onRespond: (response: { selected_value?: string; text?: string }) => Promise<void> | void;
+  submitting?: boolean;
+  error?: string | null;
 }) {
   const [selectedValue, setSelectedValue] = useState("");
   const [text, setText] = useState("");
-  const pending = question.status === "pending";
+  const pending = question.status === "waiting";
   const firstControlRef = useRef<HTMLButtonElement | HTMLTextAreaElement>(null);
   useEffect(() => {
     if (pending) firstControlRef.current?.focus({ preventScroll: true });
   }, [pending, question.id]);
   const submit = () => {
     const responseText = text.trim();
-    if (!pending || (!selectedValue && !responseText)) return;
-    onRespond({
+    if (!pending || submitting || (!selectedValue && !responseText)) return;
+    void Promise.resolve(onRespond({
       ...(selectedValue ? { selected_value: selectedValue } : {}),
       ...(responseText ? { text: responseText } : {}),
-    });
+    })).catch(() => undefined);
   };
 
   return (
@@ -32,18 +36,19 @@ export function QuestionCard({
         <HelpCircle size={17} aria-hidden="true" />
         <strong>{pending ? "需要你补充一个信息" : "已补充信息"}</strong>
       </header>
-      <p className="conv-question-prompt">{question.question}</p>
-      <p className="conv-question-reason">{question.reason}</p>
+      <p className="conv-question-prompt">{question.payload.question}</p>
+      <p className="conv-question-reason">{question.payload.reason}</p>
       {pending ? (
         <>
-          {question.options.length > 0 && (
+          {question.payload.options.length > 0 && (
             <RadioGroup.Root
               className="conv-question-options"
-              aria-label={question.question}
+              aria-label={question.payload.question}
               value={selectedValue}
               onValueChange={setSelectedValue}
+              disabled={submitting}
             >
-              {question.options.map((option, index) => (
+              {question.payload.options.map((option, index) => (
                 <div key={option.value} className="conv-question-option">
                   <RadioGroup.Item
                     ref={index === 0 ? firstControlRef as React.Ref<HTMLButtonElement> : undefined}
@@ -61,18 +66,24 @@ export function QuestionCard({
               ))}
             </RadioGroup.Root>
           )}
-          {question.allow_free_text && (
+          {question.payload.allow_free_text && (
             <textarea
-              ref={question.options.length === 0 ? firstControlRef as React.Ref<HTMLTextAreaElement> : undefined}
+              ref={question.payload.options.length === 0 ? firstControlRef as React.Ref<HTMLTextAreaElement> : undefined}
               aria-label="补充说明"
               value={text}
               onChange={(event) => setText(event.target.value)}
               placeholder="也可以直接输入你的口径或要求"
+              disabled={submitting}
               rows={2}
             />
           )}
-          <button type="button" onClick={submit} disabled={!selectedValue && !text.trim()}>
-            继续分析
+          {error && <p className="conv-action-error" role="alert">{error}</p>}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting || (!selectedValue && !text.trim())}
+          >
+            {submitting ? "正在提交…" : "继续分析"}
           </button>
         </>
       ) : (
@@ -84,11 +95,11 @@ export function QuestionCard({
   );
 }
 
-function questionResponseLabel(question: ConversationQuestion): string {
-  if (!question.response || typeof question.response !== "object") return "已回答";
-  const response = question.response as Record<string, unknown>;
+function questionResponseLabel(question: QuestionItem): string {
+  if (!question.payload.response || typeof question.payload.response !== "object") return "已回答";
+  const response = question.payload.response;
   const selectedValue = typeof response.selected_value === "string" ? response.selected_value : "";
-  const selectedLabel = question.options.find((option) => option.value === selectedValue)?.label || selectedValue;
+  const selectedLabel = question.payload.options.find((option) => option.value === selectedValue)?.label || selectedValue;
   const text = typeof response.text === "string" ? response.text.trim() : "";
   return [selectedLabel, text].filter(Boolean).join(" · ") || "已回答";
 }

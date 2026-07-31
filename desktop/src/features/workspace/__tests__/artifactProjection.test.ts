@@ -14,12 +14,9 @@ describe("artifactProjection", () => {
         presentation: { mode: "dock", priority: 1, collapsed: false },
         payload: {
           sql: "SELECT SUM(amount) AS gmv FROM orders",
-          purpose: "分析查询",
-          usedTables: ["orders"],
-          validationStatus: "passed",
-          executionStatus: "completed",
-          rowCount: 12,
-          latencyMs: 42,
+          safeSql: "SELECT SUM(amount) AS gmv FROM orders",
+          dialect: "sqlite",
+          queryFingerprint: "query-gmv",
         },
         depends_on: [],
         refs: [],
@@ -72,10 +69,11 @@ describe("artifactProjection", () => {
 
     expect(sql?.type).toBe("sql");
     if (sql?.type !== "sql") throw new Error("Expected SQL artifact");
-    expect(sql.purpose).toBe("分析查询");
-    expect(sql.usedTables).toEqual(["orders"]);
-    expect(sql.rowCount).toBe(12);
-    expect(sql.latencyMs).toBe(42);
+    expect(sql.sql).toBe("SELECT SUM(amount) AS gmv FROM orders");
+    expect(sql.purpose).toBeUndefined();
+    expect(sql.usedTables).toBeUndefined();
+    expect(sql.rowCount).toBeUndefined();
+    expect(sql.latencyMs).toBeUndefined();
 
     expect(resultView?.type).toBe("result_view");
     if (resultView?.type !== "result_view") throw new Error("Expected result_view artifact");

@@ -5,26 +5,37 @@ import {
   createConversation,
   deleteConversation,
   getConversation,
+  getConversationHistory,
+  getConversationRunArtifacts,
   listConversations,
   resolveConversationApproval,
   resolveConversationQuestion,
   selectConversationArtifact,
-  streamConversation,
 } from "../features/conversation/conversationRepository";
-import { createStreamEventBatcher } from "../features/conversation/streamEventBatcher";
+import {
+  conversationStreamRuntime,
+} from "../features/conversation/conversationStreamRuntime";
+import {
+  isFollowableRun,
+  isTerminalRunItem,
+} from "../features/conversation/conversationState";
 import { buildConversationLlmPayload, getStoredApiConfig } from "../lib/llmConfig";
 import type {
+  ApprovalItem,
   ConversationArtifact,
+  ConversationDeliveryMode,
   ConversationDetail,
-  ConversationMessage,
   ConversationRun,
+  ConversationRunItem,
   ConversationStreamEvent,
   ConversationSummary,
-  ConversationDeliveryMode,
+  QuestionItem,
 } from "../types/conversation";
-import { useDatasourceStore } from "./datasourceStore";
+import { useDatasourceSelectionStore } from "./datasourceSelectionStore";
 import {
   reduceStreamEvent,
+  removeConversationState,
+  upsertArtifacts,
   upsertRun,
 } from "./conversationStoreReducer";
 
@@ -32,20 +43,31 @@ export interface ConversationState {
   summaries: ConversationSummary[];
   activeConversationId: string | null;
   detailById: Record<string, ConversationDetail>;
-  messagesById: Record<string, ConversationMessage>;
-  runsById: Record<string, ConversationRun>;
   artifactsById: Record<string, ConversationArtifact>;
-  liveRevisionById: Record<string, number>;
-  abortControllers: Map<string, AbortController>;
+  liveFieldsById: Record<string, { revision: number; offset: number }>;
 }
 
 export interface ConversationActions {
   initConversations: () => Promise<void>;
   openConversation: (conversationId: string) => Promise<ConversationDetail>;
-  createAndOpenConversation: (question: string, contextTables: string[]) => Promise<ConversationDetail>;
+  loadOlderHistory: (conversationId: string) => Promise<boolean>;
+  createAndOpenConversation: (
+    question: string,
+    contextTables: string[],
+  ) => Promise<ConversationDetail>;
   deleteConversationById: (conversationId: string) => Promise<void>;
   loadConversation: (detail: ConversationDetail) => void;
-  sendMessage: (conversationId: string, content: string, mode?: ConversationDeliveryMode) => Promise<void>;
+  loadRunArtifacts: (
+    conversationId: string,
+    runId: string,
+    expectedArtifactIds: readonly string[],
+  ) => Promise<void>;
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    mode: ConversationDeliveryMode,
+    idempotencyKey: string,
+  ) => Promise<void>;
   cancelRun: (runId: string) => Promise<void>;
   resolveApproval: (runId: string, approvalId: string, approved: boolean) => Promise<void>;
   resolveQuestion: (
@@ -60,33 +82,49 @@ export interface ConversationActions {
 
 export type ConversationStore = ConversationState & ConversationActions;
 
+const artifactLoadRequests = new Map<string, Promise<void>>();
+
 export const useConversationStore = create<ConversationStore>()((set, get) => ({
   summaries: [],
   activeConversationId: null,
   detailById: {},
-  messagesById: {},
-  runsById: {},
   artifactsById: {},
-  liveRevisionById: {},
-  abortControllers: new Map(),
+  liveFieldsById: {},
 
   initConversations: async () => {
-    const summaries = await listConversations();
-    set({ summaries });
+    set({ summaries: await listConversations() });
   },
 
   openConversation: async (conversationId) => {
     const detail = await getConversation(conversationId);
     get().loadConversation(detail);
     const activeRun = detail.runs.findLast((run) => isFollowableRun(run.status));
-    if (activeRun) {
-      void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
-    }
+    if (activeRun) void followRun(get, conversationId, activeRun.id, detail.cursor || 0);
     return detail;
   },
 
+  loadOlderHistory: async (conversationId) => {
+    const current = get().detailById[conversationId];
+    if (!current?.pagination) return false;
+    const itemCursor = current.pagination.items.next_before_sequence;
+    const runCursor = current.pagination.runs.next_before_sequence;
+    if (!itemCursor && !runCursor) return false;
+    const page = await getConversationHistory(conversationId, {
+      beforeItemSequence: itemCursor,
+      beforeRunSequence: runCursor,
+    });
+    get().loadConversation({
+      ...current,
+      items: mergeById(page.items, current.items),
+      runs: mergeById(page.runs, current.runs),
+      pagination: page.pagination,
+      cursor: Math.max(current.cursor || 0, page.cursor || 0),
+    });
+    return Boolean(page.pagination?.items.has_more || page.pagination?.runs.has_more);
+  },
+
   createAndOpenConversation: async (question, contextTables) => {
-    const datasourceId = useDatasourceStore.getState().activeDatasourceId;
+    const datasourceId = useDatasourceSelectionStore.getState().activeDatasourceId;
     if (!datasourceId) throw new Error("Please select a datasource first.");
     const detail = await createConversation({
       datasource_id: datasourceId,
@@ -98,44 +136,66 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
   },
 
   deleteConversationById: async (conversationId) => {
+    conversationStreamRuntime.stop(conversationId);
     await deleteConversation(conversationId);
-    set((state) => ({
-      summaries: state.summaries.filter((item) => item.id !== conversationId),
-      activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,
-    }));
+    set((state) => removeConversationState(state, conversationId));
   },
 
   loadConversation: (detail) => {
-    const current = get();
-    const messagesById = { ...current.messagesById };
-    const runsById = { ...current.runsById };
-    const artifactsById = { ...current.artifactsById };
-    const runs = detail.runs;
-    const loadedDetail = { ...detail, runs };
-    for (const message of loadedDetail.messages) messagesById[message.id] = message;
-    for (const run of loadedDetail.runs) runsById[run.id] = run;
-    for (const artifact of loadedDetail.artifacts) artifactsById[artifact.id] = artifact;
-    const livePrefix = `live:${loadedDetail.id}:`;
-    const liveRevisionById = Object.fromEntries(
-      Object.entries(current.liveRevisionById).filter(([id]) => !id.startsWith(livePrefix)),
+    const terminalItemIds = new Set(
+      detail.items
+        .filter((item) => isTerminalRunItem(item.status))
+        .map((item) => item.id),
     );
     set((state) => ({
-      activeConversationId: loadedDetail.id,
-      detailById: { ...state.detailById, [loadedDetail.id]: loadedDetail },
-      messagesById,
-      runsById,
-      artifactsById,
-      liveRevisionById,
+      activeConversationId: detail.id,
+      detailById: {
+        ...state.detailById,
+        [detail.id]: preserveLiveProjection(
+          state.detailById[detail.id],
+          detail,
+          state.liveFieldsById,
+        ),
+      },
+      liveFieldsById: Object.fromEntries(
+        Object.entries(state.liveFieldsById)
+          .filter(([key]) => ![...terminalItemIds].some((itemId) => key.includes(`:${itemId}:`))),
+      ),
     }));
   },
 
-  sendMessage: async (conversationId, content, mode = "queue") => {
+  loadRunArtifacts: async (conversationId, runId, expectedArtifactIds) => {
+    const artifactIds = [...new Set(expectedArtifactIds)];
+    if (artifactIds.length === 0) return;
+    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+
+    const requestKey = `${conversationId}:${runId}`;
+    const activeRequest = artifactLoadRequests.get(requestKey);
+    if (activeRequest) await activeRequest;
+    if (artifactIds.every((artifactId) => Boolean(get().artifactsById[artifactId]))) return;
+
+    const request = (async () => {
+      const artifacts = await getConversationRunArtifacts(conversationId, runId);
+      set((state) => upsertArtifacts(state, artifacts));
+    })();
+    artifactLoadRequests.set(requestKey, request);
+    try {
+      await request;
+    } finally {
+      if (artifactLoadRequests.get(requestKey) === request) {
+        artifactLoadRequests.delete(requestKey);
+      }
+    }
+  },
+
+  sendMessage: async (conversationId, content, mode, idempotencyKey) => {
     const llmPayload = buildConversationLlmPayload(getStoredApiConfig());
     if (!llmPayload.llm_credential_id) throw new Error("请先配置模型后再开始智能分析。");
-    const detail = get().detailById[conversationId] || await get().openConversation(conversationId);
+    const detail = get().detailById[conversationId]
+      || await get().openConversation(conversationId);
     const created = await admitConversationInput(conversationId, {
       content,
-      idempotency_key: globalThis.crypto?.randomUUID?.() || `input-${Date.now()}-${Math.random()}`,
+      idempotency_key: idempotencyKey,
       delivery_mode: mode,
       selected_artifact_ids: detail.selected_artifact_id ? [detail.selected_artifact_id] : [],
       llm_credential_id: llmPayload.llm_credential_id,
@@ -147,82 +207,75 @@ export const useConversationStore = create<ConversationStore>()((set, get) => ({
         recent_agent_run_id: detail.runs.at(-1)?.id || null,
       },
     });
-    const admittedSnapshot = await getConversation(conversationId);
-    get().loadConversation(admittedSnapshot);
-    await followRun(get, conversationId, created.run_id, admittedSnapshot.cursor || 0);
+    get().loadConversation({
+      ...detail,
+      items: mergeById(detail.items, created.projection.items),
+      runs: mergeById(detail.runs, created.projection.runs),
+      cursor: Math.max(detail.cursor || 0, created.event_cursor, created.projection.cursor),
+    });
+    void followRun(get, conversationId, created.run_id, created.projection.cursor);
   },
 
   cancelRun: async (runId) => {
-    const run = get().runsById[runId];
-    try {
-      const cancelled = await cancelConversationRun(runId);
-      if (run) {
-        set((state) => upsertRun(state, run.conversation_id, {
-          ...run,
-          status: cancelled.status as ConversationRun["status"],
-          version: cancelled.version,
-          cancel_requested: true,
-        }));
-      }
-    } catch {
-      return;
-    }
-    if (run) {
-      get().abortControllers.get(run.conversation_id)?.abort();
-      const snapshot = await getConversation(run.conversation_id);
-      get().loadConversation(snapshot);
-      const current = snapshot.runs.find((item) => item.id === runId);
-      if (current && isFollowableRun(current.status)) {
-        await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
-      }
+    const run = findRun(get(), runId);
+    if (!run) return;
+    const cancelled = await cancelConversationRun(runId);
+    set((state) => upsertRun(state, run.session_id, {
+      ...run,
+      status: cancelled.status as ConversationRun["status"],
+      version: cancelled.version,
+      cancel_requested: true,
+    }));
+    conversationStreamRuntime.stop(run.session_id);
+    const snapshot = await getConversation(run.session_id);
+    get().loadConversation(snapshot);
+    const current = snapshot.runs.find((item) => item.id === runId);
+    if (current && isFollowableRun(current.status)) {
+      void followRun(get, run.session_id, runId, snapshot.cursor || 0);
     }
   },
 
   resolveApproval: async (runId, approvalId, approved) => {
-    const run = get().runsById[runId];
-    if (!run?.approval) return;
+    const run = findRun(get(), runId);
+    const approval = findItem<ApprovalItem>(get(), approvalId, "approval");
+    if (!run || !approval) return;
+    const afterSequence = get().detailById[run.session_id]?.cursor || 0;
     await resolveConversationApproval(
       approvalId,
-      run.approval.version || 0,
+      approval.payload.version,
       approved,
       approved ? "用户允许本次操作" : "用户拒绝本次操作",
     );
-    const snapshot = await getConversation(run.conversation_id);
-    get().loadConversation(snapshot);
-    await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
+    void followRun(get, run.session_id, runId, afterSequence);
   },
 
   resolveQuestion: async (runId, questionId, response) => {
-    const run = get().runsById[runId];
-    if (!run) return;
-    const detail = get().detailById[run.conversation_id];
-    const question = detail?.questions?.find((item) => item.id === questionId);
-    if (!question) return;
-    await resolveConversationQuestion(questionId, question.version, response);
-    const snapshot = await getConversation(run.conversation_id);
-    get().loadConversation(snapshot);
-    await followRun(get, run.conversation_id, runId, snapshot.cursor || 0);
+    const run = findRun(get(), runId);
+    const question = findItem<QuestionItem>(get(), questionId, "question");
+    if (!run || !question) return;
+    const afterSequence = get().detailById[run.session_id]?.cursor || 0;
+    await resolveConversationQuestion(questionId, question.payload.version, response);
+    void followRun(get, run.session_id, runId, afterSequence);
   },
 
   selectArtifact: async (conversationId, artifactId) => {
     await selectConversationArtifact(conversationId, artifactId);
     set((state) => {
       const detail = state.detailById[conversationId];
-      if (!detail) return state;
-      return {
-        ...state,
-        detailById: {
-          ...state.detailById,
-          [conversationId]: { ...detail, selected_artifact_id: artifactId },
-        },
-      };
+      return detail
+        ? {
+            detailById: {
+              ...state.detailById,
+              [conversationId]: { ...detail, selected_artifact_id: artifactId },
+            },
+          }
+        : state;
     });
   },
 
   applyStreamEvent: (event) => set((state) => reduceStreamEvent(state, event)),
   applyStreamEvents: (events) => {
-    if (events.length === 0) return;
-    set((state) => events.reduce(reduceStreamEvent, state));
+    if (events.length > 0) set((state) => events.reduce(reduceStreamEvent, state));
   },
 }));
 
@@ -232,66 +285,70 @@ async function followRun(
   runId: string,
   afterSequence: number,
 ): Promise<void> {
-  get().abortControllers.get(conversationId)?.abort();
-  const abortController = new AbortController();
-  const batchEvent = createStreamEventBatcher<ConversationStreamEvent>(
-    (events) => get().applyStreamEvents(events),
-  );
-  get().abortControllers.set(conversationId, abortController);
-  let cursor = afterSequence;
-  let attempt = 0;
-  try {
-    while (!abortController.signal.aborted) {
-      try {
-        cursor = await streamConversation(conversationId, {
-          afterSequence: cursor,
-          targetRunId: runId,
-          signal: abortController.signal,
-          onEvent: batchEvent,
-        });
-        attempt = 0;
-      } catch (error) {
-        if (abortController.signal.aborted || isAbortError(error)) return;
-        attempt += 1;
-      }
-
-      let snapshot: ConversationDetail | null = null;
-      try {
-        snapshot = await getConversation(conversationId);
-        get().loadConversation(snapshot);
-        cursor = Math.max(cursor, snapshot.cursor || 0);
-      } catch {
-        if (abortController.signal.aborted) return;
-      }
-      const run = snapshot?.runs.find((item) => item.id === runId);
-      if (!run || !isFollowableRun(run.status)) return;
-      await waitForRetry(Math.min(4_000, 250 * (2 ** Math.min(attempt, 4))), abortController.signal);
-    }
-  } finally {
-    if (get().abortControllers.get(conversationId) === abortController) {
-      get().abortControllers.delete(conversationId);
-    }
-  }
-}
-
-function isFollowableRun(status: ConversationRun["status"]): boolean {
-  return ["created", "queued", "running", "cancelling"].includes(status);
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function waitForRetry(duration: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const timer = globalThis.setTimeout(resolve, duration);
-    signal.addEventListener("abort", () => {
-      globalThis.clearTimeout(timer);
-      resolve();
-    }, { once: true });
+  await conversationStreamRuntime.follow(conversationId, runId, afterSequence, {
+    applyEvents: (events) => get().applyStreamEvents(events),
+    loadSnapshot: (snapshot) => get().loadConversation(snapshot),
   });
+}
+
+function mergeById<T extends { id: string }>(older: T[], newer: T[]): T[] {
+  const values = new Map(older.map((item) => [item.id, item]));
+  for (const item of newer) values.set(item.id, item);
+  return [...values.values()];
+}
+
+function findItem<T extends ConversationRunItem>(
+  state: ConversationStore,
+  itemId: string,
+  type: T["type"],
+): T | null {
+  const item = Object.values(state.detailById)
+    .flatMap((detail) => detail.items)
+    .find((candidate) => candidate.id === itemId);
+  return item?.type === type ? item as T : null;
+}
+
+function findRun(state: ConversationStore, runId: string): ConversationRun | null {
+  return Object.values(state.detailById)
+    .flatMap((detail) => detail.runs)
+    .find((run) => run.id === runId) ?? null;
+}
+
+function preserveLiveProjection(
+  current: ConversationDetail | undefined,
+  snapshot: ConversationDetail,
+  liveFields: ConversationState["liveFieldsById"],
+): ConversationDetail {
+  if (!current) return snapshot;
+  const currentItems = new Map(current.items.map((item) => [item.id, item]));
+  const items = mergeById(current.items, snapshot.items).sort(
+    (left, right) => left.sequence - right.sequence
+      || left.created_at.localeCompare(right.created_at)
+      || left.id.localeCompare(right.id),
+  );
+  return {
+    ...snapshot,
+    runs: mergeById(current.runs, snapshot.runs).sort(
+      (left, right) => left.session_sequence - right.session_sequence,
+    ),
+    items: items.map((item) => {
+      if (item.type !== "message" || isTerminalRunItem(item.status)) {
+        return item;
+      }
+      const fieldKey = `${item.run_id}:${item.id}:content`;
+      const liveItem = currentItems.get(item.id);
+      return liveFields[fieldKey] && liveItem?.type === "message"
+        ? {
+            ...item,
+            payload: { ...item.payload, content: liveItem.payload.content },
+          }
+        : item;
+    }),
+    pagination: (
+      current.items.length > snapshot.items.length
+      || current.runs.length > snapshot.runs.length
+    )
+      ? current.pagination
+      : snapshot.pagination,
+  };
 }

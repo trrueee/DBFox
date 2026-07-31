@@ -90,11 +90,11 @@
 
 .workspace-tab__icon--table,
 .workspace-tab__icon--datasource {
-  color: #3b82f6;
+  color: var(--color-info);
 }
 
 .workspace-tab__icon--sql {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .workspace-tab__icon--multi-table {
@@ -114,7 +114,7 @@
 }
 
 .workspace-tab__icon--diagnostics {
-  color: #f43f5e;
+  color: var(--color-danger);
 }
 
 .workspace-tab__title {

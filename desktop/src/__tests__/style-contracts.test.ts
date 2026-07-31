@@ -9,20 +9,22 @@ import { describe, expect, it } from "vitest";
 
 const appSource = join(process.cwd(), "src/App.tsx");
 const appCss = join(process.cwd(), "src/App.css");
+const layoutSource = join(process.cwd(), "src/features/appShell/ResizableWorkspaceLayout.tsx");
 const treeSource = join(process.cwd(), "src/features/datasource/DataSourceTree.tsx");
 const treeCss = join(process.cwd(), "src/features/datasource/DataSourceTree.css");
 
 describe("App resizable shell", () => {
   it("uses the DBFox resizable primitive instead of the hand-rolled sidebar dragger", () => {
     const source = readFileSync(appSource, "utf8");
+    const layout = readFileSync(layoutSource, "utf8");
     const css = readFileSync(appCss, "utf8");
     const tree = readFileSync(treeSource, "utf8");
     const treeStyles = readFileSync(treeCss, "utf8");
 
-    expect(source).toContain("ResizablePanelGroup");
-    expect(source).toContain("ResizablePanel");
-    expect(source).toContain("ResizableHandle");
-    expect(source).toContain('from "./components/ui"');
+    expect(layout).toContain("ResizablePanelGroup");
+    expect(layout).toContain("ResizablePanel");
+    expect(layout).toContain("ResizableHandle");
+    expect(layout).toContain('from "../../components/ui"');
     expect(source).not.toContain("useSidebarLayout");
     expect(source).not.toContain("handleResizeStart");
     expect(source).not.toContain("sidebarWidth");
@@ -77,7 +79,7 @@ describe("CommandPalette styles and foundation", () => {
 
     const localCss = readFileSync(cssPath, "utf8");
     expect(localCss).toContain(".dbfox-command-overlay");
-    expect(localCss).toContain(".dbfox-command-footer");
+    expect(localCss).not.toContain(".dbfox-command-footer");
     expect(localCss).not.toContain(".dbfox-command-item");
 
     const commandCss = readFileSync(commandCssPath, "utf8");
@@ -96,21 +98,6 @@ const componentDir = join(process.cwd(), "src/components");
 const utilityClassPattern = /\b(?:sm:max-w-|p-\d|px-\d|py-\d|gap-\d|space-y-|border-\[|bg-\[|text-\[|font-semibold|font-mono|rounded(?:-|\b)|flex items-|items-center|items-start|justify-|whitespace-pre-wrap|overflow-auto|max-h-\[|w-\d|h-\d|shrink-0|mt-\d)/;
 
 const surfaces = [
-  {
-    sourcePath: join(componentDir, "SettingsDialog.tsx"),
-    cssPath: join(componentDir, "SettingsDialog.css"),
-    importStatement: 'import "./SettingsDialog.css"',
-    selectors: [
-      ".settings-dialog-content",
-      ".settings-dialog-header",
-      ".settings-dialog-title",
-      ".settings-dialog-title-icon",
-      ".settings-dialog-footer",
-      ".settings-dialog-actions",
-      ".settings-dialog-save",
-      ".settings-button-indicator",
-    ],
-  },
   {
     sourcePath: join(componentDir, "ConfirmDialog.tsx"),
     cssPath: join(componentDir, "ConfirmDialog.css"),
@@ -266,40 +253,14 @@ const panelCss = join(process.cwd(), "src/components/LlmConfigPanel.css");
 const appCssForLlmPanel = join(process.cwd(), "src/App.css");
 
 const requiredSelectors = [
-  ".hifi-settings-page",
-  ".hifi-settings-dialog-body",
-  ".hifi-settings-page-header",
-  ".hifi-settings-page-icon",
-  ".hifi-settings-page-title",
-  ".hifi-settings-page-desc",
-  ".hifi-settings-body",
-  ".hifi-settings-section-head",
-  ".hifi-settings-section-icon",
-  ".hifi-settings-section-title",
-  ".hifi-settings-section-subtitle",
-  ".hifi-settings-field",
-  ".hifi-settings-label",
-  ".hifi-settings-hint",
   ".hifi-settings-input",
-  ".hifi-settings-input-compact",
   ".hifi-settings-eye-btn",
-  ".hifi-model-chips",
-  ".hifi-model-chip",
-  ".hifi-model-chip.active",
-  ".hifi-settings-divider",
-  ".hifi-settings-status-list",
-  ".hifi-settings-status-row",
-  ".hifi-settings-mono",
-  ".hifi-settings-saved",
-  ".hifi-settings-footer",
   ".hifi-settings-secret-field",
   ".hifi-settings-input--secret",
   ".hifi-settings-input--mono",
-  ".hifi-settings-input--custom-model",
-  ".hifi-settings-status-badge",
-  ".hifi-settings-status-value",
+  ".llm-model-control",
+  ".llm-model-select",
   ".hifi-settings-submit-btn",
-  ".hifi-settings-validation",
 ];
 
 describe("LlmConfigPanel form foundation", () => {
@@ -1215,10 +1176,10 @@ describe("conversation workspace split pane foundation", () => {
     const workspaceSource = readFileSync(workspaceSourcePath, "utf8");
 
     expect(workspaceSource).toContain('defaultSize="72%"');
-    expect(workspaceSource).toContain('minSize="48%"');
+    expect(workspaceSource).toContain('minSize="38%"');
     expect(workspaceSource).toContain('defaultSize="28%"');
     expect(workspaceSource).toContain('minSize="22%"');
-    expect(workspaceSource).toContain('maxSize="44%"');
+    expect(workspaceSource).not.toContain('maxSize="44%"');
     expect(workspaceSource).not.toContain("defaultSize={72}");
     expect(workspaceSource).not.toContain("defaultSize={28}");
     expect(workspaceSource).not.toContain("maxSize={44}");
@@ -1684,11 +1645,11 @@ describe("SqlConsoleWorkspace styles", () => {
     expect(source).toContain('aria-label="SQL 高亮预览"');
     expect(source).toContain("renderSqlConsoleHighlight");
     expect(css).toMatch(/\.sql-console-input\s*{[\s\S]*?color:\s*transparent;/);
-    expect(css).toMatch(/\.sql-console-input\s*{[\s\S]*?caret-color:\s*#34d399;/);
+    expect(css).toMatch(/\.sql-console-input\s*{[\s\S]*?caret-color:\s*var\(--color-success\);/);
     expect(css).toMatch(/\.sql-console-highlight\s*{[\s\S]*?pointer-events:\s*none;/);
-    expect(css).toMatch(/\.sql-console-token-keyword\s*{[\s\S]*?color:\s*#93c5fd;/);
-    expect(css).toMatch(/\.sql-console-token-string\s*{[\s\S]*?color:\s*#86efac;/);
-    expect(css).toMatch(/\.sql-console-token-number\s*{[\s\S]*?color:\s*#fdba74;/);
+    expect(css).toMatch(/\.sql-console-token-keyword\s*{[\s\S]*?color:\s*var\(--color-info\);/);
+    expect(css).toMatch(/\.sql-console-token-string\s*{[\s\S]*?color:\s*var\(--sql-code-string\);/);
+    expect(css).toMatch(/\.sql-console-token-number\s*{[\s\S]*?color:\s*var\(--color-warning\);/);
   });
 });
 
@@ -1850,25 +1811,25 @@ describe("artifact view styles", () => {
     expect(localCss).toContain(".sql-token-string");
   });
 
-  it("uses GitHub Light SQL syntax colors for artifact surfaces", () => {
+  it("uses theme-aware semantic SQL colors for artifact surfaces", () => {
     const localCss = readFileSync(artifactViewsCss, "utf8");
     const ruleFor = (selector: string) => localCss.match(new RegExp(`${selector.replace(".", "\\.")}\\s*\\{[^}]+\\}`))?.[0] ?? "";
     const sqlBlockRule = ruleFor(".sql-code-block");
 
-    expect(sqlBlockRule).toContain("background: #f6f8fa");
-    expect(sqlBlockRule).toContain("border: 1px solid #d0d7de");
-    expect(sqlBlockRule).toContain("color: #24292f");
+    expect(sqlBlockRule).toContain("background: var(--sql-code-surface)");
+    expect(sqlBlockRule).toContain("border: 1px solid var(--sql-code-border)");
+    expect(sqlBlockRule).toContain("color: var(--sql-code-text)");
     expect(sqlBlockRule).toContain('font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace');
     expect(sqlBlockRule).toContain("line-height: 1.75");
-    expect(ruleFor(".sql-token-keyword")).toContain("color: #0550ae");
+    expect(ruleFor(".sql-token-keyword")).toContain("color: var(--sql-code-keyword)");
     expect(ruleFor(".sql-token-keyword")).toContain("font-weight: 600");
-    expect(ruleFor(".sql-token-function")).toContain("color: #8250df");
+    expect(ruleFor(".sql-token-function")).toContain("color: var(--sql-code-function)");
     expect(ruleFor(".sql-token-function")).toContain("font-weight: 600");
-    expect(ruleFor(".sql-token-string")).toContain("color: #116329");
-    expect(ruleFor(".sql-token-number")).toContain("color: #953800");
-    expect(ruleFor(".sql-token-comment")).toContain("color: #6e7781");
-    expect(ruleFor(".sql-token-operator,\\s*.sql-token-punctuation")).toContain("color: #57606a");
-    expect(ruleFor(".sql-token-identifier")).toContain("color: #24292f");
+    expect(ruleFor(".sql-token-string")).toContain("color: var(--sql-code-string)");
+    expect(ruleFor(".sql-token-number")).toContain("color: var(--sql-code-number)");
+    expect(ruleFor(".sql-token-comment")).toContain("color: var(--sql-code-comment)");
+    expect(ruleFor(".sql-token-operator,\\s*.sql-token-punctuation")).toContain("color: var(--sql-code-punctuation)");
+    expect(ruleFor(".sql-token-identifier")).toContain("color: var(--sql-code-text)");
   });
 
   it("uses artifact-local pill and sort indicator classes for table metadata", () => {
@@ -2198,70 +2159,6 @@ describe("EmptyArtifactsState styles", () => {
 
 }
 
-// Source: desktop/src/pages/__tests__/AgentEvalPage.styles.test.ts
-{
-
-const sourcePath = join(process.cwd(), "src/pages/AgentEvalPage.tsx");
-const cssPath = join(process.cwd(), "src/pages/AgentEvalPage.css");
-const appCssPath = join(process.cwd(), "src/App.css");
-
-const localSelectors = [
-  ".agent-eval-page",
-  ".agent-eval-header",
-  ".agent-eval-header__title",
-  ".agent-eval-header__datasource",
-  ".agent-eval-header__actions",
-  ".agent-eval-form",
-  ".agent-eval-form__row",
-  ".agent-eval-form__inline",
-  ".agent-eval-body",
-  ".agent-eval-panel",
-  ".agent-eval-list",
-  ".agent-eval-task",
-  ".agent-eval-task__name",
-  ".agent-eval-task__question",
-  ".agent-eval-chip",
-  ".agent-eval-chip--keyword",
-  ".agent-eval-run",
-  ".agent-eval-run__head",
-  ".agent-eval-run__rate",
-  ".agent-eval-run__rate--good",
-  ".agent-eval-run__rate--warn",
-  ".agent-eval-run__rate--bad",
-  ".agent-eval-case",
-  ".agent-eval-case__status",
-  ".agent-eval-case__status--passed",
-  ".agent-eval-case__status--failed",
-  ".agent-eval-case__status--error",
-  ".agent-eval-case__reasons",
-];
-
-describe("AgentEvalPage styles", () => {
-  it("keeps agent evaluation presentation local and uses shared UI primitives", () => {
-    const source = readFileSync(sourcePath, "utf8");
-
-    expect(source).toContain('import "./AgentEvalPage.css";');
-    expect(source).toContain("from \"../components/ui\"");
-    for (const primitive of ["Button", "Input", "Panel", "PanelBody", "PanelHeader", "PanelTitle", "EmptyState", "LoadingState"]) {
-      expect(source).toContain(`<${primitive}`);
-    }
-    expect(source).not.toContain("hifi-eval");
-    expect(source).not.toContain("hifi-agent-running-spinner");
-
-    expect(existsSync(cssPath)).toBe(true);
-    const localCss = readFileSync(cssPath, "utf8");
-    for (const selector of localSelectors) {
-      expect(localCss).toContain(selector);
-    }
-    expect(localCss).not.toContain("hifi-eval");
-
-    const appCss = readFileSync(appCssPath, "utf8");
-    expect(appCss).not.toContain("hifi-eval");
-  });
-});
-
-}
-
 // Source: desktop/src/pages/__tests__/DiagnosticsPage.styles.test.ts
 {
 
@@ -2538,14 +2435,14 @@ describe("agent visual tokens", () => {
       "--ui-font-data": "12px",
       "--agent-font-micro": "12px",
       "--agent-font-caption": "12px",
-      "--agent-font-label": "12px",
-      "--agent-font-ui": "13px",
+      "--agent-font-label": "13px",
+      "--agent-font-ui": "14px",
       "--agent-font-code": "13px",
-      "--agent-font-input": "15px",
-      "--agent-font-title": "15px",
-      "--agent-font-body": "15px",
-      "--agent-font-subtitle": "17px",
-      "--agent-font-display": "20px",
+      "--agent-font-input": "16px",
+      "--agent-font-title": "16px",
+      "--agent-font-body": "16px",
+      "--agent-font-subtitle": "18px",
+      "--agent-font-display": "21px",
     };
 
     for (const selector of [":root", ".dark"] as const) {

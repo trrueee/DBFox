@@ -1,13 +1,68 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createConversation, listConversations, streamConversation } from "../conversationRepository";
+import {
+  admitConversationInput,
+  createConversation,
+  listConversations,
+  streamConversation,
+} from "../conversationRepository";
+
+const sdkMocks = vi.hoisted(() => ({
+  admitInput: vi.fn(),
+  createConversation: vi.fn(),
+  listConversations: vi.fn(),
+}));
+
+vi.mock("../../../lib/api/generated/sdk.gen", () => ({
+  admitConversationInputApiV1ConversationsConversationIdInputsPost: sdkMocks.admitInput,
+  createConversationApiV1ConversationsPost: sdkMocks.createConversation,
+  listConversationsApiV1ConversationsGet: sdkMocks.listConversations,
+}));
 
 vi.mock("../../../lib/api/client", () => ({
-  request: vi.fn(),
   BASE_URL: "http://127.0.0.1:8000/api/v1",
   ENGINE_TOKEN: "test-token",
 }));
 
-const { request } = await import("../../../lib/api/client");
+const pagination = {
+  items: { has_more: false, next_before_sequence: null },
+  runs: { has_more: false, next_before_sequence: null },
+};
+
+const projectedRun = (
+  id: string,
+  status: "running" | "completed",
+) => ({
+  id,
+  session_id: "conv-1",
+  input_id: `input-${id}`,
+  session_sequence: 1,
+  user_message_id: `message-${id}`,
+  datasource_id: "ds-1",
+  question: "Analyze data",
+  status,
+  version: 1,
+  current_turn_id: null,
+  cancel_requested: false,
+  result: {},
+  error: null,
+});
+
+const runtimeEvent = (
+  sequence: number,
+  eventType: "run.started" | "run.completed",
+  runId: string,
+  status: "running" | "completed",
+) => ({
+  event_id: `event-${sequence}`,
+  event_type: eventType,
+  event_version: 1,
+  session_id: "conv-1",
+  run_id: runId,
+  turn_id: null,
+  sequence,
+  timestamp: "2026-06-21T00:00:00Z",
+  payload: { run: projectedRun(runId, status) },
+});
 
 describe("conversationRepository", () => {
   beforeEach(() => {
@@ -15,42 +70,41 @@ describe("conversationRepository", () => {
   });
 
   it("lists structured conversation summaries", async () => {
-    vi.mocked(request).mockResolvedValueOnce([
-      {
-        id: "conv-1",
-        title: "Orders",
-        datasource_id: "ds-1",
-        updated_at: "2026-06-21T00:00:00+00:00",
-        last_message: "Done",
-        message_count: 2,
-        run_status: "completed",
-        artifact_count: 3,
-      },
-    ]);
+    sdkMocks.listConversations.mockResolvedValueOnce({
+      data: [
+        {
+          id: "conv-1",
+          title: "Orders",
+          datasource_id: "ds-1",
+          updated_at: "2026-06-21T00:00:00+00:00",
+          last_message: "Done",
+          message_count: 2,
+          run_status: "completed",
+          artifact_count: 3,
+        },
+      ],
+    });
 
     const result = await listConversations();
 
     expect(result[0].id).toBe("conv-1");
     expect(result[0].message_count).toBe(2);
-    expect(request).toHaveBeenCalledWith("/conversations");
+    expect(sdkMocks.listConversations).toHaveBeenCalledWith({ throwOnError: true });
   });
 
   it("creates a conversation through the structured endpoint", async () => {
-    vi.mocked(request).mockResolvedValueOnce({
-      protocol_version: 1,
-      session: {
-        id: "conv-2", title: "New", datasource_id: "ds-1",
-        context_tables: ["orders"], context_epoch: 0, selected_artifact_id: null,
+    sdkMocks.createConversation.mockResolvedValueOnce({
+      data: {
+        protocol_version: 2,
+        session: {
+          id: "conv-2", title: "New", datasource_id: "ds-1",
+          context_tables: ["orders"], context_epoch: 0, selected_artifact_id: null,
+        },
+        runs: [],
+        items: [],
+        pagination,
+        cursor: 0,
       },
-      messages: [],
-      runs: [],
-      turns: [],
-      activities: [],
-      artifacts: [],
-      evidence: [],
-      approvals: [],
-      questions: [],
-      cursor: 0,
     });
 
     const result = await createConversation({
@@ -60,17 +114,63 @@ describe("conversationRepository", () => {
     });
 
     expect(result.id).toBe("conv-2");
-    expect(request).toHaveBeenCalledWith("/conversations", {
-      method: "POST",
-      body: JSON.stringify({ datasource_id: "ds-1", title: "New", context_tables: ["orders"] }),
+    expect(sdkMocks.createConversation).toHaveBeenCalledWith({
+      body: { datasource_id: "ds-1", title: "New", context_tables: ["orders"] },
+      throwOnError: true,
     });
+  });
+
+  it("rejects snapshots from an unsupported timeline protocol", async () => {
+    sdkMocks.createConversation.mockResolvedValueOnce({
+      data: {
+        protocol_version: 1,
+        session: {
+          id: "conv-old", title: "Old", datasource_id: "ds-1",
+          context_tables: [], context_epoch: 0, selected_artifact_id: null,
+        },
+        runs: [],
+        items: [],
+        pagination,
+        cursor: 0,
+      },
+    });
+
+    await expect(createConversation({
+      datasource_id: "ds-1",
+      context_tables: [],
+    })).rejects.toThrow("不支持的 Agent 时间线协议版本：1");
+  });
+
+  it("rejects admission projections from an unsupported timeline protocol", async () => {
+    sdkMocks.admitInput.mockResolvedValueOnce({
+      data: {
+        session_id: "conv-2",
+        input_id: "input-1",
+        run_id: "run-1",
+        user_message_id: "message-1",
+        input_sequence: 1,
+        event_cursor: 1,
+        stream_path: "/stream",
+        projection: { protocol_version: 1, cursor: 1, items: [], runs: [] },
+      },
+    });
+
+    await expect(admitConversationInput("conv-2", {
+      content: "分析数据",
+      idempotency_key: "input-1",
+      delivery_mode: "queue",
+      selected_artifact_ids: [],
+      workspace_context: {},
+      llm_credential_id: "credential-1",
+    })).rejects.toThrow("不支持的 Agent 时间线协议版本：1");
   });
 
   it("parses fragmented and multi-line SSE frames with the standard parser", async () => {
     const encoder = new TextEncoder();
+    const completed = JSON.stringify(runtimeEvent(8, "run.completed", "run-1", "completed"));
     const chunks = [
-      ": heartbeat\n\nevent: live.delta\ndata: {\"run_id\":\"run-1\",\ndata: \"channel\":\"text\",\"offset\":0,\"content\":\"Hi\"}\n\n",
-      "event: runtime\nid: 8\ndata: {\"sequence\":8,\"run_id\":\"run-1\",\"event_type\":\"run.completed\",\"payload\":{}}\n\n",
+      ": heartbeat\n\nevent: run.item.delta\ndata: {\"session_id\":\"conv-1\",\"run_id\":\"run-1\",\"item_id\":\"message:run-1:turn-1\",\"item_type\":\"message\",\"field\":\"content\",\"revision\":1,\"offset\":0,\"content\":\"Hi\"}\n\n",
+      `event: run.completed\nid: 8\ndata: ${completed}\n\n`,
     ];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({
       start(controller) {
@@ -90,5 +190,33 @@ describe("conversationRepository", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({ kind: "delta", delta: { content: "Hi" } });
     expect(events[1]).toMatchObject({ kind: "event", event: { event_type: "run.completed" } });
+  });
+
+  it("keeps a terminal boundary sticky when a later event shares the same chunk", async () => {
+    const encoder = new TextEncoder();
+    let cancelled = false;
+    const completed = JSON.stringify(runtimeEvent(8, "run.completed", "run-1", "completed"));
+    const started = JSON.stringify(runtimeEvent(9, "run.started", "run-2", "running"));
+    const chunk = [
+      `event: run.completed\nid: 8\ndata: ${completed}\n\n`,
+      `event: run.started\nid: 9\ndata: ${started}\n\n`,
+    ].join("");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(chunk));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }), { status: 200 })));
+
+    const cursor = await streamConversation("conv-1", {
+      afterSequence: 4,
+      targetRunId: "run-1",
+      onEvent: () => undefined,
+    });
+
+    expect(cursor).toBe(9);
+    expect(cancelled).toBe(true);
   });
 });

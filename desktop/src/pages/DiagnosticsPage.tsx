@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Check, CheckCircle2, ChevronDown, Copy, FileText, FileWarning, RefreshCw, Trash2 } from "lucide-react";
-import { Button, EmptyState, ErrorState } from "../components/ui";
+import { Check, CheckCircle2, ChevronDown, Copy, FileWarning, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  EmptyState,
+  ErrorState,
+} from "../components/ui";
 import { DangerConfirmDialog, type ConfirmationDetails } from "../components/DangerConfirmDialog";
 import { SettingsSection, SettingsToggle } from "../components/settings";
 import { diagnosticsApi, type DiagnosticLogSource, type DiagnosticLogsResponse } from "../lib/api/diagnostics";
@@ -26,8 +34,14 @@ interface DiagnosticLogGroup {
   content: string;
 }
 
+type DiagnosticLogsView = Omit<DiagnosticLogsResponse, "environment"> & {
+  environment:
+    | DiagnosticLogsResponse["environment"]
+    | { app: "DBFox"; frontend_only: true };
+};
+
 export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPageProps) {
-  const [logs, setLogs] = useState<DiagnosticLogsResponse | null>(null);
+  const [logs, setLogs] = useState<DiagnosticLogsView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmptyLogs, setShowEmptyLogs] = useState(false);
@@ -130,6 +144,9 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
   const totalSourcesCount = logs?.sources.length ?? 0;
   const nonEmptySourcesCount = logs?.sources.filter((source) => source.exists && source.size_bytes > 0).length ?? 0;
   const generatedAtLabel = logs?.generated_at ? formatDateTime(logs.generated_at) : "正在读取…";
+  const backendEnvironment = logs?.environment && !("frontend_only" in logs.environment)
+    ? logs.environment
+    : null;
   const actions = (
     <div className="diagnostics-actions">
       <SettingsToggle
@@ -146,18 +163,31 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
         <RefreshCw size={14} />
         刷新
       </Button>
-      <Button type="button" variant="outline" size="sm" onClick={handleClearLogs} disabled={loading}>
-        <Trash2 size={14} />
-        清空日志
-      </Button>
-      <Button type="button" variant="outline" size="sm" onClick={requestAuditClear} disabled={loading}>
-        <Trash2 size={14} />
-        清空审计
-      </Button>
       <Button type="button" size="sm" onClick={handleCopy} disabled={!logs}>
         <Copy size={14} />
         复制诊断包
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="icon-sm" aria-label="更多诊断操作">
+            <MoreHorizontal size={14} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => void handleClearLogs()} disabled={loading}>
+            <Trash2 size={14} />
+            清空日志
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="diagnostics-danger-menu-item"
+            onSelect={requestAuditClear}
+            disabled={loading}
+          >
+            <Trash2 size={14} />
+            清空审计
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 
@@ -184,22 +214,23 @@ export function DiagnosticsPage({ onToast, chrome = "page" }: DiagnosticsPagePro
 
       <div className="diagnostics-content">
         <SettingsSection
-          icon={Activity}
           title="运行环境"
           description="用于判断问题发生在引擎、桌面端还是当前运行环境。"
         >
           <div className="diagnostics-summary">
             <Metric label="日志源" value={`${nonEmptySourcesCount}/${totalSourcesCount} 有内容`} />
             <Metric label="日志分组" value={`${visibleGroups.length}/2 可查看`} />
-            <Metric label="进程" value={String(logs?.environment.pid ?? "-")} />
-            <Metric label="Python" value={String(logs?.environment.python ?? "-")} />
-            <Metric label="模式" value={logs?.environment.frozen ? "分发版" : "开发版"} />
+            <Metric label="进程" value={String(backendEnvironment?.pid ?? "-")} />
+            <Metric label="Python" value={backendEnvironment?.python ?? "-"} />
+            <Metric
+              label="模式"
+              value={backendEnvironment ? (backendEnvironment.frozen ? "分发版" : "开发版") : "仅前端"}
+            />
             <Metric label="安全审计" value={`${logs?.security_audit.records.length ?? 0} 条（近 ${logs?.security_audit.export_window_days ?? 7} 天）`} />
           </div>
         </SettingsSection>
 
         <SettingsSection
-          icon={FileText}
           title="日志内容"
           description="日志已按前端和后端分组，并在生成诊断包前完成脱敏。"
           className="diagnostics-log-section"
@@ -298,11 +329,11 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-async function loadDiagnosticLogs(): Promise<DiagnosticLogsResponse> {
+async function loadDiagnosticLogs(): Promise<DiagnosticLogsView> {
   return withClientLogs(await diagnosticsApi.getLogs());
 }
 
-function withClientLogs(logs: DiagnosticLogsResponse): DiagnosticLogsResponse {
+function withClientLogs(logs: DiagnosticLogsResponse): DiagnosticLogsView {
   const clientSource = getClientLogSource();
   return {
     ...logs,
@@ -312,7 +343,7 @@ function withClientLogs(logs: DiagnosticLogsResponse): DiagnosticLogsResponse {
   };
 }
 
-function frontendOnlyLogs(): DiagnosticLogsResponse {
+function frontendOnlyLogs(): DiagnosticLogsView {
   return {
     generated_at: new Date().toISOString(),
     policy: {

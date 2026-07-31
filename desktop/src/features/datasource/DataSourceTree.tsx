@@ -1,5 +1,17 @@
 import { useState, type MouseEvent } from "react";
-import { Check, ChevronDown, Database, FileText, MessageSquare, Plus, RefreshCw, Search, Sparkles } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Database,
+  FileText,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  Sparkles,
+  Terminal,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../../components/ui";
-import { useDatasourceStore } from "../../stores/datasourceStore";
+import { useDatasourceState } from "./useDatasourceState";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import type { EngineSchemaTable } from "../../lib/api/schema";
 import { getUserErrorMessage } from "../../lib/api/client";
@@ -27,6 +39,9 @@ interface DataSourceTreeProps {
   onNodeContextMenu: (event: MouseEvent, type: "database" | "schema" | "table", nodeName: string) => void;
   onRefresh: () => void;
   onNewConnection: () => void;
+  onOpenSqlConsole: () => void;
+  onOpenConnectionManager: () => void;
+  onOpenSettings: () => void;
 }
 
 export function DataSourceTree({
@@ -39,19 +54,24 @@ export function DataSourceTree({
   onNodeContextMenu,
   onRefresh,
   onNewConnection,
+  onOpenSqlConsole,
+  onOpenConnectionManager,
+  onOpenSettings,
 }: DataSourceTreeProps) {
-  const datasources = useDatasourceStore((s) => s.datasources);
-  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
-  const setActiveDatasourceId = useDatasourceStore((s) => s.setActiveDatasourceId);
-  const tables = useDatasourceStore((s) => s.tables);
-  const loading = useDatasourceStore((s) => s.loadingSchema);
-  const error = useDatasourceStore((s) => s.schemaError);
+  const {
+    datasources,
+    activeDatasourceId,
+    activeDatasource,
+    setActiveDatasourceId,
+    tables,
+    loadingSchema: loading,
+    schemaError: error,
+  } = useDatasourceState();
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
   const activeTabType = useWorkspaceStore((s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.type);
   const openSmartQueryTab = useWorkspaceStore((s) => s.openSmartQueryTab);
   const openConversationHistoryTab = useWorkspaceStore((s) => s.openConversationHistoryTab);
 
-  const activeDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0];
   const activeDatasourceStatus = datasourceStatusPresentation(activeDatasource?.status);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [schemaCollapsed, setSchemaCollapsed] = useState(false);
@@ -86,6 +106,14 @@ export function DataSourceTree({
             </button>
           </TooltipTrigger>
           <TooltipContent>展开侧栏</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" onClick={onOpenSettings} aria-label="打开设置" className="ds-tree-expand-btn ds-tree-collapsed-settings">
+              <Settings size={15} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>设置</TooltipContent>
         </Tooltip>
       </section>
     );
@@ -204,6 +232,24 @@ export function DataSourceTree({
             <MessageSquare size={14} className="ds-quick-nav-icon ds-quick-nav-icon--history" />
             <span>对话历史</span>
           </button>
+          <button
+            type="button"
+            onClick={() => onOpenSqlConsole()}
+            className={`ds-quick-nav-item ${activeTabType === "sql" ? "active" : ""}`}
+            aria-current={activeTabType === "sql" ? "page" : undefined}
+          >
+            <Terminal size={14} className="ds-quick-nav-icon" />
+            <span>SQL 控制台</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenConnectionManager}
+            className={`ds-quick-nav-item ${activeTabType === "datasource-settings" ? "active" : ""}`}
+            aria-current={activeTabType === "datasource-settings" ? "page" : undefined}
+          >
+            <Database size={14} className="ds-quick-nav-icon" />
+            <span>数据源管理</span>
+          </button>
         </div>
 
         <ScrollArea className="hifi-tree-container ds-tree-scroll-area">
@@ -271,6 +317,12 @@ export function DataSourceTree({
             <div className="ds-tree-status">没有匹配的表。请先同步表结构或调整搜索词。</div>
           )}
         </ScrollArea>
+        <div className="ds-sidebar-footer">
+          <button type="button" className="ds-settings-entry" onClick={onOpenSettings}>
+            <Settings size={15} aria-hidden="true" />
+            <span>设置</span>
+          </button>
+        </div>
       </div>
     </section>
   );

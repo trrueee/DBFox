@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { CornerDownLeft, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   Command,
   CommandEmpty,
@@ -18,6 +18,7 @@ export interface CommandItem {
   id: string;
   name: string;
   category: string;
+  description?: string;
   shortcut?: string;
   icon?: React.ReactNode;
   action: () => void;
@@ -50,7 +51,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
   return (
     <div className="dbfox-command-overlay" onClick={onClose} role="presentation">
       <Command
-        label="命令面板"
+        label="全局搜索"
         loop
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
@@ -64,13 +65,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
           <Search size={15} className="dbfox-command-search-icon" />
           <CommandInput
             autoFocus
-            placeholder="输入指令或搜索表、字段、功能…"
+            placeholder="搜索对话、数据表、字段和操作…"
           />
           <CommandKbd>Esc</CommandKbd>
         </CommandSearch>
 
         <CommandList>
-          <CommandEmpty>没有找到匹配的指令</CommandEmpty>
+          <CommandEmpty>没有找到相关内容</CommandEmpty>
           {grouped.map(([category, items]) => (
             <CommandGroup
               key={category}
@@ -83,9 +84,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
                   onSelect={() => runCommand(command)}
                 >
                   <CommandItemIcon>
-                    {command.icon || <CornerDownLeft size={13} />}
+                    {command.icon || <Search size={13} />}
                   </CommandItemIcon>
-                  <CommandItemLabel>{command.name}</CommandItemLabel>
+                  <CommandItemLabel>
+                    <span>{command.name}</span>
+                    {command.description ? (
+                      <small>{command.description}</small>
+                    ) : null}
+                  </CommandItemLabel>
                   {command.shortcut ? (
                     <CommandKbd>{command.shortcut}</CommandKbd>
                   ) : null}
@@ -95,11 +101,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose, c
           ))}
         </CommandList>
 
-        <div className="dbfox-command-footer">
-          <span>↑↓ 导航</span>
-          <span>↵ 打开</span>
-          <span>Esc 关闭</span>
-        </div>
       </Command>
     </div>
   );

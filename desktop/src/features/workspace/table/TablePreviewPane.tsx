@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, ArrowUpDown, Code, Database, Download, Filter, RefreshCw, Search, Sparkles } from "lucide-react";
 import { ImageCell } from "../../../components/ImageCell";
 import { isImageUrl } from "../../../components/imageUrl";
 import { CellValuePreview } from "../../../components/data-grid/CellValuePreview";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger, Select, Toolbar, ToolbarGroup } from "../../../components/ui";
-import { agentApi } from "../../../lib/api/agent";
-import { findTableByName, listColumns, type EngineColumn } from "../../../lib/api/schema";
 import { copyText, downloadBlobFile } from "../artifacts/artifactActions";
+import {
+  useTablePreviewData,
+  type TableFilterOperator,
+} from "./useTablePreviewData";
 import "./TablePreviewPane.css";
 
 interface TablePreviewPaneProps {
@@ -16,41 +18,6 @@ interface TablePreviewPaneProps {
   datasourceDbType?: string | null;
   onOpenSqlConsole: (initialSql?: string) => void;
   onToast: (message: string) => void;
-}
-
-interface PreviewData {
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  latencyMs: number;
-  hasNext: boolean;
-  warnings: string[];
-  notices: string[];
-  page: number;
-  pageSize: number;
-}
-
-type TableFilterOperator =
-  | "contains"
-  | "equals"
-  | "not_equals"
-  | "starts_with"
-  | "ends_with"
-  | "gt"
-  | "gte"
-  | "lt"
-  | "lte"
-  | "is_null"
-  | "is_not_null";
-
-interface TableFilterState {
-  column: string;
-  operator: TableFilterOperator;
-  value?: string;
-}
-
-interface TableSortState {
-  column: string;
-  direction: "asc" | "desc";
 }
 
 interface PreviewTableRow {
@@ -63,12 +30,8 @@ interface PreviewColumnMeta {
   dataType?: string;
 }
 
-// Keeps the last loaded page per table so re-opening a tab shows data instantly
-// (then revalidates in the background) instead of flashing an empty loading view.
-const previewCache = new Map<string, PreviewData>();
 const EMPTY_PREVIEW_COLUMNS: string[] = [];
-const EMPTY_PREVIEW_ROWS: PreviewData["rows"] = [];
-const EMPTY_PREVIEW_MESSAGES: string[] = [];
+const EMPTY_PREVIEW_ROWS: Array<Record<string, unknown>> = [];
 
 export function TablePreviewPane({
   tableId,
@@ -77,125 +40,51 @@ export function TablePreviewPane({
   onOpenSqlConsole,
   onToast,
 }: TablePreviewPaneProps) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [search, setSearch] = useState("");
   const [filterColumn, setFilterColumn] = useState("");
   const [filterOperator, setFilterOperator] = useState<TableFilterOperator>("contains");
   const [filterValue, setFilterValue] = useState("");
-  const [activeFilter, setActiveFilter] = useState<TableFilterState | null>(null);
   const [sortColumn, setSortColumn] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [activeSort, setActiveSort] = useState<TableSortState | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ rowIndex: number; column: string } | null>(null);
-  const querySignature = JSON.stringify({ search: search.trim(), filter: activeFilter, sort: activeSort });
-  const cacheKey = `${datasourceId}|${tableId}|${page}|${pageSize}|${querySignature}`;
-  const [data, setData] = useState<PreviewData | null>(() => previewCache.get(cacheKey) ?? null);
-  const [columnTypes, setColumnTypes] = useState<Map<string, string>>(new Map());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [noticeDismissed, setNoticeDismissed] = useState(false);
-  const requestSeqRef = useRef(0);
-
-  const [prevDatasourceId, setPrevDatasourceId] = useState(datasourceId);
-  const [prevTableId, setPrevTableId] = useState(tableId);
-  const [prevPage, setPrevPage] = useState(page);
-  const [prevPageSize, setPrevPageSize] = useState(pageSize);
-  const [prevQuerySignature, setPrevQuerySignature] = useState(querySignature);
-
-  if (
-    datasourceId !== prevDatasourceId ||
-    tableId !== prevTableId ||
-    page !== prevPage ||
-    pageSize !== prevPageSize ||
-    querySignature !== prevQuerySignature
-  ) {
-    let nextPage = page;
-    if (datasourceId !== prevDatasourceId || tableId !== prevTableId) {
-      nextPage = 1;
-      setPage(1);
-      setPrevDatasourceId(datasourceId);
-      setPrevTableId(tableId);
-    }
-    setPrevPage(nextPage);
-    setPrevPageSize(pageSize);
-    setPrevQuerySignature(querySignature);
-
-    const nextCacheKey = `${datasourceId}|${tableId}|${nextPage}|${pageSize}|${querySignature}`;
-    const cached = previewCache.get(nextCacheKey);
-    if (cached) {
-      setData(cached);
-    } else if (datasourceId !== prevDatasourceId || tableId !== prevTableId) {
-      setData(null);
-    }
-  }
-
-  const loadPreview = async () => {
-    const seq = ++requestSeqRef.current;
-    setLoading(true);
-    setError("");
-    try {
-      if (!datasourceId) {
-        setError("Cannot preview table without an active datasource.");
-        return;
-      }
-      const table = await findTableByName(datasourceId, tableId);
-      if (seq !== requestSeqRef.current) return;
-      if (!table) {
-        setError("未找到该表的数据源或字段信息，请先同步表结构。");
-        return;
-      }
-      const cols = await listColumns(table.id);
-      if (seq !== requestSeqRef.current) return;
-      const types = new Map<string, string>();
-      cols.forEach((c: EngineColumn) => types.set(c.column_name, c.data_type));
-      setColumnTypes(types);
-      const result = await agentApi.fetchTableResultPage({
-        datasourceId,
-        tableId: table.id,
-        tableName: tableId,
-        page,
-        pageSize,
-        filters: activeFilter ? [activeFilter] : undefined,
-        sort: activeSort ? [activeSort] : undefined,
-        search: search.trim() || undefined,
-        countMode: "estimate",
-      });
-      if (seq !== requestSeqRef.current) return;
-      const next: PreviewData = {
-        columns: result.columns,
-        rows: result.rows,
-        latencyMs: result.latencyMs,
-        hasNext: result.hasNextPage,
-        warnings: result.warnings ?? [],
-        notices: result.notices ?? [],
-        page: result.page,
-        pageSize: result.pageSize,
-      };
-      previewCache.set(cacheKey, next);
-      setData(next);
-      setNoticeDismissed(false);
-    } catch (err) {
-      if (seq !== requestSeqRef.current) return;
-      setError(err instanceof Error ? err.message : "读取表预览失败");
-    } finally {
-      if (seq === requestSeqRef.current) setLoading(false);
-    }
-  };
+  const {
+    data,
+    columnTypes,
+    isLoading: loading,
+    loadingMode,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    search,
+    setSearch,
+    filters,
+    setFilters,
+    sort,
+    setSort,
+    warnings,
+    notices,
+    refresh,
+    exportAll,
+  } = useTablePreviewData({
+    datasourceId,
+    datasourceDbType,
+    tableName: tableId,
+  });
+  const activeFilter = filters[0] ?? null;
+  const activeSort = sort[0] ?? null;
 
   useEffect(() => {
-    void loadPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasourceId, datasourceDbType, tableId, page, pageSize, querySignature]);
+    setNoticeDismissed(false);
+  }, [data]);
 
   const columns = data?.columns ?? EMPTY_PREVIEW_COLUMNS;
   const rows = data?.rows ?? EMPTY_PREVIEW_ROWS;
-  const warnings = data?.warnings ?? EMPTY_PREVIEW_MESSAGES;
-  const notices = data?.notices ?? EMPTY_PREVIEW_MESSAGES;
   const initialLoading = loading && !data;
   const refreshing = loading && !!data;
   const displayPage = data?.page ?? page;
-  const loadingTargetPage = refreshing && page !== displayPage ? page : null;
+  const loadingTargetPage = loadingMode === "page" && page !== displayPage ? page : null;
   const controlColumns = columns.length > 0 ? columns : Array.from(columnTypes.keys());
   const previewRows = useMemo<PreviewTableRow[]>(
     () => rows.map((values, rowIndex) => ({ rowIndex, values })),
@@ -230,36 +119,27 @@ export function TablePreviewPane({
   const selectedSortColumn = controlColumns.includes(sortColumn) ? sortColumn : (activeSort?.column ?? controlColumns[0] ?? "");
   const filterNeedsValue = filterOperator !== "is_null" && filterOperator !== "is_not_null";
 
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
-
   const applyFilter = () => {
     if (!selectedFilterColumn) return;
-    setActiveFilter({
+    setFilters([{
       column: selectedFilterColumn,
       operator: filterOperator,
       value: filterNeedsValue ? filterValue : undefined,
-    });
-    setPage(1);
+    }]);
   };
 
   const clearFilter = () => {
-    setActiveFilter(null);
+    setFilters([]);
     setFilterValue("");
-    setPage(1);
   };
 
   const applySort = () => {
     if (!selectedSortColumn) return;
-    setActiveSort({ column: selectedSortColumn, direction: sortDirection });
-    setPage(1);
+    setSort([{ column: selectedSortColumn, direction: sortDirection }]);
   };
 
   const clearSort = () => {
-    setActiveSort(null);
-    setPage(1);
+    setSort([]);
   };
 
   const handleCellCopy = async (rowIndex: number, column: string, value: unknown, dataType?: string) => {
@@ -270,23 +150,7 @@ export function TablePreviewPane({
 
   const handleExport = async () => {
     try {
-      if (!datasourceId) {
-        onToast("Cannot export table without an active datasource.");
-        return;
-      }
-      const table = await findTableByName(datasourceId, tableId);
-      if (!table) {
-        onToast("未找到该表的数据源或字段信息，请先同步表结构。");
-        return;
-      }
-      const blob = await agentApi.exportTableResultCsv({
-        datasourceId,
-        tableId: table.id,
-        tableName: tableId,
-        filters: activeFilter ? [activeFilter] : undefined,
-        sort: activeSort ? [activeSort] : undefined,
-        search: search.trim() || undefined,
-      });
+      const blob = await exportAll();
       const ok = downloadBlobFile(`${tableId}.csv`, blob);
       onToast(ok ? "已导出 CSV" : "CSV 导出失败");
     } catch {
@@ -299,7 +163,7 @@ export function TablePreviewPane({
       <div className="hifi-table-toolbar-stack">
         <Toolbar className="hifi-table-toolbar" aria-label="表数据工具栏">
           <ToolbarGroup className="hifi-table-toolbar-group">
-            <Button size="sm" variant="outline" className="hifi-preview-toolbar-btn" onClick={() => void loadPreview()} disabled={loading}>
+            <Button size="sm" variant="outline" className="hifi-preview-toolbar-btn" onClick={refresh} disabled={loading}>
               <RefreshCw className={loading ? "hifi-preview-toolbar-icon is-spinning" : "hifi-preview-toolbar-icon"} aria-hidden="true" />
               <span>刷新</span>
             </Button>
@@ -424,7 +288,7 @@ export function TablePreviewPane({
               <Input
                 className="hifi-preview-search"
                 value={search}
-                onChange={(event) => handleSearchChange(event.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
                 placeholder="搜索表数据..."
               />
             </div>
@@ -574,7 +438,7 @@ export function TablePreviewPane({
             size="sm"
             variant="outline"
             className="hifi-preview-page-btn"
-            disabled={!data?.hasNext || loading}
+            disabled={!data?.hasNextPage || loading}
 	            onClick={() => setPage(displayPage + 1)}
           >
             &gt;

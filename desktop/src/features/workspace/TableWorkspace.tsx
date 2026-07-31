@@ -48,6 +48,7 @@ export function TableWorkspace({
       <div className="table-workspace__body">
         {currentSubTab === "preview" && (
           <TablePreviewPane
+            key={`${datasourceId}:${tableId}`}
             tableId={tableId}
             datasourceId={datasourceId}
             datasourceDbType={datasourceDbType}

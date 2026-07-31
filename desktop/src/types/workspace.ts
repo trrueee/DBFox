@@ -10,10 +10,7 @@ export type WorkspaceTabType =
   | "query-result"
   | "artifact-result"
   | "conversation-history"
-  | "llm-config"
-  | "datasource-settings"
-  | "agent-eval"
-  | "diagnostics";
+  | "datasource-settings";
 
 export interface WorkspaceTab {
   id: string;

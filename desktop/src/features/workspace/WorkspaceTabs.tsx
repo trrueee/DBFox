@@ -1,4 +1,4 @@
-import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Cpu, Database, Bug } from "lucide-react";
+import { FileText, GitMerge, MessageSquare, Plus, Terminal, TrendingUp, X, Database } from "lucide-react";
 import { FoxIcon } from "../../components/brand/FoxIcon";
 import { Button, Tabs, TabsList, TabsTrigger, Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
@@ -24,12 +24,8 @@ function tabIcon(tab: WorkspaceTab) {
       return <TrendingUp size={11} className="workspace-tab__icon workspace-tab__icon--result" aria-hidden="true" />;
     case "conversation-history":
       return <MessageSquare size={11} className="workspace-tab__icon workspace-tab__icon--conversation" aria-hidden="true" />;
-    case "llm-config":
-      return <Cpu size={11} className="workspace-tab__icon workspace-tab__icon--llm" aria-hidden="true" />;
     case "datasource-settings":
       return <Database size={11} className="workspace-tab__icon workspace-tab__icon--datasource" aria-hidden="true" />;
-    case "diagnostics":
-      return <Bug size={11} className="workspace-tab__icon workspace-tab__icon--diagnostics" aria-hidden="true" />;
     default:
       return null;
   }

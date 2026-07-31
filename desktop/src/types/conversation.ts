@@ -1,6 +1,22 @@
-export type ConversationRole = "user" | "assistant" | "system";
-export type ConversationMessageStatus = "created" | "streaming" | "completed" | "failed" | "cancelled";
-export type AgentRunStatus = "created" | "queued" | "running" | "waiting_approval" | "waiting_input" | "cancelling" | "completed" | "failed" | "cancelled";
+import type { AgentArtifactPayload } from "../lib/api/types/artifact";
+
+/**
+ * Product projection types consumed by the timeline and artifact workspace.
+ * The wire contract and its runtime validation are generated from OpenAPI;
+ * conversationWireSchema is the only boundary that normalizes API defaults
+ * into these stricter UI invariants.
+ */
+export type AgentRunStatus =
+  | "created"
+  | "queued"
+  | "running"
+  | "waiting_approval"
+  | "waiting_input"
+  | "cancelling"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
 export type CompletionDisposition = "complete" | "bounded_partial";
 export type CompletionLimitationCode =
   | "TURN_BUDGET_REACHED"
@@ -14,8 +30,6 @@ export type CompletionLimitationCode =
   | "NO_PROGRESS";
 export type ConversationDeliveryMode = "queue" | "steer" | "cancel_and_replace";
 
-export type ConversationArtifactType = "analysis_plan" | "agent_plan" | "query_plan" | "sql_suggestion" | "sql" | "result_view" | "chart" | "markdown" | "safety" | "error";
-
 export interface ConversationSummary {
   id: string;
   title: string;
@@ -23,83 +37,159 @@ export interface ConversationSummary {
   updated_at: string | null;
   selected_artifact_id?: string | null;
   last_message?: string;
-  message_count?: number;
   run_status?: AgentRunStatus | null;
+  message_count?: number;
   artifact_count?: number;
-}
-
-export interface ConversationMessage {
-  id: string;
-  conversation_id: string;
-  role: ConversationRole;
-  content: string;
-  status: ConversationMessageStatus;
-  sequence: number;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface ConversationEvidence {
-  id?: string;
-  session_id?: string;
-  run_id?: string;
-  claim_id?: string;
-  artifact_id: string;
-  label: string;
-  query_fingerprint: string;
-  observed_at: string;
-  locator?: { kind: string; value: Record<string, unknown> };
-  value?: unknown;
-}
-
-export interface ConversationApproval {
-  id: string;
-  run_id: string;
-  session_id: string;
-  turn_id?: string;
-  tool_invocation_id?: string;
-  tool_name: string;
-  status: "pending" | "approved" | "rejected" | "expired";
-  version?: number;
-  risk_level: "safe" | "warning" | "danger";
-  reason: string;
-  requested_action: Record<string, unknown>;
-  expires_at?: string | null;
-  step_name?: string;
-  policy_decision?: Record<string, unknown>;
-  created_at?: string;
-  decided_at?: string | null;
-  decision_note?: string | null;
-  decided_by?: string | null;
 }
 
 export interface ConversationRun {
   id: string;
-  conversation_id: string;
-  input_id?: string;
-  session_sequence?: number;
-  user_message_id?: string;
-  assistant_message_id?: string;
+  session_id: string;
+  input_id: string;
+  session_sequence: number;
+  user_message_id: string;
   datasource_id: string;
   question: string;
   status: AgentRunStatus;
-  completion_disposition?: CompletionDisposition | null;
-  limitation_codes?: CompletionLimitationCode[];
-  version?: number;
+  version: number;
   current_turn_id?: string | null;
-  cancel_requested?: boolean;
+  cancel_requested: boolean;
+  result: Record<string, unknown>;
+  error: { code: string; message: string } | null;
+}
+
+export type RunItemType =
+  | "message"
+  | "plan"
+  | "function_call"
+  | "function_call_output"
+  | "approval"
+  | "question";
+export type RunItemStatus =
+  | "pending"
+  | "in_progress"
+  | "waiting"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface ArtifactReference {
+  artifact_id: string;
+  label?: string | null;
+}
+
+export interface ConversationEvidence {
+  id: string;
+  claim_id: string;
+  artifact_id: string;
+  label: string;
+  query_fingerprint: string;
+  observed_at: string;
+  locator: Record<string, unknown>;
+  value?: unknown;
+}
+
+export interface ToolPresentation {
+  title: string;
+  category: "explore" | "query" | "visualize" | "manage";
+  visibility: "summary" | "details" | "developer";
+  progress: "indeterminate" | "determinate" | "none";
+}
+
+export interface ConversationPlanStep {
+  id: string;
+  title: string;
+  status: "pending" | "in_progress" | "completed" | "blocked" | "skipped";
+  evidence_required?: boolean;
+  artifact_ids?: string[];
+  note?: string | null;
+}
+
+interface RunItemBase<TType extends RunItemType, TPayload> {
+  id: string;
+  type: TType;
+  session_id: string;
+  run_id: string;
+  turn_id?: string | null;
+  sequence: number;
+  revision: number;
+  status: RunItemStatus;
+  created_at: string;
+  completed_at?: string | null;
+  payload: TPayload;
+}
+
+export type MessageItem = RunItemBase<"message", {
+  role: "user" | "assistant";
+  phase?: "commentary" | "final_answer" | null;
+  content: string;
+  evidence: ConversationEvidence[];
+  artifact_refs: ArtifactReference[];
+  completion_disposition?: CompletionDisposition | null;
+  limitation_codes: CompletionLimitationCode[];
+}>;
+export type UserMessageItem = MessageItem & { payload: MessageItem["payload"] & { role: "user" } };
+export type AssistantMessageItem = MessageItem & {
+  payload: MessageItem["payload"] & {
+    role: "assistant";
+    phase: "commentary" | "final_answer";
+  };
+};
+export type PlanItem = RunItemBase<"plan", {
+  objective: string;
+  steps: ConversationPlanStep[];
+  summary?: string | null;
+}>;
+export type FunctionCallItem = RunItemBase<"function_call", {
+  call_id: string;
+  name: string;
+  tool_version: string;
+  presentation: ToolPresentation;
+  arguments: Record<string, unknown>;
+  attempt: number;
+}>;
+export type FunctionCallOutputItem = RunItemBase<"function_call_output", {
+  call_id: string;
+  output: string;
+  summary: string;
+  artifact_refs: ArtifactReference[];
   error_code?: string | null;
   error_message?: string | null;
-  answer?: {
-    answer: string;
-    evidence: ConversationEvidence[];
-    key_findings?: string[];
-    caveats?: string[];
-    recommendations?: string[];
-    follow_up_questions?: string[];
-  } | null;
-  approval?: ConversationApproval | null;
-}
+}>;
+export type ApprovalItem = RunItemBase<"approval", {
+  version: number;
+  tool_invocation_id?: string | null;
+  risk_level: "safe" | "warning" | "danger";
+  reason?: string | null;
+  requested_action: Record<string, unknown>;
+  decision?: string | null;
+  decision_note?: string | null;
+}>;
+export type QuestionItem = RunItemBase<"question", {
+  version: number;
+  question: string;
+  reason: string;
+  options: Array<{ value: string; label: string; description?: string | null }>;
+  allow_free_text: boolean;
+  response?: Record<string, unknown> | null;
+}>;
+export type ConversationRunItem =
+  | MessageItem
+  | PlanItem
+  | FunctionCallItem
+  | FunctionCallOutputItem
+  | ApprovalItem
+  | QuestionItem;
+
+export type ConversationArtifactType =
+  | "analysis_plan"
+  | "sql"
+  | "result_view"
+  | "chart"
+  | "markdown"
+  | "safety"
+  | "error";
+export type ConversationArtifactVisibility = "primary" | "supporting" | "internal";
 
 export interface ArtifactRelation {
   relation: "validated_by" | "executed_as" | "visualized_as" | "derived_from" | "supports";
@@ -108,81 +198,55 @@ export interface ArtifactRelation {
 
 export interface ConversationArtifact {
   id: string;
-  conversation_id: string;
+  session_id: string;
   run_id: string;
   turn_id?: string | null;
-  message_id?: string | null;
-  semantic_id?: string | null;
-  version?: number;
+  semantic_key?: string | null;
+  version: number;
   type: ConversationArtifactType;
   title: string;
   status: "creating" | "completed" | "failed" | "stale";
-  sequence?: number | null;
+  visibility: ConversationArtifactVisibility;
   summary?: string | null;
   payload: AgentArtifactPayload;
   payload_ref?: string | null;
-  provenance?: Record<string, unknown>;
-  relations?: ArtifactRelation[];
-  depends_on: string[];
-  created_at?: string | null;
-}
-
-export interface ConversationActivity {
-  id: string;
-  run_id: string;
-  turn_id: string;
-  kind: string;
-  title: string;
-  summary?: string | null;
-  status: "pending" | "running" | "completed" | "failed" | "waiting" | "cancelled";
-  tool_invocation_id?: string;
-  artifact_ids?: string[];
-  started_at?: string | null;
-  completed_at?: string | null;
-  steps?: ConversationPlanStep[];
-  current_step_id?: string | null;
-}
-
-export interface ConversationPlanStep {
-  id: string;
-  title: string;
-  status: "pending" | "in_progress" | "completed" | "blocked" | "skipped";
-  evidence_required: boolean;
-  artifact_ids: string[];
-  note?: string | null;
-}
-
-export interface ConversationQuestion {
-  id: string;
-  run_id: string;
-  turn_id: string;
-  status: "pending" | "answered" | "expired" | "cancelled";
-  version: number;
-  question: string;
-  reason: string;
-  options: Array<{ value: string; label: string; description?: string | null }>;
-  allow_free_text: boolean;
-  response?: unknown;
+  provenance: Record<string, unknown>;
+  relations: ArtifactRelation[];
 }
 
 export interface ConversationDetail {
-  protocol_version?: 1;
+  protocol_version: 2;
   id: string;
   title: string;
   datasource_id: string;
   context_tables: string[];
   selected_artifact_id?: string | null;
   context_epoch?: number;
-  created_at?: string | null;
-  updated_at?: string | null;
-  messages: ConversationMessage[];
   runs: ConversationRun[];
-  activities?: ConversationActivity[];
-  artifacts: ConversationArtifact[];
-  evidence?: ConversationEvidence[];
-  approvals: ConversationApproval[];
-  questions?: ConversationQuestion[];
+  items: ConversationRunItem[];
+  pagination?: {
+    items: { has_more: boolean; next_before_sequence: number | null };
+    runs: { has_more: boolean; next_before_sequence: number | null };
+  };
   cursor?: number;
+}
+
+export interface AgentTraceSpan {
+  id: string;
+  parent_id: string | null;
+  kind: "run" | "turn" | "model" | "tool" | "policy" | "approval";
+  name: string;
+  status: string;
+  started_at: string | null;
+  ended_at: string | null;
+  attributes: Record<string, unknown>;
+}
+
+export interface AgentRunTrace {
+  trace_id: string;
+  session_id: string;
+  run_id: string;
+  spans: AgentTraceSpan[];
 }
 
 export interface ConversationCreateInput {
@@ -192,32 +256,16 @@ export interface ConversationCreateInput {
 }
 
 export type RuntimeEventType =
-  | "session.input.admitted"
-  | "session.input.promoted"
-  | "session.context.updated"
-  | "run.created"
   | "run.started"
-  | "run.cancelling"
-  | "run.cancelled"
+  | "run.updated"
   | "run.completed"
   | "run.failed"
-  | "turn.started"
-  | "turn.completed"
-  | "activity.updated"
-  | "plan.updated"
-  | "tool.requested"
-  | "tool.running"
-  | "tool.completed"
-  | "tool.failed"
-  | "approval.requested"
-  | "approval.resolved"
-  | "question.requested"
-  | "question.resolved"
-  | "observation.created"
-  | "artifact.created"
-  | "artifact.updated"
-  | "artifact.selected"
-  | "answer.completed";
+  | "run.cancelled"
+  | "run.item.started"
+  | "run.item.updated"
+  | "run.item.completed"
+  | "run.item.failed"
+  | "run.item.cancelled";
 
 export interface RuntimeEventEnvelope {
   event_id: string;
@@ -228,22 +276,21 @@ export interface RuntimeEventEnvelope {
   turn_id?: string | null;
   sequence: number;
   timestamp: string;
-  payload: Record<string, unknown>;
+  payload: { run?: ConversationRun; item?: ConversationRunItem };
 }
 
-export interface LiveDeltaEnvelope {
+export interface RunItemDeltaEnvelope {
   session_id: string;
   run_id: string;
-  turn_id: string;
-  channel: "answer" | "reasoning_summary" | "tool_progress";
-  operation: "append" | "replace";
-  live_id: string;
-  channel_revision: number;
-  correlation_id: string;
+  turn_id?: string | null;
+  item_id: string;
+  item_type: RunItemType;
+  field: "content";
+  revision: number;
+  offset: number;
   content: string;
 }
 
 export type ConversationStreamEvent =
   | { kind: "event"; event: RuntimeEventEnvelope }
-  | { kind: "delta"; delta: LiveDeltaEnvelope };
-import type { AgentArtifactPayload } from "../lib/api/types/artifact";
+  | { kind: "delta"; delta: RunItemDeltaEnvelope };

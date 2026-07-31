@@ -16,7 +16,6 @@ const REQUIRED_ROUTE_CHUNKS = Object.freeze([
   "ConversationWorkspace-",
   "TableWorkspace-",
   "DataSourcesPage-",
-  "AgentEvalPage-",
 ]);
 
 function metric(filePath) {

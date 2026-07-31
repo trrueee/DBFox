@@ -1,131 +1,3 @@
-.hifi-settings-page,
-.hifi-settings-dialog-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: var(--color-panel);
-}
-
-.hifi-settings-page-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 20px 24px 0;
-}
-
-.hifi-settings-page-icon {
-  display: flex;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-  color: hsl(var(--primary-foreground));
-}
-
-.hifi-settings-page-title {
-  margin: 0 0 4px;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-title);
-  font-weight: 600;
-}
-
-.hifi-settings-page-desc {
-  max-width: 520px;
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-control);
-  line-height: 1.5;
-}
-
-.hifi-settings-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 24px;
-}
-
-.hifi-settings-dialog-body .hifi-settings-body {
-  max-height: 58vh;
-  padding: 16px 24px;
-}
-
-.hifi-settings-section-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.hifi-settings-section-icon {
-  display: flex;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.hifi-settings-section-title {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-input);
-  font-weight: 600;
-}
-
-.hifi-settings-section-subtitle {
-  margin: 2px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-label);
-}
-
-.hifi-settings-field {
-  margin-bottom: 14px;
-}
-
-.hifi-settings-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-label);
-  font-weight: 600;
-}
-
-.hifi-settings-hint {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-settings-input {
-  width: 100%;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg);
-  color: var(--color-text-primary);
-  font-size: var(--ui-font-label);
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.hifi-settings-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-soft);
-}
-
-.hifi-settings-input-compact {
-  height: 30px;
-  font-size: var(--ui-font-caption);
-}
-
 .hifi-settings-secret-field {
   position: relative;
 }
@@ -138,10 +10,6 @@
   font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
 }
 
-.hifi-settings-input--custom-model {
-  margin-top: 8px;
-}
-
 .hifi-settings-input[aria-invalid="true"] {
   border-color: var(--color-danger, #dc2626);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-danger, #dc2626) 12%, transparent);
@@ -150,8 +18,13 @@
 .hifi-settings-eye-btn {
   position: absolute;
   top: 50%;
-  right: 6px;
-  padding: 4px;
+  right: 2px;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border: none;
   border-radius: 4px;
   background: transparent;
@@ -165,175 +38,56 @@
   color: var(--color-text-primary);
 }
 
-.hifi-model-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.hifi-model-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  font-family: var(--font-family);
-  font-size: var(--ui-font-label);
-  font-weight: 400;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.hifi-model-chip:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
-  color: var(--color-text-primary);
-}
-
-.hifi-model-chip.active {
-  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.hifi-settings-validation {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: -2px 0 14px;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--color-danger, #dc2626) 24%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-danger, #dc2626) 7%, var(--surface-card, #fff));
-  color: var(--color-danger, #dc2626);
-  font-size: var(--ui-font-label);
-}
-
-.hifi-settings-divider {
-  height: 1px;
-  margin: 18px 0;
-  background: var(--color-border);
-}
-
-.hifi-settings-status-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.hifi-settings-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0;
-  color: var(--color-text-secondary);
-  font-size: var(--ui-font-label);
-}
-
-.hifi-settings-status-badge {
-  gap: 4px;
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-settings-status-value {
-  max-width: 280px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hifi-settings-mono {
-  color: var(--color-text-primary);
-  font-family: var(--font-mono, "Fira Code", "JetBrains Mono", monospace);
-  font-size: var(--ui-font-caption);
-}
-
-.hifi-settings-saved {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  color: var(--color-success);
-  font-size: var(--ui-font-label);
-}
-
-.hifi-settings-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 24px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
-}
-
 .hifi-settings-submit-btn {
   gap: 6px;
 }
 
 /* Shared settings scaffold */
 .llm-settings-form {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--color-bg);
-}
-
-.llm-settings-form--dialog {
-  height: auto;
+  width: 100%;
   background: transparent;
 }
 
-.llm-settings-scroll.hifi-settings-body {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
+.llm-settings-content {
+  width: 100%;
   padding: 0;
 }
 
-.llm-settings-form--dialog .llm-settings-scroll {
-  max-height: 58vh;
-}
-
-.llm-settings-content {
-  width: min(100%, 760px);
-}
-
-.llm-settings-form--dialog .llm-settings-content {
-  gap: 12px;
-  padding: 14px 20px 20px;
-}
-
-.llm-settings-form--dialog .settings-section__header,
-.llm-settings-form--dialog .settings-section__body {
-  padding: 14px;
-}
-
-.llm-settings-intro {
-  border-bottom: 1px solid var(--hairline);
-  background: var(--surface-elevated);
-  padding-bottom: 18px;
-}
-
-.llm-settings-intro__icon {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
 .hifi-settings-input {
+  width: 100%;
   height: 40px;
+  border: 1px solid var(--control-border);
+  border-radius: 9px;
   border-color: var(--control-border);
   background: var(--control-bg);
+  color: var(--color-text-primary);
   font-size: var(--ui-font-control);
+  outline: none;
+  padding: 0 11px;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
-.hifi-settings-input-compact {
-  height: 36px;
+.hifi-settings-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.hifi-settings-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.llm-model-control {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.llm-model-select.dbfox-select-trigger {
+  width: 100%;
+  height: 40px;
+  justify-content: space-between;
+  border-radius: 9px;
   font-size: var(--ui-font-control);
 }
 
@@ -348,35 +102,47 @@
   outline: none;
 }
 
-.hifi-model-chips {
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.hifi-model-chip {
-  min-height: 32px;
-  padding: 5px 10px;
-  border-radius: 8px;
-  font-size: var(--ui-font-control);
-}
-
-.hifi-settings-status-row {
-  min-height: 34px;
-  border-bottom: 1px solid var(--hairline);
-  padding: 7px 0;
-  font-size: var(--ui-font-control);
-}
-
-.hifi-settings-status-row:last-child {
-  border-bottom: 0;
-}
-
-.hifi-settings-footer.settings-action-bar {
-  background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
-  padding: 12px 20px;
-}
-
 .llm-settings-action-hint {
   color: var(--color-text-muted);
   font-size: var(--ui-font-caption);
+}
+
+.llm-settings-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 58px;
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.llm-settings-inline-status {
+  min-width: 0;
+  flex: 1;
+}
+
+.llm-settings-inline-status .settings-status {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.llm-settings-inline-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .llm-settings-inline-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .llm-settings-inline-buttons {
+    justify-content: flex-end;
+  }
 }

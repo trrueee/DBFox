@@ -37,4 +37,26 @@ describe("ArtifactRenderer", () => {
     expect(screen.getAllByText("分析").length).toBeGreaterThan(0);
     expect(screen.getByText("订单上涨。")).toBeTruthy();
   });
+
+  it("keeps unsupported artifacts opaque instead of exposing their payload", () => {
+    const artifact = {
+      id: "future-1",
+      type: "future_artifact",
+      title: "未来工件",
+      secretPayload: "must-not-render",
+    } as unknown as AgentArtifact;
+
+    render(
+      <ArtifactRenderer
+        artifacts={[artifact]}
+        onOpenSqlConsole={vi.fn()}
+        onOpenResultTab={vi.fn()}
+        onToast={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("未来工件")).toBeTruthy();
+    expect(screen.getByText("此工件的引用已安全保留，当前版本暂不支持直接预览。")).toBeTruthy();
+    expect(screen.queryByText(/must-not-render/)).toBeNull();
+  });
 });

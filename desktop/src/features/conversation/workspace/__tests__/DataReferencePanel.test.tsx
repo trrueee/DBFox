@@ -7,38 +7,49 @@ function artifacts(): ConversationArtifact[] {
   return [
     {
       id: "sql-1",
-      conversation_id: "conv",
+      session_id: "conv",
       run_id: "run",
+      version: 1,
       type: "sql",
+      visibility: "supporting",
       title: "趋势分析",
       status: "completed",
       payload: {
         sql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
-        usedTables: ["orders"],
+        safeSql: "SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)",
+        dialect: "sqlite",
+        queryFingerprint: "query-gmv",
       },
-      depends_on: [],
+      provenance: {},
+      relations: [],
     },
     {
       id: "chart-1",
-      conversation_id: "conv",
+      session_id: "conv",
       run_id: "run",
+      version: 1,
       type: "chart",
+      visibility: "primary",
       title: "趋势图",
       status: "completed",
       payload: {
         chartType: "bar",
         sourceResultArtifactId: "result-view-1",
-        sourceRefs: [
-          { label: "GMV", formula: "SUM(orders.amount)", field: "orders.amount" },
-        ],
+        x: "day",
+        y: ["gmv"],
+        aggregation: "sum",
+        title: "趋势图",
       },
-      depends_on: ["result-view-1"],
+      provenance: {},
+      relations: [{ relation: "visualized_as", artifact_id: "result-view-1" }],
     },
     {
       id: "result-view-1",
-      conversation_id: "conv",
+      session_id: "conv",
       run_id: "run",
+      version: 1,
       type: "result_view",
+      visibility: "primary",
       title: "分页结果",
       status: "completed",
       payload: {
@@ -52,7 +63,8 @@ function artifacts(): ConversationArtifact[] {
         executedAt: "2026-07-19T00:00:00Z",
         truncated: true,
       },
-      depends_on: ["sql_candidate"],
+      provenance: {},
+      relations: [{ relation: "executed_as", artifact_id: "sql-1" }],
     },
   ];
 }
@@ -63,34 +75,23 @@ describe("DataReferencePanel", () => {
   });
 
   it("derives clickable data reference chips from artifacts", () => {
-    const onOpenSqlConsole = vi.fn();
-    render(<DataReferencePanel artifacts={artifacts()} onOpenSqlConsole={onOpenSqlConsole} />);
+    render(<DataReferencePanel artifacts={artifacts()} />);
 
     expect(screen.getByText("数据来源")).toBeTruthy();
-    expect(screen.getByText("orders")).toBeTruthy();
-    expect(screen.getByText("orders.amount")).toBeTruthy();
-    expect(screen.getByText("SQL: 趋势分析")).toBeTruthy();
+    expect(screen.queryByText("SQL: 趋势分析")).toBeNull();
     expect(screen.getByText("分页结果")).toBeTruthy();
     expect(screen.getByText("趋势图")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("SQL: 趋势分析"));
-    expect(onOpenSqlConsole).toHaveBeenCalledWith("SELECT SUM(amount) AS gmv FROM orders GROUP BY DATE(created_at)");
+    expect(screen.queryByText("orders.amount")).toBeNull();
   });
 
   it("selects artifact references for the dock when a selector is provided", () => {
-    const onOpenSqlConsole = vi.fn();
     const onSelectArtifact = vi.fn();
     render(
       <DataReferencePanel
         artifacts={artifacts()}
-        onOpenSqlConsole={onOpenSqlConsole}
         onSelectArtifact={onSelectArtifact}
       />,
     );
-
-    fireEvent.click(screen.getByText("SQL: 趋势分析"));
-    expect(onSelectArtifact).toHaveBeenCalledWith("sql-1");
-    expect(onOpenSqlConsole).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByText("分页结果"));
     expect(onSelectArtifact).toHaveBeenCalledWith("result-view-1");

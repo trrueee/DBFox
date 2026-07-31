@@ -114,6 +114,6 @@
 }
 
 .conversation-history__delete:hover {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }

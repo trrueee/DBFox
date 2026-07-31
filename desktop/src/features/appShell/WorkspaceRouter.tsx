@@ -3,7 +3,7 @@ import type { WorkspaceTab } from "../../types/workspace";
 import type { ConsoleEntry } from "../workspace/SqlConsoleWorkspace";
 import { defaultSql } from "../workspace/defaultSql";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
-import { useDatasourceStore } from "../../stores/datasourceStore";
+import { useDatasourceState } from "../datasource/useDatasourceState";
 import { useConversationStore } from "../../stores/conversationStore";
 import type { ConversationSummary } from "../../types/conversation";
 import { WorkspaceShell } from "./WorkspaceShell";
@@ -41,21 +41,9 @@ const TableArtifactView = lazy(async () => {
   const module = await import("../workspace/artifacts/TableArtifactView");
   return { default: module.TableArtifactView };
 });
-const AgentEvalPage = lazy(async () => {
-  const module = await import("../../pages/AgentEvalPage");
-  return { default: module.AgentEvalPage };
-});
 const DataSourcesPage = lazy(async () => {
   const module = await import("../../pages/DataSourcesPage");
   return { default: module.DataSourcesPage };
-});
-const DiagnosticsPage = lazy(async () => {
-  const module = await import("../../pages/DiagnosticsPage");
-  return { default: module.DiagnosticsPage };
-});
-const LlmConfigWorkspaceTab = lazy(async () => {
-  const module = await import("./LlmConfigWorkspaceTab");
-  return { default: module.LlmConfigWorkspaceTab };
 });
 
 function WorkspaceRouteBoundary({ children }: { children: ReactNode }) {
@@ -86,15 +74,6 @@ export function WorkspaceRouter({ activeTab, showToast }: WorkspaceRouterProps) 
       </WorkspaceRouteBoundary>
     );
   }
-  if (activeTab.type === "llm-config") {
-    return <WorkspaceRouteBoundary><LlmConfigWorkspaceTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
-  }
-  if (activeTab.type === "agent-eval") {
-    return <WorkspaceRouteBoundary><AgentEvalTab showToast={showToast} /></WorkspaceRouteBoundary>;
-  }
-  if (activeTab.type === "diagnostics") {
-    return <WorkspaceRouteBoundary><DiagnosticsTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
-  }
   if (activeTab.type === "datasource-settings") {
     return <WorkspaceRouteBoundary><DatasourceSettingsTab activeTab={activeTab} showToast={showToast} /></WorkspaceRouteBoundary>;
   }
@@ -121,7 +100,7 @@ function SmartQueryHomeTab({ showToast }: { showToast: WorkspaceRouterProps["sho
       useWorkspaceStore.getState().openConversationResult({ id: detail.id, title: detail.title });
       void useConversationStore
         .getState()
-        .sendMessage(detail.id, text)
+        .sendMessage(detail.id, text, "queue", globalThis.crypto.randomUUID())
         .catch((error) => showToast(error instanceof Error ? error.message : "执行失败", "error"));
     } catch (error) {
       showToast(error instanceof Error ? error.message : "创建会话失败", "error");
@@ -165,8 +144,7 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
   const tableSubTabs = useWorkspaceStore((s) => s.tableSubTabs);
   const setTableSubTabs = useWorkspaceStore((s) => s.setTableSubTabs);
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
-  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
-  const datasources = useDatasourceStore((s) => s.datasources);
+  const { activeDatasourceId, datasources } = useDatasourceState();
   const fallbackDatasource = datasources.find((item) => item.id === activeDatasourceId) ?? datasources[0] ?? null;
   const tabDatasource = activeTab.datasourceId
     ? datasources.find((item) => item.id === activeTab.datasourceId) ?? null
@@ -193,8 +171,7 @@ function TableWorkspaceTab({ activeTab, showToast }: { activeTab: WorkspaceTab; 
 
 // ── SqlConsole tab ──
 function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
-  const datasources = useDatasourceStore((s) => s.datasources);
-  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
+  const { datasources, activeDatasourceId } = useDatasourceState();
   const sqlConsoleState = useWorkspaceStore((s) => s.sqlConsoleState);
   const tabState = sqlConsoleState[activeTab.id] ?? { draftSql: defaultSql, entries: [], running: false };
   const datasourceId = activeTab.datasourceId || activeDatasourceId;
@@ -227,51 +204,15 @@ function SqlConsoleTab({ activeTab, showToast }: { activeTab: WorkspaceTab; show
   );
 }
 
-// ── AgentEval tab ──
-function AgentEvalTab({ showToast }: { showToast: WorkspaceRouterProps["showToast"] }) {
-  const datasources = useDatasourceStore((s) => s.datasources);
-  const activeDatasourceId = useDatasourceStore((s) => s.activeDatasourceId);
-  return <AgentEvalPage datasources={datasources} activeDatasourceId={activeDatasourceId} onToast={showToast} />;
-}
-
-function DiagnosticsTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
-  return (
-    <WorkspaceShell title={activeTab.title} description="查看本地前端、后端诊断日志和运行环境。">
-      <DiagnosticsPage onToast={showToast} chrome="workspace" />
-    </WorkspaceShell>
-  );
-}
-
 // ── DatasourceSettings tab ──
 function DatasourceSettingsTab({ activeTab, showToast }: { activeTab: WorkspaceTab; showToast: WorkspaceRouterProps["showToast"] }) {
-  const datasources = useDatasourceStore((s) => s.datasources);
-  const setActiveDatasourceId = useDatasourceStore((s) => s.setActiveDatasourceId);
-  const loadDatasources = useDatasourceStore((s) => s.loadDatasources);
-  const activeDatasourceForSettings = useDatasourceStore((s) => s.activeDatasourceForSettings);
-  const createDatasource = useDatasourceStore((s) => s.createDatasource);
-  const updateDatasource = useDatasourceStore((s) => s.updateDatasource);
-  const deleteDatasource = useDatasourceStore((s) => s.deleteDatasource);
-  const syncSchema = useDatasourceStore((s) => s.syncSchema);
-  const checkHealth = useDatasourceStore((s) => s.checkHealth);
+  void showToast;
 
   return (
     <WorkspaceShell title={activeTab.title} description="管理数据源连接、连接状态和表结构同步。">
       <DataSourcesPage
         chrome="workspace"
-        onSelectDataSource={(ds) => {
-          if (ds) {
-            setActiveDatasourceId(ds.id);
-            showToast(`已激活数据源: ${ds.name}`);
-          } else {
-            setActiveDatasourceId("");
-          }
-        }}
-        activeDataSource={activeDatasourceForSettings}
-        activeProject={null}
-        onRefreshDatasources={loadDatasources}
         initialShowAddForm={activeTab.title === "新建数据源"}
-        datasources={datasources}
-        actions={{ createDatasource, updateDatasource, deleteDatasource, syncSchema, checkHealth }}
       />
     </WorkspaceShell>
   );

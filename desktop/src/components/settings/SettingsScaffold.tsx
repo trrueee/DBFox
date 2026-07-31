@@ -1,4 +1,11 @@
-import { useId, type ComponentType, type HTMLAttributes, type ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  useId,
+  type ComponentType,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { AlertCircle, CheckCircle2, Info, Loader2, TriangleAlert } from "lucide-react";
 
 import { cn } from "../../lib/utils";
@@ -45,7 +52,10 @@ export function SettingsSection({
 }) {
   const titleId = useId();
   return (
-    <section className={cn("settings-section", className)} aria-labelledby={titleId}>
+    <section
+      className={cn("settings-section", Icon && "settings-section--with-icon", className)}
+      aria-labelledby={titleId}
+    >
       <header className="settings-section__header">
         <div className="settings-section__identity">
           {Icon ? (
@@ -54,7 +64,7 @@ export function SettingsSection({
             </span>
           ) : null}
           <div>
-            <h3 id={titleId} className="settings-section__title">{title}</h3>
+            <h2 id={titleId} className="settings-section__title">{title}</h2>
             {description ? <p className="settings-section__description">{description}</p> : null}
           </div>
         </div>
@@ -80,11 +90,33 @@ export function SettingsField({
   children: ReactNode;
   className?: string;
 }) {
+  const labelId = useId();
   const descriptionId = useId();
+  const hasDescription = Boolean(error || hint);
+  const control = isValidElement<{
+    "aria-describedby"?: string;
+    "aria-invalid"?: boolean | "true" | "false";
+  }>(children)
+    ? cloneElement(children, {
+        "aria-describedby": [
+          children.props["aria-describedby"],
+          hasDescription ? descriptionId : undefined,
+        ].filter(Boolean).join(" ") || undefined,
+        "aria-invalid": error ? true : children.props["aria-invalid"],
+      })
+    : children;
+  const isDirectControl = isValidElement(children)
+    && typeof children.type === "string"
+    && ["input", "select", "textarea"].includes(children.type);
   return (
-    <div className={cn("settings-field", className)}>
-      <label className="settings-field__label" htmlFor={htmlFor}>{label}</label>
-      {children}
+    <div
+      className={cn("settings-field", className)}
+      role={isDirectControl ? undefined : "group"}
+      aria-labelledby={isDirectControl ? undefined : labelId}
+      aria-describedby={!isDirectControl && hasDescription ? descriptionId : undefined}
+    >
+      <label id={labelId} className="settings-field__label" htmlFor={htmlFor}>{label}</label>
+      <div className="settings-field__control">{control}</div>
       {error ? (
         <p id={descriptionId} className="settings-field__message is-error" role="alert">{error}</p>
       ) : hint ? (

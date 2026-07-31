@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TableErPane } from "../TableErPane";
 
 const apiMocks = vi.hoisted(() => ({
-  request: vi.fn(),
+  getErDiagram: vi.fn(),
 }));
 
 const erDiagramMocks = vi.hoisted(() => ({
@@ -17,7 +17,9 @@ const erDiagramMocks = vi.hoisted(() => ({
   }>,
 }));
 
-vi.mock("../../../../lib/api/client", () => apiMocks);
+vi.mock("../../../../lib/api/generated/sdk.gen", () => ({
+  apiGetErDiagramApiV1SchemaErDiagramGet: apiMocks.getErDiagram,
+}));
 
 vi.mock("../../../../components/ErDiagram", () => ({
   ErDiagram: (props: (typeof erDiagramMocks.props)[number]) => {
@@ -91,7 +93,7 @@ describe("TableErPane", () => {
   });
 
   it("renders the real ER diagram with focused controls instead of static cards", async () => {
-    apiMocks.request.mockResolvedValue(diagramData);
+    apiMocks.getErDiagram.mockResolvedValue({ data: diagramData });
 
     render(<TableErPane tableId="users" datasourceId="ds-1" />);
 
@@ -117,9 +119,11 @@ describe("TableErPane", () => {
   });
 
   it("shows an explicit empty state instead of a fake diagram when no relationships exist", async () => {
-    apiMocks.request.mockResolvedValue({
-      nodes: [diagramData.nodes[0]],
-      edges: [],
+    apiMocks.getErDiagram.mockResolvedValue({
+      data: {
+        nodes: [diagramData.nodes[0]],
+        edges: [],
+      },
     });
 
     render(<TableErPane tableId="users" datasourceId="ds-1" />);
@@ -129,7 +133,7 @@ describe("TableErPane", () => {
   });
 
   it("resets focused controls when table changes without refetching the datasource diagram", async () => {
-    apiMocks.request.mockResolvedValue(diagramData);
+    apiMocks.getErDiagram.mockResolvedValue({ data: diagramData });
 
     const { rerender } = render(<TableErPane tableId="users" datasourceId="ds-1" />);
 
@@ -152,7 +156,7 @@ describe("TableErPane", () => {
       expect(erDiagramMocks.props.at(-1)?.viewMode).toBe("focus");
       expect(erDiagramMocks.props.at(-1)?.showInferred).toBe(true);
     });
-    expect(apiMocks.request).toHaveBeenCalledTimes(1);
+    expect(apiMocks.getErDiagram).toHaveBeenCalledTimes(1);
   });
 });
 

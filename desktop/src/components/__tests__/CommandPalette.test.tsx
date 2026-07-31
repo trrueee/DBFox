@@ -36,7 +36,7 @@ describe("CommandPalette", () => {
   it("renders commands with categories when open", () => {
     render(<CommandPalette open commands={makeCommands()} onClose={vi.fn()} />);
 
-    expect(screen.getByPlaceholderText("输入指令或搜索表、字段、功能…")).toBeTruthy();
+    expect(screen.getByPlaceholderText("搜索对话、数据表、字段和操作…")).toBeTruthy();
     expect(screen.getByText("工作区")).toBeTruthy();
     expect(screen.getByText("打开 SQL 工作台")).toBeTruthy();
     expect(screen.getByText("同步表结构")).toBeTruthy();
@@ -57,7 +57,7 @@ describe("CommandPalette", () => {
     const onClose = vi.fn();
     render(<CommandPalette open commands={makeCommands()} onClose={onClose} />);
 
-    fireEvent.keyDown(screen.getByPlaceholderText("输入指令或搜索表、字段、功能…"), { key: "Escape" });
+    fireEvent.keyDown(screen.getByPlaceholderText("搜索对话、数据表、字段和操作…"), { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

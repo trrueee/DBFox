@@ -4,9 +4,9 @@ const requiredMySqlFieldsMessage = "请完整填写连接名称、主机、数�
 const requiredSqliteFieldsMessage = "请完整填写连接名称和数据库路径。";
 
 export const datasourceFormSchema = z.object({
-  db_type: z.string(), name: z.string(), host: z.string(),
+  db_type: z.enum(["mysql", "postgresql", "sqlite"]), name: z.string(), host: z.string(),
   port: z.number().int().min(0).max(65535), database_name: z.string(),
-  username: z.string(), password: z.string(), is_read_only: z.boolean(), env: z.string(),
+  username: z.string(), password: z.string(), is_read_only: z.boolean(), env: z.enum(["dev", "test", "prod"]),
   ssh_enabled: z.boolean(), ssh_host: z.string(), ssh_port: z.number().int().min(0).max(65535),
   ssh_username: z.string(), ssh_password: z.string(), ssh_pkey_path: z.string(),
   ssh_pkey_passphrase: z.string(), ssl_enabled: z.boolean(), ssl_ca_path: z.string(),
@@ -22,3 +22,5 @@ export const datasourceFormSchema = z.object({
     context.addIssue({ code: "custom", path: ["name"], message: requiredMySqlFieldsMessage });
   }
 });
+
+export type DatasourceFormState = z.infer<typeof datasourceFormSchema>;

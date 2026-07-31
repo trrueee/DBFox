@@ -1,95 +1,75 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { clearCspVirtualLayout, setCspVirtualLayout } from "../../../lib/cspVirtualLayout";
-import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type {
   ConversationArtifact,
-  ConversationActivity,
-  ConversationMessage,
-  ConversationQuestion,
   ConversationRun,
+  ConversationRunItem,
 } from "../../../types/conversation";
-import { MessageBubble } from "./MessageBubble";
+import { AgentTimeline } from "./AgentTimeline";
 
-const VIRTUALIZE_AFTER_MESSAGES = 50;
+const VIRTUALIZE_AFTER_RUNS = 40;
 const BOTTOM_THRESHOLD_PX = 72;
 
 interface MessageListProps {
-  messages: ConversationMessage[];
+  items: ConversationRunItem[];
   runs: ConversationRun[];
   artifacts: ConversationArtifact[];
-  activities?: ConversationActivity[];
-  questions?: ConversationQuestion[];
   onOpenSqlConsole: (sql?: string) => void;
-  onOpenResultTab: (artifact: ResultViewArtifact) => void;
   onSelectArtifact?: (artifactId: string) => void;
+  resolvingQuestionId?: string | null;
+  questionError?: string | null;
   onResolveQuestion?: (
     runId: string,
     questionId: string,
     response: { selected_value?: string; text?: string },
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 export function MessageList({
-  messages,
+  items,
   runs,
   artifacts,
-  activities = [],
-  questions = [],
   onOpenSqlConsole,
-  onOpenResultTab,
   onSelectArtifact,
+  resolvingQuestionId,
+  questionError,
   onResolveQuestion,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const virtualLayoutId = `messages-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const pinnedToBottomRef = useRef(true);
-  const previousMessageCountRef = useRef(0);
-  const shouldVirtualize = messages.length > VIRTUALIZE_AFTER_MESSAGES;
-  const runsByAssistantMessageId = useMemo(
-    () => new Map(runs.map((run) => [run.assistant_message_id, run])),
+  const previousRunCountRef = useRef(0);
+  const orderedRuns = useMemo(
+    () => [...runs].sort((left, right) => left.session_sequence - right.session_sequence),
     [runs],
   );
-  const artifactsByRunId = useMemo(() => {
-    const map = new Map<string, ConversationArtifact[]>();
-    for (const artifact of artifacts) {
-      const key = artifact.run_id;
-      const existing = map.get(key);
-      if (existing) {
-        existing.push(artifact);
-      } else {
-        map.set(key, [artifact]);
-      }
-    }
-    return map;
-  }, [artifacts]);
-  const activitiesByRunId = useMemo(() => {
-    const map = new Map<string, ConversationActivity[]>();
-    for (const activity of activities) map.set(activity.run_id, [...(map.get(activity.run_id) || []), activity]);
-    return map;
-  }, [activities]);
-  const questionsByRunId = useMemo(() => {
-    const map = new Map<string, ConversationQuestion>();
-    for (const question of questions) map.set(question.run_id, question);
-    return map;
-  }, [questions]);
-  const latestMessageScrollKey = useMemo(() => {
-    const latest = messages[messages.length - 1];
-    return latest ? `${latest.id}:${latest.status}:${latest.content}` : "";
-  }, [messages]);
+  const shouldVirtualize = orderedRuns.length > VIRTUALIZE_AFTER_RUNS;
+  const itemsByRunId = useMemo(
+    () => groupByRun(items),
+    [items],
+  );
+  const artifactsByRunId = useMemo(
+    () => groupArtifactsByRun(artifacts),
+    [artifacts],
+  );
+  const latestRenderKey = useMemo(
+    () => items.map((item) => `${item.id}:${item.revision}:${item.status}:${itemTextLength(item)}`).join("|"),
+    [items],
+  );
 
   // TanStack Virtual intentionally exposes imperative measurement functions.
   // eslint-disable-next-line react-hooks/incompatible-library
-  const messageVirtualizer = useVirtualizer({
-    count: messages.length,
+  const virtualizer = useVirtualizer({
+    count: orderedRuns.length,
     enabled: shouldVirtualize,
     getScrollElement: () => ref.current,
-    getItemKey: (index) => messages[index]?.id || index,
-    estimateSize: () => 180,
-    overscan: 6,
+    getItemKey: (index) => orderedRuns[index]?.id || index,
+    estimateSize: () => 260,
+    overscan: 5,
     initialRect: { width: 800, height: 720 },
   });
-  const virtualMessages = messageVirtualizer.getVirtualItems();
+  const virtualRuns = virtualizer.getVirtualItems();
 
   useLayoutEffect(() => {
     if (!shouldVirtualize) {
@@ -98,36 +78,39 @@ export function MessageList({
     }
     setCspVirtualLayout(
       virtualLayoutId,
-      messageVirtualizer.getTotalSize(),
-      virtualMessages.map((item) => ({ index: item.index, start: item.start })),
+      virtualizer.getTotalSize(),
+      virtualRuns.map((item) => ({ index: item.index, start: item.start })),
     );
     return () => clearCspVirtualLayout(virtualLayoutId);
-  }, [messageVirtualizer, shouldVirtualize, virtualLayoutId, virtualMessages]);
+  }, [shouldVirtualize, virtualLayoutId, virtualRuns, virtualizer]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const node = ref.current;
-    if (!node || messages.length === 0) return;
+    if (!node || orderedRuns.length === 0) return;
     if (shouldVirtualize) {
-      messageVirtualizer.scrollToIndex(messages.length - 1, { align: "end", behavior });
-    } else {
+      virtualizer.scrollToIndex(orderedRuns.length - 1, { align: "end", behavior });
+    } else if (typeof node.scrollTo === "function") {
       node.scrollTo({ top: node.scrollHeight, behavior });
+    } else {
+      node.scrollTop = node.scrollHeight;
     }
-  }, [messageVirtualizer, messages.length, shouldVirtualize]);
+  }, [orderedRuns.length, shouldVirtualize, virtualizer]);
 
   useEffect(() => {
-    const addedMessage = messages.length > previousMessageCountRef.current;
-    previousMessageCountRef.current = messages.length;
-    if (addedMessage) pinnedToBottomRef.current = true;
+    const addedRun = orderedRuns.length > previousRunCountRef.current;
+    previousRunCountRef.current = orderedRuns.length;
+    if (addedRun) pinnedToBottomRef.current = true;
     if (!pinnedToBottomRef.current) return;
-    const frame = requestAnimationFrame(() => scrollToBottom(addedMessage ? "auto" : "smooth"));
+    const frame = requestAnimationFrame(() => scrollToBottom(addedRun ? "auto" : "smooth"));
     return () => cancelAnimationFrame(frame);
-  }, [messages.length, artifacts.length, latestMessageScrollKey, scrollToBottom]);
+  }, [artifacts.length, latestRenderKey, orderedRuns.length, scrollToBottom]);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
     const updatePinnedState = () => {
-      pinnedToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight <= BOTTOM_THRESHOLD_PX;
+      pinnedToBottomRef.current =
+        node.scrollHeight - node.scrollTop - node.clientHeight <= BOTTOM_THRESHOLD_PX;
     };
     node.addEventListener("scroll", updatePinnedState, { passive: true });
     return () => node.removeEventListener("scroll", updatePinnedState);
@@ -139,26 +122,21 @@ export function MessageList({
     const observer = new ResizeObserver(() => {
       if (pinnedToBottomRef.current) scrollToBottom("auto");
     });
-    const content = node.firstElementChild;
-    observer.observe(content || node);
+    observer.observe(node.firstElementChild || node);
     return () => observer.disconnect();
   }, [scrollToBottom]);
 
-  const renderMessage = (message: ConversationMessage) => {
-    const run = runsByAssistantMessageId.get(message.id);
-    const messageArtifacts = run ? artifactsByRunId.get(run.id) || [] : [];
-    const messageActivities = run ? activitiesByRunId.get(run.id) || [] : [];
-    const question = run ? questionsByRunId.get(run.id) : undefined;
+  const renderRun = (run: ConversationRun) => {
+    const runItems = itemsByRunId.get(run.id) || [];
     return (
-      <MessageBubble
-        message={message}
+      <AgentTimeline
         run={run}
-        artifacts={messageArtifacts}
-        activities={messageActivities}
-        question={question}
+        items={runItems}
+        artifacts={artifactsByRunId.get(run.id) || []}
         onOpenSqlConsole={onOpenSqlConsole}
-        onOpenResultTab={onOpenResultTab}
         onSelectArtifact={onSelectArtifact}
+        resolvingQuestionId={resolvingQuestionId}
+        questionError={questionError}
         onResolveQuestion={onResolveQuestion}
       />
     );
@@ -170,21 +148,54 @@ export function MessageList({
         className={`conv-message-column ${shouldVirtualize ? "is-virtualized" : ""}`}
         data-virtual-layout={shouldVirtualize ? virtualLayoutId : undefined}
       >
-        {shouldVirtualize ? virtualMessages.map((virtualMessage) => {
-          const message = messages[virtualMessage.index];
-          return (
-            <div
-              key={message.id}
-              className="conv-message-virtual-row"
-              data-index={virtualMessage.index}
-              data-virtual-layout={virtualLayoutId}
-              ref={messageVirtualizer.measureElement}
-            >
-              {renderMessage(message)}
-            </div>
-          );
-        }) : messages.map((message) => <div key={message.id}>{renderMessage(message)}</div>)}
+        {shouldVirtualize
+          ? virtualRuns.map((virtualRun) => {
+              const run = orderedRuns[virtualRun.index];
+              return (
+                <div
+                  key={run.id}
+                  className="conv-message-virtual-row"
+                  data-index={virtualRun.index}
+                  data-virtual-layout={virtualLayoutId}
+                  ref={virtualizer.measureElement}
+                >
+                  {renderRun(run)}
+                </div>
+              );
+            })
+          : orderedRuns.map((run) => <div key={run.id}>{renderRun(run)}</div>)}
       </div>
     </div>
   );
+}
+
+function groupByRun(items: ConversationRunItem[]): Map<string, ConversationRunItem[]> {
+  const grouped = new Map<string, ConversationRunItem[]>();
+  for (const item of items) {
+    const runItems = grouped.get(item.run_id);
+    if (runItems) runItems.push(item);
+    else grouped.set(item.run_id, [item]);
+  }
+  for (const values of grouped.values()) {
+    values.sort((left, right) => left.sequence - right.sequence || left.id.localeCompare(right.id));
+  }
+  return grouped;
+}
+
+function groupArtifactsByRun(
+  artifacts: ConversationArtifact[],
+): Map<string, ConversationArtifact[]> {
+  const grouped = new Map<string, ConversationArtifact[]>();
+  for (const artifact of artifacts) {
+    const runArtifacts = grouped.get(artifact.run_id);
+    if (runArtifacts) runArtifacts.push(artifact);
+    else grouped.set(artifact.run_id, [artifact]);
+  }
+  return grouped;
+}
+
+function itemTextLength(item: ConversationRunItem): number {
+  if (item.type === "message") return item.payload.content.length;
+  if (item.type === "function_call_output") return item.payload.summary.length;
+  return 0;
 }

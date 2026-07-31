@@ -1,39 +1,48 @@
-import axe from "axe-core";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { SettingsSection, SettingsStatus, SettingsToggle } from "../SettingsScaffold";
+import { SettingsField } from "../SettingsScaffold";
 
-describe("SettingsScaffold", () => {
-  it("exposes settings controls with product-facing accessibility semantics", async () => {
-    const onCheckedChange = vi.fn();
-    const { container } = render(
-      <SettingsSection title="访问边界" description="控制当前连接的默认能力。">
-        <SettingsToggle
-          checked={false}
-          label="启用只读模式"
-          description="默认阻止写入操作。"
-          onCheckedChange={onCheckedChange}
-        />
-        <SettingsStatus tone="success" label="连接正常" description="可以继续保存配置。" />
-      </SettingsSection>,
+describe("SettingsField", () => {
+  afterEach(cleanup);
+
+  it("connects field hints to the input", () => {
+    render(
+      <SettingsField label="模型地址" htmlFor="model-url" hint="请输入完整的 HTTPS 地址">
+        <input id="model-url" />
+      </SettingsField>,
     );
 
-    const readOnlySwitch = screen.getByRole("switch", { name: "启用只读模式" });
-    expect(readOnlySwitch.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(readOnlySwitch);
-    expect(onCheckedChange).toHaveBeenCalledWith(true);
-
-    const result = await axe.run(container, {
-      rules: {
-        "color-contrast": { enabled: false },
-      },
-    });
-    expect(result.violations.map((violation) => violation.id)).toEqual([]);
+    const input = screen.getByRole("textbox", { name: "模型地址" });
+    const hint = screen.getByText("请输入完整的 HTTPS 地址");
+    expect(input.getAttribute("aria-describedby")).toContain(hint.id);
   });
 
-  it("announces destructive failures immediately", () => {
-    render(<SettingsStatus tone="danger" label="保存失败" description="请检查配置后重试。" />);
-    expect(screen.getByRole("alert").textContent).toContain("保存失败");
+  it("announces validation errors and marks the input invalid", () => {
+    render(
+      <SettingsField label="模型地址" htmlFor="model-url" error="地址格式不正确">
+        <input id="model-url" />
+      </SettingsField>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "模型地址" });
+    const error = screen.getByRole("alert");
+    expect(input.getAttribute("aria-describedby")).toContain(error.id);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("describes compound controls through an accessible group", () => {
+    render(
+      <SettingsField label="API Key" htmlFor="api-key" hint="凭据由系统安全存储管理">
+        <div>
+          <input id="api-key" />
+          <button type="button">显示</button>
+        </div>
+      </SettingsField>,
+    );
+
+    const group = screen.getByRole("group", { name: "API Key" });
+    const hint = screen.getByText("凭据由系统安全存储管理");
+    expect(group.getAttribute("aria-describedby")).toContain(hint.id);
   });
 });

@@ -1,17 +1,26 @@
-import { request } from "./client";
-import type { GuardrailCheckResult } from "./types";
+import {
+  apiCancelSqlApiV1QueryCancelPost,
+  apiValidateSqlApiV1QueryValidatePost,
+} from "./generated/sdk.gen";
 
 export const queryApi = {
-  validateSql: (sql: string, options?: { datasourceId?: string; signal?: AbortSignal }) =>
-    request<GuardrailCheckResult>("/query/validate", {
-      method: "POST",
-      body: JSON.stringify({ sql, datasource_id: options?.datasourceId }),
+  async validateSql(
+    sql: string,
+    options?: { datasourceId?: string; signal?: AbortSignal },
+  ) {
+    const { data } = await apiValidateSqlApiV1QueryValidatePost({
+      body: { sql, datasource_id: options?.datasourceId },
       signal: options?.signal,
-    }),
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  cancelQuery: (executionId: string) =>
-    request<{ success: boolean; cancelled: boolean; executionId: string; message: string }>("/query/cancel", {
-      method: "POST",
-      body: JSON.stringify({ execution_id: executionId }),
-    }),
+  async cancelQuery(executionId: string) {
+    const { data } = await apiCancelSqlApiV1QueryCancelPost({
+      body: { execution_id: executionId },
+      throwOnError: true,
+    });
+    return data;
+  },
 };

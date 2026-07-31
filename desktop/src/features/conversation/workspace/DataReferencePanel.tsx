@@ -1,15 +1,14 @@
-import { BarChart2, Braces, Database, FileCode2, Table2 } from "lucide-react";
+import { BarChart2, Braces, Database, Table2 } from "lucide-react";
 import type { ConversationArtifact } from "../../../types/conversation";
 import type { DataReference } from "../../../types/agentArtifact";
 import { buildDataReferences, referenceKey, referenceTitle } from "./dataReferences";
 
 interface DataReferencePanelProps {
   artifacts: ConversationArtifact[];
-  onOpenSqlConsole: (sql?: string) => void;
   onSelectArtifact?: (artifactId: string) => void;
 }
 
-export function DataReferencePanel({ artifacts, onOpenSqlConsole, onSelectArtifact }: DataReferencePanelProps) {
+export function DataReferencePanel({ artifacts, onSelectArtifact }: DataReferencePanelProps) {
   const references = buildDataReferences(artifacts);
   if (references.length === 0) return null;
 
@@ -27,7 +26,6 @@ export function DataReferencePanel({ artifacts, onOpenSqlConsole, onSelectArtifa
                 onSelectArtifact(reference.artifactId);
                 return;
               }
-              if (reference.type === "sql") onOpenSqlConsole(reference.sql);
             }}
             title={referenceTitle(reference)}
           >
@@ -43,7 +41,6 @@ export function DataReferencePanel({ artifacts, onOpenSqlConsole, onSelectArtifa
 function referenceIcon(type: DataReference["type"]) {
   if (type === "table") return <Database size={12} />;
   if (type === "column") return <Braces size={12} />;
-  if (type === "sql") return <FileCode2 size={12} />;
   if (type === "chart") return <BarChart2 size={12} />;
   return <Table2 size={12} />;
 }

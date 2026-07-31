@@ -7,16 +7,15 @@ import type {
 import type { ConversationArtifact } from "../../../types/conversation";
 
 export function conversationSqlText(artifact: ConversationArtifact): string {
-  const value = artifact.payload.sql || artifact.payload.safeSql;
-  return typeof value === "string" ? value : "";
+  return payloadString(artifact.payload, ["safeSql", "sql"]) || "";
 }
 
 export function conversationDependsOn(artifact: ConversationArtifact): string[] {
-  return (artifact.depends_on || []).filter((item): item is string => typeof item === "string");
+  return artifact.relations.map((relation) => relation.artifact_id);
 }
 
 export function isSqlConversationArtifact(artifact: ConversationArtifact): boolean {
-  return artifact.type === "sql" || artifact.type === "sql_suggestion";
+  return artifact.type === "sql";
 }
 
 export function isResultViewConversationArtifact(artifact: ConversationArtifact): boolean {
@@ -27,8 +26,18 @@ export function isSqlBackedResultViewArtifact(artifact: ConversationArtifact): b
   return isResultViewConversationArtifact(artifact);
 }
 
+export function conversationArtifactVisibility(
+  artifact: ConversationArtifact,
+): ConversationArtifact["visibility"] {
+  return artifact.visibility;
+}
+
+export function isPrimaryConversationArtifact(artifact: ConversationArtifact): boolean {
+  return conversationArtifactVisibility(artifact) === "primary";
+}
+
 export function conversationArtifactKeys(artifact: ConversationArtifact): string[] {
-  return [artifact.id, artifact.semantic_id].filter((item): item is string => Boolean(item));
+  return [artifact.id, artifact.semantic_key].filter((item): item is string => Boolean(item));
 }
 
 export function dependsOnAnyConversationArtifact(artifact: ConversationArtifact, keys: Set<string>): boolean {
@@ -36,11 +45,11 @@ export function dependsOnAnyConversationArtifact(artifact: ConversationArtifact,
 }
 
 export function sortConversationArtifacts(artifacts: ConversationArtifact[]): ConversationArtifact[] {
-  return [...artifacts].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+  return [...artifacts].sort((a, b) => a.version - b.version || a.id.localeCompare(b.id));
 }
 
 export function conversationTableColumns(artifact: ConversationArtifact): string[] {
-  const columns = artifact.payload.columns;
+  const columns = (artifact.payload as Record<string, unknown>).columns;
   if (Array.isArray(columns)) {
     const names = columns.flatMap((item) => {
       if (typeof item === "string" && item.trim()) return [item];
@@ -157,8 +166,8 @@ export function toResultViewArtifactModel(artifact: ConversationArtifact): Resul
     rowCount,
     returnedRows,
     latencyMs: payloadNumber(artifact.payload, ["latencyMs"]),
-    truncated: Boolean(artifact.payload.truncated),
-    depends_on: artifact.depends_on,
+    truncated: Boolean((artifact.payload as Record<string, unknown>).truncated),
+    depends_on: conversationDependsOn(artifact),
   };
 }
 
@@ -170,12 +179,11 @@ export function toSqlArtifactModel(artifact: ConversationArtifact): SqlArtifact 
     description: payloadString(artifact.payload, ["purpose", "description"]),
     sql: conversationSqlText(artifact),
     purpose: payloadString(artifact.payload, ["purpose"]),
-    usedTables: payloadStringList(artifact.payload, ["usedTables"]),
     validationStatus: payloadString(artifact.payload, ["validationStatus"]),
     executionStatus: payloadString(artifact.payload, ["executionStatus"]),
     rowCount: payloadNumber(artifact.payload, ["rowCount"]),
     latencyMs: payloadNumber(artifact.payload, ["latencyMs"]),
-    depends_on: artifact.depends_on,
+    depends_on: conversationDependsOn(artifact),
   };
 }
 
@@ -186,19 +194,20 @@ export function toMarkdownArtifactModel(artifact: ConversationArtifact): Markdow
     title: artifact.title,
     content: payloadString(artifact.payload, ["content", "markdown", "message", "error"]) || artifact.title,
     description: payloadString(artifact.payload, ["description"]),
-    depends_on: artifact.depends_on,
+    depends_on: conversationDependsOn(artifact),
   };
 }
 
 function chartType(artifact: ConversationArtifact): ChartArtifact["chartType"] {
-  const value = artifact.payload.chartType;
+  const value = (artifact.payload as Record<string, unknown>).chartType;
   if (value === "line" || value === "pie" || value === "scatter" || value === "area") return value;
   return "bar";
 }
 
 export function toChartArtifactModel(artifact: ConversationArtifact): ChartArtifact {
-  const y = Array.isArray(artifact.payload.y)
-    ? artifact.payload.y.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+  const payload = artifact.payload as Record<string, unknown>;
+  const y = Array.isArray(payload.y)
+    ? payload.y.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
   return {
     id: artifact.id,
@@ -209,6 +218,6 @@ export function toChartArtifactModel(artifact: ConversationArtifact): ChartArtif
     x: payloadString(artifact.payload, ["x"]) || "",
     y,
     aggregation: payloadString(artifact.payload, ["aggregation"]) === "sum" ? "sum" : "none",
-    depends_on: artifact.depends_on,
+    depends_on: conversationDependsOn(artifact),
   };
 }

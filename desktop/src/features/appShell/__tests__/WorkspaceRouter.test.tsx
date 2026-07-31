@@ -2,7 +2,6 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceRouter } from "../WorkspaceRouter";
 import { testDraftLlmConnection } from "../llmDraftConnection";
-import { useDatasourceStore } from "../../../stores/datasourceStore";
 import { useWorkspaceStore } from "../../../stores/workspaceStore";
 import type { WorkspaceTab } from "../../../types/workspace";
 
@@ -27,9 +26,18 @@ const sqlConsoleProps = vi.hoisted(() => ({
 }));
 
 const workspacePageProps = vi.hoisted(() => ({
-  diagnostics: null as Record<string, unknown> | null,
   datasourceSettings: null as Record<string, unknown> | null,
-  llmConfig: null as Record<string, unknown> | null,
+}));
+const datasourceState = vi.hoisted(() => ({
+  datasources: [] as Array<Record<string, unknown>>,
+  activeDatasourceId: "",
+}));
+
+vi.mock("../../datasource/useDatasourceState", () => ({
+  useDatasourceState: () => ({
+    datasources: datasourceState.datasources,
+    activeDatasourceId: datasourceState.activeDatasourceId,
+  }),
 }));
 
 const llmConnectionApi = vi.hoisted(() => ({
@@ -71,19 +79,10 @@ vi.mock("../../workspace/MultiTableWorkspace", () => ({
 vi.mock("../../workspace/artifacts/TableArtifactView", () => ({
   TableArtifactView: () => <div data-testid="table-artifact" />,
 }));
-vi.mock("../../../pages/AgentEvalPage", () => ({
-  AgentEvalPage: () => <div data-testid="agent-eval" />,
-}));
 vi.mock("../../../pages/DataSourcesPage", () => ({
   DataSourcesPage: (props: Record<string, unknown>) => {
     workspacePageProps.datasourceSettings = props;
     return <div data-testid="datasources-page" />;
-  },
-}));
-vi.mock("../../../pages/DiagnosticsPage", () => ({
-  DiagnosticsPage: (props: Record<string, unknown>) => {
-    workspacePageProps.diagnostics = props;
-    return <div data-testid="diagnostics-page" />;
   },
 }));
 vi.mock("../../../hooks/useApiConfig", () => ({
@@ -92,12 +91,6 @@ vi.mock("../../../hooks/useApiConfig", () => ({
     updateConfig: vi.fn(),
     handleSave: vi.fn(),
   }),
-}));
-vi.mock("../../../components/LlmConfigPanel", () => ({
-  LlmConfigPanel: (props: Record<string, unknown>) => {
-    workspacePageProps.llmConfig = props;
-    return <div data-testid="llm-config" />;
-  },
 }));
 vi.mock("../../../lib/api/agent", () => ({
   testLlmConnection: llmConnectionApi.testLlmConnection,
@@ -145,15 +138,8 @@ describe("WorkspaceRouter table tabs", () => {
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });
-    useDatasourceStore.setState({
-      datasources: [DS1, DS2] as never,
-      activeDatasourceId: "ds-2",
-      activeDatasourceForSettings: DS2 as never,
-      tables: [],
-      loadingSchema: false,
-      schemaError: "",
-      tableColumns: {},
-    });
+    datasourceState.datasources = [DS1, DS2];
+    datasourceState.activeDatasourceId = "ds-2";
   });
 
   it("uses the datasource captured on the table tab instead of the current active datasource", async () => {
@@ -216,15 +202,8 @@ describe("WorkspaceRouter SQL console tabs", () => {
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });
-    useDatasourceStore.setState({
-      datasources: [DS1, DS2] as never,
-      activeDatasourceId: "ds-2",
-      activeDatasourceForSettings: DS2 as never,
-      tables: [],
-      loadingSchema: false,
-      schemaError: "",
-      tableColumns: {},
-    });
+    datasourceState.datasources = [DS1, DS2];
+    datasourceState.activeDatasourceId = "ds-2";
   });
 
   it("passes the datasource captured on the SQL tab instead of the global active datasource", async () => {
@@ -251,9 +230,7 @@ describe("WorkspaceRouter SQL console tabs", () => {
 describe("WorkspaceRouter desktop shell tabs", () => {
   beforeEach(() => {
     cleanup();
-    workspacePageProps.diagnostics = null;
     workspacePageProps.datasourceSettings = null;
-    workspacePageProps.llmConfig = null;
     llmConnectionApi.enrollCredentials.mockReset();
     llmConnectionApi.releaseCredentialLease.mockReset();
     llmConnectionApi.testLlmConnection.mockReset();
@@ -266,32 +243,15 @@ describe("WorkspaceRouter desktop shell tabs", () => {
       tableSubTabs: {},
       _tabSeq: { sql: 1, multiTable: 1, queryResult: 1, message: 1 },
     });
-    useDatasourceStore.setState({
-      datasources: [DS1, DS2] as never,
-      activeDatasourceId: "ds-2",
-      activeDatasourceForSettings: DS2 as never,
-      tables: [],
-      loadingSchema: false,
-      schemaError: "",
-      tableColumns: {},
-    });
+    datasourceState.datasources = [DS1, DS2];
+    datasourceState.activeDatasourceId = "ds-2";
   });
 
   it.each([
     [
-      "diagnostics",
-      { id: "diagnostics", title: "Diagnostics", type: "diagnostics" } as WorkspaceTab,
-      "diagnostics-page",
-    ],
-    [
       "datasource settings",
       { id: "datasource-settings", title: "Data Sources", type: "datasource-settings" } as WorkspaceTab,
       "datasources-page",
-    ],
-    [
-      "llm config",
-      { id: "llm-config", title: "LLM Config", type: "llm-config" } as WorkspaceTab,
-      "llm-config",
     ],
     [
       "artifact result",
@@ -327,19 +287,9 @@ describe("WorkspaceRouter desktop shell tabs", () => {
   });
 
   it("passes workspace chrome to pages that already sit inside WorkspaceShell", async () => {
-    render(<WorkspaceRouter activeTab={{ id: "diagnostics", title: "Diagnostics", type: "diagnostics" }} showToast={vi.fn()} />);
-    await findLazyRouteByTestId("diagnostics-page");
-    expect(workspacePageProps.diagnostics).toMatchObject({ chrome: "workspace" });
-
-    cleanup();
     render(<WorkspaceRouter activeTab={{ id: "datasource-settings", title: "Data Sources", type: "datasource-settings" }} showToast={vi.fn()} />);
     await findLazyRouteByTestId("datasources-page");
     expect(workspacePageProps.datasourceSettings).toMatchObject({ chrome: "workspace" });
-
-    cleanup();
-    render(<WorkspaceRouter activeTab={{ id: "llm-config", title: "LLM Config", type: "llm-config" }} showToast={vi.fn()} />);
-    await findLazyRouteByTestId("llm-config");
-    expect(workspacePageProps.llmConfig).toMatchObject({ chrome: "workspace" });
   });
 
   it("tests the current unsaved LLM draft through a temporary credential lease", async () => {

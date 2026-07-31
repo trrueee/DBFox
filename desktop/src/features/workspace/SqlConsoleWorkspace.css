@@ -37,7 +37,7 @@
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  background: #020617;
+  background: var(--sql-code-surface);
   cursor: default;
   padding: 0;
 }
@@ -46,7 +46,7 @@
   flex: 1 1 auto;
   overflow: auto;
   padding: 12px 14px;
-  color: #dbeafe;
+  color: var(--sql-code-text);
   font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
   font-size: var(--ui-font-control);
   line-height: 1.6;
@@ -57,7 +57,7 @@
   flex-wrap: wrap;
   gap: 6px 12px;
   margin: 2px 0 8px;
-  color: #93c5fd;
+  color: var(--color-info);
   font-size: var(--ui-font-label);
 }
 
@@ -67,7 +67,7 @@
 }
 
 .sql-console-status.is-warning {
-  color: #fbbf24;
+  color: var(--color-warning);
 }
 
 .sql-console-input-stack {
@@ -83,7 +83,7 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
-  color: #dbeafe;
+  color: var(--sql-code-text);
   font: inherit;
   line-height: inherit;
   pointer-events: none;
@@ -108,7 +108,7 @@
   line-height: inherit;
   outline: none;
   resize: none;
-  caret-color: #34d399;
+  caret-color: var(--color-success);
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -137,46 +137,46 @@
 }
 
 .sql-console-token-keyword {
-  color: #93c5fd;
+  color: var(--color-info);
   font-weight: 700;
 }
 
 .sql-console-token-function {
-  color: #c4b5fd;
+  color: var(--sql-code-keyword);
   font-weight: 700;
 }
 
 .sql-console-token-string {
-  color: #86efac;
+  color: var(--sql-code-string);
 }
 
 .sql-console-token-number {
-  color: #fdba74;
+  color: var(--color-warning);
 }
 
 .sql-console-token-comment {
-  color: #94a3b8;
+  color: var(--sql-code-comment);
   font-style: italic;
 }
 
 .sql-console-token-operator,
 .sql-console-token-punctuation {
-  color: #cbd5e1;
+  color: var(--color-text-secondary);
 }
 
 .sql-console-token-identifier,
 .sql-console-token-whitespace {
-  color: #dbeafe;
+  color: var(--sql-code-text);
 }
 
 .sql-console-info {
   margin: 2px 0;
-  color: #64748b;
+  color: var(--color-text-muted);
   white-space: pre-wrap;
 }
 
 .sql-console-info.warn {
-  color: #fbbf24;
+  color: var(--color-warning);
 }
 
 .sql-console-stmt {
@@ -188,7 +188,7 @@
 
 .sql-console-prompt-label {
   flex-shrink: 0;
-  color: #34d399;
+  color: var(--color-success);
   font-weight: 600;
   line-height: 1.6;
   user-select: none;
@@ -196,21 +196,21 @@
 
 .sql-console-sql {
   margin: 0;
-  color: #e0e7ff;
+  color: var(--color-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .sql-console-running {
   margin: 6px 0;
-  color: #d08060;
+  color: var(--color-warning);
 }
 
 .sql-console-error {
   margin: 6px 0 4px;
-  border-left: 2px solid #ef4444;
+  border-left: 2px solid var(--color-danger);
   background: rgba(239, 68, 68, 0.08);
-  color: #fca5a5;
+  color: var(--color-danger);
   padding: 6px 10px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -218,7 +218,7 @@
 
 .sql-console-error strong {
   margin-right: 8px;
-  color: #ef4444;
+  color: var(--color-danger);
 }
 
 .sql-console-result {
@@ -227,16 +227,16 @@
 
 .sql-console-result-meta {
   margin-bottom: 4px;
-  color: #64748b;
+  color: var(--color-text-muted);
   font-size: var(--ui-font-label);
 }
 
 .sql-console-table-wrap {
   max-height: 320px;
   overflow: auto;
-  border: 1px solid #1e293b;
+  border: 1px solid var(--sql-code-border);
   border-radius: 4px;
-  background: #0b1120;
+  background: var(--sql-code-surface);
 }
 
 .sql-console-table {
@@ -249,10 +249,10 @@
 .sql-console-table th {
   position: sticky;
   top: 0;
-  border-right: 1px solid #1a2740;
-  border-bottom: 1px solid #1e293b;
-  background: #111a2e;
-  color: #93c5fd;
+  border-right: 1px solid var(--sql-code-border);
+  border-bottom: 1px solid var(--sql-code-border);
+  background: var(--color-panel);
+  color: var(--color-info);
   font-weight: 600;
   padding: 4px 10px;
   text-align: left;
@@ -266,9 +266,9 @@
 .sql-console-table td {
   max-width: 280px;
   overflow: hidden;
-  border-right: 1px solid #131f36;
-  border-bottom: 1px solid #15233d;
-  color: #cbd5e1;
+  border-right: 1px solid var(--sql-code-border);
+  border-bottom: 1px solid var(--sql-code-border);
+  color: var(--color-text-secondary);
   padding: 3px 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -283,12 +283,12 @@
 }
 
 .sql-console-null {
-  color: #475569;
+  color: var(--color-text-secondary);
   font-style: italic;
 }
 
 .sql-console-empty {
-  color: #64748b;
+  color: var(--color-text-muted);
   text-align: center;
 }
 

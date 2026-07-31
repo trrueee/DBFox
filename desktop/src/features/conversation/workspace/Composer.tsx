@@ -5,21 +5,31 @@ import type { ConversationDeliveryMode } from "../../../types/conversation";
 export function Composer({
   disabled,
   running,
+  submitting = false,
+  cancelling = false,
+  error,
   onSend,
   onCancel,
 }: {
   disabled?: string | null;
   running: boolean;
-  onSend: (text: string, mode: ConversationDeliveryMode) => void;
-  onCancel: () => void;
+  submitting?: boolean;
+  cancelling?: boolean;
+  error?: string | null;
+  onSend: (text: string, mode: ConversationDeliveryMode) => Promise<void>;
+  onCancel: () => Promise<void>;
 }) {
   const [value, setValue] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<ConversationDeliveryMode>("queue");
-  const submit = () => {
+  const submit = async () => {
     const text = value.trim();
-    if (!text || disabled) return;
-    setValue("");
-    onSend(text, running ? deliveryMode : "queue");
+    if (!text || disabled || submitting) return;
+    try {
+      await onSend(text, running ? deliveryMode : "queue");
+      setValue("");
+    } catch {
+      // The mutation exposes a user-facing error; preserve the draft for retry.
+    }
   };
   return (
     <footer className="conv-composer" aria-label="对话输入区">
@@ -27,7 +37,7 @@ export function Composer({
         className="conv-composer-rail"
         onSubmit={(event) => {
           event.preventDefault();
-          submit();
+          void submit();
         }}
       >
         <div className="conv-composer-card">
@@ -38,11 +48,11 @@ export function Composer({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                submit();
+                void submit();
               }
             }}
             placeholder={disabled || "继续追问…"}
-            disabled={Boolean(disabled)}
+            disabled={Boolean(disabled) || submitting}
             rows={2}
           />
           <div className="conv-composer-toolbar">
@@ -65,13 +75,20 @@ export function Composer({
                 <button
                   type="button"
                   className="conv-composer-submit is-pausing"
-                  onClick={onCancel}
+                  onClick={() => void onCancel().catch(() => undefined)}
+                  disabled={cancelling}
                   aria-label="停止当前任务"
                   title="停止当前任务"
                 >
                   <Square size={13} fill="currentColor" />
                 </button>
-                <button type="submit" className="conv-composer-submit" aria-label="发送" title="发送">
+                <button
+                  type="submit"
+                  className="conv-composer-submit"
+                  aria-label="发送"
+                  title="发送"
+                  disabled={submitting}
+                >
                   <ArrowUp size={18} />
                 </button>
               </div>
@@ -81,12 +98,13 @@ export function Composer({
                 className="conv-composer-submit"
                 aria-label="发送"
                 title="发送"
-                disabled={Boolean(disabled)}
+                disabled={Boolean(disabled) || submitting}
               >
                 <ArrowUp size={18} />
               </button>
             )}
           </div>
+          {error && <p className="conv-action-error" role="alert">{error}</p>}
         </div>
       </form>
     </footer>

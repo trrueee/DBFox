@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { FileQuestion } from "lucide-react";
 import type {
   AgentArtifact,
   ChartArtifact,
@@ -72,24 +73,18 @@ function renderArtifact(artifact: AgentArtifact, props: ArtifactRendererProps) {
     case "markdown":
       return ARTIFACT_RENDERERS.markdown(artifact, props);
     default: {
-      const fallbackArtifact = artifact as AgentArtifact;
+      const unsupportedArtifact = artifact as AgentArtifact;
       return (
-        <MarkdownArtifactView
-          key={fallbackArtifact.id}
-          artifact={toFallbackMarkdownArtifact(fallbackArtifact)}
-          onToast={props.onToast}
-        />
+        <section className="artifact-card artifact-unsupported" key={unsupportedArtifact.id} role="status">
+          <span className="artifact-unsupported__icon" aria-hidden="true">
+            <FileQuestion size={18} />
+          </span>
+          <div className="artifact-unsupported__copy">
+            <strong>{unsupportedArtifact.title || "暂不支持预览的工件"}</strong>
+            <span>此工件的引用已安全保留，当前版本暂不支持直接预览。</span>
+          </div>
+        </section>
       );
     }
   }
-}
-
-function toFallbackMarkdownArtifact(artifact: AgentArtifact): MarkdownArtifact {
-  return {
-    id: artifact.id,
-    type: "markdown",
-    title: artifact.title || "Artifact",
-    content: JSON.stringify(artifact, null, 2),
-    description: "暂不支持的产物类型，已按原始 JSON 展示。",
-  };
 }

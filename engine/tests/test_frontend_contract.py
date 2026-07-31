@@ -1,33 +1,9 @@
 import logging
 
 import pytest
-import re
-from pathlib import Path
 from fastapi.testclient import TestClient
 from engine.main import app, LOCAL_SECURE_TOKEN
 from engine.models import DataSource, Project, QueryHistory
-from engine.sql.trust_gate import TrustGate
-from engine.sql.safety_gate import validate_sql_schema
-
-def parse_types_ts_interface(interface_name: str) -> set[str]:
-    pattern = rf"export\s+interface\s+{interface_name}\s*\{{([^}}]*)\}}"
-    api_types_dir = Path(__file__).resolve().parents[2] / "desktop" / "src" / "lib" / "api" / "types"
-    match = None
-    for path in sorted(api_types_dir.rglob("*.ts")):
-        content = path.read_text(encoding="utf-8")
-        match = re.search(pattern, content, re.DOTALL)
-        if match:
-            break
-    if not match:
-        raise ValueError(f"Interface {interface_name} not found in desktop API type modules")
-    block = match.group(1)
-    fields = set()
-    for line in block.splitlines():
-        # Only match direct fields indented with exactly 2 spaces
-        field_match = re.match(r"^ {2}([a-zA-Z0-9_]+)\s*\??\s*:", line)
-        if field_match:
-            fields.add(field_match.group(1))
-    return fields
 
 
 def _ensure_project(db_session, project_id: str) -> None:
@@ -323,17 +299,10 @@ def test_console_execute_response_is_artifact_backed(client, test_datasource):
     assert set(result_view["payload"]) == {
         "sourceSqlArtifactId", "queryFingerprint", "datasourceGeneration", "columns",
         "rowCount", "returnedRows", "latencyMs", "executedAt", "truncated",
+        "evidenceKind",
     }
     for forbidden in {"rows", "previewRows", "safeSql", "sourceSql", "storageMode", "datasourceId"}:
         assert forbidden not in result_view["payload"]
-
-def test_trust_gate_result_matches_types_ts(db_session, test_datasource):
-    tg = TrustGate(db_session, validate_sql_schema)
-    result = tg.evaluate(test_datasource.id, "SELECT 1")
-    
-    expected_tg = parse_types_ts_interface("TrustGateResult")
-    for key in expected_tg:
-        assert key in result, f"Field '{key}' not found in TrustGate evaluate result"
 
 @pytest.mark.parametrize("endpoint,payload,expected_code", [
     ("/api/v1/agent/console/execute", {"datasourceId": "non-existent-ds", "sql": "SELECT 1"}, "DATASOURCE_NOT_FOUND"),

@@ -4,28 +4,27 @@ import { useAppCommands } from "../useAppCommands";
 
 describe("useAppCommands", () => {
   it("includes a diagnostics log command", () => {
-    const openDiagnosticsTab = vi.fn();
+    const openSettings = vi.fn();
     const { result } = renderHook(() =>
       useAppCommands({
         tables: [],
-        tableColumns: {},
+        conversations: [],
         openSqlConsole: vi.fn(),
         openSmartQueryTab: vi.fn(),
         openConversationHistoryTab: vi.fn(),
-        openLlmConfigTab: vi.fn(),
+        openConversationResult: vi.fn(),
+        openSettings,
         openConnectionManagerTab: vi.fn(),
         openNewConnectionTab: vi.fn(),
-        openAgentEvalTab: vi.fn(),
-        openDiagnosticsTab,
         openTableTab: vi.fn(),
       }),
     );
 
     const command = result.current.commandItems.find((item) => item.id === "diagnostics-logs");
 
-    expect(command?.name).toBe("打开诊断日志");
-    expect(command?.category).toBe("开发与诊断");
+    expect(command?.name).toBe("系统诊断");
+    expect(command?.category).toBe("设置");
     command?.action();
-    expect(openDiagnosticsTab).toHaveBeenCalledOnce();
+    expect(openSettings).toHaveBeenCalledWith("diagnostics");
   });
 });

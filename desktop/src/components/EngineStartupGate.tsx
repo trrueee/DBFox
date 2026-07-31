@@ -11,7 +11,14 @@ type StartupFailure = {
   summary: string;
 };
 
-function startupMessage(stage: StartupStage): string {
+function startupMessage(stage: StartupStage, enginePhase: string | null): string {
+  if (stage === "starting") {
+    if (enginePhase === "recovering") return "正在恢复工作区，请稍候…";
+    if (enginePhase === "migrating" || enginePhase === "maintaining") {
+      return "正在准备 DBFox，请稍候…";
+    }
+    return "正在启动 DBFox…";
+  }
   switch (stage) {
     case "health-check":
       return "正在加载，请稍候…";
@@ -54,6 +61,7 @@ async function invokeDesktopCommand(command: "restart_python_engine" | "open_dia
 export function EngineStartupGate({ children }: { children: ReactNode }) {
   const [stage, setStage] = useState<StartupStage>("starting");
   const [failure, setFailure] = useState<StartupFailure | null>(null);
+  const [enginePhase, setEnginePhase] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
@@ -65,7 +73,10 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
         await waitForEngineConfig({
           signal: controller.signal,
           onStatus(status) {
-            if (!controller.signal.aborted && status.state === "starting") setStage("starting");
+            if (!controller.signal.aborted && status.state === "starting") {
+              setEnginePhase(status.stage ?? null);
+              setStage("starting");
+            }
           },
         });
         if (controller.signal.aborted) return;
@@ -87,6 +98,7 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
   const retry = async () => {
     setStage("starting");
     setFailure(null);
+    setEnginePhase(null);
     setActionMessage("正在重新加载 DBFox…");
     try {
       if (isTauriRuntime()) await invokeDesktopCommand("restart_python_engine");
@@ -125,7 +137,7 @@ export function EngineStartupGate({ children }: { children: ReactNode }) {
       </span>
       <h1>DBFox</h1>
       <p className="engine-startup-gate__message">
-        {failure?.summary ?? startupMessage(stage)}
+        {failure?.summary ?? startupMessage(stage, enginePhase)}
       </p>
 
       {stage === "failed" && (

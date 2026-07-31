@@ -1,21 +1,67 @@
-import { useEffect, useState, useCallback, type MouseEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type MouseEvent,
+} from "react";
 import "./App.css";
 import { setDialogContainer } from "./components/ui/dialogContainer";
 import { setToastRoot, useToast } from "./components/toastState";
-import { ContextDrawer } from "./features/assistant/ContextDrawer";
-import { DataSourceContextMenu } from "./features/datasource/DataSourceContextMenu";
-import { DataSourceTree } from "./features/datasource/DataSourceTree";
-import { WorkspaceTabs } from "./features/workspace/WorkspaceTabs";
 import type { ContextMenuState } from "./types/workspace";
-import { CommandPalette } from "./components/CommandPalette";
-import TitleBar from "./components/TitleBar";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui";
-import { useAppCommands } from "./features/appShell/useAppCommands";
-import { WorkspaceRouter } from "./features/appShell/WorkspaceRouter";
 import { installClientErrorLogging } from "./lib/diagnostics/clientLog";
-import { useDatasourceStore } from "./stores/datasourceStore";
+import { useDatasourceState } from "./features/datasource/useDatasourceState";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useConversationStore } from "./stores/conversationStore";
+import { Search } from "lucide-react";
+
+const AppCommandPalette = lazy(() =>
+  import("./features/appShell/AppCommandPalette").then((module) => ({
+    default: module.AppCommandPalette,
+  })),
+);
+const ContextDrawer = lazy(() =>
+  import("./features/assistant/ContextDrawer").then((module) => ({
+    default: module.ContextDrawer,
+  })),
+);
+const DataSourceContextMenu = lazy(() =>
+  import("./features/datasource/DataSourceContextMenu").then((module) => ({
+    default: module.DataSourceContextMenu,
+  })),
+);
+const DataSourceTree = lazy(() =>
+  import("./features/datasource/DataSourceTree").then((module) => ({
+    default: module.DataSourceTree,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./features/settings/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+const SettingsSidebar = lazy(() =>
+  import("./features/settings/SettingsSidebar").then((module) => ({
+    default: module.SettingsSidebar,
+  })),
+);
+const WorkspaceRouter = lazy(() =>
+  import("./features/appShell/WorkspaceRouter").then((module) => ({
+    default: module.WorkspaceRouter,
+  })),
+);
+const ResizableWorkspaceLayout = lazy(() =>
+  import("./features/appShell/ResizableWorkspaceLayout").then((module) => ({
+    default: module.ResizableWorkspaceLayout,
+  })),
+);
+const WorkspaceTabs = lazy(() =>
+  import("./features/workspace/WorkspaceTabs").then((module) => ({
+    default: module.WorkspaceTabs,
+  })),
+);
+const TitleBar = lazy(() => import("./components/TitleBar"));
 
 export default function App() {
   const [treeSearch, setTreeSearch] = useState("");
@@ -28,17 +74,12 @@ export default function App() {
   // ── Store initialization (mount once) ──
   useEffect(() => {
     installClientErrorLogging();
-    useDatasourceStore.getState().loadDatasources();
     void useConversationStore.getState().initConversations();
   }, []);
 
   // ── Store selectors (minimal — children read from stores directly) ──
   const activeTab = useWorkspaceStore((s) => s.tabs.find((t) => t.id === s.activeTabId) || s.tabs[0]);
-
-  const tables = useDatasourceStore((s) => s.tables);
-  const tableColumns = useDatasourceStore((s) => s.tableColumns);
-  const refreshSchema = useDatasourceStore((s) => s.refreshSchema);
-  const activeDatasource = useDatasourceStore((s) => s.datasources.find((item) => item.id === s.activeDatasourceId) ?? s.datasources[0] ?? null);
+  const { tables, refreshSchema, activeDatasource } = useDatasourceState();
 
   const openSqlConsole = useWorkspaceStore((s) => s.openSqlConsole);
   const openNewConnectionTab = useWorkspaceStore((s) => s.openNewConnectionTab);
@@ -46,6 +87,11 @@ export default function App() {
   const openMultiTableWorkspace = useWorkspaceStore((s) => s.openMultiTableWorkspace);
   const selectedTables = useWorkspaceStore((s) => s.selectedTables);
   const setSelectedTables = useWorkspaceStore((s) => s.setSelectedTables);
+  const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
+  const settingsSection = useWorkspaceStore((s) => s.settingsSection);
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
+  const closeSettings = useWorkspaceStore((s) => s.closeSettings);
+  const setSettingsSection = useWorkspaceStore((s) => s.setSettingsSection);
 
   const openTableTabForActiveDatasource = useCallback(
     (tableName: string, initialSubtab?: string) => {
@@ -61,7 +107,12 @@ export default function App() {
   // Layout UI states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const effectiveSidebarCollapsed = sidebarCollapsed && !settingsOpen;
   const toggleSidebarCollapse = useCallback(() => setSidebarCollapsed((value) => !value), []);
+  const handleOpenSettings = useCallback(() => {
+    setSidebarCollapsed(false);
+    openSettings("model");
+  }, [openSettings]);
 
   useEffect(() => {
     const handleDocumentClick = () => setContextMenu((prev) => ({ ...prev, visible: false }));
@@ -102,6 +153,11 @@ export default function App() {
       }
       if (mod && event.key.toLowerCase() === "w") {
         const ws = useWorkspaceStore.getState();
+        if (ws.settingsOpen) {
+          event.preventDefault();
+          ws.closeSettings();
+          return;
+        }
         const activeId = ws.activeTabId;
         if (activeId) {
           event.preventDefault();
@@ -121,123 +177,132 @@ export default function App() {
     }
   };
 
-  const { commandItems } = useAppCommands({
-    tables,
-    tableColumns,
-    openSqlConsole,
-    openSmartQueryTab: useWorkspaceStore.getState().openSmartQueryTab,
-    openConversationHistoryTab: useWorkspaceStore.getState().openConversationHistoryTab,
-    openLlmConfigTab: useWorkspaceStore.getState().openLlmConfigTab,
-    openConnectionManagerTab: useWorkspaceStore.getState().openConnectionManagerTab,
-    openNewConnectionTab,
-    openAgentEvalTab: useWorkspaceStore.getState().openAgentEvalTab,
-    openDiagnosticsTab: useWorkspaceStore.getState().openDiagnosticsTab,
-    openTableTab: openTableTabForActiveDatasource,
-  });
-
   return (
     <div className="app-shell">
       <div
         className="app-shell-inner"
         ref={useCallback((el: HTMLDivElement | null) => { setDialogContainer(el); setToastRoot(el); }, [])}
       >
-        <TitleBar />
+        <Suspense fallback={null}>
+          <TitleBar />
+        </Suspense>
         {/* Window body: sidebar + main surface + right drawer */}
         <main className="app-body">
-          <ResizablePanelGroup
-            key={sidebarCollapsed ? "collapsed" : "expanded"}
-            id="app-body-split"
-            direction="horizontal"
-            className="app-body-split"
-          >
-            <ResizablePanel
-              id="app-sidebar-panel"
-              className={`app-sidebar-panel ${sidebarCollapsed ? "app-sidebar-panel--collapsed" : ""}`}
-              defaultSize={sidebarCollapsed ? 36 : 260}
-              minSize={sidebarCollapsed ? 36 : 220}
-              maxSize={sidebarCollapsed ? 36 : 420}
-              disabled={sidebarCollapsed}
-              groupResizeBehavior="preserve-pixel-size"
-            >
-              <DataSourceTree
-                treeSearch={treeSearch}
-                collapsed={sidebarCollapsed}
-                onToggleCollapse={toggleSidebarCollapse}
-                onTreeSearchChange={setTreeSearch}
-                onTableClick={handleTableClick}
-                onTableDoubleClick={openTableTabForActiveDatasource}
-                onNodeContextMenu={handleNodeContextMenu}
-                onRefresh={refreshSchema}
-                onNewConnection={openNewConnectionTab}
-              />
-            </ResizablePanel>
+          <Suspense fallback={null}>
+            <ResizableWorkspaceLayout
+              key={effectiveSidebarCollapsed ? "collapsed" : settingsOpen ? "settings" : "expanded"}
+              sidebarCollapsed={effectiveSidebarCollapsed}
+              settingsOpen={settingsOpen}
+              sidebar={settingsOpen ? (
+                <Suspense fallback={null}>
+                  <SettingsSidebar
+                    section={settingsSection}
+                    onSectionChange={setSettingsSection}
+                    onClose={closeSettings}
+                  />
+                </Suspense>
+              ) : (
+                <Suspense fallback={null}>
+                  <DataSourceTree
+                    treeSearch={treeSearch}
+                    collapsed={effectiveSidebarCollapsed}
+                    onToggleCollapse={toggleSidebarCollapse}
+                    onTreeSearchChange={setTreeSearch}
+                    onTableClick={handleTableClick}
+                    onTableDoubleClick={openTableTabForActiveDatasource}
+                    onNodeContextMenu={handleNodeContextMenu}
+                    onRefresh={refreshSchema}
+                    onNewConnection={openNewConnectionTab}
+                    onOpenSqlConsole={openSqlConsole}
+                    onOpenConnectionManager={useWorkspaceStore.getState().openConnectionManagerTab}
+                    onOpenSettings={handleOpenSettings}
+                  />
+                </Suspense>
+              )}
+              workspace={
+                <section className={`app-main${settingsOpen ? " app-main--settings" : ""}`}>
+                {settingsOpen ? (
+                  <Suspense fallback={null}>
+                    <div className="app-main-scroll">
+                      <SettingsPage section={settingsSection} showToast={toast} />
+                    </div>
+                  </Suspense>
+                ) : (
+                  <>
+                    {/* Top Workspace Tab Bar */}
+                    <div className="app-tabbar">
+                      <Suspense fallback={null}>
+                        <WorkspaceTabs onOpenSqlConsole={openSqlConsole} />
+                      </Suspense>
 
-            {!sidebarCollapsed && (
-              <ResizableHandle
-                aria-label="Resize datasource sidebar"
-                className="app-sidebar-resize-handle"
-              />
-            )}
+                      <div className="app-tabbar-actions">
+                        <button
+                          className="app-cmd-btn"
+                          onClick={() => setShowCommandPalette(true)}
+                          title="全局搜索 (Ctrl K)"
+                        >
+                          <Search size={13} aria-hidden="true" />
+                          <span>搜索</span>
+                          <kbd>Ctrl K</kbd>
+                        </button>
+                      </div>
+                    </div>
 
-            <ResizablePanel
-              id="app-workspace-panel"
-              className="app-workspace-panel"
-              minSize={420}
-            >
-              <section className="app-main">
-            {/* Top Workspace Tab Bar */}
-            <div className="app-tabbar">
-              <WorkspaceTabs
-                onOpenSqlConsole={openSqlConsole}
-              />
+                    <div className="app-main-scroll">
+                      <Suspense fallback={null}>
+                        <WorkspaceRouter activeTab={activeTab} showToast={toast} />
+                      </Suspense>
+                    </div>
+                  </>
+                )}
+                </section>
+              }
+            />
+          </Suspense>
 
-              {/* Top Right Actions */}
-              <div className="app-tabbar-actions">
-                <button
-                  className="app-cmd-btn"
-                  onClick={() => setShowCommandPalette(true)}
-                  title="打开命令面板 (⌘K)"
-                >
-                  <span>命令面板</span>
-                  <kbd>⌘K</kbd>
-                </button>
-              </div>
-            </div>
-
-            <div className="app-main-scroll">
-              <WorkspaceRouter
+          {!settingsOpen && rightDrawerOpen && (
+            <Suspense fallback={null}>
+              <ContextDrawer
+                open
+                type={rightDrawerType}
                 activeTab={activeTab}
-                showToast={toast}
+                onClose={() => setRightDrawerOpen(false)}
+                onGenerateIndexSql={() => openSqlConsole("ALTER TABLE comment_infos ADD INDEX idx_user_id (user_id);")}
               />
-            </div>
-              </section>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-
-          <ContextDrawer
-            open={rightDrawerOpen}
-            type={rightDrawerType}
-            activeTab={activeTab}
-            onClose={() => setRightDrawerOpen(false)}
-            onGenerateIndexSql={() => openSqlConsole("ALTER TABLE comment_infos ADD INDEX idx_user_id (user_id);")}
-          />
+            </Suspense>
+          )}
         </main>
 
-        <CommandPalette
-          open={showCommandPalette}
-          onClose={() => setShowCommandPalette(false)}
-          commands={commandItems}
-        />
+        {showCommandPalette && (
+          <Suspense fallback={null}>
+            <AppCommandPalette
+              onClose={() => setShowCommandPalette(false)}
+              tables={tables}
+              openSqlConsole={openSqlConsole}
+              openSmartQueryTab={useWorkspaceStore.getState().openSmartQueryTab}
+              openConversationHistoryTab={useWorkspaceStore.getState().openConversationHistoryTab}
+              openConversationResult={useWorkspaceStore.getState().openConversationResult}
+              openSettings={useWorkspaceStore.getState().openSettings}
+              openConnectionManagerTab={useWorkspaceStore.getState().openConnectionManagerTab}
+              openNewConnectionTab={openNewConnectionTab}
+              openTableTab={openTableTabForActiveDatasource}
+            />
+          </Suspense>
+        )}
 
-        <DataSourceContextMenu
-          contextMenu={contextMenu}
-          onOpenSqlConsole={openSqlConsole}
-          onOpenTable={(tableName, subTab) => openTableTabForActiveDatasource(tableName, subTab)}
-          onOpenMultiTableWorkspace={openMultiTableWorkspace}
-          onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
-          onToast={toast}
-          onOpenProps={() => toggleRightDrawer("props")}
-        />
+        {contextMenu.visible && (
+          <Suspense fallback={null}>
+            <DataSourceContextMenu
+              contextMenu={contextMenu}
+              onOpenSqlConsole={openSqlConsole}
+              onOpenTable={(tableName, subTab) => openTableTabForActiveDatasource(tableName, subTab)}
+              onOpenMultiTableWorkspace={openMultiTableWorkspace}
+              onClose={() => setContextMenu((prev) => ({ ...prev, visible: false }))}
+              onToast={toast}
+              onOpenProps={() => toggleRightDrawer("props")}
+            />
+          </Suspense>
+        )}
       </div>
     </div>
   );

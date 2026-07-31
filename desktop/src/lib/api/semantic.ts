@@ -1,28 +1,34 @@
-import { request } from "./client";
+import {
+  apiGetTableScopeApiV1SemanticTableScopeGet,
+  apiUpdateTableScopeApiV1SemanticTableScopePost,
+} from "./generated/sdk.gen";
+import type {
+  WorkspaceTableScopeResponse,
+  WorkspaceTableScopeUpdateRequest,
+} from "./generated/types.gen";
 
-export interface WorkspaceTableScopeResponse {
-  id: string;
-  project_id: string;
-  data_source_id: string;
-  table_id: string;
-  enabled: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface WorkspaceTableScopeUpdateRequest {
-  project_id: string;
-  datasource_id: string;
-  enabled_table_ids: string[];
-}
+export type {
+  WorkspaceTableScopeResponse,
+  WorkspaceTableScopeUpdateRequest,
+};
 
 export const semanticApi = {
-  getTableScope: (projectId: string, datasourceId: string) =>
-    request<WorkspaceTableScopeResponse[]>(`/semantic/table-scope?project_id=${encodeURIComponent(projectId)}&datasource_id=${encodeURIComponent(datasourceId)}`),
+  async getTableScope(projectId: string, datasourceId: string) {
+    const { data } = await apiGetTableScopeApiV1SemanticTableScopeGet({
+      query: {
+        project_id: projectId,
+        datasource_id: datasourceId,
+      },
+      throwOnError: true,
+    });
+    return data;
+  },
 
-  updateTableScope: (params: WorkspaceTableScopeUpdateRequest) =>
-    request<{ success: boolean; message: string }>("/semantic/table-scope", {
-      method: "POST",
-      body: JSON.stringify(params),
-    }),
+  async updateTableScope(params: WorkspaceTableScopeUpdateRequest) {
+    const { data } = await apiUpdateTableScopeApiV1SemanticTableScopePost({
+      body: params,
+      throwOnError: true,
+    });
+    return data;
+  },
 };

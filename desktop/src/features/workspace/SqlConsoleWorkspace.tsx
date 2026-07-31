@@ -8,7 +8,8 @@ import { agentApi } from "../../lib/api/agent";
 import type { DataSource } from "../../lib/api/types";
 import { databaseTypeLabel } from "../../lib/presentation";
 import type { ResultViewArtifact } from "../../types/agentArtifact";
-import { toViewArtifacts } from "./artifactProjection";
+import { parseConversationArtifact } from "../conversation/conversationWireSchema";
+import { toResultViewArtifactModel } from "../conversation/workspace/conversationArtifactModels";
 import { TableArtifactView } from "./artifacts/TableArtifactView";
 import { firstSqlKeyword, splitSqlStatements, tokenizeSql, type SqlStatementKind, type SqlTokenKind } from "./artifacts/sqlTokenizer";
 import "./SqlConsoleWorkspace.css";
@@ -141,8 +142,11 @@ export function SqlConsoleWorkspace({ tabId, state, onPatchState, onAppendEntrie
         question: "SQL Console",
         sessionId: tabId,
       });
-      const resultArtifact = toViewArtifacts(result.artifacts)
-        .find((artifact): artifact is ResultViewArtifact => artifact.type === "result_view");
+      const resultArtifact = result.artifacts
+        .map(parseConversationArtifact)
+        .filter((artifact) => artifact.type === "result_view")
+        .map(toResultViewArtifactModel)
+        .at(0);
       const extras: ConsoleEntryDraft[] = resultArtifact
         ? [{ kind: "result", artifact: resultArtifact, runId: result.runId }]
         : [{ kind: "info", text: "执行成功，无结果集。" }];

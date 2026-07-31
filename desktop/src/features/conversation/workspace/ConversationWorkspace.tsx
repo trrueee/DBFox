@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelRightOpen } from "lucide-react";
 import {
   Group as PanelGroup,
@@ -8,12 +8,14 @@ import {
   type Layout,
 } from "react-resizable-panels";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
+import type { ApprovalItem } from "../../../types/conversation";
 import { Composer } from "./Composer";
 import { ApprovalCard } from "./ApprovalCard";
 import { ArtifactDock } from "./ArtifactDock";
 import { ConversationHeader } from "./ConversationHeader";
 import { MessageList } from "./MessageList";
 import { useConversationViewModel } from "./useConversationViewModel";
+import { isPrimaryConversationArtifact } from "./conversationArtifactModels";
 import "./conversationWorkspace.css";
 
 const ARTIFACT_LAYOUT_KEY = "dbfox.conversation.artifact-layout.v1";
@@ -33,18 +35,28 @@ export function ConversationWorkspace({
 }) {
   const {
     detail,
-    messages,
+    items,
     runs,
     artifacts,
     runningRun,
     openConversation,
+    conversationLoadError,
     sendMessage,
+    sending,
+    sendError,
     cancelRun,
+    cancelling,
     resolveApproval,
+    resolvingApprovalId,
+    approvalError,
     resolveQuestion,
+    resolvingQuestionId,
+    questionError,
     selectArtifact,
+    loadRunArtifacts,
   } = useConversationViewModel(conversationId);
   const artifactPanelRef = usePanelRef();
+  const pendingRevealArtifactIdRef = useRef<string | null>(null);
   const initialLayout = useMemo(() => readArtifactLayout(), []);
   const [artifactCollapsed, setArtifactCollapsed] = useState(
     () => Boolean(initialLayout && initialLayout.artifacts <= 0.01),
@@ -54,49 +66,127 @@ export function ConversationWorkspace({
     if (!detail && conversationId) void openConversation(conversationId);
   }, [conversationId, detail, openConversation]);
 
-  if (!detail) return <div className="conv-workspace" role="status">正在载入对话…</div>;
-  const hasArtifacts = artifacts.length > 0;
-  const handleSelectArtifact = (artifactId: string) => void selectArtifact(conversationId, artifactId);
-  const pendingApproval = runningRun?.approval?.status === "pending" ? runningRun.approval : null;
+  const artifactRefsByRun = useMemo(() => {
+    const refsByRun = new Map<string, Set<string>>();
+    for (const item of items) {
+      if (
+        item.type !== "function_call_output"
+        && !(item.type === "message" && item.payload.role === "assistant")
+      ) continue;
+      if (item.payload.artifact_refs.length === 0) continue;
+      const artifactIds = refsByRun.get(item.run_id) ?? new Set<string>();
+      for (const artifactRef of item.payload.artifact_refs) {
+        artifactIds.add(artifactRef.artifact_id);
+      }
+      refsByRun.set(item.run_id, artifactIds);
+    }
+    return new Map(
+      [...refsByRun].map(([runId, artifactIds]) => [runId, [...artifactIds]]),
+    );
+  }, [items]);
+  const runIdByArtifactId = useMemo(() => {
+    const runIds = new Map<string, string>();
+    for (const [runId, artifactIds] of artifactRefsByRun) {
+      for (const artifactId of artifactIds) runIds.set(artifactId, runId);
+    }
+    return runIds;
+  }, [artifactRefsByRun]);
+
+  useEffect(() => {
+    for (const [runId, artifactIds] of artifactRefsByRun) {
+      void loadRunArtifacts(conversationId, runId, artifactIds).catch(() => undefined);
+    }
+  }, [artifactRefsByRun, conversationId, loadRunArtifacts]);
+
+  const primaryArtifacts = artifacts.filter(isPrimaryConversationArtifact);
+  const hasArtifacts = primaryArtifacts.length > 0;
+  useEffect(() => {
+    const artifactId = pendingRevealArtifactIdRef.current;
+    if (!artifactId || !primaryArtifacts.some((artifact) => artifact.id === artifactId)) return;
+    pendingRevealArtifactIdRef.current = null;
+    artifactPanelRef.current?.expand();
+    setArtifactCollapsed(false);
+  }, [artifactPanelRef, primaryArtifacts]);
+  const handleSelectArtifact = useCallback((artifactId: string) => {
+    if (primaryArtifacts.some((artifact) => artifact.id === artifactId)) {
+      artifactPanelRef.current?.expand();
+      setArtifactCollapsed(false);
+    } else {
+      const runId = runIdByArtifactId.get(artifactId);
+      if (runId) {
+        pendingRevealArtifactIdRef.current = artifactId;
+        void loadRunArtifacts(conversationId, runId, [artifactId]).catch(() => {
+          if (pendingRevealArtifactIdRef.current === artifactId) {
+            pendingRevealArtifactIdRef.current = null;
+          }
+        });
+      }
+    }
+    void selectArtifact(conversationId, artifactId);
+  }, [
+    artifactPanelRef,
+    conversationId,
+    loadRunArtifacts,
+    primaryArtifacts,
+    runIdByArtifactId,
+    selectArtifact,
+  ]);
+  if (!detail) {
+    return (
+      <div className="conv-workspace" role={conversationLoadError ? "alert" : "status"}>
+        <span>{conversationLoadError || "正在载入对话…"}</span>
+        {conversationLoadError && (
+          <button type="button" onClick={() => void openConversation(conversationId)}>
+            重新载入
+          </button>
+        )}
+      </div>
+    );
+  }
+  const pendingApproval = items.findLast(
+    (item): item is ApprovalItem => item.type === "approval" && item.status === "waiting",
+  );
 
   const conversationPane = (
     <section className="conv-conversation-pane" aria-label="Conversation">
       <ConversationHeader detail={detail} onOpenHistory={onOpenHistory} onDelete={onDelete} />
       <MessageList
-        messages={messages}
+        items={items}
         runs={runs}
         artifacts={artifacts}
-        activities={detail.activities}
-        questions={detail.questions}
         onOpenSqlConsole={onOpenSqlConsole}
-        onOpenResultTab={onOpenResultTab}
         onSelectArtifact={handleSelectArtifact}
-        onResolveQuestion={(runId, questionId, response) => void resolveQuestion(runId, questionId, response)}
+        resolvingQuestionId={resolvingQuestionId}
+        questionError={questionError}
+        onResolveQuestion={resolveQuestion}
       />
       {pendingApproval && runningRun && (
         <div className="conv-pinned-action">
           <ApprovalCard
-            runId={runningRun.id}
             approval={pendingApproval}
             onOpenSqlConsole={onOpenSqlConsole}
-            onResolve={(runId, approvalId, approved) => void resolveApproval(runId, approvalId, approved)}
+            submitting={resolvingApprovalId === pendingApproval.id}
+            error={approvalError}
+            onResolve={resolveApproval}
           />
         </div>
       )}
       <Composer
         running={Boolean(runningRun)}
-        onSend={(text, mode) => void sendMessage(conversationId, text, mode)}
-        onCancel={() => runningRun && cancelRun(runningRun.id)}
+        submitting={sending}
+        cancelling={cancelling}
+        error={sendError}
+        onSend={(text, mode) => sendMessage(conversationId, text, mode)}
+        onCancel={() => runningRun ? cancelRun(runningRun.id) : Promise.resolve()}
       />
     </section>
   );
 
   const artifactDock = hasArtifacts ? (
     <ArtifactDock
-      artifacts={artifacts}
+      artifacts={primaryArtifacts}
       selectedArtifactId={detail.selected_artifact_id}
       onSelectArtifact={handleSelectArtifact}
-      onOpenSqlConsole={onOpenSqlConsole}
       onOpenResultTab={onOpenResultTab}
       onCollapse={() => artifactPanelRef.current?.collapse()}
     />
@@ -110,13 +200,13 @@ export function ConversationWorkspace({
           orientation="horizontal"
           className="conv-artifact-panel-group"
           defaultLayout={initialLayout}
-          resizeTargetMinimumSize={{ coarse: 20, fine: 8 }}
+          resizeTargetMinimumSize={{ coarse: 24, fine: 12 }}
           onLayoutChanged={(layout) => {
             writeArtifactLayout(layout);
             setArtifactCollapsed(layout.artifacts <= 0.01);
           }}
         >
-          <Panel id="conversation" className="conv-artifact-main-panel" defaultSize="72%" minSize="48%">
+          <Panel id="conversation" className="conv-artifact-main-panel" defaultSize="72%" minSize="38%">
             {conversationPane}
             {artifactCollapsed && (
               <button
@@ -138,7 +228,6 @@ export function ConversationWorkspace({
             className="conv-artifact-dock-panel"
             defaultSize="28%"
             minSize="22%"
-            maxSize="44%"
             collapsible
             collapsedSize={0}
           >

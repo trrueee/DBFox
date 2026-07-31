@@ -1,23 +1,16 @@
-import { BarChart3, CheckCircle2, Code2, FileText, PanelRightClose, ShieldCheck, Table2 } from "lucide-react";
+import { BarChart3, FileText, PanelRightClose, Table2 } from "lucide-react";
 import { useMemo } from "react";
 import type { ResultViewArtifact } from "../../../types/agentArtifact";
 import type { ConversationArtifact } from "../../../types/conversation";
-import { safetyCheckLabel } from "../../../lib/presentation";
 import { DeferredChartArtifactView } from "../../workspace/artifacts/DeferredChartArtifactView";
 import { MarkdownArtifactView } from "../../workspace/artifacts/MarkdownArtifactView";
-import { SqlCodeBlock } from "../../workspace/artifacts/SqlCodeBlock";
-import { SqlArtifactView } from "../../workspace/artifacts/SqlArtifactView";
 import { TableArtifactView } from "../../workspace/artifacts/TableArtifactView";
 import {
-  conversationSqlText,
+  isPrimaryConversationArtifact,
   isSqlBackedResultViewArtifact,
-  payloadBoolean,
-  safetyGuardrailResult,
-  safetySchemaWarningsCount,
   sortConversationArtifacts,
   toChartArtifactModel,
   toMarkdownArtifactModel,
-  toSqlArtifactModel,
   toResultViewArtifactModel,
 } from "./conversationArtifactModels";
 
@@ -25,26 +18,25 @@ interface ArtifactDockProps {
   artifacts: ConversationArtifact[];
   selectedArtifactId?: string | null;
   onSelectArtifact?: (artifactId: string) => void;
-  onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
   onCollapse?: () => void;
 }
 
-type DockKind = "sql" | "safety" | "result" | "chart" | "note";
+type DockKind = "result" | "chart" | "note";
 
 export function ArtifactDock({
   artifacts,
   selectedArtifactId,
   onSelectArtifact,
-  onOpenSqlConsole,
   onOpenResultTab,
   onCollapse,
 }: ArtifactDockProps) {
   const orderedArtifacts = useMemo(
-    () => sortConversationArtifacts(artifacts).filter(isDockArtifact),
+    () => sortConversationArtifacts(artifacts).filter(isPrimaryConversationArtifact).filter(isDockArtifact),
     [artifacts],
   );
-  const activeArtifact = orderedArtifacts.find((artifact) => artifact.id === selectedArtifactId);
+  const activeArtifact = orderedArtifacts.find((artifact) => artifact.id === selectedArtifactId)
+    || orderedArtifacts.at(-1);
 
   if (orderedArtifacts.length === 0) return null;
 
@@ -87,7 +79,6 @@ export function ArtifactDock({
           {activeArtifact ? (
             <DockArtifactPreview
               artifact={activeArtifact}
-              onOpenSqlConsole={onOpenSqlConsole}
               onOpenResultTab={onOpenResultTab}
             />
           ) : (
@@ -101,37 +92,25 @@ export function ArtifactDock({
 
 function isDockArtifact(artifact: ConversationArtifact): boolean {
   return (
-    artifact.type === "sql" ||
-    artifact.type === "sql_suggestion" ||
-    artifact.type === "safety" ||
     isSqlBackedResultViewArtifact(artifact) ||
     artifact.type === "chart" ||
-    artifact.type === "markdown" ||
-    artifact.type === "query_plan" ||
-    artifact.type === "agent_plan" ||
-    artifact.type === "error"
+    artifact.type === "markdown"
   );
 }
 
 function artifactKind(artifact: ConversationArtifact): DockKind {
-  if (artifact.type === "sql" || artifact.type === "sql_suggestion") return "sql";
-  if (artifact.type === "safety") return "safety";
   if (isSqlBackedResultViewArtifact(artifact)) return "result";
   if (artifact.type === "chart") return "chart";
   return "note";
 }
 
 function artifactKindLabel(kind: DockKind): string {
-  if (kind === "sql") return "SQL";
-  if (kind === "safety") return "Safety";
   if (kind === "result") return "Result";
   if (kind === "chart") return "Chart";
   return "Note";
 }
 
 function ArtifactIcon({ kind }: { kind: DockKind }) {
-  if (kind === "sql") return <Code2 size={14} aria-hidden="true" />;
-  if (kind === "safety") return <ShieldCheck size={14} aria-hidden="true" />;
   if (kind === "result") return <Table2 size={14} aria-hidden="true" />;
   if (kind === "chart") return <BarChart3 size={14} aria-hidden="true" />;
   return <FileText size={14} aria-hidden="true" />;
@@ -139,23 +118,11 @@ function ArtifactIcon({ kind }: { kind: DockKind }) {
 
 function DockArtifactPreview({
   artifact,
-  onOpenSqlConsole,
   onOpenResultTab,
 }: {
   artifact: ConversationArtifact;
-  onOpenSqlConsole: (sql?: string) => void;
   onOpenResultTab?: (artifact: ResultViewArtifact) => void;
 }) {
-  if (artifact.type === "sql" || artifact.type === "sql_suggestion") {
-    return (
-      <SqlArtifactView
-        artifact={toSqlArtifactModel(artifact)}
-        onOpenSqlConsole={onOpenSqlConsole}
-        onToast={() => undefined}
-      />
-    );
-  }
-
   if (isSqlBackedResultViewArtifact(artifact)) {
     return (
       <TableArtifactView
@@ -170,37 +137,5 @@ function DockArtifactPreview({
     return <DeferredChartArtifactView artifact={toChartArtifactModel(artifact)} onToast={() => undefined} />;
   }
 
-  if (artifact.type === "safety") {
-    return <SafetyDockCard artifact={artifact} />;
-  }
-
   return <MarkdownArtifactView artifact={toMarkdownArtifactModel(artifact)} onToast={() => undefined} />;
-}
-
-function SafetyDockCard({ artifact }: { artifact: ConversationArtifact }) {
-  const canExecute = payloadBoolean(artifact.payload, ["canExecute"]);
-  const requiresApproval = payloadBoolean(artifact.payload, ["requiresApproval"]);
-  const passed = payloadBoolean(artifact.payload, ["passed"]) || canExecute;
-  const guardrail = safetyGuardrailResult(artifact.payload);
-  const schemaWarnings = safetySchemaWarningsCount(artifact.payload);
-  const sql = conversationSqlText(artifact);
-
-  return (
-    <section className={`conv-dock-safety-card ${passed ? "is-safe" : "is-warning"}`}>
-      <header>
-        <CheckCircle2 size={16} />
-        <div>
-          <strong>安全检查</strong>
-          <span>{passed ? "校验通过" : "需要处理"}</span>
-        </div>
-      </header>
-      <div className="conv-dock-safety-grid">
-        <span>{canExecute ? "可执行" : "不可执行"}</span>
-        <span>{requiresApproval ? "需要批准" : "无需批准"}</span>
-        <span>安全策略：{safetyCheckLabel(guardrail)}</span>
-        <span>表结构提醒：{schemaWarnings}</span>
-      </div>
-      {sql && <SqlCodeBlock sql={sql} className="conv-dock-safety-sql" ariaLabel="安全检查 SQL" />}
-    </section>
-  );
 }

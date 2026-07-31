@@ -15,20 +15,20 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid color-mix(in srgb, var(--color-info) 36%, var(--color-border));
   border-radius: 8px;
-  background: #eff6ff;
-  color: #1e40af;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 
 .multi-table-workspace__summary-icon {
   flex-shrink: 0;
-  color: #2563eb;
+  color: var(--color-info);
 }
 
 .multi-table-workspace__summary-title {
   display: block;
-  color: #1e3a8a;
+  color: var(--color-text-primary);
   font-size: var(--ui-font-label);
   font-weight: 650;
 }
@@ -36,7 +36,7 @@
 .multi-table-workspace__summary-copy {
   display: block;
   margin-top: 2px;
-  color: #1d4ed8;
+  color: var(--color-info);
   font-size: var(--ui-font-caption);
 }
 

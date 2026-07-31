@@ -1,6 +1,7 @@
 import type { DataSource } from "../../lib/api";
+import type { DatasourceFormState } from "./datasourceFormSchema";
 
-export type DatasourceFormState = ReturnType<typeof emptyDatasourceForm>;
+export type { DatasourceFormState };
 
 export type PageMode = "detail" | "create" | "edit";
 export type ActionState = "idle" | "testing" | "saving" | "syncing" | "deleting";
@@ -12,8 +13,8 @@ export interface ConnectionTestResultState {
   details?: { serverVersion?: string; readonly?: boolean; tablesCount?: number };
 }
 
-export const emptyDatasourceForm = () => ({
-  db_type: "mysql" as string,
+export const emptyDatasourceForm = (): DatasourceFormState => ({
+  db_type: "mysql",
   name: "",
   host: "",
   port: 3306 as number,
@@ -21,7 +22,7 @@ export const emptyDatasourceForm = () => ({
   username: "",
   password: "",
   is_read_only: false,
-  env: "dev" as string,
+  env: "dev",
   ssh_enabled: false,
   ssh_host: "",
   ssh_port: 22,
@@ -36,7 +37,7 @@ export const emptyDatasourceForm = () => ({
   ssl_verify_identity: true,
 });
 
-export const formFromDataSource = (ds: DataSource) => ({
+export const formFromDataSource = (ds: DataSource): DatasourceFormState => ({
   db_type: ds.db_type || "mysql",
   name: ds.name || "",
   host: ds.host || "",
